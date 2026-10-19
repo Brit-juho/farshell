@@ -3611,6 +3611,24 @@ print(('ok|' if sel and sel['ready'] else 'warn|') + (sel['label'] + ('|ready' i
     fi
   fi
 
+  # 11-a6. 브라우저 broker — 마스터 스위치, 켠 어댑터, 열린 탭, 조작할 수 없게 된(orphaned) 탭
+  if [ -x "${VT_PYTHON:-}" ]; then
+    local _br _br_en _br_on _br_av _br_open _br_orph _br_err
+    _br="$(cd "$VT_DIR/server" && "$VT_PYTHON" -m authz browser doctor 2>/dev/null)"
+    if [ -n "$_br" ]; then
+      IFS='|' read -r _br_en _br_on _br_av _br_open _br_orph _br_err <<<"$_br"
+      if [ "$_br_en" != 1 ]; then
+        _check "$(_t '브라우저')" ok "$(_t '꺼짐 (VT_AUTHZ_ENFORCE 에 browser 를 더하면 켜짐)')"
+      elif [ "${_br_err:-0}" = 1 ]; then
+        _check "$(_t '브라우저')" warn "$(_t '켜짐 · 설정 또는 탭 장부를 읽지 못했습니다 — 어댑터 조작은 거부됩니다(fsh browser adapters 로 확인)')"
+      elif [ "${_br_orph:-0}" -gt 0 ] 2>/dev/null; then
+        _check "$(_t '브라우저')" warn "$(_t '켜짐 · 켠 어댑터 {on}개(사용 가능 {av}개) · 열린 탭 {open}개 · 조작할 수 없는 탭 {orph}개 (fsh browser tabs 로 확인)' on="$_br_on" av="$_br_av" open="$_br_open" orph="$_br_orph")"
+      else
+        _check "$(_t '브라우저')" ok "$(_t '켜짐 · 켠 어댑터 {on}개(사용 가능 {av}개) · 열린 탭 {open}개' on="$_br_on" av="$_br_av" open="$_br_open")"
+      fi
+    fi
+  fi
+
   # 11-b. OTP(새 기기 등록 관문) + 등록 기기 수
   if [ -x "${VT_PYTHON:-}" ]; then
     local _otp_json _ndev

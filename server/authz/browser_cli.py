@@ -7,6 +7,7 @@
   enable <name> [--off] [--yes]   어댑터 켜기(--off 로 끄기). 처음 켤 때는 동의가 필요하다(--yes 또는 대화형 확인)
   tabs [--json]            열린 탭(소유자·상태)
   close <id>               탭 닫기
+  doctor                   `fsh doctor` 용 한 줄 `enabled|켠 어댑터|사용 가능 어댑터|열린 탭|orphaned 탭|설정 오류` (서버에 묻지 않는다)
 """
 
 from __future__ import annotations
@@ -157,9 +158,31 @@ def cmd_close(argv: list[str]) -> int:
     return 0
 
 
+def cmd_doctor(argv: list[str]) -> int:
+    """`fsh doctor` 가 쓴다 — 서버가 꺼져 있어도 답하도록 설정·탭 장부를 직접 읽는다. 항상 0(진단이지 판정이 아니다).
+    어댑터 사용 가능 여부는 각 어댑터의 capabilities()(모듈 설치 여부 등)로 본다 — 브라우저를 띄우지는 않는다."""
+    from authz import flags
+    try:
+        from browser import adapters as A, config, tabs
+        cfg = config.load()
+        rows = [A.describe(n) for n in A.names()]
+        available = sum(1 for r in rows if r.get("available"))
+        on = sum(1 for r in rows if r.get("available") and cfg["adapters"].get(r["name"]))
+        d, bad = tabs.snapshot()
+        states = [t.get("state") for t in d.get("tabs", {}).values()]
+        opened, orphaned = states.count(tabs.OPEN), states.count(tabs.ORPHANED)
+        err = "1" if (cfg.get("error") or bad) else "0"
+    except Exception:  # noqa: BLE001
+        on = available = opened = orphaned = -1
+        err = "1"
+    _p(f"{int(flags.enforced('browser'))}|{on}|{available}|{opened}|{orphaned}|{err}")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     sub, rest = (argv[0] if argv else "adapters"), argv[1:]
-    return {"adapters": cmd_adapters, "enable": cmd_enable, "tabs": cmd_tabs, "close": cmd_close}.get(sub, lambda _a: _usage())(rest)
+    return {"adapters": cmd_adapters, "enable": cmd_enable, "tabs": cmd_tabs, "close": cmd_close,
+            "doctor": cmd_doctor}.get(sub, lambda _a: _usage())(rest)
 
 
 def _usage() -> int:

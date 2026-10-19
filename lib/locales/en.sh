@@ -260,6 +260,7 @@ _t_en_lookup() {
     '기존 설정 유지 → ~/.vt.env') _T_OUT='Keeping existing config → ~/.vt.env' ;;
     '꺼져 있는데 저장된 pair {n}개가 남아 있습니다 — 권한은 효력이 없습니다') _T_OUT='The feature is off but {n} stored pair(s) remain - their permissions have no effect' ;;
     '꺼져 있음 — 켜기: git config core.hooksPath scripts/githooks') _T_OUT='Off — turn on with: git config core.hooksPath scripts/githooks' ;;
+    '꺼짐 (VT_AUTHZ_ENFORCE 에 browser 를 더하면 켜짐)') _T_OUT='off (add browser to VT_AUTHZ_ENFORCE to turn it on)' ;;
     '꺼짐 (VT_AUTHZ_ENFORCE 에 pair 를 더하면 켜짐)') _T_OUT='Off (add pair to VT_AUTHZ_ENFORCE to turn it on)' ;;
     '꺼짐 (VT_AUTHZ_ENFORCE 에 peer 를 더하면 켜짐)') _T_OUT='off (add peer to VT_AUTHZ_ENFORCE to turn on)' ;;
     '꺼짐 — 비밀번호만으로 새 기기 등록 가능 (fsh otp setup)') _T_OUT='off — a password alone can register a new device (fsh otp setup)' ;;
@@ -335,6 +336,7 @@ _t_en_lookup() {
     '보고 실패: {reason} (서버가 실행 중인지 확인: fsh status)') _T_OUT='Report failed: {reason} (check that the server is running: fsh status)' ;;
     '복구: fsh hotkey reset voice') _T_OUT='Restore: fsh hotkey reset voice' ;;
     '붙여넣기 진단') _T_OUT='paste diagnostics' ;;
+    '브라우저') _T_OUT='Browser' ;;
     '비밀번호') _T_OUT='Password' ;;
     '비밀번호 설정 (권장)') _T_OUT='Set a password (recommended)' ;;
     '비밀번호가 비어 있습니다.') _T_OUT='The password is empty.' ;;
@@ -587,7 +589,10 @@ _t_en_lookup() {
     '켜짐 (새 기기 등록 시 OTP 요구)') _T_OUT='on (OTP required to register a new device)' ;;
     '켜짐 · 못 보낸 회수 알림 {p}건 · 확인 안 된 secret 회전 {u}건 — 서버가 다시 시도합니다(fsh host rotate 로 정리)') _T_OUT='on / {p} revoke notice(s) not delivered / {u} unconfirmed secret rotation(s) - the server retries (settle rotations with fsh host rotate)' ;;
     '켜짐 · 밀린 회수 알림 없음') _T_OUT='on / no pending revoke notices' ;;
+    '켜짐 · 설정 또는 탭 장부를 읽지 못했습니다 — 어댑터 조작은 거부됩니다(fsh browser adapters 로 확인)') _T_OUT='on / could not read the settings or the tab ledger - adapter actions are refused (check with fsh browser adapters)' ;;
     '켜짐 · 진행 중 {n}개 · 승인 대기 {w}개') _T_OUT='On / {n} in progress / {w} waiting for approval' ;;
+    '켜짐 · 켠 어댑터 {on}개(사용 가능 {av}개) · 열린 탭 {open}개') _T_OUT='on / {on} adapter(s) enabled ({av} available) / {open} open tab(s)' ;;
+    '켜짐 · 켠 어댑터 {on}개(사용 가능 {av}개) · 열린 탭 {open}개 · 조작할 수 없는 탭 {orph}개 (fsh browser tabs 로 확인)') _T_OUT='on / {on} adapter(s) enabled ({av} available) / {open} open tab(s) / {orph} tab(s) that can no longer be driven (check with fsh browser tabs)' ;;
     '코드가 맞지 않습니다. 시계 동기화를 확인하고 '\''fsh otp setup'\''을 다시 실행하세요.') _T_OUT='Wrong code. Check your clock sync and run '\''fsh otp setup'\'' again.' ;;
     '클라이언트 접속/해제 알림: 활성화됨 (VT_NOTIFY_CLIENT_EVENTS=1)') _T_OUT='Client connect/disconnect alerts: enabled (VT_NOTIFY_CLIENT_EVENTS=1)' ;;
     '클립보드 동기화') _T_OUT='Clipboard sync' ;;
