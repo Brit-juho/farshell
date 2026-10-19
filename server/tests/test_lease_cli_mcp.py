@@ -34,6 +34,20 @@ def test_acquire_sends_mode_exclusive_and_ttl(calls, capsys):
     assert lease_cli.main(["acquire", "/w/proj", "--ttl", "9x"]) == 2
 
 
+def test_acquire_resolves_relative_paths_against_the_callers_folder(calls):
+    """bin/fsh 는 server/ 로 cd 한 뒤 부른다 — 상대 경로는 --cwd(부른 폴더) 기준이어야 한다(2026-10-19 실사용에서 발견)."""
+    seen, st = calls
+    st["reply"] = (201, {"ok": True, "lease": LEASE})
+    lease_cli.main(["--cwd", "/w/proj", "acquire", "docs/notes"])
+    assert seen[-1][2]["glob"] == "/w/proj/docs/notes"
+    lease_cli.main(["--cwd", "/w/proj", "acquire", "src/*.py"])
+    assert seen[-1][2]["glob"] == "/w/proj/src/*.py"
+    lease_cli.main(["--cwd", "/w/proj", "acquire", "../other"])
+    assert seen[-1][2]["glob"] == "/w/other"
+    lease_cli.main(["--cwd", "/w/proj", "acquire", "/abs/path"])
+    assert seen[-1][2]["glob"] == "/abs/path"
+
+
 def test_acquire_conflict_and_missing_permission_are_explained(calls, capsys):
     seen, st = calls
     st["reply"] = (409, {"error": "lease_conflict", "reason": "다른 세션이 이 경로를 쓰는 중입니다", "holder": "alpha", "expires": 1893456000})
