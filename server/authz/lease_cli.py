@@ -128,7 +128,7 @@ def cmd_ls(argv: list[str]) -> int:
     return 0
 
 
-def cmd_acquire(argv: list[str]) -> int:
+def cmd_acquire(argv: list[str], cwd: Optional[str] = None) -> int:
     ap = argparse.ArgumentParser(prog="fsh lease acquire")
     ap.add_argument("glob")
     g = ap.add_mutually_exclusive_group()
@@ -143,7 +143,12 @@ def cmd_acquire(argv: list[str]) -> int:
     except ValueError:
         _err("  ✗ " + tr("--ttl 은 90, 30m, 2h 같은 값이어야 합니다"))
         return 2
-    glob = os.path.abspath(os.path.expanduser(args.glob)) if not any(c in args.glob for c in "*?[") else args.glob
+    # 상대 경로는 fsh 를 부른 폴더(--cwd) 기준이다 — 이 프로세스는 server/ 에서 돈다(bin/fsh 가 cd 한다).
+    glob = os.path.expanduser(args.glob)
+    if not os.path.isabs(glob):
+        glob = os.path.join(cwd or os.getcwd(), glob)
+    if not any(c in glob for c in "*?["):
+        glob = os.path.abspath(glob)
     body = {"glob": glob, "mode": "read" if args.read else "write", "exclusive": args.exclusive, "reason": args.reason}
     if ttl is not None:
         body["ttl"] = ttl
@@ -469,7 +474,7 @@ def main(argv: list[str]) -> int:
     if sub in ("ls", "list"):
         return cmd_ls(rest)
     if sub == "acquire":
-        return cmd_acquire(rest)
+        return cmd_acquire(rest, cwd)
     if sub == "renew":
         return cmd_renew(rest)
     if sub in ("release", "rm"):
