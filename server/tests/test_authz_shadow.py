@@ -36,6 +36,7 @@ SOURCES = [s for s in ("live", "store") if os.environ.get("VT_AUTHZ_VERIFY_ONLY"
 CASES = [c for c in all_cases() if c.method != "FUNC"]
 _found: dict[str, dict[str, list]] = {s: {} for s in ("live", "store")}
 _sites: dict[str, int] = {}
+_replayed = [0]   # 이 프로세스에서 돈 재생 사례 수 — 병렬 실행(pytest-xdist)은 사례를 여러 프로세스에 나눈다
 
 # 1단계 판정 지점 전부(hooks.py). `peer.ws_input`(peer.py peer_ws)은 matrix 사례가 없는 세션
 # 이름으로만 닿아(실제 PTY 를 열지 않으려고) 판정 전에 4404 로 끝난다 — 아래 단위 테스트가 맡는다. 재생이 각 지점을 한 번 이상 지나야 "차이 0"이 공허하지 않다.
@@ -74,6 +75,7 @@ def _migrating_seed(world: World):
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
 def test_shadow_matches_current_decision(case, source, world, capture, monkeypatch):
     monkeypatch.setenv("VT_AUTHZ_SHADOW_SOURCE", source)
+    _replayed[0] += 1
     if source == "store":
         monkeypatch.setattr(world, "seed", _migrating_seed(world))
     from authz import shadow
@@ -112,6 +114,9 @@ def test_holes_are_exercised_by_the_replay():
 def test_every_shadow_site_was_exercised():
     if not CASES or len(SOURCES) == 0:
         pytest.skip("재생 안 함")
+    if _replayed[0] < len(CASES) * len(SOURCES):
+        # 일부만 돌았다(-k 선택, 또는 병렬 실행이 사례를 다른 프로세스에 나눔) — 지나지 않은 지점을 셀 근거가 없다.
+        pytest.skip(f"이 프로세스에서 재생 {_replayed[0]}/{len(CASES) * len(SOURCES)}건만 돌았다")
     missing = sorted(SITES - set(_sites))
     assert not missing, f"재생이 지나지 않은 shadow 지점: {missing} (지난 것: {_sites})"
 
