@@ -281,6 +281,8 @@ fsh queue clear                 # 전체 비우기
 | 16 | 공용 토큰 | `VT_AUTHZ_ENFORCE=legacy`일 때만: 최근 24시간 동안 범위 밖이라 거절된(403 `legacy_token_scope`) 기계 토큰 요청 수를 경로·user agent별로 보여 줍니다. 어느 외부 스크립트를 소켓이나 로그인으로 옮겨야 하는지 알 수 있습니다. 토큰만 있고 웹 비밀번호가 없는 서버에서는 승인이 필요한 에이전트·peer 기능이 `fsh password` 설정 전까지 꺼져 있다는 안내도 나옵니다 |
 | 17 | 폴더 lease | 활성 lease 개수, 쓰기 차단(`VT_AUTHZ_ENFORCE=lease`) 켜짐 여부, 지금 저장소의 pre-commit guard 상태(설치됨 / 기존 훅과 이어짐 / 없음), 최근 24시간 동안 서버가 안 닿아 guard 가 건너뛴 횟수(`~/.vt/authz/guard-skipped.log`), 끝나지 않은 회수 정리(saga)가 있으면 경고 |
 | 18 | pair | pair 스위치(`VT_AUTHZ_ENFORCE=pair`) 켜짐 여부, 효력 중인 pair 수와 승인 대기 수. 스위치가 꺼졌는데 저장된 pair 가 남아 있으면 경고(그 grant 는 효력이 없음) |
+| 19 | 다른 Mac 권한 | 프로토콜 v2(`VT_AUTHZ_ENFORCE=peer`)가 켜졌는지. 회수 알림을 못 보냈거나 secret 회전이 확인되지 않았으면 경고(서버가 다시 시도하고, 회전은 `fsh host rotate` 로 정리) |
+| 20 | 브라우저 | 브라우저 broker 스위치(`VT_AUTHZ_ENFORCE=browser`)가 켜졌는지, 사용 가능한 어댑터 중 켠 수, 열린 탭 수. 조작할 수 없게 된 탭(orphaned, `fsh browser tabs`)이 있거나 설정·탭 장부를 못 읽으면 경고. 서버에 묻지 않고 직접 읽어서 서버가 꺼져 있어도 답한다 |
 
 ---
 

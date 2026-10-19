@@ -11,6 +11,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Added
 
 - **시스템 패널·HUD에 GPU 사용률.** `/api/system/stats`에 `gpu`(`pct`, `name`, `count`, macOS `cores`, NVIDIA `mem_used`/`mem_total`)를 더했다. macOS `ioreg`, Linux/WSL2 `nvidia-smi` → AMD `gpu_busy_percent`로 읽고 GPU가 여럿이면 가장 바쁜 하나를 낸다. 읽지 못하면 `null`이고 칸을 숨긴다.
+- **`fsh doctor` 에 브라우저 항목.** 브라우저 broker 스위치, 켠 어댑터 수(사용 가능 수), 열린 탭 수를 보이고, 조작할 수 없게 된 탭이나 읽지 못한 설정·탭 장부는 경고한다. 서버에 묻지 않고 직접 읽는다(`python -m authz browser doctor`).
+
+### Fixed
+
+- **`fsh lease acquire` 의 상대 경로가 부른 폴더가 아니라 `server/` 기준으로 풀리던 것.** 와일드카드가 있는 상대 glob 은 절대화되지도 않았다.
+- **wav 입력을 ffmpeg 로 변환할 때(pyav 없음) 출력 경로가 입력과 같아 변환 없이 원본이 나가던 것.**
 
 ---
 

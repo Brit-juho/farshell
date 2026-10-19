@@ -307,6 +307,8 @@ contract 5). The few that decide how you reach this Mac:
 | 16 | shared token | Only with `VT_AUTHZ_ENFORCE=legacy`: the number of machine-token requests refused as out of scope (403 `legacy_token_scope`) in the last 24h, listed per route and user agent so you can see which outside script still needs to move to the socket or a login. On a server with a token but no web password it also says that approval-needing agent/peer features are off until `fsh password` is set |
 | 17 | Folder leases | Active lease count, whether write blocking (`VT_AUTHZ_ENFORCE=lease`) is on, the pre-commit guard state of the current repository (installed / chained to an existing hook / absent), how many times the guard skipped in the last 24 h because the server was unreachable (`~/.vt/authz/guard-skipped.log`), and a warning if a revocation cleanup (saga) is unfinished |
 | 18 | Pairs | Whether the pair switch (`VT_AUTHZ_ENFORCE=pair`) is on, how many pairs are in effect and how many wait for approval; a warning if the switch is off but pairs are still stored (their grants have no effect) |
+| 19 | Other-Mac permissions | Whether protocol v2 (`VT_AUTHZ_ENFORCE=peer`) is on; a warning if revoke notices could not be delivered or a secret rotation is unconfirmed (the server retries; `fsh host rotate` settles a rotation) |
+| 20 | Browser | Whether the browser broker switch (`VT_AUTHZ_ENFORCE=browser`) is on, how many adapters are enabled out of those available, and how many tabs are open; a warning if tabs can no longer be driven (orphaned, see `fsh browser tabs`) or the settings/tab ledger cannot be read. Read locally, so it answers even when the server is down |
 
 ---
 

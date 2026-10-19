@@ -359,3 +359,25 @@ def test_cli_without_a_server(monkeypatch, capsys):
     monkeypatch.setattr(browser_cli, "_call", boom)
     assert browser_cli.main(["tabs"]) == 1
     assert "unix socket" in capsys.readouterr().err
+
+
+# --- fsh doctor -----------------------------------------------------------------------------------
+
+
+def _doctor(capsys) -> list:
+    assert browser_cli.main(["doctor"]) == 0
+    return capsys.readouterr().out.strip().split("|")
+
+
+def test_doctor_line_reports_switch_adapters_tabs_and_ledger_errors(env, monkeypatch, capsys):
+    """서버에 묻지 않고 설정·탭 장부만 읽는다 — `enabled|켠 어댑터|사용 가능|열린 탭|orphaned|설정 오류`."""
+    en, on, av, opened, orph, err = _doctor(capsys)
+    assert (en, opened, orph, err) == ("1", "0", "0", "0")
+    assert int(on) >= 1 and int(av) >= int(on)                       # fake 어댑터가 켜져 있다
+    tabs._write({"version": tabs.VERSION, "host": {"gen": 1}, "tabs": {
+        "bt-a": {"state": tabs.OPEN}, "bt-b": {"state": tabs.ORPHANED}, "bt-c": {"state": tabs.RELEASED}}})
+    assert _doctor(capsys)[3:] == ["1", "1", "0"]
+    tabs.path().write_text("{broken", encoding="utf-8")                # 손상된 장부는 오류로 알린다(파일은 그대로)
+    assert _doctor(capsys)[5] == "1" and tabs.path().read_text(encoding="utf-8") == "{broken"
+    monkeypatch.setenv("VT_AUTHZ_ENFORCE", "")
+    assert _doctor(capsys)[0] == "0"
