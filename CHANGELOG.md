@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Added
+- Separate session menu status, workspace and branch into readable sections on desktop and mobile.
 - Native Claude Code/Codex subagent rows and read-only transcript viewer, with bounded
   retention, child event ordering, dedicated transcript path checks and host relay support.
 

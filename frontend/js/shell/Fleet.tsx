@@ -21,12 +21,12 @@ import {
   safeFetch, collectSessionRows, syncAgentsFromServer, createDiffWatcher, useLayoutVersion, type RailDeps,
 } from './rail-fetch.js';
 import {
-  buildRailLists, groupSessionRows, rowMenuItems, rowSummary, runRowMenu, diffLabel, type SessionRow,
+  buildRailLists, groupSessionRows, rowMenuItems, rowSummaryDetails, runRowMenu, diffLabel, type SessionRow,
   buildSessionTree, kidsProgress, stepInOrder, ORDER_KEY, LINEAGE_KEY, encodeOrder, encodeLineagePrefs, type TreeEntry,
 } from './rail-data.js';
 import { createRailPrefs } from './rail-prefs.js';
 import { NativeChip } from './NativeChildren.js';
-import { KeywordLine, OriginMark, ScreensMark, ShareMark, LineageMark, KidsToggle } from './RailRow.js';
+import { MenuSummary, KeywordLine, OriginMark, ScreensMark, ShareMark, LineageMark, KidsToggle } from './RailRow.js';
 import { ViewGroup } from './ViewGroup.js';
 import {
   buildHostMenu, hostDetail, LOCAL_HOST,
@@ -590,7 +590,7 @@ function Fleet(props: { deps: FleetDeps }) {
                   </>
                 }>
                   <div class="vt-session-head"><h2>{row.name}</h2></div>
-                  <div class="vt-menu-summary" role="note" aria-label={t('요약: {summary}', { summary: rowSummary(row) })}>{rowSummary(row)}</div>
+                  <MenuSummary summary={rowSummaryDetails(row)} />
                   {/* 항목은 레일 메뉴와 같은 목록(rowMenuItems)이다. 이름 변경만 시트 안에서 입력창으로
                       바뀌고, 나머지는 시트를 닫은 뒤 실행한다 — 콜백에서 m()을 다시 읽으면 이미
                       정리된 뒤라 값은 진입 시점에 한 번 꺼내 쓴다(2026-09-23 실측). */}
