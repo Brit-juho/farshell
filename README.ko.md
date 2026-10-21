@@ -132,6 +132,7 @@ fsh voice-target dev      # 입력을 dev 세션으로 고정
 | 인증, 기기, 경계값 | [`docs/ref/auth.md`](./docs/ref/auth.md) |
 | 터미널, 페인, 붙여넣기, 스크롤백, 테마 | [`docs/ref/terminal.md`](./docs/ref/terminal.md) |
 | 에이전트 상태, 프롬프트 큐, 스니펫, 사용량, MCP | [`docs/ref/agents.md`](./docs/ref/agents.md) |
+| MCP·스킬·플러그인 통합 관리 | [`docs/guide/agent-config.ko.md`](./docs/guide/agent-config.ko.md) |
 | 파일, 공유 링크, 코드 뷰어 | [`docs/ref/files.md`](./docs/ref/files.md) |
 | 터널, 포트, Tailscale, 원격 접속 | [`docs/ref/tunnel.md`](./docs/ref/tunnel.md) |
 | 워크트리와 git | [`docs/ref/worktree.md`](./docs/ref/worktree.md) |

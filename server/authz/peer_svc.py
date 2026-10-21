@@ -74,6 +74,7 @@ NEEDS: dict[str, Need] = {
     "agent/message": Need("session.input", _RAW),                         # 제어 관문 — 이어서 아래 msg.send 도 본다
     "agent/message:msg": Need("msg.send", {}, "msg:local/-", obo="agent:{id}/-"),   # 옛 `agentMessages` 스위치
     "file": Need("fs.write", {"op": "drop"}),
+    "agent-config": Need("relay", {"group": "mcp"}, "relay:local/mcp"),
     "ws:input": Need("session.input", _RAW),                              # 입력 프레임마다(리소스는 그 세션)
     # relay — 연결 관문(그룹 하나라도)과 그룹별 판정
     "relay": Need("relay", {"group": S.ANY_GROUP}, "relay:local"),

@@ -22,6 +22,9 @@ MAX_JSON_BYTES = 5 * 1024 * 1024
 
 
 def codex_home() -> Path:
+    from agent_config_context import current
+    if current().get("tool") == "codex":
+        return Path(current()["root"])
     explicit = os.environ.get("VT_CODEX_HOME") or os.environ.get("CODEX_HOME")
     if explicit:
         return Path(explicit)
@@ -80,24 +83,34 @@ PLUGIN_LIST_TTL_SEC = 600.0
 PLUGIN_LIST_TIMEOUT_SEC = 30.0
 _plugin_lock = threading.Lock()
 _plugin_cache: dict = {"at": 0.0, "data": None}
+_plugin_caches: dict[str, dict] = {}
 
 
 def reset_plugin_cache() -> None:
     with _plugin_lock:
         _plugin_cache.update(at=0.0, data=None)
+        _plugin_caches.clear()
 
 
 def plugin_list(*, refresh: bool = False) -> tuple[object | None, str | None]:
     """캐시된 `codex plugin list --json`. 동시 호출은 실행 한 번으로 합친다(락).
     새로 받다 실패하면 옛 결과가 있으면 그걸 준다 — 설치 목록은 거의 안 변한다."""
     with _plugin_lock:
-        cached = _plugin_cache["data"]
-        fresh = time.monotonic() - _plugin_cache["at"] < PLUGIN_LIST_TTL_SEC
+        key = str(codex_home().resolve())
+        cache = _plugin_caches.setdefault(key, {"at": 0.0, "data": None})
+        while len(_plugin_caches) > 64:
+            oldest = next(iter(_plugin_caches))
+            if oldest == key:
+                break
+            del _plugin_caches[oldest]
+        cached = cache["data"]
+        fresh = time.monotonic() - cache["at"] < PLUGIN_LIST_TTL_SEC
         if cached is not None and fresh and not refresh:
             return cached, None
         data, err = run_json(["plugin", "list", "--json"], timeout=PLUGIN_LIST_TIMEOUT_SEC)
         if err is None and isinstance(data, dict) and isinstance(data.get("installed"), list):
-            _plugin_cache.update(at=time.monotonic(), data=data)
+            cache.update(at=time.monotonic(), data=data)
+            _plugin_cache.update(cache)
             return data, None
         if cached is not None:
             return cached, None

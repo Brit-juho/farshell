@@ -212,6 +212,7 @@ export default defineConfig(({ mode }) => {
             if (p.endsWith('/frontend/js/panels/settings.js')) return 'settings';
             if (p.includes('/frontend/js/panels/settings/')) return 'settings';
             if (p.endsWith('/frontend/js/panels/mcp.js')) return 'settings';
+            if (p.endsWith('/frontend/js/panels/agent-config.js')) return 'settings';
             // dock MCP 버튼(shell/Dock.tsx)이 지연 import하는 열기 로직 —
             // panels/mcp.js와 항상 같이 쓰이니 같은 청크(mcp-open.js 머리말 참고).
             if (p.endsWith('/frontend/js/panels/mcp-open.js')) return 'settings';

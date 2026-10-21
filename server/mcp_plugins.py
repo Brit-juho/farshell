@@ -112,7 +112,7 @@ def claude_installed(worktree_path: Optional[str]) -> tuple[dict, Optional[str]]
 def _bundle_mcp(root: Path | None, tool: str) -> list[dict]:
     if root is None:
         return []
-    data, error = mcp_adapters._read_json(root / ".mcp.json")
+    data, error = mcp_adapters._read_json(root / ("mcp.json" if (root / "plugin.json").is_file() else ".mcp.json"))
     definitions = mcp_adapters._as_mapping((data or {}).get("mcpServers")) if not error else {}
     if not definitions:
         manifest, error = mcp_adapters._read_json(root / (".claude-plugin" if tool == "claude" else ".codex-plugin") / "plugin.json")
@@ -189,6 +189,7 @@ def scan_claude_plugins(worktree_path: Optional[str] = None,
                 "installed": bool(rows),
                 "install_scopes": sorted({str(r.get("scope")) for r in rows if r.get("scope")}),
                 "version": str(latest.get("version") or ""),
+                "install_root": latest.get("installPath"),
                 "skills": skills,
                 "skill_count": len(skills),
                 "bundles_mcp": has_mcp,
@@ -201,7 +202,7 @@ def scan_claude_plugins(worktree_path: Optional[str] = None,
 
 def _codex_skill_names(plugin_root: Path) -> list[str]:
     """manifest가 가리키는 skills 디렉터리에서 실제 SKILL.md만 센다."""
-    manifest = plugin_root / ".codex-plugin" / "plugin.json"
+    manifest = plugin_root / "plugin.json" if (plugin_root / "plugin.json").is_file() else plugin_root / ".codex-plugin" / "plugin.json"
     try:
         data = json.loads(manifest.read_text(encoding="utf-8"))
     except (FileNotFoundError, OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
@@ -229,6 +230,8 @@ def _codex_skill_names(plugin_root: Path) -> list[str]:
 
 
 def _codex_manifest_has_mcp(plugin_root: Path) -> bool:
+    if (plugin_root / "plugin.json").is_file():
+        return (plugin_root / "mcp.json").is_file()
     manifest = plugin_root / ".codex-plugin" / "plugin.json"
     try:
         data = json.loads(manifest.read_text(encoding="utf-8"))
@@ -283,6 +286,7 @@ def scan_codex_plugins(worktree_path: Optional[str] = None,
             "plugin": plugin_name,
             "marketplace": str(marketplace) if marketplace else entry["marketplace"],
             "version": str(row.get("version") or ""),
+            "install_root": str(root) if root else None,
             "installed": bool(row.get("installed", True)),
             "explicit": plugin_id in explicit,
             "skills": skills,

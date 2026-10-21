@@ -803,6 +803,12 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
 
     if event == "session_start":
         # 에이전트가 막 열렸다 — 아직 아무 일도 안 했으니 idle.
+        # A resumed process alone does not prove that the CLI opened the intended
+        # conversation. Keep verified SessionStart evidence private for the
+        # customization manager's one-shot resume check.
+        ent["_session_start_at"] = time.time()
+        ent["_session_start_verified"] = verified is True
+        ent["_session_start_source"] = payload.get("source")
         ent["tool"] = None
         _set_status(ent, IDLE)
         _clear_prompt(ent)

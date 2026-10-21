@@ -125,6 +125,16 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | GET | `/api/git/binding?repo=X` | Resolved account id for a repo: `byRepo` → remote URL's `host/owner` in `byHostOrg` → exactly one account on that host → `null` |
 | PUT | `/api/git/binding` | Requires elevation. Body `{repo, account_id}` — sets the explicit `byRepo` binding |
 
+## Customization manager
+
+| Method | Path | Description |
+|--------|------|------|
+| POST | `/api/agent-config/read/{action}` | Human cookie required. Actions: `inventory` (`{session?, view:all/session, plugins?:boolean}`), `environment` (`{session}`), `sync-status`, `restart-status` (`{job}`), `restart-jobs`, `requests`, `preview` (`{session?, view?, changes:[{id,enabled}], preset?}`), `restart-preview` (`{session}`), `edit-preview` (`{id, session?, view?, revision, content}`). Plans are server-held, single-use and valid for 300 seconds. Inventory returns real source/profile/scope IDs, revisions, metadata and unknown runtime state; no environment values or original MCP arguments/URLs. Inventory is paged in groups of 32 contexts (`offset`, `inventory_revision`); the UI loads all pages progressively. A changed context revision refuses continuation. More than 4096 contexts requires narrowing to a session |
+| POST | `/api/agent-config/write/{action}` | Human cookie and elevation required. Actions: `apply`, `edit-apply`, `restart-start` (`{token}`); `metadata` (`{id, session?, view?, values:{category?,description?,origin?}}`); `metadata-category` (`{ids, category, session?, view?}`); `preset-save` (`{name, changes:[{id,enabled}], session?, view?}`); `preset-delete` (`{id}`); `environment-set` (`{session, scope:machine/profile/project, name, value:string/null, revision:<session identity>}`); `restart-cancel` (`{job}`); `editor`, `update-check` (`{id, session?, view?}`); `sync-run` (`{id:<discovered scheduler id>}`). Native files are reviewed, backed up, locked, revision-checked and re-read. Multi-file results may be partial; runtime state remains unknown. Secrets are write-only; restart credentials never enter process arguments |
+| POST | `/api/agent-config/requests/{request_id}/{decision}` | Direct target-host human cookie and elevation required. `decision` is `approve` or `deny`. Approve consumes an exact unexpired peer-bound plan after rechecking the peer grant; a peer cannot approve or execute its own write. Pending requests live in memory and expire with the plan |
+| POST | `/api/hosts/{host_id}/agent-config/{action}` | Human cookie required; `request` also requires elevation. Owner-host inventory, masked previews, sync/restart status and reviewed change requests over the dedicated signed peer protocol. Does not open generic MCP write relays or forward login cookies. Offline/old peers return 502 |
+| POST | `/api/peer/agent-config` | Signed body required; control-level MCP relay capability. Body `{action, payload}`. Supports owner-local inventory, masked plans and `request` with `{action:apply/restart-start, payload:{token}}`. Requests never execute writes; only a directly logged-in elevated human on the target can approve them. Responses intentionally retain target-host IDs and paths, which must not be used on the caller host |
+
 ## MCP servers (97, stage 1 — toggling requires an elevated session)
 
 | Method | Path | Description |
