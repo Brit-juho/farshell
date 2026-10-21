@@ -275,3 +275,33 @@ def test_host_relay_never_forwards_token_or_cookie(a_env, monkeypatch):
     assert "path=x" in seen["url"]
     assert "cookie" not in seen["headers"]
     assert "MYSECRET" not in str(seen["headers"])
+
+
+@pytest.mark.parametrize("enforced", [False, True])
+def test_native_transcript_relay_reads_verified_child(b_env, tmp_path, monkeypatch, enforced):
+    """Exercise signed relay + actual inner transcript route, not a dispatch stub."""
+    import json
+    import agent_status as A
+    c, hs, secret = b_env
+    monkeypatch.setenv("VT_AUTHZ_ENFORCE", "peer" if enforced else "")
+    home = tmp_path / "cli"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(home))
+    parent = home / "projects" / "sample" / "relay-parent.jsonl"
+    parent.parent.mkdir(parents=True)
+    parent.write_text("")
+    child = parent.parent / "relay-parent" / "subagents" / "agent-child.jsonl"
+    child.parent.mkdir(parents=True)
+    child.write_text(json.dumps({"type": "assistant", "message": {"content": "relayed record"}}) + "\n")
+    A.on_event("session_start", {"session_id": "relay-parent", "source": "startup"}, session="native-relay", agent="claude")
+    A.on_event("subagent_start", {"session_id": "relay-parent", "agent_id": "child", "transcript_path": str(parent)}, session="native-relay", agent="claude")
+    path = "/api/peer/relay/api/agents/native-relay/subagents/child/transcript"
+    try:
+        response = c.get(path, headers=_signed(hs, secret, "GET", path))
+        assert response.status_code == 200, response.text
+        assert response.headers["cache-control"] == "no-store"
+        assert response.json()["items"][0]["text"] == "relayed record"
+        hs.set_grant_level("laptop", hs.LEVEL_VIEW)
+        response = c.get(path, headers=_signed(hs, secret, "GET", path))
+        assert response.status_code == 403
+    finally:
+        A._retire("relay-parent")

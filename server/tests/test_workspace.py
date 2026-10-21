@@ -120,6 +120,7 @@ def test_hooks_status_endpoint_reports_per_event(client, tmp_path, monkeypatch):
     assert set(body["events"]) == {
         "PreToolUse", "PostToolUse", "Stop", "SessionStart", "Notification", "PermissionRequest",
         "UserPromptSubmit", "SessionEnd",
+        "SubagentStart", "SubagentStop", "StopFailure", "TeammateIdle",
     }
     assert body["events"]["Stop"] == "add"
     assert set(body["tools"]) == {"claude", "codex"}

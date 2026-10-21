@@ -15,6 +15,7 @@ import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { agentLabel, icon, stateIcon } from '../ui/icons.js';
 import { agentMark } from './agent-mark.js';
 import { t } from '../core/i18n.js';
+import { NativeChip } from './NativeChildren.js';
 import {
   stateKeyword, formatRelativeTime, statusSentence, diffLabel, lineageLabel,
   ORIGIN_ICON, ORIGIN_LABEL, SHARE_MODE_LABEL, shareSentence, type SessionRow, type Origin, type ShareInfo,
@@ -274,6 +275,7 @@ export function Row(props: {
           <Show when={props.kid && props.row.lineage?.state !== 'running'} fallback={<KeywordLine row={props.row} now={now} />}>
             <LineageMark row={props.row} />
           </Show>
+          <NativeChip row={props.row} />
           <ShareMark share={props.row.share} />
           <OriginMark origin={props.row.origin} />
         </div>

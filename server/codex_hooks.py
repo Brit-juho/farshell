@@ -29,6 +29,8 @@ EVENTS = {
     "PostToolUse": "post",
     "UserPromptSubmit": "prompt",
     "Stop": "stop",
+    "SubagentStart": "subagent_start",
+    "SubagentStop": "subagent_stop",
     "SessionEnd": "session_end",
 }
 

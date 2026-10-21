@@ -275,6 +275,7 @@ RELAY_SAMPLES = {
     r"/api/tmux/preview/[^/]+": "/api/tmux/preview/target",
     r"/api/agents(/coverage|/[^/]+)?": "/api/agents",
     r"/api/agent/status": "/api/agent/status",
+    r"/api/agents/[^/]+/subagents/[A-Za-z0-9_-]{1,64}/transcript": "/api/agents/sample/subagents/child/transcript",
     r"/api/files": "/api/files",
     r"/api/files/delete": "/api/files/delete",
     r"/api/files/[^/]+": "/api/files/abc",

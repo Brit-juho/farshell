@@ -47,6 +47,10 @@ EVENTS = {
     "PreToolUse": "pre",
     "PostToolUse": "post",
     "Stop": "stop",
+    "SubagentStart": "subagent_start",
+    "SubagentStop": "subagent_stop",
+    "StopFailure": "stop_failure",
+    "TeammateIdle": "teammate_idle",
     # 2026-09-28 — 막 띄운 에이전트는 턴을 한 번 돌기 전까지 상태 엔트리가 없어
     # "모른다"였고, 그 사이 온 에이전트 메시지·큐 항목이 첫 지시를 사람이 칠 때까지
     # 묶여 있었다(M1↔M5 실측). 세션이 열리면 idle로 알린다.

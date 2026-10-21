@@ -138,6 +138,7 @@ _ROWS: tuple = (
     ("GET", "/api/agents", auth()),
     ("GET", "/api/agents/coverage", auth()),
     ("GET", "/api/agents/{tmux_name}", auth()),
+    ("GET", "/api/agents/{tmux_name}/subagents/{agent_id}/transcript", auth()),
     ("POST", "/api/agent/event", sock_()),
     ("POST", "/api/agent/report", sock_()),
     ("GET", "/api/agent/status", auth()),

@@ -195,6 +195,7 @@ function _rebuildDetails() {
       // 서버가 정한 waiting의 유형(approval/choice/plan/question)과 done의 보조 표시(question/plan).
       kind: ent.kind ?? null,
       badge: ent.badge ?? null,
+      ...(ent.subagents ? { subagents: ent.subagents } : {}),
     };
   }
   if (_canon(next) === _canon(_details)) return false;

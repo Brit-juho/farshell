@@ -32636,6 +32636,261 @@
    "reached": false
   }
  },
+ "relay.api_agents_sample_subagents_child_transcript.delete.peer_control": {
+  "group": "relay",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/peer/relay/{rest:path}",
+  "path": "/api/peer/relay/api/agents/sample/subagents/child/transcript",
+  "rule": "/api/agents/[^/]+/subagents/[A-Za-z0-9_-]{1,64}/transcript",
+  "expected": {
+   "status": 403,
+   "error": "relay_forbidden",
+   "reached": false
+  }
+ },
+ "relay.api_agents_sample_subagents_child_transcript.delete.peer_control_agent": {
+  "group": "relay",
+  "caller": "peer_control_agent",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/peer/relay/{rest:path}",
+  "path": "/api/peer/relay/api/agents/sample/subagents/child/transcript",
+  "rule": "/api/agents/[^/]+/subagents/[A-Za-z0-9_-]{1,64}/transcript",
+  "expected": {
+   "status": 403,
+   "error": "relay_forbidden",
+   "reached": false
+  }
+ },
+ "relay.api_agents_sample_subagents_child_transcript.delete.peer_view": {
+  "group": "relay",
+  "caller": "peer_view",
+  "mode": "password",
+  "tmux": "up",
+  "method": "DELETE",
+  "route": "/api/peer/relay/{rest:path}",
+  "path": "/api/peer/relay/api/agents/sample/subagents/child/transcript",
+  "rule": "/api/agents/[^/]+/subagents/[A-Za-z0-9_-]{1,64}/transcript",
+  "expected": {
+   "status": 403,
+   "error": "level_required",
+   "reached": false
+  }
+ },
+ "relay.api_agents_sample_subagents_child_transcript.get.none": {
+  "group": "relay",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/relay/{rest:path}",
+  "path": "/api/peer/relay/api/agents/sample/subagents/child/transcript",
+  "rule": "/api/agents/[^/]+/subagents/[A-Za-z0-9_-]{1,64}/transcript",
+  "expected": {
+   "status": 401,
+   "error": "peer_denied",
+   "reached": false
+  }
+ },
+ "relay.api_agents_sample_subagents_child_transcript.get.peer_control": {
+  "group": "relay",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/relay/{rest:path}",
+  "path": "/api/peer/relay/api/agents/sample/subagents/child/transcript",
+  "rule": "/api/agents/[^/]+/subagents/[A-Za-z0-9_-]{1,64}/transcript",
+  "expected": {
+   "status": 200,
+   "error": null,
+   "reached": true
+  }
+ },
+ "relay.api_agents_sample_subagents_child_transcript.get.peer_control_agent": {
+  "group": "relay",
+  "caller": "peer_control_agent",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/relay/{rest:path}",
+  "path": "/api/peer/relay/api/agents/sample/subagents/child/transcript",
+  "rule": "/api/agents/[^/]+/subagents/[A-Za-z0-9_-]{1,64}/transcript",
+  "expected": {
+   "status": 200,
+   "error": null,
+   "reached": true
+  }
+ },
+ "relay.api_agents_sample_subagents_child_transcript.get.peer_forged": {
+  "group": "relay",
+  "caller": "peer_forged",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/relay/{rest:path}",
+  "path": "/api/peer/relay/api/agents/sample/subagents/child/transcript",
+  "rule": "/api/agents/[^/]+/subagents/[A-Za-z0-9_-]{1,64}/transcript",
+  "expected": {
+   "status": 401,
+   "error": "peer_denied",
+   "reached": false
+  }
+ },
+ "relay.api_agents_sample_subagents_child_transcript.get.peer_view": {
+  "group": "relay",
+  "caller": "peer_view",
+  "mode": "password",
+  "tmux": "up",
+  "method": "GET",
+  "route": "/api/peer/relay/{rest:path}",
+  "path": "/api/peer/relay/api/agents/sample/subagents/child/transcript",
+  "rule": "/api/agents/[^/]+/subagents/[A-Za-z0-9_-]{1,64}/transcript",
+  "expected": {
+   "status": 403,
+   "error": "level_required",
+   "reached": false
+  }
+ },
+ "relay.api_agents_sample_subagents_child_transcript.patch.peer_control": {
+  "group": "relay",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "PATCH",
+  "route": "/api/peer/relay/{rest:path}",
+  "path": "/api/peer/relay/api/agents/sample/subagents/child/transcript",
+  "rule": "/api/agents/[^/]+/subagents/[A-Za-z0-9_-]{1,64}/transcript",
+  "expected": {
+   "status": 403,
+   "error": "relay_forbidden",
+   "reached": false
+  }
+ },
+ "relay.api_agents_sample_subagents_child_transcript.patch.peer_control_agent": {
+  "group": "relay",
+  "caller": "peer_control_agent",
+  "mode": "password",
+  "tmux": "up",
+  "method": "PATCH",
+  "route": "/api/peer/relay/{rest:path}",
+  "path": "/api/peer/relay/api/agents/sample/subagents/child/transcript",
+  "rule": "/api/agents/[^/]+/subagents/[A-Za-z0-9_-]{1,64}/transcript",
+  "expected": {
+   "status": 403,
+   "error": "relay_forbidden",
+   "reached": false
+  }
+ },
+ "relay.api_agents_sample_subagents_child_transcript.patch.peer_view": {
+  "group": "relay",
+  "caller": "peer_view",
+  "mode": "password",
+  "tmux": "up",
+  "method": "PATCH",
+  "route": "/api/peer/relay/{rest:path}",
+  "path": "/api/peer/relay/api/agents/sample/subagents/child/transcript",
+  "rule": "/api/agents/[^/]+/subagents/[A-Za-z0-9_-]{1,64}/transcript",
+  "expected": {
+   "status": 403,
+   "error": "level_required",
+   "reached": false
+  }
+ },
+ "relay.api_agents_sample_subagents_child_transcript.post.peer_control": {
+  "group": "relay",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/relay/{rest:path}",
+  "path": "/api/peer/relay/api/agents/sample/subagents/child/transcript",
+  "rule": "/api/agents/[^/]+/subagents/[A-Za-z0-9_-]{1,64}/transcript",
+  "expected": {
+   "status": 403,
+   "error": "relay_forbidden",
+   "reached": false
+  }
+ },
+ "relay.api_agents_sample_subagents_child_transcript.post.peer_control_agent": {
+  "group": "relay",
+  "caller": "peer_control_agent",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/relay/{rest:path}",
+  "path": "/api/peer/relay/api/agents/sample/subagents/child/transcript",
+  "rule": "/api/agents/[^/]+/subagents/[A-Za-z0-9_-]{1,64}/transcript",
+  "expected": {
+   "status": 403,
+   "error": "relay_forbidden",
+   "reached": false
+  }
+ },
+ "relay.api_agents_sample_subagents_child_transcript.post.peer_view": {
+  "group": "relay",
+  "caller": "peer_view",
+  "mode": "password",
+  "tmux": "up",
+  "method": "POST",
+  "route": "/api/peer/relay/{rest:path}",
+  "path": "/api/peer/relay/api/agents/sample/subagents/child/transcript",
+  "rule": "/api/agents/[^/]+/subagents/[A-Za-z0-9_-]{1,64}/transcript",
+  "expected": {
+   "status": 403,
+   "error": "level_required",
+   "reached": false
+  }
+ },
+ "relay.api_agents_sample_subagents_child_transcript.put.peer_control": {
+  "group": "relay",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "PUT",
+  "route": "/api/peer/relay/{rest:path}",
+  "path": "/api/peer/relay/api/agents/sample/subagents/child/transcript",
+  "rule": "/api/agents/[^/]+/subagents/[A-Za-z0-9_-]{1,64}/transcript",
+  "expected": {
+   "status": 403,
+   "error": "relay_forbidden",
+   "reached": false
+  }
+ },
+ "relay.api_agents_sample_subagents_child_transcript.put.peer_control_agent": {
+  "group": "relay",
+  "caller": "peer_control_agent",
+  "mode": "password",
+  "tmux": "up",
+  "method": "PUT",
+  "route": "/api/peer/relay/{rest:path}",
+  "path": "/api/peer/relay/api/agents/sample/subagents/child/transcript",
+  "rule": "/api/agents/[^/]+/subagents/[A-Za-z0-9_-]{1,64}/transcript",
+  "expected": {
+   "status": 403,
+   "error": "relay_forbidden",
+   "reached": false
+  }
+ },
+ "relay.api_agents_sample_subagents_child_transcript.put.peer_view": {
+  "group": "relay",
+  "caller": "peer_view",
+  "mode": "password",
+  "tmux": "up",
+  "method": "PUT",
+  "route": "/api/peer/relay/{rest:path}",
+  "path": "/api/peer/relay/api/agents/sample/subagents/child/transcript",
+  "rule": "/api/agents/[^/]+/subagents/[A-Za-z0-9_-]{1,64}/transcript",
+  "expected": {
+   "status": 403,
+   "error": "level_required",
+   "reached": false
+  }
+ },
  "relay.api_capabilities.delete.peer_control": {
   "group": "relay",
   "caller": "peer_control",

@@ -54,6 +54,7 @@ RELAY_HTTP_GROUPS: dict[str, str] = {
     r"/api/tmux/preview/[^/]+": "tmux.preview",
     r"/api/agents(/coverage|/[^/]+)?": "agents",
     r"/api/agent/status": "agents",
+    r"/api/agents/[^/]+/subagents/[A-Za-z0-9_-]{1,64}/transcript": "agents",
     r"/api/files": "files",
     r"/api/files/delete": "files.write",
     r"/api/files/[^/]+": "files.write",

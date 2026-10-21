@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
@@ -375,6 +376,61 @@ async def agent_coverage():
     return rows
 
 
+class NativeTranscriptItem(BaseModel):
+    id: str
+    kind: Literal["user", "assistant", "tool_call", "tool_result"]
+    text: str
+    tool: str | None = None
+
+
+class NativeTranscriptResponse(BaseModel):
+    items: list[NativeTranscriptItem]
+    next_cursor: str | None
+    reset: bool
+    truncated: bool
+    pending: bool
+    last_message: str
+    label: str
+    state: Literal["working", "idle", "done", "failed"]
+    parent_id: str
+
+
+@router.get("/api/agents/{tmux_name}/subagents/{agent_id}/transcript", response_model=NativeTranscriptResponse)
+async def subagent_transcript_get(tmux_name: str, agent_id: str, request: Request):
+    from fastapi.responses import JSONResponse
+    import subagent_transcript
+    import fsguard
+    from i18n import tr
+    # Middleware authenticates; no machine/socket/share access is added here.
+    agent_status.sweep()
+    entries = agent_status._entries_for(tmux_name, agent_status.LOCAL_HOST)
+    ent = next((e for e in entries if agent_id in e.get("_subagents", {})), None)
+    headers = {"Cache-Control": "no-store"}
+    if ent is None:
+        return JSONResponse({"error": "subagent_not_found", "reason": tr("서브에이전트를 찾을 수 없습니다")}, status_code=404, headers=headers)
+    original = ent["_subagents"][agent_id]
+    row = dict(original)
+    try:
+        result = await asyncio.to_thread(subagent_transcript.read, row, ent["session_id"], request.query_params.get("cursor"))
+    except subagent_transcript.BadCursor:
+        return JSONResponse({"error": "bad_cursor", "reason": tr("잘못된 기록 커서")}, status_code=400, headers=headers)
+    except subagent_transcript.Unsupported:
+        return JSONResponse({"error": "unsupported_transcript", "reason": tr("지원하지 않는 기록 형식")}, status_code=422, headers=headers)
+    except (fsguard.FsDenied, OSError, ValueError):
+        return JSONResponse({"error": "transcript_denied", "reason": tr("기록에 접근할 수 없습니다")}, status_code=403, headers=headers)
+    # The parent may have been cleared/retired while the file was read off-thread.
+    current = agent_status._entries_for(tmux_name, agent_status.LOCAL_HOST)
+    if not any(e is ent for e in current) or ent.get("_subagents", {}).get(agent_id) is not original:
+        return JSONResponse({"error": "subagent_not_found", "reason": tr("서브에이전트를 찾을 수 없습니다")}, status_code=404, headers=headers)
+    live = ent["_subagents"][agent_id]
+    if result.get("label") and live.get("label") != result["label"]:
+        live["label"] = result["label"]
+        agent_status._emit(ent, "subagents")
+    result["state"] = live["state"]
+    result["parent_id"] = ent["session_id"]
+    return JSONResponse(result, headers=headers)
+
+
 @router.get("/api/agents/{tmux_name}")
 async def get_agent(tmux_name: str):
     # P2-1(ADR-34) — 같은 우선순위를 단일 세션 조회에도 적용한다.
@@ -437,6 +493,9 @@ async def agent_event(request: Request):
     # 받아 세션(agent_detector)보다 우선 적용한다.
     state = agent_status.on_event(event, payload, session=session, agent=agent_name,
                                   verified=verified, ts=ts)
+    if event in agent_status.subagents.LIFECYCLE:
+        return {"ok": True, "state": agent_status.public_entry(state) if state else None,
+                "queue_scheduled": False, "resolved_by": how, "identity": verdict}
     report_seen.mark(body.get("agent"))
     # None = 그 세션의 소유자가 아니거나 은퇴한 세션의 이벤트(agent_status 「세션 소유자」).
     # 같은 pane을 물려받은 자식 프로세스의 Stop이 큐를 흘리거나 완료를 낭독하면 안 된다.
@@ -463,7 +522,7 @@ async def agent_event(request: Request):
     # 상태 판정이 서버로 옮겨온 이상, 큐도 같은 판정을 봐야 한다(나중에 done에
     # 이르는 경로가 하나 더 생겨도 큐 쪽을 또 고칠 필요가 없다).
     queued = False
-    if (state or {}).get("status") == agent_status.DONE:
+    if not payload.get("agent_id") and (state or {}).get("status") == agent_status.DONE:
         try:
             import queue_runner
             import tmux_target

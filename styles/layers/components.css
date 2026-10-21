@@ -1446,3 +1446,31 @@
     .vt-share-mode { min-height: 48px; }
   }
 }
+
+/* Native CLI children share the rail's density; transcripts use the existing sheet. */
+.vt-native-children { margin: 0 8px 6px 22px; border-inline-start: 1px solid var(--color-line-strong); padding-inline-start: 8px; }
+.vt-native-row { display: flex; align-items: start; position: relative; }
+.vt-native-open { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 7px 4px; color: var(--color-txt); background: transparent; border: 0; text-align: start; cursor: pointer; }
+.vt-native-open:hover, .vt-native-fold:hover { background: var(--color-bg-3); }
+.vt-native-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; font-size: 12px; }
+.vt-native-meta, .vt-native-tool, .vt-native-chip { color: var(--color-muted); font-size: 11px; }
+.vt-native-tool { overflow: hidden; text-overflow: ellipsis; max-width: 110px; }
+.vt-native-fold { display: block; width: 100%; background: transparent; border: 0; color: var(--color-sub); padding: 8px 4px; text-align: start; cursor: pointer; font-size: 11px; }
+.vt-native-menu summary { cursor: pointer; list-style: none; padding: 6px; color: var(--color-sub); }
+.vt-native-menu[open] { position: relative; z-index: 2; background: var(--color-bg-1); }
+.vt-native-menu button { display: block; color: var(--color-txt); background: var(--color-bg-1); border: 1px solid var(--color-line); padding: 8px; white-space: nowrap; cursor: pointer; }
+#vt-subagent .vt-viewer-card { width: min(800px, 94vw); }
+#vt-subagent-body { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.vt-native-notice { color: var(--color-sub); font-size: 12px; }
+.vt-native-transcript { overflow: auto; min-height: 100px; }
+.vt-native-entry { padding: 12px 0; border-bottom: 1px solid var(--color-line); }
+.vt-native-entry-label { color: var(--color-muted); font-size: 11px; margin-bottom: 6px; }
+.vt-native-entry pre { margin: 0; color: var(--color-txt); font-family: var(--font-mono); font-size: 12px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.vt-native-entry[data-kind="user"] .vt-native-entry-label { color: var(--color-acc); }
+@media (max-width: 719px) { #vt-subagent .vt-viewer-card { width: 100%; height: 100%; max-height: 100%; } }
+@media (pointer: coarse) { .vt-native-open, .vt-native-fold, .vt-native-menu summary, .vt-native-menu button { min-height: 44px; } }
+
+.vt-native-chip { border: 0; padding: 2px 4px; background: transparent; cursor: pointer; text-align: start; }
+.vt-native-chip:hover { color: var(--color-txt); }
+.vt-native-picker { text-align: start; min-height: 44px; }
+.vt-native-row[data-state="failed"] .status-dot { background: var(--color-st-error); }
