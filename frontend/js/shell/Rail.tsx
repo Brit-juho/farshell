@@ -13,7 +13,7 @@ import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'so
 import { render, Portal } from 'solid-js/web';
 import { t } from '../core/i18n.js';
 import {
-  buildRailLists, groupSessionRows, compactRailRows, rowMenuItems, rowSummary, runRowMenu, defaultRailCollapsed,
+  buildRailLists, groupSessionRows, compactRailRows, rowMenuItems, rowSummaryDetails, runRowMenu, defaultRailCollapsed,
   ATTENTION_COLLAPSED_KEY, ORDER_KEY, LINEAGE_KEY, encodeOrder, encodeLineagePrefs,
   buildSessionTree, kidsProgress, moveInOrder, stepInOrder,
   type SessionRow, type RailSort, type TreeEntry,
@@ -679,7 +679,7 @@ function Rail(props: { deps: RailDeps }) {
       <Show when={ctxMenu()}>
         {(m) => (
           <Portal>
-            <Menu x={m().x} y={m().y} onClose={() => setCtxMenu(null)} items={ctxMenuItems()} summary={rowSummary(m().row)} />
+            <Menu x={m().x} y={m().y} onClose={() => setCtxMenu(null)} items={ctxMenuItems()} summary={rowSummaryDetails(m().row)} />
           </Portal>
         )}
       </Show>

@@ -42,13 +42,26 @@ test('summary 가 없으면 헤더 행도 없다(호스트 메뉴 등 다른 메
   assert.strictEqual(root.querySelector('.vt-menu-summary'), null);
 });
 
-test('레일과 Fleet 메뉴가 둘 다 rowSummary 를 쓰고, 요약 줄은 말줄임 없이 줄바꿈한다(CSS)', () => {
+test('레일과 Fleet 메뉴가 구조화 요약을 공유하고 말줄임 없이 줄바꿈한다(CSS)', () => {
   const read = (p) => fs.readFileSync(path.join(__dirname, '..', '..', p), 'utf8');
-  assert.match(read('frontend/js/shell/Rail.tsx'), /summary=\{rowSummary\(m\(\)\.row\)\}/);
-  assert.match(read('frontend/js/shell/Fleet.tsx'), /vt-menu-summary[^>]*role="note"[^>]*>\{rowSummary\(row\)\}/);
+  assert.match(read('frontend/js/shell/Rail.tsx'), /summary=\{rowSummaryDetails\(m\(\)\.row\)\}/);
+  assert.match(read('frontend/js/shell/Fleet.tsx'), /MenuSummary summary=\{rowSummaryDetails\(row\)\}/);
   const css = read('styles/layers/components.css');
   const m = css.match(/\.vt-menu-summary\s*\{([^}]*)\}/);
   assert.ok(m);
   assert.match(m[1], /white-space:\s*normal/);
   assert.doesNotMatch(m[1], /text-overflow|nowrap/);
+});
+
+
+test('구조화 요약은 상태, 프로젝트, 전체 경로, 브랜치를 분리하고 빈 필드는 숨긴다', async () => {
+  const { root } = await mount({ summary: {
+    status: '작업 중 · 이 화면에서 만듦', project: 'sample-repo', cwd: '/workspace/sample-repo',
+    branch: 'feat/sample', accessible: '작업 중 · /workspace/sample-repo · feat/sample',
+  }, items: [{ label: '닫기', run() {} }] });
+  assert.strictEqual(root.querySelector('.vt-menu-summary-project').textContent, 'sample-repo');
+  assert.strictEqual(root.querySelector('.vt-menu-summary-path').textContent, '/workspace/sample-repo');
+  assert.strictEqual(root.querySelector('.vt-menu-summary-branch').textContent, 'feat/sample');
+  const empty = await mount({ summary: { status: '대기', accessible: '대기' }, items: [] });
+  assert.strictEqual(empty.root.querySelector('.vt-menu-summary-section'), null);
 });

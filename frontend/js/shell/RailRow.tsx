@@ -18,7 +18,7 @@ import { t } from '../core/i18n.js';
 import { NativeChip } from './NativeChildren.js';
 import {
   stateKeyword, formatRelativeTime, statusSentence, diffLabel, lineageLabel,
-  ORIGIN_ICON, ORIGIN_LABEL, SHARE_MODE_LABEL, shareSentence, type SessionRow, type Origin, type ShareInfo,
+  ORIGIN_ICON, ORIGIN_LABEL, SHARE_MODE_LABEL, shareSentence, type SessionRow, type Origin, type ShareInfo, type RowSummaryDetails,
 } from './rail-data.js';
 
 /** 경과 시간을 행 DOM을 다시 만들지 않고 갱신하는 시계(30초). */
@@ -316,8 +316,32 @@ export interface MenuItem {
   danger?: boolean;
 }
 
-/** `summary`: 맨 위의 선택 불가 요약 한 줄(행 메뉴 — rail-data.ts rowSummary). aria 로도 읽힌다. */
-export function Menu(props: { x: number; y: number; onClose: () => void; items: MenuItem[]; summary?: string }) {
+/** 레일과 모바일 시트가 공유하는 선택 불가 정보 헤더. */
+export function MenuSummary(props: { summary: string | RowSummaryDetails }) {
+  const details = () => typeof props.summary === 'string' ? null : props.summary;
+  const accessible = () => typeof props.summary === 'string' ? props.summary : props.summary.accessible;
+  return (
+    <div class="vt-menu-summary" role="note" aria-label={t('요약: {summary}', { summary: accessible() })}>
+      <div class="vt-menu-summary-status">{details()?.status ?? accessible()}</div>
+      <Show when={details()?.cwd}>
+        <div class="vt-menu-summary-section">
+          <span class="vt-menu-summary-label">{t('작업 위치')}</span>
+          <strong class="vt-menu-summary-project">{details()?.project}</strong>
+          <span class="vt-menu-summary-path">{details()?.cwd}</span>
+        </div>
+      </Show>
+      <Show when={details()?.branch}>
+        <div class="vt-menu-summary-section">
+          <span class="vt-menu-summary-label">{t('브랜치')}</span>
+          <span class="vt-menu-summary-branch">{details()?.branch}</span>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
+/** `summary`: 선택 불가 정보 헤더. 일반 문자열 메뉴도 그대로 지원한다. */
+export function Menu(props: { x: number; y: number; onClose: () => void; items: MenuItem[]; summary?: string | RowSummaryDetails }) {
   let ref: HTMLDivElement | undefined;
   const previousFocus = document.activeElement as HTMLElement | null;
   const onDocClick = (e: MouseEvent) => { if (ref && !ref.contains(e.target as Node)) props.onClose(); };
@@ -354,7 +378,7 @@ export function Menu(props: { x: number; y: number; onClose: () => void; items: 
         items[(index + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
       }}>
       <Show when={props.summary}>
-        <div class="vt-menu-summary" role="note" aria-label={t('요약: {summary}', { summary: props.summary })}>{props.summary}</div>
+        <MenuSummary summary={props.summary!} />
       </Show>
       <For each={props.items}>
         {(it) => (

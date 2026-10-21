@@ -315,3 +315,10 @@ The web UI uses tmux sessions as its default:
 Current-cwd metadata, workspace kind/details and editable grouped-view headers: [session UI design](./session-ui.md).
 
 Keyboard routing, modal priority, Option modes, device migration and paste timing limits: [keyboard input](./keyboard-input.md).
+
+### Session menu summary
+
+Desktop rail menus and mobile Fleet sheets share a non-interactive summary header.
+Status and origin appear first, followed by the workspace label, project basename and
+full path, then the branch. Missing fields are hidden; long paths and branch names
+wrap without truncation. The accessible summary retains the full context.

@@ -12,6 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - MCP·스킬·플러그인 통합 관리: 전체/선택 세션 보기, 프로필별 원본 설정,
   분류·설명·출처, 혼합 선택·프리셋, 비밀값 비표시 환경변수와 조건부 CLI resume,
   기존 peer-sync 상태 및 대상 호스트에서 승인하는 원격 변경 요청.
+- Separate session menu status, workspace and branch into readable sections on desktop and mobile.
 - Native Claude Code/Codex subagent rows and read-only transcript viewer, with bounded
   retention, child event ordering, dedicated transcript path checks and host relay support.
 

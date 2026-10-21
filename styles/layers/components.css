@@ -638,8 +638,8 @@
   .vt-menu-item.on,
   .vt-menu-item.on > svg { color: var(--color-acc); }
   .vt-menu-item.dim { opacity: .6; }
-  /* 행 메뉴 맨 위의 요약 한 줄(rail-data.ts rowSummary) — 선택 불가 헤더 행이다. 호버 툴팁이 없는 터치에서
-   * 행의 숨은 정보(상태·유형·웹 외 attach·만든 곳·브랜치)를 읽는 자리라 **말줄임 없이 줄바꿈**한다(두 줄 안팎).
+  /* 행 메뉴의 선택 불가 정보 헤더. 상태·작업 위치·브랜치를 구분하고
+   * 터치에서도 전체 경로를 읽을 수 있도록 말줄임 없이 줄바꿈한다.
    * 글자는 sub: 메뉴 배경 위 4.5:1 이상(램프 하한이 sub 6.0). 눌러도 아무 일도 없어야 해서 포인터를 받지 않는다. */
   .vt-menu-summary {
     max-width: 280px;
@@ -653,6 +653,12 @@
     pointer-events: none;
     user-select: none;
   }
+  .vt-menu-summary-status { color: var(--color-txt); font-weight: var(--weight-medium); }
+  .vt-menu-summary-section { display: flex; flex-direction: column; gap: calc(var(--spacing) * .5); margin-top: calc(var(--spacing) * 2); min-width: 0; }
+  .vt-menu-summary-label { color: var(--color-sub); font-size: var(--fs-xs); }
+  .vt-menu-summary-project { color: var(--color-txt); font-size: var(--fs-sm); font-weight: var(--weight-medium); }
+  .vt-menu-summary-path { color: var(--color-sub); }
+  .vt-menu-summary-branch { color: var(--color-txt); }
   .vt-session-sheet .vt-menu-summary { max-width: none; padding-inline: calc(var(--spacing) * 0.5); }
   .vt-menu-item.new { color: var(--ok); }
   /* 2026-09-23 — `.vt-btn.danger`와 같은 값의 목록-행 버전. 되돌릴 수 없는

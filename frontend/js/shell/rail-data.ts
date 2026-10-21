@@ -458,6 +458,25 @@ export function rowSummary(
   return parts.join(' · ');
 }
 
+export interface RowSummaryDetails {
+  status: string;
+  cwd?: string;
+  project?: string;
+  branch?: string;
+  accessible: string;
+}
+
+export function rowSummaryDetails(row: Parameters<typeof rowSummary>[0]): RowSummaryDetails {
+  const cwd = row.cwd || undefined;
+  return {
+    status: rowSummary({ ...row, cwd: undefined, branch: undefined }),
+    cwd,
+    project: cwd ? cwd.replace(/\/+$/, '').split('/').pop() || cwd : undefined,
+    branch: row.branch || undefined,
+    accessible: rowSummary(row),
+  };
+}
+
 export interface RowMenuOpts {
   /** 「오른쪽에 나란히 열기」「아래에 열기」를 넣는다. 폭 720px 이상 + 터치일 때만 true로 준다
    * (term/session-actions.js `touchSplitAvailable`). 터치 드래그를 만들지 않는 대신의 길이다. */
