@@ -235,3 +235,35 @@ The user shares an ordinary tmux session (nickname + `read`/`readwrite`) and the
   SSE 검사는 미지원으로 표시한다. 실제 실행 상태는 확인 채널이 없어 `unknown`이다.
 - 플러그인 번들의 MCP 이름은 플러그인 아래 읽기 전용으로 표시한다. 인증·플러그인
   설치·스킬 설치의 양방향 동기화는 수행하지 않는다.
+
+
+## Native subagents
+
+Native CLI children appear below their parent in the expanded desktop rail; Fleet shows
+a count chip that opens the child list and fullscreen record sheet. These are read-only records, separate from delegated tmux sessions.
+The record viewer shows instructions, responses and tool calls/results as literal text.
+Thinking/reasoning is excluded by the server. API details live in [API.md](../../API.md#native-subagent-transcripts).
+
+`fsh hooks install` registers Claude SubagentStart/SubagentStop/StopFailure/TeammateIdle
+and Codex SubagentStart/SubagentStop in addition to the existing hooks. Running CLI
+sessions may need restarting and Codex may require hook trust review. Configuration
+registration does not prove that an installed CLI version emits every event.
+
+The server keeps at most 32 children per parent in memory. Done/failed rows expire one
+hour after ending; idle rows expire one hour after becoming idle. Working rows with no
+event for 15 minutes become stale idle, which does not establish completion. Codex Stop
+means idle between turns. Completed rows are evicted before idle rows; working rows are
+never evicted for a new child. If all 32 are working, the UI reports the display limit.
+A server restart clears the roster; a later Start or child tool hook can rebuild it.
+
+Parent ownership and child event ordering are checked independently. Child permission
+hooks still set the parent's waiting state, and only matching child/tool hooks clear it.
+Pure child lifecycle events cannot drain the parent's queue or trigger completion speech.
+Clear/resume/startup and owner retirement discard children; compaction does not.
+
+Transcript access uses a dedicated guard without widening file-browser roots. Claude
+paths must match the current parent's child location; Codex session metadata must match
+both child and parent IDs. Regular files are opened without following swapped symlink
+components. The remote host performs its own checks through the `agents` relay group.
+The viewer uses bounded incremental reads, file-generation cursors, cancellation and
+final reads after completion. Unsupported transcript formats fail explicitly.

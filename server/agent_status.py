@@ -66,6 +66,8 @@ import logging
 import os
 import re
 import time
+
+import subagents
 from typing import Callable, Optional
 from i18n import tr
 
@@ -306,6 +308,8 @@ def sweep(now: Optional[float] = None) -> int:
     changed = 0
     _prune_retired(now)
     for sid, ent in list(_state.items()):
+        if subagents.sweep(ent, now):
+            _emit(ent, "subagents")
         status = ent.get("status", IDLE)
         age = now - ent.get("updated_at", now)
         if status == WORKING and age > ttls[WORKING] and (shot := _probe(ent)) is not None \
@@ -341,7 +345,7 @@ def sweep(now: Optional[float] = None) -> int:
             _set_status(ent, IDLE, now)
             changed += 1
             _emit(ent, "ttl")
-        elif status == IDLE and age > ttls[DONE]:
+        elif status == IDLE and age > ttls[DONE] and not ent.get("_subagents"):
             del _state[sid]
             _drop_owner_refs(sid)
             changed += 1
@@ -520,7 +524,8 @@ def _ends_with_question(text) -> bool:
 _CLAUDE_WAIT_TOOLS = {"AskUserQuestion": KIND_CHOICE, "ExitPlanMode": KIND_PLAN}
 
 _HOOK_EVENTS = ("prompt", "user_prompt_submit", "permission", "permission_request",
-                "notification", "pre", "post", "session_start", "stop", "session_end")
+                "notification", "pre", "post", "session_start", "stop", "session_end",
+                "subagent_start", "subagent_stop", "stop_failure", "teammate_idle")
 
 
 def _gate(event: str, payload: dict, key: str, session: Optional[str], host: str,
@@ -634,7 +639,14 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
     if event not in _HOOK_EVENTS:
         return _state.get(key)   # 알 수 없는 이벤트 — 상태를 건드리지 않는다.
     prev = _state.get(key)
-    if (isinstance(ts, int) and prev is not None and isinstance(prev.get("_ts"), int)
+    sub = payload.get("agent_id")
+    if sub is not None and not subagents.valid_id(sub):
+        return None
+    if sub and event not in {"pre", "post", "permission", "permission_request", "subagent_start", "subagent_stop", "stop_failure"}:
+        return None
+    if (sub or event in subagents.LIFECYCLE) and prev is None:
+        return None  # A child cannot claim a missing/released parent's pane.
+    if (not sub and event not in subagents.LIFECYCLE and isinstance(ts, int) and prev is not None and isinstance(prev.get("_ts"), int)
             and ts < prev["_ts"]):
         logger.debug(f"agent {key}: 늦게 도착한 {event} — 버림")
         return None
@@ -673,12 +685,34 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
         # (claude_hooks.MATCHERS와 같은 규칙 — matcher 없이 등록된 옛 설정 대비).
         return _state.get(key)
 
-    ent = _entry(sid, cwd, host)
-    _apply_agent(ent, agent)
-    if session:
-        ent["tmux_session"] = session
-    if isinstance(ts, int):
+    ent = prev if sub or event in subagents.LIFECYCLE else _entry(sid, cwd, host)
+    if not sub and event not in subagents.LIFECYCLE:
+        _apply_agent(ent, agent)
+        if session:
+            ent["tmux_session"] = session
+    if not sub and event not in subagents.LIFECYCLE and isinstance(ts, int):
         ent["_ts"] = ts
+    if event == "session_start":
+        subagents.clear(ent)
+        ent["_subagents_since"] = ts
+    if sub:
+        accepted = subagents.accept(ent, event, payload, agent or ent.get("agent") or "claude", ts)
+        if not accepted:
+            if ent.get("_subagents_limited"):
+                _emit(ent, "subagents")
+            return None
+        _emit(ent, "subagents")
+        if event in subagents.LIFECYCLE:
+            return ent
+    elif event == "teammate_idle":
+        if subagents.idle_teammate(ent, payload, ts):
+            _emit(ent, "subagents")
+        return ent
+    elif event in subagents.LIFECYCLE:
+        return None
+    if event == "stop" and (agent or ent.get("agent")) == "claude":
+        if subagents.fold(ent, payload, ts=ts):
+            _emit(ent, "subagents")
 
     if event in ("prompt", "user_prompt_submit"):
         ent["tool"] = None
@@ -1067,7 +1101,10 @@ def consume_prompt(tmux_name: str, prompt_id: str, host: str = LOCAL_HOST) -> bo
 
 def public_entry(ent: dict) -> dict:
     """클라이언트로 내려가는 형태. `_` 접두 키(내부용, 예: `_prompt_fp`)는 뺀다."""
-    return {k: v for k, v in ent.items() if not k.startswith("_")}
+    out = {k: v for k, v in ent.items() if not k.startswith("_")}
+    if ent.get("_subagents") or ent.get("_subagents_limited"):
+        out["subagents"] = subagents.public(ent)
+    return out
 
 
 def report(sid: str, status: str, session: Optional[str] = None,

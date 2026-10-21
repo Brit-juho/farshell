@@ -35,6 +35,7 @@ _HTTP_RULES: tuple[tuple[re.Pattern, frozenset], ...] = tuple(
         # 에이전트 상태
         (r"/api/agents(/coverage|/[^/]+)?", _GET),
         (r"/api/agent/status", _GET),
+        (r"/api/agents/[^/]+/subagents/[A-Za-z0-9_-]{1,64}/transcript", _GET),
         # 첨부·파일·코드 뷰어 (공유 링크는 승격 라우트라 제외, send는 전이라 제외)
         (r"/api/files", _GET),
         (r"/api/files/delete", _ANY),

@@ -15,7 +15,7 @@ P2(코드 뷰어)는 읽기 전용이지만, 공개 터널 너머로 열리는 A
   3. 거부 목록   루트 안이어도 시크릿은 거부 (.env / id_rsa / *.pem / .ssh/ ...)
                  경로의 '모든' 구성요소를 검사한다 — ~/GitHub/foo/.ssh/config 같은 형태.
 
-이 모듈은 I/O를 하지 않는다(존재 확인 제외). 순수 판정만 담당해 테스트가 쉽도록 유지한다.
+일반 열람 경로는 판정만 담당한다. 네이티브 자식 기록은 전용 검증·안전한 파일 열기를 제공한다.
 """
 
 from __future__ import annotations
@@ -344,3 +344,58 @@ def voice_transcript_path(tool: str, value: str):
     except (OSError, ValueError, TypeError):
         pass
     return None
+
+
+def subagent_transcript_path(cli: str, parent_id: str, agent_id: str,
+                             raw_path: str | None, parent_transcript: str | None = None) -> Path:
+    """Narrow exception for one verified CLI child; never alters browse roots."""
+    import claude_hooks
+    import codex_hooks
+    import subagents
+    if not subagents.valid_id(parent_id) or not subagents.valid_id(agent_id):
+        raise FsDenied(tr("기록에 접근할 수 없습니다"))
+    try:
+        if cli == "claude":
+            root = (claude_hooks.settings_path().parent / "projects").resolve()
+            if not isinstance(parent_transcript, str):
+                raise FsDenied(tr("기록에 접근할 수 없습니다"))
+            parent = Path(parent_transcript).expanduser().resolve()
+            if not parent.is_relative_to(root) or parent.name != f"{parent_id}.jsonl":
+                raise FsDenied(tr("기록에 접근할 수 없습니다"))
+            expected = parent.parent / parent_id / "subagents" / f"agent-{agent_id}.jsonl"
+            # Do not resolve the expected suffix: a link into another parent's file is not this child.
+            path = Path(raw_path).expanduser().resolve() if raw_path else expected.resolve()
+            if path != expected or not path.is_relative_to(root):
+                raise FsDenied(tr("기록에 접근할 수 없습니다"))
+        elif cli == "codex":
+            root = (codex_hooks.settings_path().parent / "sessions").resolve()
+            if not isinstance(raw_path, str):
+                raise FileNotFoundError
+            path = Path(raw_path).expanduser().resolve()
+            if not path.is_relative_to(root):
+                raise FsDenied(tr("기록에 접근할 수 없습니다"))
+        else:
+            raise FsDenied(tr("지원하지 않는 기록 형식"))
+        if path.suffix != ".jsonl":
+            raise FsDenied(tr("기록에 접근할 수 없습니다"))
+        return path
+    except (RuntimeError, ValueError):
+        raise FsDenied(tr("기록에 접근할 수 없습니다")) from None
+
+
+def open_subagent_file(path: Path):
+    """Open resolved absolute components without following subsequently swapped links."""
+    import stat
+    fd = os.open(path.anchor, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for part in path.parts[1:-1]:
+            nxt = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            os.close(fd)
+            fd = nxt
+        result = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+        if not stat.S_ISREG(os.fstat(result).st_mode):
+            os.close(result)
+            raise FsDenied(tr("기록에 접근할 수 없습니다"))
+        return os.fdopen(result, "rb")
+    finally:
+        os.close(fd)

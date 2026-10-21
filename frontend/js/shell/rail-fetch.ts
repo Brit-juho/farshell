@@ -65,6 +65,7 @@ export function useLayoutVersion() {
 // ---- 데이터 수집 ----
 
 export interface AgentDetail {
+  subagents?: unknown;
   since: number | null;
   tool: string | null;
   question: string | null;
@@ -359,6 +360,7 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
       status: w.getStatus ? w.getStatus(tm.name) : 'idle',
       unseen: !!(w.isUnseen && w.isUnseen(tm.name)),
       since: detail?.since ?? null,
+      subagents: detail?.subagents,
       tool: detail?.tool ?? null,
       kind: detail?.kind ? normalizeKind(detail.kind) : null,
       badge: normalizeBadge(detail?.badge),

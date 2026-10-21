@@ -184,6 +184,7 @@ export default defineConfig(({ mode }) => {
           manualChunks: isVoice || isTest ? undefined : (id) => {
             const p = id.split('?')[0].replace(/\\/g, '/');
             // 음성 상태 UI는 인증 후 조회할 때 로딩한다. 초기 core 크기를 늘리지 않는다.
+            if (/\/frontend\/js\/panels\/subagent-(viewer|poll)\.js$/.test(p)) return 'subagents';
             if (p.endsWith('/frontend/js/voice/status-panel.js')) return 'voice-status';
             // 터치 제스처는 터치 기기에만 로딩한다. 상태/키 인코더는 core 하나를 공유한다.
             if (/\/frontend\/js\/term\/(?:touch(?:-select)?|keybar-ui)\.js$/.test(p)) return 'touch';

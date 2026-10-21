@@ -3,6 +3,27 @@
 // 원문을 고치면 여기 키도 같이 고친다 — scripts/check_i18n.py가 빠진 키와 남은 키를 잡는다.
 // 본문은 JSON이어야 한다(검사 스크립트와 서버가 json으로 읽는다).
 window.__VT_I18N = {
+  "기록 반영 대기": "Awaiting transcript update",
+  "기록 보기": "View transcript",
+  "기록에 접근할 수 없습니다": "Transcript access denied",
+  "기록을 찾을 수 없거나 서버가 지원하지 않습니다": "Transcript not found or unsupported by this server",
+  "기록이 아직 생성되지 않았습니다": "Transcript has not been created yet",
+  "끝난 서브에이전트 {n}": "Finished subagents {n}",
+  "네이티브 서브에이전트": "Native subagents",
+  "답변": "Response",
+  "도구 결과": "Tool result",
+  "도구 호출": "Tool call",
+  "상태 확인 필요": "Status needs checking",
+  "서브 {n} 작업 중": "Subagents working: {n}",
+  "서브에이전트 {n}개": "Subagents: {n}",
+  "서브에이전트 기록": "Subagent transcript",
+  "서브에이전트 메뉴": "Subagent menu",
+  "서브에이전트를 찾을 수 없습니다": "Subagent not found",
+  "일부 기록이 생략되었습니다": "Some transcript entries were omitted",
+  "잘못된 기록 커서": "Invalid transcript cursor",
+  "지시": "Instruction",
+  "지원하지 않는 기록 형식": "Unsupported transcript format",
+  "표시 한도에 도달함": "Display limit reached",
   "    {id}  {tag}{label} 등록 {added} / 최근 사용 {seen} / {life}": "    {id}  {tag}{label} added {added} / last used {seen} / {life}",
   "  ⓘ --dry-run: {path} 는 바꾸지 않았습니다 ({n}개)": {
     "one": "  ⓘ --dry-run: left {path} unchanged (1 entry)",

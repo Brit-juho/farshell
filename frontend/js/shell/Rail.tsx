@@ -31,6 +31,7 @@ import {
 import { createRailPrefs } from './rail-prefs.js';
 import { REGULAR_MAX } from '../layout/breakpoints.js';
 import { Menu, Row, type MenuItem } from './RailRow.js';
+import { NativeChildren } from './NativeChildren.js';
 import { icon } from '../ui/icons.js';
 
 export type { RailDeps } from './rail-fetch.js';
@@ -420,6 +421,7 @@ function Rail(props: { deps: RailDeps }) {
 
   // 같은 행이 두 구역(개입 필요·세션)에 나올 수 있다 — 같은 세션이라 편집·활성 상태도 같이 따라간다.
   const renderRow = (row: SessionRow, lin?: { kid?: boolean; entry?: TreeEntry<SessionRow> }) => (
+    <>
     <Row
       row={row}
       compact={collapsed()}
@@ -439,6 +441,8 @@ function Rail(props: { deps: RailDeps }) {
       onOpen={(e) => openRow(e, row)}
       onContext={(e) => contextRow(e, row)}
     />
+    <Show when={!collapsed()}><NativeChildren row={row} /></Show>
+    </>
   );
 
   return (

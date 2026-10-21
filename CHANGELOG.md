@@ -8,6 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- Native Claude Code/Codex subagent rows and read-only transcript viewer, with bounded
+  retention, child event ordering, dedicated transcript path checks and host relay support.
+
+
 ---
 
 ## [2.6.0] — 2026-10-19

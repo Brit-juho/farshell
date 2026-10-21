@@ -25,6 +25,7 @@ import {
   buildSessionTree, kidsProgress, stepInOrder, ORDER_KEY, LINEAGE_KEY, encodeOrder, encodeLineagePrefs, type TreeEntry,
 } from './rail-data.js';
 import { createRailPrefs } from './rail-prefs.js';
+import { NativeChip } from './NativeChildren.js';
 import { KeywordLine, OriginMark, ScreensMark, ShareMark, LineageMark, KidsToggle } from './RailRow.js';
 import { ViewGroup } from './ViewGroup.js';
 import {
@@ -191,6 +192,7 @@ function Row(props: {
           <Show when={props.kid && props.row.lineage?.state !== 'running'} fallback={<KeywordLine row={props.row} now={now} />}>
             <LineageMark row={props.row} />
           </Show>
+          <NativeChip row={props.row} />
           <ShareMark share={props.row.share} />
           <OriginMark origin={props.row.origin} />
         </div>
