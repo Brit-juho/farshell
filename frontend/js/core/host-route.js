@@ -26,6 +26,7 @@ const STORE_KEY = 'vt.relayHost';
 const ID_RE = /^[a-z0-9][a-z0-9_-]{0,39}$/;
 
 const LOCAL_HTTP = [
+  /^\/api\/agent-config(\/|$)/,
   /^\/api\/auth(\/|$)/,
   /^\/api\/devices(\/|$)/,
   /^\/api\/device-settings(\/|$)/,

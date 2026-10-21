@@ -58,6 +58,7 @@ from routes.queue import router as queue_router
 from routes.snippets import router as snippets_router
 from routes.search import router as search_router
 from routes.mcp import router as mcp_router, elevated_router as mcp_elevated_router
+from routes.agent_config import router as agent_config_router, elevated_router as agent_config_elevated_router, peer_router as agent_config_peer_router
 from routes.git_accounts import router as git_accounts_router, elevated_router as git_accounts_elevated_router
 from routes.worktree import router as worktree_router
 from routes.repos import router as repos_router
@@ -667,6 +668,9 @@ app.include_router(delegation_router)
 app.include_router(delegation_human_router)
 app.include_router(mcp_router)
 app.include_router(mcp_elevated_router)
+app.include_router(agent_config_router)
+app.include_router(agent_config_elevated_router)
+app.include_router(agent_config_peer_router)
 
 
 @app.exception_handler(StarletteHTTPException)

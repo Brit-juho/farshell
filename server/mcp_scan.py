@@ -159,6 +159,21 @@ def _session_context(session: str) -> Optional[dict]:
 def find_worktree(worktree_id: Optional[str]) -> Optional[dict]:
     if not worktree_id:
         return None
+    # A manager context can refer to a native CLI project that is not registered
+    # as a FarShell worktree. The browser never supplies its path; it is bound
+    # server-side and rechecked against the normal filesystem boundary.
+    if worktree_id.startswith("config:"):
+        from agent_config_context import current
+        ctx = current()
+        if ctx.get("worktree") != worktree_id or not ctx.get("project"):
+            return None
+        try:
+            path = fsguard.resolve_under_roots(ctx["project"])
+        except fsguard.FsDenied:
+            return None
+        if not path.is_dir():
+            return None
+        return {"id": worktree_id, "path": str(path), "cwd": str(path), "repoName": path.name}
     if worktree_id.startswith(SESSION_PREFIX):
         return _session_context(worktree_id[len(SESSION_PREFIX):])
     for wt in worktree.list_worktrees():

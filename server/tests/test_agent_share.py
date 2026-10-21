@@ -580,7 +580,8 @@ def test_auth_kind_helper(app_auth):
     assert a.request_kind(R(cookies={"vt_session": sess})) == "session"
     assert a.request_kind(R(cookies={"vt_session": sess}, headers={"authorization": "Bearer x"})) == "none"
     assert a.request_kind(R(cookies={"vt_session": MACHINE})) == "machine"    # 레거시: 쿠키로 실린 기계 토큰은 사람이 아니다
-    assert a.request_kind(R(cookies={"vt_session": sess[:-2] + "00"})) == "none"
+    tampered = sess[:-1] + ("0" if sess[-1] != "0" else "1")
+    assert a.request_kind(R(cookies={"vt_session": tampered})) == "none"
 
 
 # ── 5. 입력·속도·상태 ─────────────────────────────────────────────────────────────────

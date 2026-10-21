@@ -34,6 +34,7 @@ import stat
 import tempfile
 import time
 from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Optional
 
@@ -44,6 +45,17 @@ from i18n import tr
 # 이보다 오래된 임시 파일만 치운다. 다른 프로세스가 쓰는 중인 것은 건드리지 않는다.
 STALE_TEMP_SEC = 600.0
 _TEMP_SUFFIX = ".vt-tmp"
+_reviewed: ContextVar[dict | None] = ContextVar("reviewed_config_revisions", default=None)
+
+
+@contextmanager
+def reviewed_revisions(revisions: dict):
+    """Bind reviewed hashes to this operation, including native adapter writes."""
+    token = _reviewed.set({str(resolve_target(k)): v for k, v in revisions.items()})
+    try:
+        yield
+    finally:
+        _reviewed.reset(token)
 
 
 class ConfigWriteRefused(Exception):
@@ -96,6 +108,12 @@ def locked(path, deadline: float = 10.0):
     """
     key = hashlib.sha1(str(resolve_target(path)).encode()).hexdigest()[:16]
     with store_lock.exclusive(_lock_dir() / f"{key}.lock", deadline=deadline):
+        reviewed = _reviewed.get()
+        target = resolve_target(path)
+        if reviewed is not None and str(target) in reviewed:
+            actual = hashlib.sha256(target.read_bytes()).hexdigest() if target.exists() else "absent"
+            if actual != reviewed[str(target)]:
+                raise ConfigWriteRefused(tr("설정 파일이 바뀌었습니다. 다시 검토하세요"))
         yield
 
 

@@ -12,6 +12,14 @@ import { openPanel, closePanel } from './panel.js';
 import { getTabs, getActiveTabId, getTree, getActivePaneId, onLayoutChange } from '../layout/store.js';
 import { findNode } from '../layout/tree.js';
 import { t } from '../core/i18n.js';
+import { relayHost } from '../core/host-route.js';
+
+export function agentConfigContext() {
+  const leaf = findNode(getTree(), getActivePaneId());
+  const tab = getTabs().find((tb) => tb.id === getActiveTabId());
+  return { host: relayHost() !== 'local' ? relayHost() : (leaf?.host || tab?.hostId || 'local'),
+    session: leaf?.remote?.tmux || leaf?.session || null };
+}
 
 /** MCP 화면의 기준 — 포커스된 칸의 tmux 세션(`session:<이름>`). 경로는 서버가
  *  tmux에 직접 묻는다(server/mcp_scan.py SESSION_PREFIX). 원격 호스트 칸은 이
@@ -32,24 +40,34 @@ export function showMcp() {
   // openPanel이 이미 토글이다 — 같은 id로 열려 있으면 여기서 닫고 null을
   // 반환한다(panel.js 158번 주석). 그 경우 아래로 내려가지 않는다.
   let unsub = null;
+  let manager = null;
   const panel = openPanel({
     id: 'vt-mcp',
-    ariaLabel: t('MCP와 스킬 관리'),
-    headHTML: `<div class="vt-vw-title">${t('MCP · 스킬')}</div>`,
+    ariaLabel: t('MCP · 스킬 · 플러그인'),
+    headHTML: `<div class="vt-vw-title">${t('MCP · 스킬 · 플러그인')}</div>`,
     bodyId: 'vt-mcp-body',
-    onClose: () => { if (unsub) unsub(); unsub = null; },
+    onClose: () => { if (unsub) unsub(); unsub = null; manager?.dispose(); manager = null; },
   });
   if (!panel) return;
-  let ctx = mcpContext();
-  import('./mcp.js')
+  let ctx = JSON.stringify(agentConfigContext());
+  import('./agent-config.js')
     .then((m) => {
-      m.mount(panel.body, ctx);
+      if (!panel.body.isConnected) return;
+      const openLegacy = () => {
+        if (unsub) unsub();
+        unsub = null;
+        import('./mcp.js').then((legacy) => {
+          if (panel.body.isConnected) legacy.mount(panel.body, mcpContext());
+        }).catch(() => { panel.body.textContent = t('불러오지 못했습니다'); });
+      };
+      manager = m.mount(panel.body, JSON.parse(ctx), openLegacy);
       // 팝업을 띄운 채 다른 칸을 누르면 그 칸 기준으로 다시 읽는다.
       unsub = onLayoutChange(() => {
-        const next = mcpContext();
+        const next = JSON.stringify(agentConfigContext());
         if (next === ctx || !panel.body.isConnected) return;
         ctx = next;
-        m.mount(panel.body, ctx);
+        manager?.dispose();
+        manager = m.mount(panel.body, JSON.parse(ctx), openLegacy);
       });
     })
     .catch((e) => { panel.body.textContent = t('불러오지 못했습니다'); console.error('[FarShell mcp]', e); });

@@ -129,6 +129,8 @@ Details: [`docs/ref/auth.md`](./docs/ref/auth.md).
 
 **Feature reference by area:**
 
+MCP, skill and plugin organization: [customization manager](./docs/guide/agent-config.md).
+
 | Area | Document |
 |---|---|
 | Auth, devices, boundary values | [`docs/ref/auth.md`](./docs/ref/auth.md) |

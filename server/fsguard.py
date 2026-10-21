@@ -194,6 +194,18 @@ def _check_denylist(p: Path) -> Optional[str]:
     return _is_denied_name(p.name)
 
 
+def resolve_cli_profile(raw_path: str, home: Path) -> Path:
+    """A server-discovered CLI settings root, confined to its owner's home.
+
+    This does not authorize arbitrary file browsing. Callers only use it for
+    native settings filenames beneath a profile found on a same-user process.
+    """
+    p = Path(raw_path).expanduser()
+    if not p.is_absolute() or not p.resolve().is_relative_to(home.resolve()):
+        raise FsDenied(tr("프로필 경로가 사용자 홈 밖에 있습니다"))
+    return p.resolve()
+
+
 def resolve_under_roots(raw_path: str, *, check_hidden: bool = True) -> Path:
     """사용자가 준 경로를 검증해 안전한 절대경로로 바꾼다.
 

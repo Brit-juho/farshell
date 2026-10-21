@@ -1,5 +1,36 @@
 # Agent state, queue, MCP
 
+## Customization manager
+
+The dock popup opens the unified manager (`panels/agent-config.js`,
+`routes/agent_config.py`). All FarShell collects native settings without moving
+them; Selected session binds to the foreground CLI's actual settings root and
+project. Request-local roots (`agent_config_context.py`) do not mutate the server
+environment. Codex plugin-list caching is keyed by settings root.
+
+`agent_config.py` stores only organization/presets/environment overlays and
+verified profile roots in private host-local state. Native settings remain the
+installation truth. Mixed plans preserve nonmembers and check both the scanned
+source and actual write destination; per-file reviewed hashes are checked inside
+the shared config lock. Native writes are backed up. Project-shared plugin writes
+are available only through this reviewed manager, not the legacy toggle API.
+
+Restart jobs require an identifiable native CLI, known original arguments, an
+empty recognized composer and an exact conversation ID. They wait up to 15 minutes,
+request normal exit, and resume the same profile/directory/conversation without a
+kill fallback. New process/hook evidence is required; MCP runtime stays unknown.
+Private one-use launch files keep environment values out of command arguments.
+
+Remote management has a dedicated signed capability. A peer can inspect and
+request an exact peer-bound plan, but cannot execute a write. The target's direct
+human/elevated approval and current peer permission are required. Generic MCP
+write relays remain blocked. No login credentials or raw skill contents are sent
+to peers. Existing peer-sync is observed/triggered through its installed scheduler;
+its file scope and merge policy are not changed.
+
+User workflow and limits: [customization manager](../guide/agent-config.md).
+Endpoint contracts: [API.md](../../API.md).
+
 ## Features
 
 | Feature | Description |

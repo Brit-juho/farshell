@@ -472,12 +472,20 @@ def _entry(
 # ---------------------------------------------------------------- claude
 
 def claude_paths() -> dict:
+    from agent_config_context import current
+    ctx = current()
+    if ctx.get("tool") == "claude":
+        root = Path(ctx["root"])
+        return {"global": (root.parent / ".claude.json") if root == _home() / ".claude" else root / ".claude.json"}
     return {"global": _home() / ".claude.json"}
 
 
 def claude_settings_dir() -> Path:
     """`~/.claude` — settings.json·plugins/가 있는 곳. `CLAUDE_CONFIG_DIR`을 따른다.
     테스트 격리(VT_MCP_HOME)가 켜져 있으면 그쪽이 이긴다."""
+    from agent_config_context import current
+    if current().get("tool") == "claude":
+        return Path(current()["root"])
     if os.environ.get("VT_MCP_HOME"):
         return _home() / ".claude"
     override = os.environ.get("CLAUDE_CONFIG_DIR")
@@ -565,6 +573,9 @@ def scan_claude(worktree_path: Optional[str] = None, worktree_id: Optional[str] 
 # ----------------------------------------------------------------- codex
 
 def codex_paths() -> dict:
+    from agent_config_context import current
+    if current().get("tool") == "codex":
+        return {"global": Path(current()["root"]) / "config.toml"}
     home = os.environ.get("VT_CODEX_HOME") or os.environ.get("CODEX_HOME")
     base = Path(home) if home else _home() / ".codex"
     return {"global": base / "config.toml"}
@@ -626,7 +637,8 @@ def scan_codex(worktree_path: Optional[str] = None, worktree_id: Optional[str] =
 
     # config.toml에는 인증 결과가 없다. Codex 자신이 내놓는 상태만 이름으로
     # 합친다. 조회 실패는 MCP 정의 자체를 숨기지 않고 진단으로만 남긴다.
-    if servers:
+    from agent_config_context import current
+    if servers and not current().get("inventory_only"):
         auth_by_name, auth_err = codex_cli.mcp_auth_statuses()
         if auth_err:
             errors.append({"source": "codex mcp list --json", "reason": auth_err})
