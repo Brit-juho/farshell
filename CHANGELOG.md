@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+- Preserve GPU statistics in the system API response so the HUD can display them.
+- Compact HUD reset times and chip spacing; show GPU model names in tooltips.
+
 ### Added
 - Native Claude Code/Codex subagent rows and read-only transcript viewer, with bounded
   retention, child event ordering, dedicated transcript path checks and host relay support.

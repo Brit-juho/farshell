@@ -77,6 +77,8 @@ function Chip(props: { chip: HudChip; deps: HudDeps }) {
       class="vt-hud-chip"
       classList={{ [`tone-${props.chip.tone}`]: true, clickable: clickable() }}
       data-chip={props.chip.id}
+      data-tip={props.chip.tooltip}
+      aria-label={props.chip.tooltip ? `${props.chip.label} ${props.chip.value ?? ""} ${props.chip.tooltip}` : undefined}
       data-priority={props.chip.priority}
       onClick={clickable() ? fire : undefined}
       onKeyDown={clickable() ? (e: KeyboardEvent) => {

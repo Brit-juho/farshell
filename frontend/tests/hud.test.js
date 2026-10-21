@@ -100,7 +100,8 @@ test('사용량 칩: 창이 여럿이면 가장 많이 쓴 창을 대표로 쓴�
   });
   const usage = chips.find((c) => c.id === 'usage:Claude');
   assert.strictEqual(usage.value, '62%', '20%가 아니라 더 높은 62%를 써야 한다');
-  assert.strictEqual(usage.hint, '· 4h12m 후 초기화');
+  assert.strictEqual(usage.hint, '· 4h12m');
+  assert.strictEqual(usage.tooltip, '· 4h12m 후 초기화');
   assert.strictEqual(usage.side, 'right');
 });
 
@@ -230,6 +231,9 @@ test('시스템 칩 — GPU 칩은 값이 있을 때만, 임계는 CPU와 같다
   const { buildHudChips } = await mod();
   const chip = (stats) => Array.from(buildHudChips({ stats }), (c) => c).find((c) => c.id === 'stats:gpu');
   assert.strictEqual(chip({ gpu: null }), undefined);
+  const named = chip({ gpu: { pct: 50, name: 'Sample GPU' } });
+  assert.strictEqual(named.tooltip, 'Sample GPU');
+  assert.strictEqual(named.hint, undefined);
   assert.strictEqual(chip({ gpu: { pct: 50.4 } }).value, '50%');
   assert.strictEqual(chip({ gpu: { pct: 80 } }).tone, 'warn');
   assert.strictEqual(chip({ gpu: { pct: 95 } }).tone, 'err');

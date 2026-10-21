@@ -460,10 +460,11 @@ only a file path; a `panel` leaf has one registered dock panel name. Both keep
 ### HUD 24px (`shell/Hud.tsx`)
 
 A row of chips like `server :7777 · tunnel named · E2E ON · safe mode ON ·
-screens 3 · Claude 62% · resets in 4h12m · v2.1.0`. Polled every 30s, plus
+screens 3 · Claude 62% · 4h12m · v2.1.0`. Polled every 30s, plus
 immediate refresh on `/ws-notify` events. A chip with no value is **hidden**
 (no usage provider → no chip, the 2.0 rule kept). There is no HUD at all in
-compact — the bottom nav takes its place.
+compact — the bottom nav takes its place. Chip padding is 6px horizontally,
+with 3px internal gaps. Reset wording and GPU model names appear in tooltips.
 
 **"No value" hides a chip; "no room" drops the least important one.** These are
 two different axes. The first is `buildHudChips` declining to emit a chip. The

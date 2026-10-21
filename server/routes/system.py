@@ -317,6 +317,15 @@ class _CpuStats(BaseModel):
     cores: int
 
 
+class _GpuStats(BaseModel):
+    pct: float
+    name: Optional[str] = None
+    count: int
+    cores: Optional[int] = None
+    mem_used: Optional[int] = None
+    mem_total: Optional[int] = None
+
+
 class _RamStats(BaseModel):
     used: int
     total: int
@@ -334,6 +343,7 @@ class SystemStats(BaseModel):
     ok: bool
     platform: str
     cpu: Optional[_CpuStats] = None
+    gpu: Optional[_GpuStats] = None
     ram: Optional[_RamStats] = None
     net: Optional[_NetStats] = None
     ts: float
