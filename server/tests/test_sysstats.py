@@ -219,3 +219,24 @@ def test_route_returns_the_snapshot(monkeypatch):
     assert asyncio.run(R.system_stats()) == fake
     # 응답 모델이 값을 그대로 통과시키고, null 항목도 허용한다
     R.SystemStats(**{**fake, "cpu": None, "net": None})
+
+
+@pytest.mark.parametrize("gpu", [None,
+    {"pct": 12.5, "name": "Sample GPU", "count": 1, "cores": 16},
+    {"pct": 75.0, "name": "Sample GPU", "count": 2, "mem_used": 1024, "mem_total": 4096},
+])
+def test_http_response_preserves_gpu(monkeypatch, gpu):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routes import system as R
+    snapshot = {"ok": True, "platform": "test", "gpu": gpu, "ts": 1.0}
+    monkeypatch.setattr(S, "snapshot", lambda: snapshot)
+    app = FastAPI()
+    app.include_router(R.router)
+    response = TestClient(app).get("/api/system/stats")
+    assert response.status_code == 200
+    actual = response.json()["gpu"]
+    if gpu is None:
+        assert actual is None
+    else:
+        assert {key: actual[key] for key in gpu} == gpu

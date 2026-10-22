@@ -15,6 +15,7 @@ export interface HudChip {
   label: string;
   value?: string;
   hint?: string;
+  tooltip?: string;
   tone: HudTone;
   dot?: boolean;
   /** 클릭 시 발동할 core/dom.js 액션 id. 없으면 클릭 불가. */
@@ -130,7 +131,8 @@ function usageChip(p: UsageProfile): HudChip | null {
     id: `usage:${name}`,
     label: name,
     value: `${pct}%`,
-    hint: resets ? t('· {resets} 후 초기화', { resets }) : undefined,
+    hint: resets ? `· ${resets}` : undefined,
+    tooltip: resets ? t('· {resets} 후 초기화', { resets }) : undefined,
     tone,
     action: 'usage.open',
     side: 'right',
@@ -154,8 +156,8 @@ export function formatRate(bps: number | null | undefined): string {
 function statsChips(stats: SystemStats): HudChip[] {
   const out: HudChip[] = [];
   const level = (pct: number, warn: number, err: number): HudTone => (pct >= err ? 'err' : pct >= warn ? 'warn' : 'plain');
-  const push = (id: string, label: string, value: string, tone: HudTone, hint?: string) => out.push({
-    id, label, value, hint, tone, action: 'system.open', side: 'right',
+  const push = (id: string, label: string, value: string, tone: HudTone, tooltip?: string) => out.push({
+    id, label, value, tooltip, tone, action: 'system.open', side: 'right',
     priority: tone === 'plain' ? PRIORITY.stats : PRIORITY.statsAlert,
   });
   if (stats.cpu && Number.isFinite(stats.cpu.pct)) {

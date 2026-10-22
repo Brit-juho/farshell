@@ -52,8 +52,8 @@
 
 .vt-hud-spacer { flex:1; min-width:0; }
 .vt-hud-chip {
-  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5);
-  padding:0 calc(var(--spacing) * 2.5); white-space:nowrap;
+  display:flex; align-items:center; gap:calc(var(--spacing) * .75);
+  padding:0 calc(var(--spacing) * 1.5); white-space:nowrap;
   border-right:1px solid var(--line);
 }
 /* 우측 그룹은 경계선이 반대편에 붙어야 좌우가 대칭으로 읽힌다. */
