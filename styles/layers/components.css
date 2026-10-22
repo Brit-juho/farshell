@@ -1530,3 +1530,8 @@
 @media (pointer: coarse) {
   .vt-agent-config button, .vt-agent-config select, .vt-agent-config summary, .vt-ac-pick { min-height: 44px; }
 }
+
+.vt-child-heading { display: flex; flex-wrap: wrap; gap: 4px 8px; padding: 8px 4px 2px; font-size: 11px; font-weight: 600; color: var(--color-sub); }
+.vt-child-heading span { font-weight: 400; color: var(--color-muted); }
+.vt-session-access-grants { margin-top: 16px; }
+.vt-session-access-grants .vt-authz-code { overflow-wrap: anywhere; }

@@ -195,10 +195,19 @@ async def list_approvals():
 
 @read_router.get("/api/authz/grants", response_model=GrantsResponse)
 async def list_grants(subject: str = Query("", max_length=200), resource: str = Query("", max_length=200),
-                      kind: str = Query("", max_length=20)):
+                      kind: str = Query("", max_length=20), session: str = Query("", max_length=200)):
     """모든 종류의 grant(share·msg·peer·deleg·generic). 승인한 쪽/경로, 프리셋, 만료·남은 횟수, 위임 계보를 함께 싣는다."""
     snap = await asyncio.to_thread(agent_share.snapshot)
-    return {"grants": await asyncio.to_thread(inbox.list_grants, snap, subject=subject, resource=resource, kind=kind)}
+    if session and snap is None:
+        raise HTTPException(503, "session_snapshot_unavailable")
+    grants = await asyncio.to_thread(inbox.list_grants, snap, subject=subject, resource=resource, kind=kind)
+    if session:
+        resources = {f"session:local/{s.key}" for s in snap.values() if s.name == session}
+        # Name-based resources are distinct from canonical tmux identity resources.
+        if resources:
+            resources.add(f"session:local/name:{session}")
+        grants = [g for g in grants if g.get("resource") in resources]
+    return {"grants": grants}
 
 
 _chain_cache: dict = {"sig": None, "val": None}

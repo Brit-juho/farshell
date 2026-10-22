@@ -4064,5 +4064,21 @@ window.__VT_I18N = {
   "훅 이벤트 이름": "Hook event name",
   "훅 추가": "Add hook",
   "훅에 임시 runtime 경로가 있습니다. 원본 경로를 먼저 수정하세요": "A hook references a temporary runtime path. Correct the source path first",
-  "훅은 이 계정의 권한으로 명령을 실행합니다": "Hooks execute commands with this account's permissions"
+  "훅은 이 계정의 권한으로 명령을 실행합니다": "Hooks execute commands with this account's permissions",
+  "내부 에이전트 · 표시 한도 도달": "Internal agents · display limit reached",
+  "도구: {tool}": "Tool: {tool}",
+  "FarShell 위임 세션 {n}개": "{n} FarShell delegated sessions",
+  "위임 세션 {n}": "Delegated sessions {n}",
+  "위임 보고 {r}/{n}": "Delegation reports {r}/{n}",
+  "내부 에이전트 {n} 작업 중": "{n} internal agents working",
+  "내부 에이전트 {n}개": "{n} internal agents",
+  "에이전트 내부": "Inside the agent",
+  "기록 조회": "View records",
+  "FarShell 위임 세션": "FarShell delegated sessions",
+  "별도 터미널": "Separate terminals",
+  "공유 및 권한…": "Sharing and permissions…",
+  "공유 및 권한 · {name}": "Sharing and permissions · {name}",
+  "이 세션 이름은 공유를 지원하지 않습니다. 권한은 아래에서 확인할 수 있습니다.": "Sharing is not supported for this session name. Review its permissions below.",
+  "이 세션에 허용된 권한": "Permissions granted for this session",
+  "이 세션을 직접 대상으로 하는 권한입니다. 전체 권한과 승인 대기는 설정의 권한에서 확인하세요.": "Permissions targeting this session directly. See Permissions in Settings for all permissions and pending approvals."
 };

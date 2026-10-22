@@ -1,11 +1,12 @@
 // 「에이전트와 공유…」/「공유 설정…」 대화상자. 뼈대(backdrop·포커스 트랩·Esc·포커스 복귀)는
 // core/dialog.js의 openDialog(openPanel) 그대로, 여기는 내용과 검증만 얹는다.
-import { openDialog, nextId } from '../core/dialog.js';
+import { openDialog, nextId, confirmDialog } from '../core/dialog.js';
 import { closePanel } from '../panels/panel.js';
 import { vtEsc } from '../core/api.js';
 import { shareApi } from './share-api.js';
+import { mountGrants } from '../authz/grants.js';
 import {
-  validateNick, suggestNick, normalizeMode, MODE_LABEL, MODE_HELP, WARNING_LINES, UNSHARE_NOTE,
+  validateNick, suggestNick, normalizeMode, SESSION_NAME_RE, MODE_LABEL, MODE_HELP, WARNING_LINES, UNSHARE_NOTE,
   errorText,
 } from './share-data.js';
 import { t } from '../core/i18n.js';
@@ -25,22 +26,29 @@ function modeRadio(group, value, checked) {
  * 공유 지정/변경. `share`가 있으면 설정 변경(기존 닉네임·모드로 시작), 없으면 새 공유(세션 이름에서 닉네임 제안).
  * 성공하면 `{nick, mode}`, 취소·닫기면 null 로 resolve 한다.
  */
-export function openShareDialog(name, share) {
+export function openSessionAccess(name, share) {
+  return openShareDialog(name, share, { access: true });
+}
+
+export function openShareDialog(name, share, { access = false } = {}) {
   const id = nextId();
   const group = `${id}-mode`;
   const editing = !!share;
+  const shareable = SESSION_NAME_RE.test(name);
   const initialMode = normalizeMode(share && share.mode);
   const initialNick = share ? share.nick : suggestNick(name);
   return new Promise((resolve) => {
     let result = null;
     let settled = false;
     let busy = false;
-    const finish = () => { if (!settled) { settled = true; resolve(result); } };
+    let grants;
+    const finish = () => { grants?.dispose(); if (!settled) { settled = true; resolve(result); } };
     const { body } = openDialog({
       id,
-      title: editing ? t('공유 설정 · {name}', { name }) : t('에이전트와 공유 · {name}', { name }),
+      title: access ? t('공유 및 권한 · {name}', { name }) : editing ? t('공유 설정 · {name}', { name }) : t('에이전트와 공유 · {name}', { name }),
       onClose: finish,
       bodyHTML: `
+        <div class="vt-session-share" ${access && !shareable ? 'hidden' : ''}>
         <div class="vt-share-warn" role="note">${WARNING_LINES.map((l) => `<p>${vtEsc(l)}</p>`).join('')}</div>
         <div class="vt-share-field">
           <label class="vt-share-label" for="${id}-nick">${t('닉네임')}</label>
@@ -57,9 +65,16 @@ export function openShareDialog(name, share) {
         </div>
         ${editing ? `<p class="vt-share-note">${vtEsc(UNSHARE_NOTE)}</p>` : ''}
         <div class="vt-dialog-actions">
-          <button type="button" class="vt-btn lg vt-share-cancel">${t('취소')}</button>
+          <button type="button" class="vt-btn lg vt-share-cancel">${access ? t('닫기') : t('취소')}</button>
+          ${access && editing && shareable ? `<button type="button" class="vt-btn lg danger vt-share-unshare">${t('공유 해제')}</button>` : ''}
           <button type="button" class="vt-btn lg solid vt-share-ok">${editing ? t('저장') : t('공유')}</button>
-        </div>`,
+        </div></div>
+        ${access ? `${!shareable ? `<p class="vt-authz-note">${t('이 세션 이름은 공유를 지원하지 않습니다. 권한은 아래에서 확인할 수 있습니다.')}</p>` : ''}
+          <section class="vt-session-access-grants" aria-label="${t('이 세션에 허용된 권한')}">
+            <h3 class="vt-authz-h">${t('이 세션에 허용된 권한')}</h3>
+            <p class="vt-authz-note">${t('이 세션을 직접 대상으로 하는 권한입니다. 전체 권한과 승인 대기는 설정의 권한에서 확인하세요.')}</p>
+            <div class="vt-session-grants"></div>
+          </section>` : ''}`,
     });
     if (!body) { resolve(null); return; }
 
@@ -108,7 +123,20 @@ export function openShareDialog(name, share) {
     body.querySelector('.vt-share-cancel').addEventListener('click', () => closePanel(id));
     input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); submit(); } });
 
+    if (access) {
+      grants = mountGrants(body.querySelector('.vt-session-grants'), { session: name });
+      body.querySelector('.vt-share-unshare')?.addEventListener('click', async () => {
+        if (busy) return;
+        busy = true; refresh();
+        const confirmed = await confirmDialog(UNSHARE_NOTE, { title: t('공유 해제'), okLabel: t('공유 해제'), danger: true });
+        if (!confirmed || !body.isConnected) { busy = false; refresh(); return; }
+        body.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+        if (await unshareSession(name)) closePanel(id);
+        else { busy = false; body.querySelectorAll('button').forEach((b) => { b.disabled = false; }); refresh(); }
+      });
+    }
     refresh();
+    if (access && !shareable) return;
     // openPanel의 첫 포커스는 닫기 X 다 — 입력창으로 옮긴다(모바일에서는 키보드가 뜨는 대신 곧바로 고칠 수 있다).
     input.focus();
     input.select();

@@ -47,6 +47,7 @@ function sync() {
     .catch(() => { /* 다음 연결에서 다시 맞춘다 */ });
 }
 
+window.vtSessionAccess = (name, share) => loadShare().then((m) => m.openSessionAccess(name, share)).catch(warn);
 window.vtShareOpen = (name, share) => loadShare().then((m) => m.openShareDialog(name, share)).catch(warn);
 window.vtShareUnshare = (name) => loadShare().then((m) => m.unshareSession(name)).catch(warn);
 window.vtAgentPerms = () => { const open = getAction('permissions.show'); if (typeof open === 'function') open(); };

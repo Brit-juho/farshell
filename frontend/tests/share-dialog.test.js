@@ -145,3 +145,75 @@ test('순수 규칙: suggestNick·validateNick', async () => {
   assert.ok(d.validateNick('a b'));
   void tick;
 });
+
+
+test('통합 화면은 세션으로 권한을 한정하고 공유 해제 취소 시 변경하지 않는다', async () => {
+  const t = await loadShare({ 'GET /api/authz/grants': () => ({ json: { grants: [] } }) });
+  _wins.push(t.window);
+  const p = t.mod.openSessionAccess('dev', { nick: 'dev', mode: 'read' });
+  const dlg = await waitFor(() => t.document.querySelector('.vt-dialog'));
+  await waitFor(() => dlg.querySelector('.vt-authz-empty'));
+  assert.match(dlg.textContent, /공유 및 권한 · dev/);
+  assert.strictEqual(new URL(t.calls[0].url, 'http://localhost').searchParams.get('session'), 'dev');
+  assert.strictEqual(dlg.querySelector('[data-f=resource]').hidden, true);
+  assert.strictEqual(dlg.querySelector('.vt-authz-builtin'), null);
+  dlg.querySelector('.vt-share-unshare').click();
+  t.document.querySelector('.vt-dialog-cancel').click();
+  await tick();
+  assert.strictEqual(t.calls.filter(c => c.method !== 'GET').length, 0);
+  dlg.querySelector('.vt-share-cancel').click();
+  await p;
+});
+
+test('지원하지 않는 세션 이름은 공유 입력을 숨기고 권한 오류를 재시도할 수 있다', async () => {
+  let fail = true;
+  const t = await loadShare({ 'GET /api/authz/grants': () => fail
+    ? { status: 503, json: { error: 'unavailable' } } : { json: { grants: [] } } });
+  _wins.push(t.window);
+  const p = t.mod.openSessionAccess('한글', null);
+  const dlg = await waitFor(() => t.document.querySelector('.vt-dialog'));
+  assert.ok(dlg.querySelector('.vt-session-share').hidden);
+  await waitFor(() => dlg.querySelector('.vt-authz-retry'));
+  fail = false;
+  dlg.querySelector('.vt-authz-retry').click();
+  await waitFor(() => dlg.querySelector('.vt-authz-empty')?.textContent.includes('허용된 권한이 없습니다'));
+  assert.strictEqual(new URL(t.calls.at(-1).url, 'http://localhost').searchParams.get('session'), '한글');
+  t.document.dispatchEvent(new t.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await p;
+  assert.strictEqual(t.calls.filter(c => c.method !== 'GET').length, 0);
+});
+
+test('통합 화면의 공유 해제는 확인 후 한 번만 요청한다', async () => {
+  let count = 0;
+  const t = await loadShare({
+    'GET /api/authz/grants': () => ({ json: { grants: [] } }),
+    'DELETE /api/agent/share/sessions/dev': () => { count++; return { json: { ok: true } }; },
+  });
+  _wins.push(t.window);
+  const p = t.mod.openSessionAccess('dev', { nick: 'dev', mode: 'readwrite' });
+  const dlg = await waitFor(() => t.document.querySelector('.vt-dialog'));
+  dlg.querySelector('.vt-share-unshare').click();
+  dlg.querySelector('.vt-share-unshare').click();
+  t.document.querySelector('.vt-dialog-ok').click();
+  await p;
+  assert.strictEqual(count, 1);
+});
+
+
+test('통합 공유·권한 화면의 실제 영어 사전 표시', async () => {
+  const fs = require('node:fs');
+  const t = await loadShare({ 'GET /api/authz/grants': () => ({ json: { grants: [] } }) }, { files: [] });
+  _wins.push(t.window);
+  t.document.documentElement.lang = 'en';
+  t.window.eval(fs.readFileSync(path.join(__dirname, '../js/locales/en.js'), 'utf8'));
+  t.window.eval(fs.readFileSync(path.join(__dirname, '../js/i18n-boot.js'), 'utf8'));
+  const mod = await importFresh(path.join(__dirname, '../js/share/entry.js'), t.env.context, new Map());
+  const p = mod.openSessionAccess('sample-session', null);
+  const dlg = await waitFor(() => t.document.querySelector('.vt-dialog'));
+  await waitFor(() => dlg.querySelector('.vt-authz-empty'));
+  assert.match(dlg.textContent, /Sharing and permissions · sample-session/);
+  assert.match(dlg.textContent, /Permissions granted for this session/);
+  assert.doesNotMatch(dlg.textContent, /[가-힣]/);
+  dlg.querySelector('.vt-share-cancel').click();
+  await p;
+});

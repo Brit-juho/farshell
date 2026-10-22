@@ -82,6 +82,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- 레일·모바일 세션 메뉴의 공유 설정·권한 진입점을 「공유 및 권한」으로 통합한다. 해당 세션의 직접 권한과 회수를 함께 제공하고 공유 해제는 확인을 거친다. 내부 서브에이전트와 FarShell 위임 터미널을 구분하고, 작업 중 도구 이름에 레이블을 붙이며 중복 작업 위치 메뉴를 제거한다.
+- Rail/mobile session menus consolidate sharing and direct session permissions with revocation and confirmed unsharing. Native agent records and FarShell delegated terminals have distinct labels; working tool names are explicit and the duplicate workspace-details action is removed.
+
 - **프리셋의 일부만 덮는 요청 표시를 「… 일부」에서 「… 범위 안」으로 바꾼다.** 영어 화면의 「Part of Control」이 모호해서 「Within Control」로 읽히게 했다.
 - **모바일에서 승인 모달이 하단 내비에 가려지지 않고, 설정 홈의 「권한」 줄에 승인 대기 건수가 붙는다.** 승인 모달 안의 「대상」 이름과 id 도 줄을 나눠 붙어 읽히지 않게 했다.
 
