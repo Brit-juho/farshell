@@ -1,7 +1,7 @@
 # 사용량 표시 (clauth 연동)
 
 FarShell은 웹/모바일 UI의 rail에 **사용량 게이지**를 띄울 수 있다. 데이터는
-[clauth](https://github.com/anthropics/clauth)가 쓰는 상태 피드에서 읽는다.
+[clauth](https://github.com/uwuclxdy/clauth)가 쓰는 상태 피드에서 읽는다.
 
 **clauth를 쓰지 않으면 이 기능은 조용히 사라진다** — 설정할 것도, 에러도 없다.
 
@@ -25,7 +25,7 @@ fsh doctor            # 피드 신선도까지 함께 진단
 
 **토큰·credential은 응답에 싣지 않는다.** 서버가 필드 화이트리스트로 걸러서
 내보내므로, clauth가 나중에 민감한 필드를 추가해도 웹으로 새지 않는다.
-`token_ledger.json`·`profiles/`·`session_profiles.json`은 읽지 않는다.
+이 레거시 피드 경로는 `token_ledger.json`·`profiles/`·`session_profiles.json`을 읽지 않는다. 별도의 [실행 프로필 관리](profiles.md)는 명시적 검토 과정에서 선택한 이전 원본을 읽는다.
 
 ## 끄기 / 강제하기
 
@@ -35,6 +35,7 @@ fsh doctor            # 피드 신선도까지 함께 진단
 |---|---|
 | `auto` (기본) | 피드가 있으면 표시, 없으면 숨김 |
 | `clauth` | 강제. 피드가 없으면 **이유를 표시**한다(왜 안 뜨는지 알고 싶을 때) |
+| `native` | clauth 피드와 기본 Codex 자격증명 대신 관리 프로필의 네이티브 사용량만 읽음 |
 | `none` | 기능 자체를 끈다. 공개 터널로 사용량을 내보내기 싫을 때 |
 
 ```bash

@@ -207,6 +207,8 @@ def _run(job_id, plan):
                             and owner.get("_session_start_at", 0) > requested_at
                             and owner.get("_session_start_verified") is True
                             and owner.get("_session_start_source") == "resume"):
+                        import agent_profile_runtime
+                        agent_profile_runtime.note_verified_restart(fresh)
                         _set(job_id, state="resumed", runtime_state="unknown", finished_at=time.time(),
                              note=tr("같은 대화로 재시작했습니다. MCP 실제 연결은 CLI에서 확인하세요"))
                         return

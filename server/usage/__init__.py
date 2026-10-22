@@ -38,7 +38,7 @@ _codex_provider: Optional[CodexProvider] = None
 
 def _mode() -> str:
     raw = (os.environ.get("VT_USAGE_PROVIDER") or "auto").strip().lower()
-    return raw if raw in ("auto", "clauth", "none") else "auto"
+    return raw if raw in ("auto", "clauth", "native", "none") else "auto"
 
 
 def get_provider():
@@ -48,8 +48,8 @@ def get_provider():
     if _provider is not None and _provider_mode == mode:
         return _provider
 
-    if mode == "none":
-        provider = NullProvider(reason="disabled")
+    if mode in ("none", "native"):
+        provider = NullProvider(reason="disabled" if mode == "none" else "native-profiles")
     elif mode == "clauth":
         provider = ClauthProvider()
     else:  # auto
@@ -80,13 +80,13 @@ def _get_codex_provider() -> CodexProvider:
 
 
 def codex_capability() -> dict:
-    if _mode() == "none":
-        return {"available": False, "provider": "codex", "profiles": 0, "reason": "disabled"}
+    if _mode() in ("none", "native"):
+        return {"available": False, "provider": "codex", "profiles": 0, "reason": "disabled" if _mode() == "none" else "managed-native"}
     return _get_codex_provider().capability()
 
 
 def codex_snapshot() -> Optional[dict]:
-    if _mode() == "none":
+    if _mode() in ("none", "native"):
         return None
     return _get_codex_provider().snapshot()
 
@@ -99,6 +99,11 @@ def codex_snapshot() -> Optional[dict]:
 
 def merged_capability() -> dict:
     caps = [capability(), codex_capability()]
+    if _mode() != 'none':
+        import agent_profiles
+        native = agent_profiles.listing()['profiles']
+        if native:
+            caps.append({'available': True, 'provider': 'native', 'profiles': len(native)})
     available = [c for c in caps if c.get("available")]
     # 코덱스 토큰이 만료됐어도 "있는데 재인증이 필요하다"는 카드를 보여야 한다.
     if caps[1].get("reason") == "expired":
@@ -109,6 +114,8 @@ def merged_capability() -> dict:
 
 
 def merged_snapshot() -> Optional[dict]:
+    if _mode() == "none":
+        return None
     clauth_snap = snapshot() or {}
     codex_snap = codex_snapshot()
     profiles = list(clauth_snap.get("profiles") or [])
@@ -117,10 +124,12 @@ def merged_snapshot() -> Optional[dict]:
         profiles.append(codex_profile)
     elif codex_capability().get("reason") == "expired":
         profiles.append(codex_expired_profile())
+    from .profiles import snapshot as profile_snapshot
+    profiles.extend(profile_snapshot())
     if not profiles:
         return None
     return {
-        "provider": clauth_snap.get("provider") or (codex_snap or {}).get("provider") or "codex",
+        "provider": "native" if _mode() == "native" else clauth_snap.get("provider") or (codex_snap or {}).get("provider") or "native",
         "generated_at": clauth_snap.get("generated_at") or (codex_snap or {}).get("generated_at"),
         "stale": bool(clauth_snap.get("stale")) or bool((codex_snap or {}).get("stale")),
         "active_profile": clauth_snap.get("active_profile"),

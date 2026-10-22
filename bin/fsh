@@ -1940,6 +1940,7 @@ cmd_help() {
     fsh run "…"             Run headless claude -p in the background + notify when done
     fsh template            Save/apply CLAUDE.md templates
     fsh usage               Record/show cumulative usage (local LLMs etc.)
+    fsh profile             Manage native CLI launch profiles (fsh help profiles)
     fsh clauth              Show usage (clauth integration, read-only)
 
   Security and other Macs
@@ -2006,6 +2007,7 @@ HELP_EN
     fsh run "…"             헤드리스 claude -p 백그라운드 실행 + 완료 알림
     fsh template            CLAUDE.md 템플릿 저장/적용
     fsh usage               누적 사용량 기록/조회 (로컬 LLM 등)
+    fsh profile             네이티브 CLI 실행 프로필 관리 (fsh help profiles)
     fsh clauth              사용량 조회 (clauth 연동, 읽기 전용)
 
   보안과 다른 맥
@@ -2036,6 +2038,7 @@ HELP
 
   # 명령 이름으로도 찾을 수 있게 — 명령은 토픽 문서가 설명하는 쪽으로 연결한다.
   case "$topic" in
+    profile) topic="profiles" ;;
     start|restart|stop|status|mobile|password|otp|device|devices) topic="access" ;;
     attach|handoff|terminal) topic="terminal" ;;
     hooks|pane|queue|msg|mcp|delegate) topic="agent-state" ;;
@@ -5297,6 +5300,7 @@ case "${1:-help}" in
   hooks)    shift; cmd_hooks "$@" ;;
   pane)     shift; cmd_pane "$@" ;;
   clauth)   shift; cmd_clauth "$@" ;;
+  profile)  shift; (cd "$VT_DIR/server" && "$VT_PYTHON" -m agent_profiles_cli "$@") ;;
   password) shift; cmd_password "$@" ;;
   otp)      shift; cmd_otp "$@" ;;
   device|devices) shift; cmd_device "$@" ;;

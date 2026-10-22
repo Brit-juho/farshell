@@ -48,6 +48,7 @@ MAX_ENTRIES = 1000
 # 루트 안에 있어도 절대 내보내지 않는다. 실제로 ~/GitHub/services/*/.env 가 존재한다.
 
 DENY_NAMES = {
+    ".farshell-provider.json", ".credentials.json",
     ".env", ".vt.env", ".netrc", ".npmrc", ".pypirc", ".htpasswd",
     "credentials", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519",
     "secrets.json", "serviceaccount.json", ".git-credentials",
@@ -179,11 +180,22 @@ def _is_denied_name(name: str) -> Optional[str]:
     return None
 
 
+def is_managed_profile_path(path: Path) -> bool:
+    """Manager backups/payloads stay private even with a visible state override."""
+    import vt_paths
+    try:
+        return Path(path).resolve().is_relative_to((vt_paths.state_dir() / 'agent-profiles').resolve())
+    except (OSError, RuntimeError, ValueError):
+        return True
+
+
 def _check_denylist(p: Path) -> Optional[str]:
     """경로의 모든 구성요소를 검사한다.
 
     마지막 이름만 보면 ~/GitHub/x/.ssh/config 가 통과한다. .ssh 는 중간 디렉토리다.
     """
+    if is_managed_profile_path(p):
+        return tr("관리 프로필의 비공개 저장소는 열람할 수 없습니다")
     parts = p.parts
     for i, part in enumerate(parts):
         if part in DENY_DIR_PARTS:
@@ -192,6 +204,127 @@ def _check_denylist(p: Path) -> Optional[str]:
         if i + 1 < len(parts) and f"{part}/{parts[i + 1]}" in DENY_DIR_PARTS:
             return tr("거부된 디렉토리: {name}", name=f"{part}/{parts[i + 1]}")
     return _is_denied_name(p.name)
+
+
+def private_profile_directory(path: Path, *, create: bool = True) -> Path:
+    """Private manager state; reject swapped links and foreign directories.
+
+    Ancestors are checked too. This grants no file-browser permission.
+    """
+    import stat
+    path = Path(path).absolute()
+    # /tmp and /var may themselves be platform-owned symlinks. Resolve only
+    # their existing platform prefix, never a manager-controlled component.
+    parts = path.parts
+    current = Path(parts[0])
+    for component in parts[1:]:
+        current /= component
+        if current.is_symlink():
+            if current in (Path('/tmp'), Path('/var')):
+                current = current.resolve()
+                continue
+            raise FsDenied(tr("프로필 경로에 심볼릭 링크가 있습니다"))
+        if not current.exists():
+            if not create:
+                raise FsDenied(tr("프로필 디렉터리가 없습니다"))
+            current.mkdir(mode=0o700)
+        info = current.stat()
+        if not stat.S_ISDIR(info.st_mode):
+            raise FsDenied(tr("프로필 경로가 디렉터리가 아닙니다"))
+    info = current.stat()
+    if info.st_uid != os.getuid():
+        raise FsDenied(tr("프로필 소유자가 일치하지 않습니다"))
+    os.chmod(current, 0o700)
+    return current
+
+
+def profile_file(root: Path, relative: str) -> Path:
+    """Only an approved native-relative path, without link traversal."""
+    import stat
+    rel = Path(relative)
+    if rel.is_absolute() or not rel.parts or any(p in ('.', '..') for p in rel.parts):
+        raise FsDenied(tr("프로필 파일 경로가 올바르지 않습니다"))
+    base = Path(root)
+    if base.is_symlink() or not base.is_dir():
+        raise FsDenied(tr("프로필 디렉터리를 확인하지 못했습니다"))
+    target = base
+    for component in rel.parts:
+        target /= component
+        if target.is_symlink():
+            raise FsDenied(tr("프로필 파일에 심볼릭 링크가 있습니다"))
+        if target.exists():
+            info = target.stat()
+            if info.st_uid != os.getuid() or (stat.S_ISREG(info.st_mode) and info.st_nlink != 1):
+                raise FsDenied(tr("프로필 파일 소유권을 확인하지 못했습니다"))
+            if not (stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode)):
+                raise FsDenied(tr("프로필 특수 파일은 지원하지 않습니다"))
+    if not target.resolve().is_relative_to(base.resolve()):
+        raise FsDenied(tr("프로필 파일이 허용된 경로 밖에 있습니다"))
+    return target
+
+
+def read_profile_bytes(root: Path, relative: str, limit: int = 8 * 1024 * 1024) -> bytes:
+    """Open every component relative to a directory fd with NOFOLLOW."""
+    import stat
+    profile_file(root, relative)
+    fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        parts = Path(relative).parts
+        for part in parts[:-1]:
+            nxt = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            os.close(fd)
+            fd = nxt
+        leaf = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+        with os.fdopen(leaf, 'rb') as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.getuid() or info.st_size > limit:
+                raise FsDenied(tr("프로필 파일을 안전하게 읽지 못했습니다"))
+            data = stream.read(limit + 1)
+            if len(data) > limit:
+                raise FsDenied(tr("프로필 파일이 너무 큽니다"))
+            return data
+    finally:
+        os.close(fd)
+
+
+def profile_tree(root: Path, *, limit: int = 2000):
+    """Bound traversal including directories; never descend links or Git data."""
+    import stat
+    root = Path(root)
+    stack = [root]
+    count = 0
+    while stack:
+        current = stack.pop()
+        info = current.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+            raise FsDenied(tr("프로필 원본 디렉터리를 안전하게 읽지 못했습니다"))
+        entries = []
+        with os.scandir(current) as scan:
+            for entry in scan:
+                if entry.name == '.git':
+                    continue
+                count += 1
+                if count > limit:
+                    raise FsDenied(tr("프로필 원본의 항목 수가 한도를 넘었습니다"))
+                entries.append(entry)
+        for entry in sorted(entries, key=lambda e: e.name):
+            path = Path(entry.path)
+            profile_file(root, str(path.relative_to(root)))
+            if entry.is_dir(follow_symlinks=False):
+                stack.append(path)
+            else:
+                yield path
+
+
+def skill_import_source(path: Path, home: Path) -> Path:
+    """Resolve a discovered skill link to code, without widening file browsing."""
+    target = path.resolve(strict=True)
+    if not target.is_relative_to(home.resolve()) or not target.is_dir() or not (target / 'SKILL.md').is_file():
+        raise FsDenied(tr("스킬 원본이 사용자 홈의 유효한 스킬 디렉터리가 아닙니다"))
+    sensitive = DENY_DIR_PARTS - {'.claude', '.codex', '.clauth', '.vt'}
+    if any(part in sensitive for part in target.parts):
+        raise FsDenied(tr("스킬 원본에 자격증명 디렉터리가 포함되어 있습니다"))
+    return target
 
 
 def resolve_cli_profile(raw_path: str, home: Path) -> Path:

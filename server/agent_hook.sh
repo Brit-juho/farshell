@@ -22,7 +22,7 @@ if [ -n "${CLAUDE_JOB_DIR:-}" ]; then
 fi
 
 # stdin 백업 — Stop 이벤트는 tts_hook.sh로도 전달해야 함
-TMPINPUT=$(mktemp)
+TMPINPUT=$(mktemp "${TMPDIR:-/tmp}/fsh-hook.XXXXXX") || exit 0
 trap 'rm -f "$TMPINPUT"' EXIT
 cat > "$TMPINPUT"
 

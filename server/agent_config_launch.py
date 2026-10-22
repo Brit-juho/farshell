@@ -17,6 +17,12 @@ def launch(path: Path) -> None:
             raise ValueError("invalid launch payload")
         data = json.load(stream)
     path.unlink()
+    if data["env"].get("FSH_PROFILE_ID"):
+        # new-session creates these after the payload was prepared. Without
+        # them native hooks cannot prove which newly created pane they own.
+        for key in ("TMUX", "TMUX_PANE"):
+            if os.environ.get(key):
+                data["env"][key] = os.environ[key]
     os.chdir(data["cwd"])
     os.execve(data["argv"][0], data["argv"], data["env"])
 

@@ -102,6 +102,10 @@ fsh shell-init zsh     # print the shell init snippet (add the printed snippet t
 > If a window can't be opened (app missing, or macOS Automation permission denied), the manual command is printed (`tmux -L fsh new -A -s dev 'claude --resume'`).
 
 
+## Native CLI launch profiles
+
+Manage dedicated Claude/Codex roots with `fsh profile list`, `create <name> --tool claude|codex [--account <id>] [--test]`, `login <id>`, `status <id>`, `sources` and `retirement`. Login runs interactively on the owner host. Account labels are logical groups, not identity proof. See [Launch profiles](docs/help/en/profiles.md) for reviewed imports, test restrictions and current replacement limits.
+
 ## `fsh start` and `fsh mobile` options
 
 `fsh start` decides **who can reach the server**; `fsh mobile` shows the URL and QR for your phone.

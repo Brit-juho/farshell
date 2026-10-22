@@ -167,10 +167,17 @@ def _scan(ctx: dict, plugins: bool) -> tuple[list[dict], list[dict]]:
             row["write_revision"] = mcp_adapters.file_revision(write_path)
             row["profile"] = ctx["root"]
             row["project"] = project
+    if ctx.get("managed_profile"):
+        import agent_profile_resources
+        agent_profile_resources.decorate(rows, ctx)
     return rows, errors
 
 
 def _context_list(session: str | None, view: str) -> tuple[list[dict], dict | None, list[dict]]:
+    if contexts.current().get("managed_profile"):
+        import agent_profiles
+        ctx = agent_profiles.context(contexts.current()["managed_profile"])
+        return [ctx], ctx, []
     errors, selected = [], None
     if session:
         try:
@@ -402,7 +409,8 @@ def apply(token: str) -> dict:
         row = change["item"]
         if (row["id"] not in by_id or not by_id[row["id"]].get("writable")
                 or row["revision"] != by_id[row["id"]]["revision"]
-                or row["write_revision"] != by_id[row["id"]]["write_revision"]):
+                or row["write_revision"] != by_id[row["id"]]["write_revision"]
+                or row.get("managed_digest") != by_id[row["id"]].get("managed_digest")):
             raise ValueError(tr("설정 파일이 바뀌었습니다. 다시 검토하세요"))
         revisions[row["source"]] = row["revision"]
         revisions[row["write_source"]] = row["write_revision"]
@@ -416,7 +424,10 @@ def apply(token: str) -> dict:
             else:
                 try:
                     _backup(Path(row["write_source"]))
-                    if row["kind"] == "mcp":
+                    if row.get("managed_kind"):
+                        import agent_profile_resources
+                        result = agent_profile_resources.toggle(row, enabled)
+                    elif row["kind"] == "mcp":
                         result = mcp_write.set_enabled(row["tool"], row["name"], enabled, scope=row["scope"],
                             worktree_id=row["context"].get("worktree"), shared=bool(row.get("shared")))
                     elif row["kind"] == "skill":
