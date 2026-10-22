@@ -232,7 +232,7 @@ test('시스템 칩 — GPU 칩은 값이 있을 때만, 임계는 CPU와 같다
   const chip = (stats) => Array.from(buildHudChips({ stats }), (c) => c).find((c) => c.id === 'stats:gpu');
   assert.strictEqual(chip({ gpu: null }), undefined);
   const named = chip({ gpu: { pct: 50, name: 'Sample GPU' } });
-  assert.strictEqual(named.tooltip, 'Sample GPU');
+  assert.strictEqual(named.tooltip, undefined);
   assert.strictEqual(named.hint, undefined);
   assert.strictEqual(chip({ gpu: { pct: 50.4 } }).value, '50%');
   assert.strictEqual(chip({ gpu: { pct: 80 } }).tone, 'warn');
