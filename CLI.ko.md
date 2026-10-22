@@ -86,6 +86,10 @@ fsh shell-init zsh     # 셸 init 스니펫 출력 (출력한 스니펫을 ~/.zs
 > 창을 열지 못하면(앱 없음, macOS 자동화 권한 거부) 수동 명령(`tmux -L fsh new -A -s dev 'claude --resume'`)이 출력됩니다.
 
 
+## 네이티브 CLI 실행 프로필
+
+`fsh profile list`, `create <name> --tool claude|codex [--account <id>] [--test]`, `login <id>`, `status <id>`, `sources`, `retirement`으로 전용 설정 루트를 관리합니다. 로그인은 해당 호스트에서 대화형으로 실행합니다. 계정 라벨은 논리적 그룹이며 신원 증명이 아닙니다. 검토 가져오기·테스트 제한·현재 대체 범위는 [실행 프로필](docs/help/profiles.md)을 참고하세요.
+
 ## `fsh start` / `fsh mobile` 옵션
 
 `fsh start`가 **누가 접속할 수 있는지**를 정하고, `fsh mobile`은 폰으로 접속할 URL과 QR을 보여줍니다.

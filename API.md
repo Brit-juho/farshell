@@ -135,6 +135,13 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | POST | `/api/hosts/{host_id}/agent-config/{action}` | Human cookie required; `request` also requires elevation. Owner-host inventory, masked previews, sync/restart status and reviewed change requests over the dedicated signed peer protocol. Does not open generic MCP write relays or forward login cookies. Offline/old peers return 502 |
 | POST | `/api/peer/agent-config` | Signed body required; control-level MCP relay capability. Body `{action, payload}`. Supports owner-local inventory, masked plans and `request` with `{action:apply/restart-start, payload:{token}}`. Requests never execute writes; only a directly logged-in elevated human on the target can approve them. Responses intentionally retain target-host IDs and paths, which must not be used on the caller host |
 
+## Managed native launch profiles
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/agent-profiles/read/{action}` | Direct-host human cookie required. Actions: `list`, `sources`, `retirement`, `usage`; `auth-status`, `hooks`, `inventory` with `{profile_id}`; `session-status` with `{session}`; `conversations` with `{source_id}`; `job` with `{job_id}`. `preview` additionally requires elevation and `{operation,payload}`. Operations: `create`, `launch`, `config-import`, `conversation-import`, `hook`, `mcp-add`, `native-toggle`, `native-edit`, `plugin`, `recover`, `rollback`, `refresh-test`, `probe`, `provider-edit`, `adopt`. Private API configuration cloning is restricted to Claude test profiles. Preview returns hashes and an opaque actor-bound token, never credentials |
+| POST | `/api/agent-profiles/apply` | Elevated direct-host human cookie and `{token}` required. Consumes a one-use reviewed plan, checks revisions and serializes profile mutations. Imports preserve sources and journal partial writes; rollback refuses subsequent edits. Plugin installation uses a fixed local snapshot and native installation, then requires separate enable review. Real Claude probes may incur model charges. Provider edits are write-only, require an inactive profile, and support reviewed rollback. Adoption preserves the native root and login while disabling test-only forced expiration. OAuth login remains an interactive local CLI operation; no generic peer or machine-token write access |
+
 ## MCP servers (97, stage 1 — toggling requires an elevated session)
 
 | Method | Path | Description |

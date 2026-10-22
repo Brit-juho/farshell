@@ -61,6 +61,8 @@ def _list_dir(p: Path) -> dict:
                     truncated = True
                     break
                 name = de.name
+                if fsguard.is_managed_profile_path(Path(de.path)):
+                    continue
                 try:
                     is_dir = de.is_dir(follow_symlinks=False)
                 except OSError:
@@ -132,6 +134,8 @@ def _search_files(root: Path, query: str) -> tuple[list[dict], bool]:
                 subdirs = []
                 for de in it:
                     name = de.name
+                    if fsguard.is_managed_profile_path(Path(de.path)):
+                        continue
                     try:
                         is_dir = de.is_dir(follow_symlinks=False)
                     except OSError:

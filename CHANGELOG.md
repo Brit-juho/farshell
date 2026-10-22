@@ -10,9 +10,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 - Preserve GPU statistics in the system API response so the HUD can display them.
-- Compact HUD reset times and chip spacing; show GPU model names in tooltips.
+- Compact HUD reset times and chip spacing; show only usage in GPU chips.
 
 ### Added
+- Managed Claude/Codex launch profiles with reviewed source-preserving imports, private
+  API configuration test clones, native session attribution, profile quota readers,
+  fixed-snapshot local plugin installation and disposable OS-sandbox verification.
+  Full OAuth replacement certification remains pending live account validation.
 - MCP·스킬·플러그인 통합 관리: 전체/선택 세션 보기, 프로필별 원본 설정,
   분류·설명·출처, 혼합 선택·프리셋, 비밀값 비표시 환경변수와 조건부 CLI resume,
   기존 peer-sync 상태 및 대상 호스트에서 승인하는 원격 변경 요청.

@@ -53,6 +53,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
   let snapshots = [];
   let rows = [];
   let section = 'items';
+  let profilePanel = null;
   let kind = 'all';
   let tool = 'all';
   let category = 'all';
@@ -508,6 +509,8 @@ export function mount(host, initialContext = {}, onLegacy = null) {
 
   function paint() {
     if (!alive()) return;
+    profilePanel?.dispose();
+    profilePanel = null;
     host.replaceChildren();
     host.classList.add('vt-agent-config');
     if (editorState) { renderEditor(); return; }
@@ -550,7 +553,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
     }
     const navigation = el('nav', 'vt-ac-nav');
     navigation.setAttribute('aria-label', t('관리 메뉴'));
-    for (const [key, label] of [['items', t('목록·분류')], ['presets', t('프리셋')], ['environment', t('환경변수')], ['sync', t('동기화')], ['requests', t('원격 승인')]]) {
+    for (const [key, label] of [['items', t('목록·분류')], ['profiles', t('실행 프로필')], ['presets', t('프리셋')], ['environment', t('환경변수')], ['sync', t('동기화')], ['requests', t('원격 승인')]]) {
       const btn = button(label, () => { section = key; paint(); });
       btn.setAttribute('aria-current', section === key ? 'page' : 'false');
       navigation.appendChild(btn);
@@ -559,6 +562,9 @@ export function mount(host, initialContext = {}, onLegacy = null) {
     const body = el('div', 'vt-ac-body');
     host.appendChild(body);
     if (section === 'items') renderItems(body);
+    else if (section === 'profiles') import('./agent-profiles.js').then((module) => {
+      if (alive() && body.isConnected) profilePanel = module.mount(body);
+    }).catch((error) => { if (alive() && body.isConnected) body.textContent = error.message; });
     else if (section === 'presets') renderPresets(body);
     else if (section === 'environment') renderEnvironment(body);
     else if (section === 'sync') renderSync(body);
@@ -580,7 +586,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
     if (busy) host.querySelectorAll('button, input, select, textarea').forEach((node) => { node.disabled = true; });
   }
 
-  function dispose() { disposed = true; generation++; if (timer) clearTimeout(timer); }
+  function dispose() { disposed = true; generation++; profilePanel?.dispose(); if (timer) clearTimeout(timer); }
   host.replaceChildren(el('p', 'vt-set-help', t('설정과 설치 위치를 확인하는 중…')));
   vtFetch('/api/hosts').then((data) => {
     if (!alive()) return;

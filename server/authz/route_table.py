@@ -91,6 +91,8 @@ GATE_ONLY: dict[tuple[str, str], str] = {
 # 한 줄에 메서드를 공백으로 이어 쓸 수 있다.
 _ROWS: tuple = (
     ("POST", "/api/agent-config/read/{action}", human()),
+    ("POST", "/api/agent-profiles/read/{action}", human()),
+    ("POST", "/api/agent-profiles/apply", human(elevated=True)),
     ("POST", "/api/agent-config/write/{action}", human(elevated=True)),
     ("POST", "/api/agent-config/requests/{request_id}/{decision}", human(elevated=True)),
     ("POST", "/api/hosts/{host_id}/agent-config/{action}", human()),

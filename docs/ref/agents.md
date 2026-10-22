@@ -298,3 +298,28 @@ both child and parent IDs. Regular files are opened without following swapped sy
 components. The remote host performs its own checks through the `agents` relay group.
 The viewer uses bounded incremental reads, file-generation cursors, cancellation and
 final reads after completion. Unsupported transcript formats fail explicitly.
+
+## Managed launch profiles
+
+`agent_profiles.py` owns a private SQLite registry and persistent per-profile native
+roots. `agent_profile_runtime.py` provides sanitized launch environments, interactive
+native login, tmux/session attribution and test-only inference receipts. Configuration,
+conversation, hook and plugin adapters live in the `agent_profile_*` modules. Read and
+apply routes are human-only; review plans bind the exact elevated cookie, source hashes
+and profile revisions. Nested plans retain the profile ID for the operation lock.
+Imports journal writes before rename and preserve backups. Rollback rechecks before/after
+hashes; it refuses external edits. Profile selection never replaces global auth stores.
+
+`usage/profiles.py` reads namespaced native OAuth credentials and whitelisted quota
+responses without implementing OAuth refresh. API-key profiles do not fall back to
+OAuth credentials. Native mode excludes the default Codex reader; `none` excludes all
+usage sources. Arbitrary API endpoint quotas remain unsupported. Registry account
+labels remain unverified logical grouping. Full replacement certification still requires
+real OAuth concurrency/refresh evidence. See the paired profile help for current limits
+and [API.md](../../API.md) for endpoints.
+
+`scripts/profile_sandbox.py` starts a disposable macOS Seatbelt server with its own
+HOME/state/run/config/workspace/tmux. Fake CLI mode has no external network; live mode
+requires explicit provider-network access. Only standalone native executables are copied
+into its bin directory. Production credential directories remain denied. The companion
+HTTP/browser check refuses live-login sandboxes and records fixture results separately.

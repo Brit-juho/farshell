@@ -1,7 +1,7 @@
 # Usage display (clauth integration)
 
 FarShell can show a **usage gauge** in the rail of the web/mobile UI. It reads the data from the
-status feed that [clauth](https://github.com/anthropics/clauth) writes.
+status feed that [clauth](https://github.com/uwuclxdy/clauth) writes.
 
 **If you don't use clauth, this feature quietly disappears.** There's nothing to configure and no error.
 
@@ -25,7 +25,7 @@ like `pending_switch` can't be observed from a one-shot run (only the daemon kno
 
 **Tokens and credentials are never included in the response.** The server filters through a field
 allowlist, so if clauth adds a sensitive field later, it still won't leak to the web.
-`token_ledger.json`, `profiles/` and `session_profiles.json` are never read.
+This legacy feed reader does not read `token_ledger.json`, `profiles/` or `session_profiles.json`. The separate [launch profile manager](profiles.md) reads selected migration sources on explicit review.
 
 ## Turn off / force on
 
@@ -35,6 +35,7 @@ allowlist, so if clauth adds a sensitive field later, it still won't leak to the
 |---|---|
 | `auto` (default) | Show if the feed exists, hide if not |
 | `clauth` | Force on. If there's no feed, **it shows the reason** (use this to find out why nothing appears) |
+| `native` | Read managed native profile quotas without a clauth feed or default Codex fallback |
 | `none` | Turn the feature off entirely. Use it if you don't want usage going out through a public tunnel |
 
 ```bash
