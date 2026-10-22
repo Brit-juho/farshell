@@ -14,7 +14,7 @@ export {
   ORDER_KEY, LINEAGE_KEY, encodeOrder, encodeLineagePrefs,
 } from '../../js/shell/rail-data.js';
 export { collectSessionRows } from '../../js/shell/rail-fetch.js';
-export { mountRow, mountMenu } from './row-mount.js';
+export { mountRow, mountMenu, mountNativeChildren } from './row-mount.js';
 export {
   parseQuery, fuzzyMatch, PLACEHOLDER, PREFIX_MODE, MODE_PREFIX,
   DEFAULT_COMMANDS, SETTINGS_COMMANDS, panelCommands,

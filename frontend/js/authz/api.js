@@ -33,7 +33,7 @@ export const authzApi = {
     `/api/authz/approvals/${encodeURIComponent(id)}/decision`,
     J('POST', { decision: 'allow', elevated: elevated || [] }),
   ),
-  grants: (filters = {}) => shareFetch(`/api/authz/grants${qs({ subject: filters.subject, resource: filters.resource, kind: filters.kind })}`)
+  grants: (filters = {}) => shareFetch(`/api/authz/grants${qs({ subject: filters.subject, resource: filters.resource, kind: filters.kind, session: filters.session })}`)
     .then((d) => (d && d.grants) || []),
   revoke: (id, scopes) => shareFetch(
     `/api/authz/grants/${encodeURIComponent(id)}${qs({ scopes: scopes && scopes.length ? scopes.join(',') : '' })}`,

@@ -528,3 +528,28 @@ def test_old_share_routes_are_shims_with_unchanged_bodies(world):
     rv = call(world, "session", "DELETE", f"/api/agent/share/grants/{dec['grant']['id']}").json()
     assert set(rv) - {"grantId"} == {"ok", "grant"}
     assert call(world, "session", "GET", "/api/authz/grants?kind=share").json()["grants"] == []
+
+
+def test_session_grant_filter_is_exact_and_preserves_read_auth(world, monkeypatch):
+    import agent_share
+    from dataclasses import replace
+    snap = agent_share.snapshot()
+    target = next(s for s in snap.values() if s.name == "target")
+    rows = [
+        {"id": "one", "resource": f"session:local/{target.key}", "kind": "generic"},
+        {"id": "prefix", "resource": f"session:local/{target.key}0", "kind": "generic"},
+        {"id": "named", "resource": "session:local/name:target", "kind": "generic"},
+        {"id": "neighbor", "resource": "session:local/name:target-other", "kind": "generic"},
+    ]
+    monkeypatch.setattr(inbox, "list_grants", lambda *a, **kw: rows)
+    r = call(world, "session", "GET", "/api/authz/grants?session=target")
+    assert r.status_code == 200, r.text
+    assert [g["id"] for g in r.json()["grants"]] == ["one", "named"]
+    assert call(world, "session", "GET", "/api/authz/grants?session=absent").json()["grants"] == []
+    assert call(world, "machine", "GET", "/api/authz/grants?session=target").status_code == 403
+    # A new session with the old name must not inherit the former identity's grants.
+    new = replace(target, created=target.created + 1)
+    monkeypatch.setattr(agent_share, "snapshot", lambda: {new.key: new})
+    assert [g["id"] for g in call(world, "session", "GET", "/api/authz/grants?session=target").json()["grants"]] == ["named"]
+    monkeypatch.setattr(agent_share, "snapshot", lambda: None)
+    assert call(world, "session", "GET", "/api/authz/grants?session=target").status_code == 503

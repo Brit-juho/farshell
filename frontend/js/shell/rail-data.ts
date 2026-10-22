@@ -429,7 +429,7 @@ export function compactRailRows<T>(lists: RailLists<T>): { rows: T[]; split: num
 
 export type RowMenuId =
   | 'open' | 'close' | 'rename' | 'openOnMac' | 'screens' | 'kill' | 'splitRight' | 'splitDown'
-  | 'workspace' | 'share' | 'shareSettings' | 'unshare' | 'agentPerms'
+  | 'sessionAccess' | 'share' | 'shareSettings' | 'unshare' | 'agentPerms'
   | 'moveUp' | 'moveDown' | 'report' | 'closeDelegation' | 'openParent';
 
 export interface RowMenuItem {
@@ -519,20 +519,8 @@ export function rowMenuItems(row: Pick<SessionRow, 'open' | 'tmuxName'> & { shar
     items.push({ id: 'open', label: t('열기') }, ...split);
   }
   items.push(...delegationItems, ...move);
-  if (row.cwd) items.push({ id: 'workspace', label: t('작업 위치 보기') });
-  // 이름 규칙 밖(한글 등)은 공유 항목만 뺀다.
   if (opts.share && row.tmuxName) {
-    if (SHARE_NAME_RE.test(row.tmuxName)) {
-      if (row.share) {
-        items.push(
-          { id: 'shareSettings', label: t('공유 설정…') },
-          { id: 'unshare', label: t('공유 해제'), detail: t('권한 모두 삭제') },
-        );
-      } else {
-        items.push({ id: 'share', label: t('에이전트와 공유…') });
-      }
-    }
-    items.push({ id: 'agentPerms', label: t('에이전트 권한…') });
+    items.push({ id: 'sessionAccess', label: t('공유 및 권한…') });
   }
   if (row.tmuxName) items.push({ id: 'kill', label: t('종료'), detail: t('되돌릴 수 없음'), danger: true });
   return items;
@@ -548,7 +536,7 @@ export function runRowMenu(
 ): void {
   const sid = row.sessionId || null;
   switch (id) {
-    case 'workspace': void import('../ui/workspace-details.js').then(m => m.showWorkspaceDetails(row)); break;
+    case 'sessionAccess': if (row.tmuxName) w.vtSessionAccess?.(row.tmuxName, row.share ?? null); break;
     case 'open': w.vtOpenSessionFromRail?.({ sessionId: sid, tmuxName: row.tmuxName }); break;
     case 'close': if (sid) w.vtCloseSession?.(sid); break;
     case 'rename': if (sid) startRename(); break;

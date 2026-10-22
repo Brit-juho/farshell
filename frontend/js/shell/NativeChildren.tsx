@@ -13,7 +13,7 @@ export function NativeChip(props: { row: SessionRow }) {
     mod.showSubagents({ tmuxName: props.row.tmuxName, parentId: summary().parentId, items: summary().items, host });
   };
   return <Show when={summary().items.length || summary().limited}>
-    <button type="button" class="vt-native-chip" onClick={(e) => { e.stopPropagation(); void openList(); }}>{summary().limited ? t('표시 한도에 도달함') : count() ? t('서브 {n} 작업 중', { n: count() }) : t('서브에이전트 {n}개', { n: summary().items.length })}</button>
+    <button type="button" class="vt-native-chip" onClick={(e) => { e.stopPropagation(); void openList(); }}>{summary().limited ? t('내부 에이전트 · 표시 한도 도달') : count() ? t('내부 에이전트 {n} 작업 중', { n: count() }) : t('내부 에이전트 {n}개', { n: summary().items.length })}</button>
   </Show>;
 }
 
@@ -38,7 +38,7 @@ export function NativeChildren(props: { row: SessionRow }) {
       <span class="status-dot" data-state={child.state === 'failed' ? 'error' : child.state} />
       <span class="vt-native-name">{child.label}</span>
       <span class="vt-native-meta">{nativeStateLabel(child.state)}{child.stale ? ` · ${t('상태 확인 필요')}` : ''}</span>
-      <Show when={child.tool}><span class="vt-native-tool">{child.tool}</span></Show>
+      <Show when={child.tool}><span class="vt-native-tool">{t('도구: {tool}', { tool: child.tool })}</span></Show>
       <span class="vt-native-meta">{formatRelativeTime(child.started_at)}</span>
     </button>
     <details class="vt-native-menu"><summary aria-label={t('서브에이전트 메뉴')}>⋯</summary>
@@ -48,8 +48,9 @@ export function NativeChildren(props: { row: SessionRow }) {
   </div>;
   return <Show when={summary().items.length || summary().limited}>
     <div class="vt-native-children" role="group" aria-label={t('네이티브 서브에이전트')}>
+      <div class="vt-child-heading">{t('에이전트 내부')}<span>{t('기록 조회')}</span></div>
       <Show when={manyWorking()}>
-        <button type="button" class="vt-native-fold" aria-expanded={expanded()} onClick={() => { setExpanded(!expanded()); save(); }}>{t('서브에이전트 {n}개', { n: current().length })}</button>
+        <button type="button" class="vt-native-fold" aria-expanded={expanded()} onClick={() => { setExpanded(!expanded()); save(); }}>{t('내부 에이전트 {n}개', { n: current().length })}</button>
       </Show>
       <Show when={!manyWorking() || expanded()}><For each={current()}>{render}</For></Show>
       <Show when={ended().length}>

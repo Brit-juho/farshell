@@ -11,42 +11,34 @@ const ids = (items) => items.map((i) => i.id);
 // vm 컨텍스트의 객체는 프로토타입이 달라 deepStrictEqual 이 실패한다 — JSON 으로 건너온 값을 비교한다.
 const plain = (v) => JSON.parse(JSON.stringify(v));
 
-test('공유 안 된 이 맥의 tmux 행: 「에이전트와 공유…」와 「에이전트 권한…」, 해제·설정은 없다', async () => {
+test('이 맥의 tmux 행은 공유 여부와 관계없이 공유 및 권한 진입점 하나만 제공한다', async () => {
   const { rowMenuItems } = await load();
-  const items = rowMenuItems({ open: true, tmuxName: 'dev', share: null }, { share: true });
-  assert.ok(ids(items).includes('share'));
-  assert.ok(ids(items).includes('agentPerms'));
-  assert.ok(!ids(items).includes('shareSettings'));
-  assert.ok(!ids(items).includes('unshare'));
-  assert.strictEqual(items.find((i) => i.id === 'share').label, '에이전트와 공유…');
-});
-
-test('공유된 행: 「공유 설정…」「공유 해제」「에이전트 권한…」, 공유 항목은 없다', async () => {
-  const { rowMenuItems } = await load();
-  const items = rowMenuItems({ open: false, tmuxName: 'dev', share: { nick: 'dev', mode: 'read' } }, { share: true });
-  assert.deepStrictEqual(plain(ids(items).filter((i) => /share|unshare|agentPerms/i.test(i))), ['shareSettings', 'unshare', 'agentPerms']);
-  assert.strictEqual(items.find((i) => i.id === 'unshare').label, '공유 해제');
+  for (const share of [null, { nick: 'dev', mode: 'read' }]) {
+    const items = rowMenuItems({ open: true, tmuxName: 'dev', share }, { share: true });
+    const access = items.filter((i) => ['share', 'shareSettings', 'unshare', 'agentPerms', 'sessionAccess'].includes(i.id));
+    assert.deepStrictEqual(plain(access), [{ id: 'sessionAccess', label: '공유 및 권한…' }]);
+  }
 });
 
 test('다른 맥을 보는 화면(share 옵션 없음)·tmux 아닌 행에는 항목이 없다', async () => {
   const { rowMenuItems } = await load();
-  const any = (items) => items.some((i) => ['share', 'shareSettings', 'unshare', 'agentPerms'].includes(i.id));
+  const any = (items) => items.some((i) => ['share', 'shareSettings', 'unshare', 'agentPerms', 'sessionAccess'].includes(i.id));
   assert.ok(!any(rowMenuItems({ open: true, tmuxName: 'dev', share: null })), '옵션 없음 = 원격 화면');
   assert.ok(!any(rowMenuItems({ open: true, tmuxName: 'dev', share: null }, { share: false })));
   assert.ok(!any(rowMenuItems({ open: true, tmuxName: null, share: null }, { share: true })));
 });
 
-test('kill 이름의 공유 세션에도 공유 해제 항목이 있다', async () => {
+test('kill 이름의 공유 세션도 통합 진입점을 제공한다', async () => {
   const { rowMenuItems } = await load();
   const items = rowMenuItems({ open: true, tmuxName: 'kill', share: { nick: 'shell', mode: 'read' } }, { share: true });
-  assert.ok(ids(items).includes('unshare'));
+  assert.ok(ids(items).includes('sessionAccess'));
 });
 
-test('서버가 받지 않는 이름(한글 등)은 공유 항목만 빠지고 권한 패널 진입은 남는다', async () => {
+test('한글 세션도 통합 권한 화면에 진입할 수 있다', async () => {
   const { rowMenuItems } = await load();
   const items = rowMenuItems({ open: true, tmuxName: '작업', share: null }, { share: true });
   assert.ok(!ids(items).includes('share'));
-  assert.ok(ids(items).includes('agentPerms'));
+  assert.ok(ids(items).includes('sessionAccess'));
 });
 
 test('종료 항목은 그대로 마지막에 남는다', async () => {
@@ -81,14 +73,16 @@ test('메뉴 실행: 브리지로 연결된다(세션 이름·현재 공유값�
     vtShareOpen: (n, s) => got.push(['open', n, s]),
     vtShareUnshare: (n) => got.push(['unshare', n]),
     vtAgentPerms: () => got.push(['perms']),
+    vtSessionAccess: (n, s) => got.push(['access', n, s]),
   };
   const row = { sessionId: '', tmuxName: 'dev', name: 'dev', share: { nick: 'n', mode: 'read' } };
+  runRowMenu('sessionAccess', row, w, () => {});
   runRowMenu('shareSettings', row, w, () => {});
   runRowMenu('share', { ...row, share: null }, w, () => {});
   runRowMenu('unshare', row, w, () => {});
   runRowMenu('agentPerms', row, w, () => {});
   assert.deepStrictEqual(plain(got), [
-    ['open', 'dev', { nick: 'n', mode: 'read' }], ['open', 'dev', null], ['unshare', 'dev'], ['perms'],
+    ['access', 'dev', { nick: 'n', mode: 'read' }], ['open', 'dev', { nick: 'n', mode: 'read' }], ['open', 'dev', null], ['unshare', 'dev'], ['perms'],
   ]);
 });
 

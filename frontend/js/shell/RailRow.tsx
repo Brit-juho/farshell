@@ -107,7 +107,7 @@ export function KeywordLine(props: { row: SessionRow; now: () => number }) {
         data-tip={props.row.status === 'waiting' && props.row.question ? props.row.question : undefined}
         data-tip-side="right"
       >{kw().text}</span>
-      <Show when={kw().tool}><span class="vt-srow-tool">{kw().tool}</span></Show>
+      <Show when={kw().tool}><span class="vt-srow-tool">{t('도구: {tool}', { tool: kw().tool })}</span></Show>
       <Show when={kw().badge}><span class="vt-srow-badge">{kw().badge}</span></Show>
       <Show when={rel()}><span class="vt-srow-since">{rel()}</span></Show>
     </>
@@ -144,12 +144,12 @@ export function KidsToggle(props: {
         classList={{ collapsed: props.collapsed }}
         aria-expanded={!props.collapsed}
         aria-label={props.collapsed ? t('{name}의 하위 세션 펼치기', { name: props.name }) : t('{name}의 하위 세션 접기', { name: props.name })}
-        data-tip={t('하위 세션 {n}개', { n: props.count })}
+        data-tip={t('FarShell 위임 세션 {n}개', { n: props.count })}
         data-tip-side="right"
         onClick={(e) => { e.stopPropagation(); props.onToggle?.(); }}
       >
-        <Show when={props.progress} fallback={<span>{t('하위 {n}', { n: props.count })}</span>}>
-          {(p) => <span>{t('하위 보고 {r}/{n}', { r: p().reported, n: p().open })}</span>}
+        <Show when={props.progress} fallback={<span>{t('위임 세션 {n}', { n: props.count })}</span>}>
+          {(p) => <span>{t('위임 보고 {r}/{n}', { r: p().reported, n: p().open })}</span>}
         </Show>
         <span class="vt-srow-kids-caret" innerHTML={icon('chevron-down', 11, 2)} />
       </button>

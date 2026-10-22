@@ -513,6 +513,7 @@ function Fleet(props: { deps: FleetDeps }) {
                   onAnswer={() => Promise.resolve()} onSeen={() => seenRow(entry.row)} />
                 <Show when={entry.kids.length + entry.closedKids.length > 0 && !collapsed()}>
                   <div class="vt-lin-kids" role="group" aria-label={t('{name}의 하위 세션', { name: entry.row.name })}>
+                    <div class="vt-child-heading">{t('FarShell 위임 세션')}<span>{t('별도 터미널')}</span></div>
                     <For each={entry.kids}>{(k, i) => (
                       <div class="vt-lin-kid" classList={{
                         last: i() === entry.kids.length - 1 && entry.closedKids.length === 0,

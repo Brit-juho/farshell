@@ -42,11 +42,11 @@ function rowHTML(g) {
 }
 
 /** `host` 에 권한 패널을 그린다. 필터는 서버 쿼리로 보낸다. */
-export function mountGrants(host) {
+export function mountGrants(host, { session = '' } = {}) {
   host.innerHTML = `
     <div class="vt-authz-filters" role="search">
       <input type="search" class="vt-authz-in" data-f="subject" placeholder="${vtEsc(t('주체(이름·id)'))}" aria-label="${vtEsc(t('주체로 거르기'))}" autocomplete="off">
-      <input type="search" class="vt-authz-in" data-f="resource" placeholder="${vtEsc(t('리소스(앞부분)'))}" aria-label="${vtEsc(t('리소스로 거르기'))}" autocomplete="off">
+      <input type="search" class="vt-authz-in" data-f="resource" ${session ? 'hidden' : ''} placeholder="${vtEsc(t('리소스(앞부분)'))}" aria-label="${vtEsc(t('리소스로 거르기'))}" autocomplete="off">
       <select class="vt-authz-in" data-f="kind" aria-label="${vtEsc(t('종류로 거르기'))}">
         <option value="">${vtEsc(t('모든 종류'))}</option>
         ${FILTER_KINDS.map((k) => `<option value="${k}">${vtEsc(KIND_LABEL[k])}</option>`).join('')}
@@ -54,12 +54,13 @@ export function mountGrants(host) {
     </div>
     <div class="vt-authz-err" role="alert"></div>
     <div class="vt-authz-list" aria-live="polite"></div>
-    <h4 class="vt-authz-h">${t('기본 규칙')}</h4>
+    ${session ? '' : `<h4 class="vt-authz-h">${t('기본 규칙')}</h4>
     <p class="vt-authz-note">${t('코드가 정해 둔 기본 권한입니다. 읽기 전용이라 회수할 수 없고, 아래 목록에 없는 권한은 모두 승인이 필요합니다.')}</p>
-    <ul class="vt-authz-builtin">${builtinDefaults().map((b) => `<li data-builtin="${b.id}"><span class="vt-authz-who">${vtEsc(b.who)}</span><span class="vt-authz-row-detail">${vtEsc(b.what)}</span></li>`).join('')}</ul>`;
+    <ul class="vt-authz-builtin">${builtinDefaults().map((b) => `<li data-builtin="${b.id}"><span class="vt-authz-who">${vtEsc(b.who)}</span><span class="vt-authz-row-detail">${vtEsc(b.what)}</span></li>`).join('')}</ul>`}`;
   const list = host.querySelector('.vt-authz-list');
   const errEl = host.querySelector('.vt-authz-err');
-  const filters = { subject: '', resource: '', kind: '' };
+  const filters = { session, subject: '', resource: '', kind: '' };
+  let disposed = false;
   let seq = 0;
   let timer = null;
   let busy = false;
@@ -68,17 +69,18 @@ export function mountGrants(host) {
   const filtered = () => !!(filters.subject || filters.resource || filters.kind);
 
   async function load() {
+    if (disposed) return;
     const mine = ++seq;
     list.innerHTML = `<p class="vt-authz-empty">${t('불러오는 중…')}</p>`;
     try {
       const grants = await authzApi.grants(filters);
-      if (mine !== seq || !host.isConnected) return;
+      if (mine !== seq || disposed || !host.isConnected) return;
       errEl.textContent = keepErr; keepErr = '';
       list.innerHTML = grants.length
         ? `<ul class="vt-authz-rows">${grants.map(rowHTML).join('')}</ul>`
         : `<p class="vt-authz-empty">${filtered() ? t('조건에 맞는 권한이 없습니다.') : t('허용된 권한이 없습니다. 에이전트가 권한이 필요하면 승인을 묻습니다.')}</p>`;
     } catch (e) {
-      if (mine !== seq || !host.isConnected) return;
+      if (mine !== seq || disposed || !host.isConnected) return;
       list.innerHTML = `<p class="vt-authz-empty">${t('권한 목록을 불러오지 못했습니다.')}</p>
         <button type="button" class="vt-btn lg vt-authz-retry">${t('다시 시도')}</button>`;
       errEl.textContent = errorText(e);
@@ -111,6 +113,7 @@ export function mountGrants(host) {
       : kind === 'deleg' ? t('이 위임을 닫습니다. 하위 세션은 남지만 더 이상 지시를 받지 않습니다. 계속할까요?')
         : t('이 권한을 회수합니다. 에이전트는 다시 요청해야 쓸 수 있습니다. 계속할까요?');
     if (!(await confirmDialog(msg, { title: t('권한 회수'), okLabel: writeOnly ? t('입력만 회수') : t('회수'), danger: true }))) return;
+    if (disposed || !host.isConnected) return;
     busy = true;
     row.querySelectorAll('button').forEach((x) => { x.disabled = true; });
     try {
@@ -127,9 +130,9 @@ export function mountGrants(host) {
   });
 
   const off = onChange((ev) => {
-    if (!host.isConnected) { off(); return; }
+    if (disposed || !host.isConnected) { off(); return; }
     if (ev.type === 'grants' && !busy) void load();
   });
   void load();
-  return { reload: load, dispose: () => { off(); clearTimeout(timer); seq++; } };
+  return { reload: load, dispose: () => { disposed = true; off(); clearTimeout(timer); seq++; } };
 }

@@ -261,10 +261,15 @@ row menu in `shell/rail-data.ts`.
 
 | Row (this Mac, tmux) | Items added to the row menu / phone sheet |
 |---|---|
-| not shared | 「에이전트와 공유…」, 「에이전트 권한…」 |
-| shared | 「공유 설정…」 (nick, mode), 「공유 해제」 (instant: every grant and pending request goes), 「에이전트 권한…」 |
+| not shared or shared | 「공유 및 권한…」: sharing form, direct session grants and revocation; shared sessions also offer confirmed unsharing |
 | viewing another host (relayed), non-tmux row | none (sharing is not relayed) |
-| tmux name outside `[A-Za-z0-9_.-]{1,64}` (e.g. Hangul) | only 「에이전트 권한…」 — the server route cannot name it |
+| tmux name outside `[A-Za-z0-9_.-]{1,64}` (e.g. Hangul) | same entry, permissions only; sharing controls are hidden |
+
+The grant list is scoped to the live session's exact identity; global/default permissions and pending approvals remain in Settings → Permissions.
+The separate workspace-details row-menu action is removed; directory and branch stay on the row and full cwd stays in the menu summary.
+Working tool labels use 「도구: Bash」: the hook's tool name, not the terminal login shell.
+Native subagents are grouped under 「에이전트 내부 / 기록 조회」; FarShell delegated terminal children under 「FarShell 위임 세션 / 별도 터미널」.
+
 
 - **Calls go out with the cookie only** (`share/share-api.js`). `vtFetch` appends `?token=` and `apiFetch` adds `Authorization`
   for a legacy token link — either makes the server treat the request as not human (403 `human_session_required`). A page

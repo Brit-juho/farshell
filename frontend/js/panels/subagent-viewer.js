@@ -63,9 +63,9 @@ export function showSubagent({ tmuxName, parentId, child, host }) {
 
 export function showSubagents({ tmuxName, parentId, items, host }) {
   closePanel('vt-subagent', { history: 'replace' });
-  const panel = openPanel({ id: 'vt-subagent', ariaLabel: t('네이티브 서브에이전트'), bodyId: 'vt-subagent-body', headHTML: '<div class="vt-vw-title"></div>' });
+  const panel = openPanel({ id: 'vt-subagent', ariaLabel: t('에이전트 내부'), bodyId: 'vt-subagent-body', headHTML: '<div class="vt-vw-title"></div>' });
   if (!panel) return;
-  panel.el.querySelector('.vt-vw-title').textContent = t('네이티브 서브에이전트');
+  panel.el.querySelector('.vt-vw-title').textContent = t('에이전트 내부');
   panel.body.replaceChildren();
   for (const child of items) {
     const button = document.createElement('button'); button.type = 'button'; button.className = 'vt-btn vt-native-picker';

@@ -104,7 +104,7 @@ test('done 배지·작업 중 도구', async () => {
   const done = await mount({ status: 'done', badge: 'question' });
   assert.strictEqual(done.root.querySelector('.vt-srow-badge').textContent, '질문 있음');
   const work = await mount({ status: 'working', tool: 'Edit' });
-  assert.strictEqual(work.root.querySelector('.vt-srow-tool').textContent, 'Edit');
+  assert.strictEqual(work.root.querySelector('.vt-srow-tool').textContent, '도구: Edit');
 });
 
 test('compact — 상태 아이콘이 행 직속에 있고 ⋯ 버튼은 없다, 우클릭은 된다', async () => {
@@ -135,4 +135,21 @@ test('행 메뉴가 뷰포트 아래로 넘치면 안으로 당긴다 — 가로
   // 700 + 200 > 832 → 왼쪽으로: 832 - 200 - 8 = 624
   assert.strictEqual(parseFloat(el.style.left), 624);
   assert.strictEqual(el.style.overflowY, 'auto');
+});
+
+
+test('내부 에이전트는 기록 조회로, 위임 세션은 별도 레이블로 구분한다', async () => {
+  const env = await loadSolidBuild();
+  _envs.push(env);
+  const root = env.document.createElement('div');
+  env.document.body.append(root);
+  const row = { ...base, status: 'working', subagents: { parent_id: 'parent', items: [
+    { id: 'child', label: '리뷰', state: 'working', tool: 'Bash', started_at: 1 },
+  ] } };
+  env.mountNativeChildren(root, row);
+  assert.match(root.querySelector('.vt-child-heading').textContent, /에이전트 내부기록 조회/);
+  assert.match(root.querySelector('.vt-native-tool').textContent, /도구: Bash/);
+  env.mountRow(root, { row, kidsCount: 1, progress: { reported: 0, open: 1 }, onToggleKids() {}, onOpen() {}, onContext() {} });
+  assert.match(root.querySelector('.vt-srow-kids').textContent, /위임 보고 0\/1/);
+  assert.match(root.querySelector('.vt-native-chip').textContent, /내부 에이전트 1 작업 중/);
 });
