@@ -1,21 +1,28 @@
 import { openPanel, closePanel } from './panel.js';
 import { t } from '../core/i18n.js';
+import { icon } from '../ui/icons.js';
+import { nativeStateLabel } from '../shell/native-subagents.js';
 import { startSubagentPolling, mergeTranscript } from './subagent-poll.js';
 
 export function showSubagent({ tmuxName, parentId, child, host }) {
   closePanel('vt-subagent', { history: 'replace' });
   let poll, unsubscribe;
   const panel = openPanel({ id: 'vt-subagent', ariaLabel: t('서브에이전트 기록'), bodyId: 'vt-subagent-body',
-    headHTML: `<div class="vt-vw-title"></div>`,
+    headHTML: `<span class="status-dot vt-native-head-dot" data-state="${child.state === 'failed' ? 'error' : child.state}"></span><div class="vt-vw-title"></div>`,
     onClose: () => { poll?.stop(); unsubscribe?.(); document.removeEventListener('visibilitychange', visibility); },
   });
   if (!panel) return;
-  panel.el.querySelector('.vt-vw-title').textContent = `${t('서브에이전트 기록')} · ${child.label}`;
+  const title = panel.el.querySelector('.vt-vw-title');
+  const dot = panel.el.querySelector('.vt-native-head-dot');
+  title.textContent = child.label;
   let cursor = null, items = [], currentState = child.state;
+  const opened = new Set();
   const status = document.createElement('div'); status.className = 'vt-native-notice'; status.setAttribute('role', 'status');
   const content = document.createElement('div'); content.className = 'vt-native-transcript';
-  const refresh = document.createElement('button'); refresh.type = 'button'; refresh.className = 'vt-btn'; refresh.textContent = t('새로고침'); refresh.onclick = () => poll?.refresh();
-  panel.body.replaceChildren(refresh, status, content);
+  const refresh = document.createElement('button'); refresh.type = 'button'; refresh.className = 'vt-icon-btn sm vt-native-refresh';
+  refresh.setAttribute('aria-label', t('새로고침')); refresh.innerHTML = icon('refresh-cw', 14); refresh.onclick = () => poll?.refresh();
+  title.after(refresh);
+  panel.body.replaceChildren(status, content);
   const selected = () => panel.el.isConnected && host === (window.vtRelayHost?.() || 'local');
   const state = () => {
     const summary = window.agentDetails?.()[tmuxName]?.subagents;
@@ -36,7 +43,9 @@ export function showSubagent({ tmuxName, parentId, child, host }) {
     },
     receive: (page) => {
       currentState = page.state;
-      panel.el.querySelector('.vt-vw-title').textContent = `${t('서브에이전트 기록')} · ${String(page.label || child.label).slice(0, 200)}`;
+      title.textContent = String(page.label || child.label).slice(0, 200);
+      dot.dataset.state = currentState === 'failed' ? 'error' : currentState;
+      dot.setAttribute('title', nativeStateLabel(currentState));
       cursor = page.next_cursor;
       items = mergeTranscript(items, page);
       status.textContent = page.pending ? t('기록이 아직 생성되지 않았습니다') : page.truncated ? t('일부 기록이 생략되었습니다') : '';
@@ -45,9 +54,17 @@ export function showSubagent({ tmuxName, parentId, child, host }) {
       const fragment = document.createDocumentFragment();
       const draw = (row, temporary = false) => {
         const article = document.createElement('article'); article.className = 'vt-native-entry'; article.dataset.kind = row.kind;
-        const title = document.createElement('div'); title.className = 'vt-native-entry-label'; title.textContent = `${labels[row.kind]}${row.tool ? ` · ${String(row.tool).slice(0, 200)}` : ''}${temporary ? ` · ${t('기록 반영 대기')}` : ''}`;
+        const label = document.createElement('div'); label.className = 'vt-native-entry-label'; label.textContent = `${labels[row.kind]}${row.tool ? ` · ${String(row.tool).slice(0, 200)}` : ''}${temporary ? ` · ${t('기록 반영 대기')}` : ''}`;
         const text = document.createElement('pre'); text.textContent = String(row.text || '').slice(0, 2000);
-        article.append(title, text); fragment.append(article);
+        if (row.kind === 'tool_call' || row.kind === 'tool_result') {
+          const key = row.id || `${row.kind}:${fragment.childElementCount}`;
+          article.dataset.fold = opened.has(key) ? 'open' : 'closed';
+          label.tabIndex = 0; label.setAttribute('role', 'button'); label.setAttribute('aria-expanded', String(opened.has(key)));
+          const toggle = () => { if (opened.has(key)) opened.delete(key); else opened.add(key); article.dataset.fold = opened.has(key) ? 'open' : 'closed'; label.setAttribute('aria-expanded', String(opened.has(key))); };
+          label.onclick = toggle;
+          label.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } };
+        }
+        article.append(label, text); fragment.append(article);
       };
       items.forEach((row) => draw(row));
       const last = items.filter((r) => r.kind === 'assistant').at(-1);
@@ -68,9 +85,12 @@ export function showSubagents({ tmuxName, parentId, items, host }) {
   panel.el.querySelector('.vt-vw-title').textContent = t('에이전트 내부');
   panel.body.replaceChildren();
   for (const child of items) {
-    const button = document.createElement('button'); button.type = 'button'; button.className = 'vt-btn vt-native-picker';
-    const labels = { working: t('작업 중'), idle: t('유휴'), done: t('완료'), failed: t('실패') };
-    button.textContent = `${child.label} · ${labels[child.state]}`;
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'vt-native-picker';
+    button.dataset.state = child.state;
+    const dot = document.createElement('span'); dot.className = 'status-dot'; dot.dataset.state = child.state === 'failed' ? 'error' : child.state;
+    const name = document.createElement('span'); name.className = 'vt-native-name'; name.textContent = child.label;
+    const state = document.createElement('span'); state.className = 'vt-native-time'; state.textContent = nativeStateLabel(child.state);
+    button.append(dot, name, state);
     button.onclick = () => { if (host === (window.vtRelayHost?.() || 'local')) showSubagent({ tmuxName, parentId, child, host }); };
     panel.body.append(button);
   }

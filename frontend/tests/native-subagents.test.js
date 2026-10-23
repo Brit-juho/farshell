@@ -78,7 +78,7 @@ test('viewer renders hostile text literally and replaces temporary final answer'
   assert.equal(document.querySelector('#vt-subagent b'), null);
   assert.match(document.querySelector('.vt-native-transcript').textContent, /<img src=x/);
   next = { ...next, items: [{ id: 'answer', kind: 'assistant', text: next.last_message }] };
-  document.querySelector('#vt-subagent-body > button').click(); await flush();
+  document.querySelector('#vt-subagent .vt-native-refresh').click(); await flush();
   assert.equal(document.querySelectorAll('.vt-native-entry').length, 1);
   document.querySelector('#vt-subagent .vt-vw-x').click();
   assert.equal(document.getElementById('vt-subagent'), null);
