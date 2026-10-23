@@ -11,6 +11,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Added
 - Share a file from the 파일 tab or any file viewer (row/header link button): `POST /api/fs/share-import` (elevated) copies the file into the file store as a snapshot and opens the share-link dialog for it. Same browse boundary as `/api/fs/file`; reuses the snapshot while source path, size and mtime are unchanged.
 
+### Changed
+- Snippets and the prompt queue panels share one look: command-block cards (header / body / actions) and a
+  block-style scope switch with counts. Line breaks show as `↵` markers, so a trailing Enter is visible in
+  the text itself; the "Press Enter at the end" switch is gone (the editor shows a live preview instead).
+  Korean instructions use the UI font instead of falling back from the monospace font; only English
+  commands in the snippet editor switch to monospace. The queue's legacy CSS moved into `components.css`.
+
 ### Fixed
 - Blank views after a restart or re-login: `/api/tmux/attach` no longer answers 404 ("session gone") when tmux merely timed out or was unreachable — it returns 503 and the boot retries (`tmux_runner.session_state`). A pane whose local tmux session could not be found at restore keeps its tmux name (`lost`) instead of being saved as an anonymous empty pane, and is re-attached when the session shows up in the server's tmux list.
 - New tmux sessions without a name are numbered from `-1` (was `-2`) and are named after the requested `cwd` folder instead of the server's working directory.

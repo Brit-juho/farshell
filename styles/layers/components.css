@@ -1583,11 +1583,18 @@
   }
   .vt-sn-search .vt-input { width: 100%; padding-left: calc(var(--spacing) * 8); }
   /* 세그먼트 상자 — 안쪽 칸은 components의 .vt-segment. */
+  /* 2026-10-23 블록형 — 칸 사이를 선으로 가르고 켜진 칸만 액센트로 채운다.
+   * 칸마다 개수가 붙는다(명령 블록을 다루는 화면이라 "몇 개"가 먼저 궁금하다). */
   .vt-sn-seg {
-    display: flex; gap: calc(var(--spacing) * 0.5);
-    padding: calc(var(--spacing) * 0.5);
+    display: flex;
     border: 1px solid var(--color-line); border-radius: var(--radius-sm);
-    background: var(--color-bg-0);
+    background: var(--color-bg-0); overflow: hidden;
+  }
+  .vt-sn-seg .vt-segment { border-radius: 0; min-height: 28px; gap: calc(var(--spacing) * 1.5); }
+  .vt-sn-seg .vt-segment + .vt-segment { border-left: 1px solid var(--color-line); }
+  .vt-sn-seg .vt-segment b {
+    font: var(--weight-semibold) var(--fs-3xs) / 1 var(--font-mono);
+    font-variant-numeric: tabular-nums; opacity: .65;
   }
 
   /* 편집 폼 — 목록 위에 펼쳐진다. 입력은 .vt-input(inset: 주변보다 어두움). */
@@ -1601,8 +1608,31 @@
   .vt-sn-editor[hidden] { display: none; }
   .vt-sn-editor textarea.vt-input {
     resize: vertical; min-height: 96px; max-height: 40vh;
-    font-size: var(--fs-sm); line-height: 1.5; white-space: pre; overflow: auto;
+    font-size: var(--fs-sm); line-height: 1.6; white-space: pre-wrap; overflow: auto;
     tab-size: 2;
+  }
+  /* 한글 지시문은 UI 글꼴(기본), 영문 명령만 고정폭 — 고정폭 글꼴에는 한글이 없어
+   * 대체 글꼴로 떨어지고 영문과 폭이 안 맞아 들쭉날쭉해진다. */
+  .vt-sn-editor textarea.vt-input.code { font-family: var(--font-mono); }
+  /* 입력 아래의 실제 모양 — 줄바꿈(↵)이 어디서 일어나는지, 마지막 Enter가 있는지 보인다. */
+  .vt-sn-preview {
+    display: flex; flex-direction: column; gap: calc(var(--spacing) * 1);
+    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 2.5);
+    border: 1px dashed var(--color-line); border-radius: var(--radius-sm);
+  }
+  .vt-sn-preview[hidden] { display: none; }
+  .vt-sn-preview pre {
+    margin: 0; white-space: pre-wrap; overflow-wrap: anywhere;
+    font: var(--weight-normal) var(--fs-xs) / 1.7 var(--font-mono); color: var(--color-txt);
+  }
+  .vt-sn-preview pre.prose { font-family: var(--font-ui); }
+  .vt-sn-preview-cap { font: var(--weight-normal) var(--fs-2xs) / 1 var(--font-ui); color: var(--color-faint); }
+  /* ↵ 마커 — 줄바꿈이 키보드 Enter라는 표시. 글자 옆에 붙는 작은 액센트 칩. */
+  .vt-nl {
+    display: inline-flex; align-items: center; vertical-align: 1px;
+    margin-left: calc(var(--spacing) * 0.75); padding: 0 calc(var(--spacing) * 1);
+    border-radius: 3px; line-height: 1;
+    color: var(--color-acc); background: color-mix(in srgb, var(--color-acc) 14%, transparent);
   }
   .vt-sn-opts { display: flex; flex-direction: column; }
   .vt-sn-opt {
@@ -1618,15 +1648,20 @@
   .vt-sn-editor-foot { display: flex; align-items: center; justify-content: flex-end; gap: calc(var(--spacing) * 2); }
   .vt-sn-hint { margin-right: auto; font: var(--weight-normal) var(--fs-2xs) / 1 var(--font-mono); color: var(--color-faint); }
 
-  .vt-sn-list { display: flex; flex-direction: column; }
+  /* 한 스니펫 = 명령 블록 카드(Warp 계열): 머리줄(이름·표시) / 본문 / 행동. 모서리 한 단계. */
+  .vt-sn-list { display: flex; flex-direction: column; gap: calc(var(--spacing) * 2.5); padding: calc(var(--spacing) * 3); }
   .vt-sn-row {
-    display: flex; flex-direction: column; gap: calc(var(--spacing) * 2);
-    padding: calc(var(--spacing) * 3);
-    border-bottom: 1px solid var(--color-line);
-    transition: background var(--dur-fast) var(--ease-out-quint);
+    display: flex; flex-direction: column;
+    border: 1px solid var(--color-line); border-radius: var(--radius-lg);
+    background: var(--color-bg-0); overflow: hidden;
+    transition: border-color var(--dur-fast) var(--ease-out-quint);
   }
-  .vt-sn-row:hover, .vt-sn-row:focus-within { background: var(--menu-hover); }
-  .vt-sn-head { display: flex; align-items: center; gap: calc(var(--spacing) * 2); min-width: 0; }
+  .vt-sn-row:hover, .vt-sn-row:focus-within { border-color: var(--color-line-strong); }
+  .vt-sn-head {
+    display: flex; align-items: center; gap: calc(var(--spacing) * 2); min-width: 0;
+    padding: calc(var(--spacing) * 1.75) calc(var(--spacing) * 2.5);
+    background: var(--color-bg-1); border-bottom: 1px solid var(--color-line);
+  }
   .vt-sn-name {
     flex: 1 1 auto; min-width: 0;
     font: var(--weight-semibold) var(--fs-sm) / var(--leading-row) var(--font-ui);
@@ -1634,33 +1669,35 @@
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .vt-sn-flags { display: inline-flex; align-items: center; gap: calc(var(--spacing) * 1.5); flex: none; }
-  .vt-sn-enter {
-    display: inline-flex; align-items: center; gap: calc(var(--spacing) * 1);
-    color: var(--color-acc);
-    font: var(--weight-medium) var(--fs-3xs) / 1 var(--font-mono);
-  }
+  .vt-sn-enter { color: var(--color-faint); font: var(--weight-medium) var(--fs-3xs) / 1 var(--font-ui); }
+  .vt-sn-enter.on { color: var(--color-acc); }
   .vt-sn-fold { display: inline-flex; color: var(--color-faint); transition: transform var(--dur-fast) var(--ease-out-quint); }
   .vt-sn-fold.open { transform: rotate(180deg); }
   .vt-sn-text {
-    display: block; width: 100%; min-width: 0; margin: 0; padding: 0;
+    display: block; width: 100%; min-width: 0; margin: 0;
+    padding: calc(var(--spacing) * 2.5);
     border: 0; background: transparent; text-align: left;
-    color: var(--color-sub);
-    font: var(--weight-normal) var(--fs-xs) / 1.5 var(--font-mono);
+    color: var(--color-txt);
+    font: var(--weight-normal) var(--fs-xs) / 1.7 var(--font-mono);
   }
   /* 글꼴은 <pre>에 직접 건다 — 접히는 행은 <button> 안에 있고, 버튼은 UA/legacy 규칙이
    * font를 따로 정해서 부모의 font 선언을 이어받지 못한다. */
   .vt-sn-text pre {
     margin: 0; white-space: pre-wrap; overflow-wrap: anywhere;
-    font: var(--weight-normal) var(--fs-xs) / 1.5 var(--font-mono);
+    font: var(--weight-normal) var(--fs-xs) / 1.7 var(--font-mono);
     display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
   }
   .vt-sn-text.open pre { display: block; -webkit-line-clamp: unset; overflow: visible; }
   /* 한글 지시문은 고정폭이 아니라 UI 글꼴 — 고정폭에서는 한글이 대체 글꼴로 떨어져 리듬이 깨진다. */
   .vt-sn-text.prose pre { font-family: var(--font-ui); }
-  .vt-sn-row.editing { background: color-mix(in srgb, var(--color-acc) 9%, transparent); }
+  .vt-sn-row.editing { border-color: var(--color-acc); }
   .vt-sn-text.foldable { cursor: pointer; }
   .vt-sn-text.foldable:hover { color: var(--color-txt); }
-  .vt-sn-actions, .vt-sn-name-form { display: flex; align-items: center; gap: calc(var(--spacing) * 1.5); }
+  .vt-sn-actions, .vt-sn-name-form {
+    display: flex; align-items: center; gap: calc(var(--spacing) * 1.5);
+    padding: calc(var(--spacing) * 1.75) calc(var(--spacing) * 2.5);
+    border-top: 1px solid var(--color-line);
+  }
   .vt-sn-spacer { flex: 1 1 auto; }
   .vt-sn-confirm { font: var(--weight-medium) var(--fs-xs) / 1 var(--font-ui); color: var(--color-st-error); }
   .vt-sn-name-form .vt-input { flex: 1 1 auto; min-width: 0; }
@@ -1677,6 +1714,50 @@
     .vt-sn-actions .vt-btn, .vt-sn-name-form .vt-btn { --btn-h: 36px; }
     .vt-sn-actions .vt-icon-btn { --icon-btn: 36px; }
   }
+}
+
+/* ── 프롬프트 큐 패널 (queue.js) ───────────────────────────────────────────
+ * 2026-10-23 — screens/30-viewer.css(legacy)에 있던 .vt-q-* 규칙을 옮겼고 스니펫과 같은
+ * 명령 블록 카드로 맞췄다(옛 규칙은 지웠다 — legacy가 components를 이기므로 남기면 이 규칙이 죽는다).
+ * 입력은 한글 지시문이므로 UI 글꼴(모노에는 한글이 없다). */
+@layer components {
+  .vt-q-compose {
+    display: flex; flex-direction: column; gap: calc(var(--spacing) * 2);
+    flex: 0 0 auto; padding: calc(var(--spacing) * 2.5) calc(var(--spacing) * 3);
+    background: var(--color-bg-1); border-bottom: 1px solid var(--color-line);
+  }
+  .vt-q-compose textarea { flex: 1 1 auto; resize: vertical; min-height: 56px; max-height: 160px; line-height: 1.6; font-family: var(--font-ui); }
+  .vt-q-compose-row { display: flex; gap: calc(var(--spacing) * 2); align-items: center; }
+  .vt-q-target { flex: 1 1 auto; min-width: 0; }
+  .vt-q-compose-row .vt-btn { flex: 0 0 auto; }
+
+  .vt-q-list { display: flex; flex-direction: column; gap: calc(var(--spacing) * 2.5); padding: calc(var(--spacing) * 3); }
+  .vt-q-row {
+    display: flex; flex-direction: column;
+    border: 1px solid var(--color-line); border-radius: var(--radius-lg);
+    background: var(--color-bg-0); overflow: hidden;
+  }
+  .vt-q-row:hover { border-color: var(--color-line-strong); }
+  .vt-q-row.blocked { border-color: color-mix(in srgb, var(--color-st-error) 55%, var(--color-line)); }
+  .vt-q-head {
+    display: flex; align-items: center; gap: calc(var(--spacing) * 2); min-width: 0;
+    padding: calc(var(--spacing) * 1.75) calc(var(--spacing) * 2.5);
+    background: var(--color-bg-1); border-bottom: 1px solid var(--color-line);
+  }
+  .vt-q-idx { color: var(--color-acc); font: var(--weight-semibold) var(--fs-xs) / 1 var(--font-mono); font-variant-numeric: tabular-nums; }
+  .vt-q-row.blocked .vt-q-idx { color: var(--color-st-error); display: inline-flex; }
+  .vt-q-sub { margin-right: auto; min-width: 0; color: var(--color-faint); font: var(--weight-normal) var(--fs-2xs) / 1.3 var(--font-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vt-q-row.blocked .vt-q-sub { color: var(--color-st-error); }
+  .vt-q-text {
+    padding: calc(var(--spacing) * 2.5); margin: 0; color: var(--color-txt);
+    font: var(--weight-normal) var(--fs-sm) / 1.6 var(--font-ui);
+    white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .vt-q-actions {
+    display: flex; align-items: center; justify-content: flex-end; gap: calc(var(--spacing) * 1.5);
+    padding: calc(var(--spacing) * 1.75) calc(var(--spacing) * 2.5); border-top: 1px solid var(--color-line);
+  }
+  @media (pointer: coarse) { .vt-q-actions .vt-btn { --btn-h: 36px; } }
 }
 
 /* ── 하단바 구성 (panels/settings/sections/hud.js) ──────────────────────────

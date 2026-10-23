@@ -118,6 +118,21 @@ function _repaintTerminals() {
   }, 120);
 }
 
+// 창이 떠 있는 동안에도 터미널 출력은 계속 들어온다. 위 보정은 열기·이동·닫기 순간에만 돌아서
+// 그 사이에 그려지는 팝업 밑 구역이 비는 것을 못 막는다(2026-10-23 스크린샷 — 팝업 가로 범위 아래
+// 글자가 통째로 사라짐). 열려 있는 동안만 보이는 세션의 행을 다시 그린다. 아틀라스는 비우지 않는다.
+const REPAINT_TICK_MS = 300;
+function _startRepaintTick() {
+  return setInterval(() => {
+    if (document.hidden) return;
+    const id = typeof window.activeSessionId === 'function' ? window.activeSessionId() : null;
+    const map = typeof window.allSessions === 'function' ? window.allSessions() : null;
+    const term = id && map && map[id] && map[id].term;
+    if (!term || !term.refresh) return;
+    try { term.refresh(0, term.rows - 1); } catch (_) { /* 그리기 보정일 뿐 */ }
+  }, REPAINT_TICK_MS);
+}
+
 function _setFile(el, path) {
   // 같은 파일을 다시 그리면 스크롤이 튄다 — 뷰어 페인(panes.js)과 같은 규칙.
   if (el.dataset.viewerFile === path) return;
@@ -251,6 +266,7 @@ export function openFileOverlay(path) {
   const compact = isCompactMode();
   const mount = compact ? null : _container();
   let ro = null;
+  let tick = null;
   const panel = openPanel({
     id: PANEL_ID,
     ariaLabel: t('파일 보기'),
@@ -260,6 +276,7 @@ export function openFileOverlay(path) {
     ...(mount ? { mount, modal: false, onKey: _escClosesOnlyWhenFocused } : {}),
     onClose: () => {
       _repaintTerminals();
+      if (tick) { clearInterval(tick); tick = null; }
       if (ro) ro.disconnect();
       if (panel && panel.el._vtUnwatch) { panel.el._vtUnwatch(); panel.el._vtUnwatch = null; }
     },
@@ -290,6 +307,7 @@ export function openFileOverlay(path) {
     _wireFloatDrag(el, el.querySelector('.vt-viewer-head'), 'move');
     _wireFloatDrag(el, corner, 'resize');
     _applyGeometry(el);
+    tick = _startRepaintTick();
     // dock·레일을 접고 펴도 컨테이너 폭이 바뀐다 — 창 크기 이벤트만으로는 못 잡는다.
     if (typeof window.ResizeObserver === 'function') {
       ro = new window.ResizeObserver(() => {

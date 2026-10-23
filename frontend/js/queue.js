@@ -166,35 +166,27 @@ export function showQueue(opts = {}) {
       }
 
       const list = document.createElement('div');
-      list.className = 'vt-vw-list';
+      list.className = 'vt-q-list';
       d.items.forEach((it, i) => {
         const row = document.createElement('div');
         row.className = 'vt-q-row' + (it.status === 'blocked' ? ' blocked' : '');
 
+        // 머리줄: 순번(또는 멈춤 아이콘) · 상태 한 줄 · [대상 세션 칩]
+        const head = document.createElement('div');
+        head.className = 'vt-q-head';
         const idx = document.createElement('span');
         idx.className = 'vt-q-idx';
         // blocked는 숫자 자리에 '멈춤' 아이콘을 넣는다. 이모지(⏸)는 플랫폼마다
         // 모양이 갈리고 currentColor를 안 따라 상태색과 어긋났다.
         if (it.status === 'blocked') idx.innerHTML = icon('pause', 12);
-        else idx.textContent = String(i + 1);
+        else idx.textContent = `#${i + 1}`;
+        head.appendChild(idx);
 
-        const meta = document.createElement('div');
-        meta.className = 'vt-q-meta';
-        const txt = document.createElement('div');
-        txt.className = 'vt-q-text';
-        txt.textContent = it.text;                    // textContent — XSS 방어
-        meta.appendChild(txt);
-        if (it.blocked_reason) {
-          const sub = document.createElement('div');
-          sub.className = 'vt-q-sub';
-          sub.textContent = blockedLine(it);
-          meta.appendChild(sub);
-        } else if (it.status === 'sending') {
-          const sub = document.createElement('div');
-          sub.className = 'vt-q-sub';
-          sub.textContent = t('전송 중');
-          meta.appendChild(sub);
-        }
+        const sub = document.createElement('span');
+        sub.className = 'vt-q-sub';
+        if (it.blocked_reason) sub.textContent = blockedLine(it);
+        else if (it.status === 'sending') sub.textContent = t('전송 중');
+        head.appendChild(sub);
 
         // [대상 워크트리 칩](60 §4) — target.session만 실제로 채워진다(2.1.0엔
         // 워크트리 모델이 없다, ADR-20). target.worktree는 2.1.1에서 레일이
@@ -203,19 +195,25 @@ export function showQueue(opts = {}) {
         const targetHost = it.target && it.target.host;
         if (targetSession) {
           const chip = document.createElement('span');
-          chip.className = 'vt-tag vt-q-chip';
+          chip.className = 'vt-tag';
           chip.textContent = targetHost ? `${targetSession} · ${targetHost}` : targetSession;
           chip.title = targetHost
             ? t('대상: {host} 호스트의 {session} 세션', { host: targetHost, session: targetSession })
             : t('대상 세션: {session}', { session: targetSession });
-          meta.appendChild(chip);
+          head.appendChild(chip);
         }
+        row.appendChild(head);
 
-        const act = document.createElement('span');
-        act.className = 'vt-pt-actions';
+        const txt = document.createElement('div');
+        txt.className = 'vt-q-text';
+        txt.textContent = it.text;                    // textContent — XSS 방어
+        row.appendChild(txt);
+
+        const act = document.createElement('div');
+        act.className = 'vt-q-actions';
         if (it.status === 'blocked') {
           const ub = document.createElement('button');
-          ub.className = 'vt-btn';
+          ub.className = 'vt-btn sm';
           ub.textContent = t('재개');
           ub.onclick = () => unblockQueueItem(ctx, it.id);
           act.appendChild(ub);
@@ -223,13 +221,12 @@ export function showQueue(opts = {}) {
         // 전송 중인 항목은 서버가 삭제를 거부한다(409 item_sending) — 버튼도 안 그린다.
         if (it.status !== 'sending') {
           const rm = document.createElement('button');
-          rm.className = 'vt-btn danger';
+          rm.className = 'vt-btn sm danger';
           rm.textContent = t('삭제');
           rm.onclick = () => removeQueueItem(ctx, it.id);
           act.appendChild(rm);
         }
-
-        row.appendChild(idx); row.appendChild(meta); row.appendChild(act);
+        if (act.childElementCount) row.appendChild(act);
         list.appendChild(row);
       });
       body.innerHTML = '';

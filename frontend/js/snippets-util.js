@@ -2,21 +2,35 @@
 //
 // 모델: 본문의 줄바꿈은 키보드의 Enter와 같다. **본문 끝의 줄바꿈 하나가 곧
 // 「마지막 줄까지 Enter」**다(서버 snippet_store.normalize_text와 같은 규칙).
-// 편집 화면은 이 끝 줄바꿈을 눈에 안 보이는 글자로 두지 않고 「끝에 Enter 포함」
-// 스위치로 드러낸다 — 그래서 본문과 스위치를 오가는 변환이 필요하다.
+// 화면은 줄바꿈을 눈에 안 보이는 글자로 두지 않고 줄 끝마다 ↵ 마커로 드러낸다.
 
-/** 저장된 본문 → 편집 화면의 (본문, 스위치). */
+/** 저장된 본문 → (끝 줄바꿈을 뗀 본문, 끝 Enter 여부). */
 export function splitText(text) {
   const raw = String(text ?? '');
   return { body: raw.replace(/\n+$/, ''), enter: raw.endsWith('\n') };
 }
 
-/** 편집 화면의 (본문, 스위치) → 저장할 본문. 본문 끝의 빈 줄은 스위치로 대신한다. */
-export function composeText(body, enter) {
-  const b = String(body ?? '').replace(/\r\n?/g, '\n').replace(/^\n+/, '').replace(/\n+$/, '');
+/** 편집 화면의 텍스트 → 저장할 본문. 앞 빈 줄은 버리고 끝 줄바꿈은 하나로 접어 보존한다
+ *  (서버 normalize_text와 같은 규칙 — 끝 줄바꿈이 곧 마지막 Enter다). */
+export function composeText(text) {
+  const t = String(text ?? '').replace(/\r\n?/g, '\n').replace(/^\n+/, '');
+  const b = t.replace(/\n+$/, '');
   if (!b.trim()) return '';
-  return enter ? `${b}\n` : b;
+  return t.endsWith('\n') ? `${b}\n` : b;
 }
+
+/** 줄 단위로 쪼갠다. nl = 그 줄 뒤에 Enter(줄바꿈)가 있는가 — 화면이 ↵ 마커를 붙일 자리. */
+export function toLines(text) {
+  const raw = String(text ?? '');
+  if (!raw) return [];
+  const parts = raw.split('\n');
+  const ended = parts[parts.length - 1] === '';
+  if (ended) parts.pop();
+  return parts.map((line, i) => ({ text: line, nl: ended || i < parts.length - 1 }));
+}
+
+/** 한글이 섞인 문장인가 — 고정폭 글꼴에는 한글 글리프가 없어 대체 글꼴로 떨어지므로 UI 글꼴을 쓴다. */
+export const hasHangul = (s) => /[가-힣]/.test(String(s ?? ''));
 
 /** 목록에 보일 이름 — 이름이 없으면 본문 첫 줄. */
 export function displayName(item) {

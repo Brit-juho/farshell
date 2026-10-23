@@ -1,6 +1,6 @@
 // snippets-util.js — 스니펫의 순수 규칙. 지키는 계약:
 //   본문 끝의 줄바꿈 하나가 곧 「마지막 줄까지 Enter」다(서버 snippet_store.normalize_text와 같은 규칙).
-//   편집 화면의 (본문, 스위치)와 저장되는 본문이 서로 손실 없이 오가야 한다.
+//   화면은 줄마다 ↵ 마커로 이를 보여 준다.
 'use strict';
 const { test, after } = require('node:test');
 const assert = require('node:assert');
@@ -24,19 +24,20 @@ test('splitText: 끝 줄바꿈은 스위치로, 본문에서는 빠진다', asyn
   assert.deepStrictEqual({ ...u.splitText('a\nb') }, { body: 'a\nb', enter: false });
 });
 
-test('composeText ∘ splitText 는 항등이다', async () => {
+test('composeText: 앞 빈 줄 제거, 끝 줄바꿈은 하나로 접어 보존, CRLF 정규화, 공백뿐이면 빈 문자열', async () => {
   const u = await load();
-  for (const text of ['ls', 'ls\n', 'a\nb', 'a\nb\n', 'git status\n']) {
-    const { body, enter } = u.splitText(text);
-    assert.strictEqual(u.composeText(body, enter), text);
-  }
+  assert.strictEqual(u.composeText('\n\nx\r\ny\n\n\n'), 'x\ny\n');
+  assert.strictEqual(u.composeText('x\n\n'), 'x\n');
+  assert.strictEqual(u.composeText(' \n '), '');
+  for (const text of ['ls', 'ls\n', 'a\nb', 'a\nb\n']) assert.strictEqual(u.composeText(text), text);
 });
 
-test('composeText: 앞 빈 줄 제거, 끝 빈 줄은 스위치로 대신, CRLF 정규화, 공백뿐이면 빈 문자열', async () => {
+test('toLines: 줄마다 뒤에 Enter가 있는지 — 끝 줄바꿈이 있어야 마지막 줄도 nl', async () => {
   const u = await load();
-  assert.strictEqual(u.composeText('\n\nx\r\ny\n\n\n', true), 'x\ny\n');
-  assert.strictEqual(u.composeText('x\n\n', false), 'x');
-  assert.strictEqual(u.composeText(' \n ', true), '');
+  const j = (x) => JSON.parse(JSON.stringify(x));
+  assert.deepStrictEqual(j(u.toLines('a\nb\n')), [{ text: 'a', nl: true }, { text: 'b', nl: true }]);
+  assert.deepStrictEqual(j(u.toLines('a\nb')), [{ text: 'a', nl: true }, { text: 'b', nl: false }]);
+  assert.deepStrictEqual(j(u.toLines('')), []);
 });
 
 test('displayName: 이름이 없으면 본문의 첫 비어 있지 않은 줄', async () => {
