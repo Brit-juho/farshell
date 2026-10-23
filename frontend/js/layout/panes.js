@@ -484,6 +484,17 @@ function _renderViewerBody(bodyEl, file) {
   refreshBtn.innerHTML = icon('refresh-cw', 13);
   refreshBtn.addEventListener('click', () => { _refreshViewerBody(bodyEl); });
   tools.appendChild(refreshBtn);
+  const shareBtn = document.createElement('button');
+  shareBtn.type = 'button';
+  shareBtn.className = 'vt-icon-btn xs vt-pane-refresh vt-pane-share';
+  shareBtn.setAttribute('aria-label', t('공유 링크 만들기'));
+  shareBtn.dataset.tip = t('공유 링크 만들기');
+  shareBtn.innerHTML = icon('link', 13);
+  shareBtn.addEventListener('click', () => {
+    const f = bodyEl.dataset.viewerFile;
+    if (f) import('../panels/files/files.js').then((m) => m.shareFsPath(f)).catch((e) => console.error('[FarShell share]', e));
+  });
+  tools.appendChild(shareBtn);
   const host = document.createElement('div');
   host.className = 'vt-vw-code-pane';
   bodyEl.append(tools, host);

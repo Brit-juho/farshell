@@ -3,7 +3,7 @@
 import { openPanel, closePanel } from '../panel.js';
 import { renderFile, refreshFile } from './file.js';
 import { watchPath, coalesce } from '../../shell/fs-watch.js';
-import { _viewerState } from './state.js';
+import { _viewerState, _shareFile } from './state.js';
 import { icon } from '../../ui/icons.js';
 import { get, set, subscribe, SCHEMA } from '../../core/settings.js';
 import { openViewerPane } from '../../layout/store.js';
@@ -62,6 +62,7 @@ function _surface() {
 function _headHTML() {
   return '<div class="vt-file-title"><span class="vt-file-name"></span><span class="vt-file-dir"></span></div>'
     + `<button type="button" class="vt-icon-btn vt-file-refresh" aria-label="${t('새로고침')}" data-tip="${t('새로고침')}">${icon('refresh-cw', 14)}</button>`
+    + `<button type="button" class="vt-icon-btn vt-file-share" aria-label="${t('공유 링크 만들기')}" data-tip="${t('공유 링크 만들기')}">${icon('link', 14)}</button>`
     + `<button type="button" class="vt-icon-btn vt-file-float" aria-pressed="false">${icon('app-window', 14)}</button>`
     + `<button type="button" class="vt-icon-btn vt-file-topane" aria-label="${t('페인으로 열기')}" data-tip="${t('페인으로 열기')}">${icon('columns-2', 14)}</button>`;
 }
@@ -267,6 +268,7 @@ export function openFileOverlay(path) {
   const { el, body } = panel;
 
   el.querySelector('.vt-file-refresh').addEventListener('click', () => { _refresh(el); });
+  el.querySelector('.vt-file-share').addEventListener('click', () => { _shareFile(el.dataset.viewerFile); });
   const floatBtn = el.querySelector('.vt-file-float');
   // 폰(compact)은 설정과 무관하게 전체 화면 시트라 옮길 곳이 없다.
   if (!mount) floatBtn.hidden = true;

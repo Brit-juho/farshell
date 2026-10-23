@@ -227,3 +227,63 @@ def test_files_list_reflects_active_share(client):
     r = client.get("/api/files")
     item = next(x for x in r.json()["items"] if x["id"] == fid)
     assert len(item["shares"]) == 1
+
+
+# --- 파일 탭 경로 공유(스냅샷 복사) ------------------------------------------
+
+
+@pytest.fixture
+def browse(tmp_path, monkeypatch):
+    root = tmp_path / "root"
+    root.mkdir()
+    monkeypatch.setenv("VT_BROWSE_ROOTS", str(root))
+    return root
+
+
+def test_share_import_snapshots_and_shares(client, anon, browse):
+    (browse / "note.md").write_text("v1")
+    r = client.post("/api/fs/share-import", json={"path": str(browse / "note.md")})
+    assert r.status_code == 200, r.text
+    item = r.json()["item"]
+    assert item["name"] == "note.md" and item["size"] == 2
+    # 같은 원본·크기·mtime이면 같은 스냅샷을 재사용한다
+    again = client.post("/api/fs/share-import", json={"path": str(browse / "note.md")}).json()["item"]
+    assert again["id"] == item["id"]
+    # 발급 → PIN 모드로 받기
+    token = _share(client, item["id"], "pin", pin="1234")["token"]
+    assert anon.post(f"/s/{token}/pin", data={"pin": "1234"}, follow_redirects=False).status_code == 303
+    assert anon.get(f"/s/{token}").content == b"v1"
+    # 원본이 바뀌어도 스냅샷은 그대로, 새로 가져오면 새 스냅샷이다
+    (browse / "note.md").write_text("version-2")
+    assert client.get(f"/api/files/{item['id']}/download").content == b"v1"
+    newer = client.post("/api/fs/share-import", json={"path": str(browse / "note.md")}).json()["item"]
+    assert newer["id"] != item["id"]
+
+
+def test_share_import_enforces_browse_boundary(client, browse, tmp_path):
+    outside = tmp_path / "outside.txt"
+    outside.write_text("x")
+    (browse / ".env").write_text("SECRET=1")
+    (browse / "link").symlink_to(outside)
+    (browse / "d").mkdir()
+    for path, status in [
+        (str(outside), 403),                  # 루트 밖
+        (str(browse / ".env"), 403),          # 거부 목록
+        (str(browse / "link"), 403),          # 루트 밖을 가리키는 심링크
+        (str(browse / "d"), 400),             # 디렉토리
+        (str(browse / "nope.txt"), 404),      # 없음
+        ("", 400),
+    ]:
+        r = client.post("/api/fs/share-import", json={"path": path})
+        assert r.status_code == status, (path, r.status_code, r.text)
+    assert client.post("/api/fs/share-import", json={}).status_code == 400
+
+
+def test_share_import_size_cap_and_elevation(client, anon, browse, monkeypatch):
+    import file_store
+    (browse / "big.bin").write_bytes(b"0123456789")
+    monkeypatch.setattr(file_store, "MAX_UPLOAD_BYTES", 5)
+    r = client.post("/api/fs/share-import", json={"path": str(browse / "big.bin")})
+    assert r.status_code == 413
+    # 승격이 없는 클라이언트는 거부된다
+    assert anon.post("/api/fs/share-import", json={"path": str(browse / "big.bin")}).status_code in (401, 403)

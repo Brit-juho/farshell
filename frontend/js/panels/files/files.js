@@ -632,7 +632,7 @@ async function deleteFile(item) {
 
 // ── 링크 발급 다이얼로그 (§3 화면 3b) ────────────────────────────────────────
 
-function openShareDialog(item) {
+function openShareDialog(item, { snapshot = false } = {}) {
   const existing = document.getElementById('vt-fl-share');
   if (existing) existing.remove();
 
@@ -646,6 +646,7 @@ function openShareDialog(item) {
         <button class="vt-icon-btn vt-vw-x" aria-label="${t('닫기')}">${icon('x', 16)}</button>
       </div>
       <div class="vt-vw-body">
+        ${snapshot ? `<div class="vt-fl-hint">${t('지금 시점의 복사본(스냅샷)을 공유합니다. 원본이 바뀌어도 링크의 내용은 그대로입니다.')}</div>` : ''}
         <div class="vt-fl-field">
           <div class="vt-fl-field-label">${t('누가 열 수 있나')}</div>
           <label class="vt-fl-radio"><input type="radio" name="vt-fl-mode" value="device" checked> ${t('내 기기만')} <span class="vt-fl-hint">${t('등록된 기기에서 로그인 상태로만 열립니다')}</span></label>
@@ -728,6 +729,31 @@ async function issueShare(item, wrap) {
   try { await navigator.clipboard.writeText(absoluteShareUrl(res.url)); copied = true; } catch (_) {}
   showToast(copied ? t('링크 발급됨 — 클립보드에 복사했습니다') : t('링크 발급됨'), 'success');
   await renderShareList(item, wrap);
+  refreshAllFiles();
+}
+
+/** 파일 탭·뷰어의 경로를 공유한다 — 저장소로 스냅샷 복사한 뒤 그 파일로 링크 발급 다이얼로그를 연다.
+ * 공유 링크는 저장소(id) 파일에만 걸리므로 복사본이 필요하다. 승격이 필요하면 한 번 묻고 재시도. */
+export async function shareFsPath(path) {
+  if (!path) return;
+  const post = () => vtFetch('/api/fs/share-import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  });
+  let res;
+  try {
+    res = await post();
+  } catch (e) {
+    if (!/elevation_required|401/.test(e.message || '')) {
+      showToast(t('공유 준비 실패: {msg}', { msg: e.message }), 'error');
+      return;
+    }
+    if (!(await elevate())) return;
+    try { res = await post(); } catch (e2) { showToast(t('공유 준비 실패: {msg}', { msg: e2.message }), 'error'); return; }
+  }
+  if (!res || !res.item) { showToast(t('공유 준비 실패: {msg}', { msg: '?' }), 'error'); return; }
+  openShareDialog(res.item, { snapshot: true });
   refreshAllFiles();
 }
 

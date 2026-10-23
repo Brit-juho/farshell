@@ -97,6 +97,7 @@ is never limited. Denied and failed attempts are written to `~/.vt/audit/denials
 | GET | `/api/fs/search?q=X` | Fuzzy filename search (command palette `/` mode). `path=` scopes to a subtree, max 50 results |
 | GET | `/api/fs/file?path=X` | File content. Binaries return only `binary:true`; anything over 512KB is truncated. Images also carry `image:true`, `mime`, and `too_large` — the bytes come from `/api/fs/raw` below |
 | GET | `/api/fs/raw?path=X` | [T3] Raw **image** bytes for inline preview. Same browse boundary as `/api/fs/file`, plus a type allowlist: png/jpeg/gif/webp/bmp/ico only, and only when extension **and** magic bytes agree. SVG, HTML and PDF are excluded — served same-origin they are scriptable documents, i.e. XSS. Over 8MB → 413; not an image → 403. Sent with `nosniff` and `Content-Disposition: inline` |
+| POST | `/api/fs/share-import` | Requires elevation. Body `{path}`. Copies a file inside the browse boundary into the file store (snapshot) so a share link can be issued for it; returns `{ok, item}` (same shape as an `/api/files` item). 403 `denied` outside the boundary/denylist, 404 missing, 400 `bad_path`/`not_a_file`, 413 over `VT_MAX_UPLOAD_MB`. The same path+size+mtime reuses its snapshot |
 | GET | `/api/git/status?repo=X` | Parsed result of `git status --porcelain` |
 | GET | `/api/git/diff?repo=X[&file=Y][&staged=1]` | Raw `git diff` output. Protected paths (`.env`/`*.pem`/`id_rsa`, etc.) have their content redacted (`[content redacted — protected path]`) |
 
