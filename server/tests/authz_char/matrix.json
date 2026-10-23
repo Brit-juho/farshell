@@ -28031,6 +28031,258 @@
    "close": 4401
   }
  },
+ "peer.api_peer_ws_v2_X_X_X_X.ws.machine.none": {
+  "group": "peer",
+  "caller": "machine",
+  "mode": "none",
+  "tmux": "up",
+  "method": "WS",
+  "route": "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}",
+  "path": "/api/peer/ws-v2/00000000000000000000000000000000/00000000000000000000000000000000/00000000000000000000000000000000/nosuch",
+  "expected": {
+   "close": 4401
+  }
+ },
+ "peer.api_peer_ws_v2_X_X_X_X.ws.machine.password": {
+  "group": "peer",
+  "caller": "machine",
+  "mode": "password",
+  "tmux": "up",
+  "method": "WS",
+  "route": "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}",
+  "path": "/api/peer/ws-v2/00000000000000000000000000000000/00000000000000000000000000000000/00000000000000000000000000000000/nosuch",
+  "expected": {
+   "close": 4401
+  }
+ },
+ "peer.api_peer_ws_v2_X_X_X_X.ws.machine.token": {
+  "group": "peer",
+  "caller": "machine",
+  "mode": "token",
+  "tmux": "up",
+  "method": "WS",
+  "route": "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}",
+  "path": "/api/peer/ws-v2/00000000000000000000000000000000/00000000000000000000000000000000/00000000000000000000000000000000/nosuch",
+  "expected": {
+   "close": 4401
+  }
+ },
+ "peer.api_peer_ws_v2_X_X_X_X.ws.none.none": {
+  "group": "peer",
+  "caller": "none",
+  "mode": "none",
+  "tmux": "up",
+  "method": "WS",
+  "route": "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}",
+  "path": "/api/peer/ws-v2/00000000000000000000000000000000/00000000000000000000000000000000/00000000000000000000000000000000/nosuch",
+  "expected": {
+   "close": 4401
+  }
+ },
+ "peer.api_peer_ws_v2_X_X_X_X.ws.none.password": {
+  "group": "peer",
+  "caller": "none",
+  "mode": "password",
+  "tmux": "up",
+  "method": "WS",
+  "route": "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}",
+  "path": "/api/peer/ws-v2/00000000000000000000000000000000/00000000000000000000000000000000/00000000000000000000000000000000/nosuch",
+  "expected": {
+   "close": 4401
+  }
+ },
+ "peer.api_peer_ws_v2_X_X_X_X.ws.none.token": {
+  "group": "peer",
+  "caller": "none",
+  "mode": "token",
+  "tmux": "up",
+  "method": "WS",
+  "route": "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}",
+  "path": "/api/peer/ws-v2/00000000000000000000000000000000/00000000000000000000000000000000/00000000000000000000000000000000/nosuch",
+  "expected": {
+   "close": 4401
+  }
+ },
+ "peer.api_peer_ws_v2_X_X_X_X.ws.peer_control.none": {
+  "group": "peer",
+  "caller": "peer_control",
+  "mode": "none",
+  "tmux": "up",
+  "method": "WS",
+  "route": "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}",
+  "path": "/api/peer/ws-v2/00000000000000000000000000000000/00000000000000000000000000000000/00000000000000000000000000000000/nosuch",
+  "expected": {
+   "close": 4404
+  }
+ },
+ "peer.api_peer_ws_v2_X_X_X_X.ws.peer_control.password": {
+  "group": "peer",
+  "caller": "peer_control",
+  "mode": "password",
+  "tmux": "up",
+  "method": "WS",
+  "route": "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}",
+  "path": "/api/peer/ws-v2/00000000000000000000000000000000/00000000000000000000000000000000/00000000000000000000000000000000/nosuch",
+  "expected": {
+   "close": 4404
+  }
+ },
+ "peer.api_peer_ws_v2_X_X_X_X.ws.peer_control.token": {
+  "group": "peer",
+  "caller": "peer_control",
+  "mode": "token",
+  "tmux": "up",
+  "method": "WS",
+  "route": "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}",
+  "path": "/api/peer/ws-v2/00000000000000000000000000000000/00000000000000000000000000000000/00000000000000000000000000000000/nosuch",
+  "expected": {
+   "close": 4404
+  }
+ },
+ "peer.api_peer_ws_v2_X_X_X_X.ws.peer_control_agent.none": {
+  "group": "peer",
+  "caller": "peer_control_agent",
+  "mode": "none",
+  "tmux": "up",
+  "method": "WS",
+  "route": "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}",
+  "path": "/api/peer/ws-v2/00000000000000000000000000000000/00000000000000000000000000000000/00000000000000000000000000000000/nosuch",
+  "expected": {
+   "close": 4404
+  }
+ },
+ "peer.api_peer_ws_v2_X_X_X_X.ws.peer_control_agent.password": {
+  "group": "peer",
+  "caller": "peer_control_agent",
+  "mode": "password",
+  "tmux": "up",
+  "method": "WS",
+  "route": "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}",
+  "path": "/api/peer/ws-v2/00000000000000000000000000000000/00000000000000000000000000000000/00000000000000000000000000000000/nosuch",
+  "expected": {
+   "close": 4404
+  }
+ },
+ "peer.api_peer_ws_v2_X_X_X_X.ws.peer_control_agent.token": {
+  "group": "peer",
+  "caller": "peer_control_agent",
+  "mode": "token",
+  "tmux": "up",
+  "method": "WS",
+  "route": "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}",
+  "path": "/api/peer/ws-v2/00000000000000000000000000000000/00000000000000000000000000000000/00000000000000000000000000000000/nosuch",
+  "expected": {
+   "close": 4404
+  }
+ },
+ "peer.api_peer_ws_v2_X_X_X_X.ws.peer_forged.none": {
+  "group": "peer",
+  "caller": "peer_forged",
+  "mode": "none",
+  "tmux": "up",
+  "method": "WS",
+  "route": "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}",
+  "path": "/api/peer/ws-v2/00000000000000000000000000000000/00000000000000000000000000000000/00000000000000000000000000000000/nosuch",
+  "expected": {
+   "close": 4401
+  }
+ },
+ "peer.api_peer_ws_v2_X_X_X_X.ws.peer_forged.password": {
+  "group": "peer",
+  "caller": "peer_forged",
+  "mode": "password",
+  "tmux": "up",
+  "method": "WS",
+  "route": "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}",
+  "path": "/api/peer/ws-v2/00000000000000000000000000000000/00000000000000000000000000000000/00000000000000000000000000000000/nosuch",
+  "expected": {
+   "close": 4401
+  }
+ },
+ "peer.api_peer_ws_v2_X_X_X_X.ws.peer_forged.token": {
+  "group": "peer",
+  "caller": "peer_forged",
+  "mode": "token",
+  "tmux": "up",
+  "method": "WS",
+  "route": "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}",
+  "path": "/api/peer/ws-v2/00000000000000000000000000000000/00000000000000000000000000000000/00000000000000000000000000000000/nosuch",
+  "expected": {
+   "close": 4401
+  }
+ },
+ "peer.api_peer_ws_v2_X_X_X_X.ws.peer_view.none": {
+  "group": "peer",
+  "caller": "peer_view",
+  "mode": "none",
+  "tmux": "up",
+  "method": "WS",
+  "route": "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}",
+  "path": "/api/peer/ws-v2/00000000000000000000000000000000/00000000000000000000000000000000/00000000000000000000000000000000/nosuch",
+  "expected": {
+   "close": 4404
+  }
+ },
+ "peer.api_peer_ws_v2_X_X_X_X.ws.peer_view.password": {
+  "group": "peer",
+  "caller": "peer_view",
+  "mode": "password",
+  "tmux": "up",
+  "method": "WS",
+  "route": "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}",
+  "path": "/api/peer/ws-v2/00000000000000000000000000000000/00000000000000000000000000000000/00000000000000000000000000000000/nosuch",
+  "expected": {
+   "close": 4404
+  }
+ },
+ "peer.api_peer_ws_v2_X_X_X_X.ws.peer_view.token": {
+  "group": "peer",
+  "caller": "peer_view",
+  "mode": "token",
+  "tmux": "up",
+  "method": "WS",
+  "route": "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}",
+  "path": "/api/peer/ws-v2/00000000000000000000000000000000/00000000000000000000000000000000/00000000000000000000000000000000/nosuch",
+  "expected": {
+   "close": 4404
+  }
+ },
+ "peer.api_peer_ws_v2_X_X_X_X.ws.session.none": {
+  "group": "peer",
+  "caller": "session",
+  "mode": "none",
+  "tmux": "up",
+  "method": "WS",
+  "route": "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}",
+  "path": "/api/peer/ws-v2/00000000000000000000000000000000/00000000000000000000000000000000/00000000000000000000000000000000/nosuch",
+  "expected": {
+   "close": 4401
+  }
+ },
+ "peer.api_peer_ws_v2_X_X_X_X.ws.session.password": {
+  "group": "peer",
+  "caller": "session",
+  "mode": "password",
+  "tmux": "up",
+  "method": "WS",
+  "route": "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}",
+  "path": "/api/peer/ws-v2/00000000000000000000000000000000/00000000000000000000000000000000/00000000000000000000000000000000/nosuch",
+  "expected": {
+   "close": 4401
+  }
+ },
+ "peer.api_peer_ws_v2_X_X_X_X.ws.session.token": {
+  "group": "peer",
+  "caller": "session",
+  "mode": "token",
+  "tmux": "up",
+  "method": "WS",
+  "route": "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}",
+  "path": "/api/peer/ws-v2/00000000000000000000000000000000/00000000000000000000000000000000/00000000000000000000000000000000/nosuch",
+  "expected": {
+   "close": 4401
+  }
+ },
  "peer_v2.api_peer_v2_authz_grants.get.machine.none": {
   "group": "peer_v2",
   "caller": "machine",

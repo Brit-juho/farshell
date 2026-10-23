@@ -19,6 +19,9 @@ export type WaitKind = 'approval' | 'choice' | 'plan' | 'question';
 export type DoneBadge = 'question' | 'plan';
 
 export interface SessionRow {
+  physicalKey?: string;
+  catalogSessionId?: string;
+  runtimeId?: string;
   subagents?: unknown;
   /** 이 브라우저 탭의 웹 세션 id. 열려 있지 않으면 빈 문자열. */
   sessionId: string;

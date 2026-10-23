@@ -380,6 +380,8 @@ def _legacy_decide(request_id: str, decision: str, level: Optional[str], snap: O
         grant["read"] = True
         if level == LEVEL_READWRITE:
             grant["write"] = True
+        from session_catalog.identity import stamp_approved
+        stamp_approved(grant)
         grant["updated"] = now
         data["requests"] = [r for r in data["requests"] if r is not req]
         return {"request": dict(req), "grant": dict(grant)}
@@ -419,7 +421,10 @@ def _legacy_list_state(snap: Optional[dict[str, Sess]]) -> dict:
 def _legacy_get_grant(snap, agent, target: Sess) -> Optional[dict]:
     with _txn(snap) as data:
         g = _find_grant(data, agent, target)
-        return dict(g) if g else None
+        if g:
+            from session_catalog.identity import filter_grants
+            return dict(g) if filter_grants([g]) else None
+        return None
 
 
 # --- 공개 분기: 플래그가 켜져 있으면 엔진(authz/share_svc.py), 아니면 위의 옛 구현 ---------------------

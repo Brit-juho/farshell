@@ -497,6 +497,9 @@ async def lifespan(_app: FastAPI):
     except Exception as e:  # noqa: BLE001
         logger.debug(f"tmux 훅 설치 실패: {e}")
 
+    from session_history import worker as history_worker
+    await history_worker.initialize()
+
     # unix socket 두 번째 서버. 실패해도(건너뜀·자가 시험 실패) 서버 기동은 막지 않는다:
     # 소켓이 없으면 클라이언트는 토큰으로 내려간다.
     sock_service = authz_sock.SockService(_app)
@@ -505,9 +508,25 @@ async def lifespan(_app: FastAPI):
     except Exception as e:  # noqa: BLE001
         logger.error(f"[authz-sock] 시작 실패: {e}")
 
+    history_task = asyncio.create_task(history_worker.run())
+    history_replica_task = asyncio.create_task(history_worker.replicate())
+    history_discovery_task = asyncio.create_task(history_worker.discover())
+    history_index_task = asyncio.create_task(history_worker.index_history())
     try:
         yield
     finally:
+        history_task.cancel()
+        history_replica_task.cancel()
+        history_index_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await history_index_task
+        history_discovery_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await history_discovery_task
+        with suppress(asyncio.CancelledError):
+            await history_task
+        with suppress(asyncio.CancelledError):
+            await history_replica_task
         with suppress(Exception):
             await sock_service.stop()
         authz_legacy_use.flush()
@@ -674,6 +693,11 @@ app.include_router(agent_config_elevated_router)
 app.include_router(agent_config_peer_router)
 app.include_router(agent_profiles_router)
 app.include_router(agent_profiles_elevated_router)
+
+from routes.session_catalog import router as session_catalog_router, elevated_router as session_history_elevated_router, peer_router as session_history_peer_router
+app.include_router(session_catalog_router)
+app.include_router(session_history_elevated_router)
+app.include_router(session_history_peer_router)
 
 
 @app.exception_handler(StarletteHTTPException)

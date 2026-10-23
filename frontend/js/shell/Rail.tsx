@@ -32,6 +32,8 @@ import { createRailPrefs } from './rail-prefs.js';
 import { REGULAR_MAX } from '../layout/breakpoints.js';
 import { Menu, Row, type MenuItem } from './RailRow.js';
 import { NativeChildren } from './NativeChildren.js';
+import { CatalogTree, type CatalogSnapshot } from './CatalogTree.js';
+import { historyApi } from '../history/api.js';
 import { icon } from '../ui/icons.js';
 
 export type { RailDeps } from './rail-fetch.js';
@@ -111,6 +113,26 @@ function Rail(props: { deps: RailDeps }) {
   // 전환**이다(core/host-route.js). 이 화면이 보고 있는 맥은 부팅 때 정해지고,
   // 레일의 세션 행은 그 맥의 API(중계)에서 오므로 로컬과 같은 경로로 그린다.
   const viewHostId = String((window as any).vtRelayHost?.() || LOCAL_HOST);
+  const [catalog, setCatalog] = createSignal<CatalogSnapshot | null>(null);
+  const [catalogMode, setCatalogMode] = createSignal('repositories');
+  let catalogRequest = 0;
+  const refreshCatalog = async (more = false) => {
+    if (viewHostId !== LOCAL_HOST) return;
+    const request = ++catalogRequest;
+    try {
+      const params = new URLSearchParams({ archived: String(catalogMode() === 'archive') });
+      if (more && catalog()?.next) params.set('after', catalog()!.next!);
+      const data = await historyApi('/api/session-catalog?' + params);
+      if (request !== catalogRequest) return;
+      setCatalog(more && catalog() ? { ...data, sessions: [...catalog()!.sessions, ...data.sessions] } : data);
+    } catch (_) { /* Older hosts keep their existing live rail. */ }
+  };
+  const catalogTimer = setInterval(() => { if (!document.hidden) void refreshCatalog(); }, 5000);
+  const catalogChanged = () => { void refreshCatalog(); };
+  window.addEventListener('vt:catalog-changed', catalogChanged);
+  onCleanup(() => { clearInterval(catalogTimer); window.removeEventListener('vt:catalog-changed', catalogChanged); });
+  void refreshCatalog();
+
 
   // compact(<720px)에서는 이 데스크톱 Rail이 CSS로 숨고 mobile-nav가 Fleet을
   // 마운트한다. 예전엔 숨은 Rail도 계속 살아 있어 Fleet과 똑같은 tmux·agent·git
@@ -282,7 +304,7 @@ function Rail(props: { deps: RailDeps }) {
   const openRow = async (_e: MouseEvent, row: SessionRow) => {
     const sid = actionSessionId(row);
     if (!sid && !row.tmuxName) return;
-    await (window as any).vtOpenSessionFromRail?.({ sessionId: sid, tmuxName: row.tmuxName || null });
+    await (window as any).vtOpenSessionFromRail?.({ sessionId: sid, tmuxName: row.tmuxName || null, catalogSessionId: row.catalogSessionId, runtimeId: row.runtimeId });
   };
 
   // ⋯ 버튼과 우클릭이 이 함수 하나를 부른다. 버튼은 좌표가 클릭 지점이라 메뉴가
@@ -470,6 +492,8 @@ function Rail(props: { deps: RailDeps }) {
           </Show>
         </Show>
         <div class="vt-wgrail-head-actions">
+          <button type="button" class="vt-icon-btn sm" aria-label={t('대화 보관함')} data-tip={t('대화 보관함')}
+            onClick={() => { void import('../history/panel.js').then(m => m.openHistory()); }} innerHTML={icon('search', 14, 2)} />
           {/* 레일 설정 — 개입 필요 표시, 만든 곳별 표시, 저장소 표시. 접히지 않은 때만 그린다.
               머리글 줄은 구역 유무와 무관하게 항상 있어 설정에 늘 닿는다. */}
           <Show when={!collapsed()}>
@@ -500,7 +524,15 @@ function Rail(props: { deps: RailDeps }) {
         </div>
       </div>
       <div class="vt-wgrail-body">
-        <Show when={rows().length === 0 && !collapsed() && !viewHostOffline()}>
+        <Show when={!collapsed() && catalog()}>
+          <div class="vt-catalog-switch" role="group" aria-label={t('세션 탐색 방식')}>
+            <button type="button" aria-pressed={catalogMode() === 'repositories'} onClick={() => { setCatalogMode('repositories'); void refreshCatalog(); }}>{t('저장소')}</button>
+            <button type="button" aria-pressed={catalogMode() === 'all'} onClick={() => { setCatalogMode('all'); void refreshCatalog(); }}>{t('전체 세션')}</button>
+            <button type="button" aria-pressed={catalogMode() === 'archive'} onClick={() => { setCatalogMode('archive'); void refreshCatalog(); }}>{t('세션 보관함')}</button>
+          </div>
+        </Show>
+
+        <Show when={rows().length === 0 && !catalog()?.sessions.length && !collapsed() && !viewHostOffline()}>
           <div class="vt-wgrail-empty">
             {t('아직 세션이 없습니다.')}
             <button
@@ -550,7 +582,10 @@ function Rail(props: { deps: RailDeps }) {
               <For each={lists().attention}>{(row) => renderRow(row)}</For>
             </Show>
           </Show>
-          <Show when={!collapsed() && lists().sessions.length > 0}>
+          <Show when={!collapsed() && catalog()}>
+            {data => <CatalogTree flat={catalogMode() === 'all'} data={data()} live={lists().sessions} renderLive={renderRow} onChanged={() => { void refreshCatalog(); }} onMore={() => { void refreshCatalog(true); }} />}
+          </Show>
+          <Show when={!collapsed() && lists().sessions.length > 0 && !catalog()}>
             <Show when={!collapsed()}>
               <div class="vt-wgrail-group-head">
                 <span class="vt-wgrail-group-label">

@@ -38,7 +38,7 @@
 
 | Term (UI) | Meaning |
 |---|---|
-| Session (세션) | One tmux session. Runs until killed; closing a view never stops it. |
+| Session (세션) | A durable logical task in the catalog. A tmux runtime is one execution of it; closing a view never stops execution. Legacy live APIs still address tmux sessions. |
 | View (뷰) | One header tab. Holds one or more panes. 1 pane = single view, 2+ = grouped view. |
 | Pane (칸) | One region of a view. Holds one session, or is empty. |
 | Open (열림) | The session is placed in a pane of this browser tab. A placement, not a state. |
@@ -77,7 +77,7 @@ Implementation notes (2026-10-03): the active session is derived in `layout/stor
 active view's focused pane — `null` on an empty pane. The store never holds zero tabs; one unlabeled tab with one empty
 pane reads as "no views" (`isLayoutEmpty`: tab bar hidden, onboarding shown). Reopening a remembered group attaches its
 members and rebuilds the tree; a member already open elsewhere in this browser tab is not moved — its slot stays empty.
-Layout snapshot `v5` adds `screen` and `closed`; it is written to `localStorage` under a per-tab key plus the "latest" key,
+Layout snapshot `v6` retains `screen` and `closed` and stores catalog session/runtime IDs when supplied by attach; it is written to `localStorage` under a per-tab key plus the "latest" key,
 and to `/api/workspace` as `ui.layouts[screen]` (merged per tab id by the server, capped at 20) plus `ui.layout` (latest).
 Boot attaches only the sessions in the saved layout's open panes; `restoreWorkspace`, `reconcileMissingTmuxSessions`, the
 "attach every tmux session" fallback and the empty-pane fill-in on restore are gone. Session order (mobile swipe) now
@@ -327,3 +327,53 @@ Desktop rail menus and mobile Fleet sheets share a non-interactive summary heade
 Status and origin appear first, followed by the workspace label, project basename and
 full path, then the branch. Missing fields are hidden; long paths and branch names
 wrap without truncation. The accessible summary retains the full context.
+
+
+## Durable catalog and conversation archive
+
+`server/session_catalog/` owns private SQLite logical sessions, workspaces, physical runtime
+observations and recorded stop/resume operations. A complete batch observation uses the tmux
+server socket/PID/birth epoch plus session ID/birth; partial observations mark executions unknown
+and cannot terminate them. Stopped catalog rows remain. Archive requires an explicitly stopped
+runtime. Independent delegated tmux sessions are not stopped together.
+
+`server/session_history/` stores immutable SHA-256 raw chunks before committing manifests and
+normalizes supported Claude/Codex JSONL, including compressed Codex records. Claude child metadata
+and selected tool-result attachments are raw archive units. `dependency_complete:false` remains
+explicit: complete restoration across arbitrary CLI versions is not certified. Source disappearance
+and rewrite preserve earlier manifests. The collector is independent of browser visibility; Git
+discovery, FTS projection and encrypted replication have separate tasks. Shutdown drains an active
+worker before releasing its state. Interactive collection commits at most 256 KiB of new raw bytes
+per file pass; explicit/offline capture retains the 8 MiB budget. Compressed projection allows one
+supported record (up to the 1 MiB line limit) to make progress even with the smaller raw budget.
+The disposable trigram index can fall back to normalized SQL
+search while absent or behind the catalog.
+
+Archive APIs are direct-host human only; sensitive operations additionally require elevation.
+They are absent from broad relay and agent socket allowlists. Replication uses a distinct human
+approved peer grant and sealed public-key packets. Raw chunks are verified before manifest ACK;
+projection batches are bounded and replayable. Approved source scopes restrict transfer. Origin and
+replica quotas are accounted separately, including pending and orphan bytes. Receiver key rotation
+retains old private keys for in-flight packets; keys are excluded from backup exports. Explicit deletion
+can request replica tombstones with delivery ACKs, while source disappearance emits no deletion.
+Raw chunks remain until a separate cleanup operation; a tombstone is not a physical secure erase.
+Receiver records never become local executions.
+Protocol tests cover large projections, lost ACKs and revoked grants; these are not evidence of
+an operational central host connection.
+
+Daily consistent catalog snapshots retain seven generations. Export includes local and replicated
+referenced raw chunks, excluding CLI credentials and transport private keys. The offline
+`session_history.backup.restore_package` function restores only into an absent catalog directory;
+sources and replication are disabled for review and historical runtimes are stopped. There is
+currently no browser backup-import flow.
+
+New catalog attach paths validate durable runtime IDs; layout v6 retains stopped placeholders and
+rejects same-name replacement runtimes. Legacy name-only snapshots retain compatibility behavior;
+legacy name-only layout adoption remains separate from grant migration. Execution-bound legacy grants
+are denied until an elevated human reviews and binds them to observed host/epoch identities. Explicit
+new grants, pair membership and file leases use the same execution fence. Remote delegation includes
+runtime assertions in the signed request body and pins both host identities; missing or changed
+assertions are refused. Durable peer terminal paths bind host/session/runtime IDs in the signed URL.
+Repository visibility is imported once into catalog metadata; the legacy preferences remain recovery evidence.
+Native resume returns `started_unverified` until separately checked; it is not an OAuth/profile
+replacement certificate. Endpoint and authentication contracts are in [API.md](../../API.md).

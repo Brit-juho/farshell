@@ -59,7 +59,7 @@ const FOCUSABLE_SEL = [
 ].join(',');
 
 const MOBILE_ROUTE_IDS = new Set([
-  'vt-subagent', 'vt-dock-scm', 'vt-queue', 'vt-settings', 'vt-mcp', 'vt-files', 'vt-dir', 'vt-ports', 'vt-usage', 'vt-file',
+  'vt-history', 'vt-session-record', 'vt-subagent', 'vt-dock-scm', 'vt-queue', 'vt-settings', 'vt-mcp', 'vt-files', 'vt-dir', 'vt-ports', 'vt-usage', 'vt-file',
 ]);
 
 // 하단 내비의 탭 화면 — 팝업이 아니라 탭이라 × 를 숨기고 상단 바 아래를 채운다(60-mobile-hud.css).

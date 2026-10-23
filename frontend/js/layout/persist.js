@@ -56,9 +56,10 @@ export function serializeTree(tree, lookup) {
     // C3 — 아직 못 닿은(unreachable) 칸은 세션 객체가 없다. 그대로 저장하면
     // 다음 저장 한 번에 배치가 사라지므로(레이아웃은 아무 변경에나 저장된다)
     // 무엇을 기다리는 중이었는지를 그대로 다시 적는다.
-    // `lost`(로컬 복원 때 세션을 못 찾은 칸)도 같은 이유로 이름을 다시 적는다.
     const keep = tree.unreachable || tree.lost;
-    const u = !info && keep ? { id: null, tmux: keep.tmux } : null;
+    const u = !info && keep ? { id: null, tmux: keep.tmux, ...(keep.catalogSessionId ? {
+      catalogSessionId: keep.catalogSessionId, runtimeId: keep.runtimeId, catalogHost: keep.catalogHost,
+    } : {}) } : null;
     return { t: 'leaf', id: tree.id, session: info || u, host: tree.host || 'local' };
   }
   return {
@@ -69,7 +70,7 @@ export function serializeTree(tree, lookup) {
 
 function _lookupLive(sessionId) {
   const s = getSession(sessionId);
-  return { id: sessionId, tmux: (s && s.tmuxName) || null, host: (s && s.host) || 'local' };
+  return { id: sessionId, tmux: (s && s.tmuxName) || null, host: (s && s.host) || 'local', catalogSessionId: s?.catalogSessionId || null, runtimeId: s?.runtimeId || null, catalogHost: s?.catalogHost || null };
 }
 
 // ── 역직렬화 ──────────────────────────────────────────────────────────────
@@ -102,14 +103,14 @@ export function deserializeTree(node, resolve, taken = new Set()) {
     // 잠깐 꺼진 것일 수도** 있다. 강등하지 않고 `unreachable`로 남겨 배치를
     // 지킨다. 로컬은 그대로 강등한다 — 로컬 tmux에 이름이 없으면 그 세션은
     // 실제로 없는 것이고, 더 기다릴 이유가 없다.
-    if (!session && host !== 'local' && node.session && node.session.tmux) {
-      leaf.unreachable = { host, tmux: node.session.tmux };
+    if (!session && node.session && (node.session.catalogSessionId || (host !== 'local' && node.session.tmux))) {
+      leaf.unreachable = { host, tmux: node.session.tmux, ...(node.session.catalogSessionId ? {catalogSessionId: node.session.catalogSessionId, runtimeId: node.session.runtimeId, catalogHost: node.session.catalogHost} : {}) };
     }
     // 로컬도 같은 칸을 **빈 칸으로 지우지 않고** 이름을 들고 있는다(`lost`). 못 찾은 이유가
     // 정말 종료일 수도, 부팅 직후 일시 장애일 수도 있는데 여기서는 구분할 수 없다. 이름을
     // 버린 채 저장하면 세션이 돌아와도 되살릴 근거가 없다(빈 뷰가 영구히 남던 원인).
     // 화면에는 평범한 빈 칸이고, 서버 tmux 목록에 그 이름이 보이면 recoverLostPanes가 채운다.
-    if (!session && host === 'local' && node.session && node.session.tmux) {
+    if (!session && host === 'local' && node.session && !node.session.catalogSessionId && node.session.tmux) {
       leaf.lost = { tmux: node.session.tmux };
     }
     return leaf;
@@ -126,12 +127,15 @@ export function deserializeTree(node, resolve, taken = new Set()) {
 export function makeResolver(sessions) {
   const byTmux = new Map();
   const liveIds = new Set();
+  const byCatalog = new Map();
   for (const [id, s] of Object.entries(sessions)) {
     liveIds.add(id);
+    if (s?.catalogSessionId && s?.runtimeId) byCatalog.set(`${s.host || 'local'}:${s.catalogHost || ''}:${s.catalogSessionId}:${s.runtimeId}`, id);
     if (s && s.tmuxName && !byTmux.has(s.tmuxName)) byTmux.set(s.tmuxName, id);
   }
   return (info) => {
     if (!info) return null;
+    if (info.catalogSessionId) return byCatalog.get(`${info.host || 'local'}:${info.catalogHost || ''}:${info.catalogSessionId}:${info.runtimeId}`) || null;
     if (info.tmux && byTmux.has(info.tmux)) return byTmux.get(info.tmux);
     // tmux 세션이었는데 그 이름이 지금 없다 → 그 세션은 죽었다. id는 어차피
     // 이전 부팅의 값이라 볼 필요도 없다(빈 pane 강등).
@@ -159,7 +163,7 @@ export function makeResolver(sessions) {
 function _snapshot() {
   const tabs = getTabsWithTrees();
   return {
-    v: 5,
+    v: 6,
     savedAt: Date.now(),
     screen: screenId(),
     closed: getClosedViews(),
@@ -223,7 +227,7 @@ function _readLocal(key) {
 // 닫았다) 유효하다 — 기억된 닫힌 묶음만 남은 상태도 저장할 가치가 있다.
 function _isSnapshot(s) {
   if (!s) return false;
-  if (s.v === 5 && Array.isArray(s.tabs)) return true;
+  if ((s.v === 5 || s.v === 6) && Array.isArray(s.tabs)) return true;
   if ((s.v === 2 || s.v === 3 || s.v === 4) && Array.isArray(s.tabs) && s.tabs.length) return true;
   return s.v === 1 && !!s.tree;
 }
@@ -285,7 +289,7 @@ export function snapshotSessionInfos(snap) {
 
 /** 스냅샷 → 항상 "탭 배열" 모양으로. v1은 탭 1개로 승격한다. */
 export function snapshotTabs(snap) {
-  if ((snap.v === 2 || snap.v === 3 || snap.v === 4 || snap.v === 5) && Array.isArray(snap.tabs)) return snap.tabs;
+  if ((snap.v === 2 || snap.v === 3 || snap.v === 4 || snap.v === 5 || snap.v === 6) && Array.isArray(snap.tabs)) return snap.tabs;
   return [{ id: 'tab-legacy', worktreeId: null, hostId: 'local', label: null,
             active: snap.active, tree: snap.tree }];
 }

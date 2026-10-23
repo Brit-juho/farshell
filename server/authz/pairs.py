@@ -318,7 +318,15 @@ def _is_agent_member(m: dict) -> bool:
     return m.get("kind") == "agent" and bool(m.get("principal"))
 
 
+def _identity_live(pair: dict) -> bool:
+    from session_catalog.identity import filter_grants
+    record = {**pair, 'bound_sessions': [key for m in pair['members'] if (key := _own_key(m))]}
+    return bool(filter_grants([record]))
+
+
 def _caller_member(pair: dict, p: P.Principal) -> Optional[dict]:
+    if p.kind in (P.AGENT, P.PEER) and not _identity_live(pair):
+        return None
     if p.kind == P.AGENT:
         return next((m for m in pair["members"] if _is_agent_member(m) and m["principal"] == p.id), None)
     if p.kind == P.PEER and p.obo:       # 다른 Mac 의 에이전트(대리 주체) — 그 호스트가 보증한 `peer:X/obo:agent:X/<key>` 로 구성원이 된다
@@ -405,6 +413,9 @@ def _grant(pair: dict, m: dict, gid: str, resource: str, scopes: list, sconds: O
          "scopes": list(scopes), "schema": S.SCHEMA, "state": "active", "approved_by": pair["approval"].get("by") or "human",
          "approved_via": S.VIA_MANUAL, "expires": pair.get("hard_expires"), "conds": extra.pop("conds", {}),
          "pair_id": pair["id"], "subject_session": _own_key(m), "created": now_, "updated": now_, **extra}
+    for field in ('identity_version', 'runtime_bindings', 'bound_sessions'):
+        if field in pair:
+            g[field] = pair[field]
     if sconds:
         g["sconds"] = sconds
     return g
@@ -905,6 +916,9 @@ def decide(request_id: str, decision: str, actor: Optional[P.Principal], *, elev
                     break
             if late_error is None:
                 ap.update(state="allowed", decided=t, by=who, ticked=sorted(set(ticks)))
+                from session_catalog.identity import stamp_approved
+                pair['bound_sessions'] = sorted({key for m in pair['members'] if (key := _own_key(m))})
+                stamp_approved(pair)
                 pair.update(state=ACTIVE, activated=t, hard_expires=t + MAX_LIFETIME, updated=t, touched=t)
                 _apply_grants(docs, pair, t)
                 _sync_leases(docs, pair, t, alive)
@@ -1178,7 +1192,7 @@ def _running_pairs() -> list:
         d, bad = store._read("pairs")
     except Exception:  # noqa: BLE001
         return []
-    return [] if bad else [x for x in d["items"] if x.get("state") in RUNNING_STATES]
+    return [] if bad else [x for x in d["items"] if x.get("state") in RUNNING_STATES and _identity_live(x)]
 
 
 def related_keys(a_key: str, b_key: str) -> bool:

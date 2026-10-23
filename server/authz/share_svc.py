@@ -132,7 +132,7 @@ def _txn(snap):
 def _snapshot(docs: dict, now: float) -> store.Snapshot:
     return store.Snapshot(grants=docs["grants"]["items"], approvals=docs["approvals"]["items"],
                           windows=docs["windows"]["items"], shares=docs["shares"]["items"],
-                          corrupt=docs.get("_corrupt", frozenset()), now=now, source="store")
+                          corrupt=docs.get("_corrupt", frozenset()), now=now, source="store").fenced()
 
 
 def agent_key(a) -> str:
@@ -299,7 +299,7 @@ def still_allowed(kind: str, snap, agent, target, now: Optional[float] = None) -
     docs = {n: store._read(n) for n in ("grants", "approvals", "windows", "shares", "meta")}
     s = store.Snapshot(grants=docs["grants"][0]["items"], approvals=docs["approvals"][0]["items"],
                        windows=docs["windows"][0]["items"], shares=docs["shares"][0]["items"],
-                       corrupt=frozenset(n for n, (_d, bad) in docs.items() if bad), now=now, source="store")
+                       corrupt=frozenset(n for n, (_d, bad) in docs.items() if bad), now=now, source="store").fenced()
     return engine.decide(P.from_caller(agent), scope, f"session:local/{target.key}", ctx, s).allow
 
 
@@ -345,6 +345,11 @@ def decide(request_id: str, decision: str, level: Optional[str], snap, actor: Op
         if res.get("replayed"):                  # 먼저 온 결정의 재전송 — 아무것도 바뀌지 않았으니 감사·알림을 다시 만들지 않는다
             return res
         allowed = res["grant"] is not None
+        if allowed:
+            from session_catalog.identity import stamp_approved
+            record=next((g for g in docs['grants']['items'] if g.get('id')==res['grantId']),None)
+            if record is not None:
+                stamp_approved(record)
         view_agent = (snap or {}).get(req["subject_session"]) if req else None
         who = view_agent.name if view_agent else (req or {}).get("subject_name", "")
         _audit_change("decide", "allowed" if allowed else "denied", actor, res["resource"],

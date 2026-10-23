@@ -171,7 +171,7 @@ test('복원 전에는 저장하지 않는다 — 빈 초기 트리로 정본을
   // 이 스냅샷을 읽는다. groupId/repoId(v3/v4 시절 탭 정체성)는 2026-09-18
   // 후속(그룹 재정의)에서 뜻을 잃어 더 이상 쓰지 않는다 — 탭 레코드에 아예
   // 없다.
-  assert.strictEqual(body.ui.layout.v, 5);
+  assert.strictEqual(body.ui.layout.v, 6);
   // 2026-10-03 — 브라우저 탭별 사본도 같은 PUT에 실린다(서버가 탭 id별로 병합).
   assert.deepStrictEqual(Object.keys(body.ui.layouts), [body.ui.layout.screen]);
   assert.match(body.ui.layout.screen, /^[0-9a-f]{32}$/);
@@ -754,4 +754,44 @@ test('recoverLostPanes — 그 세션이 이미 다른 칸에 열려 있으면 �
   assert.strictEqual(t.b.session, 'web-nice');
   assert.strictEqual(t.a.session, null);
   assert.strictEqual(t.a.lost, undefined);
+});
+
+test('v6 — 같은 이름의 다른 실행에 붙지 않고 종료 자리표시자를 보존한다', async () => {
+  const { P } = await load();
+  const resolve = P.makeResolver({'web-new': {tmuxName: 'same', catalogSessionId: 'new-session', runtimeId: 'new-runtime'}});
+  const info = {id: 'web-old', tmux: 'same', catalogSessionId: 'old-session', runtimeId: 'old-runtime'};
+  assert.strictEqual(resolve(info), null);
+  const leaf = P.deserializeTree({t: 'leaf', id: 'pane', host: 'local', session: info}, resolve);
+  assert.strictEqual(leaf.session, null);
+  assert.strictEqual(leaf.unreachable.catalogSessionId, 'old-session');
+  assert.strictEqual(leaf.lost, undefined, '영속 참조는 이름 기반 자동 복구에 들어가지 않는다');
+  const saved = P.serializeTree(leaf, () => null);
+  assert.strictEqual(saved.session.runtimeId, 'old-runtime');
+  assert.strictEqual(saved.session.catalogSessionId, 'old-session');
+  assert.strictEqual(resolve({catalogSessionId: 'new-session', runtimeId: 'new-runtime'}), 'web-new');
+});
+
+test('durable resolver separates host routing and host incarnation', async () => {
+  const { P } = await load();
+  const resolve = P.makeResolver({
+    local: {host: 'local', catalogHost: 'host-one', catalogSessionId: 'session', runtimeId: 'runtime'},
+    peer: {host: 'peer', catalogHost: 'host-two', catalogSessionId: 'session', runtimeId: 'runtime'},
+  });
+  assert.strictEqual(resolve({host: 'local', catalogHost: 'host-one', catalogSessionId: 'session', runtimeId: 'runtime'}), 'local');
+  assert.strictEqual(resolve({host: 'peer', catalogHost: 'host-two', catalogSessionId: 'session', runtimeId: 'runtime'}), 'peer');
+  assert.strictEqual(resolve({host: 'local', catalogHost: 'reinstalled', catalogSessionId: 'session', runtimeId: 'runtime'}), null);
+});
+
+test('closed groups retain same-name tasks on different hosts and ignore name-only deletion', async () => {
+  const { S } = await load();
+  const leaf = (id, host, task) => ({t:'leaf', id, host, session:{tmux:'same', host,
+    catalogHost:host+'-incarnation', catalogSessionId:task, runtimeId:'runtime'}});
+  const first = {id:'durable-view',tree:{t:'split',id:'split',dir:'row',ratio:0.5,
+    a:leaf('a','local','task-one'),b:leaf('b','peer','task-two')}};
+  assert.equal(S.rememberClosedView(first),true);
+  S.forgetClosedMembers(['same']);
+  assert.ok(S.peekClosedView('durable-view'));
+  assert.equal(S.findClosedViewByTmux('same'),null);
+  assert.equal(S.findClosedViewByCatalog('task-one').id,'durable-view');
+  assert.equal(S.findClosedViewByCatalog('task-two','peer').id,'durable-view');
 });

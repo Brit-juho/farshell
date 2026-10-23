@@ -31,3 +31,30 @@ fsh terminal unset            # back to automatic selection
 - `fsh start`/`restart`/`mobile`/`voice` don't open a window.
 - If no window opens: run the manual command fsh prints (`tmux -L fsh new -A -s dev`) in any terminal,
   then check the "terminal app" item in `fsh doctor` and the macOS Automation permission.
+
+## Saved sessions and conversation archives
+
+The rail browses repositories → workspaces → sessions, with All sessions and Session archive views.
+Closing a view keeps its execution running. Task history shows the logical task name and execution history.
+Stop an execution explicitly before archiving it; independently running child sessions are not stopped together.
+
+In Conversation archive settings, review a Claude or Codex configuration home and enable collection.
+FarShell stores raw copies and searchable messages separately in private storage, so records already saved
+remain readable after CLI source files disappear. Raw files may include sensitive conversations and tool output.
+The default limit is 20 GiB. Collection pauses at the limit; existing archives are never deleted automatically.
+
+Central replication requires pairing and separate approval of direction, archive identity and public key on both servers.
+Disconnecting replication stops future transfers and preserves copies already received. Viewing a replica does not launch a remote CLI.
+Restoring or exporting raw files requires password verification; existing source files are never overwritten.
+Starting a CLI through Continue conversation and verifying actual resumption of the same conversation are separate outcomes.
+Archive metadata currently reports `dependency_complete:false`; restoration of every companion file across all CLI versions is not guaranteed.
+
+Use Review existing execution permissions to compare legacy permissions with current executions before reconnecting them.
+A replacement session with the same name does not automatically receive the previous execution's permissions.
+Replication can be restricted to registered source scopes; local archive and incoming replica limits are separate.
+Rotating a replication key retains earlier keys so in-flight records can still be decrypted.
+
+History deletion can target this host alone or include approved replicas.
+It hides records and prevents reimport; it does not erase CLI source files or archived raw bytes on disk.
+Deletion acknowledgments from offline replica hosts complete after reconnection.
+FarShell delegation links open separate task records and remain distinct from agent-internal children.

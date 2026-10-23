@@ -246,6 +246,8 @@ def txn(held: bool = False):
             if bad:
                 corrupt.add(n)
         yield docs
+        from session_catalog.identity import stamp_new
+        stamp_new(docs,before)
         for n in _UPGRADED_DOCS:                  # 옛 이름으로 덧붙인 레코드도 새 형태로 쓴다
             docs[n]["items"] = [S.upgrade_record(x) for x in docs[n]["items"]]
         changed = [n for n in DOCS if json.dumps(docs[n], sort_keys=True) != before[n]]
@@ -322,6 +324,11 @@ class Snapshot:
     now: float = 0.0
     source: str = "store"            # store | live | empty — 어디서 만든 snapshot 인가(감사·진단용)
 
+    def fenced(self):
+        from session_catalog.identity import filter_grants
+        from dataclasses import replace
+        return replace(self,grants=filter_grants(self.grants))
+
     def deny_rules(self) -> list:
         return [g for g in self.grants if g.get("effect") == "deny"]
 
@@ -355,7 +362,7 @@ def snapshot(now: Optional[float] = None) -> Snapshot:
             corrupt.add(n)
     return Snapshot(grants=out["grants"], approvals=out["approvals"], windows=out["windows"],
                     shares=out["shares"], corrupt=frozenset(corrupt),
-                    now=time.time() if now is None else now, source="store")
+                    now=time.time() if now is None else now, source="store").fenced()
 
 
 def exists() -> bool:

@@ -1,3 +1,4 @@
+import { operationId } from '../core/operation-id.js';
 import { disposeKeyboardInput } from './keyboard-input.js';
 import { cancelPasteTransactions } from './clipboard.js';
 // 세션 생성 진입점 + 세션 전환/이름변경/좌우이동 단축키 + 세션 제거.
@@ -44,7 +45,7 @@ export async function createSession({ place = 'view' } = {}) {
     const res = await apiFetch(`${API_BASE}/api/tmux/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ auto_open_on_mac: true, screen: screenId() }),
+      body: JSON.stringify({ auto_open_on_mac: true, screen: screenId(),operation_id:operationId() }),
     });
     const data = await res.json();
     addSession(data.id, data.name || data.id, { place });
@@ -52,7 +53,7 @@ export async function createSession({ place = 'view' } = {}) {
     // "이 세션은 tmux 세션이 아니라 맥에서 열 수 없습니다"를 잘못 띄운다 —
     // 실제로는 진짜 tmux 세션인데도(restoreWorkspace 경로는 이걸 항상 채워왔음).
     const s = getSession(data.id);
-    if (s) s.tmuxName = data.tmux_session;
+    if (s) { s.tmuxName = data.tmux_session; s.catalogSessionId = data.catalog_session_id; s.runtimeId = data.runtime_id; s.catalogHost = data.catalog_host || null; }
     return;
   }
   const res = await apiFetch(`${API_BASE}/api/sessions`, {
@@ -138,11 +139,11 @@ async function createPlainSession() {
 // (attachTmux/createTmuxSession)은 그 목록들이 공통으로 부르는 진짜 동작이라
 // 그대로 옮긴다 — createPlainSession의 tmux 버전이라 바로 옆이 제자리다.
 // place는 addSession과 같다. 이미 열려 있으면 그 자리로 간다. 실패하면 null.
-export async function attachTmux(tmuxName, { place = 'view' } = {}) {
+export async function attachTmux(tmuxName, { place = 'view', catalogSessionId = null, runtimeId = null, catalogHost = null } = {}) {
   const res = await apiFetch(`${API_BASE}/api/tmux/attach`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: tmuxName, screen: screenId() }),
+    body: JSON.stringify({ name: tmuxName, screen: screenId(), ...(catalogSessionId ? { catalog_session_id: catalogSessionId, runtime_id: runtimeId, ...(catalogHost ? {catalog_host: catalogHost} : {}) } : {}) }),
   });
   // 서버가 세션 없음(404) 등을 돌려주면 data.id가 없다. 그대로 addSession(undefined)하면
   // /ws/undefined로 무한 재연결하는 유령 탭이 생기므로 여기서 차단한다.
@@ -158,7 +159,7 @@ export async function attachTmux(tmuxName, { place = 'view' } = {}) {
     addSession(data.id, data.name || data.id, { place, tmuxName: data.tmux_session || tmuxName });
     // ⚠ tmuxName 미설정 시 openSessionOnMac()이 "tmux 세션 아님"으로 오판한다.
     const s = getSession(data.id);
-    if (s) s.tmuxName = data.tmux_session || tmuxName;
+    if (s) { s.tmuxName = data.tmux_session || tmuxName; s.catalogSessionId = data.catalog_session_id || catalogSessionId; s.runtimeId = data.runtime_id || runtimeId; s.catalogHost = data.catalog_host || catalogHost; }
     if (place !== 'none') saveLayoutNow();
   }
   return data.id;
@@ -172,7 +173,7 @@ export async function createTmuxSession() {
   const res = await apiFetch(`${API_BASE}/api/tmux/create`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ auto_open_on_mac: !!autoMac, screen: screenId() }),
+    body: JSON.stringify({ auto_open_on_mac: !!autoMac, screen: screenId(), operation_id: operationId() }),
   });
   if (!res.ok) { showToast(t('tmux 세션 생성 실패 ({status})', { status: res.status })); return; }
   const data = await res.json();
@@ -180,7 +181,7 @@ export async function createTmuxSession() {
   addSession(data.id, data.name || data.id, { tmuxName: data.tmux_session });
   // ⚠ tmuxName 미설정 시 openSessionOnMac()이 "tmux 세션 아님"으로 오판한다.
   const s = getSession(data.id);
-  if (s) s.tmuxName = data.tmux_session;
+  if (s) { s.tmuxName = data.tmux_session; s.catalogSessionId = data.catalog_session_id; s.runtimeId = data.runtime_id; s.catalogHost = data.catalog_host || null; }
   return data.id;
 }
 

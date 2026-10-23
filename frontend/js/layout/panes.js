@@ -273,15 +273,20 @@ function _renderUnreachableBody(bodyEl, node) {
   box.className = 'vt-pane-unreachable';
   const title = document.createElement('div');
   title.className = 'vt-pane-unreachable-title';
-  title.textContent = t('{host} · 연결 안 됨', { host: node.unreachable.host });
+  title.textContent = node.unreachable.catalogSessionId && node.unreachable.host === 'local' ? t('실행 확인 필요') : t('{host} · 연결 안 됨', { host: node.unreachable.host });
   const sub = document.createElement('div');
   sub.className = 'vt-pane-unreachable-sub';
-  sub.textContent = t('{name} — 호스트가 돌아오면 이 자리에 복구됩니다.', { name: node.unreachable.tmux });
+  sub.textContent = node.unreachable.catalogSessionId ? node.unreachable.tmux || node.unreachable.catalogSessionId : t('{name} — 호스트가 돌아오면 이 자리에 복구됩니다.', { name: node.unreachable.tmux });
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'vt-btn sm vt-pane-unreachable-retry';
-  btn.textContent = t('다시 시도');
-  btn.addEventListener('click', () => _retryUnreachable(node, sub, btn));
+  btn.textContent = node.unreachable.catalogSessionId && node.unreachable.host === 'local' ? t('작업 기록') : t('다시 시도');
+  btn.addEventListener('click', async () => {
+    if (node.unreachable.catalogSessionId && node.unreachable.host === 'local') {
+      const { openSessionRecord } = await import('../history/session-record.js');
+      openSessionRecord(node.unreachable.catalogSessionId);
+    } else _retryUnreachable(node, sub, btn);
+  });
   const pick = document.createElement('button');
   pick.type = 'button';
   pick.className = 'vt-btn sm';
@@ -314,7 +319,7 @@ async function _retryUnreachable(node, subEl, btn) {
       // 멀티호스트 3단계가 붙여 주는 경로. 없으면(지금) 아래 안내로 떨어진다.
       // 이 칸을 다시 채운다 — 활성 칸으로 맞춘 뒤 그 자리에 놓는다.
       setActivePane(node.id);
-      await window.attachRemoteSession(host.id, node.unreachable.tmux, { place: 'pane' });
+      await window.attachRemoteSession(host.id, node.unreachable.tmux, { place: 'pane', catalogSessionId:node.unreachable.catalogSessionId, runtimeId:node.unreachable.runtimeId, catalogHost:node.unreachable.catalogHost });
       return;
     } else {
       subEl.textContent = t('{host}는 다시 켜졌습니다 — 원격 세션 열기는 준비 중입니다.', { host: host.label });

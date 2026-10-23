@@ -38,8 +38,10 @@ export function startSessionSocket(id, term) {
     // 「연결된 화면」이 원격에서 "이게 나"를 판정하는 유일한 근거다.
     const _screen = _s && _s.remote && _s.remote.screen
       ? `${_wsQuery() ? '&' : '?'}screen=${encodeURIComponent(_s.remote.screen)}` : '';
+    const identity = _s?.remote?.catalogSessionId
+      ? `${_wsQuery() || _screen ? '&' : '?'}catalog_host=${encodeURIComponent(_s.remote.catalogHost)}&catalog_session_id=${encodeURIComponent(_s.remote.catalogSessionId)}&runtime_id=${encodeURIComponent(_s.remote.runtimeId)}` : '';
     return _s && _s.remote
-      ? `/ws/remote/${encodeURIComponent(_s.remote.host)}/${encodeURIComponent(_s.remote.tmux)}${_wsQuery()}${_screen}`
+      ? `/ws/remote/${encodeURIComponent(_s.remote.host)}/${encodeURIComponent(_s.remote.tmux)}${_wsQuery()}${_screen}${identity}`
       : relayWsPath(`/ws/${id}${_wsQuery()}${_wsQuery() ? '&' : '?'}screen=${screenId()}`);
   };
   let _retries = 0;

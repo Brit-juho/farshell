@@ -177,6 +177,23 @@ async def peer_sessions(request: Request, grant: dict):
         return out
 
     sessions = await asyncio.to_thread(_collect)
+    def _durable():
+        from session_catalog import inventory
+        from session_catalog.db import database, host_id, Refused
+        try:
+            observed = inventory.reconcile()
+            if not observed.get('complete') or not observed.get('epoch'):
+                return {}
+            with database() as db:
+                host = host_id(db)
+                return {row['name']: {'catalog_session_id': row['session_id'], 'runtime_id': row['id'],
+                        'catalog_host': host} for row in db.execute(
+                    "SELECT * FROM runtimes WHERE epoch=? AND ended IS NULL AND state='running'", (observed['epoch'],))}
+        except (OSError, ValueError, Refused):
+            return {}
+    identities = await asyncio.to_thread(_durable)
+    for session in sessions:
+        session.update(identities.get(session['name'], {}))
     me = host_store.get_self()
     return {"ok": True, "id": me["id"], "label": me["label"], "sessions": sessions}
 
@@ -535,8 +552,10 @@ async def peer_sessions_rename(request: Request, grant: dict):
     return {"ok": True, "name": new}, f"{old} → {new}"
 
 
+@router.websocket('/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}')
 @router.websocket("/api/peer/ws/{tmux_name}")
-async def peer_ws(ws: WebSocket, tmux_name: str):
+async def peer_ws(ws: WebSocket, tmux_name: str, catalog_host: str | None = None,
+                  catalog_session_id: str | None = None, runtime_id: str | None = None):
     """원격 pane의 출력 스트림(+ control이면 입력). 상대 서버(A)의 프록시가 연결한다.
 
     브라우저가 직접 여는 소켓이 아니다 — 서명 헤더를 붙일 수 있는 건 서버뿐이다
@@ -561,6 +580,24 @@ async def peer_ws(ws: WebSocket, tmux_name: str):
     from routes.tmux import TMUX_SOCKET
     from deps import pty_mgr
     import platform_utils
+
+    target = tmux_name
+    if catalog_host is not None:
+        from session_catalog.db import database, host_id, identifier, Refused
+        from session_catalog.inventory import resolve_runtime
+        try:
+            identifier(catalog_host); identifier(catalog_session_id); identifier(runtime_id)
+            with database() as db:
+                if host_id(db) != catalog_host:
+                    raise Refused('host_changed')
+            runtime, physical = await asyncio.to_thread(resolve_runtime, catalog_session_id)
+            if runtime['id'] != runtime_id:
+                raise Refused('runtime_changed')
+            tmux_name, target = physical['name'], physical['tmux_id']
+        except Refused:
+            await ws.accept()
+            await ws.close(code=4404, reason='runtime identity changed')
+            return
 
     if not await tmux_runner.has_session_async(tmux_name):
         await ws.accept()
@@ -607,7 +644,7 @@ async def peer_ws(ws: WebSocket, tmux_name: str):
     pty_mgr.create_session(
         session_id,
         cmd=platform_utils.find_tmux(),
-        cmd_args=["tmux", "-L", TMUX_SOCKET, "attach-session", "-t", tmux_name],
+        cmd_args=["tmux", "-L", TMUX_SOCKET, "attach-session", "-t", target],
         cols=80, rows=24,
     )
     pty_mgr.subscribe(session_id, _on_data)

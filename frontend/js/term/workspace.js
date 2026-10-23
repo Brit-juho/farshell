@@ -37,24 +37,29 @@ export async function attachLayoutSessions(infos) {
   for (const info of infos || []) {
     if (!info) continue;
     const host = info.host || 'local';
-    const key = info.tmux ? `${host}\n${info.tmux}` : `id\n${info.id}`;
+    const key = info.catalogSessionId ? `${host}\n${info.catalogSessionId}:${info.runtimeId}` : info.tmux ? `${host}\n${info.tmux}` : `id\n${info.id}`;
     if (seen.has(key)) continue;
     seen.add(key);
     try {
       let id = null;
       if (host !== 'local') {
         // 원격 호스트가 꺼져 있으면 실패가 정상 — 배치는 unreachable 칸이 지킨다(C3).
-        if (info.tmux) id = await attachRemoteSession(host, info.tmux, { place: 'none' });
+        if (info.tmux) id = await attachRemoteSession(host, info.tmux, { place: 'none', catalogSessionId:info.catalogSessionId, runtimeId:info.runtimeId, catalogHost:info.catalogHost });
         if (!id) continue;
       } else if (info.tmux) {
         const res = await restoreRequest(`${API_BASE}/api/tmux/attach`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: info.tmux, screen: screenId() }),
+          body: JSON.stringify({ name: info.tmux, screen: screenId(), ...(info.catalogSessionId ? {catalog_session_id: info.catalogSessionId, runtime_id: info.runtimeId, ...(info.catalogHost ? {catalog_host: info.catalogHost} : {})} : {}) }),
         }, true);
         const data = res.ok ? await res.json() : null;
         id = data && data.id;
         if (res.ok && !id) throw new Error('invalid attach response');
-        if (id && !getSession(id)) addSession(id, data.name || info.tmux, { place: 'none', tmuxName: info.tmux });
+        if (id && !getSession(id)) addSession(id, data.name || info.tmux, { place: 'none', tmuxName: data.tmux_session || info.tmux });
+        if (id && getSession(id)) {
+          getSession(id).catalogSessionId = data.catalog_session_id || info.catalogSessionId || null;
+          getSession(id).runtimeId = data.runtime_id || info.runtimeId || null;
+          getSession(id).catalogHost = data.catalog_host || info.catalogHost || null;
+        }
       } else if (info.id) {
         // 비-tmux(순수 PTY) 칸 — 서버가 이 브라우저 탭의 그 PTY를 아직 들고 있을 때만.
         if (!live) {
@@ -67,6 +72,7 @@ export async function attachLayoutSessions(infos) {
       }
       if (id) opened++; else failed++;
     } catch (e) {
+      if (info.catalogSessionId && (e.status === 404 || e.status === 409)) continue;
       if (host === 'local' || e.retryable) throw e;
       failed++;
     }
