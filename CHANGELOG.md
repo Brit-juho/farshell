@@ -19,6 +19,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   commands in the snippet editor switch to monospace. The queue's legacy CSS moved into `components.css`.
 
 ### Fixed
+- File popup/sheet over a terminal: the terminal area under the popup could go blank while output kept streaming (repaint only ran on open/move/resize/close). The visible session is now repainted every 300ms while the overlay is open, and the card sits on its own compositing layer.
 - Blank views after a restart or re-login: `/api/tmux/attach` no longer answers 404 ("session gone") when tmux merely timed out or was unreachable — it returns 503 and the boot retries (`tmux_runner.session_state`). A pane whose local tmux session could not be found at restore keeps its tmux name (`lost`) instead of being saved as an anonymous empty pane, and is re-attached when the session shows up in the server's tmux list.
 - New tmux sessions without a name are numbered from `-1` (was `-2`) and are named after the requested `cwd` folder instead of the server's working directory.
 - Preserve GPU statistics in the system API response so the HUD can display them.
