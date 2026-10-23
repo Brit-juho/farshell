@@ -11,7 +11,7 @@
 // 넘겨준다(HudDeps).
 import { createSignal, createEffect, onCleanup, For, Show } from 'solid-js';
 import { render } from 'solid-js/web';
-import { buildHudChips, type HudChip, type HudInput } from './hud-data.js';
+import { buildHudChips, parseHudLayout, type HudChip, type HudInput, type HudLayout } from './hud-data.js';
 
 const POLL_MS = 30000;
 const SCREEN_POLL_MS = 5000;
@@ -25,6 +25,10 @@ export interface HudDeps {
   activeClientsPath?: () => string;
   getAction: (name: string) => unknown;
   e2eEnabled: boolean;
+  /** 저장된 배치(JSON 문자열, `ui.hud.layout`). 없으면 기본 배치. core/settings.js를 직접 못 읽으니 main.js가 넘긴다. */
+  getLayout?: () => string | undefined;
+  /** 배치가 바뀌면 부른다. 해제 함수를 돌려준다. */
+  subscribeLayout?: (fn: () => void) => () => void;
 }
 
 // 실패한 조회는 조용히 "값 없음"으로 떨어뜨린다 — HUD는 부가 정보라, 한
@@ -143,13 +147,22 @@ function fitChips(host: HTMLElement) {
 function Hud(props: { deps: HudDeps; root: HTMLElement }) {
   const [chips, setChips] = createSignal<HudChip[]>([]);
   let snapshot: HudInput | null = null;
+  // 배치는 설정에서 바뀐다(즉시 반영 — 새로고침 없음). 폴링 결과와 배치가 만나는 자리는
+  // publish() 하나다: 어느 쪽이 바뀌어도 같은 함수로 칩을 다시 만든다.
+  let layout: HudLayout = parseHudLayout(props.deps.getLayout?.());
+  const publish = () => { if (snapshot) setChips(buildHudChips(snapshot, layout)); };
+  const unsubscribe = props.deps.subscribeLayout?.(() => {
+    layout = parseHudLayout(props.deps.getLayout?.());
+    publish();
+  });
+  onCleanup(() => unsubscribe?.());
 
   // 갱신: 30초 폴링(§7). 간격이 긴 이유는 여기 실리는 값이 전부 "천천히 바뀌는
   // 것"(터널 모드·세이프모드·사용량)이기 때문이다 — 빠르게 바뀌는 에이전트
   // 상태는 탭·레일이 이미 실시간으로 보여준다. 백그라운드 탭에서는 쉰다.
   const refresh = async () => {
     snapshot = await collect(props.deps);
-    setChips(buildHudChips(snapshot));
+    publish();
   };
 
   // attach/detach는 사용량보다 빨리 변한다. 다른 HUD 데이터의 30초 주기는
@@ -161,14 +174,14 @@ function Hud(props: { deps: HudDeps; root: HTMLElement }) {
       (tmuxName ? `/api/tmux/clients?session=${encodeURIComponent(tmuxName)}` : '');
     const data = path ? await safeFetch<{ clients?: unknown[] }>(props.deps, path) : null;
     snapshot = { ...snapshot, screens: data?.clients?.length ?? null };
-    setChips(buildHudChips(snapshot));
+    publish();
   };
 
   const refreshStats = async () => {
     if (!snapshot) return;
     const stats = await safeFetch<HudInput['stats']>(props.deps, '/api/system/stats');
     snapshot = { ...snapshot, stats };
-    setChips(buildHudChips(snapshot));
+    publish();
   };
 
   refresh();

@@ -19,6 +19,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   after the last line", edit, search, name the new session (taken names become `name-1`, `name-2`),
   and no more browser-default radio/checkbox controls. Existing "auto-run" snippets keep their behavior.
   `PATCH /api/snippets/{id}` now edits name/text/scope; `POST /api/tmux/create` takes `unique_name`.
+- Status bar customization: Settings → Status bar chooses which chips (connected screens, E2E,
+  safe mode, CPU, GPU, RAM, network, usage, version, server) show, on which side and in what order, by
+  drag, a position select or up/down buttons, with a live preview. Saved per device. The default layout no
+  longer shows the `server :port` chip (it was always on the far left and said nothing new).
 - `fsh update` updates an install by channel (`stable` = SSH-signed release tag, `dev` = `origin/dev`,
   `devmode` = manual pull) with rollback, and re-syncs Claude Code/Codex hooks and the `fsh` skill link;
   `fsh sync` does the sync alone. Pin the release-signing key once with `fsh update trust`.

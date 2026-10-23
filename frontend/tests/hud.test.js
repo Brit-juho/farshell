@@ -37,7 +37,8 @@ test('capabilities가 오기 전에는 서버 칩도 안 그린다', async () =>
 
 test('서버 칩은 포트를 그대로 싣는다', async () => {
   const { buildHudChips } = await mod();
-  const chips = buildHudChips({ port: '7801', caps: {} });
+  // 기본 배치에는 서버 칩이 없다(2026-10-23) — 켠 배치에서 본다.
+  const chips = buildHudChips({ port: '7801', caps: {} }, { left: ['server'], right: [] });
   const server = chips.find((c) => c.id === 'server');
   assert.ok(server);
   assert.strictEqual(server.value, ':7801');
@@ -165,7 +166,7 @@ test('모든 칩은 순위를 갖는다', async () => {
 
 test('서버 칩이 버전보다 끝까지 남는다', async () => {
   const { buildHudChips } = await mod();
-  const chips = buildHudChips({ caps: { version: '2.1.0' }, port: '7777' });
+  const chips = buildHudChips({ caps: { version: '2.1.0' }, port: '7777' }, { left: ['server'], right: ['version'] });
   const server = chips.find((c) => c.id === 'server');
   const version = chips.find((c) => c.id === 'version');
   assert.ok(server.priority < version.priority);
@@ -237,4 +238,119 @@ test('시스템 칩 — GPU 칩은 값이 있을 때만, 임계는 CPU와 같다
   assert.strictEqual(chip({ gpu: { pct: 50.4 } }).value, '50%');
   assert.strictEqual(chip({ gpu: { pct: 80 } }).tone, 'warn');
   assert.strictEqual(chip({ gpu: { pct: 95 } }).tone, 'err');
+});
+
+
+// ── 배치(2026-10-23): 어떤 칩을 어느 쪽에 어떤 순서로 ──────────────────────
+
+const sides = (chips) => Array.from(chips, (c) => `${c.side}:${c.id}`);
+
+test('기본 배치에는 서버 칩이 없다 — 지금 이 화면이 보이면 서버는 떠 있다', async () => {
+  const { buildHudChips, DEFAULT_HUD_LAYOUT } = await mod();
+  assert.ok(!DEFAULT_HUD_LAYOUT.left.includes('server') && !DEFAULT_HUD_LAYOUT.right.includes('server'));
+  assert.ok(!ids(buildHudChips({ port: '7777', caps: { version: '2.6.0' } })).includes('server'));
+});
+
+test('배치가 칩의 구역과 순서를 정한다 (칩이 스스로 정한 side는 무시)', async () => {
+  const { buildHudChips } = await mod();
+  const input = {
+    port: '7777', caps: { version: '2.6.0' }, screens: 1,
+    stats: { cpu: { pct: 10 }, ram: { pct: 20 } },
+  };
+  const chips = buildHudChips(input, { left: ['cpu', 'version'], right: ['screens', 'server', 'ram'] });
+  assert.deepStrictEqual(sides(chips), [
+    'left:stats:cpu', 'left:version', 'right:screens', 'right:server', 'right:stats:ram',
+  ]);
+});
+
+test('배치에 없는 종류는 값이 있어도 그리지 않는다', async () => {
+  const { buildHudChips } = await mod();
+  const chips = buildHudChips({ caps: { version: '2.6.0' }, screens: 2, stats: { cpu: { pct: 10 } } },
+    { left: [], right: ['cpu'] });
+  assert.deepStrictEqual(ids(chips), ['stats:cpu']);
+});
+
+test('배치에 있어도 값이 없으면 그리지 않는다 (값 없음 → 숨김 규칙이 위에 그대로)', async () => {
+  const { buildHudChips } = await mod();
+  assert.deepStrictEqual(ids(buildHudChips({}, { left: ['screens', 'server'], right: ['cpu', 'usage', 'version'] })), []);
+});
+
+test('사용량 프로필이 여럿이어도 「사용량」 하나로 함께 움직인다', async () => {
+  const { buildHudChips } = await mod();
+  const usage = { available: true, profiles: [
+    { name: 'alpha', windows: [{ pct: 10 }] }, { name: 'beta', windows: [{ pct: 20 }] },
+  ] };
+  assert.deepStrictEqual(sides(buildHudChips({ caps: {}, usage }, { left: ['usage'], right: [] })),
+    ['left:usage:alpha', 'left:usage:beta']);
+});
+
+test('parseHudLayout: 비었거나 깨졌으면 기본 배치, 모르는 종류·중복은 버린다', async () => {
+  const { parseHudLayout, DEFAULT_HUD_LAYOUT } = await mod();
+  const plain = (l) => JSON.parse(JSON.stringify(l));
+  for (const bad of [undefined, null, '', '   ', '{', '[]', '{"left":1}', '{"left":[]}', 42]) {
+    assert.deepStrictEqual(plain(parseHudLayout(bad)), plain(DEFAULT_HUD_LAYOUT), `입력: ${String(bad)}`);
+  }
+  assert.deepStrictEqual(
+    plain(parseHudLayout('{"left":["cpu","nope",7,"cpu"],"right":["cpu","version","version"]}')),
+    { left: ['cpu'], right: ['version'] },
+    '먼저 나온 쪽만 남고 모르는 종류는 버려진다');
+  assert.deepStrictEqual(plain(parseHudLayout('{"left":[],"right":[]}')), { left: [], right: [] },
+    '전부 끈 배치는 그대로 존중한다 (기본으로 되돌리지 않는다)');
+});
+
+test('parseHudLayout 은 기본 배치 객체를 공유하지 않는다 (호출자가 바꿔도 기본이 안 변한다)', async () => {
+  const { parseHudLayout, DEFAULT_HUD_LAYOUT } = await mod();
+  const a = parseHudLayout('');
+  a.left.push('server');
+  assert.ok(!DEFAULT_HUD_LAYOUT.left.includes('server'));
+});
+
+test('serializeHudLayout ∘ parseHudLayout 는 항등이다', async () => {
+  const { parseHudLayout, serializeHudLayout } = await mod();
+  const raw = serializeHudLayout({ left: ['version', 'cpu'], right: ['usage'] });
+  assert.strictEqual(serializeHudLayout(parseHudLayout(raw)), raw);
+});
+
+test('moveHudKind: 구역 사이를 옮기고, 원본은 건드리지 않으며, 자리는 범위로 자른다', async () => {
+  const { moveHudKind, hudZoneOf } = await mod();
+  const plain = (l) => JSON.parse(JSON.stringify(l));
+  const base = { left: ['screens', 'e2e'], right: ['cpu', 'ram'] };
+  const moved = moveHudKind(base, 'cpu', 'left', 1);
+  assert.deepStrictEqual(plain(moved), { left: ['screens', 'cpu', 'e2e'], right: ['ram'] });
+  assert.deepStrictEqual(plain(base), { left: ['screens', 'e2e'], right: ['cpu', 'ram'] }, '입력은 그대로');
+  assert.deepStrictEqual(plain(moveHudKind(base, 'cpu', 'right', 99)), { left: ['screens', 'e2e'], right: ['ram', 'cpu'] });
+  assert.deepStrictEqual(plain(moveHudKind(base, 'cpu', 'right', -5)), { left: ['screens', 'e2e'], right: ['cpu', 'ram'] });
+  const off = moveHudKind(base, 'e2e', 'off');
+  assert.strictEqual(hudZoneOf(off, 'e2e'), 'off');
+  assert.deepStrictEqual(plain(moveHudKind(off, 'e2e', 'right')), { left: ['screens'], right: ['cpu', 'ram', 'e2e'] });
+});
+
+test('stepHudKind: 같은 구역에서 한 칸씩, 끝에서는 그대로, 꺼진 칩은 움직이지 않는다', async () => {
+  const { stepHudKind } = await mod();
+  const plain = (l) => JSON.parse(JSON.stringify(l));
+  const base = { left: ['screens', 'e2e'], right: ['cpu'] };
+  assert.deepStrictEqual(plain(stepHudKind(base, 'e2e', -1)), { left: ['e2e', 'screens'], right: ['cpu'] });
+  assert.strictEqual(stepHudKind(base, 'screens', -1), base);
+  assert.strictEqual(stepHudKind(base, 'cpu', 1), base);
+  assert.strictEqual(stepHudKind(base, 'version', 1), base);
+});
+
+test('모든 종류는 기본 배치가 정확히 한 번만 배정하거나 비워 둔다 (서버만 비어 있다)', async () => {
+  const { HUD_KINDS, DEFAULT_HUD_LAYOUT, hudZoneOf } = await mod();
+  const off = Array.from(HUD_KINDS).filter((k) => hudZoneOf(DEFAULT_HUD_LAYOUT, k) === 'off');
+  assert.deepStrictEqual(off, ['server']);
+  const all = [...DEFAULT_HUD_LAYOUT.left, ...DEFAULT_HUD_LAYOUT.right];
+  assert.strictEqual(new Set(all).size, all.length);
+});
+
+test('buildHudChips 가 만드는 모든 칩의 kind 는 HUD_KINDS 안에 있다', async () => {
+  const { buildHudChips, HUD_KINDS } = await mod();
+  const everything = { left: [...HUD_KINDS], right: [] };
+  const chips = buildHudChips({
+    port: '7777', caps: { version: '2.6.0' }, e2e: true, safeMode: { enabled: true }, screens: 2,
+    usage: { available: true, profiles: [{ name: 'a', windows: [{ pct: 1 }] }] },
+    stats: { cpu: { pct: 1 }, gpu: { pct: 1 }, ram: { pct: 1 }, net: { rx_bps: 1, tx_bps: 1 } },
+  }, everything);
+  assert.strictEqual(chips.length, 10, '종류 10개가 전부 한 번씩');
+  for (const c of chips) assert.ok(Array.from(HUD_KINDS).includes(c.kind), c.id);
 });

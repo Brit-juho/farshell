@@ -35,6 +35,8 @@ const PATHS = {
   // 스니펫 탭·빈 상태(Lucide braces)와 「끝에 Enter 포함」 표시(Lucide corner-down-left).
   braces: '<path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/><path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/>',
   'corner-down-left': '<polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/>',
+  // 하단바 구성 화면의 끌기 손잡이(Lucide grip-vertical).
+  'grip-vertical': '<circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/>',
 
   // 2026-09-16 — 이모지로 남아 있던 자리를 메운다. DESIGN.md §0이 "No emoji as
   // a UI asset"을 이미 규칙으로 두고 있었는데 키바(📎🎤)·상단바(🔍)·파일 패널

@@ -1653,3 +1653,50 @@
     .vt-sn-actions .vt-icon-btn { --icon-btn: 36px; }
   }
 }
+
+/* ── 하단바 구성 (panels/settings/sections/hud.js) ──────────────────────────
+ * 미리보기는 실제 HUD의 칩 마크업(.vt-hud-chip)을 그대로 쓴다 — 칩 모양 규칙은
+ * screens/60-mobile-hud.css 한 곳에 있고 이쪽은 띠(24px)와 목록만 그린다. */
+@layer components {
+  .vt-hudcfg { display: flex; flex-direction: column; gap: calc(var(--spacing) * 4); }
+  .vt-hudcfg-previewwrap { display: flex; flex-direction: column; gap: calc(var(--spacing) * 1.5); }
+  .vt-hudcfg-cap { font: var(--weight-medium) var(--fs-3xs) / 1 var(--font-ui); color: var(--color-faint); letter-spacing: var(--tracking-wide); }
+  /* 글꼴은 #vt-hud(screens/60-mobile-hud.css)와 같은 값 — 칩의 라벨·값 크기가 그 상속에 기대고 있다.
+   * 칩이 많으면 줄을 바꿔 전부 보여 준다(실제 띠는 한 줄이고 자리가 모자라면 덜어 낸다 — 여기서는
+   * 순서를 보는 게 목적이라 덜지 않는다). */
+  .vt-hudcfg-preview {
+    display: flex; flex-wrap: wrap; align-items: stretch; min-height: 24px;
+    border: 1px solid var(--color-line); border-radius: var(--radius-sm);
+    background: var(--color-bg-1);
+    font: var(--weight-normal) var(--fs-2xs) / 24px var(--font-mono); color: var(--color-sub);
+    user-select: none; overflow: hidden;
+    pointer-events: none;
+  }
+  .vt-hudcfg-empty-bar { align-self: center; padding: 0 calc(var(--spacing) * 2); font: var(--weight-normal) var(--fs-3xs) / 1 var(--font-ui); color: var(--color-faint); }
+
+  .vt-hudcfg-zone { display: flex; flex-direction: column; gap: calc(var(--spacing) * 1.5); }
+  .vt-hudcfg-list {
+    display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none;
+    border: 1px solid var(--color-line); border-radius: var(--radius-sm);
+    transition: border-color var(--dur-fast) var(--ease-out-quint), background var(--dur-fast) var(--ease-out-quint);
+  }
+  /* 끌어 놓을 수 있는 구역 — 채움이 아니라 액센트 테두리로만 알린다. */
+  .vt-hudcfg-list.drop { border-color: var(--color-acc); background: color-mix(in srgb, var(--color-acc) 6%, transparent); }
+  .vt-hudcfg-item {
+    display: flex; align-items: center; gap: calc(var(--spacing) * 2.5);
+    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+    border-top: 1px solid var(--color-line);
+    background: transparent;
+  }
+  .vt-hudcfg-item:first-child { border-top: 0; }
+  .vt-hudcfg-item:hover { background: var(--menu-hover); }
+  .vt-hudcfg-item.dragging { opacity: .4; }
+  .vt-hudcfg-grip { display: inline-flex; flex: none; color: var(--color-faint); cursor: grab; }
+  .vt-hudcfg-item:active .vt-hudcfg-grip { cursor: grabbing; }
+  .vt-hudcfg-text { display: flex; flex-direction: column; gap: calc(var(--spacing) * 0.5); flex: 1 1 auto; min-width: 0; }
+  .vt-hudcfg-text b { font: var(--weight-medium) var(--fs-sm) / var(--leading-row) var(--font-ui); color: var(--color-txt); }
+  .vt-hudcfg-text span { font: var(--weight-normal) var(--fs-xs) / 1.4 var(--font-ui); color: var(--color-sub); text-wrap: pretty; }
+  .vt-hudcfg-ctrl { display: flex; align-items: center; gap: calc(var(--spacing) * 1); flex: none; }
+  .vt-hudcfg-empty { padding: calc(var(--spacing) * 3); font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui); color: var(--color-faint); }
+  .vt-hudcfg-foot { display: flex; justify-content: flex-end; }
+}
