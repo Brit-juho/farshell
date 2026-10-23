@@ -690,3 +690,68 @@ test('재로그인 — 인증 실패로 비워진 최신 로컬 캐시보다 서
   assert.strictEqual(S.getTree().b.session, 'new-b');
   assert.strictEqual(window.sessionStorage.getItem('vt.restore-after-login'), null);
 });
+
+test('lost — 로컬에서 못 찾은 칸은 빈 칸으로 보이되 tmux 이름을 저장에 보존한다', async () => {
+  const { window, S, P } = await load();
+  window.localStorage.setItem('vt-layout-v1', JSON.stringify({
+    v: 1, savedAt: 100, active: 'p1',
+    tree: { t: 'leaf', id: 'p1', session: { id: 'x', tmux: 'nice' }, host: 'local' },
+  }));
+  await P.restoreLayout();
+  assert.strictEqual(S.getTree().session, null);
+  assert.deepEqual(S.getTree().lost, { tmux: 'nice' });
+  const out = P.serializeTree(S.getTree(), () => null);
+  assert.deepEqual(out.session, { id: null, tmux: 'nice' }, '다음 저장이 이름을 지우지 않는다');
+});
+
+test('lost — 사용자가 그 칸에 세션을 놓으면 표시가 사라지고 저장에도 안 남는다', async () => {
+  const { window, S, P } = await load();
+  window.localStorage.setItem('vt-layout-v1', JSON.stringify({
+    v: 1, savedAt: 100, active: 'p1',
+    tree: { t: 'leaf', id: 'p1', session: { id: 'x', tmux: 'nice' }, host: 'local' },
+  }));
+  await P.restoreLayout();
+  S.setPaneSession('web-9', 'p1');
+  assert.strictEqual(S.getTree().lost, undefined);
+});
+
+test('recoverLostPanes — 목록에 돌아온 세션을 그 칸에 붙이고 저장한다, 빈 목록은 믿지 않는다', async () => {
+  const { window, S, P, calls } = await load();
+  window.localStorage.setItem('vt-layout-v1', JSON.stringify({
+    v: 1, savedAt: 100, active: 'p1',
+    tree: { t: 'split', id: 's', dir: 'row', ratio: 0.5,
+      a: { t: 'leaf', id: 'p1', session: { id: 'x', tmux: 'nice' }, host: 'local' },
+      b: { t: 'leaf', id: 'p2', session: { id: 'y', tmux: 'gone' }, host: 'local' } },
+  }));
+  await P.restoreLayout();
+  const asked = [];
+  const attach = async (name) => { asked.push(name); return `web-${name}`; };
+
+  assert.strictEqual(await P.recoverLostPanes([], attach), 0);
+  assert.deepEqual(asked, []);
+  calls.length = 0;
+  assert.strictEqual(await P.recoverLostPanes([{ name: 'nice' }], attach), 1);
+  assert.deepEqual(asked, ['nice'], '목록에 없는 gone은 건드리지 않는다');
+  const t = S.getTree();
+  assert.strictEqual(t.a.session, 'web-nice');
+  assert.strictEqual(t.a.lost, undefined);
+  assert.deepEqual(t.b.lost, { tmux: 'gone' });
+  assert.ok(calls.some((c) => c.opts && c.opts.method === 'PUT'));
+});
+
+test('recoverLostPanes — 그 세션이 이미 다른 칸에 열려 있으면 중복 배정하지 않고 표시만 거둔다', async () => {
+  const { window, S, P } = await load();
+  window.localStorage.setItem('vt-layout-v1', JSON.stringify({
+    v: 1, savedAt: 100, active: 'p1',
+    tree: { t: 'split', id: 's', dir: 'row', ratio: 0.5,
+      a: { t: 'leaf', id: 'p1', session: { id: 'x', tmux: 'nice' }, host: 'local' },
+      b: { t: 'leaf', id: 'p2', session: null, host: 'local' } },
+  }));
+  await P.restoreLayout();
+  S.setPaneSession('web-nice', 'p2');
+  assert.strictEqual(await P.recoverLostPanes([{ name: 'nice' }], async () => 'web-nice'), 0);
+  const t = S.getTree();
+  assert.strictEqual(t.b.session, 'web-nice');
+  assert.strictEqual(t.a.session, null);
+  assert.strictEqual(t.a.lost, undefined);
+});

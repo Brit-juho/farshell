@@ -100,10 +100,18 @@ async def _attach_tmux(tmux_name: str, cols: int, rows: int, request: Request | 
     # 그 id로 WS를 열었다가 죽은 세션에 재연결을 반복하고, restoreWorkspace가 stale 탭마다
     # 이 유령 세션을 만들어 로드 즉시 세션·터미널·WS가 무더기로 쌓여 메모리가 폭증했다.
     # → PTY를 만들기 전에 세션 존재를 확인하고, 없으면 404로 돌려보내 복원 루틴이 건너뛰게 한다.
-    if not await tmux_runner.has_session_async(tmux_name):
+    state = await tmux_runner.session_state_async(tmux_name)
+    if state == tmux_runner.SESSION_MISSING:
         return JSONResponse(
             {"error": "tmux session not found", "tmux_session": tmux_name},
             status_code=404,
+        )
+    if state == tmux_runner.SESSION_UNKNOWN:
+        # 확인 못 한 것을 「없음」(404)으로 답하면 복원 중인 화면이 그 칸을 비워 저장한다.
+        # 503은 클라이언트가 재시도 대상으로 다룬다(term/workspace.js restoreRequest).
+        return JSONResponse(
+            {"error": "tmux state unknown", "tmux_session": tmux_name},
+            status_code=503,
         )
     session_id = new_session_id()
     pty_mgr.create_session(

@@ -22,7 +22,7 @@ import { vtFetch } from '../core/api.js';
 import { hostKey } from '../core/host-route.js';
 import { screenId } from '../core/screen-id.js';
 import { getTree, getActivePaneId, onLayoutChange, replaceTree, countLeaves, getTabsWithTrees, getActiveTabId, replaceTabs,
-  getClosedViews, replaceClosedViews, pruneClosedViews } from './store.js';
+  getClosedViews, replaceClosedViews, pruneClosedViews, lostPanes, fillLostPane } from './store.js';
 // N4 — 스냅샷의 `panel` 이름을 검증할 때만 쓴다(상수 Set 하나). 화면 모듈은
 // 여기서 import 하지 않는다 — 그러면 panels 청크가 core로 승격된다(ADR-26).
 import { PANEL_KINDS } from '../panels/registry.js';
@@ -56,7 +56,9 @@ export function serializeTree(tree, lookup) {
     // C3 — 아직 못 닿은(unreachable) 칸은 세션 객체가 없다. 그대로 저장하면
     // 다음 저장 한 번에 배치가 사라지므로(레이아웃은 아무 변경에나 저장된다)
     // 무엇을 기다리는 중이었는지를 그대로 다시 적는다.
-    const u = !info && tree.unreachable ? { id: null, tmux: tree.unreachable.tmux } : null;
+    // `lost`(로컬 복원 때 세션을 못 찾은 칸)도 같은 이유로 이름을 다시 적는다.
+    const keep = tree.unreachable || tree.lost;
+    const u = !info && keep ? { id: null, tmux: keep.tmux } : null;
     return { t: 'leaf', id: tree.id, session: info || u, host: tree.host || 'local' };
   }
   return {
@@ -102,6 +104,13 @@ export function deserializeTree(node, resolve, taken = new Set()) {
     // 실제로 없는 것이고, 더 기다릴 이유가 없다.
     if (!session && host !== 'local' && node.session && node.session.tmux) {
       leaf.unreachable = { host, tmux: node.session.tmux };
+    }
+    // 로컬도 같은 칸을 **빈 칸으로 지우지 않고** 이름을 들고 있는다(`lost`). 못 찾은 이유가
+    // 정말 종료일 수도, 부팅 직후 일시 장애일 수도 있는데 여기서는 구분할 수 없다. 이름을
+    // 버린 채 저장하면 세션이 돌아와도 되살릴 근거가 없다(빈 뷰가 영구히 남던 원인).
+    // 화면에는 평범한 빈 칸이고, 서버 tmux 목록에 그 이름이 보이면 recoverLostPanes가 채운다.
+    if (!session && host === 'local' && node.session && node.session.tmux) {
+      leaf.lost = { tmux: node.session.tmux };
     }
     return leaf;
   }
@@ -330,6 +339,23 @@ export function pruneClosedByLive(sessions) {
   if (!live.size || !pruneClosedViews(live)) return false;
   saveLayoutNow();
   return true;
+}
+
+/** 복원 때 세션을 못 찾아 이름만 들고 있던 칸(`lost`) 중 서버 tmux 목록에 다시 보이는 것을
+ * 그 자리에 붙인다. 부팅 직후 일시 장애로 못 찾았던 세션이 돌아온 경우다. 빈 목록은 믿지
+ * 않는다(pruneClosedByLive와 같은 이유). `attach(name)`은 웹 세션 id 또는 null. */
+export async function recoverLostPanes(sessions, attach) {
+  if (!Array.isArray(sessions) || !sessions.length) return 0;
+  const live = new Set(sessions.map((x) => x && x.name).filter(Boolean));
+  let n = 0;
+  for (const { paneId, tmux } of lostPanes()) {
+    if (!live.has(tmux)) continue;
+    let id = null;
+    try { id = await attach(tmux); } catch (_) { /* 다음 push에서 다시 시도한다 */ }
+    if (id && fillLostPane(paneId, id)) n++;
+  }
+  if (n) saveLayoutNow();
+  return n;
 }
 
 function clearLayout() {

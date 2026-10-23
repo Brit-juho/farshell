@@ -470,6 +470,43 @@ export function closeLayoutTab(tabId) {
   return true;
 }
 
+/** 복원 때 세션을 못 찾아 tmux 이름만 들고 있는 칸(`lost`, persist.js deserializeTree) —
+ * 모든 뷰에서 모은다. 빈 칸처럼 보이지만 recoverLostPanes가 되살릴 후보다. */
+export function lostPanes() {
+  _sync();
+  const out = [];
+  const walk = (n) => {
+    if (n.t === 'leaf') { if (!n.session && n.lost) out.push({ paneId: n.id, tmux: n.lost.tmux }); return; }
+    walk(n.a); walk(n.b);
+  };
+  for (const t of _tabs) walk(t.tree);
+  return out;
+}
+
+/** `lost` 칸에 되살린 세션을 놓는다. 그 사이 사용자가 칸을 채웠거나, 그 세션이 이미 다른 칸에
+ * 열려 있으면(불변식 1) 놓지 않고 표시만 거둔다. 놓았으면 true. */
+export function fillLostPane(paneId, sessionId) {
+  _sync();
+  const tab = _tabs.find((t) => { const n = findNode(t.tree, paneId); return n && n.t === 'leaf' && !n.session && n.lost; });
+  if (!tab) return false;
+  const placed = _tabs.some((t) => collectSessions(t.tree).includes(sessionId));
+  tab.tree = placed
+    ? _clearLost(tab.tree, paneId)
+    : _setSession(tab.tree, paneId, sessionId);
+  _tree = _tabs[_activeTabIndex].tree;
+  _notify();
+  return !placed;
+}
+
+function _clearLost(node, paneId) {
+  if (node.t === 'leaf') {
+    if (node.id !== paneId) return node;
+    const { lost, ...rest } = node;
+    return rest;
+  }
+  return { ...node, a: _clearLost(node.a, paneId), b: _clearLost(node.b, paneId) };
+}
+
 /** 드래그로 세션이 빠져나가 비게 된 뷰를 닫는다(2026-10-03 규칙 결정 — 옛 동작).
  * "비었다"는 모든 칸이 세션 없는 터미널 칸이라는 뜻이다(뷰어·패널 칸이 있으면
  * 비지 않은 것). 활성 뷰이거나 뷰가 하나뿐이면 닫지 않는다 — 그 경우는
