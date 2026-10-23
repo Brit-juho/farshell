@@ -90,6 +90,9 @@ Verify affected behavior with actual responses, operations and logs.
   `Release` workflow publishes it; it fails if `VERSION` and the tag differ), and point
   `release/X.Y` at the tag. Pushing a tag publishes a public release — confirm with the user first.
 - Never force-push `master`, `dev` or a `release/*` branch; a push must only move the tip forward.
+  One exception was made on 2026-10-23, before the repository was made public: history was rewritten
+  once to drop a personal file, and every branch and tag was force-pushed. Clones made before that
+  date must be discarded and cloned again.
 
 ## Working rules
 
