@@ -75,6 +75,19 @@ preserving the public tunnel URL. See `fsh help access` for network scopes.
 
 Port 7777 is the default; use your configured port if different.
 
+## Updating an install
+
+`fsh update` (`server/updater.py`; user guide `fsh help update`) moves a git install by
+channel: `stable` = newest `vX.Y.Z` tag whose SSH signature matches `~/.vt/update-signers`
+(also: tag name == signed name, commit in `origin/master` history), `dev` = fast-forward to
+`origin/dev`, `devmode` = never moves. Order: clean-tree check, fetch, resolve + verify,
+detached checkout, `post_checkout` (pip when `requirements-core.txt` changed, `npm ci`/`npm run build`
+when frontend inputs or `package-lock.json` changed or `frontend/dist` is missing), `dev` branch
+advance, `sync`. Any failure before the branch advance returns to the saved commit/branch
+(`~/.vt/update-prev.json`). `sync` reuses `claude_hooks.py`/`codex_hooks.py install` and links
+`~/.claude/skills/fsh` to the repo copy; it never overwrites a non-link skill. The trust file is
+outside the repo on purpose; do not add a key file to the repository. Tests: `server/tests/test_updater.py`.
+
 ## Validation
 
 The shared required checks are listed in [AGENTS.md](../../AGENTS.md).

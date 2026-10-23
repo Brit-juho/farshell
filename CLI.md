@@ -43,6 +43,8 @@ fsh worktree [list|add <name> [--base b] [--ports] [--copy-modules] [--agent cla
 fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git account store (stored credentials are not used for push)
 fsh hotkey [list|set|reset|disable]  # view/change hotkeys
 fsh hooks [status|install|uninstall|dedupe [--dry-run]]  # register Claude Code + Codex hooks (status badges/queue; Claude/Codex Stop drive session-specific TTS); dedupe removes FarShell hooks the Codex app copied into ~/.codex/hooks.json
+fsh update [--channel stable|dev|devmode] [--to vX.Y.Z] [--check] [--restart] [--rollback]  # update by channel (stable = signed release tag, dev = origin/dev, devmode = manual pull) then re-sync hooks + skill; `update trust [--key <pubkey>]` pins the release-signing key; `--rollback` returns to the previous commit
+fsh sync [--dry-run]  # re-sync Claude Code/Codex hooks and the fsh skill link to the current code (use after a manual pull)
 fsh pane report [--state ...] [--agent ...]  # report this pane's state (for agents without managed hooks)
 fsh clauth [status|which]  # read-only usage view (hidden when clauth isn't installed)
 fsh usage [list|add --model <name> --tokens <N> --seconds <N>]  # cumulative usage log (local LLMs etc., no quota)
