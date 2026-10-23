@@ -6,7 +6,7 @@
 import { waitForAuthentication, requireAuthentication } from '../core/auth-state.js';
 import { attachTmux } from './session.js';
 import { attachLayoutSessions } from './workspace.js';
-import { restoreLayout, loadLayoutSnapshot, snapshotSessionInfos, pruneClosedByLive } from '../layout/persist.js';
+import { restoreLayout, loadLayoutSnapshot, snapshotSessionInfos, pruneClosedByLive, recoverLostPanes } from '../layout/persist.js';
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
 import { isLayoutEmpty } from '../layout/store.js';
 import { load as loadSettings } from '../core/settings.js';
@@ -148,7 +148,13 @@ export async function bootApp() {
     await restoreLayout(snap);
     // 닫은 묶음 기억 정리 — 연결(재연결 포함)마다 서버가 현재 tmux 목록을 한 번 밀어 주고, 이후
     // 바뀔 때마다 또 온다. 이미 종료된 세션이 든 항목을 거기서 비운다(session-actions 재열기와 짝).
-    try { onWorkspaceEvent('tmux_sessions', (msg) => { pruneClosedByLive(msg && msg.sessions); }); } catch (_) { /* 정리는 부가 기능 */ }
+    try {
+      onWorkspaceEvent('tmux_sessions', (msg) => {
+        pruneClosedByLive(msg && msg.sessions);
+        // 복원 때 못 찾았던 세션이 목록에 돌아오면 그 칸에 다시 붙인다(빈 뷰로 굳지 않게).
+        recoverLostPanes(msg && msg.sessions, (name) => attachTmux(name, { place: 'none' })).catch(() => {});
+      });
+    } catch (_) { /* 정리는 부가 기능 */ }
 
     // handoff 링크(#tmux=<name>) — 이미 열려 있으면 그 칸으로, 아니면 새 단독 뷰.
     const targetTmux = new URLSearchParams(location.hash.slice(1)).get('tmux');

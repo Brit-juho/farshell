@@ -164,7 +164,8 @@ export function setSession(tree, paneId, sessionId) {
         if (node.session === sessionId && node.kind !== 'viewer' && !node.unreachable) return node;
         // C3 — 실제 세션이 들어오면 "못 닿는 중" 표시는 끝난다. 남겨두면
         // 터미널이 붙었는데도 자리표시자가 계속 그려진다.
-        const { unreachable, ...rest } = node;
+        // `lost`(복원 때 못 찾은 로컬 세션 이름)도 같다 — 새 세션이 들어오면 끝난다.
+        const { unreachable, lost, ...rest } = node;
         return { ...rest, session: sessionId, kind: 'terminal', file: null };
       }
       if (sessionId != null && node.session === sessionId) return { ...node, session: null };

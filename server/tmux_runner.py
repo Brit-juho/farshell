@@ -88,6 +88,33 @@ def has_session(name: str) -> bool:
     return rc == 0
 
 
+# session_state()의 결과. "없음"과 "모르겠음"은 호출자가 다르게 다뤄야 한다 —
+# 모르는 걸 없다고 답하면 복원 중인 화면이 멀쩡한 세션 칸을 비워서 저장한다.
+SESSION_EXISTS = "exists"
+SESSION_MISSING = "missing"
+SESSION_UNKNOWN = "unknown"
+
+_MISSING_STDERR = (b"can't find session", b"no server running", b"error connecting to")
+
+
+def session_state(name: str) -> str:
+    """세션 존재 여부를 세 갈래로 답한다. `has_session`은 타임아웃(124)·tmux 없음(127)·
+    기동 중 실패까지 전부 False라 「없음」으로 오판한다.
+
+    `missing`은 tmux가 직접 「그런 세션/서버가 없다」고 말했을 때(rc 1 + 알려진 stderr)만이다.
+    그 밖의 실패는 한 번 더 물어 보고, 그래도 확정 못 하면 `unknown`(원인은 로그에 남긴다).
+    """
+    rc, err = 0, b""
+    for attempt in range(2):
+        rc, _, err = run(["has-session", "-t", name], timeout=3.0)
+        if rc == 0:
+            return SESSION_EXISTS
+        if rc == 1 and any(m in err for m in _MISSING_STDERR):
+            return SESSION_MISSING
+    logger.warning("tmux has-session unknown: name=%s rc=%s stderr=%r", name, rc, err[:200])
+    return SESSION_UNKNOWN
+
+
 @dataclass
 class PaneInfo:
     session: str
@@ -259,6 +286,11 @@ async def run_text_async(*args, **kwargs) -> Optional[str]:
 async def get_all_panes_async(*args, **kwargs) -> list[PaneInfo]:
     """`get_all_panes`의 async 버전. 인자는 그대로 넘긴다."""
     return await asyncio.to_thread(functools.partial(get_all_panes, *args, **kwargs))
+
+
+async def session_state_async(*args, **kwargs) -> str:
+    """`session_state`의 async 버전. 인자는 그대로 넘긴다."""
+    return await asyncio.to_thread(functools.partial(session_state, *args, **kwargs))
 
 
 async def has_session_async(*args, **kwargs) -> bool:
