@@ -131,49 +131,82 @@ def test_legacy_items_migrate_to_global_scope():
     assert item["project"] is None
 
 
-# ── 실행 방식(mode) — 실사용 요청(2026-09-11) ───────────────────────────────
+# ── 본문 끝 줄바꿈 = 마지막 Enter (2026-10-23) ─────────────────────────────
 
-def test_add_defaults_to_paste_mode():
-    r = snippet_store.add("echo hi")
-    assert r["item"]["mode"] == snippet_store.MODE_PASTE
-
-
-def test_add_with_new_section_mode():
-    r = snippet_store.add("echo hi", mode=snippet_store.MODE_NEW_SECTION)
-    assert r["item"]["mode"] == snippet_store.MODE_NEW_SECTION
+def test_trailing_newline_is_kept_as_one():
+    assert snippet_store.add("ls\n\n\n")["item"]["text"] == "ls\n"
+    assert snippet_store.add("ls")["item"]["text"] == "ls"
 
 
-def test_add_with_invalid_mode_falls_back_to_default():
-    r = snippet_store.add("echo hi", mode="run-and-explode")
-    assert r["item"]["mode"] == snippet_store.MODE_PASTE
+def test_leading_blank_lines_dropped_and_crlf_normalized():
+    assert snippet_store.add("\n\na\r\nb\r\n")["item"]["text"] == "a\nb\n"
 
 
-def test_set_mode_changes_existing_item():
-    r = snippet_store.add("echo hi")
-    item_id = r["item"]["id"]
-    r2 = snippet_store.set_mode(item_id, snippet_store.MODE_NEW_SECTION)
-    assert r2["ok"] and r2["item"]["mode"] == snippet_store.MODE_NEW_SECTION
-    assert snippet_store.list_items()[0]["mode"] == snippet_store.MODE_NEW_SECTION
+def test_whitespace_only_is_empty():
+    r = snippet_store.add("\n  \n")
+    assert not r["ok"] and r["error"] == "empty"
 
 
-def test_set_mode_rejects_unknown_value():
-    r = snippet_store.add("echo hi")
-    r2 = snippet_store.set_mode(r["item"]["id"], "teleport")
-    assert not r2["ok"] and r2["error"] == "bad_mode"
-
-
-def test_set_mode_not_found():
-    r = snippet_store.set_mode("no-such-id", snippet_store.MODE_PASTE)
-    assert not r["ok"] and r["error"] == "not_found"
-
-
-def test_legacy_items_without_mode_default_to_paste():
-    """구 snippets.json(mode 없음)도 안전한 기본값(paste)으로 채워져야 한다."""
-    snippet_store.add("a")
+def test_legacy_new_section_item_gets_trailing_newline():
+    """옛 「새 섹션 자동 실행」은 항상 Enter까지 갔다 — 같은 동작이 되도록 본문 끝에 옮긴다."""
+    snippet_store.add("make test")
+    snippet_store.add("echo hi")
     p = Path(os.environ["VT_STATE_DIR"]).expanduser() / "snippets.json"
     import json
     raw = json.loads(p.read_text())
-    del raw[0]["mode"]
+    raw[0]["mode"] = "new_section"
+    raw[1]["mode"] = "paste"
     p.write_text(json.dumps(raw))
-    item = snippet_store.list_items()[0]
-    assert item["mode"] == snippet_store.MODE_PASTE
+    items = snippet_store.list_items()
+    assert items[0]["text"] == "make test\n" and "mode" not in items[0]
+    assert items[1]["text"] == "echo hi" and "mode" not in items[1]
+
+
+def test_add_ignores_mode_argument():
+    r = snippet_store.add("echo hi", mode="new_section")
+    assert r["item"]["text"] == "echo hi" and "mode" not in r["item"]
+
+
+# ── 수정 ──────────────────────────────────────────────────────────────────
+
+def test_update_changes_text_and_label_only():
+    item = snippet_store.add("a", "old")["item"]
+    r = snippet_store.update(item["id"], text="b\n", label="new")
+    assert r["ok"] and r["item"]["text"] == "b\n" and r["item"]["label"] == "new"
+    assert r["item"]["scope"] == snippet_store.SCOPE_GLOBAL
+    assert snippet_store.list_items()[0]["text"] == "b\n"
+
+
+def test_update_label_alone_keeps_text():
+    item = snippet_store.add("keep")["item"]
+    r = snippet_store.update(item["id"], label="x")
+    assert r["item"]["text"] == "keep" and r["item"]["label"] == "x"
+
+
+def test_update_rejects_empty_and_too_long():
+    item = snippet_store.add("a")["item"]
+    assert snippet_store.update(item["id"], text=" \n")["error"] == "empty"
+    assert snippet_store.update(item["id"], text="x" * (snippet_store.MAX_TEXT_LEN + 1))["error"] == "too_long"
+    assert snippet_store.list_items()[0]["text"] == "a"
+
+
+def test_update_rejects_unknown_scope_and_missing_item():
+    item = snippet_store.add("a")["item"]
+    assert snippet_store.update(item["id"], scope="galaxy")["error"] == "bad_scope"
+    assert snippet_store.update("no-such-id", text="b")["error"] == "not_found"
+
+
+def test_update_to_project_scope_resolves_repo(git_repo):
+    item = snippet_store.add("a")["item"]
+    r = snippet_store.update(item["id"], scope="project", cwd=str(git_repo))
+    assert r["ok"] and r["item"]["project"] == snippet_store.resolve_project_key(str(git_repo))
+    back = snippet_store.update(item["id"], scope="global")
+    assert back["item"]["scope"] == "global" and back["item"]["project"] is None
+
+
+def test_update_to_project_scope_without_repo_rejected(tmp_path, monkeypatch):
+    monkeypatch.setenv("VT_BROWSE_ROOTS", str(tmp_path))
+    item = snippet_store.add("a")["item"]
+    r = snippet_store.update(item["id"], scope="project", cwd=str(tmp_path))
+    assert not r["ok"] and r["error"] == "no_project"
+    assert snippet_store.list_items()[0]["scope"] == "global"

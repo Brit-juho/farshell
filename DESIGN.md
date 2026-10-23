@@ -428,7 +428,8 @@ keyword move to the row tooltip.
 
 Fixed to the right, collapses to a 36px strip via a chevron (no bottom dock —
 ADR-21, to keep terminal vertical space). 5 tabs: **Source control · Queue ·
-Files · Ports · Usage**.
+Files · Ports · Usage** (later tabs — attachments, system and, since 2026-10-23, **Snippets**
+(`braces` icon, action `snippets.show`) — follow the same frame rules).
 
 **Collapsed, a tab is an icon — never rotated text.** The 36px strip used to
 rotate each label with `writing-mode: vertical-rl`, which works for Latin

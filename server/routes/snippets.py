@@ -57,16 +57,21 @@ async def delete_snippet(item_id: str):
 
 
 @router.patch("/api/snippets/{item_id}")
-async def update_snippet_mode(item_id: str, request: Request):
-    """지금은 mode만 바꾼다 — 텍스트·라벨 수정은 스코프 밖(지우고 다시 저장)."""
+async def update_snippet(item_id: str, request: Request):
+    """이름·본문·스코프 수정. 보내지 않은 필드는 그대로 둔다(옛 `mode`는 무시)."""
     try:
         body = await request.json()
     except Exception:
         body = {}
-    mode = body.get("mode")
-    if not mode:
-        return JSONResponse({"error": "missing_mode"}, status_code=400)
-    r = snippet_store.set_mode(item_id, mode)
+    if not any(k in body for k in ("text", "label", "scope")):
+        return JSONResponse({"error": "nothing_to_update"}, status_code=400)
+    r = snippet_store.update(
+        item_id,
+        text=body.get("text"),
+        label=body.get("label"),
+        scope=body.get("scope"),
+        cwd=body.get("cwd"),
+    )
     if not r.get("ok"):
         status = 404 if r.get("error") == "not_found" else 400
         return JSONResponse(r, status_code=status)
