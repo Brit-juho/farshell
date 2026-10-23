@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Optional
 from i18n import tr
@@ -184,7 +185,8 @@ def is_managed_profile_path(path: Path) -> bool:
     """Manager backups/payloads stay private even with a visible state override."""
     import vt_paths
     try:
-        return Path(path).resolve().is_relative_to((vt_paths.state_dir() / 'agent-profiles').resolve())
+        return any(Path(path).resolve().is_relative_to((vt_paths.state_dir() / name).resolve())
+                   for name in ('agent-profiles', 'session-catalog'))
     except (OSError, RuntimeError, ValueError):
         return True
 
@@ -544,3 +546,90 @@ def open_subagent_file(path: Path):
         return os.fdopen(result, "rb")
     finally:
         os.close(fd)
+
+
+def history_source_root(raw: str) -> Path:
+    """Explicitly approved CLI home, not a general filesystem exemption."""
+    import vt_paths
+    if not isinstance(raw, str) or not raw or len(raw) > 4096:
+        raise FsDenied(tr("기록에 접근할 수 없습니다"))
+    original = Path(raw).expanduser()
+    home = vt_paths.user_home().resolve()
+    if not original.is_absolute() or original.is_symlink():
+        raise FsDenied(tr("기록에 접근할 수 없습니다"))
+    root = original.resolve(strict=True)
+    blocked = {'.ssh', '.aws', '.gnupg', '.kube', '.azure'}
+    if root == home or not root.is_relative_to(home) or any(p in blocked for p in root.parts):
+        raise FsDenied(tr("기록에 접근할 수 없습니다"))
+    # A manager profile is valid, but catalog backups may never recursively ingest themselves.
+    if root.is_relative_to((vt_paths.state_dir() / 'session-catalog').resolve()) or not root.is_dir():
+        raise FsDenied(tr("기록에 접근할 수 없습니다"))
+    return root
+
+
+def history_capture_kind(relative: str, provider: str) -> str | None:
+    if not isinstance(relative,str) or len(relative)>4096:
+        return None
+    rel=Path(relative)
+    if rel.is_absolute() or '..' in rel.parts or not rel.parts:
+        return None
+    allowed={'claude':{'projects'},'codex':{'sessions','archived_sessions'}}
+    if rel.parts[0] not in allowed.get(provider,set()):
+        return None
+    if relative.endswith('.jsonl') or relative.endswith('.jsonl.zst'):
+        return 'transcript'
+    if provider=='claude':
+        if (len(rel.parts)==5 and rel.parts[3]=='subagents'
+                and re.fullmatch(r'agent-[A-Za-z0-9_-]{1,160}\.meta\.json',rel.name)):
+            return 'child_metadata'
+        if (len(rel.parts)==5 and rel.parts[3]=='tool-results'
+                and rel.suffix in ('.txt','.json')):
+            return 'tool_attachment'
+    return None
+
+
+def history_source_path(root: Path, relative: str, provider: str) -> Path:
+    if not isinstance(relative, str) or len(relative) > 4096:
+        raise FsDenied(tr("기록에 접근할 수 없습니다"))
+    rel = Path(relative)
+    allowed = {'claude': {'projects'}, 'codex': {'sessions', 'archived_sessions'}}
+    if (rel.is_absolute() or '..' in rel.parts or not rel.parts
+            or rel.parts[0] not in allowed.get(provider, set())
+            or history_capture_kind(relative,provider) is None):
+        raise FsDenied(tr("기록에 접근할 수 없습니다"))
+    path = root / rel
+    resolved = path.resolve(strict=True)
+    if resolved != path or not resolved.is_relative_to(root):
+        raise FsDenied(tr("기록에 접근할 수 없습니다"))
+    return resolved
+
+
+def history_restore_target(raw_root: str, relative: str, provider: str) -> Path:
+    """Create only declared transcript directories under an approved original CLI home."""
+    import vt_paths
+    import stat
+    root = Path(raw_root)
+    home = vt_paths.user_home().resolve()
+    if (not root.is_absolute() or not root.resolve().is_relative_to(home) or root.resolve() == home
+            or any(p in {'.ssh', '.aws', '.gnupg', '.kube', '.azure'} for p in root.parts)):
+        raise FsDenied(tr("기록에 접근할 수 없습니다"))
+    rel = Path(relative)
+    allowed = {'claude': {'projects'}, 'codex': {'sessions', 'archived_sessions'}}
+    if (rel.is_absolute() or '..' in rel.parts or not rel.parts or rel.parts[0] not in allowed.get(provider, set())
+            or history_capture_kind(relative,provider) is None):
+        raise FsDenied(tr("기록에 접근할 수 없습니다"))
+    target = root / rel
+    # Walk each component; do not let recursive mkdir follow a substituted link.
+    directory = os.open(home, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for part in target.parent.relative_to(home).parts:
+            try:
+                os.mkdir(part, mode=0o700, dir_fd=directory)
+            except FileExistsError:
+                pass
+            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
+            os.close(directory)
+            directory = child
+    finally:
+        os.close(directory)
+    return target

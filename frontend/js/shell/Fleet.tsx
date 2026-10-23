@@ -13,6 +13,8 @@ import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'so
 import { render } from 'solid-js/web';
 import { icon, stateIcon } from '../ui/icons.js';
 import { t } from '../core/i18n.js';
+import { CatalogTree, type CatalogSnapshot } from './CatalogTree.js';
+import { historyApi } from '../history/api.js';
 import { agentMark } from './agent-mark.js';
 // core 청크의 공유 인스턴스로 연결된다(shell.js가 core.js에서 import — 복제되지 않는다).
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
@@ -247,6 +249,26 @@ function Fleet(props: { deps: FleetDeps }) {
   // 2026-09-28(사용자 요청) — 스위처는 목록 필터가 아니라 화면 전체의 전환이다
   // (core/host-route.js, Rail.tsx와 같은 규칙). 세션 목록은 그 맥의 API에서 온다.
   const viewHostId = String((window as any).vtRelayHost?.() || LOCAL_HOST);
+  const [catalog, setCatalog] = createSignal<CatalogSnapshot | null>(null);
+  const [catalogMode, setCatalogMode] = createSignal('repositories');
+  let catalogRequest = 0;
+  const refreshCatalog = async (more = false) => {
+    if (viewHostId !== LOCAL_HOST) return;
+    const request = ++catalogRequest;
+    try {
+      const params = new URLSearchParams({ archived: String(catalogMode() === 'archive') });
+      if (more && catalog()?.next) params.set('after', catalog()!.next!);
+      const value = await historyApi('/api/session-catalog?' + params);
+      if (request !== catalogRequest) return;
+      setCatalog(more && catalog() ? { ...value, sessions: [...catalog()!.sessions, ...value.sessions] } : value);
+    } catch (_) { /* Old host retains its live list. */ }
+  };
+  const catalogTimer = setInterval(() => { if (!document.hidden && window.innerWidth < 720) void refreshCatalog(); }, 5000);
+  const catalogChanged = () => { void refreshCatalog(); };
+  window.addEventListener('vt:catalog-changed', catalogChanged);
+  onCleanup(() => { clearInterval(catalogTimer); window.removeEventListener('vt:catalog-changed', catalogChanged); });
+  void refreshCatalog();
+
 
   let tmuxRevision = 0;
   const refreshSessions = async () => {
@@ -330,7 +352,7 @@ function Fleet(props: { deps: FleetDeps }) {
     // 2026-10-03(세션·뷰 규칙) — 레일 클릭과 같은 함수(term/session-actions.js
     // openSessionFromRail): 열린 세션은 그 자리로, 아니면 기억된 묶음 뷰를
     // 통째로 다시 열거나 새 단독 뷰로 연다.
-    await w.vtOpenSessionFromRail?.({ sessionId: row.open ? row.sessionId : null, tmuxName: row.tmuxName || null });
+    await w.vtOpenSessionFromRail?.({ sessionId: row.open ? row.sessionId : null, tmuxName: row.tmuxName || null, catalogSessionId: row.catalogSessionId, runtimeId: row.runtimeId });
     props.deps.onOpenTerminal();
   };
 
@@ -401,6 +423,7 @@ function Fleet(props: { deps: FleetDeps }) {
 
   return (
     <div id="vt-fleet" aria-label={t('플릿')}>
+      <button type="button" class="vt-btn" onClick={() => { void import('../history/panel.js').then(m => m.openHistory()); }}>{t('대화 보관함')}</button>
       {/* C1 — 폰의 호스트 스위처. compact에서는 레일이 통째로 숨으므로 여기가
           유일한 진입점이다. 레일과 같은 규칙으로 호스트가 하나뿐이면 아예 안
           그린다. 좌표 팝업 대신 목록 위로 펼치는 시트 — 손가락으로 여는
@@ -447,7 +470,20 @@ function Fleet(props: { deps: FleetDeps }) {
       <Show when={viewHostOffline()}>
         <div class="vt-fleet-empty">{hostDetail(activeHost()!)}</div>
       </Show>
-      <Show when={rows().length === 0 && !viewHostOffline()}>
+      <Show when={catalog()}>
+        <div class="vt-catalog-switch" role="group" aria-label={t('세션 탐색 방식')}>
+          <For each={[['repositories', t('저장소')], ['all', t('전체 세션')], ['archive', t('세션 보관함')]]}>{([key,label]) =>
+            <button type="button" aria-pressed={catalogMode() === key} onClick={() => { setCatalogMode(key); void refreshCatalog(); }}>{label}</button>}
+          </For>
+        </div>
+      </Show>
+      <Show when={catalog()}>
+        {data => <CatalogTree flat={catalogMode() === 'all'} data={data()} live={lists().sessions}
+          renderLive={row => <Row row={row} onOpen={() => { void openRow(row); }} onLongPress={() => openMenu(row)}
+            onAnswer={() => Promise.resolve()} onSeen={() => seenRow(row)} />}
+          onChanged={() => { void refreshCatalog(); }} onMore={() => { void refreshCatalog(true); }} />}
+      </Show>
+      <Show when={rows().length === 0 && !catalog()?.sessions.length && !viewHostOffline()}>
         <div class="vt-fleet-empty">
           <div>{t('세션이 없습니다')}</div>
           <div class="vt-fleet-empty-actions">
@@ -474,7 +510,7 @@ function Fleet(props: { deps: FleetDeps }) {
           </For>
         </div>
       </Show>
-      <Show when={lists().sessions.length > 0}>
+      <Show when={lists().sessions.length > 0 && !catalog()}>
         <div class="vt-fleet-group">
           <div class="vt-fleet-group-head vt-fleet-group-head-sort">
             <span>{t('세션')} · {lists().sessions.length}</span>

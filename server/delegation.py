@@ -292,9 +292,12 @@ def _key(sid: str, created) -> str:
 
 def live_sessions() -> Optional[dict[str, str]]:
     """{key: 현재 세션 이름}. tmux를 못 읽으면 None(=모름, 아무것도 지우지 않는다)."""
-    rc, out, _ = tmux_runner.run(["list-sessions", "-F", "#{session_id}\t#{session_created}\t#{session_name}"])
+    rc, out, err = tmux_runner.run(["list-sessions", "-F", "#{session_id}\t#{session_created}\t#{session_name}"])
     if rc != 0:
-        # 서버가 없으면(세션 0개) tmux가 실패한다 — 그때는 '모름'과 구별할 수 없어 None.
+        # A missing socket permits the first spawn. Timeouts/permissions remain unknown.
+        if rc == 1 and (b"no server running on" in err or
+                (err.startswith(b"error connecting to ") and err.rstrip().endswith(b" (No such file or directory)"))):
+            return {}
         return None
     res: dict[str, str] = {}
     for line in out.decode("utf-8", "replace").splitlines():
@@ -568,6 +571,13 @@ def _spawn_denial(data: dict, parent_key: str, now: float) -> Optional[Delegatio
 def _owned(data: dict, did: str, caller_key: str, role: str, op: str = "send") -> dict:
     item = next((x for x in data["items"] if x["id"] == did), None)
     from authz import hooks as authz_hooks   # shadow
+    if item is not None:
+        from session_catalog.identity import require_ledger
+        from session_catalog.db import Refused
+        try:
+            require_ledger(item,role)
+        except Refused as error:
+            raise DelegationError(error.code,tr("실행 권한을 다시 확인해야 합니다"),error.status) from error
     if role == "parent" and item is not None and item["parent"]["key"] == item["child"]["key"]:
         item = None      # 자기 자신은 제어자가 될 수 없다(부모 = 자식인 항목은 위조·손상) — 없는 위임과 같은 답
     if enforced():
@@ -645,7 +655,7 @@ _DID_RE = re.compile(r"[0-9a-f]{10}")
 
 
 def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
-          worktree_branch: str = "", parent_agent: str = "", remote: Optional[RemoteCaller] = None, did: str = "") -> dict:
+          worktree_branch: str = "", parent_agent: str = "", remote: Optional[RemoteCaller] = None, did: str = "", runtime_binding=None) -> dict:
     """caller: share_identity.Caller(검증된 호출자). blocking.
 
     `remote`(다른 호스트의 부모): `caller` 자리에 `RemoteCaller` 를 넣고 `did` 는 부모 호스트의 장부와 같은 id 다. 작업 폴더·worktree 는 받지 않는다
@@ -671,6 +681,10 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
     if worktree_branch and not re.fullmatch(r"[A-Za-z0-9._/-]{1,100}", worktree_branch):
         raise DelegationError("bad_branch", "브랜치 이름이 올바르지 않습니다")
 
+    from session_catalog.identity import enabled as identity_enabled
+    if remote is not None and identity_enabled():
+        from session_catalog.identity import peer_binding
+        peer_binding(runtime_binding, remote.raw_key)
     parent_cwd = _pane_cwd(caller.pane_id) or "" if remote is None else ""
     if cwd:
         if not os.path.isabs(cwd) or not os.path.isdir(cwd):
@@ -698,10 +712,15 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
                 # 부모 호스트가 응답을 못 받고 다시 보낸 것 — 같은 부모면 만들어 둔 결과를 그대로(멱등), 다른 부모의 id 와 겹치면 거부.
                 if (same.get("parent") or {}).get("key") != parent_key:
                     raise DelegationError("id_taken", "이미 쓰인 위임 id 입니다", 409)
+                if identity_enabled() and (same.get('identity_version') != 2 or
+                        same.get('runtime_bindings',{}).get(parent_key) != runtime_binding):
+                    raise DelegationError('identity_migration_required', tr('실행 권한을 다시 확인해야 합니다'), 403)
                 if same["state"] != RUNNING and same["state"] != REPORTED:
                     raise DelegationError("in_progress", "이 위임은 아직 만드는 중이거나 이미 닫혔습니다", 409)
                 return {"delegation": did, "child": same["child"]["name"], "agent": same["agent"], "childKey": same["child"]["key"],
-                        "duplicate": True}
+                        "duplicate": True, **({'identity_version': 2,
+                        'runtime_binding': same['runtime_bindings'][same['child']['key']]}
+                        if same.get('identity_version') == 2 else {})}
         check_spawn(data, parent_key, now, **({"remote": True} if remote is not None else {}))
         if cwd and enforced():
             # 명시한 cwd 는 `fs.read` + fsguard 루트(VT_BROWSE_ROOTS) 안일 때만(쿼터 검사 뒤 — 오류 우선순위를 유지).
@@ -741,10 +760,21 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
             raise DelegationError("tmux_failed", "만든 세션을 확인하지 못했습니다", 500)
         tmux_runner.set_option(child_name, "@fsh_parent", caller.name)
         tmux_runner.set_option(child_name, "@fsh_delegation", did)
+        # Capture authority outside the ledger transaction; never infer it from names.
+        from session_catalog.identity import enabled as identity_enabled,current as current_bindings
+        identity_metadata={}
+        if identity_enabled():
+            bindings=current_bindings()
+            if remote is not None:
+                bindings[parent_key] = runtime_binding
+            if parent_key not in bindings or ident['key'] not in bindings:
+                raise DelegationError('peer_identity_incompatible',tr("실행 권한을 다시 확인해야 합니다"),403)
+            identity_metadata={'identity_version':2,'runtime_bindings':{key:bindings[key] for key in (parent_key,ident['key'])}}
         # 4) 장부 확정 + 첫 지시를 outbox에
         with _locked():
             data = _read()
             cur = next(x for x in data["items"] if x["id"] == did)
+            cur.update(identity_metadata)
             cur["state"] = RUNNING
             cur["cwd"] = start_dir
             cur["child"] = {"key": ident["key"], "name": child_name, "pane": ident["pane"]}
@@ -784,7 +814,7 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
            reason=f"{caller.name}->{child_name}", chars=len(task), sha8=_sha8(task))
     _push(tr("하위 세션을 만들었습니다"), f"{caller.name} → {child_name}: {_one_line(task, 60)}")
     if remote is not None:
-        return {"delegation": did, "child": child_name, "agent": agent, "childKey": ident["key"]}    # 이 호스트의 경로는 내보내지 않는다
+        return {"delegation": did, "child": child_name, "agent": agent, "childKey": ident["key"], **({"identity_version": 2, "runtime_binding": identity_metadata["runtime_bindings"][ident["key"]]} if identity_metadata else {})}    # 이 호스트의 경로는 내보내지 않는다
     return {"delegation": did, "child": child_name, "agent": agent, "cwd": start_dir}
 
 
@@ -954,6 +984,10 @@ def spawn_on_host(caller, host: str, *, task: str, title: str = "", agent: str =
     did = uuid.uuid4().hex[:10]
     now = time.time()
     parent_key = caller.key
+    from session_catalog import identity
+    initial_binding = identity.current().get(parent_key) if identity.enabled() else None
+    if identity.enabled() and initial_binding is None:
+        raise DelegationError('identity_unverified', tr('현재 실행 확인 불가'), 403)
     with _locked():
         data = _read()
         check_spawn(data, parent_key, now)
@@ -991,11 +1025,27 @@ def spawn_on_host(caller, host: str, *, task: str, title: str = "", agent: str =
         _audit("spawn", "failed", principal=_agent_id(parent_key), did=did, reason=str(out.get("error") or status))
         raise DelegationError(str(out.get("error") or "remote_spawn_failed"), str(out.get("reason") or f"상대 호스트가 거절했습니다(HTTP {status})"),
                               status if 400 <= status < 600 else 502)
+    from session_catalog import identity
+    identity_metadata = {}
+    if identity.enabled():
+        from session_catalog.db import Refused
+        try:
+            if out.get('identity_version') != 2:
+                raise Refused('peer_identity_incompatible',403)
+            child_binding = identity.peer_binding(out.get('runtime_binding'), child_key)
+            parent_binding = identity.current().get(parent_key)
+            if not parent_binding or parent_binding != initial_binding:
+                raise Refused('identity_unverified',403)
+            identity_metadata = {'identity_version': 2, 'runtime_bindings': {
+                parent_key: parent_binding, f'{host}/{child_key}': child_binding}}
+        except Refused as error:
+            raise DelegationError(error.code, tr('실행 권한을 다시 확인해야 합니다'), error.status) from error
     with _locked():
         data = _read()
         cur = next((x for x in data["items"] if x["id"] == did), None)
         if cur is None:
             raise DelegationError("spawn_interrupted", "위임 예약이 사라졌습니다", 500)
+        cur.update(identity_metadata)
         cur["state"] = RUNNING
         cur["child"] = {"key": f"{host}/{child_key}", "name": str(out.get("child") or "")[:60], "pane": "", "host": host}
         _write(data)
@@ -1004,12 +1054,12 @@ def spawn_on_host(caller, host: str, *, task: str, title: str = "", agent: str =
     return {"delegation": did, "child": f"{host}/{out.get('child')}", "agent": agent, "cwd": f"(호스트 {host})", "host": host}
 
 
-def spawn_remote(host: str, obo: str, *, did: str, parent_name: str, task: str, title: str, agent: str, principal: str) -> dict:
+def spawn_remote(host: str, obo: str, *, did: str, parent_name: str, task: str, title: str, agent: str, principal: str, runtime_binding=None) -> dict:
     """이 호스트에 다른 호스트의 에이전트가 부모인 하위 세션을 만든다(허용은 호출자가 B 의 grant 로 이미 판정). blocking."""
     from authz import remote
     name = _NAME_RE.sub("-", str(parent_name or "")).strip("-")[:40] or "remote"
     caller = RemoteCaller(host, remote.obo_key(obo), name, principal)
-    return spawn(caller, task=task, title=title, agent=agent, remote=caller, did=did)
+    return spawn(caller, task=task, title=title, agent=agent, remote=caller, did=did, runtime_binding=runtime_binding)
 
 
 def _find_remote(data: dict, did: str, host: str, obo: str, role: str) -> dict:

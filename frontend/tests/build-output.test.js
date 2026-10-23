@@ -139,3 +139,9 @@ test('에이전트 공유의 대화상자와 통합 승인함(모달·권한·�
   assert.doesNotMatch(shareJs, /const sessions\s*=\s*\{\}/, 'core/store.js의 세션 저장소가 복제됐다');
   assert.doesNotMatch(shareJs, /const registry\s*=\s*new Map\(\)/, 'core/dom.js의 액션 레지스트리가 복제됐다');
 });
+
+
+test('core never statically imports the lazy shell or history chunks', () => {
+  assert.doesNotMatch(coreJs, /from\s*["']\.\/(shell|history)\.js["']/,
+    'a static back edge evaluates lazy listeners before core state initialization');
+});

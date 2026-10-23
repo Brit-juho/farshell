@@ -102,7 +102,7 @@ def _fresh_snapshot(now: float) -> store.Snapshot:
     docs = {n: store._read(n) for n in ("grants", "approvals", "windows", "shares")}
     return store.Snapshot(grants=docs["grants"][0]["items"], approvals=docs["approvals"][0]["items"],
                           windows=docs["windows"][0]["items"], shares=docs["shares"][0]["items"],
-                          corrupt=frozenset(n for n, (_d, bad) in docs.items() if bad), now=now, source="store")
+                          corrupt=frozenset(n for n, (_d, bad) in docs.items() if bad), now=now, source="store").fenced()
 
 
 def decide(p: P.Principal, scope: str, resource: str, ctx: Optional[dict] = None, now: Optional[float] = None,
@@ -422,6 +422,13 @@ def call(host: str, method: str, path: str, body: Optional[dict] = None, *, agen
     require_enabled()
     peer = peer_of(host)
     obo = self_obo(agent_key) if agent_key else ""
+    if agent_key and path.startswith('/api/peer/v2/deleg/'):
+        from session_catalog import identity
+        if identity.enabled():
+            binding = identity.current().get(agent_key)
+            if not binding:
+                raise ShareError('identity_unverified', tr('현재 실행 확인 불가'), 403)
+            body = {**(body or {}), 'identity_version': 2, 'runtime_binding': binding}
     try:
         status, payload = peer_client.v2_call_sync(peer, method, path, body, obo=obo, timeout=timeout)
     except peer_client.PeerError as e:
@@ -434,12 +441,36 @@ def call(host: str, method: str, path: str, body: Optional[dict] = None, *, agen
 # --- 위임 (받는 쪽 B 의 핸들러 + 장부 outbox 전달) -------------------------------------------------------------------------
 
 
+def _deleg_binding(grant, body, role=None):
+    from session_catalog import identity
+    from session_catalog.db import Refused
+    if not identity.enabled():
+        return None
+    try:
+        if body.get('identity_version') != 2:
+            raise Refused('peer_identity_incompatible',403)
+        binding = identity.peer_binding(body.get('runtime_binding'), obo_key(principal(grant).obo))
+        if role:
+            import delegation
+            item = next((x for x in delegation.list_all() if x['id'] == body.get('delegation')), None)
+            remote_key = f"{grant['id']}/{binding['physical_key']}"
+            if (not item or item.get(role,{}).get('key') != remote_key
+                    or item.get('identity_version') != 2
+                    or item.get('runtime_bindings',{}).get(remote_key) != binding):
+                raise Refused('identity_migration_required',403)
+            identity.require_ledger(item)
+        return binding
+    except Refused as error:
+        raise ShareError(error.code, tr('실행 권한을 다시 확인해야 합니다'), error.status) from error
+
+
 def deleg_spawn_in(grant: dict, body: dict) -> tuple[int, dict, Optional[dict]]:
     """부모(A 의 에이전트)가 B 에 하위 세션을 만든다. B 의 grant(`deleg.spawn`, 원격이라 elevated 로 승인된 것)가 없으면 202 보류 요청."""
     import delegation
     from . import approvals
     p = principal(grant)
     _need_obo(p)
+    binding = _deleg_binding(grant, body)
     res = f"deleg-quota:{p.short()}"
     now = time.time()
     with store.txn() as docs:
@@ -457,7 +488,7 @@ def deleg_spawn_in(grant: dict, body: dict) -> tuple[int, dict, Optional[dict]]:
                      "reason": tr("사용자 승인 대기 중 — 승인되면 같은 호출을 다시 하세요")}, (view if created else None)
     out = delegation.spawn_remote(grant["id"], p.obo, did=str(body.get("delegation") or ""), parent_name=str(body.get("parentName") or ""),
                                   task=str(body.get("task") or ""), title=str(body.get("title") or ""), agent=str(body.get("agent") or ""),
-                                  principal=p.short())
+                                  principal=p.short(), runtime_binding=binding)
     return 200, {"ok": True, **out}, None
 
 
@@ -465,6 +496,7 @@ def deleg_send_in(grant: dict, body: dict) -> tuple[int, dict, Optional[dict]]:
     import delegation
     p = principal(grant)
     _need_obo(p)
+    _deleg_binding(grant, body, 'parent')
     return 200, delegation.send_from_remote(grant["id"], p.obo, str(body.get("delegation") or "")[:40], str(body.get("text") or "")), None
 
 
@@ -472,6 +504,7 @@ def deleg_close_in(grant: dict, body: dict) -> tuple[int, dict, Optional[dict]]:
     import delegation
     p = principal(grant)
     _need_obo(p)
+    _deleg_binding(grant, body, 'parent')
     return 200, delegation.close_from_remote(grant["id"], p.obo, str(body.get("delegation") or "")[:40]), None
 
 
@@ -479,6 +512,7 @@ def deleg_report_in(grant: dict, body: dict) -> tuple[int, dict, Optional[dict]]
     import delegation
     p = principal(grant)
     _need_obo(p)
+    _deleg_binding(grant, body, 'child')
     return 200, delegation.report_from_remote(
         grant["id"], p.obo, str(body.get("delegation") or "")[:40], str(body.get("kind") or ""), str(body.get("outcome") or ""),
         str(body.get("body") or ""), body.get("seq")), None
@@ -497,6 +531,12 @@ def deliver_deleg(item: dict, o: dict) -> bool:
         logger.warning(f"위임 {did} {kind} 전달 포기 — {host} 에 {DELIVER_GIVE_UP // 3600}시간 동안 닿지 못했다")
         return True
     try:
+        from session_catalog.identity import require_ledger
+        from session_catalog.db import Refused
+        try:
+            require_ledger(item)
+        except Refused:
+            return True
         if (item.get("child") or {}).get("host") == host:                  # 우리가 부모
             key = item["parent"]["key"]
             if kind == D.KIND_FOLLOWUP:

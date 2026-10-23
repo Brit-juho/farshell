@@ -355,6 +355,7 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
     out.push({
       sessionId: sid,
       tmuxName: tm.name,
+      physicalKey: tm.physical_key,
       name: tm.name,
       open: !!sid,
       status: w.getStatus ? w.getStatus(tm.name) : 'idle',

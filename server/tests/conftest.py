@@ -190,3 +190,21 @@ def _legacy_off_for_open_contract(request, monkeypatch):
         toks = [t for t in os.environ.get("VT_AUTHZ_ENFORCE", "").split(",") if t.strip() and t.strip() != "legacy"]
         monkeypatch.setenv("VT_AUTHZ_ENFORCE", ",".join(toks))
     yield
+
+
+@pytest.fixture(autouse=True)
+def _isolate_catalog_background_workers(monkeypatch):
+    """Route mocks must not record unrelated server-owned discovery commands.
+
+    Collector/archive behavior is tested directly with disposable state; the
+    complete daemon is exercised by isolated HTTP/tmux integration checks.
+    """
+    import asyncio
+    from session_history import worker
+    async def dormant():
+        await asyncio.Event().wait()
+    async def initialized():
+        return None
+    monkeypatch.setattr(worker,'initialize',initialized)
+    for name in ('run','replicate','discover','index_history'):
+        monkeypatch.setattr(worker,name,dormant)

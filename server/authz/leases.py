@@ -218,8 +218,10 @@ def _grant_live(g: Optional[dict], now: float) -> bool:
 
 def active(items: list, now: float, alive: Optional[set], grants: Optional[dict]) -> list:
     """수명이 남은 lease — 만료·보유 세션 소멸(tmux 를 못 읽으면 유지)·근거 grant 회수·부모 lease 소멸을 거른 것."""
+    from session_catalog.identity import filter_grants
+    records = [{**l, "bound_sessions": [l["holder_key"]]} if l.get("holder_key") else l for l in items]
     out = []
-    for l in items:
+    for l in filter_grants(records):
         ex = l.get("expires")
         if ex is not None and now >= float(ex):
             continue
@@ -322,7 +324,7 @@ def _fresh_snapshot(now: float) -> store.Snapshot:
     docs = {n: store._read(n) for n in ("grants", "approvals", "windows", "shares")}
     return store.Snapshot(grants=docs["grants"][0]["items"], approvals=docs["approvals"][0]["items"],
                           windows=docs["windows"][0]["items"], shares=docs["shares"][0]["items"],
-                          corrupt=frozenset(n for n, (_d, bad) in docs.items() if bad), now=now, source="store")
+                          corrupt=frozenset(n for n, (_d, bad) in docs.items() if bad), now=now, source="store").fenced()
 
 
 def _decide(p: P.Principal, mode: str, glob: str, alive: Optional[set]):
@@ -413,6 +415,10 @@ def acquire(p: P.Principal, glob: str, *, mode: str = "write", exclusive: bool =
            "expires": expires if expires is not None else now + t, "max_expires": max_expires if max_expires is not None else now + MAX_TTL,
            "derived_from": derived_from, "deleg": deleg, "grant_id": grant_id,
            "approved_via": SYSTEM_VIA if system else S.VIA_MANUAL, "state": "active"}
+    from session_catalog.identity import stamp_approved
+    if rec.get("holder_key"):
+        rec["bound_sessions"] = [rec["holder_key"]]
+        stamp_approved(rec)
     with store.txn() as docs:
         _reap_in_txn(docs, now, alive)
         items = docs["leases"]["items"]

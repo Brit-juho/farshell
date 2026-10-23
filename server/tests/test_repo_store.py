@@ -40,10 +40,12 @@ def test_hide_and_unhide_roundtrip(store):
 
 def test_hidden_file_is_owner_only(store, tmp_path):
     store.set_hidden("/repos/a", True)
-    path = tmp_path / "state" / "repos.json"
+    path = tmp_path / "state" / "session-catalog" / "catalog.sqlite3"
     assert path.is_file()
     assert (path.stat().st_mode & 0o777) == 0o600
-    assert json.loads(path.read_text())["version"] == 1
+    import sqlite3
+    with sqlite3.connect(path) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 1
 
 
 def test_trailing_slash_is_the_same_repo(store):
@@ -69,11 +71,14 @@ def test_vanished_repo_in_list_is_ignored(store):
     assert store.list_hidden() == ["/repos/gone"]
 
 
-def test_corrupt_file_falls_back_to_empty(store, tmp_path):
+def test_corrupt_file_blocks_import_and_preserves_source(store, tmp_path):
     state = tmp_path / "state"
     state.mkdir(parents=True, exist_ok=True)
     (state / "repos.json").write_text("{not json", encoding="utf-8")
-    assert store.list_hidden() == []
+    from session_catalog.db import Refused
+    with pytest.raises(Refused,match='repository_preferences_unreadable'):
+        store.list_hidden()
+    assert (state/'repos.json').read_text() == '{not json'
 
 
 # --- id·host (2.2 기반) -------------------------------------------------------
@@ -120,12 +125,15 @@ def test_no_legacy_file_starts_empty(tmp_path, monkeypatch):
     assert repo_store.list_repos() == []
 
 
-def test_corrupt_legacy_file_migrates_to_empty(tmp_path, monkeypatch):
+def test_corrupt_legacy_file_preserved_without_import(tmp_path, monkeypatch):
     monkeypatch.setenv("VT_STATE_DIR", str(tmp_path / "state"))
     state = tmp_path / "state"
     state.mkdir(parents=True)
     (state / "rail-repos.json").write_text("{not json", encoding="utf-8")
-    assert repo_store.list_repos() == []
+    from session_catalog.db import Refused
+    with pytest.raises(Refused,match='repository_preferences_unreadable'):
+        repo_store.list_repos()
+    assert (state/'rail-repos.json').read_text() == '{not json'
 
 
 # --- 라우트(routes/worktree.py가 repo_store로 갈아 낀 뒤에도 그대로 동작) --------
@@ -151,3 +159,13 @@ def test_route_filters_hidden(monkeypatch, tmp_path):
 
     everything = asyncio.run(worktree_routes.list_worktrees(include_hidden=1))
     assert [(w["id"], w["hidden"]) for w in everything["worktrees"]] == [("1", True), ("2", False)]
+
+
+def test_catalog_is_authority_after_import(store,tmp_path):
+    state=tmp_path/'state';state.mkdir()
+    original={'version':1,'repos':[{'host':'local','path':'/repos/a','hidden':True}]}
+    legacy=state/'repos.json';legacy.write_text(json.dumps(original))
+    assert store.list_hidden()==['/repos/a']
+    store.set_hidden('/repos/a',False)
+    assert json.loads(legacy.read_text())==original
+    assert store.list_hidden()==[]

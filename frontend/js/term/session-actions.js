@@ -4,7 +4,7 @@
 // 뷰 닫기(묶음 구성 기억) · 종료(항상 확인). 지연 청크(Rail/Fleet)는 정적
 // import를 못 해 맨 아래 window 브리지를 쓴다.
 import { closeLayoutTab, getTabsWithTrees, getTree, getActiveTabId, countLeaves, closePane,
-  isLayoutEmpty, rememberClosedView, findClosedViewByTmux, peekClosedView, takeClosedView, forgetClosedMembers,
+  isLayoutEmpty, rememberClosedView, findClosedViewByTmux, findClosedViewByCatalog, peekClosedView, takeClosedView, forgetClosedMembers,
   openTabWithTree, getActivePaneId, setTabLabel } from '../layout/store.js';
 import { collectSessions, findNode, findPaneBySession } from '../layout/tree.js';
 import { applyPaneDrop, canSplit } from '../layout/dnd.js';
@@ -38,7 +38,7 @@ export function renameView(viewId, label) {
 
 function _lookupLive(sessionId) {
   const s = getSession(sessionId);
-  return { id: sessionId, tmux: (s && (s.tmuxName || s.tmux_name)) || null, host: (s && s.host) || 'local' };
+  return { id: sessionId, tmux: (s && (s.tmuxName || s.tmux_name)) || null, host: (s && s.host) || 'local', ...(s?.catalogSessionId ? {catalogSessionId:s.catalogSessionId,runtimeId:s.runtimeId,catalogHost:s.catalogHost} : {}) };
 }
 
 function _showEmptyIfNoViews() {
@@ -90,33 +90,40 @@ export async function reopenClosedView(viewId, focusTmux = null) {
   _reopening.add(viewId);
   try {
     const byTmux = new Map();
+    const refKey=(info,host='local') => info.catalogSessionId ? `${host}:${info.catalogSessionId}:${info.runtimeId}` : info.tmux;
+    let hasDurable=false;
     const openNow = new Set(Object.values(allSessions()).map((s) => s && (s.tmuxName || s.tmux_name)).filter(Boolean));
     (function walk(node) {
       if (!node) return;
       if (node.t === 'leaf') {
         const tmux = node.session && node.session.tmux;
-        if (tmux && !openNow.has(tmux)) byTmux.set(tmux, (node.host || node.session.host || 'local'));
+        const info=node.session;
+        const host=node.host || info?.host || 'local';
+        if (info?.catalogSessionId) hasDurable=true;
+        const alreadyOpen=info?.catalogSessionId ? Object.values(allSessions()).some(s=>s?.catalogSessionId===info.catalogSessionId && s.runtimeId===info.runtimeId && (s.host || 'local')===host) : openNow.has(tmux);
+        if (tmux && !alreadyOpen) byTmux.set(refKey(info,host), {...info,host});
         return;
       }
       walk(node.a); walk(node.b);
     })(view.tree);
     const attached = new Map();
     const failed = [];
-    for (const [tmux, host] of byTmux) {
+    for (const [key, info] of byTmux) {
+      const {tmux,host}=info;
       let id = null;
       if (host && host !== 'local') {
         id = typeof window.attachRemoteSession === 'function'
-          ? await window.attachRemoteSession(host, tmux, { place: 'none' }) : null;
+          ? await window.attachRemoteSession(host, tmux, { place: 'none', catalogSessionId:info.catalogSessionId,runtimeId:info.runtimeId,catalogHost:info.catalogHost }) : null;
       } else {
-        id = await attachTmux(tmux, { place: 'none' });
+        id = await attachTmux(tmux, { place: 'none',catalogSessionId:info.catalogSessionId,runtimeId:info.runtimeId,catalogHost:info.catalogHost });
       }
-      if (id) attached.set(tmux, id); else failed.push(tmux);
+      if (id) attached.set(key, id); else failed.push(tmux);
     }
-    if (byTmux.size > 0 && attached.size === 0) {
+    if (byTmux.size > 0 && attached.size === 0 && !hasDurable) {
       showToast(t('묶음을 열지 못했습니다 — {names} (기억은 그대로 둡니다)', { names: failed.join(', ') }));
       return false;
     }
-    const tree = deserializeTree(view.tree, (info) => (info && info.tmux && attached.get(info.tmux)) || null);
+    const tree = deserializeTree(view.tree, (info) => info ? attached.get(refKey(info,info.host || 'local')) || null : null);
     if (!tree) return false;
     takeClosedView(viewId);
     if (failed.length) showToast(t('묶음의 {n}개 세션을 열지 못해 빈 칸으로 뒀습니다 — {names}', { n: failed.length, names: failed.join(', ') }));
@@ -132,12 +139,12 @@ export async function reopenClosedView(viewId, focusTmux = null) {
 
 /** 행 클릭 = 열기: 열려 있으면 그 칸으로, 기억된 묶음이 있으면 통째로, 아니면
  * 새 단독 뷰. */
-export async function openSessionFromRail({ sessionId = null, tmuxName = null } = {}) {
+export async function openSessionFromRail({ sessionId = null, tmuxName = null, catalogSessionId = null, runtimeId = null } = {}) {
   if (sessionId && getSession(sessionId)) { revealSession(sessionId); return sessionId; }
   if (!tmuxName) return null;
-  const view = findClosedViewByTmux(tmuxName);
+  const view = catalogSessionId ? findClosedViewByCatalog(catalogSessionId) : findClosedViewByTmux(tmuxName);
   if (view && await reopenClosedView(view.id, tmuxName)) return true;
-  return attachTmux(tmuxName);
+  return attachTmux(tmuxName, { catalogSessionId, runtimeId });
 }
 
 /** 「오른쪽에 나란히 열기」「아래에 열기」를 행 메뉴에 넣을지. **폭 720px 이상 + 터치(pointer: coarse)**

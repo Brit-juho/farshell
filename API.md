@@ -290,6 +290,7 @@ method+path so a `view` GET signature can't be reused on a `control` POST.
 | GET | `/api/peer/ping` | Signed liveness check → id, label, version, `serverTime` (the caller derives clock skew from it), and the caller's granted level |
 | GET | `/api/peer/sessions` | Signed, `view` level — this host's tmux sessions + agent status. Each item carries `origin` (`local`/`peer`/`external`, the same values and `@fsh_origin` source as `GET /api/tmux/sessions`; an older peer omits it and the receiver treats the session as local). **Never relays other peers' sessions** (hop 0): A↔B mutual pairing would otherwise recurse A→B→A |
 | POST | `/api/peer/input` | Signed, **`control` level** — type text into a tmux session on this host (JSON: `session`, `data`, optional `enter`). Default types without Enter (same contract as file insert); `enter: true` presses it, which is what the prompt queue needs (A3) — the caller says which, the server never guesses. A `view` peer gets 403 with the exact command to enable it |
+| WS | `/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}` | Signed durable attach. All identity fields are covered by HMAC; owner verifies host incarnation and runtime before exact physical attach. Stale identity closes 4404; older peers have no name fallback. Same view/control and revocation checks as the legacy stream. |
 | WS | `/api/peer/ws/{tmux_name}` | Signed, `view` streams output; input is applied only at `control` level. With `VT_AUTHZ_ENFORCE=peer` each input frame re-checks the grant and a revoked/downgraded Mac is disconnected (4401) within 5 seconds. Opened by the **other server's proxy**, never by a browser (a browser WebSocket can't send the signature headers). Each connection gets its own PTY on this host and it is destroyed on disconnect — sharing the owner's PTY would make the two screens fight over the terminal size |
 | ANY | `/api/peer/relay/{path}` | Host switch, receiving side (2026-09-28). Runs **this host's own** `/{path}` in-process for the peer and streams the response back (tagged `x-peer-relay: 1`). Signed over path **including the query** plus a **required** body hash; **`control` level only**; `{path}` must be in the allowlist in `server/relay_policy.py` (login/devices/OTP, host and peer management, share links, port expose, git accounts, MCP writes, push, clipboard, voice and hook events are never relayed → 403 `relay_forbidden`). Mutations are audited; GETs are not (polling would drown the log) |
 | WS | `/api/peer/relay-ws/{path}` | Same, for `/ws/{id}`, `/ws-agent`, `/ws-workspace`, `/ws-preview/{name}`. Closes 4401 (bad signature) / 4403 (level or allowlist). Re-checks the grant every 30s (every 2s with `VT_AUTHZ_ENFORCE=peer`) and closes 4401 if it was revoked or dropped to `view` |
@@ -620,3 +621,34 @@ Items contain only `id`, `cli`, `type`, `label`, `state`, `started_at`, `ended_a
 `reset` replaces the viewer's previous generation; `truncated` reports omitted data.
 The final hook message is provided separately (at most 2000 characters) to cover delayed
 transcript writes. The client removes its temporary answer once the recorded answer arrives.
+
+## Durable sessions and conversation archives
+
+These routes require a direct-host human browser session. They are excluded from
+agent, machine-token and broad peer-relay access. Raw exports, restore/source
+approval and replication configuration additionally require elevated authentication.
+Original CLI disappearance never deletes archived copies. Starting a CLI returns
+`started_unverified`; it does not certify successful native conversation resumption.
+
+| Method | Path | Contract |
+|---|---|---|
+| GET | `/api/session-catalog` | Repository/workspace/session snapshot; `limit` 1–200, ID `after`, `archived`. Includes physical runtime identities and stored relationships. |
+| GET | `/api/session-catalog/sessions/{session_id}` | Logical session, execution history and linked conversations. |
+| POST | `/api/session-catalog/sessions/{session_id}` | Revision-checked title/archive change. Running or unconfirmed runtimes cannot be archived. |
+| POST | `/api/session-catalog/sessions/{session_id}/stop` | Recorded `operation_id`, explicit `force:true`; stops the exact physical tmux session. Independent child sessions continue. |
+| GET | `/api/session-history` | Conversation list/search; provider, archive filter, bounded keyset pagination. |
+| GET | `/api/session-history/status` | Source registry, collection state, quota and replication checkpoints. |
+| GET | `/api/session-history/conversations/{conversation_id}` | Bounded normalized messages, raw manifest states and native children. |
+| POST | `/api/session-history/conversations/{conversation_id}` | Archive/unarchive or explicit deletion tombstone; `delete_scope` is `local` (default) or `replicas` (ACK-tracked remote tombstones, retained raw bytes). Active conversations are rejected. |
+| POST | `/api/session-history/conversations/{conversation_id}/resume` | Recorded `operation_id`, optional stopped logical `session_id`; explicit CLI launch without inherited execution grants. |
+| GET | `/api/session-history/replicas/{origin}/{conversation_id}` | Offline read-only copy, isolated by origin UUID. |
+| POST | `/api/session-history/preview/{action}` | Elevated `source`, `restore` or legacy execution `identity` preview; actor-bound expiring approval token. |
+| POST | `/api/session-history/apply/{action}` | Elevated one-use preview token application. |
+| POST | `/api/session-history/settings` | Elevated quota/source enable changes, source revision checked. |
+| POST | `/api/session-history/manifests/{manifest_id}/export` | Elevated verified raw export. |
+| POST | `/api/session-history/download` | Elevated preparation of an actor-bound, one-use download ticket. |
+| GET | `/api/session-history/download/{ticket}` | Elevated streaming download; ticket cannot be reused by another browser session. |
+| POST | `/api/session-history/backup` | Elevated consistent catalog plus referenced raw chunk package; excludes transport keys and CLI credentials. |
+| POST | `/api/session-history/replication/identity` | Elevated archive UUID/public encryption key. |
+| POST | `/api/session-history/replication/settings` | Elevated explicit paired-peer direction, origin, public key and revision approval/revocation. |
+| POST | `/api/peer/session-history/receive` | Signed peer-only encrypted offer/chunk/projection/commit protocol; dedicated receive grant required, obo rejected. |

@@ -92,6 +92,9 @@ def grant_to_legacy(rec: dict) -> dict:
            "read": "session.read" in scopes, "write": _can_write(rec), "granted": rec.get("created")}
     if rec.get("updated") is not None:
         out["updated"] = rec["updated"]
+    for key in ('identity_version','runtime_bindings'):
+        if key in rec:
+            out[key]=rec[key]
     return out
 
 
@@ -120,6 +123,9 @@ def legacy_state(docs: dict, *, provenance: bool = False) -> dict:
 def engine_grant(legacy: dict, *, approved_by: str, approved_via: str = S.VIA_MANUAL, stamp: str = "live") -> Optional[dict]:
     rec = migrate.translate_agent_grant(legacy, stamp=stamp)
     if rec is not None:
+        for key in ('identity_version','runtime_bindings'):
+            if key in legacy:
+                rec[key]=legacy[key]
         rec["approved_by"] = approved_by
         rec["approved_via"] = approved_via if approved_via in S.APPROVED_VIA else S.VIA_MIGRATED
     return rec
@@ -263,7 +269,7 @@ def check_authority(actor: Optional[P.Principal], scopes: Iterable[str], resourc
 
 def _snap(docs: dict, now: float) -> store.Snapshot:
     return store.Snapshot(grants=docs["grants"]["items"], approvals=docs["approvals"]["items"],
-                          windows=docs["windows"]["items"], shares=docs["shares"]["items"], now=now, source="store")
+                          windows=docs["windows"]["items"], shares=docs["shares"]["items"], now=now, source="store").fenced()
 
 
 # --- 해결 기록 (N-1: 먼저 온 결정이 이긴다) -------------------------------------------------------

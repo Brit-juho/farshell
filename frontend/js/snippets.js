@@ -1,3 +1,4 @@
+import { operationId } from './core/operation-id.js';
 // 자주 쓰는 명령·지시문 보관함 (L3, 2026-10-23 개편) — iTerm2 Snippets와 같은 개념.
 //
 // 프롬프트 큐(queue.js)와 다르다: 큐는 "순서를 기다렸다가" 나가지만, 스니펫은 대기
@@ -432,7 +433,7 @@ async function _runInNewSession(it, name) {
       body: JSON.stringify({
         ...(cwd ? { cwd } : {}),
         ...(name ? { name, unique_name: true } : {}),
-        screen: screenId(),
+        screen: screenId(), operation_id:operationId(),
       }),
     });
   } catch (e) {
@@ -446,7 +447,7 @@ async function _runInNewSession(it, name) {
   // layout/dnd.js가 드롭으로 세션을 꽂을 때 쓰는 것과 같은 경로.
   addSession(data.id, data.name || data.id, { place: 'pane', tmuxName: data.tmux_session });
   const s = getSession(data.id);
-  if (s) s.tmuxName = data.tmux_session;
+  if (s) { s.tmuxName = data.tmux_session; s.catalogSessionId=data.catalog_session_id; s.runtimeId=data.runtime_id; }
 
   if (!(await _waitForPtyOpen(data.id))) {
     showToast(t('새 세션 연결이 늦어 스니펫을 아직 보내지 못했습니다 — 연결되면 직접 입력하세요'), 'error');

@@ -210,6 +210,8 @@ def peer_cases() -> list[Case]:
          {"to": "target", "text": "hi", "from": "dev", "id": "m1"}, ()),
         ("POST", "/api/peer/file", "/api/peer/file", b"file-bytes", (("X-Peer-File-Name", "a.txt"),)),
         ("WS", "/api/peer/ws/{tmux_name}", "/api/peer/ws/nosuch", None, ()),
+        ("WS", "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}",
+         "/api/peer/ws-v2/" + "/".join(["0"*32]*3) + "/nosuch", None, ()),
     ]
     out = []
     for mode in MODES:

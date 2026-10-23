@@ -241,7 +241,7 @@ def _snapshot(now: float) -> store.Snapshot:
     docs = {n: store._read(n) for n in ("grants", "approvals", "windows", "shares")}
     return store.Snapshot(grants=docs["grants"][0]["items"], approvals=docs["approvals"][0]["items"],
                           windows=docs["windows"][0]["items"], shares=docs["shares"][0]["items"],
-                          corrupt=frozenset(n for n, (_d, bad) in docs.items() if bad), now=now, source="store")
+                          corrupt=frozenset(n for n, (_d, bad) in docs.items() if bad), now=now, source="store").fenced()
 
 
 def decide(p: P.Principal, scope: str, resource: str, ctx: Optional[dict] = None) -> engine.Decision:
