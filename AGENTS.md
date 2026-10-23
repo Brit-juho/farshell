@@ -84,7 +84,9 @@ Verify affected behavior with actual responses, operations and logs.
 - To release: on `dev`, run the release commit (`VERSION`, the two README badges, move
   `[Unreleased]` to `[X.Y.Z] — date`, `chore(release): vX.Y.Z`), then fast-forward `master` to it.
   This one stays a fast-forward: `master`'s tip must be the release commit the tag points at (the
-  feature merge commits come along in the history). Tag `vX.Y.Z` on `master` and push the tag (the
+  feature merge commits come along in the history). Tag `vX.Y.Z` on `master` as a **signed annotated
+  tag** (`git -c gpg.format=ssh -c user.signingkey=<key> tag -s vX.Y.Z`) — `fsh update --channel stable`
+  refuses unsigned tags (`docs/ref/dev.md`) — and push the tag (the
   `Release` workflow publishes it; it fails if `VERSION` and the tag differ), and point
   `release/X.Y` at the tag. Pushing a tag publishes a public release — confirm with the user first.
 - Never force-push `master`, `dev` or a `release/*` branch; a push must only move the tip forward.

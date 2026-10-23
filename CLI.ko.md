@@ -38,6 +38,8 @@ fsh worktree [list|add <이름> [--base b] [--ports] [--copy-modules] [--agent c
 fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git 계정 저장소 (저장한 자격증명은 push에 사용되지 않음)
 fsh hotkey [list|set|reset|disable]  # 핫키 조회/변경
 fsh hooks [status|install|uninstall|dedupe [--dry-run]]  # Claude Code·Codex 훅 등록(상태 배지·큐·TTS의 전제); dedupe는 Codex 앱이 ~/.codex/hooks.json에 복제한 FarShell 훅 제거
+fsh update [--channel stable|dev|devmode] [--to vX.Y.Z] [--check] [--restart] [--rollback]  # 채널별 업데이트(stable = 서명된 릴리스 태그, dev = origin/dev, devmode = 직접 pull) 후 훅·스킬 재동기화; `update trust [--key <공개키>]` 는 릴리스 서명 키 고정; `--rollback` 은 직전 커밋으로 복귀
+fsh sync [--dry-run]  # Claude Code·Codex 훅과 fsh 스킬 링크를 현재 코드에 맞춤(직접 pull 한 뒤 사용)
 fsh pane report [--state ...] [--agent ...]  # 이 pane의 상태 보고(훅 없는 에이전트용)
 fsh clauth [status|which]  # 사용량 조회(읽기 전용, clauth 미설치면 숨김)
 fsh usage [list|add --model <이름> --tokens <N> --seconds <N>]  # 누적형 사용량 기록/조회 (로컬 LLM 등, 한도 없음)

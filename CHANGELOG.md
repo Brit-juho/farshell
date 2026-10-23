@@ -13,6 +13,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Compact HUD reset times and chip spacing; show only usage in GPU chips.
 
 ### Added
+- `fsh update` updates an install by channel (`stable` = SSH-signed release tag, `dev` = `origin/dev`,
+  `devmode` = manual pull) with rollback, and re-syncs Claude Code/Codex hooks and the `fsh` skill link;
+  `fsh sync` does the sync alone. Pin the release-signing key once with `fsh update trust`.
 - Managed Claude/Codex launch profiles with reviewed source-preserving imports, private
   API configuration test clones, native session attribution, profile quota readers,
   fixed-snapshot local plugin installation and disposable OS-sandbox verification.
