@@ -13,6 +13,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Compact HUD reset times and chip spacing; show only usage in GPU chips.
 
 ### Added
+- Status bar customization: Settings → Status bar chooses which chips (connected screens, E2E,
+  safe mode, CPU, GPU, RAM, network, usage, version, server) show, on which side and in what order, by
+  drag, a position select or up/down buttons, with a live preview. Saved per device. The default layout no
+  longer shows the `server :port` chip (it was always on the far left and said nothing new).
 - `fsh update` updates an install by channel (`stable` = SSH-signed release tag, `dev` = `origin/dev`,
   `devmode` = manual pull) with rollback, and re-syncs Claude Code/Codex hooks and the `fsh` skill link;
   `fsh sync` does the sync alone. Pin the release-signing key once with `fsh update trust`.

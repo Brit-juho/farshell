@@ -20,6 +20,7 @@ import { renderAgentsSection } from './settings/sections/agents.js';
 import { renderSecuritySection } from './settings/sections/security.js';
 import { renderPermissionsSection } from './settings/sections/permissions.js';
 import { renderAboutSection } from './settings/sections/about.js';
+import { renderHudSection } from './settings/sections/hud.js';
 import { getAction } from '../core/dom.js';
 import { subscribePersistence } from '../core/settings.js';
 import { t } from '../core/i18n.js';
@@ -105,6 +106,7 @@ const SECTIONS = [
   // 기본 6스킨 칩(2026-09-18부터 이 탭이 유일한 자리 — 위 주석 참고).
   // 「테마 가져오기」(N14, Ghostty/Warp 파싱)는 2026-09-22 실사용 없어 제거.
   { id: 'appearance', label: t('모양'), description: t('스킨, 화면 언어, 파일 뷰어 표시 방식을 고릅니다.'), custom: renderAppearanceSection },
+  { id: 'hud', label: t('하단바'), description: t('하단 상태바에 보일 칩과 순서를 고릅니다.'), custom: renderHudSection, desktopOnly: true },
   { id: 'permissions', label: t('권한'), description: t('에이전트의 승인 요청, 페어, 폴더 lease, 허용된 권한, 감사 기록을 봅니다.'), custom: renderPermissionsSection },
   { id: 'security', label: t('계정 및 보안'), description: t('로그인, OTP, 등록 기기와 현재 세션을 확인합니다.'), custom: renderSecuritySection },
   // N13(80-multihost-agents.md §3) — 토글 자체는 스키마 항목이지만, 디스크
@@ -155,6 +157,8 @@ let _mobileHome = true;
 let _persistenceUnsub = null;
 
 function isCompact() { return window.matchMedia('(max-width:719px)').matches; }
+// 좁은 화면에는 하단바(HUD) 자체가 없다(DESIGN.md 「HUD 24px」) — 거기서 구성하는 섹션은 목록에서 뺀다.
+const shownSections = () => (isCompact() ? SECTIONS.filter((s) => !s.desktopOnly) : SECTIONS);
 
 function openTool(action) {
   // 모바일 더보기는 브라우저 history에 한 단계로 올라간다. 여기서 도구 화면으로
@@ -226,7 +230,7 @@ function renderMobileHome(body, focusSearch = false) {
     { label: t('포트'), description: t('실행 중인 로컬 서비스'), action: 'ports.show' },
     { label: t('사용량'), description: t('AI 도구 한도와 누적 사용량'), action: 'usage.open' },
   ]);
-  addList(t('설정'), SECTIONS);
+  addList(t('설정'), shownSections());
   body.appendChild(home);
   if (focusSearch) Promise.resolve().then(() => home.querySelector('.vt-set-search-input')?.focus());
 }
@@ -244,7 +248,7 @@ function rerender(focusTarget = null) {
   nav.className = 'vt-set-nav';
   nav.setAttribute('aria-label', t('설정 항목'));
   nav.appendChild(renderSearch());
-  for (const s of SECTIONS) {
+  for (const s of shownSections()) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'vt-menu-item sm vt-set-navitem' + (s.id === _activeSection ? ' active' : '');

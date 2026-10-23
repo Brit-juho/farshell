@@ -135,6 +135,11 @@ export const SCHEMA = {
   // 만든 곳별 표시(local은 끌 수 없다). 끄더라도 열려 있는 세션·입력 대기 세션은 남는다.
   'rail.origin.peer.show':     { type: 'bool', def: true, scope: 'device' },
   'rail.origin.external.show': { type: 'bool', def: true, scope: 'device' },
+  // 하단바(HUD)에 어떤 칩을 어느 쪽에 어떤 순서로 둘지 — `{"left":[…],"right":[…]}` JSON 한 덩어리.
+  // 칩마다 키를 만들면 순서를 표현할 수 없고 일부만 저장된 중간 상태가 생긴다(keymap과 같은 이유).
+  // 비어 있으면 shell/hud-data.ts의 DEFAULT_HUD_LAYOUT. 폰에는 HUD가 없고 기기마다 화면 폭이
+  // 달라 device 스코프다.
+  'ui.hud.layout': { type: 'str', def: '', scope: 'device' },
   'rail.order':   { type: 'str', def: '' },
   'rail.lineage': { type: 'str', def: '', scope: 'device' },
 };

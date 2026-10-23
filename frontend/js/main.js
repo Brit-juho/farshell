@@ -28,7 +28,7 @@ import { vtFetch } from './core/api.js';
 import { getSession, activeSessionId } from './core/store.js';
 import { getAction } from './core/dom.js';
 import { E2E_ENABLED } from './term/e2e.js';
-import './core/settings.js';  // S2 — 설정 스토어(모듈 평가 시점에 캐시+마이그레이션 동기 적용)
+import { get as settingGet, subscribe as settingSubscribe } from './core/settings.js';  // S2 — 설정 스토어(모듈 평가 시점에 캐시+마이그레이션 동기 적용)
 import './core/keymap.js';    // S3 — 키맵 레지스트리(각 모듈이 register()로 액션을 붙인다)
 import './core/dom.js';
 import './ui/toast.js';   // F5 — showToast/dismissToast. 다른 모듈이 참조하므로 먼저.
@@ -149,7 +149,15 @@ try {
   const hudRoot = document.getElementById('vt-hud');
   if (hudRoot) {
     import('./shell/Hud.tsx')
-      .then(({ mountHud }) => mountHud(hudRoot, { vtFetch, activeTmuxName, activeClientsPath, getAction, e2eEnabled: E2E_ENABLED }))
+      .then(({ mountHud }) => mountHud(hudRoot, {
+        vtFetch, activeTmuxName, activeClientsPath, getAction, e2eEnabled: E2E_ENABLED,
+        // 배치(ui.hud.layout)는 설정 화면에서 바뀐다 — core/settings.js는 지연 청크가 직접 못 읽으므로 여기서 넘긴다.
+        getLayout: () => settingGet('ui.hud.layout'),
+        subscribeLayout: (fn) => settingSubscribe((changed) => {
+          const keys = Array.isArray(changed) ? changed : (changed && typeof changed === 'object' ? Object.keys(changed) : [changed]);
+          if (!keys.length || keys.includes('ui.hud.layout')) fn();
+        }),
+      }))
       .catch((e) => console.error('[FarShell HUD]', e)); // HUD는 부가 정보 — 실패해도 앱은 계속
   }
 

@@ -4,7 +4,10 @@
 // 로드한다. 새 .ts/.tsx를 테스트하려면 여기에 re-export만 추가하면 된다.
 export { mountSmoke } from './smoke.js';
 export { SCHEMA as SETTINGS_SCHEMA } from '../../js/core/settings.js';
-export { buildHudChips, formatResetsIn, formatRate } from '../../js/shell/hud-data.js';
+export {
+  buildHudChips, formatResetsIn, formatRate, HUD_KINDS, DEFAULT_HUD_LAYOUT, parseHudLayout, serializeHudLayout,
+  sameHudLayout, hudZoneOf, moveHudKind, stepHudKind,
+} from '../../js/shell/hud-data.js';
 export {
   formatRelativeTime, statusSentence, stateKeyword, defaultRailCollapsed,
   buildRailLists, compactRailRows, readRailPrefs, RAIL_PREF_DEFAULTS, ATTENTION_SHOW_KEY, ATTENTION_COLLAPSED_KEY, originShowKey,
