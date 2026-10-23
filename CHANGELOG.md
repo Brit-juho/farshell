@@ -9,10 +9,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Fixed
+- New tmux sessions without a name are numbered from `-1` (was `-2`) and are named after the requested `cwd` folder instead of the server's working directory.
 - Preserve GPU statistics in the system API response so the HUD can display them.
 - Compact HUD reset times and chip spacing; show only usage in GPU chips.
 
 ### Added
+- Snippets moved into a dock tab and were rebuilt: choose how to run at run time ("Type into this
+  session" / "New session") instead of when saving, a trailing newline in the text means "press Enter
+  after the last line", edit, search, name the new session (taken names become `name-1`, `name-2`),
+  and no more browser-default radio/checkbox controls. Existing "auto-run" snippets keep their behavior.
+  `PATCH /api/snippets/{id}` now edits name/text/scope; `POST /api/tmux/create` takes `unique_name`.
 - `fsh update` updates an install by channel (`stable` = SSH-signed release tag, `dev` = `origin/dev`,
   `devmode` = manual pull) with rollback, and re-syncs Claude Code/Codex hooks and the `fsh` skill link;
   `fsh sync` does the sync alone. Pin the release-signing key once with `fsh update trust`.

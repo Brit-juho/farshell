@@ -25,27 +25,41 @@ TMUX_SOCKET = tmux_runner.VT_TMUX_SOCKET
 
 
 # Wave 1 W1-2: 의미있는 디폴트 세션 이름 (cwd basename + 충돌 시 순번)
-def _generate_default_session_name() -> str:
-    """cwd basename 기반 + 충돌 시 -1, -2 순번. 안전한 영숫자만 사용."""
-    try:
-        cwd = os.getcwd()
-        base = os.path.basename(cwd) or "session"
-    except Exception:
-        base = "session"
-    # 안전한 슬러그: 영숫자/dash/underscore만, 소문자, 최대 20자
-    slug = re.sub(r"[^A-Za-z0-9_-]+", "-", base).strip("-").lower()[:20]
-    if not slug:
-        slug = "session"
-    candidate = slug
-    n = 1
+def _session_slug(raw: str, limit: int = 20) -> str:
+    """안전한 슬러그: 영숫자/dash/underscore만, 소문자, 최대 `limit`자."""
+    return re.sub(r"[^A-Za-z0-9_-]+", "-", raw).strip("-").lower()[:limit]
+
+
+def _free_session_name(base: str) -> str:
+    """`base`, `base-1`, `base-2` … 중 아직 없는 첫 이름(2026-10-23: 순번은 1부터).
+
+    같은 이름을 동시에 두 번 만들면 안 되므로 호출부는 `_create_lock` 안에서 부르고,
+    같은 락 안에서 곧바로 `new-session`까지 한다.
+    """
+    candidate = base
+    n = 0
     while tmux_runner.has_session(candidate):
         n += 1
-        candidate = f"{slug}-{n}"
+        candidate = f"{base}-{n}"
         if n > 99:
             # 안전 폴백: uuid
-            candidate = f"web-{str(uuid.uuid4())[:4]}"
-            break
+            return f"web-{str(uuid.uuid4())[:4]}"
     return candidate
+
+
+def _generate_default_session_name(base: str | None = None) -> str:
+    """`base`(없으면 서버 cwd의 basename) 기반 + 충돌 시 -1, -2 순번."""
+    if base is None:
+        try:
+            base = os.path.basename(os.getcwd()) or "session"
+        except Exception:
+            base = "session"
+    return _free_session_name(_session_slug(base) or "session")
+
+
+# 이름 고르기 → new-session 사이를 한 덩어리로 묶는다. 스니펫 「새 세션에서 실행」을
+# 연달아 눌러도(같은 이름 요청 두 개) 서로 다른 번호가 나가야 한다.
+_create_lock = asyncio.Lock()
 
 
 # --------------------------------------------------------------------------
@@ -280,8 +294,8 @@ async def create_tmux_session(request: Request):
         return JSONResponse({"error": "invalid screen id"}, status_code=400)
     # Wave 1 W1-2: 사용자 지정 이름 없으면 cwd 기반 디폴트
     requested_name = body.get("name", "").strip()
-    # 이 헬퍼는 이름이 빌 때까지 has_session을 반복 호출한다(동기 tmux).
-    tmux_name = requested_name or await asyncio.to_thread(_generate_default_session_name)
+    # `unique_name`: 이름이 이미 있으면 에러 대신 `이름-1`, `이름-2`로 비켜 간다(스니펫).
+    unique_name = bool(body.get("unique_name"))
     cols = body.get("cols", 80)
     rows = body.get("rows", 24)
     auto_open = bool(body.get("auto_open_on_mac", False))
@@ -298,10 +312,28 @@ async def create_tmux_session(request: Request):
     else:
         # 새 tmux 세션 시작 디렉토리 — 서버 cwd(프로젝트 폴더) 대신 홈/VT_START_DIR.
         start_dir = platform_utils.default_start_dir()
-    rc, _, err = await tmux_runner.run_async(
-        ["new-session", "-d", "-s", tmux_name, "-x", str(cols), "-y", str(rows), "-c", start_dir],
-        timeout=5.0,
-    )
+    async with _create_lock:
+        if requested_name and not unique_name:
+            tmux_name = requested_name
+        elif requested_name:
+            # 앱의 세션 이름 규칙은 [A-Za-z0-9_-]다(`/api/tmux/clients`·open-on-mac 등이 그
+            # 밖의 이름을 400으로 거절한다) — 그 밖의 글자는 `-`로 바꾼다. 한글만 있는
+            # 이름처럼 남는 게 없으면 cwd 폴더 이름으로 간다. 이름이 바뀌었다는 걸
+            # 호출부가 알 수 있게 응답의 `tmux_session`을 그대로 돌려준다.
+            base = re.sub(r"[^A-Za-z0-9_-]+", "-", requested_name).strip("-")[:40]
+            if base:
+                tmux_name = await asyncio.to_thread(_free_session_name, base)
+            else:
+                folder = os.path.basename(requested_cwd.rstrip("/")) if requested_cwd else None
+                tmux_name = await asyncio.to_thread(_generate_default_session_name, folder)
+        else:
+            # cwd를 받았으면 그 폴더 이름으로(서버 프로세스의 cwd가 아니라).
+            base = os.path.basename(requested_cwd.rstrip("/")) if requested_cwd else None
+            tmux_name = await asyncio.to_thread(_generate_default_session_name, base)
+        rc, _, err = await tmux_runner.run_async(
+            ["new-session", "-d", "-s", tmux_name, "-x", str(cols), "-y", str(rows), "-c", start_dir],
+            timeout=5.0,
+        )
     if rc != 0:
         return JSONResponse(
             {"error": "tmux session create failed", "detail": err.decode("utf-8", errors="ignore")},
