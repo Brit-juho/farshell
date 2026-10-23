@@ -28,7 +28,7 @@ import { icon } from './ui/icons.js';
 import { isMac } from './core/env.js';
 import { t } from './core/i18n.js';
 import {
-  splitText, composeText, displayName, matchesQuery, sessionNameFor, sessionNameAdjusted, planInput,
+  splitText, composeText, toLines, hasHangul, displayName, matchesQuery, sessionNameFor, sessionNameAdjusted, planInput,
 } from './snippets-util.js';
 
 // '전체' 탭 기본 — 스코프 구분 없이 쓰던 예전 동작과 가장 가깝다.
@@ -69,21 +69,17 @@ export function showSnippets() {
                  placeholder="${t('이름·내용 검색')}" aria-label="${t('스니펫 검색')}" />
         </label>
         <div class="vt-sn-seg" role="tablist" aria-label="${t('스니펫 스코프')}">
-          <button type="button" class="vt-segment" role="tab" id="vt-sn-tab-project" data-scope="project">${t('프로젝트')}</button>
-          <button type="button" class="vt-segment" role="tab" id="vt-sn-tab-global" data-scope="global">${t('전체')}</button>
+          <button type="button" class="vt-segment" role="tab" id="vt-sn-tab-project" data-scope="project">${t('프로젝트')}<b>0</b></button>
+          <button type="button" class="vt-segment" role="tab" id="vt-sn-tab-global" data-scope="global">${t('전체')}<b>0</b></button>
         </div>
       </div>
       <form class="vt-sn-editor" id="vt-sn-editor" hidden autocomplete="off">
         <input id="vt-sn-label" class="vt-input lg" type="text" maxlength="60"
                placeholder="${t('이름 (비우면 첫 줄)')}" aria-label="${t('이름')}" />
-        <textarea id="vt-sn-text" class="vt-input mono lg" rows="6" spellcheck="false"
+        <textarea id="vt-sn-text" class="vt-input lg" rows="6" spellcheck="false"
                   placeholder="${t('명령이나 지시문. 줄바꿈은 Enter로 입력됩니다.')}" aria-label="${t('내용')}"></textarea>
+        <div class="vt-sn-preview" id="vt-sn-preview" aria-live="off"></div>
         <div class="vt-sn-opts">
-          <div class="vt-sn-opt">
-            <div class="vt-sn-opt-text"><b>${t('끝에 Enter 포함')}</b>
-              <span>${t('켜면 마지막 줄까지 실행됩니다. 끄면 입력만 하고 멈춥니다.')}</span></div>
-            <button type="button" class="vt-toggle" role="switch" aria-checked="false" id="vt-sn-enter" aria-label="${t('끝에 Enter 포함')}"><span>ON</span><span>OFF</span></button>
-          </div>
           <div class="vt-sn-opt" id="vt-sn-proj-opt">
             <div class="vt-sn-opt-text"><b>${t('이 프로젝트에만')}</b>
               <span>${t('지금 세션의 git 저장소에서만 보입니다.')}</span></div>
@@ -112,7 +108,7 @@ export function showSnippets() {
   $('#vt-sn-tab-project').addEventListener('click', () => _switchScopeTab('project'));
   $('#vt-sn-tab-global').addEventListener('click', () => _switchScopeTab('global'));
   $('#vt-sn-cancel').addEventListener('click', _closeEditor);
-  _bindToggle($('#vt-sn-enter'));
+  $('#vt-sn-text').addEventListener('input', _paintEditorText);
   _bindToggle($('#vt-sn-proj'));
 
   const editor = $('#vt-sn-editor');
@@ -175,6 +171,7 @@ async function _refresh() {
     return;
   }
   _projectKey = await _currentProjectKey();
+  _paintTabs();
   _render();
 }
 
@@ -182,6 +179,8 @@ function _paintTabs() {
   for (const scope of ['project', 'global']) {
     const tab = $(`#vt-sn-tab-${scope}`);
     if (!tab) continue;
+    const n = scope === 'project' ? _projectItems().length : _items.length;
+    tab.querySelector('b').textContent = String(n);
     tab.classList.toggle('active', _scopeTab === scope);
     tab.setAttribute('aria-selected', String(_scopeTab === scope));
   }
@@ -194,11 +193,11 @@ function _switchScopeTab(scope) {
 }
 
 // ── 목록 ──────────────────────────────────────────────────────────────────
+const _projectItems = () => _items.filter((it) => it.scope === 'project' && _projectKey && it.project === _projectKey);
+
 function _visibleItems() {
   // 「전체」 탭은 전부 보인다 — 프로젝트 스니펫은 태그로 구분한다.
-  const scoped = _scopeTab === 'project'
-    ? _items.filter((it) => it.scope === 'project' && _projectKey && it.project === _projectKey)
-    : _items;
+  const scoped = _scopeTab === 'project' ? _projectItems() : _items;
   return scoped.filter((it) => matchesQuery(it, _query));
 }
 
@@ -214,21 +213,42 @@ function _emptyHTML() {
     <p class="vt-sn-empty-sub">${t('자주 쓰는 명령이나 지시문을 저장해 두면 한 번에 입력합니다.')}</p></div>`;
 }
 
+// 줄마다 ↵ 마커 — 줄바꿈이 곧 Enter 키라는 것을 글자 옆에서 바로 읽게 한다.
+// 마커 뒤의 실제 \n 은 pre-wrap 줄바꿈이고, 마커는 aria-hidden(스크린리더는 본문만 읽는다).
+function _linesHTML(text) {
+  const mark = `<span class="vt-nl" aria-hidden="true">${icon('corner-down-left', 11)}</span>`;
+  return toLines(text).map((l) => `${vtEsc(l.text)}${l.nl ? mark : ''}`).join('\n');
+}
+
+function _paintEditorText() {
+  const ta = $('#vt-sn-text');
+  const pv = $('#vt-sn-preview');
+  if (!ta || !pv) return;
+  const v = ta.value;
+  ta.classList.toggle('code', !!v.trim() && !hasHangul(v));
+  const text = composeText(v);
+  pv.hidden = !text;
+  pv.innerHTML = text
+    ? `<pre class="${hasHangul(text) ? 'prose' : ''}">${_linesHTML(text)}</pre>
+       <span class="vt-sn-preview-cap">${text.endsWith('\n') ? t('마지막 줄까지 실행') : t('마지막 줄은 입력만 하고 멈춤')}</span>`
+    : '';
+}
+
 function _rowHTML(it) {
   const { body, enter } = splitText(it.text);
   const open = _expanded.has(it.id);
   const multi = body.includes('\n') || body.length > 90;
   const flags = [
     it.scope === 'project' ? `<span class="vt-tag" title="${vtEsc(it.project || '')}">${t('프로젝트')}</span>` : '',
-    enter ? `<span class="vt-sn-enter" title="${t('끝에 Enter 포함')}">${icon('corner-down-left', 13)}Enter</span>` : '',
+    `<span class="vt-sn-enter${enter ? ' on' : ''}">${enter ? t('끝에 Enter') : t('입력만')}</span>`,
     multi ? `<span class="vt-sn-fold${open ? ' open' : ''}" aria-hidden="true">${icon('chevron-down', 14)}</span>` : '',
   ].join('');
 
   // 길거나 여러 줄이면 눌러서 펼친다(접힘 3줄). 짧으면 그냥 보여 준다.
   // 한글이 섞인 본문은 지시문(문장)이라 UI 글꼴로, 그 밖에는 명령이라 고정폭으로 보인다.
-  const prose = /[가-힣]/.test(body);
+  const prose = hasHangul(body);
   const cls = `vt-sn-text${open ? ' open' : ''}${multi ? ' foldable' : ''}${prose ? ' prose' : ''}`;
-  const pre = `<pre>${vtEsc(body)}</pre>`;
+  const pre = `<pre>${_linesHTML(it.text)}</pre>`;
   const preview = multi
     ? `<button type="button" class="${cls}" data-act="toggle" data-id="${vtEsc(it.id)}" aria-expanded="${open}">${pre}</button>`
     : `<div class="${cls}">${pre}</div>`;
@@ -324,10 +344,9 @@ function _onBodySubmit(ev) {
 function _openEditor(it) {
   _editing = { id: it ? it.id : null };
   _namingId = null;
-  const { body, enter } = it ? splitText(it.text) : { body: '', enter: false };
   $('#vt-sn-label').value = it ? it.label || '' : '';
-  $('#vt-sn-text').value = body;
-  _setToggle($('#vt-sn-enter'), enter);
+  $('#vt-sn-text').value = it ? it.text : '';
+  _paintEditorText();
   _setToggle($('#vt-sn-proj'), !!it && it.scope === 'project');
   $('#vt-sn-save').textContent = it ? t('수정 저장') : t('저장');
   $('#vt-sn-editor').hidden = false;
@@ -348,7 +367,7 @@ function _closeEditor() {
 
 async function _save() {
   if (!_editing) return;
-  const text = composeText($('#vt-sn-text').value, _toggleOn($('#vt-sn-enter')));
+  const text = composeText($('#vt-sn-text').value);
   if (!text) { showToast(t('내용을 입력하세요'), 'error'); $('#vt-sn-text').focus(); return; }
   const label = $('#vt-sn-label').value;
   const wantProject = _toggleOn($('#vt-sn-proj'));
