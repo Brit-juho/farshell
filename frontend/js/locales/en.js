@@ -4170,5 +4170,9 @@ window.__VT_I18N = {
   "하단 상태바에 보일 칩과 순서를 고릅니다.": "Choose the chips and their order in the bottom status bar.",
   "하단바": "Status bar",
   "하단바 미리보기": "Status bar preview",
-  "화면 아래 상태바에 보일 칩을 고릅니다. 값이 없는 칩은 자리에 상관없이 보이지 않고, 자리가 모자라면 중요도가 낮은 칩부터 숨습니다. 이 기기에만 저장됩니다.": "Choose the chips shown in the status bar at the bottom. A chip with no value is hidden wherever it is placed, and when space runs out the least important chips hide first. Saved on this device only."
+  "화면 아래 상태바에 보일 칩을 고릅니다. 값이 없는 칩은 자리에 상관없이 보이지 않고, 자리가 모자라면 중요도가 낮은 칩부터 숨습니다. 이 기기에만 저장됩니다.": "Choose the chips shown in the status bar at the bottom. A chip with no value is hidden wherever it is placed, and when space runs out the least important chips hide first. Saved on this device only.",
+  "공유 링크 만들기": "Create share link",
+  "공유 준비 실패: {msg}": "Could not prepare share: {msg}",
+  "지금 시점의 복사본(스냅샷)을 공유합니다. 원본이 바뀌어도 링크의 내용은 그대로입니다.": "Shares a copy (snapshot) as of now. The link's content stays the same even if the original changes.",
+  "일반 파일만 공유할 수 있습니다": "Only regular files can be shared"
 };

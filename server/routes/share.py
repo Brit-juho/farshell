@@ -15,11 +15,16 @@ file_store.get_item_and_share가 None을 돌려주므로 그대로 404가 된다
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import logging
+import os
 import secrets
+import stat
 import time
+import uuid
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
@@ -28,6 +33,8 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 import auth
 from i18n import tr
 import file_store
+import fsguard
+from routes.files import _file_public
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +52,94 @@ def _no_store_headers(resp) -> None:
 
 
 # --- 발급/취소 (승격) ---------------------------------------------------------
+
+
+class _ImportError(Exception):
+    def __init__(self, status: int, body: dict):
+        self.status = status
+        self.body = body
+
+
+def _snapshot_into_store(p: Path) -> dict:
+    """열람 경계 안의 파일 하나를 저장소로 **복사**한다(스냅샷). blocking — to_thread로 부른다.
+
+    공유 링크는 id 기반 저장소 파일에만 걸린다(경로를 받는 다운로드 API는 의도적으로 없다).
+    그래서 파일 탭의 파일은 복사본을 만들어 그 id로 링크를 발급한다. 같은 원본·크기·mtime이면
+    같은 스냅샷을 재사용해 디스크에 두 벌 쌓이지 않는다(내용이 바뀌면 새 스냅샷).
+    """
+    # resolve() 뒤에 심링크로 바꿔치기하는 경합을 막는다 — NOFOLLOW로 열고 fd로 판정한다.
+    try:
+        fd = os.open(str(p), os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0))
+    except FileNotFoundError:
+        raise _ImportError(404, {"error": "not_found"})
+    except PermissionError:
+        raise _ImportError(403, {"error": "denied", "reason": tr("읽기 권한이 없습니다")})
+    except OSError:
+        raise _ImportError(400, {"error": "not_a_file", "reason": tr("일반 파일만 공유할 수 있습니다")})
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            raise _ImportError(400, {"error": "not_a_file", "reason": tr("일반 파일만 공유할 수 있습니다")})
+        max_mb = file_store.MAX_UPLOAD_BYTES // (1024 * 1024)
+        if st.st_size > file_store.MAX_UPLOAD_BYTES:
+            raise _ImportError(413, {"error": "file too large", "max_mb": max_mb})
+        origin = f"fs:{p}:{st.st_size}:{st.st_mtime_ns}"
+        existing = file_store.find_by_origin(origin)
+        if existing is not None and file_store.real_path_for(existing["id"]) is not None:
+            return existing
+        file_store.files_dir().mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(file_store.files_dir(), 0o700)
+        except OSError:
+            pass
+        tmp = file_store.files_dir() / f".tmp-{uuid.uuid4().hex}"
+        size = 0
+        try:
+            out_fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(out_fd, "wb") as out, os.fdopen(fd, "rb", closefd=False) as src:
+                while True:
+                    chunk = src.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    # 복사 도중 커지는 파일 — 상한을 스트리밍으로 다시 건다.
+                    if size > file_store.MAX_UPLOAD_BYTES:
+                        raise _ImportError(413, {"error": "file too large", "max_mb": max_mb})
+                    out.write(chunk)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
+        return file_store.add_from_upload(tmp, p.name, size, origin=origin)
+    finally:
+        os.close(fd)
+
+
+@elevated_router.post("/api/fs/share-import")
+async def share_import(request: Request):
+    """파일 탭의 경로를 공유할 수 있게 저장소로 복사하고 그 파일 id를 돌려준다.
+
+    열람 경계는 `/api/fs/file`과 같은 fsguard를 쓴다(루트·거부 목록·숨김 디렉토리).
+    승격 필요 — 공유 링크 발급과 같은 급의 동작이다."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    path = body.get("path") if isinstance(body, dict) else None
+    if not isinstance(path, str) or not path.strip():
+        return JSONResponse({"error": "bad_path"}, status_code=400)
+    try:
+        p = fsguard.resolve_under_roots(path)
+    except fsguard.FsDenied as e:
+        return JSONResponse({"error": "denied", "reason": e.reason}, status_code=403)
+    try:
+        item = await asyncio.to_thread(_snapshot_into_store, p)
+    except _ImportError as e:
+        return JSONResponse(e.body, status_code=e.status)
+    except OSError as e:
+        logger.warning(f"share-import 실패: {e}")
+        return JSONResponse({"error": "write failed"}, status_code=500)
+    return {"ok": True, "item": _file_public(item)}
+
 
 
 @elevated_router.post("/api/files/{file_id}/share")

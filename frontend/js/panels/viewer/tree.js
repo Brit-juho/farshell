@@ -9,7 +9,7 @@
 import { openPanel } from '../panel.js';
 import { icon } from '../../ui/icons.js';
 import { vtFetch } from '../../core/api.js';
-import { _viewerState, _setMsg, _ICON_CHEVRON, _ICON_INSERT } from './state.js';
+import { _viewerState, _setMsg, _ICON_CHEVRON, _ICON_INSERT, _shareFile } from './state.js';
 import { _loadRecent, _pushRecent, _clearRecent } from './recent.js';
 import { _fmtSize } from './file.js';
 import { watchPath, coalesce } from '../../shell/fs-watch.js';
@@ -143,6 +143,14 @@ export async function showTree(opts = {}) {
       insert.innerHTML = _ICON_INSERT;
       insert.addEventListener('click', (e) => { e.stopPropagation(); insertToTerminal(path); });
       row.appendChild(insert);
+      const share = document.createElement('button');
+      share.type = 'button';
+      share.className = 'vt-icon-btn xs vt-vw-row-insert vt-vw-row-share';
+      share.title = t('공유 링크 만들기');
+      share.setAttribute('aria-label', t('공유 링크 만들기'));
+      share.innerHTML = icon('link', 12);
+      share.addEventListener('click', (e) => { e.stopPropagation(); _shareFile(path); });
+      row.appendChild(share);
     }
 
     row.addEventListener('click', () => {
