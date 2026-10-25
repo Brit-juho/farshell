@@ -36,12 +36,17 @@ class Collector:
         self.sources = {}
         self.last_inventory = 0
         self.last_discovery = 0
+        self.last_auto_archive = 0
 
     def step(self):
         now = time.monotonic()
         if now - self.last_inventory >= 5:
             inventory.reconcile()
             self.last_inventory = now
+        if now - self.last_auto_archive >= 3600:
+            from session_catalog import db as catalog_db
+            catalog_db.auto_archive()
+            self.last_auto_archive = now
         with database(write=True) as db:
             sources = [dict(r) for r in db.execute('SELECT * FROM sources WHERE enabled=1')]
         updated, failures, limited = 0, 0, False

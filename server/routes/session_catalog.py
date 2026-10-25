@@ -89,6 +89,24 @@ async def edit_session(session_id: str, request: Request):
     return await _call(db.edit_session, session_id, body.get('revision'), title=body.get('title'), archived=body.get('archived'))
 
 
+@router.delete('/api/session-catalog/sessions/{session_id}')
+async def delete_session(session_id: str, request: Request):
+    try:
+        body = await _body(request, {'revision'})
+    except db.Refused as error:
+        return JSONResponse({'error': error.code}, status_code=error.status)
+    return await _call(db.delete_session, session_id, body.get('revision'))
+
+
+@router.post('/api/session-catalog/settings')
+async def catalog_settings(request: Request):
+    try:
+        body = await _body(request, {'auto_archive_days'})
+    except db.Refused as error:
+        return JSONResponse({'error': error.code}, status_code=error.status)
+    return await _call(db.configure, body)
+
+
 @router.post('/api/session-catalog/sessions/{session_id}/stop')
 async def stop_session(session_id: str, request: Request):
     try:

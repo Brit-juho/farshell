@@ -142,6 +142,7 @@ export const SCHEMA = {
   'ui.hud.layout': { type: 'str', def: '', scope: 'device' },
   'rail.order':   { type: 'str', def: '' },
   'rail.lineage': { type: 'str', def: '', scope: 'device' },
+  'rail.view':    { type: 'str', def: '', scope: 'device' },
 };
 
 function _scopeOf(key) {

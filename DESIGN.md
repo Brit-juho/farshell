@@ -399,8 +399,10 @@ connected-screens icon; it doesn't touch the tabs themselves).
 
 A row is **one tmux session** (docs/ref/terminal.md 「Rail」). Two zones: **개입 필요**
 (waiting sessions; collapsible, and switchable on/off in 레일 설정 like VS Code's
-Open Editors) and **세션** (every session, **name order only** — no urgency sorting, so
-rows never jump). There are no 묶음 / 묶지 않음 / 잠자는 중 zones. A row is three lines:
+Open Editors) and **실행 중** (every other running session, **name order only** — no urgency
+sorting, so rows never jump). Below them, **최근 종료** (collapsible, newest N) and a one-line
+**보관함** that swaps the list in place; ended rows use the same three lines with a dashed state
+circle and a dimmed name, and only 이어서 시작 is accent-filled. There are no 묶음 / 묶지 않음 / 잠자는 중 zones. A row is three lines:
 
 1. **State icon** (`stateIcon`; a ring around it = unseen) · agent mark · name (edited in place).
    A small window icon at the line's end = "open in this browser tab".

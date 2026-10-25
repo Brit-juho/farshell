@@ -154,6 +154,28 @@
    ⚠ screens 레이어라 components의 `.vt-srow-name`보다 이긴다 — 활성 행(열림이 전제)은 이
    규칙에 안 걸리게 `.closed`로만 건다. */
 .vt-srow.closed .vt-srow-name { color:var(--color-sub); }
+/* 종료된 세션 행 — 실행 중 행과 같은 3줄 구조. 점선 원과 흐린 이름이 "지금 안 돌아간다"를 말하고,
+   강조색 채움은 주 동작(이어서 시작) 하나뿐이다. */
+.vt-catalog-stopped.is-busy { opacity:.6; }
+.vt-srow.stopped { cursor:pointer; }
+.vt-srow.stopped .vt-srow-state { color:var(--color-sub); }
+.vt-srow.stopped .vt-srow-name { color:var(--color-sub); }
+.vt-srow.stopped[data-tone="warn"] .vt-srow-kw { color:var(--color-st-waiting); }
+.vt-srow.stopped[data-tone="bad"] .vt-srow-kw { color:var(--color-st-error); }
+.vt-srow.stopped > .vt-btn { flex:none; margin-right:calc(var(--spacing) * 1); }
+/* 「N개 더 보기」·보관함 진입·보관함 머리의 되돌아가기 — 글자 버튼, 테두리 없음. */
+.vt-catalog-more-link, .vt-catalog-archive-link, .vt-catalog-back {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5);
+  border:0; background:none; color:var(--color-sub); font:inherit; font-size:var(--fs-xs); cursor:pointer; text-align:left;
+}
+.vt-catalog-more-link { width:100%; padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5); }
+.vt-catalog-archive-link { width:100%; padding:calc(var(--spacing) * 2.5); margin-top:calc(var(--spacing) * 1); border-top:1px solid var(--color-line); }
+.vt-catalog-archive-link:hover, .vt-catalog-more-link:hover, .vt-catalog-back:hover { color:var(--color-txt); }
+.vt-catalog-archive-label { flex:1; }
+.vt-catalog-archive-mark, .vt-catalog-archive-go { display:inline-flex; }
+.vt-catalog-archive-head { gap:calc(var(--spacing) * 2); }
+.vt-catalog-archive-head .vt-wgrail-group-label { flex:1; }
+.vt-catalog-back { padding:0; }
 .vt-wgrail-empty {
   padding:calc(var(--spacing) * 4) calc(var(--spacing) * 2.5); text-align:center;
   color:var(--sub); font:400 var(--fs-sm) var(--mono); display:flex; flex-direction:column; gap:calc(var(--spacing) * 2); align-items:center;

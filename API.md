@@ -633,9 +633,11 @@ Original CLI disappearance never deletes archived copies. Starting a CLI returns
 
 | Method | Path | Contract |
 |---|---|---|
-| GET | `/api/session-catalog` | Repository/workspace/session snapshot; `limit` 1–200, ID `after`, `archived`. Includes physical runtime identities and stored relationships. |
+| GET | `/api/session-catalog` | Repository/workspace/session snapshot; `limit` 1–200, ID `after`, `archived`. Includes physical runtime identities and stored relationships, `archived_count` and `auto_archive_days`. |
 | GET | `/api/session-catalog/sessions/{session_id}` | Logical session, execution history and linked conversations. |
 | POST | `/api/session-catalog/sessions/{session_id}` | Revision-checked title/archive change. Running or unconfirmed runtimes cannot be archived. |
+| DELETE | `/api/session-catalog/sessions/{session_id}` | Body `{revision}`. Removes the session record only (conversations and raw copies stay). `409 archive_first` unless archived, `409 runtime_must_stop`, `409 session_has_relations` for delegation parents/children, `409 revision_conflict`. |
+| POST | `/api/session-catalog/settings` | `{auto_archive_days}` 0–3650 (0 = off, default 30). The server archives — never deletes — sessions whose last runtime ended that many days ago; running and unconfirmed sessions are skipped. |
 | POST | `/api/session-catalog/sessions/{session_id}/stop` | Recorded `operation_id`, explicit `force:true`; stops the exact physical tmux session. Independent child sessions continue. |
 | POST | `/api/session-catalog/reconcile` | Re-observes tmux immediately and updates runtime states; `{complete}` is false when the observation was partial (rows stay `unknown`). |
 | POST | `/api/session-catalog/sessions/{session_id}/resume` | Recorded `operation_id`; restarts a stopped session under the same session ID by resuming its latest verified, non-child conversation (same checks and result as the conversation `resume`). `409 session_archived`, `409 no_resumable_conversation`. Snapshot rows carry `resume_conversation_id` (null when not resumable); session detail carries `resumable:{ok,reason}`. |
