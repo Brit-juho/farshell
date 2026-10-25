@@ -201,6 +201,18 @@ def page(limit, after=None):
     return limit
 
 
+# 세션에 이어 붙일 대화: 이 세션의 실행에 묶였고, 식별자가 검증됐고, 에이전트 내부 자식이 아닌 것 중 최신.
+_RESUME_PICK = """SELECT c.id FROM conversations c JOIN conversation_executions e ON e.conversation_id=c.id
+  JOIN runtimes r ON r.id=e.runtime_id WHERE r.session_id={sid} AND c.deleted IS NULL
+  AND c.parent_native_id IS NULL AND json_extract(c.detail,'$.native_identity_verified')
+  ORDER BY c.updated DESC,c.id LIMIT 1"""
+
+
+def resume_target(db, sid):
+    row = db.execute(_RESUME_PICK.format(sid="?"), (sid,)).fetchone()
+    return row[0] if row else None
+
+
 def snapshot(*, limit=50, after=None, archived=False):
     page(limit, after)
     import repo_store
@@ -208,7 +220,8 @@ def snapshot(*, limit=50, after=None, archived=False):
     with database(write=True) as db:
         host = host_id(db)
         rows = db.execute("""SELECT s.*,r.id AS runtime_id,r.name AS tmux_name,r.state AS execution_state,
-          r.epoch,r.physical_key,r.detail AS runtime_detail,r.ended,r.observed
+          r.epoch,r.physical_key,r.detail AS runtime_detail,r.ended,r.observed,
+          CASE WHEN r.ended IS NOT NULL AND s.archived IS NULL THEN (""" + _RESUME_PICK.format(sid="s.id") + """) END AS resume_conversation_id
           FROM sessions s LEFT JOIN runtimes r ON r.id=(SELECT id FROM runtimes WHERE session_id=s.id
           ORDER BY started DESC,id DESC LIMIT 1) WHERE s.deleted IS NULL AND (s.archived IS NOT NULL)=?
           AND (? IS NULL OR s.id>?) ORDER BY s.id LIMIT ?""", (int(archived), after, after, limit + 1)).fetchall()
@@ -251,6 +264,14 @@ def session_detail(sid):
         row = db.execute('SELECT * FROM sessions WHERE id=? AND deleted IS NULL', (sid,)).fetchone()
         if not row:
             raise Refused('session_not_found',404)
-        return {'session':dict(row), 'runtimes':[dict(r) for r in db.execute('SELECT * FROM runtimes WHERE session_id=? ORDER BY started DESC LIMIT 50',(sid,))],
-                'conversations':[dict(r) for r in db.execute('SELECT DISTINCT c.id,c.title,c.native_id,c.provider FROM conversations c JOIN conversation_executions e ON e.conversation_id=c.id JOIN runtimes r ON r.id=e.runtime_id WHERE r.session_id=? AND c.deleted IS NULL',(sid,))],
+        runtimes = [dict(r) for r in db.execute('SELECT * FROM runtimes WHERE session_id=? ORDER BY started DESC LIMIT 50',(sid,))]
+        if row['archived'] is not None:
+            reason = 'archived'
+        elif any(r['ended'] is None for r in runtimes):
+            reason = 'running'
+        else:
+            reason = None if resume_target(db, sid) else 'no_conversation'
+        return {'session':dict(row), 'runtimes':runtimes,
+                'resumable':{'ok':reason is None,'reason':reason},
+                'conversations':[dict(r) for r in db.execute('SELECT DISTINCT c.id,c.title,c.native_id,c.provider,c.updated FROM conversations c JOIN conversation_executions e ON e.conversation_id=c.id JOIN runtimes r ON r.id=e.runtime_id WHERE r.session_id=? AND c.deleted IS NULL ORDER BY c.updated DESC',(sid,))],
                 'relations':[dict(r) for r in db.execute('SELECT * FROM relations WHERE parent_id=? OR child_id=?',(sid,sid))]}
