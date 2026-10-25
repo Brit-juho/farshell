@@ -12,7 +12,7 @@ import zstandard
 import fsguard
 import store_lock
 import tmux_runner
-from .db import database, directory, identifier, uid, encode, changed, host_id, Refused
+from .db import database, directory, identifier, uid, encode, changed, host_id, resume_target, Refused
 from . import inventory
 
 
@@ -118,6 +118,28 @@ def resume(cid, opid, *, sid=None):
         result.update(runtime_id=rid, native_verified=False)
         _finish(opid, 'started_unverified', result)
         return {'operation_id': opid, 'state': 'started_unverified', **result}
+
+
+def resume_session(sid, opid):
+    """Restart a stopped session by resuming its latest verified conversation under the same session id."""
+    identifier(sid)
+    identifier(opid)
+    with database() as db:
+        retry = db.execute('SELECT * FROM operations WHERE id=?', (opid,)).fetchone()
+        if retry:
+            if retry['kind'] != 'resume' or retry['resource'] != sid:
+                raise Refused('idempotency_conflict')
+            cid = json.loads(retry['result']).get('conversation_id')
+        else:
+            row = db.execute('SELECT archived FROM sessions WHERE id=? AND deleted IS NULL', (sid,)).fetchone()
+            if not row:
+                raise Refused('session_not_found', 404)
+            if row['archived'] is not None:
+                raise Refused('session_archived')
+            cid = resume_target(db, sid)
+            if not cid:
+                raise Refused('no_resumable_conversation')
+    return resume(cid, opid, sid=sid)
 
 
 def _exists(root, relative, provider,native_id=None):

@@ -17,6 +17,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Compact HUD reset times and chip spacing; show only usage in GPU chips.
 
 ### Added
+- Resume a stopped session from the session list: `POST /api/session-catalog/sessions/{id}/resume` restarts it under the same session ID from its latest verified conversation, and `POST /api/session-catalog/reconcile` re-observes tmux on demand. Stopped rows now show a primary "이어서 시작" action with rename/archive in a ⋯ menu, execution states are spelled out (종료됨 · 아직 실행 전 · 연결 확인 중 · 상태 확인 필요 · 과거 기록), and past records with no linked conversation can be archived in one step. The session record dialog is regrouped (actions, linked conversations, delegation, run history).
 - Share a file from the 파일 tab or any file viewer (row/header link button): `POST /api/fs/share-import` (elevated) copies the file into the file store as a snapshot and opens the share-link dialog for it. Same browse boundary as `/api/fs/file`; reuses the snapshot while source path, size and mtime are unchanged.
 
 ### Changed

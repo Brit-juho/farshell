@@ -678,3 +678,45 @@ def test_small_budget_compressed_projection_does_not_stall_on_large_valid_line(p
     assert _exists(str(root), str(path.relative_to(root)), 'codex', 'large-compressed')
     assert detail['manifests'][0]['state'] == 'saved'
     assert archive.capture(source,str(path.relative_to(root)),max_bytes=worker.CAPTURE_BYTES) is False
+
+
+def _stopped_session(home, *, verified=True, parent=None, archived=False):
+    from session_catalog.db import database
+    with database(write=True) as db:
+        db.execute("INSERT INTO sessions(id,host,title,origin,created,updated,archived) VALUES('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','h','작업','local',1,1,?)", (5 if archived else None,))
+        db.execute("INSERT INTO runtimes VALUES('eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','e','k','fsh-old','stopped',1,2,2,'{}')")
+        db.execute("INSERT INTO conversations(id,host,provider,scope,native_id,title,cwd,parent_native_id,created,updated,detail) VALUES('cccccccccccccccccccccccccccccccc','h','claude','l','n1','t',?,?,1,1,?)",
+                   (str(home), parent, json.dumps({'native_identity_verified': verified})))
+        db.execute("INSERT INTO conversations(id,host,provider,scope,native_id,title,cwd,created,updated,detail) VALUES('dddddddddddddddddddddddddddddddd','h','claude','l','n2','t',?,1,9,?)",
+                   (str(home), json.dumps({'native_identity_verified': True})))
+        for c in ('cccccccccccccccccccccccccccccccc', 'dddddddddddddddddddddddddddddddd'):
+            db.execute("INSERT INTO conversation_executions VALUES(?,'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee','p',1)", (c,))
+
+
+def test_stopped_session_exposes_latest_verified_resume_target(private_history):
+    from session_catalog import db
+    _stopped_session(private_history)
+    row = db.snapshot()['sessions'][0]
+    assert row['resume_conversation_id'] == 'dddddddddddddddddddddddddddddddd'
+    detail = db.session_detail('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    assert detail['resumable'] == {'ok': True, 'reason': None}
+    assert [c['id'] for c in detail['conversations']] == ['dddddddddddddddddddddddddddddddd', 'cccccccccccccccccccccccccccccccc']
+
+
+def test_archived_session_is_not_resumable(private_history):
+    from session_catalog import db, lifecycle
+    _stopped_session(private_history, archived=True)
+    assert db.snapshot(archived=True)['sessions'][0]['resume_conversation_id'] is None
+    assert db.session_detail('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')['resumable'] == {'ok': False, 'reason': 'archived'}
+    with pytest.raises(db.Refused, match='session_archived'):
+        lifecycle.resume_session('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '11111111111111111111111111111111')
+
+
+def test_resume_session_without_conversation_is_refused(private_history):
+    from session_catalog import db, lifecycle
+    with db.database(write=True) as conn:
+        conn.execute("INSERT INTO sessions(id,host,title,origin,created,updated) VALUES('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','h','x','local',1,1)")
+    with pytest.raises(db.Refused, match='no_resumable_conversation'):
+        lifecycle.resume_session('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', '22222222222222222222222222222222')
+    with pytest.raises(db.Refused, match='session_not_found'):
+        lifecycle.resume_session('ffffffffffffffffffffffffffffffff', '33333333333333333333333333333333')

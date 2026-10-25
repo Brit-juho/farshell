@@ -98,6 +98,21 @@ async def stop_session(session_id: str, request: Request):
     return await _call(lifecycle.stop, session_id, body.get('operation_id'), force=body.get('force'))
 
 
+@router.post('/api/session-catalog/reconcile')
+async def reconcile_catalog():
+    """Re-observe tmux now instead of waiting for the background worker (used by "다시 확인")."""
+    return await _call(lambda: {'complete': bool(inventory.reconcile()['complete'])})
+
+
+@router.post('/api/session-catalog/sessions/{session_id}/resume')
+async def resume_session(session_id: str, request: Request):
+    try:
+        body = await _body(request, {'operation_id'})
+    except db.Refused as error:
+        return JSONResponse({'error': error.code}, status_code=error.status)
+    return await _call(lifecycle.resume_session, session_id, body.get('operation_id'))
+
+
 @router.post('/api/session-history/conversations/{conversation_id}')
 async def edit_conversation(conversation_id: str, request: Request):
     try:
