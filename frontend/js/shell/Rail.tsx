@@ -13,8 +13,8 @@ import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'so
 import { render, Portal } from 'solid-js/web';
 import { t } from '../core/i18n.js';
 import {
-  buildRailLists, groupSessionRows, compactRailRows, rowMenuItems, rowSummaryDetails, runRowMenu, defaultRailCollapsed,
-  ATTENTION_COLLAPSED_KEY, ORDER_KEY, LINEAGE_KEY, encodeOrder, encodeLineagePrefs,
+  buildRailLists, splitRunning, groupSessionRows, compactRailRows, rowMenuItems, rowSummaryDetails, runRowMenu, defaultRailCollapsed,
+  ATTENTION_COLLAPSED_KEY, ORDER_KEY, LINEAGE_KEY, VIEW_KEY, encodeOrder, encodeLineagePrefs, encodeRailView,
   buildSessionTree, kidsProgress, moveInOrder, stepInOrder,
   type SessionRow, type RailSort, type TreeEntry,
 } from './rail-data.js';
@@ -32,7 +32,8 @@ import { createRailPrefs } from './rail-prefs.js';
 import { REGULAR_MAX } from '../layout/breakpoints.js';
 import { Menu, Row, type MenuItem } from './RailRow.js';
 import { NativeChildren } from './NativeChildren.js';
-import { CatalogTree, type CatalogSnapshot } from './CatalogTree.js';
+import { CatalogTree, RecentEnded, ArchiveEntry, ArchiveList, type CatalogSnapshot } from './CatalogTree.js';
+import { renameSession as renameCatalogSession } from '../history/session-actions.js';
 import { historyApi } from '../history/api.js';
 import { icon } from '../ui/icons.js';
 
@@ -114,13 +115,14 @@ function Rail(props: { deps: RailDeps }) {
   // 레일의 세션 행은 그 맥의 API(중계)에서 오므로 로컬과 같은 경로로 그린다.
   const viewHostId = String((window as any).vtRelayHost?.() || LOCAL_HOST);
   const [catalog, setCatalog] = createSignal<CatalogSnapshot | null>(null);
-  const [catalogMode, setCatalogMode] = createSignal('repositories');
+  // 보관함을 열면 같은 자리의 목록이 보관된 세션으로 바뀐다(탭은 없다).
+  const [archiveOpen, setArchiveOpen] = createSignal(false);
   let catalogRequest = 0;
   const refreshCatalog = async (more = false) => {
     if (viewHostId !== LOCAL_HOST) return;
     const request = ++catalogRequest;
     try {
-      const params = new URLSearchParams({ archived: String(catalogMode() === 'archive') });
+      const params = new URLSearchParams({ archived: String(archiveOpen()), limit: '200' });
       if (more && catalog()?.next) params.set('after', catalog()!.next!);
       const data = await historyApi('/api/session-catalog?' + params);
       if (request !== catalogRequest) return;
@@ -245,7 +247,9 @@ function Rail(props: { deps: RailDeps }) {
   });
 
   const lists = createMemo(() => buildRailLists(rows(), prefs()));
-  const viewGroups = createMemo(() => { layoutVersion(); return groupSessionRows(lists().sessions,
+  // 「실행 중」 구역 = 세션 전체에서 개입 필요에 올라간 행을 뺀 것(같은 세션이 두 번 나오지 않는다).
+  const running = createMemo(() => splitRunning(lists()));
+  const viewGroups = createMemo(() => { layoutVersion(); return groupSessionRows(running(),
     (window as any).getSessionViewGroups?.() || (window as any).getTabGroups?.() || []); });
   const compact = createMemo(() => compactRailRows(lists()));
 
@@ -344,7 +348,22 @@ function Rail(props: { deps: RailDeps }) {
     const trimmed = editingSessionValue().trim();
     if (!trimmed) return;
     await (window as any).renameSession?.(sessionId, trimmed);
+    // 카탈로그 제목도 같이 바꾼다 — 이름 변경은 어느 행에서든 같은 결과여야 한다.
+    const row = rows().find((r) => r.sessionId === sessionId);
+    const linked = row && catalogOf(row);
+    if (linked && linked.title !== trimmed) {
+      try { await historyApi(`/api/session-catalog/sessions/${linked.id}`, { body: { title: trimmed, revision: linked.revision } }); void refreshCatalog(); } catch (_) { /* 웹 세션 이름은 이미 바뀌었다 */ }
+    }
   };
+
+  // 실행 중 행 ↔ 카탈로그 세션. 행 객체는 그대로 두고(폴링마다 새로 만들면 DOM이 뜯긴다) 찾아서 쓴다.
+  const catalogOf = (row: SessionRow): any | undefined =>
+    catalog()?.sessions.find((s) => s.ended == null && s.runtime_id && s.tmux_name === row.tmuxName && s.physical_key === row.physicalKey);
+  const openRecordOf = async (session: any) => {
+    const { openSessionRecord } = await import('../history/session-record.js');
+    openSessionRecord(session.id, () => { void refreshCatalog(); });
+  };
+  const recentCollapsedToggle = () => setPref(VIEW_KEY, encodeRailView({ ...prefs().view, recentCollapsed: !prefs().view.recentCollapsed }));
 
   // 폭 720px 이상 + 터치일 때만 「오른쪽에 나란히/아래에 열기」가 들어간다(term/session-actions.js).
   const splitAvailable = (row: SessionRow): boolean => !!(window as any).vtTouchSplitAvailable?.(row.sessionId || null);
@@ -356,9 +375,15 @@ function Rail(props: { deps: RailDeps }) {
     const order = topOrder();
     const at = isTop(row) && prefs().sort === 'manual' ? order.indexOf(rowKey(row)) : -1;
     const move = at < 0 ? undefined : { up: at > 0, down: at < order.length - 1 };
-    return rowMenuItems(row, { split: splitAvailable(row), share: viewHostId === LOCAL_HOST, move }).map((it) => ({
+    const linked = catalogOf(row);
+    return rowMenuItems(row, { split: splitAvailable(row), share: viewHostId === LOCAL_HOST, move, record: !!linked }).map((it) => ({
       label: it.label, detail: it.detail, danger: it.danger,
-      run: () => runRowMenu(it.id, row, window, () => startRenameSession(row.sessionId, row.name), (d) => moveRow(row, d)),
+      run: () => {
+        if (it.id === 'record' && linked) { void openRecordOf(linked); return; }
+        // 열려 있지 않은 행은 웹 세션이 없어 제자리 편집이 안 된다 — 카탈로그 제목만 바꾼다.
+        if (it.id === 'rename' && linked && !row.sessionId) { void renameCatalogSession(linked).then(() => refreshCatalog()); return; }
+        runRowMenu(it.id, row, window, () => startRenameSession(row.sessionId, row.name), (d) => moveRow(row, d));
+      },
     }));
   };
 
@@ -492,8 +517,9 @@ function Rail(props: { deps: RailDeps }) {
           </Show>
         </Show>
         <div class="vt-wgrail-head-actions">
-          <button type="button" class="vt-icon-btn sm" aria-label={t('대화 보관함')} data-tip={t('대화 보관함')}
-            onClick={() => { void import('../history/panel.js').then(m => m.openHistory()); }} innerHTML={icon('search', 14, 2)} />
+          <button type="button" class="vt-icon-btn sm" aria-label={t('대화 기록')} data-tip={t('대화 기록')} data-tip-sub={t('보관된 대화 검색 · 복구')}
+            data-tip-side="bottom"
+            onClick={() => { void import('../history/panel.js').then(m => m.openHistory()); }} innerHTML={icon('list', 14, 2)} />
           {/* 레일 설정 — 개입 필요 표시, 만든 곳별 표시, 저장소 표시. 접히지 않은 때만 그린다.
               머리글 줄은 구역 유무와 무관하게 항상 있어 설정에 늘 닿는다. */}
           <Show when={!collapsed()}>
@@ -502,7 +528,7 @@ function Rail(props: { deps: RailDeps }) {
               class="vt-icon-btn sm vt-wgrail-settings"
               aria-label={t('레일 설정')}
               data-tip={t('레일 설정')}
-              data-tip-sub={hiddenCount() ? t('저장소 {n}개 숨김', { n: hiddenCount() }) : t('개입 필요 · 만든 곳 · 저장소')}
+              data-tip-sub={hiddenCount() ? t('저장소 {n}개 숨김', { n: hiddenCount() }) : t('구역 · 종료 세션 · 저장소')}
               data-tip-side="bottom"
               onClick={() => setRepoSheet(true)}
               innerHTML={icon('settings', 13, 2)}
@@ -524,14 +550,6 @@ function Rail(props: { deps: RailDeps }) {
         </div>
       </div>
       <div class="vt-wgrail-body">
-        <Show when={!collapsed() && catalog()}>
-          <div class="vt-catalog-switch" role="group" aria-label={t('세션 탐색 방식')}>
-            <button type="button" aria-pressed={catalogMode() === 'repositories'} onClick={() => { setCatalogMode('repositories'); void refreshCatalog(); }}>{t('저장소')}</button>
-            <button type="button" aria-pressed={catalogMode() === 'all'} onClick={() => { setCatalogMode('all'); void refreshCatalog(); }}>{t('전체 세션')}</button>
-            <button type="button" aria-pressed={catalogMode() === 'archive'} onClick={() => { setCatalogMode('archive'); void refreshCatalog(); }}>{t('세션 보관함')}</button>
-          </div>
-        </Show>
-
         <Show when={rows().length === 0 && !catalog()?.sessions.length && !collapsed() && !viewHostOffline()}>
           <div class="vt-wgrail-empty">
             {t('아직 세션이 없습니다.')}
@@ -562,7 +580,7 @@ function Rail(props: { deps: RailDeps }) {
             </For>
           </Show>
           {/* 개입 필요 — waiting 세션만. 접을 수 있고(제목 줄 전체가 토글), 레일 설정에서 끈다. */}
-          <Show when={!collapsed() && lists().attention.length > 0}>
+          <Show when={!collapsed() && !archiveOpen() && lists().attention.length > 0}>
             <Show when={!collapsed()}>
               <div class="vt-wgrail-group-head">
                 <button
@@ -582,15 +600,21 @@ function Rail(props: { deps: RailDeps }) {
               <For each={lists().attention}>{(row) => renderRow(row)}</For>
             </Show>
           </Show>
-          <Show when={!collapsed() && catalog()}>
-            {data => <CatalogTree flat={catalogMode() === 'all'} data={data()} live={lists().sessions} renderLive={renderRow} onChanged={() => { void refreshCatalog(); }} onMore={() => { void refreshCatalog(true); }} />}
+          {/* 보관함 — 탭이 아니라 같은 자리의 목록 전환이다. 위의 「최근 종료」 아래 한 줄이 여기로 온다. */}
+          <Show when={!collapsed() && archiveOpen() && catalog()}>
+            {data => <ArchiveList data={data()} onBack={() => { setArchiveOpen(false); void refreshCatalog(); }}
+              onChanged={() => { void refreshCatalog(); }} onMore={() => { void refreshCatalog(true); }} />}
           </Show>
-          <Show when={!collapsed() && lists().sessions.length > 0 && !catalog()}>
+          {/* 「저장소별로 묶기」(레일 설정) — 저장소 → 작업 공간 보기. 정렬·위임 트리는 이 보기에서 쓰지 않는다. */}
+          <Show when={!collapsed() && !archiveOpen() && prefs().view.byRepo && catalog()}>
+            {data => <CatalogTree data={data()} live={lists().sessions} renderLive={renderRow} onChanged={() => { void refreshCatalog(); }} onMore={() => { void refreshCatalog(true); }} />}
+          </Show>
+          <Show when={!collapsed() && !archiveOpen() && !(prefs().view.byRepo && catalog()) && running().length > 0}>
             <Show when={!collapsed()}>
               <div class="vt-wgrail-group-head">
                 <span class="vt-wgrail-group-label">
-                  {t('세션')}
-                  <span class="vt-wgrail-group-count">{lists().sessions.length}</span>
+                  {t('실행 중')}
+                  <span class="vt-wgrail-group-count">{running().length}</span>
                 </span>
                 <div class="vt-rail-sort" role="radiogroup" aria-label={t('세션 정렬')}>
                   <For each={[['name', t('이름순')], ['manual', t('수동')]] as [RailSort, string][]}>{([id, label]) => (
@@ -664,6 +688,16 @@ function Rail(props: { deps: RailDeps }) {
                 </Show>
               </div>
             )}</For>
+          </Show>
+          {/* 최근 종료 → 보관함 한 줄. 카탈로그가 없는 옛 호스트는 위의 실행 중 목록만 남는다. */}
+          <Show when={!collapsed() && !archiveOpen() && catalog()}>
+            {data => <>
+              <Show when={!prefs().view.byRepo}>
+                <RecentEnded data={data()} live={lists().sessions} count={prefs().view.recent} collapsed={prefs().view.recentCollapsed}
+                  onToggle={recentCollapsedToggle} onChanged={() => { void refreshCatalog(); }} />
+              </Show>
+              <ArchiveEntry count={data().archived_count ?? 0} onOpen={() => { setArchiveOpen(true); void refreshCatalog(); }} />
+            </>}
           </Show>
           <Show when={rows().length > lists().sessions.length && !collapsed()}>
             <div class="vt-wgrail-note">{t('레일 설정에서 {n}개를 숨겼습니다.', { n: rows().length - lists().sessions.length })}</div>

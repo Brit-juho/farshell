@@ -1,4 +1,4 @@
-import { promptDialog } from '../core/dialog.js';
+import { promptDialog, confirmDialog } from '../core/dialog.js';
 import { t } from '../core/i18n.js';
 import { historyApi, operationId } from './api.js';
 
@@ -27,6 +27,25 @@ export async function setSessionArchived(session, archived, { signal } = {}) {
   await historyApi(`/api/session-catalog/sessions/${session.id}`, { body: { archived, revision: session.revision }, signal });
   notify();
   return true;
+}
+
+/** 보관함의 세션 기록 한 줄을 지운다. 대화 보관함의 대화와 원본 사본은 남는다. 확인창에서 취소하면 false. */
+export async function deleteSession(session, { signal } = {}) {
+  if (!await confirmDialog(t('「{title}」 세션 기록을 삭제합니다. 대화 보관함의 대화와 원본은 남습니다. 계속할까요?', { title: session.title }))) return false;
+  await historyApi(`/api/session-catalog/sessions/${session.id}`, { method: 'DELETE', body: { revision: session.revision }, signal });
+  notify();
+  return true;
+}
+
+/** 확인 없이 차례로 삭제한다(호출한 쪽이 이미 한 번 확인했다). 막힌 것(위임 관계·다른 화면에서 바뀜)은 건너뛰고 센다. */
+export async function deleteMany(sessions) {
+  let done = 0, failed = 0;
+  for (const session of sessions) {
+    try { await historyApi(`/api/session-catalog/sessions/${session.id}`, { method: 'DELETE', body: { revision: session.revision } }); done++; }
+    catch (_) { failed++; }
+  }
+  notify();
+  return { done, failed };
 }
 
 /** "3분 전", "2시간 전" 같은 상대 시각. 입력은 초 단위 epoch. */

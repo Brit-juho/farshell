@@ -8,6 +8,8 @@ export function historyError(code) {
     identity_migration_changed: t('실행이나 권한이 변경됐습니다. 다시 검토하세요'),
     identity_unverified: t('현재 실행 확인 불가'),
     runtime_must_stop: t('실행을 종료한 뒤 보관할 수 있습니다'),
+    archive_first: t('먼저 보관한 뒤 삭제할 수 있습니다'),
+    session_has_relations: t('위임 관계가 있는 세션은 삭제할 수 없습니다'),
     revision_conflict: t('다른 화면에서 변경됐습니다. 새로고침 후 다시 시도하세요'),
     source_unavailable: t('등록한 원본 경로를 확인할 수 없습니다'),
     native_source_missing: t('CLI 원본이 없습니다. 보관본에서 먼저 복구하세요'),
@@ -33,9 +35,10 @@ export function historyError(code) {
   })[code] || t('작업을 완료하지 못했습니다');
 }
 
-export async function historyApi(path, { body, signal, elevated = true } = {}) {
+/** @param {string} path @param {{ body?: any, signal?: AbortSignal, elevated?: boolean, method?: string }} [options] @returns {Promise<any>} */
+export async function historyApi(path, { body, signal, elevated = true, method } = {}) {
   const run = async () => {
-    const response = await fetch(path, { method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin',
+    const response = await fetch(path, { method: method || (body === undefined ? 'GET' : 'POST'), credentials: 'same-origin',
       headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body), signal });
     const value = await response.json();

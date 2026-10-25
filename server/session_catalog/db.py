@@ -231,6 +231,8 @@ def snapshot(*, limit=50, after=None, archived=False):
                 "sessions": [{**dict(r), "runtime_detail": json.loads(r["runtime_detail"] or "{}"),
                               "execution_state": r["execution_state"] or "never_started"} for r in rows[:limit]],
                 "relations": [dict(r) for r in db.execute("SELECT * FROM relations WHERE kind='delegation' LIMIT 5000")],
+                "auto_archive_days": auto_archive_days(db),
+                "archived_count": db.execute("SELECT COUNT(*) FROM sessions WHERE deleted IS NULL AND archived IS NOT NULL").fetchone()[0],
                 "next": rows[limit-1]["id"] if len(rows)>limit else None}
 
 
@@ -256,6 +258,69 @@ def edit_session(sid, revision, *, title=None, archived=None):
                     (time.time() if archived else None) if archived is not None else row["archived"], time.time(), sid))
         changed(db, "session", sid)
         return dict(db.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone())
+
+
+AUTO_ARCHIVE_DEFAULT_DAYS = 30
+AUTO_ARCHIVE_MAX_DAYS = 3650
+
+
+def auto_archive_days(db):
+    value = setting(db, "auto_archive_days", AUTO_ARCHIVE_DEFAULT_DAYS)
+    return value if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= AUTO_ARCHIVE_MAX_DAYS else AUTO_ARCHIVE_DEFAULT_DAYS
+
+
+def configure(values):
+    """레일 설정에서 바꾸는 서버 쪽 값. 0이면 자동 보관을 끈다."""
+    days = values.get("auto_archive_days")
+    if isinstance(days, bool) or not isinstance(days, int) or not 0 <= days <= AUTO_ARCHIVE_MAX_DAYS:
+        raise Refused("invalid_auto_archive_days", 400)
+    with database(write=True) as db:
+        set_setting(db, "auto_archive_days", days)
+        return {"auto_archive_days": days}
+
+
+def auto_archive(now=None):
+    """종료 후 N일이 지난 세션을 보관한다. 삭제하지 않는다.
+
+    실행 중(ended IS NULL)이거나 상태를 확인하지 못한 세션, 실행 기록이 없는 세션은 건드리지 않는다.
+    """
+    now = time.time() if now is None else now
+    with database(write=True) as db:
+        days = auto_archive_days(db)
+        if not days:
+            return 0
+        cutoff = now - days * 86400
+        rows = db.execute("""SELECT s.id FROM sessions s WHERE s.deleted IS NULL AND s.archived IS NULL
+          AND EXISTS(SELECT 1 FROM runtimes r WHERE r.session_id=s.id)
+          AND NOT EXISTS(SELECT 1 FROM runtimes r WHERE r.session_id=s.id AND r.ended IS NULL)
+          AND (SELECT MAX(r.ended) FROM runtimes r WHERE r.session_id=s.id)<?""", (cutoff,)).fetchall()
+        for row in rows:
+            db.execute("UPDATE sessions SET archived=?,updated=?,revision=revision+1 WHERE id=?", (now, now, row["id"]))
+            changed(db, "session", row["id"])
+        return len(rows)
+
+
+def delete_session(sid, revision):
+    """보관함의 세션 기록 한 줄만 지운다. 대화와 원본 사본은 남는다. 위임 관계가 있으면 막는다."""
+    identifier(sid)
+    if isinstance(revision, bool) or not isinstance(revision, int) or revision < 1:
+        raise Refused("invalid_revision", 400)
+    with database(write=True) as db:
+        row = db.execute("SELECT * FROM sessions WHERE id=? AND deleted IS NULL", (sid,)).fetchone()
+        if not row:
+            raise Refused("session_not_found", 404)
+        if row["revision"] != revision:
+            raise Refused("revision_conflict")
+        if row["archived"] is None:
+            raise Refused("archive_first")
+        if db.execute("SELECT 1 FROM runtimes WHERE session_id=? AND ended IS NULL", (sid,)).fetchone():
+            raise Refused("runtime_must_stop")
+        if db.execute("SELECT 1 FROM relations WHERE parent_id=? OR child_id=?", (sid, sid)).fetchone():
+            raise Refused("session_has_relations")
+        now = time.time()
+        db.execute("UPDATE sessions SET deleted=?,updated=?,revision=revision+1 WHERE id=?", (now, now, sid))
+        changed(db, "session", sid)
+        return {"id": sid, "deleted": now}
 
 
 def session_detail(sid):

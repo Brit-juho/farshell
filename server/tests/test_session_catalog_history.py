@@ -905,3 +905,67 @@ def test_projection_budget_boundary_does_not_omit_a_supported_record(private_his
     assert messages==texts
     assert info['manifests'][0]['state']=='saved'
     assert info['manifests'][0]['projection']['omitted_reasons']==[]
+
+
+def _ended_session(inventory, db, name='n', key='$1:1', epoch='e'):
+    inventory.reconcile({'complete': True, 'epoch': epoch, 'sessions': [{'physical_key': key, 'name': name,
+                         'origin': 'external', 'cwd': '', 'panes': []}]})
+    inventory.reconcile({'complete': True, 'epoch': epoch, 'sessions': []})
+    return next(r for r in db.snapshot()['sessions'] if r['tmux_name'] == name)
+
+
+def test_auto_archive_only_old_stopped_sessions_and_never_deletes(private_history):
+    import time
+    from session_catalog import inventory, db
+    old = _ended_session(inventory, db, 'old', '$1:1')
+    inventory.reconcile({'complete': True, 'epoch': 'e', 'sessions': [{'physical_key': '$2:2', 'name': 'live',
+                         'origin': 'external', 'cwd': '', 'panes': []}]})
+    assert db.auto_archive() == 0  # 방금 종료 — 아직 기간 안
+    assert db.auto_archive(time.time() + 31 * 86400) == 1  # live는 실행 중이라 제외
+    sessions = {r['tmux_name']: r for r in db.snapshot()['sessions']}
+    assert 'old' not in sessions and 'live' in sessions
+    archived = db.snapshot(archived=True)['sessions']
+    assert [r['id'] for r in archived] == [old['id']]
+    db.configure({'auto_archive_days': 0})
+    assert db.auto_archive(time.time() + 999 * 86400) == 0
+    assert db.snapshot()['auto_archive_days'] == 0
+
+
+def test_auto_archive_skips_unknown_state(private_history):
+    import time
+    from session_catalog import inventory, db
+    inventory.reconcile({'complete': True, 'epoch': 'e', 'sessions': [{'physical_key': '$1:1', 'name': 'n',
+                         'origin': 'external', 'cwd': '', 'panes': []}]})
+    inventory.reconcile({'complete': False, 'epoch': 'e', 'sessions': []})
+    assert db.auto_archive(time.time() + 365 * 86400) == 0
+
+
+def test_configure_rejects_bad_days(private_history):
+    from session_catalog import db
+    for bad in (-1, True, '30', 10 ** 6, None):
+        with pytest.raises(db.Refused, match='invalid_auto_archive_days'):
+            db.configure({'auto_archive_days': bad})
+
+
+def test_delete_requires_archive_and_keeps_conversations(private_history):
+    from session_catalog import inventory, db
+    s = _ended_session(inventory, db)
+    with pytest.raises(db.Refused, match='archive_first'):
+        db.delete_session(s['id'], s['revision'])
+    row = db.edit_session(s['id'], s['revision'], archived=True)
+    with pytest.raises(db.Refused, match='revision_conflict'):
+        db.delete_session(s['id'], s['revision'])
+    db.delete_session(s['id'], row['revision'])
+    assert db.snapshot(archived=True)['sessions'] == []
+    with pytest.raises(db.Refused, match='session_not_found'):
+        db.delete_session(s['id'], row['revision'] + 1)
+
+
+def test_delete_blocked_by_delegation_relation(private_history):
+    from session_catalog import inventory, db
+    s = _ended_session(inventory, db)
+    row = db.edit_session(s['id'], s['revision'], archived=True)
+    with db.database(write=True) as conn:
+        conn.execute("INSERT INTO relations VALUES('r1','delegation',?,'other','src','{}')", (s['id'],))
+    with pytest.raises(db.Refused, match='session_has_relations'):
+        db.delete_session(s['id'], row['revision'])

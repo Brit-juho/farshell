@@ -2,7 +2,7 @@ import { openDialog, confirmDialog } from '../core/dialog.js';
 import { closePanel } from '../panels/panel.js';
 import { t } from '../core/i18n.js';
 import { historyApi, operationId } from './api.js';
-import { resumeSession, renameSession, setSessionArchived, recheckCatalog, executionStatus, agoLabel } from './session-actions.js';
+import { resumeSession, renameSession, setSessionArchived, deleteSession, recheckCatalog, executionStatus, agoLabel } from './session-actions.js';
 
 const RESUME_BLOCKED = () => ({
   archived: t('보관된 세션은 보관을 해제한 뒤 시작할 수 있습니다'),
@@ -92,13 +92,22 @@ export function openSessionRecord(id, changed = () => {}) {
       if (data.runtimes.length) {
         const section = el('section', null, 'vt-record-section'); section.append(el('h4', t('실행 이력')));
         for (const runtime of data.runtimes) {
-          section.append(el('p', `${runtime.ended ? t('실행 종료됨') : t('실행 중')} · ${new Date(runtime.started * 1000).toLocaleString()} · ${runtime.name}`, 'vt-history-meta'));
+          // 상태·시각이 한 줄, tmux 이름은 아래 줄 — 한 줄에 몰아 쓰면 좁은 창에서 이름이 시각을 밀어낸다.
+          const item = el('div', null, 'vt-record-run');
+          item.append(el('span', `${runtime.ended ? t('실행 종료됨') : t('실행 중')} · ${new Date(runtime.started * 1000).toLocaleString()}`), el('small', runtime.name));
+          section.append(item);
         }
         body.append(section);
       }
       const foot = el('footer', null, 'vt-record-foot');
       foot.append(button(t('이름 변경'), () => renameSession(session, { signal: controller.signal })));
       if (!active && !session.archived) foot.append(button(t('세션 보관'), () => setSessionArchived(session, true, { signal: controller.signal })));
+      if (!active && session.archived) {
+        foot.append(button(t('삭제'), async () => {
+          if (!await deleteSession(session, { signal: controller.signal })) return false;
+          closePanel('vt-session-record'); changed(); return false;
+        }, { danger: true }));
+      }
       body.append(foot);
     } catch (error) { if (!controller.signal.aborted) message.textContent = error.message; }
   }

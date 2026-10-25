@@ -13,8 +13,9 @@ import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'so
 import { render } from 'solid-js/web';
 import { icon, stateIcon } from '../ui/icons.js';
 import { t } from '../core/i18n.js';
-import { CatalogTree, type CatalogSnapshot } from './CatalogTree.js';
+import { CatalogTree, RecentEnded, ArchiveEntry, ArchiveList, type CatalogSnapshot } from './CatalogTree.js';
 import { historyApi } from '../history/api.js';
+import { renameSession as renameCatalogSession } from '../history/session-actions.js';
 import { agentMark } from './agent-mark.js';
 // core 청크의 공유 인스턴스로 연결된다(shell.js가 core.js에서 import — 복제되지 않는다).
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
@@ -23,8 +24,8 @@ import {
   safeFetch, collectSessionRows, syncAgentsFromServer, createDiffWatcher, useLayoutVersion, type RailDeps,
 } from './rail-fetch.js';
 import {
-  buildRailLists, groupSessionRows, rowMenuItems, rowSummaryDetails, runRowMenu, diffLabel, type SessionRow,
-  buildSessionTree, kidsProgress, stepInOrder, ORDER_KEY, LINEAGE_KEY, encodeOrder, encodeLineagePrefs, type TreeEntry,
+  buildRailLists, splitRunning, groupSessionRows, rowMenuItems, rowSummaryDetails, runRowMenu, diffLabel, type SessionRow,
+  buildSessionTree, kidsProgress, stepInOrder, ORDER_KEY, LINEAGE_KEY, VIEW_KEY, encodeOrder, encodeLineagePrefs, encodeRailView, type TreeEntry,
 } from './rail-data.js';
 import { createRailPrefs } from './rail-prefs.js';
 import { NativeChip } from './NativeChildren.js';
@@ -250,13 +251,13 @@ function Fleet(props: { deps: FleetDeps }) {
   // (core/host-route.js, Rail.tsx와 같은 규칙). 세션 목록은 그 맥의 API에서 온다.
   const viewHostId = String((window as any).vtRelayHost?.() || LOCAL_HOST);
   const [catalog, setCatalog] = createSignal<CatalogSnapshot | null>(null);
-  const [catalogMode, setCatalogMode] = createSignal('repositories');
+  const [archiveOpen, setArchiveOpen] = createSignal(false);
   let catalogRequest = 0;
   const refreshCatalog = async (more = false) => {
     if (viewHostId !== LOCAL_HOST) return;
     const request = ++catalogRequest;
     try {
-      const params = new URLSearchParams({ archived: String(catalogMode() === 'archive') });
+      const params = new URLSearchParams({ archived: String(archiveOpen()), limit: '200' });
       if (more && catalog()?.next) params.set('after', catalog()!.next!);
       const value = await historyApi('/api/session-catalog?' + params);
       if (request !== catalogRequest) return;
@@ -333,7 +334,16 @@ function Fleet(props: { deps: FleetDeps }) {
     });
   });
   const lists = createMemo(() => buildRailLists(rows(), prefs()));
-  const viewGroups = createMemo(() => { layoutVersion(); return groupSessionRows(lists().sessions,
+  // 「실행 중」 = 세션 전체에서 「개입 필요」에 올라간 행을 뺀 것(레일과 같은 규칙).
+  const running = createMemo(() => splitRunning(lists()));
+  // 실행 중 행 ↔ 카탈로그 세션(레일과 같은 규칙) — 메뉴의 작업 기록·이름 변경이 쓴다.
+  const catalogOf = (row: SessionRow): any | undefined =>
+    catalog()?.sessions.find((x) => x.ended == null && x.runtime_id && x.tmux_name === row.tmuxName && x.physical_key === row.physicalKey);
+  const openRecordOf = async (session: any) => {
+    const { openSessionRecord } = await import('../history/session-record.js');
+    openSessionRecord(session.id, () => { void refreshCatalog(); });
+  };
+  const viewGroups = createMemo(() => { layoutVersion(); return groupSessionRows(running(),
     (window as any).getSessionViewGroups?.() || (window as any).getTabGroups?.() || []); });
   // 레일과 같은 계보 트리·정렬(rail-data.ts). 폰에는 드래그가 없어 수동 순서는 행 시트의 위로·아래로 이동으로 바꾼다.
   const fleetTree = createMemo<TreeEntry<SessionRow>[]>(() =>
@@ -470,19 +480,6 @@ function Fleet(props: { deps: FleetDeps }) {
       <Show when={viewHostOffline()}>
         <div class="vt-fleet-empty">{hostDetail(activeHost()!)}</div>
       </Show>
-      <Show when={catalog()}>
-        <div class="vt-catalog-switch" role="group" aria-label={t('세션 탐색 방식')}>
-          <For each={[['repositories', t('저장소')], ['all', t('전체 세션')], ['archive', t('세션 보관함')]]}>{([key,label]) =>
-            <button type="button" aria-pressed={catalogMode() === key} onClick={() => { setCatalogMode(key); void refreshCatalog(); }}>{label}</button>}
-          </For>
-        </div>
-      </Show>
-      <Show when={catalog()}>
-        {data => <CatalogTree flat={catalogMode() === 'all'} data={data()} live={lists().sessions}
-          renderLive={row => <Row row={row} onOpen={() => { void openRow(row); }} onLongPress={() => openMenu(row)}
-            onAnswer={() => Promise.resolve()} onSeen={() => seenRow(row)} />}
-          onChanged={() => { void refreshCatalog(); }} onMore={() => { void refreshCatalog(true); }} />}
-      </Show>
       <Show when={rows().length === 0 && !catalog()?.sessions.length && !viewHostOffline()}>
         <div class="vt-fleet-empty">
           <div>{t('세션이 없습니다')}</div>
@@ -493,7 +490,7 @@ function Fleet(props: { deps: FleetDeps }) {
         </div>
       </Show>
       {/* 개입 필요 — waiting 세션. 인라인 승인 버튼은 여기 행에만 붙는다. */}
-      <Show when={lists().attention.length > 0}>
+      <Show when={!archiveOpen() && lists().attention.length > 0}>
         <div class="vt-fleet-group">
           <div class="vt-fleet-group-head">{t('개입 필요')} · {lists().attention.length}</div>
           <For each={lists().attention}>
@@ -510,10 +507,10 @@ function Fleet(props: { deps: FleetDeps }) {
           </For>
         </div>
       </Show>
-      <Show when={lists().sessions.length > 0 && !catalog()}>
+      <Show when={!archiveOpen() && !(prefs().view.byRepo && catalog()) && running().length > 0}>
         <div class="vt-fleet-group">
           <div class="vt-fleet-group-head vt-fleet-group-head-sort">
-            <span>{t('세션')} · {lists().sessions.length}</span>
+            <span>{t('실행 중')} · {running().length}</span>
             {/* 폰에도 정렬 전환이 있어야 수동 순서를 이 화면에서 시작할 수 있다(레일 머리와 같은 값) — 순서는 행 시트의 위로·아래로 이동. */}
             <div class="vt-rail-sort" role="radiogroup" aria-label={t('세션 정렬')}>
               <For each={[['name', t('이름순')], ['manual', t('수동')]] as ['name' | 'manual', string][]}>{([id, label]) => (
@@ -578,6 +575,24 @@ function Fleet(props: { deps: FleetDeps }) {
           </Show>
         </div>
       </Show>
+      {/* 종료 세션 — 레일과 같은 구역(CatalogTree.tsx): 최근 종료 → 보관함 한 줄, 보관함을 열면 같은 자리가 보관 목록으로 바뀐다. */}
+      <Show when={!viewHostOffline() && catalog()}>
+        {data => <Show when={archiveOpen()} fallback={<>
+          <Show when={prefs().view.byRepo} fallback={
+            <RecentEnded data={data()} live={lists().sessions} count={prefs().view.recent} collapsed={prefs().view.recentCollapsed}
+              onToggle={() => setPref(VIEW_KEY, encodeRailView({ ...prefs().view, recentCollapsed: !prefs().view.recentCollapsed }))}
+              onChanged={() => { void refreshCatalog(); }} />}>
+            <CatalogTree data={data()} live={lists().sessions}
+              renderLive={row => <Row row={row} onOpen={() => { void openRow(row); }} onLongPress={() => openMenu(row)}
+                onAnswer={() => Promise.resolve()} onSeen={() => seenRow(row)} />}
+              onChanged={() => { void refreshCatalog(); }} onMore={() => { void refreshCatalog(true); }} />
+          </Show>
+          <ArchiveEntry count={data().archived_count ?? 0} onOpen={() => { setArchiveOpen(true); void refreshCatalog(); }} />
+        </>}>
+          <ArchiveList data={data()} onBack={() => { setArchiveOpen(false); void refreshCatalog(); }}
+            onChanged={() => { void refreshCatalog(); }} onMore={() => { void refreshCatalog(true); }} />
+        </Show>}
+      </Show>
       {/* Rail.tsx 하단의 "+ 새 세션"과 같은 액션(session.add-menu) — 목록이
           비었을 때는 위 empty-state 버튼 둘이 이미 같은 일을 하므로 겹치지
           않게 뺀다. */}
@@ -632,14 +647,15 @@ function Fleet(props: { deps: FleetDeps }) {
                       바뀌고, 나머지는 시트를 닫은 뒤 실행한다 — 콜백에서 m()을 다시 읽으면 이미
                       정리된 뒤라 값은 진입 시점에 한 번 꺼내 쓴다(2026-09-23 실측). */}
                   <div class="vt-session-list">
-                    <For each={rowMenuItems(row, { split: !!(window as any).vtTouchSplitAvailable?.(row.sessionId || null), share: viewHostId === LOCAL_HOST, move: fleetMoveOpts(row) })}>
+                    <For each={rowMenuItems(row, { split: !!(window as any).vtTouchSplitAvailable?.(row.sessionId || null), share: viewHostId === LOCAL_HOST, move: fleetMoveOpts(row), record: !!catalogOf(row) })}>
                       {(it) => (
                         <button
                           type="button"
                           class="vt-menu-item"
                           classList={{ danger: !!it.danger }}
                           onClick={() => {
-                            if (it.id === 'rename') { startRename(); return; }
+                            if (it.id === 'record') { const linked = catalogOf(row); if (linked) runMenuAction(() => { void openRecordOf(linked); }); return; }
+                            if (it.id === 'rename') { if (row.sessionId) startRename(); else { const linked = catalogOf(row); if (linked) runMenuAction(() => { void renameCatalogSession(linked).then(() => refreshCatalog()); }); } return; }
                             runMenuAction(() => runRowMenu(it.id, row, window, () => {}, (d) => fleetMove(row, d)));
                           }}
                         >

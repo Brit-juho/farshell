@@ -403,3 +403,52 @@ test('runRowMenu — 분할 항목은 vtSplitOpenSession(방향, 세션)을 부�
     ['vtSplitOpenSession', 'bottom', { sessionId: null, tmuxName: 't1' }],
   ]);
 });
+
+// ── 상태 구역형(실행 중 · 최근 종료 · 보관함) ──────────────────────────────
+
+test('splitRunning — 개입 필요에 올라간 행은 실행 중에서 빠진다(중복 없음)', async () => {
+  const { buildRailLists, splitRunning } = await mod();
+  const rows = [row({ name: 'a', status: 'idle' }), row({ name: 'b', status: 'waiting' }), row({ name: 'c', status: 'working' })];
+  const lists = buildRailLists(rows, PREFS);
+  assert.deepStrictEqual(names(splitRunning(lists)), ['a', 'c']);
+  assert.deepStrictEqual(names(lists.attention), ['b']);
+});
+
+test('splitRunning — 개입 필요 구역을 끄면 waiting도 실행 중에 남는다', async () => {
+  const { buildRailLists, splitRunning } = await mod();
+  const lists = buildRailLists([row({ name: 'a', status: 'waiting' })], { ...PREFS, attentionShow: false });
+  assert.deepStrictEqual(names(splitRunning(lists)), ['a']);
+});
+
+test('pickRecentEnded — 보관된 것과 실행 중인 것을 빼고 최근 순으로 N개', async () => {
+  const { pickRecentEnded } = await mod();
+  const s = [
+    { id: 'old', ended: 10 }, { id: 'new', ended: 30 }, { id: 'mid', ended: 20 },
+    { id: 'arch', ended: 40, archived: 1 }, { id: 'live', ended: null, observed: 50 },
+    { id: 'unknown', ended: null, observed: 5 },
+  ];
+  const r = pickRecentEnded(s, (x) => x.id === 'live', 2);
+  assert.deepStrictEqual(r.shown.map((x) => x.id), ['new', 'mid']);
+  assert.strictEqual(r.total, 4); // old, new, mid, unknown — 상태 확인이 필요한 세션도 구역에 남는다
+});
+
+test('parseRailView — 값이 없거나 깨지면 기본값(5개, 묶지 않음, 펼침)', async () => {
+  const { parseRailView, encodeRailView } = await mod();
+  const d = { byRepo: false, recent: 5, recentCollapsed: false };
+  assert.deepStrictEqual({ ...parseRailView('') }, d);
+  assert.deepStrictEqual({ ...parseRailView('{') }, d);
+  assert.deepStrictEqual({ ...parseRailView(undefined) }, d);
+  for (const bad of [0, -1, 51, 2.5, '9x', null]) assert.strictEqual(parseRailView(JSON.stringify({ recent: bad })).recent, 5);
+  const v = { byRepo: true, recent: 12, recentCollapsed: true };
+  assert.deepStrictEqual({ ...parseRailView(encodeRailView(v)) }, v);
+});
+
+test('rowMenuItems — 카탈로그에 이어진 행만 작업 기록을 갖고, 열려 있지 않아도 이름 변경이 된다', async () => {
+  const { rowMenuItems } = await mod();
+  const ids = (r, o) => Array.from(rowMenuItems(r, o), (i) => i.id);
+  assert.ok(!ids({ open: false, tmuxName: 'x' }, {}).includes('record'));
+  assert.ok(!ids({ open: false, tmuxName: 'x' }, {}).includes('rename'));
+  const linked = ids({ open: false, tmuxName: 'x' }, { record: true });
+  assert.ok(linked.includes('record') && linked.includes('rename'));
+  assert.strictEqual(ids({ open: true, tmuxName: 'x' }, { record: true }).filter((i) => i === 'rename').length, 1);
+});

@@ -15,6 +15,7 @@ export {
   worktreeIconName, diffLabel, KIND_LABEL, BADGE_LABEL, normalizeShare, shareSentence, groupSessionRows,
   normalizeLineage, lineageLabel, buildSessionTree, kidsProgress, moveInOrder, stepInOrder, parseNameList,
   ORDER_KEY, LINEAGE_KEY, encodeOrder, encodeLineagePrefs,
+  splitRunning, pickRecentEnded, parseRailView, encodeRailView,
 } from '../../js/shell/rail-data.js';
 export { collectSessionRows } from '../../js/shell/rail-fetch.js';
 export { mountRow, mountMenu, mountNativeChildren } from './row-mount.js';
