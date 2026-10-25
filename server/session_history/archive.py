@@ -146,37 +146,45 @@ def _prefix(stream, count):
     return digest, remaining
 
 
-def _projection(stream, provider, begin, end, *, seek=True):
+def _projection(stream, provider, begin, end, *, seek=True, checkpoint=None):
     if seek:
         stream.seek(begin)
-    out, offset, partial = [], begin, False
+    checkpoint = checkpoint if checkpoint is not None else {}
+    reasons = set(checkpoint.get('omitted_reasons', []))
+    skipping = checkpoint.get('skipping_oversized', False)
+    out, offset, incomplete = [], begin, False
     while offset < end:
         line = stream.readline(min(MAX_LINE + 1, end - offset))
         if not line:
             break
+        if skipping:
+            offset += len(line)
+            skipping = not line.endswith(b'\n')
+            continue
+        if len(line) > MAX_LINE:
+            # Commit a bounded skip, including its continuation state. Never parse
+            # an oversized record's tail as an independent JSON record after restart.
+            reasons.add('oversized_record')
+            offset += len(line)
+            skipping = not line.endswith(b'\n')
+            continue
         if not line.endswith(b'\n'):
-            if len(line) > MAX_LINE:
-                partial = True
-                # Oversized records stay in raw; skip only through a known newline.
-                while offset + len(line) < end and not line.endswith(b'\n'):
-                    offset += len(line)
-                    line = stream.readline(min(MAX_LINE + 1, end - offset))
-                if not line.endswith(b'\n'):
-                    break
-            else:
-                break
+            incomplete = True
+            break
         position = offset
         offset += len(line)
         try:
             row = json.loads(line)
             projected = adapters.records(row, provider)
         except (ValueError, UnicodeError, RecursionError, TypeError):
-            partial = True
+            reasons.add('invalid_record')
             continue
         for index, (role, body) in enumerate(projected):
             if body:
                 out.append((position * 1000000 + index, role, body))
-    return out, offset, partial
+    checkpoint.update(version=1, skipping_oversized=skipping, omitted_reasons=sorted(reasons),
+                      incomplete_record=incomplete)
+    return out, offset, bool(reasons or skipping or incomplete)
 
 
 def capture(source, relative, *, max_bytes=PASS_BYTES):
@@ -197,8 +205,10 @@ def capture(source, relative, *, max_bytes=PASS_BYTES):
     with fsguard.open_subagent_file(path) as file:
         st = os.fstat(file.fileno())
         fingerprint = encode([st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns])
+        legacy_incomplete = (previous and prior and previous['state'] == 'partial'
+                             and prior.get('projection', {}).get('version') != 1)
         if (previous and previous['fingerprint'] == fingerprint and previous['offset'] == st.st_size
-                and previous['state'] != 'indexing'):
+                and previous['state'] != 'indexing' and not legacy_incomplete):
             with database(write=True) as db:
                 db.execute("UPDATE source_files SET seen=? WHERE id=?", (time.time(), previous['id']))
             return False
@@ -206,11 +216,18 @@ def capture(source, relative, *, max_bytes=PASS_BYTES):
         begin = 0
         digest, chunks = hashlib.sha256(), []
         generation, parsed = uid(), 0
+        projection = {}
         if previous and prior and previous['offset'] <= st.st_size:
             check, remaining = _prefix(file, previous['offset'])
             if not remaining and check.hexdigest() == prior_manifest['digest']:
                 begin, parsed = previous['offset'], previous['parsed_offset']
                 generation, digest, chunks = previous['generation'], check, list(prior['chunks'])
+                if prior.get('projection', {}).get('version') == 1:
+                    projection = dict(prior['projection'])
+                elif previous['state'] in ('partial', 'indexing'):
+                    # Re-read legacy incomplete projections once. Stable message
+                    # positions/IDs make this safe even after earlier messages exist.
+                    parsed = 0
         file.seek(0)
         probe = file.read(min(1024 * 1024, st.st_size))
         compressed = relative.endswith('.zst')
@@ -241,6 +258,7 @@ def capture(source, relative, *, max_bytes=PASS_BYTES):
             chunks.append({'digest': put_chunk(data), 'size': len(data)})
             digest.update(data)
         indexing = False
+        projection_failed = False
         if capture_kind != 'transcript':
             messages, next_parsed, partial = [], end, False
         elif compressed:
@@ -261,13 +279,20 @@ def capture(source, relative, *, max_bytes=PASS_BYTES):
                             raise Refused('compressed_source_changed')
                         if parsed >= 1024**3:
                             partial = True
+                            projection.setdefault('omitted_reasons', []).append('projection_limit')
                         else:
-                            messages, next_parsed, partial = _projection(reader, source['provider'], parsed, parsed + max(max_bytes, MAX_LINE + 1), seek=False)
+                            messages, next_parsed, partial = _projection(reader, source['provider'], parsed, parsed + max(max_bytes, MAX_LINE + 1), seek=False, checkpoint=projection)
                             indexing = bool(reader.peek(1))
                 except Exception:
                     partial = True
+                    projection_failed = True
+                    projection.setdefault('omitted_reasons', []).append('decode_error')
         else:
-            messages, next_parsed, partial = _projection(file, source['provider'], parsed, end)
+            projection_end = min(end, parsed + max(max_bytes, MAX_LINE + 1))
+            messages, next_parsed, partial = _projection(file, source['provider'], parsed, projection_end, checkpoint=projection)
+            indexing = next_parsed < end and (projection_end < end or not projection.get('incomplete_record'))
+        projection.update(version=1, omitted_reasons=sorted(set(projection.get('omitted_reasons', []))))
+        projection['state'] = 'indexing' if indexing else ('partial' if partial else 'complete')
         after = os.fstat(file.fileno())
         if (st.st_dev, st.st_ino) != (after.st_dev, after.st_ino) or after.st_size < end:
             raise Refused('source_changed')
@@ -277,7 +302,8 @@ def capture(source, relative, *, max_bytes=PASS_BYTES):
     now = time.time()
     manifest = {'version': 1, 'provider': source['provider'], 'scope': source['scope'], 'relative_path': relative,
                 'chunks': chunks, 'compressed': compressed, 'length': end,
-                'state': 'indexing' if indexing else ('partial' if end < st.st_size or partial else 'saved'),
+                'state': 'indexing' if indexing else ('partial' if end < st.st_size or changing or projection_failed or projection.get('incomplete_record') else 'saved'),
+                'raw_complete': end == st.st_size and not changing, 'projection': projection,
                 'native_identity_verified': identity is not None and capture_kind == 'transcript' and not changing, 'dependency_complete': False, 'capture_kind':capture_kind}
     with database(write=True) as db:
         current_source = db.execute('SELECT enabled,revision FROM sources WHERE id=?', (source['id'],)).fetchone()
@@ -307,8 +333,8 @@ def capture(source, relative, *, max_bytes=PASS_BYTES):
                        (cid, host, source['provider'], source['scope'], native, (identity or {}).get('title', ''),
                         (identity or {}).get('cwd', ''), (identity or {}).get('parent_native_id'), now, now))
         if previous:
-            current = db.execute('SELECT generation,offset FROM source_files WHERE id=?', (previous['id'],)).fetchone()
-            if not current or tuple(current) != (previous['generation'], previous['offset']):
+            current = db.execute('SELECT generation,offset,parsed_offset FROM source_files WHERE id=?', (previous['id'],)).fetchone()
+            if not current or tuple(current) != (previous['generation'], previous['offset'], previous['parsed_offset']):
                 raise Refused('capture_conflict')
             fid = previous['id']
             db.execute('UPDATE source_files SET conversation_id=?,generation=?,offset=?,parsed_offset=?,fingerprint=?,state=?,seen=? WHERE id=?',

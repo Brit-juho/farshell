@@ -54,6 +54,10 @@ A replacement session with the same name does not automatically receive the prev
 Replication can be restricted to registered source scopes; local archive and incoming replica limits are separate.
 Rotating a replication key retains earlier keys so in-flight records can still be decrypted.
 
+Records exceeding 1 MiB are omitted from searchable content, while their raw bytes are preserved.
+Archive status separately reports complete raw preservation and reasons for omitted search content.
+Supported messages following oversized records remain indexed, with progress preserved across collector restarts.
+
 History deletion can target this host alone or include approved replicas.
 It hides records and prevents reimport; it does not erase CLI source files or archived raw bytes on disk.
 Deletion acknowledgments from offline replica hosts complete after reconnection.

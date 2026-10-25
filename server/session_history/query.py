@@ -83,7 +83,7 @@ def detail(cid, *, after=0, limit=100):
         manifests = [dict(m) for m in db.execute('SELECT id,file_id,generation,length,digest,created,detail FROM manifests WHERE conversation_id=? ORDER BY created DESC LIMIT 200', (cid,))]
         for manifest in manifests:
             info = json.loads(manifest.pop('detail'))
-            manifest.update({k: info.get(k) for k in ('state', 'compressed', 'native_identity_verified', 'dependency_complete', 'relative_path')})
+            manifest.update({k: info.get(k) for k in ('state', 'compressed', 'native_identity_verified', 'dependency_complete', 'relative_path', 'raw_complete', 'projection')})
         children = [dict(r) for r in db.execute('SELECT id,provider,native_id,title,state FROM conversations WHERE host=? AND provider=? AND scope=? AND parent_native_id=? AND deleted IS NULL LIMIT 200',
                                                (row['host'], row['provider'], row['scope'], row['native_id']))]
         native = [{**dict(r), 'detail':json.loads(r['detail'])} for r in db.execute('SELECT * FROM native_children WHERE conversation_id=? ORDER BY observed DESC LIMIT 200',(cid,))]
@@ -184,6 +184,9 @@ def replica_detail(origin, cid, *, after=0, limit=100):
             raise Refused('conversation_not_found',404)
         messages=db.execute("SELECT rowid,payload FROM replicas WHERE origin=? AND kind='message' AND json_extract(payload,'$.conversation_id')=? AND rowid>? ORDER BY rowid LIMIT ?",(origin,cid,after,limit+1)).fetchall()
         manifests=[json.loads(r[0]) for r in db.execute("SELECT payload FROM replicas WHERE origin=? AND kind='manifest' AND json_extract(payload,'$.conversation_id')=? ORDER BY received DESC LIMIT 200",(origin,cid))]
+        for manifest in manifests:
+            info = json.loads(manifest['detail'])
+            manifest.update({k: info.get(k) for k in ('state', 'raw_complete', 'projection')})
         batch, size = [], 0
         for record in messages[:limit]:
             value = {**json.loads(record['payload']),'cursor':record['rowid']}

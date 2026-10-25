@@ -169,8 +169,20 @@ def _replicate_once(stop=None):
         peers = [r['peer'] for r in db.execute("SELECT peer FROM replication_grants WHERE enabled=1 AND direction='send'")]
     failed=[]
     for peer in peers:
+        deadline = time.monotonic() + 1
+        def should_stop():
+            return bool(stop and stop.is_set())
         try:
-            replication.push_once(peer,max_chunks=2,should_stop=stop.is_set if stop else lambda:False)
+            # Drain small events without sleeping two seconds after each one.
+            # In-flight requests keep their timeout and shared byte-rate budget.
+            for _ in range(32):
+                # A slow first request must still be allowed to advance this
+                # bounded event. The scheduling deadline applies between events;
+                # only explicit cancellation interrupts an event already begun.
+                if should_stop() or time.monotonic() >= deadline:
+                    break
+                if not replication.push_once(peer, max_chunks=2, should_stop=should_stop):
+                    break
         except Exception:
             failed.append(peer)
     with database(write=True) as db:

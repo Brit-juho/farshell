@@ -641,10 +641,10 @@ Original CLI disappearance never deletes archived copies. Starting a CLI returns
 | POST | `/api/session-catalog/sessions/{session_id}/resume` | Recorded `operation_id`; restarts a stopped session under the same session ID by resuming its latest verified, non-child conversation (same checks and result as the conversation `resume`). `409 session_archived`, `409 no_resumable_conversation`. Snapshot rows carry `resume_conversation_id` (null when not resumable); session detail carries `resumable:{ok,reason}`. |
 | GET | `/api/session-history` | Conversation list/search; provider, archive filter, bounded keyset pagination. |
 | GET | `/api/session-history/status` | Source registry, collection state, quota and replication checkpoints. |
-| GET | `/api/session-history/conversations/{conversation_id}` | Bounded normalized messages, raw manifest states and native children. |
+| GET | `/api/session-history/conversations/{conversation_id}` | Bounded normalized messages, raw manifest states and native children. Manifests expose `raw_complete` and `projection` (`state`, `omitted_reasons`, `skipping_oversized`, `incomplete_record`) separately from raw preservation state. |
 | POST | `/api/session-history/conversations/{conversation_id}` | Archive/unarchive or explicit deletion tombstone; `delete_scope` is `local` (default) or `replicas` (ACK-tracked remote tombstones, retained raw bytes). Active conversations are rejected. |
 | POST | `/api/session-history/conversations/{conversation_id}/resume` | Recorded `operation_id`, optional stopped logical `session_id`; explicit CLI launch without inherited execution grants. |
-| GET | `/api/session-history/replicas/{origin}/{conversation_id}` | Offline read-only copy, isolated by origin UUID. |
+| GET | `/api/session-history/replicas/{origin}/{conversation_id}` | Offline read-only copy, isolated by origin UUID; includes the same raw-completeness and projection metadata as local history. |
 | POST | `/api/session-history/preview/{action}` | Elevated `source`, `restore` or legacy execution `identity` preview; actor-bound expiring approval token. |
 | POST | `/api/session-history/apply/{action}` | Elevated one-use preview token application. |
 | POST | `/api/session-history/settings` | Elevated quota/source enable changes, source revision checked. |

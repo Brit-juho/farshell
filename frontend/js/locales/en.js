@@ -3,6 +3,12 @@
 // 원문을 고치면 여기 키도 같이 고친다 — scripts/check_i18n.py가 빠진 키와 남은 키를 잡는다.
 // 본문은 JSON이어야 한다(검사 스크립트와 서버가 json으로 읽는다).
 window.__VT_I18N = {
+  "1 MiB를 초과한 행": "Records exceeding 1 MiB",
+  "해석할 수 없는 행": "Invalid records",
+  "색인 크기 한도 초과": "Index size limit exceeded",
+  "압축 해제 실패": "Decompression failed",
+  "원본 전체 보존 · 검색 본문 일부 생략": "Full original preserved · some search content omitted",
+  "검색 본문 일부 생략": "Some search content omitted",
   "API endpoint: 비워 두면 현재 값 유지": "API endpoint: leave blank to keep the current value",
   "API 설정 변경 형식이 올바르지 않습니다": "Invalid API configuration change",
   "API 설정 제거": "Remove API configuration",
