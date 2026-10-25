@@ -126,6 +126,12 @@ export function openHistory(options = {}) {
       for (const manifest of data.manifests) {
         const row = node('div', 'vt-history-manifest');
         row.append(node('span', 'vt-history-meta', `${when(manifest.created)} · ${size(manifest.length)} · ${({saved:t('저장 완료'),indexing:t('색인 중'),partial:t('일부 저장'),source_missing:t('원본 없음')})[manifest.state] || t('검증된 복제본')}`));
+        if (manifest.projection?.omitted_reasons?.length) {
+          const reasons = {oversized_record:t('1 MiB를 초과한 행'),invalid_record:t('해석할 수 없는 행'),
+            projection_limit:t('색인 크기 한도 초과'),decode_error:t('압축 해제 실패')};
+          const label = manifest.raw_complete ? t('원본 전체 보존 · 검색 본문 일부 생략') : t('검색 본문 일부 생략');
+          row.append(node('span', 'vt-history-meta', `${label}: ${manifest.projection.omitted_reasons.map(reason => reasons[reason] || t('지원하지 않는 기록 형식')).join(', ')}`));
+        }
         row.append(button(t('원본 내보내기'), () => download(manifest.id, item.replica ? item.origin : null)));
         if (!item.replica) row.append(button(t('CLI 원본 복구'), async () => {
           const preview = await api('/api/session-history/preview/restore', { body: { manifest_id: manifest.id } });

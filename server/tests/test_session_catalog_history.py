@@ -720,3 +720,188 @@ def test_resume_session_without_conversation_is_refused(private_history):
         lifecycle.resume_session('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', '22222222222222222222222222222222')
     with pytest.raises(db.Refused, match='session_not_found'):
         lifecycle.resume_session('ffffffffffffffffffffffffffffffff', '33333333333333333333333333333333')
+
+
+@pytest.mark.parametrize('compressed', [False, True])
+def test_oversized_record_checkpoint_survives_restart_and_keeps_following_messages(private_history, compressed):
+    import importlib
+    import zstandard
+    from session_history import archive, query, worker
+    from session_catalog.db import database
+    root, folder, source = _source(private_history, 'codex')
+    fake = json.dumps({'type':'response_item','payload':{'type':'message','role':'assistant',
+                      'content':[{'type':'output_text','text':'not a separate record'}]}}).encode()
+    tail = json.dumps({'type':'response_item','payload':{'type':'message','role':'assistant',
+                      'content':[{'type':'output_text','text':'normal message after omitted record'}]}}).encode()
+    raw = b'{"type":"session_meta","payload":{"id":"oversized"}}\n' + b'x'*(archive.MAX_LINE*3+17) + fake + b'\n' + tail + b'\n'
+    path = folder/('oversized.jsonl.zst' if compressed else 'oversized.jsonl')
+    content = zstandard.ZstdCompressor().compress(raw) if compressed else raw
+    path.write_bytes(content)
+    checkpoints=[]
+    for _ in range(40):
+        # No parser state survives outside the serialized manifest.
+        archive = importlib.reload(archive)
+        archive.capture(source,str(path.relative_to(root)),max_bytes=worker.CAPTURE_BYTES)
+        with database() as db:
+            file = dict(db.execute('SELECT * FROM source_files').fetchone())
+            manifest = json.loads(db.execute('SELECT detail FROM manifests ORDER BY created DESC LIMIT 1').fetchone()[0])
+        checkpoints.append(manifest['projection']['skipping_oversized'])
+        if file['offset']==len(content) and file['state']!='indexing':
+            break
+    else:
+        pytest.fail('oversized record stalled the projection')
+    assert any(checkpoints), 'test must cross a persisted oversized-record skip'
+    assert manifest['state']=='saved' and manifest['raw_complete'] is True
+    assert manifest['projection']['state']=='partial'
+    assert manifest['projection']['omitted_reasons']==['oversized_record']
+    detail=query.detail(query.listing()['items'][0]['id'])
+    assert [m['body'] for m in detail['messages']]==['normal message after omitted record']
+    output=io.BytesIO();archive.restore_stream(query.manifest(detail['manifests'][0]['id']),output)
+    assert output.getvalue()==content
+    assert archive.capture(source,str(path.relative_to(root)),max_bytes=worker.CAPTURE_BYTES) is False
+
+
+def test_appended_oversized_tail_is_not_parsed_and_rewrite_resets_checkpoint(private_history):
+    from session_history import archive,query
+    root,folder,source=_source(private_history,'codex')
+    head=b'{"type":"session_meta","payload":{"id":"append-large"}}\n'
+    valid=b'{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"valid"}]}}\n'
+    path=folder/'append.jsonl';path.write_bytes(head+b'x'*(archive.MAX_LINE+1))
+    archive.capture(source,str(path.relative_to(root)))
+    with path.open('ab') as stream:stream.write(valid+valid)
+    archive.capture(source,str(path.relative_to(root)))
+    cid=query.listing()['items'][0]['id']
+    assert [r['body'] for r in query.detail(cid)['messages']]==['valid']
+    path.write_bytes(head+valid)
+    archive.capture(source,str(path.relative_to(root)))
+    manifest=query.detail(cid)['manifests'][0]
+    assert manifest['projection']['omitted_reasons']==[]
+    assert manifest['projection']['skipping_oversized'] is False
+
+
+def test_legacy_stalled_compressed_checkpoint_is_repaired(private_history):
+    import zstandard
+    from session_history import archive,query,worker
+    from session_catalog.db import database
+    root,folder,source=_source(private_history,'codex')
+    raw=b'{"type":"session_meta","payload":{"id":"legacy-stall"}}\n'+b'x'*(archive.MAX_LINE*2)+b'\n'
+    path=folder/'legacy.jsonl.zst';path.write_bytes(zstandard.ZstdCompressor().compress(raw))
+    archive.capture(source,str(path.relative_to(root)),max_bytes=worker.CAPTURE_BYTES)
+    with database(write=True) as db:
+        row=db.execute('SELECT id,detail FROM manifests').fetchone();detail=json.loads(row['detail']);detail.pop('projection')
+        db.execute('UPDATE manifests SET detail=? WHERE id=?',(json.dumps(detail),row['id']))
+        db.execute("UPDATE source_files SET parsed_offset=?,state='indexing'",(raw.index(b'\n')+1,))
+    for _ in range(8):
+        archive.capture(source,str(path.relative_to(root)),max_bytes=worker.CAPTURE_BYTES)
+        manifest=query.detail(query.listing()['items'][0]['id'])['manifests'][0]
+        if manifest['state']!='indexing':break
+    assert manifest['state']=='saved'
+    assert manifest['projection']['omitted_reasons']==['oversized_record']
+
+
+def _sending_peer(db,peer='sample-peer'):
+    db.execute('INSERT INTO replication_grants VALUES(?,?,?,1,1,1)',(peer,'send','public'))
+
+
+def test_replication_batch_drains_small_events_with_a_hard_count_limit(private_history,monkeypatch):
+    from session_history import replication,worker
+    from session_catalog.db import database
+    with database(write=True) as db:_sending_peer(db)
+    calls=[]
+    def push(peer,*,max_chunks,should_stop):
+        assert max_chunks==2 and not should_stop()
+        calls.append(peer);return True
+    monkeypatch.setattr(replication,'push_once',push)
+    worker._replicate_once()
+    assert len(calls)==32
+
+
+def test_replication_batch_yields_on_time_cancellation_and_empty_queue(private_history,monkeypatch):
+    import threading
+    from session_history import replication,worker
+    from session_catalog.db import database
+    with database(write=True) as db:_sending_peer(db)
+    clock=[0.0];calls=[]
+    monkeypatch.setattr(worker.time,'monotonic',lambda:clock[0])
+    def push(*args,**kwargs):
+        calls.append(1);clock[0]+=.4;return True
+    monkeypatch.setattr(replication,'push_once',push)
+    worker._replicate_once();assert len(calls)==3
+    calls.clear();stop=threading.Event()
+    def cancel(*args,**kwargs):calls.append(1);stop.set();return True
+    monkeypatch.setattr(replication,'push_once',cancel)
+    worker._replicate_once(stop);assert len(calls)==1
+    calls.clear()
+    def empty(*args,**kwargs):calls.append(1);return False
+    monkeypatch.setattr(replication,'push_once',empty)
+    worker._replicate_once();assert len(calls)==1
+
+
+def test_replication_failure_does_not_prevent_other_peers(private_history,monkeypatch):
+    from session_history import replication,worker
+    from session_catalog.db import database,Refused,setting
+    with database(write=True) as db:
+        _sending_peer(db,'first');_sending_peer(db,'second')
+    calls=[]
+    def push(peer,**kwargs):
+        calls.append(peer)
+        if peer=='first':raise OSError('unavailable')
+        return False
+    monkeypatch.setattr(replication,'push_once',push)
+    with pytest.raises(Refused,match='replication_delayed'):worker._replicate_once()
+    assert calls==['first','second']
+    with database() as db:assert setting(db,'replication_worker')['failed']==['first']
+
+
+def test_replication_slow_event_can_advance_but_next_event_yields(private_history,monkeypatch):
+    from session_history import replication,worker
+    from session_catalog.db import database
+    with database(write=True) as db:_sending_peer(db)
+    clock=[0.0];calls=[]
+    monkeypatch.setattr(worker.time,'monotonic',lambda:clock[0])
+    def slow(peer,*,max_chunks,should_stop):
+        calls.append(peer);clock[0]+=2
+        # A response took longer than the batch scheduling window. Finishing the
+        # current bounded event must remain possible, or this peer starves forever.
+        assert not should_stop()
+        return True
+    monkeypatch.setattr(replication,'push_once',slow)
+    worker._replicate_once()
+    assert len(calls)==1
+
+
+def test_legacy_full_raw_partial_is_reindexed_once_without_duplicate_messages(private_history):
+    from session_history import archive,query,worker
+    from session_catalog.db import database
+    root,folder,source=_source(private_history,'codex')
+    head=b'{"type":"session_meta","payload":{"id":"legacy-partial"}}\n'
+    record=b'{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"retained"}]}}\n'
+    path=folder/'legacy-partial.jsonl';path.write_bytes(head+record)
+    archive.capture(source,str(path.relative_to(root)))
+    with database(write=True) as db:
+        row=db.execute('SELECT id,detail FROM manifests').fetchone();detail=json.loads(row['detail']);detail.pop('projection')
+        db.execute('UPDATE manifests SET detail=? WHERE id=?',(json.dumps(detail),row['id']))
+        db.execute("UPDATE source_files SET state='partial'")
+    assert archive.capture(source,str(path.relative_to(root)),max_bytes=worker.CAPTURE_BYTES)
+    info=query.detail(query.listing()['items'][0]['id'])
+    assert [r['body'] for r in info['messages']]==['retained']
+    assert info['manifests'][0]['projection']['state']=='complete'
+    assert archive.capture(source,str(path.relative_to(root)),max_bytes=worker.CAPTURE_BYTES) is False
+
+
+def test_projection_budget_boundary_does_not_omit_a_supported_record(private_history):
+    from session_history import archive,query,worker
+    root,folder,source=_source(private_history,'codex')
+    head=b'{"type":"session_meta","payload":{"id":"budget-edge"}}\n'
+    texts=['x'*600000,'y'*600000,'z'*600000]
+    raw=head+b''.join((json.dumps({'type':'response_item','payload':{'type':'message','role':'assistant',
+          'content':[{'type':'output_text','text':text}]}})+'\n').encode() for text in texts)
+    path=folder/'edge.jsonl';path.write_bytes(raw)
+    for _ in range(12):archive.capture(source,str(path.relative_to(root)),max_bytes=worker.CAPTURE_BYTES)
+    info=query.detail(query.listing()['items'][0]['id'])
+    # Detail is byte-paginated; inspect the authoritative normalized records.
+    from session_catalog.db import database
+    with database() as db: messages=[r[0] for r in db.execute('SELECT body FROM messages ORDER BY position')]
+    assert messages==texts
+    assert info['manifests'][0]['state']=='saved'
+    assert info['manifests'][0]['projection']['omitted_reasons']==[]

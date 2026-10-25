@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Fixed
+- Resume history indexing past oversized records with persisted skip checkpoints; distinguish preserved raw originals from omitted search content. Drain replication backlogs in bounded batches while retaining byte-rate, chunk and cancellation limits.
 - File popup/sheet over a terminal: the terminal area under the popup could go blank while output kept streaming (repaint only ran on open/move/resize/close). The visible session is now repainted every 300ms while the overlay is open, and the card sits on its own compositing layer.
 - Blank views after a restart or re-login: `/api/tmux/attach` no longer answers 404 ("session gone") when tmux merely timed out or was unreachable — it returns 503 and the boot retries (`tmux_runner.session_state`). A pane whose local tmux session could not be found at restore keeps its tmux name (`lost`) instead of being saved as an anonymous empty pane, and is re-attached when the session shows up in the server's tmux list.
 - Limit interactive history capture passes to keep terminal input responsive during backfill; preserve compressed-record indexing progress.

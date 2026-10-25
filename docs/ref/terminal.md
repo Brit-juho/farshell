@@ -346,6 +346,14 @@ discovery, FTS projection and encrypted replication have separate tasks. Shutdow
 worker before releasing its state. Interactive collection commits at most 256 KiB of new raw bytes
 per file pass; explicit/offline capture retains the 8 MiB budget. Compressed projection allows one
 supported record (up to the 1 MiB line limit) to make progress even with the smaller raw budget.
+Oversized records are skipped in bounded passes with continuation state stored in the manifest;
+restarting collection cannot parse their tails as separate records. Later supported records remain
+searchable. The manifest distinguishes complete raw preservation from omitted search content and
+reports oversized/invalid records and decompression/index limits in the archive UI. Legacy incomplete
+projections are replayed once with stable message IDs. Replication drains at most 32 attempts per peer
+within a one-second scheduling window, preserving the existing request timeout, chunk and byte-rate
+limits; a bounded event already begun can outlast that window so a slow host still advances.
+Explicit cancellation is also checked within the event and prevents subsequent work.
 The disposable trigram index can fall back to normalized SQL
 search while absent or behind the catalog.
 
