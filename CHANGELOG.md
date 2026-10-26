@@ -117,6 +117,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- 기본 브라우저 컨트롤을 FarShell 컨트롤로 바꾼다. 모든 `<select>`는 `ui/select.js`가 자동으로 FarShell 드롭다운(`.vt-dd`, 방향키·Home/End·글자 점프·Esc, combobox/listbox aria)으로 바꾸고 — 네이티브 select는 값·이벤트의 정본으로 숨겨 남아 기존 코드가 그대로 동작한다 — 체크박스는 CSS로 토큰에 맞게 다시 그린다(체크·부분 선택·포커스·비활성). 숫자 입력은 `ui/number-spinner.js`(공용 위치로 이동)로 통일하고 레일 설정의 「최근 종료 표시 개수」도 같은 스피너를 쓴다. `frontend/tests/native-controls.test.js`가 `type="number"`가 다시 늘어나는 것을 막는다. 끄려면 `data-native`.
+- Native form controls are replaced by FarShell controls. Every `<select>` is auto-enhanced by `ui/select.js` into a themed dropdown (arrow/Home/End/type-ahead/Esc, combobox/listbox ARIA) while the native select stays hidden as the source of truth for value and events; checkboxes are redrawn with tokens (checked, indeterminate, focus, disabled); number fields all use the shared `ui/number-spinner.js`. A test blocks new raw `type="number"` inputs. Opt out with `data-native`.
+- 설정 숫자 입력에 공용 전용 스피너를 적용한다. 범위·간격을 지키는 증감 버튼과 직접 입력·키보드 조절을 제공하며 모바일 버튼은 가로로 배치한다. 음성 최소 작업 시간에도 같은 컨트롤을 사용한다.
+- Settings numeric inputs use shared custom step buttons with bounds, step validation, direct editing and keyboard controls. Touch buttons sit side by side; voice minimum-duration inputs use the same control.
+
 - 레일·모바일 세션 메뉴의 공유 설정·권한 진입점을 「공유 및 권한」으로 통합한다. 해당 세션의 직접 권한과 회수를 함께 제공하고 공유 해제는 확인을 거친다. 내부 서브에이전트와 FarShell 위임 터미널을 구분하고, 작업 중 도구 이름에 레이블을 붙이며 중복 작업 위치 메뉴를 제거한다.
 - Rail/mobile session menus consolidate sharing and direct session permissions with revocation and confirmed unsharing. Native agent records and FarShell delegated terminals have distinct labels; working tool names are explicit and the duplicate workspace-details action is removed.
 

@@ -6,6 +6,7 @@
 // **컨트롤은 스키마에서 그린다** — 항목을 하드코딩하면 core/settings.js 스키마와
 // 두 벌이 되어 어긋난다. 값·범위·기본값은 전부 스토어에서 읽는다.
 import { get as setting, set as setSetting, scopeOf, SCHEMA, DEVICE_PROFILE } from '../../core/settings.js';
+import { numberSpinner } from '../../ui/number-spinner.js';
 import { icon } from '../../ui/icons.js';
 import { t } from '../../core/i18n.js';
 
@@ -68,6 +69,8 @@ export function row(label, controlEl, help, options = {}) {
     directNumber.setAttribute('aria-label', t('{label} 직접 입력', { label }));
     if (helpId) directNumber.setAttribute('aria-describedby', helpId);
   }
+  const spinner = controlEl.matches?.('.vt-number-spinner') ? controlEl : controlEl.querySelector?.('.vt-number-spinner');
+  spinner?.vtSetLabel?.(label, helpId);
   meta.prepend(left);
   el.append(meta, controlEl);
   return el;
@@ -113,29 +116,33 @@ export function rangeControl(key, step, unit = '', presets = []) {
   input.max = spec.max ?? 100;
   input.step = step || 1;
   input.value = setting(key);
-  const number = document.createElement('input');
-  number.type = 'number';
-  number.className = 'vt-range-number';
-  number.min = input.min; number.max = input.max; number.step = input.step; number.value = input.value;
+  const spinner = numberSpinner({ value: Number(input.value), min: Number(input.min), max: Number(input.max), step: Number(input.step),
+    onCommit: async (value) => {
+      input.value = String(value);
+      input.setAttribute('aria-valuetext', unit === '줄' ? t('{n}줄', { n: value.toLocaleString() }) : `${value}${unit}`);
+      input.disabled = true;
+      try {
+        const saved = setSetting(key, value);
+        wrap.dispatchEvent(new Event('vt-setting-value'));
+        await saved;
+        return setting(key);
+      } finally { input.disabled = false; }
+    },
+  });
   const suffix = document.createElement('span');
   suffix.className = 'vt-range-unit';
   suffix.textContent = unit === '줄' ? t('줄') : unit;
   const paint = (v) => {
-    input.value = v; number.value = v;
+    input.value = v; spinner.setValue(Number(v));
     input.setAttribute('aria-valuetext', unit === '줄' ? t('{n}줄', { n: Number(v).toLocaleString() }) : `${v}${unit}`);
   };
   paint(input.value);
-  input.addEventListener('input', () => { number.value = input.value; paint(input.value); });
+  input.addEventListener('input', () => paint(input.value));
   // 드래그 중에는 화면만 갱신하고, 놓을 때 저장한다 — 안 그러면 슬라이더 한 번에
   // PUT이 수십 번 나간다(설정 스토어에는 디바운스가 없다. 있어야 할 곳은
   // 여기가 아니라 이 컨트롤이다).
   input.addEventListener('change', () => setSetting(key, input.value));
-  number.addEventListener('change', async () => {
-    await setSetting(key, number.value);
-    paint(setting(key));
-    wrap.dispatchEvent(new Event('vt-setting-value'));
-  });
-  wrap.append(input, number, suffix);
+  wrap.append(input, spinner.element, suffix);
   if (presets.length) {
     wrap.classList.add('has-presets');
     const quick = document.createElement('div');

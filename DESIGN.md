@@ -83,6 +83,13 @@ steps are the 20%, and the accent is the 10%.
 - Secondary info is small and dim (`--color-sub`/`--color-muted`), not boxed.
 - Every border line must be able to answer "what does this line teach the user?"
 
+### Native controls are not used as-is
+
+`<select>` → `ui/select.js` (auto-applied to every select; opt out with `data-native`), numeric `<input>` →
+`ui/number-spinner.js`, `<input type=checkbox>` → the token-drawn checkbox in `components.css`. The dropdown list
+reuses the `.vt-menu` look and lives in `screens/20-overlay.css` because `.vt-menu` is unlayered — a rule for
+`.vt-dd-list` inside `@layer components` loses to it (position and z-index). Touch gets 44px rows.
+
 ### Motion
 
 - No entrance animation (fade-in, slide-up) as a default on content.

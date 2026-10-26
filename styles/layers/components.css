@@ -782,6 +782,84 @@
   .vt-select:hover { border-color: var(--color-acc-dim); }
   .vt-select:disabled { opacity: .45; cursor: not-allowed; }
 
+  /* ── 드롭다운(ui/select.js) · 체크박스 ─────────────────────────────────────
+   * 위의 .vt-select 주석은 "직접 만든 드롭다운으로 바꾸지 않는다"였다 — 2026-10-26에 뒤집었다:
+   * 네이티브 팝업은 스킨 6종과 전혀 어울리지 않고 모양을 바꿀 방법이 없다. 대신 키보드(방향키·
+   * Home/End·글자 점프·Esc)·aria(combobox/listbox)를 ui/select.js가 전부 짠다.
+   * 네이티브 <select>는 값·이벤트의 정본으로 남고(숨김), 보이는 것은 형제 버튼(.vt-dd)과 body의 목록이다.
+   * 버튼은 select의 클래스(.vt-input·.vt-select…)를 그대로 물려받아 크기·테두리가 원래와 같다. */
+  select.vt-dd-native { display: none !important; }
+  .vt-dd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(var(--spacing) * 2);
+    min-width: 0;
+    text-align: left;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  .vt-dd:not(.vt-input):not(.vt-select) {
+    min-height: 28px;
+    padding: 0 calc(var(--spacing) * 2);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-0);
+    color: var(--color-txt);
+    font: var(--weight-normal) var(--fs-sm) / var(--leading-row) var(--font-ui);
+  }
+  .vt-dd.vt-select { padding-right: calc(var(--spacing) * 2); }
+  .vt-dd:hover:not(:disabled) { border-color: var(--color-line-strong); }
+  .vt-dd[aria-expanded="true"] { border-color: var(--color-acc); }
+  .vt-dd:disabled { opacity: .45; cursor: not-allowed; }
+  .vt-dd-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vt-dd-caret { display: inline-flex; flex: none; color: var(--color-sub); transition: transform var(--dur-fast) var(--ease-out-quint); }
+  .vt-dd[aria-expanded="true"] .vt-dd-caret { transform: rotate(180deg); }
+  .vt-select-wrap:has(> .vt-dd) > svg { display: none; }   /* 래퍼가 그리던 화살표는 버튼이 대신 그린다 */
+
+  /* 체크박스 — appearance를 끄고 토큰으로 다시 그린다(네이티브 파란 체크는 스킨과 무관하게 혼자 튄다).
+   * <input>을 그대로 쓰므로 label 클릭·스페이스·폼 값·indeterminate가 공짜다. 끄는 법: data-native. */
+  input[type="checkbox"]:not([data-native]) {
+    appearance: none;
+    -webkit-appearance: none;
+    display: inline-grid;
+    place-content: center;
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    border: 1px solid var(--color-line-strong);
+    border-radius: 4px;
+    background: var(--color-bg-0);
+    cursor: pointer;
+    vertical-align: middle;
+    transition: background var(--dur-fast) var(--ease-out-quint), border-color var(--dur-fast) var(--ease-out-quint);
+  }
+  input[type="checkbox"]:not([data-native])::after {
+    content: "";
+    width: 10px;
+    height: 10px;
+    background: var(--color-acc-ink);
+    -webkit-mask: center / contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+    mask: center / contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+    transform: scale(.6);
+    opacity: 0;
+    transition: opacity var(--dur-fast) var(--ease-out-quint), transform var(--dur-fast) var(--ease-out-quint);
+  }
+  input[type="checkbox"]:not([data-native]):hover:not(:disabled) { border-color: var(--color-acc-dim); }
+  input[type="checkbox"]:not([data-native]):checked,
+  input[type="checkbox"]:not([data-native]):indeterminate { background: var(--color-acc); border-color: var(--color-acc); }
+  input[type="checkbox"]:not([data-native]):checked::after,
+  input[type="checkbox"]:not([data-native]):indeterminate::after { opacity: 1; transform: none; }
+  input[type="checkbox"]:not([data-native]):indeterminate::after {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round'%3E%3Cpath d='M5 12h14'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round'%3E%3Cpath d='M5 12h14'/%3E%3C/svg%3E");
+  }
+  input[type="checkbox"]:not([data-native]):focus-visible { outline: 2px solid var(--color-acc); outline-offset: 2px; }
+  input[type="checkbox"]:not([data-native]):disabled { opacity: .45; cursor: not-allowed; }
+  @media (prefers-reduced-motion: reduce) { input[type="checkbox"]:not([data-native])::after { transition: none; } }
+
   /* ── 슬라이더 ──────────────────────────────────────────────────────────
    * 이것도 <input type=range>를 그대로 쓴다(키보드 화살표·Home/End가 공짜).
    * 트랙과 손잡이만 우리 토큰으로 다시 그린다 — 안 그리면 macOS 기본 파란
@@ -1560,6 +1638,25 @@
 .vt-child-heading span { font-weight: 400; color: var(--color-muted); }
 .vt-session-access-grants { margin-top: 16px; }
 .vt-session-access-grants .vt-authz-code { overflow-wrap: anywhere; }
+
+/* Shared settings number input: native semantics, FarShell step buttons. */
+.vt-number-spinner { display:inline-flex; flex:none; align-items:stretch; border:1px solid var(--color-line); border-radius:var(--radius-sm); background:var(--color-term-bg); }
+.vt-number-spinner:focus-within { outline:2px solid var(--color-acc); outline-offset:2px; }
+.vt-number-spinner .vt-range-number { box-sizing:border-box; width:62px; min-width:0; height:28px; padding:0 6px; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--color-txt); font:500 var(--fs-xs) var(--font-mono); text-align:right; appearance:textfield; -moz-appearance:textfield; }
+.vt-number-spinner .vt-range-number:focus { outline:none; box-shadow:none; }
+.vt-number-spinner .vt-range-number::-webkit-inner-spin-button,
+.vt-number-spinner .vt-range-number::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+.vt-number-steps { display:flex; flex-direction:column; }
+.vt-number-step { display:flex; align-items:center; justify-content:center; width:24px; height:14px; padding:0; border:0; border-radius:0; background:transparent; color:var(--color-sub); cursor:pointer; }
+.vt-number-step.up svg { transform:rotate(180deg); }
+.vt-number-step:hover:not(:disabled) { background:var(--color-bg-3); color:var(--color-txt); }
+.vt-number-step:disabled { opacity:.35; cursor:default; }
+.vt-number-step:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
+@media (pointer:coarse), (max-width:719px) {
+  .vt-number-spinner .vt-range-number { height:44px; }
+  .vt-number-steps { flex-direction:row; }
+  .vt-number-step { width:44px; height:44px; }
+}
 
 /* ── 스니펫 패널 (snippets.js) ─────────────────────────────────────────────
  * 2026-10-23 개편. 이전에는 브라우저 기본 라디오·체크박스·textarea를 그대로 썼고

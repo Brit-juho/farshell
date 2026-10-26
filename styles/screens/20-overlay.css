@@ -212,6 +212,31 @@ body.voice-only-mode .vt-onboarding { display:none; }
 .vt-menu-item-detail { display:block; color:var(--sub); font-size:var(--fs-2xs); margin-top:2px; }
 .vt-menu-sep { border-top:1px solid var(--line); margin:calc(var(--spacing) * 1) 0; }
 
+/* 드롭다운 목록(ui/select.js) — `.vt-menu`가 이 파일(레이어 밖)에 있어 목록 규칙도 여기 둬야 이긴다.
+   components.css(@layer)에 두면 .vt-menu의 position:absolute·z-index:520이 항상 이긴다(2026-10-26 실화면). */
+.vt-dd-list {
+  position: fixed;
+  right: auto;
+  z-index: 1100;                /* 모달(600)·오버레이(700)·풀스크린(900)·토스트(1000) 위 */
+  box-sizing: border-box;
+  padding: calc(var(--spacing) * 1);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  animation: vt-dd-in 140ms var(--ease-out-quint);
+}
+.vt-dd-list[data-side="up"] { animation-name: vt-dd-in-up; }
+@keyframes vt-dd-in    { from { opacity: 0; transform: translateY(-4px); } }
+@keyframes vt-dd-in-up { from { opacity: 0; transform: translateY(4px); } }
+.vt-dd-item { justify-content: space-between; gap: calc(var(--spacing) * 3); }
+.vt-dd-item.active { background: var(--menu-hover); }
+.vt-dd-item[aria-selected="true"] { color: var(--color-acc); }
+.vt-dd-item[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.vt-dd-item-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vt-dd-check { display: inline-flex; flex: none; width: 14px; height: 14px; }
+.vt-dd-group { padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5) calc(var(--spacing) * 0.5); color: var(--color-faint); font: var(--weight-semibold) var(--fs-3xs) / 1 var(--font-mono); letter-spacing: var(--tracking-wide); }
+@media (pointer: coarse) { .vt-dd-item { --menu-item-h: 44px; font-size: var(--fs-sm); } }
+@media (prefers-reduced-motion: reduce) { .vt-dd-list { animation: none; } .vt-dd-caret { transition: none; } }
+
 /* L3 4단계: 그리드 뷰(#grid-view)는 폐지됐지만 카드 스타일은 남는다 —
    agent/preview.js의 카드 마크업을 pane-picker.js(빈 pane 클릭 → 세션 선택
    시트)와 팔레트(Palette.tsx)가 그대로 재사용한다. */

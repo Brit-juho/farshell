@@ -718,6 +718,33 @@ test('모양 — 기본 스킨 9개가 #theme-row 칩으로 나온다', async ()
     '기본 스킨(farshell)이 선택 표시돼야 한다');
 });
 
+
+test('전용 숫자 스피너는 저장·슬라이더·기본값 복원과 동기화된다', async () => {
+  const { document, P, S, window, puts } = await build();
+  P.showSettings();
+  const row = rowByLabel(document, '글자 크기');
+  const spinner = row.querySelector('.vt-number-spinner');
+  const number = spinner.querySelector('input');
+  const slider = row.querySelector('input[type=range]');
+  assert.strictEqual(spinner.querySelector('.up').getAttribute('aria-label'), '글자 크기 늘리기');
+  spinner.querySelector('.up').click();
+  await flush();
+  assert.strictEqual(S.get('terminal.fontSize'), 15);
+  assert.strictEqual(slider.value, '15');
+  assert.strictEqual(number.value, '15');
+  assert.strictEqual(puts.length, 1);
+  slider.value = '28'; slider.dispatchEvent(new window.Event('input'));
+  slider.dispatchEvent(new window.Event('change'));
+  await flush();
+  assert.strictEqual(number.value, '28');
+  assert.ok(spinner.querySelector('.up').disabled);
+  row.querySelector('.vt-set-default').click();
+  await flush();
+  assert.strictEqual(number.value, '14');
+  assert.strictEqual(slider.value, '14');
+  assert.ok(!spinner.querySelector('.up').disabled);
+});
+
 // ── 하단바(HUD) 구성 — 2026-10-23 ───────────────────────────────────────────
 // 규칙(parse/move/step)은 hud.test.js가 잠근다. 여기서는 화면이 그 규칙을 부르고 저장하는지만 본다.
 
