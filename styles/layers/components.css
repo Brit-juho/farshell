@@ -1578,6 +1578,8 @@
   .vt-number-spinner .vt-range-number { height:44px; }
   .vt-number-steps { flex-direction:row; }
   .vt-number-step { width:44px; height:44px; }
+}
+
 /* ── 스니펫 패널 (snippets.js) ─────────────────────────────────────────────
  * 2026-10-23 개편. 이전에는 브라우저 기본 라디오·체크박스·textarea를 그대로 썼고
  * 규칙이 screens/30-viewer.css(legacy 레이어)에 흩어져 있었다 — 이 한 곳으로 모으고

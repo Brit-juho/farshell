@@ -743,6 +743,8 @@ test('전용 숫자 스피너는 저장·슬라이더·기본값 복원과 동�
   assert.strictEqual(number.value, '14');
   assert.strictEqual(slider.value, '14');
   assert.ok(!spinner.querySelector('.up').disabled);
+});
+
 // ── 하단바(HUD) 구성 — 2026-10-23 ───────────────────────────────────────────
 // 규칙(parse/move/step)은 hud.test.js가 잠근다. 여기서는 화면이 그 규칙을 부르고 저장하는지만 본다.
 
