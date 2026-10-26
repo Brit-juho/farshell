@@ -9,6 +9,7 @@ import { formatRelativeTime, type SessionRow } from './rail-data.js';
 export function NativeChip(props: { row: SessionRow }) {
   const summary = () => normalizeSubagents(props.row.subagents);
   const count = () => summary().items.filter((r: any) => r.state === 'working').length;
+  const fullLabel = () => summary().limited ? t('내부 에이전트 · 표시 한도 도달') : count() ? t('내부 에이전트 {n} 작업 중', { n: count() }) : t('내부 에이전트 {n}개', { n: summary().items.length });
   const openList = async () => {
     const host = (window as any).vtRelayHost?.() || 'local';
     const mod = await import('../panels/subagent-viewer.js');
@@ -16,9 +17,12 @@ export function NativeChip(props: { row: SessionRow }) {
     mod.showSubagents({ tmuxName: props.row.tmuxName, parentId: summary().parentId, items: summary().items, host });
   };
   return <Show when={summary().items.length || summary().limited}>
-    <button type="button" class="vt-native-chip" data-working={count() ? '' : undefined} onClick={(e) => { e.stopPropagation(); void openList(); }}>
+    {/* 행 폭이 좁아 칩 글자는 줄이고(「내부 3 작업 중」), 전체 문장은 툴팁에 둔다. 아이콘이 에이전트 가지임을 말한다. */}
+    <button type="button" class="vt-native-chip" data-working={count() ? '' : undefined}
+      data-tip={fullLabel()} data-tip-side="right" aria-label={fullLabel()}
+      onClick={(e) => { e.stopPropagation(); void openList(); }}>
       <span class="vt-native-chip-icon" innerHTML={icon('git-branch', 12, 2)} />
-      <span>{summary().limited ? t('내부 에이전트 · 표시 한도 도달') : count() ? t('내부 에이전트 {n} 작업 중', { n: count() }) : t('내부 에이전트 {n}개', { n: summary().items.length })}</span>
+      <span>{summary().limited ? t('내부 · 한도 도달') : count() ? t('내부 {n} 작업 중', { n: count() }) : t('내부 {n}개', { n: summary().items.length })}</span>
     </button>
   </Show>;
 }
