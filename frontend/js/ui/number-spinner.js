@@ -1,7 +1,14 @@
-import { icon } from '../../ui/icons.js';
-import { t } from '../../core/i18n.js';
+import { icon } from './icons.js';
+import { t } from '../core/i18n.js';
 
-/** Numeric input with one shared validation/commit path for typing and step buttons. */
+/**
+ * Numeric input with one shared validation/commit path for typing and step buttons.
+ * @param {{ value: number, min: number, max: number, step?: number,
+ *   onCommit: (value: number) => unknown, onError?: (error: unknown) => void }} options
+ * @returns {{ element: HTMLDivElement & { vtSetLabel: (label: string, helpId?: string) => void,
+ *   vtSetValue: (n: number) => void, vtSetDisabled: (d: boolean) => void },
+ *   input: HTMLInputElement, setValue: (n: number) => void, setDisabled: (d: boolean) => void }}
+ */
 export function numberSpinner({ value, min, max, step = 1, onCommit, onError }) {
   if (![value, min, max, step].every(Number.isFinite) || min > max || step <= 0 || typeof onCommit !== 'function') {
     throw new RangeError('Invalid number spinner bounds');
@@ -18,7 +25,7 @@ export function numberSpinner({ value, min, max, step = 1, onCommit, onError }) 
   let busy = false;
   let disabled = false;
   let revision = 0;
-  const element = document.createElement('div');
+  const element = /** @type {any} */ (document.createElement('div'));
   element.className = 'vt-number-spinner';
   const input = document.createElement('input');
   input.type = 'number'; input.className = 'vt-range-number';

@@ -13,6 +13,7 @@ import {
   VIEW_KEY, RECENT_MAX, encodeRailView, type RailView,
 } from './rail-data.js';
 import { historyApi } from '../history/api.js';
+import { numberSpinner } from '../ui/number-spinner.js';
 
 function Toggle(props: { label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -34,6 +35,9 @@ export function RailSettingsLead() {
   const { prefs, set } = createRailPrefs();
   const setView = (patch: Partial<RailView>) =>
     set(VIEW_KEY, encodeRailView({ ...prefs().view, ...patch }));
+  // 기본 type=number 대신 공용 스피너(ui/number-spinner.js). 범위를 벗어난 입력은 스피너가 되돌린다.
+  const recentSpinner = numberSpinner({ value: prefs().view.recent, min: 1, max: RECENT_MAX, step: 1, onCommit: (n: number) => { setView({ recent: n }); } });
+  recentSpinner.element.vtSetLabel(t('최근 종료 표시 개수'));
   // 자동 보관 일수는 서버가 정한다(서버가 주기적으로 보관하므로 기기 설정이 아니다). 0 = 끔.
   const [autoDays, setAutoDays] = createSignal<number | null>(null);
   const [autoError, setAutoError] = createSignal('');
@@ -60,14 +64,10 @@ export function RailSettingsLead() {
         checked={prefs().view.byRepo}
         onChange={(v) => setView({ byRepo: v })}
       />
-      <label class="vt-railset-row">
+      <div class="vt-railset-row">
         <span class="vt-railset-label">{t('최근 종료 표시 개수')}</span>
-        <input
-          type="number" min="1" max={RECENT_MAX} step="1"
-          value={prefs().view.recent}
-          onChange={(e) => { const n = Math.round(Number(e.currentTarget.value)); if (n >= 1 && n <= RECENT_MAX) setView({ recent: n }); else e.currentTarget.value = String(prefs().view.recent); }}
-        />
-      </label>
+        {recentSpinner.element}
+      </div>
       <Show when={autoDays() !== null}>
         <label class="vt-railset-row">
           <span class="vt-railset-label">{t('자동 보관')}</span>

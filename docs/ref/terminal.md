@@ -332,7 +332,7 @@ wrap without truncation. The accessible summary retains the full context.
 
 ### Settings numeric controls
 
-`panels/settings/number-spinner.js` supplies the number field and custom step buttons for range controls and both voice minimum-duration fields. Native number semantics and the input's min/max/step remain; browser spinners are hidden. Typed values commit on change/Enter, invalid or empty edits restore the current value, and bounds/step are normalized before saving. Arrow keys and buttons share that path. While saving, step buttons are disabled and the field is read-only to preserve focus; rejection restores the prior value unless the caller returns its own authoritative value (the settings store deliberately retains locally applied values after persistence failure). Desktop arrows stack; touch/narrow-screen buttons are side by side at 44px.
+`ui/number-spinner.js` supplies the number field and custom step buttons for range controls and both voice minimum-duration fields. Native number semantics and the input's min/max/step remain; browser spinners are hidden. Typed values commit on change/Enter, invalid or empty edits restore the current value, and bounds/step are normalized before saving. Arrow keys and buttons share that path. While saving, step buttons are disabled and the field is read-only to preserve focus; rejection restores the prior value unless the caller returns its own authoritative value (the settings store deliberately retains locally applied values after persistence failure). Desktop arrows stack; touch/narrow-screen buttons are side by side at 44px.
 
 ## Durable catalog and conversation archive
 

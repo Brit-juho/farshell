@@ -2,7 +2,7 @@ import { vtFetch } from '../../../core/api.js';
 import { activeSessionId, getSession, subscribe } from '../../../core/store.js';
 import { screenId } from '../../../core/screen-id.js';
 import { getAction } from '../../../core/dom.js';
-import { numberSpinner } from '../number-spinner.js';
+import { numberSpinner } from '../../../ui/number-spinner.js';
 import { row, group, toast } from '../controls.js';
 import { t } from '../../../core/i18n.js';
 

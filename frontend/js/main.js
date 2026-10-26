@@ -32,6 +32,7 @@ import { get as settingGet, subscribe as settingSubscribe } from './core/setting
 import './core/keymap.js';    // S3 — 키맵 레지스트리(각 모듈이 register()로 액션을 붙인다)
 import './core/dom.js';
 import './ui/toast.js';   // F5 — showToast/dismissToast. 다른 모듈이 참조하므로 먼저.
+import { autoEnhanceSelects } from './ui/select.js';  // 기본 <select> 팝업 대신 FarShell 드롭다운(모든 select에 자동)
 import { initTooltips } from './ui/tooltip.js';  // 2026-09-18 — 네이티브 title 대체(data-tip)
 import './theme.js';      // F5 — classic script에서 전환. term/xterm-setup.js가 이걸 import한다.
 import './lib/ansilex.js';
@@ -119,6 +120,7 @@ try {
   // 문서 전체에 위임 리스너 하나만 건다 — 트리거가 언제 생기든 상관없으므로
   // bootApp()보다 먼저 불러도 된다(오히려 첫 화면의 버튼을 놓치지 않는다).
   initTooltips();
+  autoEnhanceSelects();
   // `appBooted`(아래)는 "배선 끝"이고 이건 "부팅 끝"이다(성공·실패 무관). 부팅 도중에
   // 새로고침하는 테스트가 진행 중인 부팅을 끊지 않도록 e2e가 이걸 기다린다(ADR-45).
   bootApp().finally(() => { document.documentElement.dataset.appReady = 'true'; });

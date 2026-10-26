@@ -15,7 +15,7 @@ async function build(options = {}, lang = 'ko') {
     w.eval(fs.readFileSync(path.join(__dirname, '../js/locales/en.js'), 'utf8'));
     w.eval(fs.readFileSync(path.join(__dirname, '../js/i18n-boot.js'), 'utf8'));
   }
-  const { numberSpinner } = await importFresh(path.join(__dirname, '../js/panels/settings/number-spinner.js'), env.context, new Map());
+  const { numberSpinner } = await importFresh(path.join(__dirname, '../js/ui/number-spinner.js'), env.context, new Map());
   const saved = [];
   const control = numberSpinner({ value: 14, min: 8, max: 28, onCommit: v => { saved.push(v); }, ...options });
   control.element.vtSetLabel(lang === 'en' ? 'Font size' : '글자 크기');
