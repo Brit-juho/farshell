@@ -22,6 +22,15 @@ export const _ICON_INSERT = '<svg viewBox="0 0 24 24" fill="none" stroke="curren
 // 짜여 있어 icons.js 쪽으로 통일하면 회전 각도까지 다시 계산해야 한다).
 export const _ICON_CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 6 6 6-6 6"/></svg>';
 
+// 파일을 외부 공유 링크로 내보낸다 — 스냅샷 복사 + 링크 발급 다이얼로그(panels/files/files.js).
+// 같은 청크의 다른 모듈이라 정적 import 대신 지연 import로 부른다(파일 탭 지연 진입점과 같은 이유).
+export function _shareFile(path) {
+  if (!path) return;
+  import('../files/files.js')
+    .then((m) => m.shareFsPath(path))
+    .catch((e) => console.error('[FarShell share]', e));
+}
+
 // 정적 안내 메시지용 — textContent 만 쓰므로 이스케이프가 필요 없다.
 // 줄바꿈은 <br> 엘리먼트로 표현한다(문자열 조립 없이).
 export function _setMsg(container, className, lines) {

@@ -66,23 +66,37 @@ function _hostsChanged(hostId) {
  * @returns 세션 id, 실패면 null
  */
 // opts.place — term/session.js addSession과 같다('view' 기본 · 'pane' · 'none').
-export async function attachRemoteSession(hostId, tmuxName, { place = 'view' } = {}) {
+export async function attachRemoteSession(hostId, tmuxName, { place = 'view', catalogSessionId = null, runtimeId = null, catalogHost = null } = {}) {
   if (!hostId || !tmuxName) return null;
   // 2026-09-21(사용자 지적) — Rail.tsx의 openRow와 같은 이유. 이미 열려 있는
   // 세션이 다른 세션과 화면을 공유 중이면 switchTo가 그 짝을 밀어냈다.
   // 레코드로 찾는다(id로 찾지 않는다) — host-view.js findRemoteSession 주석.
-  const open = findRemoteSession(_entries(), hostId, tmuxName);
+  let durable = catalogSessionId ? {catalogSessionId, runtimeId, catalogHost} : null;
+  if (durable && (!runtimeId || !catalogHost)) return null;
+  if (!durable) {
+    try {
+      const host = (await _fetchHosts()).find(h => h.id === hostId);
+      const row = host?.sessions?.find(s => s.name === tmuxName);
+      if (row?.catalog_session_id && row.runtime_id && row.catalog_host) {
+        durable = {catalogSessionId: row.catalog_session_id, runtimeId: row.runtime_id, catalogHost: row.catalog_host};
+        ({catalogSessionId, runtimeId, catalogHost} = durable);
+      }
+    } catch (_) { /* Legacy peers retain their explicit live-open path. */ }
+  }
+  const open = durable
+    ? _entries().find(([, s]) => s?.host === hostId && s.catalogSessionId === catalogSessionId && s.runtimeId === runtimeId && s.catalogHost === catalogHost)?.[0]
+    : findRemoteSession(_entries(), hostId, tmuxName);
   if (open) { if (place !== 'none') revealSession(open); return open; }
   const id = remoteSessionId(hostId, tmuxName);
   if (getSession(id)) {
     // 이 id를 쓰던 세션이 다른 이름으로 바뀐 뒤 옛 이름으로 새 세션이 생긴 경우 —
     // 같은 id를 두 번 등록할 수 없으니 뒤에 표시를 붙인다.
-    return attachRemoteSessionAs(`${id}#${Date.now().toString(36)}`, hostId, tmuxName, place);
+    return attachRemoteSessionAs(`${id}#${Date.now().toString(36)}`, hostId, tmuxName, place, durable);
   }
-  return attachRemoteSessionAs(id, hostId, tmuxName, place);
+  return attachRemoteSessionAs(id, hostId, tmuxName, place, durable);
 }
 
-async function attachRemoteSessionAs(id, hostId, tmuxName, place = 'view') {
+async function attachRemoteSessionAs(id, hostId, tmuxName, place = 'view', durable = null) {
   // 호스트가 살아 있는지 먼저 본다 — 죽은 호스트에 탭을 만들면 재연결 스톰의
   // 입구가 된다(ws.js 상단 주석의 그 사고와 같은 모양).
   try {
@@ -101,7 +115,8 @@ async function attachRemoteSessionAs(id, hostId, tmuxName, place = 'view') {
   addSession(id, `${tmuxName} · ${hostId}`, {
     tmuxName,
     host: hostId,
-    remote: { host: hostId, tmux: tmuxName, screen },
+    remote: { host: hostId, tmux: tmuxName, screen, ...durable },
+    ...durable,
     place,
   });
   return id;
@@ -159,7 +174,21 @@ export async function killRemoteSession(hostId, tmuxName) {
     { title: t('완전 종료'), okLabel: t('완전 종료'), danger: true },
   );
   if (!ok) return false;
-  const open = findRemoteSession(_entries(), hostId, tmuxName);
+  let durable = catalogSessionId ? {catalogSessionId, runtimeId, catalogHost} : null;
+  if (durable && (!runtimeId || !catalogHost)) return null;
+  if (!durable) {
+    try {
+      const host = (await _fetchHosts()).find(h => h.id === hostId);
+      const row = host?.sessions?.find(s => s.name === tmuxName);
+      if (row?.catalog_session_id && row.runtime_id && row.catalog_host) {
+        durable = {catalogSessionId: row.catalog_session_id, runtimeId: row.runtime_id, catalogHost: row.catalog_host};
+        ({catalogSessionId, runtimeId, catalogHost} = durable);
+      }
+    } catch (_) { /* Legacy peers retain their explicit live-open path. */ }
+  }
+  const open = durable
+    ? _entries().find(([, s]) => s?.host === hostId && s.catalogSessionId === catalogSessionId && s.runtimeId === runtimeId && s.catalogHost === catalogHost)?.[0]
+    : findRemoteSession(_entries(), hostId, tmuxName);
   if (open) await removeSession(open);
   try {
     await vtFetch(

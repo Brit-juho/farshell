@@ -10,8 +10,25 @@ import { t } from '../core/i18n.js';
 
 export type HudTone = 'ok' | 'warn' | 'err' | 'plain';
 
+// 배치(어떤 칩을 어느 쪽에 어떤 순서로)의 규칙은 hud-layout.js에 있다 — 설정 화면(일반 JS)도 같은 함수를
+// 써야 하는데 테스트 하네스가 .ts를 직접 못 읽어서다. 여기서는 타입과 함께 다시 내보내기만 한다.
+import {
+  HUD_KINDS, DEFAULT_HUD_LAYOUT, parseHudLayout, serializeHudLayout, sameHudLayout, hudZoneOf,
+  moveHudKind, stepHudKind,
+} from './hud-layout.js';
+import type { HudKind, HudLayout } from './hud-layout.js';
+
+export {
+  HUD_KINDS, DEFAULT_HUD_LAYOUT, parseHudLayout, serializeHudLayout, sameHudLayout, hudZoneOf,
+  moveHudKind, stepHudKind,
+};
+export type { HudKind, HudLayout };
+export type { HudZone } from './hud-layout.js';
+
 export interface HudChip {
   id: string;
+  /** 설정 화면이 다루는 종류(위 HUD_KINDS). 배치를 적용할 때만 쓴다. */
+  kind: HudKind;
   label: string;
   value?: string;
   hint?: string;
@@ -129,6 +146,7 @@ function usageChip(p: UsageProfile): HudChip | null {
   const tone: HudTone = pct >= 90 ? 'err' : pct >= 75 ? 'warn' : 'plain';
   return {
     id: `usage:${name}`,
+    kind: 'usage',
     label: name,
     value: `${pct}%`,
     hint: resets ? `· ${resets}` : undefined,
@@ -156,26 +174,26 @@ export function formatRate(bps: number | null | undefined): string {
 function statsChips(stats: SystemStats): HudChip[] {
   const out: HudChip[] = [];
   const level = (pct: number, warn: number, err: number): HudTone => (pct >= err ? 'err' : pct >= warn ? 'warn' : 'plain');
-  const push = (id: string, label: string, value: string, tone: HudTone, tooltip?: string) => out.push({
-    id, label, value, tooltip, tone, action: 'system.open', side: 'right',
+  const push = (id: string, kind: HudKind, label: string, value: string, tone: HudTone, tooltip?: string) => out.push({
+    id, kind, label, value, tooltip, tone, action: 'system.open', side: 'right',
     priority: tone === 'plain' ? PRIORITY.stats : PRIORITY.statsAlert,
   });
   if (stats.cpu && Number.isFinite(stats.cpu.pct)) {
-    push('stats:cpu', 'CPU', `${Math.round(stats.cpu.pct)}%`, level(stats.cpu.pct, 75, 90));
+    push('stats:cpu', 'cpu', 'CPU', `${Math.round(stats.cpu.pct)}%`, level(stats.cpu.pct, 75, 90));
   }
   if (stats.gpu && Number.isFinite(stats.gpu.pct)) {
-    push('stats:gpu', 'GPU', `${Math.round(stats.gpu.pct)}%`, level(stats.gpu.pct, 75, 90));
+    push('stats:gpu', 'gpu', 'GPU', `${Math.round(stats.gpu.pct)}%`, level(stats.gpu.pct, 75, 90));
   }
   if (stats.ram && Number.isFinite(stats.ram.pct)) {
-    push('stats:ram', 'RAM', `${Math.round(stats.ram.pct)}%`, level(stats.ram.pct, 80, 90));
+    push('stats:ram', 'ram', 'RAM', `${Math.round(stats.ram.pct)}%`, level(stats.ram.pct, 80, 90));
   }
   if (stats.net) {
-    push('stats:net', 'NET', `\u2193${formatRate(stats.net.rx_bps)} \u2191${formatRate(stats.net.tx_bps)}`, 'plain');
+    push('stats:net', 'net', 'NET', `\u2193${formatRate(stats.net.rx_bps)} \u2191${formatRate(stats.net.tx_bps)}`, 'plain');
   }
   return out;
 }
 
-export function buildHudChips(input: HudInput): HudChip[] {
+export function buildHudChips(input: HudInput, layout: HudLayout = DEFAULT_HUD_LAYOUT): HudChip[] {
   const chips: HudChip[] = [];
 
   // ── 좌측: "지금 이 서버가 어떤 상태인가" ────────────────────────────────
@@ -184,6 +202,7 @@ export function buildHudChips(input: HudInput): HudChip[] {
   if (input.caps) {
     chips.push({
       id: 'server',
+      kind: 'server',
       label: t('서버'),
       value: input.port ? `:${input.port}` : '',
       tone: 'ok',
@@ -194,11 +213,11 @@ export function buildHudChips(input: HudInput): HudChip[] {
   }
 
   if (input.e2e) {
-    chips.push({ id: 'e2e', label: 'E2E', value: 'ON', tone: 'ok', side: 'left', priority: PRIORITY.devToggle });
+    chips.push({ id: 'e2e', kind: 'e2e', label: 'E2E', value: 'ON', tone: 'ok', side: 'left', priority: PRIORITY.devToggle });
   }
 
   if (input.safeMode?.enabled) {
-    chips.push({ id: 'safe-mode', label: t('세이프모드'), value: 'ON', tone: 'ok', side: 'left', priority: PRIORITY.devToggle });
+    chips.push({ id: 'safe-mode', kind: 'safe-mode', label: t('세이프모드'), value: 'ON', tone: 'ok', side: 'left', priority: PRIORITY.devToggle });
   }
 
   // 연결된 화면 — 2.0에서는 clients.length < 2면 패널 자체를 숨겨서 "내 화면
@@ -207,6 +226,7 @@ export function buildHudChips(input: HudInput): HudChip[] {
   if (typeof input.screens === 'number' && input.screens > 0) {
     chips.push({
       id: 'screens',
+      kind: 'screens',
       label: t('연결된 화면'),
       value: String(input.screens),
       // 나 말고 다른 화면이 붙어 있으면 주의 색 — tmux가 가장 작은 클라이언트에
@@ -230,8 +250,17 @@ export function buildHudChips(input: HudInput): HudChip[] {
 
   const version = (input.caps?.version || '').trim();
   if (version) {
-    chips.push({ id: 'version', label: '', value: `v${version}`, tone: 'plain', side: 'right', priority: PRIORITY.version });
+    chips.push({ id: 'version', kind: 'version', label: '', value: `v${version}`, tone: 'plain', side: 'right', priority: PRIORITY.version });
   }
 
-  return chips;
+  // 배치 적용 — 칩이 스스로 정한 side는 무시하고 사용자가 정한 구역·순서를 따른다.
+  // 배치에 없는 종류는 여기서 빠진다. 같은 종류의 칩이 여럿(사용량 프로필)이면 만든 순서를 유지한다.
+  const placed: HudChip[] = [];
+  for (const side of ['left', 'right'] as const) {
+    for (const kind of layout[side]) {
+      for (const c of chips) if (c.kind === kind) placed.push({ ...c, side });
+    }
+  }
+  return placed;
 }
+

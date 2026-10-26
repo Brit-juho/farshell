@@ -450,10 +450,12 @@ def test_remote_delegation_round_trip(duo):
     with a.ctx():
         delegation.send_to_child(parent.key, did, "also run the linter")
     assert wait_until(lambda: any(s.get("delegation") == did and s.get("kind") == "followup" for s in _queue_sources(b)), 15)
-    # 다른 에이전트는 이 위임을 건드릴 수 없다
+    # 살아 있는 별도 실행도 이 위임을 건드릴 수 없다.
+    a.new_session("intruder-a")
+    intruder_key = a.session_key("intruder-a")
     with a.ctx():
-        st, out = remote.call(bid, "POST", "/api/peer/v2/deleg/send", {"delegation": did, "text": "hijack"}, agent_key=OTHER_KEY)
-    assert st == 404
+        st, out = remote.call(bid, "POST", "/api/peer/v2/deleg/send", {"delegation": did, "text": "hijack"}, agent_key=intruder_key)
+    assert st in (403, 404)
 
     # 4) 자식의 보고 -> A 의 부모 큐(A 가 머리글을 다시 만든다)
     with b.ctx():

@@ -100,8 +100,11 @@ NEEDS: dict[str, Need] = {
 
 # 이름이 붙은 capability 가 아닌 `/api/peer/*` 라우트 -> 동작 이름 (None = 엔진 밖: 서명 대신 1회용 티켓이 인증).
 ROUTE_ACTIONS: dict[str, Optional[str]] = {
+    # Dedicated history replication checks a separate, elevated-human-approved grant.
+    "/api/peer/session-history/receive": None,
     "/api/peer/pair": None,
     "/api/peer/ws/{tmux_name}": "ws",
+    "/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}": "ws",
     "/api/peer/relay/{rest:path}": "relay",
     "/api/peer/relay-ws/{rest:path}": "relay-ws",
 }

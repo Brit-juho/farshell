@@ -25,27 +25,41 @@ TMUX_SOCKET = tmux_runner.VT_TMUX_SOCKET
 
 
 # Wave 1 W1-2: 의미있는 디폴트 세션 이름 (cwd basename + 충돌 시 순번)
-def _generate_default_session_name() -> str:
-    """cwd basename 기반 + 충돌 시 -1, -2 순번. 안전한 영숫자만 사용."""
-    try:
-        cwd = os.getcwd()
-        base = os.path.basename(cwd) or "session"
-    except Exception:
-        base = "session"
-    # 안전한 슬러그: 영숫자/dash/underscore만, 소문자, 최대 20자
-    slug = re.sub(r"[^A-Za-z0-9_-]+", "-", base).strip("-").lower()[:20]
-    if not slug:
-        slug = "session"
-    candidate = slug
-    n = 1
+def _session_slug(raw: str, limit: int = 20) -> str:
+    """안전한 슬러그: 영숫자/dash/underscore만, 소문자, 최대 `limit`자."""
+    return re.sub(r"[^A-Za-z0-9_-]+", "-", raw).strip("-").lower()[:limit]
+
+
+def _free_session_name(base: str) -> str:
+    """`base`, `base-1`, `base-2` … 중 아직 없는 첫 이름(2026-10-23: 순번은 1부터).
+
+    같은 이름을 동시에 두 번 만들면 안 되므로 호출부는 `_create_lock` 안에서 부르고,
+    같은 락 안에서 곧바로 `new-session`까지 한다.
+    """
+    candidate = base
+    n = 0
     while tmux_runner.has_session(candidate):
         n += 1
-        candidate = f"{slug}-{n}"
+        candidate = f"{base}-{n}"
         if n > 99:
             # 안전 폴백: uuid
-            candidate = f"web-{str(uuid.uuid4())[:4]}"
-            break
+            return f"web-{str(uuid.uuid4())[:4]}"
     return candidate
+
+
+def _generate_default_session_name(base: str | None = None) -> str:
+    """`base`(없으면 서버 cwd의 basename) 기반 + 충돌 시 -1, -2 순번."""
+    if base is None:
+        try:
+            base = os.path.basename(os.getcwd()) or "session"
+        except Exception:
+            base = "session"
+    return _free_session_name(_session_slug(base) or "session")
+
+
+# 이름 고르기 → new-session 사이를 한 덩어리로 묶는다. 스니펫 「새 세션에서 실행」을
+# 연달아 눌러도(같은 이름 요청 두 개) 서로 다른 번호가 나가야 한다.
+_create_lock = asyncio.Lock()
 
 
 # --------------------------------------------------------------------------
@@ -80,30 +94,55 @@ _SCREEN_RE = re.compile(r"[0-9a-f]{32}")
 
 
 async def _attach_tmux(tmux_name: str, cols: int, rows: int, request: Request | None = None,
-                       screen_id: str | None = None):
+                       screen_id: str | None = None, catalog_binding: dict | None = None):
     # 존재하지 않는 tmux 세션에 attach하면 `tmux attach-session`이 즉시 실패하지만,
     # 그 전에 유령 web 세션(PTY)이 이미 생성·등록돼 /api/sessions에 남는다. 클라이언트는
     # 그 id로 WS를 열었다가 죽은 세션에 재연결을 반복하고, restoreWorkspace가 stale 탭마다
     # 이 유령 세션을 만들어 로드 즉시 세션·터미널·WS가 무더기로 쌓여 메모리가 폭증했다.
     # → PTY를 만들기 전에 세션 존재를 확인하고, 없으면 404로 돌려보내 복원 루틴이 건너뛰게 한다.
-    if not await tmux_runner.has_session_async(tmux_name):
+    if catalog_binding:
+        from session_catalog.inventory import resolve_runtime
+        from session_catalog.db import Refused
+        try:
+            runtime, physical = await asyncio.to_thread(resolve_runtime,catalog_binding['session_id'])
+            if runtime['id'] != catalog_binding['runtime_id']:
+                raise Refused('runtime_changed')
+            catalog_binding = {**catalog_binding,'tmux_id':physical['tmux_id']}
+        except Refused as error:
+            return JSONResponse({'error':error.code},status_code=error.status)
+    target = catalog_binding["tmux_id"] if catalog_binding else tmux_name
+    state = await tmux_runner.session_state_async(target)
+    if state == tmux_runner.SESSION_MISSING:
         return JSONResponse(
             {"error": "tmux session not found", "tmux_session": tmux_name},
             status_code=404,
+        )
+    if state == tmux_runner.SESSION_UNKNOWN:
+        # 확인 못 한 것을 「없음」(404)으로 답하면 복원 중인 화면이 그 칸을 비워 저장한다.
+        # 503은 클라이언트가 재시도 대상으로 다룬다(term/workspace.js restoreRequest).
+        return JSONResponse(
+            {"error": "tmux state unknown", "tmux_session": tmux_name},
+            status_code=503,
         )
     session_id = new_session_id()
     pty_mgr.create_session(
         session_id,
         cmd=platform_utils.find_tmux(),
-        cmd_args=["tmux", "-L", TMUX_SOCKET, "attach-session", "-t", tmux_name],
+        cmd_args=["tmux", "-L", TMUX_SOCKET, "attach-session", "-t", target],
         cols=cols,
         rows=rows,
     )
     session_store.add(session_id, name=tmux_name, device_label=_device_label_for_request(request),
                       screen_id=screen_id)
     session_store.update_tmux_name(session_id, tmux_name)
+    if catalog_binding:
+        info = session_store.get(session_id)
+        info.catalog_session_id = catalog_binding['session_id']
+        info.runtime_id = catalog_binding['runtime_id']
+        info.catalog_host = catalog_binding.get('host')
     output_watcher.add_session(session_id)
-    return {"id": session_id, "name": tmux_name, "tmux_session": tmux_name}
+    return {"id": session_id, "name": tmux_name, "tmux_session": tmux_name,
+            **({"catalog_session_id": catalog_binding['session_id'], "runtime_id": catalog_binding['runtime_id'], "catalog_host": catalog_binding.get('host')} if catalog_binding else {})}
 
 
 async def revive_tmux_attach(info) -> bool:
@@ -115,26 +154,40 @@ async def revive_tmux_attach(info) -> bool:
         return False
     if info.session_id in pty_mgr.sessions:
         return True
-    if not await tmux_runner.has_session_async(info.tmux_name):
+    target = info.tmux_name
+    if info.catalog_session_id:
+        from session_catalog.inventory import resolve_runtime
+        from session_catalog.db import Refused
+        try:
+            runtime, physical = await asyncio.to_thread(resolve_runtime, info.catalog_session_id)
+            if runtime['id'] != info.runtime_id:
+                return False
+            target = physical['tmux_id']
+        except Refused:
+            return False
+    if not await tmux_runner.has_session_async(target):
         return False
     pty_mgr.create_session(
         info.session_id, cmd=platform_utils.find_tmux(),
-        cmd_args=["tmux", "-L", TMUX_SOCKET, "attach-session", "-t", info.tmux_name],
+        cmd_args=["tmux", "-L", TMUX_SOCKET, "attach-session", "-t", target],
     )
     output_watcher.add_session(info.session_id)
     return True
 
 
 async def attach_screen(tmux_name: str, cols: int, rows: int, request: Request,
-                        screen_id: str):
+                        screen_id: str, catalog_binding: dict | None = None):
     """같은 화면은 복구하고 다른 화면에는 새 PTY를 준다. attach 락 안에서 호출."""
     existing = session_store.find_by_tmux_and_screen(tmux_name, screen_id)
     if existing:
+        if catalog_binding and existing.runtime_id != catalog_binding['runtime_id']:
+            return JSONResponse({"error":"runtime_changed"},status_code=409)
         if existing.session_id in pty_mgr.sessions or await revive_tmux_attach(existing):
-            return {"id": existing.session_id, "name": existing.name, "tmux_session": tmux_name}
+            return {"id": existing.session_id, "name": existing.name, "tmux_session": tmux_name,
+                    **({"catalog_session_id": existing.catalog_session_id, "runtime_id": existing.runtime_id, "catalog_host": existing.catalog_host} if existing.catalog_session_id else {})}
         session_store.remove(existing.session_id)
         output_watcher.remove_session(existing.session_id)
-    return await _attach_tmux(tmux_name, cols, rows, request, screen_id)
+    return await _attach_tmux(tmux_name, cols, rows, request, screen_id, catalog_binding)
 
 
 # attach 확인(find_by_tmux_name)과 생성(_attach_tmux)이 원자적이지 않아, 같은 tmux_name에
@@ -225,6 +278,7 @@ async def collect_tmux_sessions() -> list[dict]:
         attached = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
         sessions.append({
             "name": name,
+            "physical_key": f"{parts[7]}:{parts[8]}" if len(parts) > 8 else None,
             "windows": int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1,
             "attached": attached,
             # 웹 화면 = 이 서버가 PTY를 쥔 attach(브라우저 탭·폰 하나가 1개). 나머지는 웹이 아닌 attach
@@ -251,7 +305,8 @@ def _lineage_by_name(keys: dict[str, str]) -> dict[str, dict]:
     """{세션 키: 이름} → {자식 세션 이름: 계보}. 장부를 못 읽으면 빈 값(레일은 평평하게 그린다)."""
     try:
         import delegation
-        items = delegation.list_all()
+        from session_catalog.identity import visible_ledger
+        items = visible_ledger(delegation.list_all())
     except Exception:  # noqa: BLE001
         return {}
     out: dict[str, dict] = {}
@@ -280,8 +335,8 @@ async def create_tmux_session(request: Request):
         return JSONResponse({"error": "invalid screen id"}, status_code=400)
     # Wave 1 W1-2: 사용자 지정 이름 없으면 cwd 기반 디폴트
     requested_name = body.get("name", "").strip()
-    # 이 헬퍼는 이름이 빌 때까지 has_session을 반복 호출한다(동기 tmux).
-    tmux_name = requested_name or await asyncio.to_thread(_generate_default_session_name)
+    # `unique_name`: 이름이 이미 있으면 에러 대신 `이름-1`, `이름-2`로 비켜 간다(스니펫).
+    unique_name = bool(body.get("unique_name"))
     cols = body.get("cols", 80)
     rows = body.get("rows", 24)
     auto_open = bool(body.get("auto_open_on_mac", False))
@@ -298,10 +353,39 @@ async def create_tmux_session(request: Request):
     else:
         # 새 tmux 세션 시작 디렉토리 — 서버 cwd(프로젝트 폴더) 대신 홈/VT_START_DIR.
         start_dir = platform_utils.default_start_dir()
-    rc, _, err = await tmux_runner.run_async(
-        ["new-session", "-d", "-s", tmux_name, "-x", str(cols), "-y", str(rows), "-c", start_dir],
-        timeout=5.0,
-    )
+    async with _create_lock:
+        if requested_name and not unique_name:
+            tmux_name = requested_name
+        elif requested_name:
+            # 앱의 세션 이름 규칙은 [A-Za-z0-9_-]다(`/api/tmux/clients`·open-on-mac 등이 그
+            # 밖의 이름을 400으로 거절한다) — 그 밖의 글자는 `-`로 바꾼다. 한글만 있는
+            # 이름처럼 남는 게 없으면 cwd 폴더 이름으로 간다. 이름이 바뀌었다는 걸
+            # 호출부가 알 수 있게 응답의 `tmux_session`을 그대로 돌려준다.
+            base = re.sub(r"[^A-Za-z0-9_-]+", "-", requested_name).strip("-")[:40]
+            if base:
+                tmux_name = await asyncio.to_thread(_free_session_name, base)
+            else:
+                folder = os.path.basename(requested_cwd.rstrip("/")) if requested_cwd else None
+                tmux_name = await asyncio.to_thread(_generate_default_session_name, folder)
+        else:
+            # cwd를 받았으면 그 폴더 이름으로(서버 프로세스의 cwd가 아니라).
+            base = os.path.basename(requested_cwd.rstrip("/")) if requested_cwd else None
+            tmux_name = await asyncio.to_thread(_generate_default_session_name, base)
+        catalog_binding = None
+        if body.get('operation_id') is not None:
+            from session_catalog.lifecycle import create as catalog_create
+            from session_catalog.db import Refused
+            try:
+                catalog_binding = await asyncio.to_thread(catalog_create,body['operation_id'],tmux_name,start_dir,cols,rows,request_spec={'name':requested_name,'unique_name':unique_name})
+                tmux_name = catalog_binding['name']
+                rc,err = 0,b''
+            except Refused as error:
+                return JSONResponse({'error':error.code},status_code=error.status)
+        else:
+            rc, _, err = await tmux_runner.run_async(
+                ["new-session", "-d", "-s", tmux_name, "-x", str(cols), "-y", str(rows), "-c", start_dir],
+                timeout=5.0,
+            )
     if rc != 0:
         return JSONResponse(
             {"error": "tmux session create failed", "detail": err.decode("utf-8", errors="ignore")},
@@ -333,7 +417,9 @@ async def create_tmux_session(request: Request):
     _kick_sessions()
     async with _get_attach_lock(tmux_name):
         if screen_id:
-            return await attach_screen(tmux_name, cols, rows, request, screen_id)
+            return await attach_screen(tmux_name, cols, rows, request, screen_id, catalog_binding)
+        if catalog_binding:
+            return await _attach_tmux(tmux_name, cols, rows, request,catalog_binding=catalog_binding)
         return await _attach_tmux(tmux_name, cols, rows, request)
 
 
@@ -411,16 +497,35 @@ async def attach_tmux_session(request: Request):
     if screen_id is not None and not _SCREEN_RE.fullmatch(str(screen_id)):
         return JSONResponse({"error": "invalid screen id"}, status_code=400)
 
+    catalog_binding = None
+    if body.get('catalog_session_id') is not None:
+        from session_catalog import inventory as catalog_inventory
+        from session_catalog.db import identifier, host_id, database, Refused
+        try:
+            catalog_id = identifier(body.get('catalog_session_id'))
+            expected_runtime = identifier(body.get('runtime_id'))
+            with database() as db:
+                catalog_host = host_id(db)
+            if body.get('catalog_host') is not None and identifier(body['catalog_host']) != catalog_host:
+                raise Refused('host_changed')
+            runtime, physical = await asyncio.to_thread(catalog_inventory.resolve_runtime, catalog_id)
+            if runtime['id'] != expected_runtime:
+                raise Refused('runtime_changed')
+            tmux_name = physical['name']
+            catalog_binding = {'session_id':catalog_id,'runtime_id':runtime['id'],'tmux_id':physical['tmux_id'],'host':catalog_host}
+        except Refused as error:
+            return JSONResponse({'error':error.code},status_code=error.status)
     async with _get_attach_lock(tmux_name):
         if screen_id:
-            return await attach_screen(tmux_name, cols, rows, request, screen_id)
+            return await attach_screen(tmux_name, cols, rows, request, screen_id, catalog_binding)
         existing = session_store.find_by_tmux_name(tmux_name)
         if existing:
             if existing.session_id in pty_mgr.sessions or await revive_tmux_attach(existing):
-                return {"id": existing.session_id, "name": existing.name, "tmux_session": tmux_name}
+                return {"id": existing.session_id, "name": existing.name, "tmux_session": tmux_name,
+                    **({"catalog_session_id": existing.catalog_session_id, "runtime_id": existing.runtime_id, "catalog_host": existing.catalog_host} if existing.catalog_session_id else {})}
             session_store.remove(existing.session_id)
             output_watcher.remove_session(existing.session_id)
-        result = await _attach_tmux(tmux_name, cols, rows, request)
+        result = await _attach_tmux(tmux_name, cols, rows, request, catalog_binding=catalog_binding)
     # client-attached 훅(tmux_hooks.py)도 오지만, 붙는 도중의 await 사이에 웹 세션
     # 등록이 훅보다 늦을 수 있어(web_session_id가 빈 채 push) 여기서도 알린다.
     _kick_sessions()   # attached 수·web_session_id가 바뀐다

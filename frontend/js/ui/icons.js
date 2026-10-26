@@ -32,6 +32,16 @@ const PATHS = {
   'share-read': '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
   'share-write': '<path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/>',
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  // 세션 레일: 보관함 진입(Lucide archive)·되돌아가기·종료 세션의 점선 원(state-idle과 같은 원, 선만 끊는다).
+  archive: '<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
+  'chevron-right': '<path d="m9 18 6-6-6-6"/>',
+  'chevron-left': '<path d="m15 18-6-6 6-6"/>',
+  'state-stopped': '<circle cx="12" cy="12" r="8" stroke-dasharray="3 3"/>',
+  // 스니펫 탭·빈 상태(Lucide braces)와 「끝에 Enter 포함」 표시(Lucide corner-down-left).
+  braces: '<path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/><path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/>',
+  'corner-down-left': '<polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/>',
+  // 하단바 구성 화면의 끌기 손잡이(Lucide grip-vertical).
+  'grip-vertical': '<circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/>',
 
   // 2026-09-16 — 이모지로 남아 있던 자리를 메운다. DESIGN.md §0이 "No emoji as
   // a UI asset"을 이미 규칙으로 두고 있었는데 키바(📎🎤)·상단바(🔍)·파일 패널

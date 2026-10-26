@@ -382,6 +382,12 @@
     <button id="keybar-open-btn" type="button" class="vt-icon-btn" aria-label="특수키 바" aria-pressed="false" data-tip="특수키 바 열기/닫기" data-tip-side="bottom" data-i18n-attr="aria-label,data-tip">
       <svg data-icon="keyboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
     </button>
+    <!-- 2026-10-23 — 스니펫 진입점(좁은 화면). 넓은 화면에는 dock의 「스니펫」 탭과 레일 버튼이
+         있지만 compact에는 둘 다 없고 하단 내비에도 자리가 없어 팔레트로만 열렸다. 좁은 화면의
+         터미널 탭에서만 보인다(CSS) — 스니펫은 터미널에 넣는 것이라 다른 탭에서는 쓸 곳이 없다. -->
+    <button id="snippets-open-btn" type="button" class="vt-icon-btn" data-action="snippets.show" aria-label="프롬프트 스니펫" data-tip="프롬프트 스니펫" data-tip-side="bottom" data-i18n-attr="aria-label,data-tip">
+      <svg data-icon="braces" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
+    </button>
     <button id="palette-toggle" class="vt-icon-btn" data-action="quickopen.open" aria-label="빠른 열기" data-tip="빠른 열기" data-tip-keys="Mod+K" data-tip-side="bottom" data-i18n-attr="aria-label,data-tip">
       <svg data-icon="search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
     </button>

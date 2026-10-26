@@ -3,7 +3,7 @@
 import { openPanel, closePanel } from '../panel.js';
 import { renderFile, refreshFile } from './file.js';
 import { watchPath, coalesce } from '../../shell/fs-watch.js';
-import { _viewerState } from './state.js';
+import { _viewerState, _shareFile } from './state.js';
 import { icon } from '../../ui/icons.js';
 import { get, set, subscribe, SCHEMA } from '../../core/settings.js';
 import { openViewerPane } from '../../layout/store.js';
@@ -62,6 +62,7 @@ function _surface() {
 function _headHTML() {
   return '<div class="vt-file-title"><span class="vt-file-name"></span><span class="vt-file-dir"></span></div>'
     + `<button type="button" class="vt-icon-btn vt-file-refresh" aria-label="${t('새로고침')}" data-tip="${t('새로고침')}">${icon('refresh-cw', 14)}</button>`
+    + `<button type="button" class="vt-icon-btn vt-file-share" aria-label="${t('공유 링크 만들기')}" data-tip="${t('공유 링크 만들기')}">${icon('link', 14)}</button>`
     + `<button type="button" class="vt-icon-btn vt-file-float" aria-pressed="false">${icon('app-window', 14)}</button>`
     + `<button type="button" class="vt-icon-btn vt-file-topane" aria-label="${t('페인으로 열기')}" data-tip="${t('페인으로 열기')}">${icon('columns-2', 14)}</button>`;
 }
@@ -115,6 +116,21 @@ function _repaintTerminals() {
       } catch (_) { /* 그리기 보정일 뿐 — 실패해도 파일 창 동작과 무관하다 */ }
     }
   }, 120);
+}
+
+// 창이 떠 있는 동안에도 터미널 출력은 계속 들어온다. 위 보정은 열기·이동·닫기 순간에만 돌아서
+// 그 사이에 그려지는 팝업 밑 구역이 비는 것을 못 막는다(2026-10-23 스크린샷 — 팝업 가로 범위 아래
+// 글자가 통째로 사라짐). 열려 있는 동안만 보이는 세션의 행을 다시 그린다. 아틀라스는 비우지 않는다.
+const REPAINT_TICK_MS = 300;
+function _startRepaintTick() {
+  return setInterval(() => {
+    if (document.hidden) return;
+    const id = typeof window.activeSessionId === 'function' ? window.activeSessionId() : null;
+    const map = typeof window.allSessions === 'function' ? window.allSessions() : null;
+    const term = id && map && map[id] && map[id].term;
+    if (!term || !term.refresh) return;
+    try { term.refresh(0, term.rows - 1); } catch (_) { /* 그리기 보정일 뿐 */ }
+  }, REPAINT_TICK_MS);
 }
 
 function _setFile(el, path) {
@@ -250,6 +266,7 @@ export function openFileOverlay(path) {
   const compact = isCompactMode();
   const mount = compact ? null : _container();
   let ro = null;
+  let tick = null;
   const panel = openPanel({
     id: PANEL_ID,
     ariaLabel: t('파일 보기'),
@@ -259,6 +276,7 @@ export function openFileOverlay(path) {
     ...(mount ? { mount, modal: false, onKey: _escClosesOnlyWhenFocused } : {}),
     onClose: () => {
       _repaintTerminals();
+      if (tick) { clearInterval(tick); tick = null; }
       if (ro) ro.disconnect();
       if (panel && panel.el._vtUnwatch) { panel.el._vtUnwatch(); panel.el._vtUnwatch = null; }
     },
@@ -267,6 +285,7 @@ export function openFileOverlay(path) {
   const { el, body } = panel;
 
   el.querySelector('.vt-file-refresh').addEventListener('click', () => { _refresh(el); });
+  el.querySelector('.vt-file-share').addEventListener('click', () => { _shareFile(el.dataset.viewerFile); });
   const floatBtn = el.querySelector('.vt-file-float');
   // 폰(compact)은 설정과 무관하게 전체 화면 시트라 옮길 곳이 없다.
   if (!mount) floatBtn.hidden = true;
@@ -288,6 +307,7 @@ export function openFileOverlay(path) {
     _wireFloatDrag(el, el.querySelector('.vt-viewer-head'), 'move');
     _wireFloatDrag(el, corner, 'resize');
     _applyGeometry(el);
+    tick = _startRepaintTick();
     // dock·레일을 접고 펴도 컨테이너 폭이 바뀐다 — 창 크기 이벤트만으로는 못 잡는다.
     if (typeof window.ResizeObserver === 'function') {
       ro = new window.ResizeObserver(() => {

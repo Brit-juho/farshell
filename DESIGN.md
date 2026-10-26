@@ -399,8 +399,10 @@ connected-screens icon; it doesn't touch the tabs themselves).
 
 A row is **one tmux session** (docs/ref/terminal.md 「Rail」). Two zones: **개입 필요**
 (waiting sessions; collapsible, and switchable on/off in 레일 설정 like VS Code's
-Open Editors) and **세션** (every session, **name order only** — no urgency sorting, so
-rows never jump). There are no 묶음 / 묶지 않음 / 잠자는 중 zones. A row is three lines:
+Open Editors) and **실행 중** (every other running session, **name order only** — no urgency
+sorting, so rows never jump). Below them, **최근 종료** (collapsible, newest N) and a one-line
+**보관함** that swaps the list in place; ended rows use the same three lines with a dashed state
+circle and a dimmed name, and only 이어서 시작 is accent-filled. There are no 묶음 / 묶지 않음 / 잠자는 중 zones. A row is three lines:
 
 1. **State icon** (`stateIcon`; a ring around it = unseen) · agent mark · name (edited in place).
    A small window icon at the line's end = "open in this browser tab".
@@ -428,7 +430,8 @@ keyword move to the row tooltip.
 
 Fixed to the right, collapses to a 36px strip via a chevron (no bottom dock —
 ADR-21, to keep terminal vertical space). 5 tabs: **Source control · Queue ·
-Files · Ports · Usage**.
+Files · Ports · Usage** (later tabs — attachments, system and, since 2026-10-23, **Snippets**
+(`braces` icon, action `snippets.show`) — follow the same frame rules).
 
 **Collapsed, a tab is an icon — never rotated text.** The 36px strip used to
 rotate each label with `writing-mode: vertical-rl`, which works for Latin
@@ -459,12 +462,26 @@ only a file path; a `panel` leaf has one registered dock panel name. Both keep
 
 ### HUD 24px (`shell/Hud.tsx`)
 
-A row of chips like `server :7777 · tunnel named · E2E ON · safe mode ON ·
-screens 3 · Claude 62% · 4h12m · v2.1.0`. Polled every 30s, plus
+A row of chips like `screens 3 · E2E ON · safe mode ON · CPU 17% · GPU 0% · RAM 72% ·
+NET ↓12K ↑3K · Claude 62% · 4h12m · v2.6.0`. Polled every 30s, plus
 immediate refresh on `/ws-notify` events. A chip with no value is **hidden**
 (no usage provider → no chip, the 2.0 rule kept). There is no HUD at all in
 compact — the bottom nav takes its place. Chip padding is 6px horizontally,
 with 3px internal gaps. Reset wording appears in tooltips; GPU chips show only usage.
+
+**Which chips show, on which side and in what order is the user's choice**
+(Settings → Status bar, 2026-10-23; device-scoped `ui.hud.layout`, JSON
+`{"left":[…],"right":[…]}`). The unit is a *kind* (`server`, `screens`, `e2e`, `safe-mode`,
+`cpu`, `gpu`, `ram`, `net`, `usage`, `version`), not a chip id — usage profiles come and go,
+so the setting names «usage» once. A kind that is in neither list is hidden, so a new kind
+starts off until someone turns it on. The default layout leaves out `server`: seeing the
+screen already proves the server is up. The rules (parse, move, step) live in
+`shell/hud-layout.js` as plain JS because the settings screen and its test harness cannot
+read `.ts`; `hud-data.ts` applies the layout *after* it builds the chips, so «no value hides a
+chip» and the squeeze order below still hold wherever a chip is placed. The settings screen
+edits the layout three ways — drag, a position select and up/down buttons — all through the same
+`moveHudKind`/`stepHudKind` (the select and buttons are the keyboard path, not an extra), shows a
+preview with sample values, and is hidden in compact (there is no HUD there).
 
 **"No value" hides a chip; "no room" drops the least important one.** These are
 two different axes. The first is `buildHudChips` declining to emit a chip. The

@@ -19,6 +19,9 @@ export type WaitKind = 'approval' | 'choice' | 'plan' | 'question';
 export type DoneBadge = 'question' | 'plan';
 
 export interface SessionRow {
+  physicalKey?: string;
+  catalogSessionId?: string;
+  runtimeId?: string;
   subagents?: unknown;
   /** 이 브라우저 탭의 웹 세션 id. 열려 있지 않으면 빈 문자열. */
   sessionId: string;
@@ -337,7 +340,26 @@ export function encodeLineagePrefs(collapsed: string[], closedOpen: string[]): s
   return JSON.stringify({ collapsed: collapsed.slice(0, 200), closedOpen: closedOpen.slice(0, 200) });
 }
 
+/** 기기별 설정 하나에 `{"byRepo":bool,"recent":N,"recentCollapsed":bool}`. 키를 아끼려고 JSON 한 덩어리로 묶는다(LINEAGE_KEY와 같은 이유). */
+export const VIEW_KEY = 'rail.view';
+export const RECENT_DEFAULT = 5;
+export const RECENT_MAX = 50;
+export interface RailView { byRepo: boolean; recent: number; recentCollapsed: boolean }
+export function parseRailView(v: unknown): RailView {
+  const o = parseObj(v);
+  const n = Number(o.recent);
+  return {
+    byRepo: o.byRepo === true,
+    recent: Number.isInteger(n) && n >= 1 && n <= RECENT_MAX ? n : RECENT_DEFAULT,
+    recentCollapsed: o.recentCollapsed === true,
+  };
+}
+export function encodeRailView(v: RailView): string {
+  return JSON.stringify({ byRepo: v.byRepo, recent: v.recent, recentCollapsed: v.recentCollapsed });
+}
+
 export interface RailPrefs {
+  view: RailView;
   attentionShow: boolean;
   attentionCollapsed: boolean;
   hiddenOrigins: Origin[];
@@ -354,6 +376,7 @@ export function readRailPrefs(get: (key: string) => unknown): RailPrefs {
     return v === undefined || v === null ? RAIL_PREF_DEFAULTS[key] : Boolean(v);
   };
   return {
+    view: parseRailView(get(VIEW_KEY)),
     attentionShow: flag(ATTENTION_SHOW_KEY),
     attentionCollapsed: flag(ATTENTION_COLLAPSED_KEY),
     hiddenOrigins: HIDEABLE_ORIGINS.filter((o) => !flag(originShowKey(o))),
@@ -425,12 +448,41 @@ export function compactRailRows<T>(lists: RailLists<T>): { rows: T[]; split: num
   return { rows: [...lists.attention, ...rest], split: rest.length > 0 ? top.size : 0 };
 }
 
+/**
+ * 「실행 중」 구역 = 「세션」 전체에서 「개입 필요」에 이미 올라간 행을 뺀 것.
+ * 개입 필요 구역이 꺼져 있으면(`attention`이 비어 있다) 빼는 것이 없다.
+ * 접힌 레일(compactRailRows)은 이 함수를 안 쓴다 — 거기는 이미 한 번씩만 나온다.
+ */
+export function splitRunning<T>(lists: RailLists<T>): T[] {
+  if (lists.attention.length === 0) return lists.sessions;
+  const top = new Set<T>(lists.attention);
+  return lists.sessions.filter((r) => !top.has(r));
+}
+
+/** 카탈로그 세션이 마지막으로 움직인 시각(epoch초). */
+export function lastActiveOf(s: { ended?: number | null; observed?: number | null; updated?: number | null }): number {
+  return s.ended || s.observed || s.updated || 0;
+}
+
+/**
+ * 「최근 종료」 구역에 나올 세션. 보관 안 된 것 중 지금 실행 중으로 그려지지 않는 것을
+ * 최근에 움직인 순으로 `limit`개. `total`은 자르기 전 개수(「N개 더 보기」용).
+ * 종료 시각이 없지만 실행 중 행도 없는 세션(상태 확인 필요·아직 실행 전)도 여기에 남긴다 —
+ * 어디에도 안 보이면 「다시 확인」을 누를 곳이 없다.
+ */
+export function pickRecentEnded<S extends { archived?: number | null; ended?: number | null; observed?: number | null; updated?: number | null }>(
+  sessions: S[], isLive: (s: S) => boolean, limit: number,
+): { shown: S[]; total: number } {
+  const all = sessions.filter((s) => !s.archived && !isLive(s)).sort((a, b) => lastActiveOf(b) - lastActiveOf(a));
+  return { shown: all.slice(0, Math.max(0, limit)), total: all.length };
+}
+
 // ── 행 메뉴(⋯ 버튼·우클릭·폰 롱프레스가 같은 항목) ───────────────────────
 
 export type RowMenuId =
   | 'open' | 'close' | 'rename' | 'openOnMac' | 'screens' | 'kill' | 'splitRight' | 'splitDown'
   | 'sessionAccess' | 'share' | 'shareSettings' | 'unshare' | 'agentPerms'
-  | 'moveUp' | 'moveDown' | 'report' | 'closeDelegation' | 'openParent';
+  | 'moveUp' | 'moveDown' | 'report' | 'closeDelegation' | 'openParent' | 'record';
 
 export interface RowMenuItem {
   id: RowMenuId;
@@ -485,11 +537,15 @@ export interface RowMenuOpts {
   share?: boolean;
   /** 수동 정렬의 키보드 대안(드래그를 못 쓰는 사람·터치). 최상위 행에서만, 끝이면 그 방향은 뺀다. */
   move?: { up: boolean; down: boolean };
+  /** 이 행이 카탈로그 세션과 이어져 있다 — 작업 기록 항목을 넣고, 열려 있지 않아도 이름 변경을 허용한다. */
+  record?: boolean;
 }
 
 /** 열린 세션이면 닫기, 아니면 열기. 이름 변경·맥에서 열기·연결된 화면은 웹 세션이 있어야 하고,
  * 종료는 tmux 세션이면 늘 있다(확인창은 vtConfirmAndKillSession). */
 export function rowMenuItems(row: Pick<SessionRow, 'open' | 'tmuxName'> & { share?: ShareInfo | null; cwd?: string; lineage?: Lineage | null }, opts: RowMenuOpts = {}): RowMenuItem[] {
+  // 카탈로그에 기록된 세션이면 작업 기록을 연다(종료 행 메뉴와 같은 항목). 행 아래 별도 텍스트 줄을 대신한다.
+  const record: RowMenuItem[] = opts.record ? [{ id: 'record', label: t('작업 기록') }] : [];
   const items: RowMenuItem[] = [];
   // 위임 하위 세션: 보고 보기 · 부모로 이동 · 위임 닫기(세션은 남는다). 위임 관련은 이 맥에서만(장부가 이 맥에 있다).
   const lin = row.lineage;
@@ -516,9 +572,9 @@ export function rowMenuItems(row: Pick<SessionRow, 'open' | 'tmuxName'> & { shar
       { id: 'screens', label: t('연결된 화면') },
     );
   } else {
-    items.push({ id: 'open', label: t('열기') }, ...split);
+    items.push({ id: 'open', label: t('열기') }, ...split, ...(opts.record ? [{ id: 'rename' as const, label: t('이름 변경') }] : []));
   }
-  items.push(...delegationItems, ...move);
+  items.push(...record, ...delegationItems, ...move);
   if (opts.share && row.tmuxName) {
     items.push({ id: 'sessionAccess', label: t('공유 및 권한…') });
   }

@@ -31,7 +31,7 @@ SERVER = pathlib.Path(__file__).resolve().parent.parent
 # 호출하는 순간 스레드가 멈추는 것들. 이름은 `모듈.함수` 또는 `함수`로 적는다.
 BLOCKING = {
     "tmux_runner.run", "tmux_runner.run_text",
-    "tmux_runner.get_all_panes", "tmux_runner.has_session",
+    "tmux_runner.get_all_panes", "tmux_runner.has_session", "tmux_runner.session_state",
     "tmux_runner.list_sessions", "tmux_runner.set_option",
     "subprocess.run", "subprocess.check_output", "subprocess.check_call",
     "subprocess.call", "subprocess.Popen",

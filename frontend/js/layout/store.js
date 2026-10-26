@@ -470,6 +470,43 @@ export function closeLayoutTab(tabId) {
   return true;
 }
 
+/** 복원 때 세션을 못 찾아 tmux 이름만 들고 있는 칸(`lost`, persist.js deserializeTree) —
+ * 모든 뷰에서 모은다. 빈 칸처럼 보이지만 recoverLostPanes가 되살릴 후보다. */
+export function lostPanes() {
+  _sync();
+  const out = [];
+  const walk = (n) => {
+    if (n.t === 'leaf') { if (!n.session && n.lost) out.push({ paneId: n.id, tmux: n.lost.tmux }); return; }
+    walk(n.a); walk(n.b);
+  };
+  for (const t of _tabs) walk(t.tree);
+  return out;
+}
+
+/** `lost` 칸에 되살린 세션을 놓는다. 그 사이 사용자가 칸을 채웠거나, 그 세션이 이미 다른 칸에
+ * 열려 있으면(불변식 1) 놓지 않고 표시만 거둔다. 놓았으면 true. */
+export function fillLostPane(paneId, sessionId) {
+  _sync();
+  const tab = _tabs.find((t) => { const n = findNode(t.tree, paneId); return n && n.t === 'leaf' && !n.session && n.lost; });
+  if (!tab) return false;
+  const placed = _tabs.some((t) => collectSessions(t.tree).includes(sessionId));
+  tab.tree = placed
+    ? _clearLost(tab.tree, paneId)
+    : _setSession(tab.tree, paneId, sessionId);
+  _tree = _tabs[_activeTabIndex].tree;
+  _notify();
+  return !placed;
+}
+
+function _clearLost(node, paneId) {
+  if (node.t === 'leaf') {
+    if (node.id !== paneId) return node;
+    const { lost, ...rest } = node;
+    return rest;
+  }
+  return { ...node, a: _clearLost(node.a, paneId), b: _clearLost(node.b, paneId) };
+}
+
 /** 드래그로 세션이 빠져나가 비게 된 뷰를 닫는다(2026-10-03 규칙 결정 — 옛 동작).
  * "비었다"는 모든 칸이 세션 없는 터미널 칸이라는 뜻이다(뷰어·패널 칸이 있으면
  * 비지 않은 것). 활성 뷰이거나 뷰가 하나뿐이면 닫지 않는다 — 그 경우는
@@ -569,10 +606,25 @@ function _serialMembers(node, out = []) {
   return out;
 }
 
+function _serialKey(node) {
+  const info = node?.session;
+  if (!info?.tmux) return null;
+  const host = node.host || info.host || 'local';
+  return info.catalogSessionId
+    ? `catalog:${host}:${info.catalogHost || ''}:${info.catalogSessionId}`
+    : `legacy:${host}:${info.tmux}`;
+}
+function _serialKeys(node, out = []) {
+  if (!node) return out;
+  if (node.t === 'leaf') { const key = _serialKey(node); if (key) out.push(key); }
+  else { _serialKeys(node.a, out); _serialKeys(node.b, out); }
+  return out;
+}
+
 function _serialDrop(node, tmuxSet) {
   if (!node) return node;
   if (node.t === 'leaf') {
-    return node.session && node.session.tmux && tmuxSet.has(node.session.tmux) ? { ...node, session: null } : node;
+    return tmuxSet.has(_serialKey(node)) ? { ...node, session: null } : node;
   }
   return { ...node, a: _serialDrop(node.a, tmuxSet), b: _serialDrop(node.b, tmuxSet) };
 }
@@ -586,9 +638,9 @@ export function getClosedViews() {
 }
 
 export function rememberClosedView(view) {
-  const members = new Set(_serialMembers(view && view.tree));
+  const members = new Set(_serialKeys(view && view.tree));
   if (members.size < 2 || typeof view.id !== 'string') return false;
-  forgetClosedMembers([...members]);
+  _forgetClosedKeys(members);
   _closed = _closed.filter((v) => v.id !== view.id);
   _closed.push({ id: view.id, label: view.label || null, worktreeId: view.worktreeId || null,
     hostId: view.hostId || 'local', tree: view.tree });
@@ -597,16 +649,27 @@ export function rememberClosedView(view) {
 }
 
 export function forgetClosedMembers(tmuxNames) {
-  const drop = new Set((tmuxNames || []).filter(Boolean));
+  _forgetClosedKeys(new Set((tmuxNames || []).filter(Boolean).map(name => `legacy:local:${name}`)));
+}
+function _forgetClosedKeys(drop) {
   if (!drop.size) return;
-  _closed = _closed
-    .map((v) => ({ ...v, tree: _serialDrop(v.tree, drop) }))
-    .filter((v) => new Set(_serialMembers(v.tree)).size >= 2);
+  _closed = _closed.map(v => ({...v, tree:_serialDrop(v.tree,drop)}))
+    .filter(v => new Set(_serialKeys(v.tree)).size >= 2);
+}
+
+export function findClosedViewByCatalog(catalogSessionId,host='local') {
+  const matches=(node) => {
+    if (!node) return false;
+    if (node.t==='leaf') return node.session?.catalogSessionId===catalogSessionId && (node.host || node.session?.host || 'local')===host;
+    return matches(node.a) || matches(node.b);
+  };
+  const view=_closed.find(v=>matches(v.tree));
+  return view ? {...view} : null;
 }
 
 export function findClosedViewByTmux(tmuxName) {
   if (!tmuxName) return null;
-  const v = _closed.find((x) => _serialMembers(x.tree).includes(tmuxName));
+  const v = _closed.find((x) => _serialKeys(x.tree).includes(`legacy:local:${tmuxName}`));
   return v ? { ...v } : null;
 }
 
@@ -619,6 +682,7 @@ export function peekClosedView(viewId) {
 // 로컬 구성원 중 live에 없는 tmux 세션을 빈 칸으로 만든다. 원격 호스트 칸은 그 호스트의
 // 세션이라 이 서버의 목록으로는 판단할 수 없다 — 건드리지 않는다.
 function _serialPrune(node, live) {
+  if (node?.t === 'leaf' && node.session?.catalogSessionId) return node;
   if (!node) return node;
   if (node.t === 'leaf') {
     const host = node.host || (node.session && node.session.host) || 'local';
@@ -637,7 +701,7 @@ export function pruneClosedViews(live) {
     const tree = _serialPrune(v.tree, live);
     if (tree === v.tree || JSON.stringify(tree) === JSON.stringify(v.tree)) { next.push(v); continue; }
     changed = true;
-    if (new Set(_serialMembers(tree)).size >= 2) next.push({ ...v, tree });
+    if (new Set(_serialKeys(tree)).size >= 2) next.push({ ...v, tree });
   }
   if (changed) _closed = next;
   return changed;

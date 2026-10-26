@@ -113,6 +113,13 @@ async def ws_remote(ws: WebSocket, host_id: str, tmux_name: str):
         return
 
     path = f"/api/peer/ws/{tmux_name}"
+    durable = [ws.query_params.get(k) for k in ('catalog_host', 'catalog_session_id', 'runtime_id')]
+    if any(value is not None for value in durable):
+        if not all(isinstance(value, str) and re.fullmatch(r'[a-f0-9]{32}', value) for value in durable):
+            await ws.close(code=4004, reason='invalid runtime identity')
+            return
+        # All identities are part of the HMAC-covered path; never fall back to a name.
+        path = f"/api/peer/ws-v2/{'/'.join(durable)}/{tmux_name}"
     # 서명은 **쿼리 없는 path**에 건다 — B도 `ws.url.path`로 검증한다. screen은
     # 브라우저가 만든 화면 토큰(term/remote.js)으로, B가 이 연결의 attach PTY에
     # 이름을 붙여 「연결된 화면」이 "이게 나"를 판정할 수 있게 하는 값이다.

@@ -1,20 +1,9 @@
-"""저장소 단위 사용자 판단(숨김) — 2.1 D1, "저장소 1급화" 1단계.
+"""Repository preference compatibility facade.
 
-`rail_repos_store.py`(2.1.6, `~/.vt/rail-repos.json`)를 흡수한다. 그 파일은
-숨김 목록 하나만 들고 있었는데, 이제 저장소가 1급 개체(`GET /api/repos`)가
-되면서 저장소에 대한 사용자 판단을 적을 자리가 하나로 모여야 한다 — 숨김과
-별개로 두 파일을 유지하면 다음 판단(정렬 등)이 늘 때마다 또 갈라진다.
-
-**키는 `(host, path)`다.** 지금은 `host`가 항상 `"local"`이지만, 이 값을
-id 해시에 넣어 두는 것이 2.2(멀티호스트) 기반이다 — 나중에 원격 저장소가
-생겨도 이 스키마를 다시 안 고쳐도 된다.
-
-저장 규칙은 snippet_store·queue_store·(옛)rail_repos_store와 같다: 0700
-디렉터리 + 0600 파일 + atomic replace + flock.
-
-**이관은 1회, 조용히.** `repos.json`이 아직 없고 옛 `rail-repos.json`이
-있으면, 그 숨김 목록을 `hidden: true` 레코드로 옮기고 원본은 `.bak`으로
-남긴다(지우지 않는다 — 이관이 잘못됐을 때 되돌릴 수 있어야 한다).
+The private session catalog owns hidden preferences after one-time import.
+The old repos.json remains unchanged as recovery evidence; legacy rail preferences
+are retained as a .bak. Imports take the legacy store lock before the catalog lock.
+Repository identifiers remain compatible with existing API consumers.
 """
 
 from __future__ import annotations
@@ -172,8 +161,8 @@ def _write_unlocked(items: dict[str, dict]) -> None:
 
 def list_repos() -> list[dict]:
     """`{id, host, path, hidden}` 레코드 전부(경로 삭제 여부와 무관하게 저장된 것)."""
-    with _locked():
-        return list(_read_unlocked().values())
+    from session_catalog.projects import listing
+    return listing()
 
 
 def list_hidden() -> list[str]:
@@ -187,30 +176,8 @@ def hidden_set() -> set[str]:
 def set_hidden(path: str, hidden: bool, *, host: str = DEFAULT_HOST) -> dict:
     """한 저장소의 숨김 여부를 바꾼다. 결과는 `{ok, hidden: [...]}`(경로 목록,
     옛 rail_repos_store 호출자와의 호환)."""
-    norm = _normalize(path)
-    if not norm:
-        return {"ok": False, "error": "empty_path", "reason": "경로가 비어 있습니다"}
-    with _locked():
-        items = _read_unlocked()
-        rid = repo_id(host, norm)
-        existing = items.get(rid)
-        if hidden:
-            if existing and existing["hidden"]:
-                # ⚠ 여기서 `list_hidden()`을 부르면 안 된다 — 이미 `_locked()` 안이라,
-                # 그 함수가 다시 잠그려는 순간 자기 자신이 쥔 락을 기다리며 멈춘다
-                # (flock은 프로세스가 아니라 open file description 단위라 재진입이
-                # 안 된다). 들고 있는 `items`에서 바로 계산한다.
-                return {"ok": True, "hidden": [r["path"] for r in items.values() if r["hidden"]]}
-            if not existing and len(items) >= MAX_REPOS:
-                return {"ok": False, "error": "too_many",
-                        "reason": f"저장소는 최대 {MAX_REPOS}개까지 기록할 수 있습니다"}
-            items[rid] = {"id": rid, "host": host, "path": norm, "hidden": True}
-        else:
-            if not existing or not existing["hidden"]:
-                return {"ok": True, "hidden": [r["path"] for r in items.values() if r["hidden"]]}
-            items[rid] = {**existing, "hidden": False}
-        _write_unlocked(items)
-        return {"ok": True, "hidden": [r["path"] for r in items.values() if r["hidden"]]}
+    from session_catalog.projects import set_hidden as catalog_set_hidden
+    return catalog_set_hidden(path,hidden,host)
 
 
 def is_hidden(entry: dict, hidden: set[str]) -> bool:

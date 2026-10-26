@@ -209,7 +209,9 @@ def translate_delegation(item: dict) -> list[dict]:
     ended = item.get("state") in _ENDED
     st: dict = {"state": "ended", "ended_at": item.get("closed_at"), "end_reason": item.get("close_reason")} if ended \
         else {"state": "active"}
-    base = {**st, "approved_by": "system:spawn", "approved_via": "system", "expires": None, "conds": {}, "deleg": did}
+    base = {**st, "bound_sessions": [item[side]["key"] for side in ("parent","child") if item.get(side,{}).get("key") and not item[side].get("host")], "approved_by": "system:spawn", "approved_via": "system", "expires": None, "conds": {}, "deleg": did}
+    if item.get('identity_version')==2:
+        base.update(identity_version=2,runtime_bindings=item.get('runtime_bindings',{}))
     out = []
     if did and pk and _SAFE.fullmatch(pk):
         out.append(_scoped({"id": f"dc-{did}", "origin": f"{DELEG_ORIGIN}{did}:control",
@@ -384,7 +386,7 @@ def _is_legacy(rec: dict) -> bool:
     return str(rec.get("origin", "")).startswith("legacy:")
 
 
-def _sync(items: list, new: list, keep_fields: tuple = ("approved_by", "approved_via", "delegation")) -> tuple[list, dict]:
+def _sync(items: list, new: list, keep_fields: tuple = ("approved_by", "approved_via", "delegation", "identity_version", "runtime_bindings")) -> tuple[list, dict]:
     """legacy origin 레코드를 new 와 동기화. (결과 목록, {added, updated, removed, same})."""
     by_origin = {x.get("origin"): x for x in items if _is_legacy(x)}
     native = [x for x in items if not _is_legacy(x)]

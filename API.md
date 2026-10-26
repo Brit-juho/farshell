@@ -30,7 +30,7 @@ is still accepted unless `VT_AUTHZ_ENFORCE=legacy` is on, see «Shared machine t
 |--------|------|------|
 | GET | `/api/tmux/sessions` | List tmux sessions. Each item carries `origin` — where the session was created: `local` (this UI, incl. worktree open), `peer` (another Mac via `/api/peer/sessions/create`), `external` (no record, or any other value — an old `agent` option reads back as this: `fsh` CLI or plain tmux). Read from tmux option `@fsh_origin` in the same `list-sessions` call; the same field is in `/ws-workspace` `tmux_sessions`. Also `share` (`{nick, mode}` while the session is shared with agents, else `null` — tmux options `@fsh_share_nick`/`@fsh_share_mode` read in the same `list-sessions` call, no extra tmux call; a nick that breaks the rule reads as `null`, an unknown mode as `read`; also in `/ws-workspace` `tmux_sessions`), `webScreens` (web screens attached — PTYs this server holds for the session, one per browser tab/phone) and `otherClients` (`attached` minus `webScreens`, floor 0: non-web attaches such as a Mac terminal); both come from the same `list-sessions` call plus the session store, no extra tmux call; `command`, `cwd`, `pane_id` refer to the active pane in the active window. `context` is one current-cwd Git snapshot: `{status: ready|nonrepo|unavailable, cwd, root, branch, changed: {files, add, del}|null, worktree: {kind: main|linked|unknown, status: ready|unavailable, name, relative, repositoryRoot}|null}`; branch and change counts are from the same cwd, independent of agent CLI or creation-time `wt_id`. `worktree` is resolved from the current Git directory/common directory, including CLI-created trees; `name` is the workspace root basename (shortest distinct parent suffix for duplicate names in the snapshot), `relative` is the resolved cwd path beneath `root` (empty at root), and `repositoryRoot` is the allowed primary workspace path or null. Git management paths are never returned. Identity lookup failure yields `unknown/unavailable` without discarding valid branch/diff data; no Git root yields null. An unavailable lookup keeps only the same cwd's last success, never another cwd; denied paths lose cached Git values. REST and `tmux_sessions` push share the collector (10s Git cache, 2s retry, default 5s visible-screen scan). `lineage` is set only for a delegation sub-session: `{delegation, parent (current name or null), state: running|reported|closed|orphaned, outcome, createdAt, task, summary (≤600 chars)}`, from the delegation ledger by `#{session_id}:#{session_created}` (not from `@fsh_parent`) |
 | POST | `/api/tmux/attach` | Attach to a tmux session (JSON: name, optional 32-hex `screen`). Each screen gets its own PTY; the same screen reuses its attachment after reload |
-| POST | `/api/tmux/create` | Create a tmux session + auto-attach (JSON: name, cols, rows, cwd, optional `screen`) |
+| POST | `/api/tmux/create` | Create a tmux session + auto-attach (JSON: name, cols, rows, cwd, optional `screen`, optional `unique_name`). No name → named after the `cwd` folder (else the server's), a taken name gets `-1`, `-2`. With `unique_name` a taken `name` also gets `-1`, `-2` instead of failing, and the name is reduced to `[A-Za-z0-9_-]` (nothing left → the default name); the response's `tmux_session` is the name actually used |
 | DELETE | `/api/tmux/kill/{tmux_name}` | Fully kill a tmux session |
 | POST | `/api/tmux/kick` | tmux hooks only — nudges the session-list watcher. Needs the `X-VT-Kick` secret the server makes at start (not the login); 204, or 403 without it |
 | POST | `/api/tmux/open-on-mac` | Attach an existing tmux session in a new window on the server's (macOS) terminal (JSON: name). Returns 400 if the server isn't macOS |
@@ -97,6 +97,7 @@ is never limited. Denied and failed attempts are written to `~/.vt/audit/denials
 | GET | `/api/fs/search?q=X` | Fuzzy filename search (command palette `/` mode). `path=` scopes to a subtree, max 50 results |
 | GET | `/api/fs/file?path=X` | File content. Binaries return only `binary:true`; anything over 512KB is truncated. Images also carry `image:true`, `mime`, and `too_large` — the bytes come from `/api/fs/raw` below |
 | GET | `/api/fs/raw?path=X` | [T3] Raw **image** bytes for inline preview. Same browse boundary as `/api/fs/file`, plus a type allowlist: png/jpeg/gif/webp/bmp/ico only, and only when extension **and** magic bytes agree. SVG, HTML and PDF are excluded — served same-origin they are scriptable documents, i.e. XSS. Over 8MB → 413; not an image → 403. Sent with `nosniff` and `Content-Disposition: inline` |
+| POST | `/api/fs/share-import` | Requires elevation. Body `{path}`. Copies a file inside the browse boundary into the file store (snapshot) so a share link can be issued for it; returns `{ok, item}` (same shape as an `/api/files` item). 403 `denied` outside the boundary/denylist, 404 missing, 400 `bad_path`/`not_a_file`, 413 over `VT_MAX_UPLOAD_MB`. The same path+size+mtime reuses its snapshot |
 | GET | `/api/git/status?repo=X` | Parsed result of `git status --porcelain` |
 | GET | `/api/git/diff?repo=X[&file=Y][&staged=1]` | Raw `git diff` output. Protected paths (`.env`/`*.pem`/`id_rsa`, etc.) have their content redacted (`[content redacted — protected path]`) |
 
@@ -230,9 +231,9 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 |--------|------|------|
 | GET | `/api/snippets` | List saved prompt snippets |
 | GET | `/api/snippets/project?cwd=` | Resolve a cwd to its snippet project key (repo top, or null) |
-| POST | `/api/snippets` | Add a snippet (JSON: text, label, scope: global\|project, cwd) |
+| POST | `/api/snippets` | Add a snippet (JSON: text, label, scope: global\|project, cwd). A single trailing newline in `text` means "press Enter after the last line"; a legacy `mode` field is ignored |
 | DELETE | `/api/snippets/{item_id}` | Delete a snippet |
-| PATCH | `/api/snippets/{item_id}` | Change a saved snippet's run mode (JSON: mode) — auto-run-in-new-section vs paste-only. Text/label can't be edited (delete and re-save) |
+| PATCH | `/api/snippets/{item_id}` | Edit a snippet (JSON: any of text, label, scope, cwd — fields you leave out are unchanged; `cwd` is needed when switching to `project`) |
 
 ## Web Push
 
@@ -290,6 +291,7 @@ method+path so a `view` GET signature can't be reused on a `control` POST.
 | GET | `/api/peer/ping` | Signed liveness check → id, label, version, `serverTime` (the caller derives clock skew from it), and the caller's granted level |
 | GET | `/api/peer/sessions` | Signed, `view` level — this host's tmux sessions + agent status. Each item carries `origin` (`local`/`peer`/`external`, the same values and `@fsh_origin` source as `GET /api/tmux/sessions`; an older peer omits it and the receiver treats the session as local). **Never relays other peers' sessions** (hop 0): A↔B mutual pairing would otherwise recurse A→B→A |
 | POST | `/api/peer/input` | Signed, **`control` level** — type text into a tmux session on this host (JSON: `session`, `data`, optional `enter`). Default types without Enter (same contract as file insert); `enter: true` presses it, which is what the prompt queue needs (A3) — the caller says which, the server never guesses. A `view` peer gets 403 with the exact command to enable it |
+| WS | `/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}` | Signed durable attach. All identity fields are covered by HMAC; owner verifies host incarnation and runtime before exact physical attach. Stale identity closes 4404; older peers have no name fallback. Same view/control and revocation checks as the legacy stream. |
 | WS | `/api/peer/ws/{tmux_name}` | Signed, `view` streams output; input is applied only at `control` level. With `VT_AUTHZ_ENFORCE=peer` each input frame re-checks the grant and a revoked/downgraded Mac is disconnected (4401) within 5 seconds. Opened by the **other server's proxy**, never by a browser (a browser WebSocket can't send the signature headers). Each connection gets its own PTY on this host and it is destroyed on disconnect — sharing the owner's PTY would make the two screens fight over the terminal size |
 | ANY | `/api/peer/relay/{path}` | Host switch, receiving side (2026-09-28). Runs **this host's own** `/{path}` in-process for the peer and streams the response back (tagged `x-peer-relay: 1`). Signed over path **including the query** plus a **required** body hash; **`control` level only**; `{path}` must be in the allowlist in `server/relay_policy.py` (login/devices/OTP, host and peer management, share links, port expose, git accounts, MCP writes, push, clipboard, voice and hook events are never relayed → 403 `relay_forbidden`). Mutations are audited; GETs are not (polling would drown the log) |
 | WS | `/api/peer/relay-ws/{path}` | Same, for `/ws/{id}`, `/ws-agent`, `/ws-workspace`, `/ws-preview/{name}`. Closes 4401 (bad signature) / 4403 (level or allowlist). Re-checks the grant every 30s (every 2s with `VT_AUTHZ_ENFORCE=peer`) and closes 4401 if it was revoked or dropped to `view` |
@@ -620,3 +622,38 @@ Items contain only `id`, `cli`, `type`, `label`, `state`, `started_at`, `ended_a
 `reset` replaces the viewer's previous generation; `truncated` reports omitted data.
 The final hook message is provided separately (at most 2000 characters) to cover delayed
 transcript writes. The client removes its temporary answer once the recorded answer arrives.
+
+## Durable sessions and conversation archives
+
+These routes require a direct-host human browser session. They are excluded from
+agent, machine-token and broad peer-relay access. Raw exports, restore/source
+approval and replication configuration additionally require elevated authentication.
+Original CLI disappearance never deletes archived copies. Starting a CLI returns
+`started_unverified`; it does not certify successful native conversation resumption.
+
+| Method | Path | Contract |
+|---|---|---|
+| GET | `/api/session-catalog` | Repository/workspace/session snapshot; `limit` 1–200, ID `after`, `archived`. Includes physical runtime identities and stored relationships, `archived_count` and `auto_archive_days`. |
+| GET | `/api/session-catalog/sessions/{session_id}` | Logical session, execution history and linked conversations. |
+| POST | `/api/session-catalog/sessions/{session_id}` | Revision-checked title/archive change. Running or unconfirmed runtimes cannot be archived. |
+| DELETE | `/api/session-catalog/sessions/{session_id}` | Body `{revision}`. Removes the session record only (conversations and raw copies stay). `409 archive_first` unless archived, `409 runtime_must_stop`, `409 session_has_relations` for delegation parents/children, `409 revision_conflict`. |
+| POST | `/api/session-catalog/settings` | `{auto_archive_days}` 0–3650 (0 = off, default 30). The server archives — never deletes — sessions whose last runtime ended that many days ago; running and unconfirmed sessions are skipped. |
+| POST | `/api/session-catalog/sessions/{session_id}/stop` | Recorded `operation_id`, explicit `force:true`; stops the exact physical tmux session. Independent child sessions continue. |
+| POST | `/api/session-catalog/reconcile` | Re-observes tmux immediately and updates runtime states; `{complete}` is false when the observation was partial (rows stay `unknown`). |
+| POST | `/api/session-catalog/sessions/{session_id}/resume` | Recorded `operation_id`; restarts a stopped session under the same session ID by resuming its latest verified, non-child conversation (same checks and result as the conversation `resume`). `409 session_archived`, `409 no_resumable_conversation`. Snapshot rows carry `resume_conversation_id` (null when not resumable); session detail carries `resumable:{ok,reason}`. |
+| GET | `/api/session-history` | Conversation list/search; provider, archive filter, bounded keyset pagination. |
+| GET | `/api/session-history/status` | Source registry, collection state, quota and replication checkpoints. |
+| GET | `/api/session-history/conversations/{conversation_id}` | Bounded normalized messages, raw manifest states and native children. Manifests expose `raw_complete` and `projection` (`state`, `omitted_reasons`, `skipping_oversized`, `incomplete_record`) separately from raw preservation state. |
+| POST | `/api/session-history/conversations/{conversation_id}` | Archive/unarchive or explicit deletion tombstone; `delete_scope` is `local` (default) or `replicas` (ACK-tracked remote tombstones, retained raw bytes). Active conversations are rejected. |
+| POST | `/api/session-history/conversations/{conversation_id}/resume` | Recorded `operation_id`, optional stopped logical `session_id`; explicit CLI launch without inherited execution grants. |
+| GET | `/api/session-history/replicas/{origin}/{conversation_id}` | Offline read-only copy, isolated by origin UUID; includes the same raw-completeness and projection metadata as local history. |
+| POST | `/api/session-history/preview/{action}` | Elevated `source`, `restore` or legacy execution `identity` preview; actor-bound expiring approval token. |
+| POST | `/api/session-history/apply/{action}` | Elevated one-use preview token application. |
+| POST | `/api/session-history/settings` | Elevated quota/source enable changes, source revision checked. |
+| POST | `/api/session-history/manifests/{manifest_id}/export` | Elevated verified raw export. |
+| POST | `/api/session-history/download` | Elevated preparation of an actor-bound, one-use download ticket. |
+| GET | `/api/session-history/download/{ticket}` | Elevated streaming download; ticket cannot be reused by another browser session. |
+| POST | `/api/session-history/backup` | Elevated consistent catalog plus referenced raw chunk package; excludes transport keys and CLI credentials. |
+| POST | `/api/session-history/replication/identity` | Elevated archive UUID/public encryption key. |
+| POST | `/api/session-history/replication/settings` | Elevated explicit paired-peer direction, origin, public key and revision approval/revocation. |
+| POST | `/api/peer/session-history/receive` | Signed peer-only encrypted offer/chunk/projection/commit protocol; dedicated receive grant required, obo rejected. |

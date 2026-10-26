@@ -329,6 +329,9 @@
   position:absolute; top:calc(var(--spacing) * 2); right:calc(var(--spacing) * 3);
   background:var(--win); border:1px solid var(--line);
 }
+.vt-pane-body.vt-pane-viewer .vt-pane-share { right:calc(var(--spacing) * 3 + 32px); }
+/* 파일 탭에서 연 공유 다이얼로그의 스냅샷 안내 — 필드 안쪽 들여쓰기(20px)가 아닌 맨 위 줄이다. */
+.vt-fl-share-card .vt-vw-body > .vt-fl-hint { margin:0 0 calc(var(--spacing) * 3); }
 /* 뷰어 페인이 열려 있으면 온보딩(세션 0개 안내)은 나오지 않는다 — 볼 것이 있다. */
 body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 

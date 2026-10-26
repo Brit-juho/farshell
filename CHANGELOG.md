@@ -9,10 +9,42 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Fixed
+- Resume history indexing past oversized records with persisted skip checkpoints; distinguish preserved raw originals from omitted search content. Drain replication backlogs in bounded batches while retaining byte-rate, chunk and cancellation limits.
+- File popup/sheet over a terminal: the terminal area under the popup could go blank while output kept streaming (repaint only ran on open/move/resize/close). The visible session is now repainted every 300ms while the overlay is open, and the card sits on its own compositing layer.
+- Blank views after a restart or re-login: `/api/tmux/attach` no longer answers 404 ("session gone") when tmux merely timed out or was unreachable — it returns 503 and the boot retries (`tmux_runner.session_state`). A pane whose local tmux session could not be found at restore keeps its tmux name (`lost`) instead of being saved as an anonymous empty pane, and is re-attached when the session shows up in the server's tmux list.
+- Limit interactive history capture passes to keep terminal input responsive during backfill; preserve compressed-record indexing progress.
+- New tmux sessions without a name are numbered from `-1` (was `-2`) and are named after the requested `cwd` folder instead of the server's working directory.
 - Preserve GPU statistics in the system API response so the HUD can display them.
 - Compact HUD reset times and chip spacing; show only usage in GPU chips.
 
 ### Added
+- Session rail state sections: the 저장소 / 전체 세션 / 세션 보관함 tabs are gone. One list shows 개입 필요 → 실행 중 → 최근 종료 (collapsible, newest N) with a 보관함 line that swaps in the archived sessions. Ended rows share the running rows' three-line shape and the common row menu (작업 기록, 이름 변경, 보관, 삭제); sorting, delegation tree and grouped views are back for the running list, and a waiting session no longer appears twice. Rail settings gain 저장소별로 묶기, 최근 종료 표시 개수 and 자동 보관. `DELETE /api/session-catalog/sessions/{id}` removes an archived session record (conversations stay; delegation-linked sessions are refused), `POST /api/session-catalog/settings` sets the auto-archive age (default 30 days, archive only — never delete), and the snapshot reports `archived_count`. The phone Fleet uses the same sections; the work-record dialog drops its bordered cards.
+- Resume a stopped session from the session list: `POST /api/session-catalog/sessions/{id}/resume` restarts it under the same session ID from its latest verified conversation, and `POST /api/session-catalog/reconcile` re-observes tmux on demand. Stopped rows now show a primary "이어서 시작" action with rename/archive in a ⋯ menu, execution states are spelled out (종료됨 · 아직 실행 전 · 연결 확인 중 · 상태 확인 필요 · 과거 기록), and past records with no linked conversation can be archived in one step. The session record dialog is regrouped (actions, linked conversations, delegation, run history).
+- Share a file from the 파일 tab or any file viewer (row/header link button): `POST /api/fs/share-import` (elevated) copies the file into the file store as a snapshot and opens the share-link dialog for it. Same browse boundary as `/api/fs/file`; reuses the snapshot while source path, size and mtime are unchanged.
+
+### Changed
+- Snippets and the prompt queue panels share one look: command-block cards (header / body / actions) and a
+  block-style scope switch with counts. Line breaks show as `↵` markers, so a trailing Enter is visible in
+  the text itself; the "Press Enter at the end" switch is gone (the editor shows a live preview instead).
+  Korean instructions use the UI font instead of falling back from the monospace font; only English
+  commands in the snippet editor switch to monospace. The queue's legacy CSS moved into `components.css`.
+- Durable repository/workspace/session catalog, human-only conversation archive, immutable raw
+  copies, Claude/Codex normalization, encrypted peer replication packets and consistent backup
+  export/offline restore. Catalog-aware layout v6 retains stopped sessions and host identities.
+  Execution permissions, pair membership and file leases are epoch-bound; legacy grants require
+  explicit human review. Durable peer streams and delegation assertions reject changed identities.
+  Replication supports source scopes, key rotation, separate receive quotas and explicit deletion
+  tombstones; receiving a replica never starts a CLI. This does not certify every provider dependency,
+  legacy name-only layout adoption, real-account resumption or an operational deployment.
+- Snippets moved into a dock tab and were rebuilt: choose how to run at run time ("Type into this
+  session" / "New session") instead of when saving, a trailing newline in the text means "press Enter
+  after the last line", edit, search, name the new session (taken names become `name-1`, `name-2`),
+  and no more browser-default radio/checkbox controls. Existing "auto-run" snippets keep their behavior.
+  `PATCH /api/snippets/{id}` now edits name/text/scope; `POST /api/tmux/create` takes `unique_name`.
+- Status bar customization: Settings → Status bar chooses which chips (connected screens, E2E,
+  safe mode, CPU, GPU, RAM, network, usage, version, server) show, on which side and in what order, by
+  drag, a position select or up/down buttons, with a live preview. Saved per device. The default layout no
+  longer shows the `server :port` chip (it was always on the far left and said nothing new).
 - `fsh update` updates an install by channel (`stable` = SSH-signed release tag, `dev` = `origin/dev`,
   `devmode` = manual pull) with rollback, and re-syncs Claude Code/Codex hooks and the `fsh` skill link;
   `fsh sync` does the sync alone. Pin the release-signing key once with `fsh update trust`.

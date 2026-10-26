@@ -38,7 +38,7 @@
 
 | Term (UI) | Meaning |
 |---|---|
-| Session (세션) | One tmux session. Runs until killed; closing a view never stops it. |
+| Session (세션) | A durable logical task in the catalog. A tmux runtime is one execution of it; closing a view never stops execution. Legacy live APIs still address tmux sessions. |
 | View (뷰) | One header tab. Holds one or more panes. 1 pane = single view, 2+ = grouped view. |
 | Pane (칸) | One region of a view. Holds one session, or is empty. |
 | Open (열림) | The session is placed in a pane of this browser tab. A placement, not a state. |
@@ -52,7 +52,7 @@
 2. The "current session" is not stored separately — it is the focused pane of the active view.
 3. Reload never reopens a session or view the user closed. Only the saved layout is restored.
 4. The layout is saved per browser tab. A new browser tab starts from a copy of the most recently saved layout.
-5. Authentication expiry is never session termination. Boot waits for login, and a 401/403 or invalid attach response leaves the saved layout intact. Only a confirmed missing local session becomes an empty pane. Re-login restores the server copy before a potentially damaged local cache; view titles, splits and remembered closed groups stay in that snapshot. A terminal WebSocket authentication failure opens the login gate while retaining its view. Pure PTY processes can only be restored while the server still owns them; tmux-backed sessions reconnect by name.
+5. Authentication expiry is never session termination. Boot waits for login, and a 401/403 or invalid attach response leaves the saved layout intact. Only a confirmed missing local session becomes an empty pane — and "confirmed" means tmux itself said so: `tmux_runner.session_state` returns `missing` only for `can't find session` / `no server running`; a timeout or any other failure is `unknown`, which `/api/tmux/attach` answers with 503 (retried by boot), never 404. Even a confirmed miss keeps the pane's tmux name (`lost`, `layout/persist.js`) through later saves, and `recoverLostPanes` re-attaches it when the name reappears in a `tmux_sessions` push (never into a session already open elsewhere). Re-login restores the server copy before a potentially damaged local cache; view titles, splits and remembered closed groups stay in that snapshot. A terminal WebSocket authentication failure opens the login gate while retaining its view. Pure PTY processes can only be restored while the server still owns them; tmux-backed sessions reconnect by name.
 
 ### Actions
 
@@ -77,7 +77,7 @@ Implementation notes (2026-10-03): the active session is derived in `layout/stor
 active view's focused pane — `null` on an empty pane. The store never holds zero tabs; one unlabeled tab with one empty
 pane reads as "no views" (`isLayoutEmpty`: tab bar hidden, onboarding shown). Reopening a remembered group attaches its
 members and rebuilds the tree; a member already open elsewhere in this browser tab is not moved — its slot stays empty.
-Layout snapshot `v5` adds `screen` and `closed`; it is written to `localStorage` under a per-tab key plus the "latest" key,
+Layout snapshot `v6` retains `screen` and `closed` and stores catalog session/runtime IDs when supplied by attach; it is written to `localStorage` under a per-tab key plus the "latest" key,
 and to `/api/workspace` as `ui.layouts[screen]` (merged per tab id by the server, capped at 20) plus `ui.layout` (latest).
 Boot attaches only the sessions in the saved layout's open panes; `restoreWorkspace`, `reconcileMissingTmuxSessions`, the
 "attach every tmux session" fallback and the empty-pane fill-in on restore are gone. Session order (mobile swipe) now
@@ -138,7 +138,9 @@ moves the active **view tab** at every width (it moved a session in the removed 
 ### Rail
 
 - 「개입 필요」 (waiting sessions): collapsible, and switchable on/off in rail settings (like VS Code's Open Editors).
-- 「세션」: grouped views have one editable title and pane-order members; remaining single sessions use name order. Closed remembered groups stay together too. See [session UI design](./session-ui.md).
+- 「실행 중」 (was 「세션」): grouped views have one editable title and pane-order members; remaining single sessions use name order. Closed remembered groups stay together too. A waiting session shown in 「개입 필요」 is left out here (`splitRunning`), so no session appears twice. See [session UI design](./session-ui.md).
+- **Ended sessions (state-section layout, 2026-10-26).** No tabs: below 「실행 중」 the same list continues with 「최근 종료」 (collapsible, newest N, default 5, `rail.view` device setting; sessions not live and not archived, `pickRecentEnded`) and one 「보관함 N ›」 line that swaps the list in place for the archived sessions (back chevron, 비우기). Ended rows (`StoppedRow`) use the running rows' 3-line shape with a dashed state circle and dimmed name; the only accent-filled button is 이어서 시작. Every row uses the shared `Menu`: running rows gain 작업 기록 (and 이름 변경 even when not open) via `rowMenuItems({record})`; ended rows add 이어서 시작 · 보관/보관 해제 · 삭제 (archived only). Rename sets the catalog title and, for an open session, the web session name too. Rail settings add 저장소별로 묶기 (repository → workspace view, which has no sorting or delegation tree), 최근 종료 표시 개수 and 자동 보관.
+- **Auto-archive / delete.** The server worker archives (never deletes) sessions whose last runtime ended `auto_archive_days` ago (default 30, 0 = off, `POST /api/session-catalog/settings`); running and unconfirmed sessions are skipped. `DELETE /api/session-catalog/sessions/{id}` soft-deletes an archived session record only — conversations and raw copies stay — and refuses sessions with delegation relations. Confirmation is a dialog, not a password.
 - **Delegation lineage (2026-10-13, direction A 「계보선」).** Single sessions are built into a parent → child tree (`buildSessionTree`) from the session list's `lineage` field, which the server fills from the delegation ledger (`routes/tmux.py _lineage_by_name`) — not from `@fsh_parent`, which an agent could rewrite. A child always sits under its parent in creation order, whatever the sort. Open children (running / reported) hang off a lane in the parent's state colour; a reported child's branch turns the done colour (failed → error colour); closed children fold into 「닫힌 하위 N」 (expandable, dimmed). A child whose parent is gone or orphaned is drawn at top level. Child rows drop line 2 and show the agent keyword while running, the delegation result after (`보고 · 성공/실패`, `닫힘`). The parent's 「하위 보고 r/n」 chip collapses its children. Child menu: 보고 보기 · 부모 세션으로 이동 · 위임 닫기 (this Mac only; `POST /api/delegations/{did}/close-by-user`, human session). The lane runs in the row's left padding (x = 4px) so it never crosses the parent's text; geometry lives in `styles/screens/70-worktree-rail.css`. The same tree is drawn in the phone Fleet.
 - **Sort: 이름순 | 수동** (switch in the 「세션」 header). Manual order moves a top-level entry (a parent with its children) by drag inside the rail or 위로/아래로 이동 in the row menu (the phone uses the menu). Switching to manual starts from the current name order; switching back keeps the manual order for next time. Stored as one global setting `rail.order` = `{"sort","order"}`; child collapse / closed-children expansion is one device setting `rail.lineage`. Grouped views keep their view order above the tree.
 - Collapsed rail (48px) has no zone headings, so it draws **one list**: waiting sessions first (name order), the rest after
@@ -331,3 +333,60 @@ wrap without truncation. The accessible summary retains the full context.
 ### Settings numeric controls
 
 `panels/settings/number-spinner.js` supplies the number field and custom step buttons for range controls and both voice minimum-duration fields. Native number semantics and the input's min/max/step remain; browser spinners are hidden. Typed values commit on change/Enter, invalid or empty edits restore the current value, and bounds/step are normalized before saving. Arrow keys and buttons share that path. While saving, step buttons are disabled and the field is read-only to preserve focus; rejection restores the prior value unless the caller returns its own authoritative value (the settings store deliberately retains locally applied values after persistence failure). Desktop arrows stack; touch/narrow-screen buttons are side by side at 44px.
+
+## Durable catalog and conversation archive
+
+`server/session_catalog/` owns private SQLite logical sessions, workspaces, physical runtime
+observations and recorded stop/resume operations. A complete batch observation uses the tmux
+server socket/PID/birth epoch plus session ID/birth; partial observations mark executions unknown
+and cannot terminate them. Stopped catalog rows remain. Archive requires an explicitly stopped
+runtime. Independent delegated tmux sessions are not stopped together.
+
+`server/session_history/` stores immutable SHA-256 raw chunks before committing manifests and
+normalizes supported Claude/Codex JSONL, including compressed Codex records. Claude child metadata
+and selected tool-result attachments are raw archive units. `dependency_complete:false` remains
+explicit: complete restoration across arbitrary CLI versions is not certified. Source disappearance
+and rewrite preserve earlier manifests. The collector is independent of browser visibility; Git
+discovery, FTS projection and encrypted replication have separate tasks. Shutdown drains an active
+worker before releasing its state. Interactive collection commits at most 256 KiB of new raw bytes
+per file pass; explicit/offline capture retains the 8 MiB budget. Compressed projection allows one
+supported record (up to the 1 MiB line limit) to make progress even with the smaller raw budget.
+Oversized records are skipped in bounded passes with continuation state stored in the manifest;
+restarting collection cannot parse their tails as separate records. Later supported records remain
+searchable. The manifest distinguishes complete raw preservation from omitted search content and
+reports oversized/invalid records and decompression/index limits in the archive UI. Legacy incomplete
+projections are replayed once with stable message IDs. Replication drains at most 32 attempts per peer
+within a one-second scheduling window, preserving the existing request timeout, chunk and byte-rate
+limits; a bounded event already begun can outlast that window so a slow host still advances.
+Explicit cancellation is also checked within the event and prevents subsequent work.
+The disposable trigram index can fall back to normalized SQL
+search while absent or behind the catalog.
+
+Archive APIs are direct-host human only; sensitive operations additionally require elevation.
+They are absent from broad relay and agent socket allowlists. Replication uses a distinct human
+approved peer grant and sealed public-key packets. Raw chunks are verified before manifest ACK;
+projection batches are bounded and replayable. Approved source scopes restrict transfer. Origin and
+replica quotas are accounted separately, including pending and orphan bytes. Receiver key rotation
+retains old private keys for in-flight packets; keys are excluded from backup exports. Explicit deletion
+can request replica tombstones with delivery ACKs, while source disappearance emits no deletion.
+Raw chunks remain until a separate cleanup operation; a tombstone is not a physical secure erase.
+Receiver records never become local executions.
+Protocol tests cover large projections, lost ACKs and revoked grants; these are not evidence of
+an operational central host connection.
+
+Daily consistent catalog snapshots retain seven generations. Export includes local and replicated
+referenced raw chunks, excluding CLI credentials and transport private keys. The offline
+`session_history.backup.restore_package` function restores only into an absent catalog directory;
+sources and replication are disabled for review and historical runtimes are stopped. There is
+currently no browser backup-import flow.
+
+New catalog attach paths validate durable runtime IDs; layout v6 retains stopped placeholders and
+rejects same-name replacement runtimes. Legacy name-only snapshots retain compatibility behavior;
+legacy name-only layout adoption remains separate from grant migration. Execution-bound legacy grants
+are denied until an elevated human reviews and binds them to observed host/epoch identities. Explicit
+new grants, pair membership and file leases use the same execution fence. Remote delegation includes
+runtime assertions in the signed request body and pins both host identities; missing or changed
+assertions are refused. Durable peer terminal paths bind host/session/runtime IDs in the signed URL.
+Repository visibility is imported once into catalog metadata; the legacy preferences remain recovery evidence.
+Native resume returns `started_unverified` until separately checked; it is not an OAuth/profile
+replacement certificate. Endpoint and authentication contracts are in [API.md](../../API.md).

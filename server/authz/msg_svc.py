@@ -99,7 +99,8 @@ def relation(a_key: str, b_key: str, items: Optional[Iterable[dict]] = None) -> 
     if not a_key or not b_key or a_key == b_key:
         return None
     import delegation
-    open_ = [x for x in (items if items is not None else _ledger_items())
+    from session_catalog.identity import visible_ledger
+    open_ = [x for x in visible_ledger(list(items if items is not None else _ledger_items()))
              if isinstance(x, dict) and x.get("state") in delegation.OPEN_STATES]
 
     def key(x: dict, side: str) -> str:
@@ -234,7 +235,7 @@ def _snapshot(now: float, peer_grant: Optional[dict] = None) -> store.Snapshot:
         src = "live"
     return store.Snapshot(grants=grants, approvals=docs["approvals"][0]["items"], windows=docs["windows"][0]["items"],
                           shares=docs["shares"][0]["items"],
-                          corrupt=frozenset(n for n, (_d, bad) in docs.items() if bad), now=now, source=src)
+                          corrupt=frozenset(n for n, (_d, bad) in docs.items() if bad), now=now, source=src).fenced()
 
 
 def _decide(p: P.Principal, resource: str, ctx: dict, peer_grant: Optional[dict] = None) -> engine.Decision:
@@ -395,7 +396,7 @@ def request_access(sender_key: str, sender_name: str, recv_key: str, recv_name: 
         snap = store.Snapshot(grants=docs["grants"]["items"], approvals=docs["approvals"]["items"],
                               windows=docs["windows"]["items"], shares=docs["shares"]["items"],
                               corrupt=frozenset(n for n in ("grants", "approvals", "windows", "shares", "meta")
-                                                if store._read(n)[1]), now=now, source="store")
+                                                if store._read(n)[1]), now=now, source="store").fenced()
         d = engine.decide(P.agent(sender_key, name=sender_name), "authz.request", "authz:*", {}, snap)
         if not d.allow:                          # authz.request 가 없으면 보류 요청도 없다
             raise ShareError("request_not_allowed", tr("승인 요청을 만들 수 없는 호출자입니다"), 403)

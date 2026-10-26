@@ -1,5 +1,8 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
+import { Portal } from 'solid-js/web';
 import { t } from '../core/i18n.js';
+import { icon } from '../ui/icons.js';
+import { Menu } from './RailRow.js';
 import { normalizeSubagents, nativeStateLabel } from './native-subagents.js';
 import { formatRelativeTime, type SessionRow } from './rail-data.js';
 
@@ -13,7 +16,10 @@ export function NativeChip(props: { row: SessionRow }) {
     mod.showSubagents({ tmuxName: props.row.tmuxName, parentId: summary().parentId, items: summary().items, host });
   };
   return <Show when={summary().items.length || summary().limited}>
-    <button type="button" class="vt-native-chip" onClick={(e) => { e.stopPropagation(); void openList(); }}>{summary().limited ? t('내부 에이전트 · 표시 한도 도달') : count() ? t('내부 에이전트 {n} 작업 중', { n: count() }) : t('내부 에이전트 {n}개', { n: summary().items.length })}</button>
+    <button type="button" class="vt-native-chip" data-working={count() ? '' : undefined} onClick={(e) => { e.stopPropagation(); void openList(); }}>
+      <span class="vt-native-chip-icon" innerHTML={icon('git-branch', 12, 2)} />
+      <span>{summary().limited ? t('내부 에이전트 · 표시 한도 도달') : count() ? t('내부 에이전트 {n} 작업 중', { n: count() }) : t('내부 에이전트 {n}개', { n: summary().items.length })}</span>
+    </button>
   </Show>;
 }
 
@@ -33,18 +39,28 @@ export function NativeChildren(props: { row: SessionRow }) {
     if (host !== ((window as any).vtRelayHost?.() || 'local')) return;
     m.showSubagent({ tmuxName: props.row.tmuxName, parentId: summary().parentId, child, host });
   };
+  const [menu, setMenu] = createSignal<{ x: number; y: number; child: any } | null>(null);
+  const openMenu = (e: MouseEvent, child: any) => {
+    e.stopPropagation();
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setMenu({ x: r.left, y: r.bottom + 2, child });
+  };
+  const menuItems = (child: any) => [
+    { label: t('기록 보기'), run: () => void open(child) },
+    { label: t('부모 세션으로 이동'), run: () => (window as any).vtOpenSessionFromRail?.({ sessionId: props.row.sessionId, tmuxName: props.row.tmuxName }) },
+  ];
   const render = (child: any) => <div class="vt-native-row" data-state={child.state}>
-    <button type="button" class="vt-native-open" onClick={() => void open(child)}>
-      <span class="status-dot" data-state={child.state === 'failed' ? 'error' : child.state} />
-      <span class="vt-native-name">{child.label}</span>
-      <span class="vt-native-meta">{nativeStateLabel(child.state)}{child.stale ? ` · ${t('상태 확인 필요')}` : ''}</span>
-      <Show when={child.tool}><span class="vt-native-tool">{t('도구: {tool}', { tool: child.tool })}</span></Show>
-      <span class="vt-native-meta">{formatRelativeTime(child.started_at)}</span>
+    <button type="button" class="vt-native-open" aria-label={`${child.label}, ${nativeStateLabel(child.state)}${child.stale ? `, ${t('상태 확인 필요')}` : ''}`} onClick={() => void open(child)}>
+      <span class="status-dot" data-state={child.state === 'failed' ? 'error' : child.state} data-stale={child.stale ? '' : undefined} />
+      <span class="vt-native-main">
+        <span class="vt-native-head">
+          <span class="vt-native-name">{child.label}</span>
+          <span class="vt-native-time">{formatRelativeTime(child.started_at)}</span>
+        </span>
+        <Show when={child.tool}><span class="vt-native-tool">{child.tool}</span></Show>
+      </span>
     </button>
-    <details class="vt-native-menu"><summary aria-label={t('서브에이전트 메뉴')}>⋯</summary>
-      <button type="button" onClick={() => void open(child)}>{t('기록 보기')}</button>
-      <button type="button" onClick={() => (window as any).vtOpenSessionFromRail?.({ sessionId: props.row.sessionId, tmuxName: props.row.tmuxName })}>{t('부모 세션으로 이동')}</button>
-    </details>
+    <button type="button" class="vt-icon-btn xs vt-native-menu-btn" aria-label={t('서브에이전트 메뉴')} aria-haspopup="menu" onClick={(e) => openMenu(e, child)} innerHTML={icon('more-horizontal', 14, 2)} />
   </div>;
   return <Show when={summary().items.length || summary().limited}>
     <div class="vt-native-children" role="group" aria-label={t('네이티브 서브에이전트')}>
@@ -58,6 +74,7 @@ export function NativeChildren(props: { row: SessionRow }) {
         <Show when={endedOpen()}><For each={ended()}>{render}</For></Show>
       </Show>
       <Show when={summary().limited}><p class="vt-native-meta">{t('표시 한도에 도달함')}</p></Show>
+      <Show when={menu()}>{(m) => <Portal><Menu x={m().x} y={m().y} onClose={() => setMenu(null)} items={menuItems(m().child)} /></Portal>}</Show>
     </div>
   </Show>;
 }

@@ -170,6 +170,12 @@ html[data-skin="windows"] #topbar {
 #keybar-open-btn { display:none; }
 html.vt-has-keybar #keybar-open-btn { display:inline-flex; }
 html.vt-has-keybar[data-mobile-tab]:not([data-mobile-tab="terminal"]) #keybar-open-btn { display:none; }
+/* 스니펫 버튼 — dock이 없는 좁은 화면(COMPACT_MAX 720)의 터미널 탭에서만. */
+#snippets-open-btn { display:none; }
+@media (max-width:719.98px) {
+  #snippets-open-btn { display:inline-flex; }
+  html[data-mobile-tab]:not([data-mobile-tab="terminal"]) #snippets-open-btn { display:none; }
+}
 
 #vt-workspace-chip {
   display:flex; align-items:center; gap:calc(var(--spacing) * 1.5);
@@ -242,8 +248,8 @@ html.vt-has-keybar[data-mobile-tab]:not([data-mobile-tab="terminal"]) #keybar-op
     max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     font:500 var(--fs-2xs) / 1.2 var(--mono); color:var(--sub);
   }
-  #topbar > #keybar-open-btn, #topbar > #palette-toggle { width:44px; height:44px; flex:none; }
-  #topbar > #keybar-open-btn svg, #topbar > #palette-toggle svg { width:21px; height:21px; }
+  #topbar > #keybar-open-btn, #topbar > #snippets-open-btn, #topbar > #palette-toggle { width:44px; height:44px; flex:none; }
+  #topbar > #keybar-open-btn svg, #topbar > #snippets-open-btn svg, #topbar > #palette-toggle svg { width:21px; height:21px; }
   /* 켜짐 — components의 aria-pressed 규칙이 이 레이어의 hover 배경에 진다(CSS 레이어 함정). */
   #topbar > #keybar-open-btn[aria-pressed="true"] {
     color:var(--acc); background:color-mix(in srgb, var(--acc) 14%, transparent);

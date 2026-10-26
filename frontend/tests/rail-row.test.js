@@ -148,7 +148,7 @@ test('내부 에이전트는 기록 조회로, 위임 세션은 별도 레이블
   ] } };
   env.mountNativeChildren(root, row);
   assert.match(root.querySelector('.vt-child-heading').textContent, /에이전트 내부기록 조회/);
-  assert.match(root.querySelector('.vt-native-tool').textContent, /도구: Bash/);
+  assert.match(root.querySelector('.vt-native-tool').textContent, /Bash/);
   env.mountRow(root, { row, kidsCount: 1, progress: { reported: 0, open: 1 }, onToggleKids() {}, onOpen() {}, onContext() {} });
   assert.match(root.querySelector('.vt-srow-kids').textContent, /위임 보고 0\/1/);
   assert.match(root.querySelector('.vt-native-chip').textContent, /내부 에이전트 1 작업 중/);

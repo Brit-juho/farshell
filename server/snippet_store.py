@@ -36,17 +36,11 @@ SCOPE_GLOBAL = "global"
 SCOPE_PROJECT = "project"
 VALID_SCOPES = {SCOPE_GLOBAL, SCOPE_PROJECT}
 
-# 실사용 요청(2026-09-11) — 스니펫마다 "누르면 뭘 하는지"가 갈린다.
-#   new_section: 새 섹션(페인)을 만들어 텍스트를 넣고 Enter까지 눌러 바로 실행한다.
-#   paste:       지금 보고 있는 세션에 텍스트만 넣는다 — Enter는 안 누른다. 값을
-#                끼워 넣거나 실행 전에 고쳐야 하는 스니펫(경로·플래그가 매번
-#                달라지는 것 등)은 자동 실행되면 오히려 위험하다.
-# 행마다 버튼 두 개(여기서/새 섹션)를 매번 고르게 하는 대신, 저장할 때 한 번
-# 고르고 그 뒤로는 버튼 하나로 "이 스니펫이 하는 일"이 고정되게 한다.
-MODE_NEW_SECTION = "new_section"
-MODE_PASTE = "paste"
-VALID_MODES = {MODE_NEW_SECTION, MODE_PASTE}
-DEFAULT_MODE = MODE_PASTE  # 모르면 안전한 쪽 — 자동 실행보다 "일단 넣기만"이 사고가 적다.
+# 실행 방식은 스니펫이 아니라 **실행하는 순간** 고른다(2026-10-23): 이 세션에 입력 /
+# 새 세션에서 실행. 저장할 때 미리 고르게 하면 같은 문구를 두 방식으로 쓰고 싶을
+# 때 두 번 저장해야 했다. 대신 "마지막 줄까지 Enter를 칠지"는 본문이 정한다 —
+# 본문 끝의 줄바꿈이 곧 마지막 Enter다(키보드에서 Enter를 친 것과 같은 모델).
+# 옛 파일의 `mode`는 읽을 때 한 번 본문으로 옮기고 버린다(_read_unlocked).
 
 
 def resolve_project_key(cwd: str | None) -> str | None:
@@ -79,6 +73,19 @@ def resolve_project_key(cwd: str | None) -> str | None:
         return None
     top = result.stdout.strip()
     return top or None
+
+
+def normalize_text(text: str | None) -> str:
+    """앞쪽 빈 줄은 버리고, 끝의 줄바꿈은 **의미 있으므로** 한 개로 접어 보존한다.
+
+    `"ls\n\n\n"`과 `"ls\n"`은 같은 뜻(마지막 줄까지 Enter)이다. 줄 끝 공백 때문에
+    문자열이 달라지지 않게 `\r\n`도 `\n`으로 맞춘다.
+    """
+    t = (text or "").replace("\r\n", "\n").replace("\r", "\n").lstrip("\n")
+    body = t.rstrip("\n")
+    if not body.strip():
+        return ""
+    return body + ("\n" if t.endswith("\n") else "")
 
 
 def _state_dir() -> Path:
@@ -120,14 +127,19 @@ def _read_unlocked() -> list[dict]:
     if not isinstance(data, list):
         return []
     items = [x for x in data if isinstance(x, dict) and x.get("text")]
-    # 구 형식(scope/mode 없음) 마이그레이션 — 전부 전체 스코프·기본 모드였다.
+    # 구 형식 마이그레이션 — scope 없음은 전체 스코프, mode는 본문으로 옮긴다:
+    # 「새 섹션 자동 실행」이던 항목은 끝에 줄바꿈을 붙여 지금까지와 똑같이 Enter까지
+    # 가게 하고, 「붙여넣기만」이던 항목은 본문 그대로(끝 줄바꿈 없음).
     for x in items:
         if x.get("scope") not in VALID_SCOPES:
             x["scope"] = SCOPE_GLOBAL
             x["project"] = None
-        if x.get("mode") not in VALID_MODES:
-            x["mode"] = DEFAULT_MODE
-    return items
+        mode = x.pop("mode", None)
+        text = normalize_text(x.get("text"))
+        if mode == "new_section" and text and not text.endswith("\n"):
+            text += "\n"
+        x["text"] = text
+    return [x for x in items if x["text"]]
 
 
 def _write_unlocked(items: list[dict]) -> None:
@@ -154,15 +166,15 @@ def list_items() -> list[dict]:
 
 def add(text: str, label: str | None = None, scope: str = SCOPE_GLOBAL,
         cwd: str | None = None, mode: str | None = None) -> dict:
-    text = (text or "").strip("\n")
-    if not text.strip():
+    # `mode`는 옛 클라이언트가 보내도 받아주기만 하고 쓰지 않는다(위 주석).
+    text = normalize_text(text)
+    if not text:
         return {"ok": False, "error": "empty", "reason": tr("빈 내용은 저장할 수 없습니다")}
     if len(text) > MAX_TEXT_LEN:
         return {"ok": False, "error": "too_long",
                 "reason": tr("내용이 너무 깁니다 (최대 {max}자)", max=MAX_TEXT_LEN)}
     label = (label or "").strip()[:MAX_LABEL_LEN]
     scope = scope if scope in VALID_SCOPES else SCOPE_GLOBAL
-    mode = mode if mode in VALID_MODES else DEFAULT_MODE
     project = None
     if scope == SCOPE_PROJECT:
         project = resolve_project_key(cwd)
@@ -180,7 +192,6 @@ def add(text: str, label: str | None = None, scope: str = SCOPE_GLOBAL,
             "text": text,
             "scope": scope,
             "project": project,
-            "mode": mode,
             "created_at": time.time(),
         }
         items.append(item)
@@ -198,16 +209,40 @@ def remove(item_id: str) -> dict:
     return {"ok": True, "count": len(rest)}
 
 
-def set_mode(item_id: str, mode: str) -> dict:
-    """저장된 스니펫의 실행 방식(새 섹션 자동 실행 / 붙여넣기만)을 나중에 바꾼다
-    — 처음 저장할 때 고른 모드를 되돌릴 수 없으면 "관리"가 아니라 "한 번 선택"이다."""
-    if mode not in VALID_MODES:
-        return {"ok": False, "error": "bad_mode", "reason": tr("mode는 {modes} 중 하나", modes=sorted(VALID_MODES))}
+def update(item_id: str, *, text: str | None = None, label: str | None = None,
+           scope: str | None = None, cwd: str | None = None) -> dict:
+    """이름·본문·스코프를 고친다. 넘기지 않은(None) 항목은 그대로 둔다.
+
+    프로젝트 스코프로 바꿀 때만 cwd가 필요하다(저장할 때와 같은 판정). 이미 프로젝트
+    스니펫인데 스코프를 다시 project로 보내면 기존 project 키를 유지한다.
+    """
+    new_text = None
+    if text is not None:
+        new_text = normalize_text(text)
+        if not new_text:
+            return {"ok": False, "error": "empty", "reason": tr("빈 내용은 저장할 수 없습니다")}
+        if len(new_text) > MAX_TEXT_LEN:
+            return {"ok": False, "error": "too_long",
+                    "reason": tr("내용이 너무 깁니다 (최대 {max}자)", max=MAX_TEXT_LEN)}
+    if scope is not None and scope not in VALID_SCOPES:
+        return {"ok": False, "error": "bad_scope", "reason": tr("scope는 {scopes} 중 하나", scopes=sorted(VALID_SCOPES))}
     with _locked():
         items = _read_unlocked()
         for x in items:
-            if x.get("id") == item_id:
-                x["mode"] = mode
-                _write_unlocked(items)
-                return {"ok": True, "item": x}
+            if x.get("id") != item_id:
+                continue
+            if scope == SCOPE_PROJECT and x.get("scope") != SCOPE_PROJECT:
+                project = resolve_project_key(cwd)
+                if not project:
+                    return {"ok": False, "error": "no_project",
+                            "reason": tr("현재 세션이 git 저장소 안에 있어야 프로젝트 스니펫을 저장할 수 있습니다")}
+                x["scope"], x["project"] = SCOPE_PROJECT, project
+            elif scope == SCOPE_GLOBAL:
+                x["scope"], x["project"] = SCOPE_GLOBAL, None
+            if new_text is not None:
+                x["text"] = new_text
+            if label is not None:
+                x["label"] = (label or "").strip()[:MAX_LABEL_LEN]
+            _write_unlocked(items)
+            return {"ok": True, "item": x}
     return {"ok": False, "error": "not_found", "reason": tr("항목이 없습니다")}
