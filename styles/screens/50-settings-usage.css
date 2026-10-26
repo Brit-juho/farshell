@@ -113,11 +113,6 @@
 .vt-set-reset:disabled:hover { background:transparent; }
 
 .vt-set-btns { display:flex; gap:calc(var(--spacing) * 1); flex-shrink:0; }
-.vt-range-number {
-  width:58px; height:28px; padding:0 6px; text-align:right;
-  border:1px solid var(--line); border-radius:var(--radius-sm);
-  background:var(--color-term-bg); color:var(--txt); font:500 var(--fs-xs) var(--mono);
-}
 .vt-range-unit { min-width:1.5em; color:var(--sub); font:400 var(--fs-xs) var(--ui); }
 .vt-range.has-presets { flex-wrap:wrap; justify-content:flex-end; max-width:300px; }
 .vt-range-presets { display:flex; justify-content:flex-end; gap:4px; width:100%; }
@@ -493,7 +488,6 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
      곳도 모호해진다 — 원래 크기(콘텐츠 폭)로 되돌린다. */
   .vt-settings .vt-toggle { align-self:flex-start; }
   .vt-settings .vt-range input[type="range"] { height:44px; flex:1; min-width:0; }
-  .vt-settings .vt-range-number { height:44px; }
   /* MCP 서버 행의 주 액션(켬/끔·검증) 칩은 데스크톱 밀도용 20px(.vt-chip.sm)
      그대로면 손가락 표적이 안 된다. 44px는 같은 줄의 태그 칩들과 12px gap
      밖에 없어 서로 삼킨다(20-overlay.css의 선택 핸들과 같은 트레이드오프) —

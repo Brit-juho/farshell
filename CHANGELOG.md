@@ -85,6 +85,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- 설정 숫자 입력에 공용 전용 스피너를 적용한다. 범위·간격을 지키는 증감 버튼과 직접 입력·키보드 조절을 제공하며 모바일 버튼은 가로로 배치한다. 음성 최소 작업 시간에도 같은 컨트롤을 사용한다.
+- Settings numeric inputs use shared custom step buttons with bounds, step validation, direct editing and keyboard controls. Touch buttons sit side by side; voice minimum-duration inputs use the same control.
+
 - 레일·모바일 세션 메뉴의 공유 설정·권한 진입점을 「공유 및 권한」으로 통합한다. 해당 세션의 직접 권한과 회수를 함께 제공하고 공유 해제는 확인을 거친다. 내부 서브에이전트와 FarShell 위임 터미널을 구분하고, 작업 중 도구 이름에 레이블을 붙이며 중복 작업 위치 메뉴를 제거한다.
 - Rail/mobile session menus consolidate sharing and direct session permissions with revocation and confirmed unsharing. Native agent records and FarShell delegated terminals have distinct labels; working tool names are explicit and the duplicate workspace-details action is removed.
 

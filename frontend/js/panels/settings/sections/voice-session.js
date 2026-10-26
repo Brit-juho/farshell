@@ -2,8 +2,19 @@ import { vtFetch } from '../../../core/api.js';
 import { activeSessionId, getSession, subscribe } from '../../../core/store.js';
 import { screenId } from '../../../core/screen-id.js';
 import { getAction } from '../../../core/dom.js';
+import { numberSpinner } from '../number-spinner.js';
 import { row, group, toast } from '../controls.js';
 import { t } from '../../../core/i18n.js';
+
+// Rebuilding voice controls after a save must not drop keyboard focus.
+async function refreshNumberFocus(host, refresh) {
+  const focused = document.activeElement;
+  const restore = host.contains(focused) && focused?.matches('.vt-range-number');
+  await refresh();
+  if (restore && !focused.isConnected && host.isConnected && document.activeElement === document.body) {
+    host.querySelector('.vt-range-number')?.focus();
+  }
+}
 
 export function renderSessionVoice() {
   const host = document.createElement('div');
@@ -50,12 +61,13 @@ export function renderSessionVoice() {
       if (source) inputObserver.observe(source, { childList: true, subtree: true, characterData: true });
       const controls = [];
       const save = async (changes, transfer = false) => {
-        for (const el of controls) el.disabled = true;
+        for (const el of controls) { if (el.vtSetDisabled) el.vtSetDisabled(true); else el.disabled = true; }
         try {
           await vtFetch('/voice/session', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ session_id: id, screen, policy: changes, transfer }) });
-          if (!disposed && selected === id) await refresh();
-        } catch (e) { toast(e.message, 'error'); if (!disposed && selected === id) await refresh(); }
+          if (!disposed && selected === id) await refreshNumberFocus(host, refresh);
+          return true;
+        } catch (e) { toast(e.message, 'error'); if (!disposed && selected === id) await refreshNumberFocus(host, refresh); return false; }
       };
       const select = (label, values, key, help) => {
         const el = document.createElement('select'); el.className = 'vt-select';
@@ -71,9 +83,9 @@ export function renderSessionVoice() {
         t('이 기기가 연결되지 않으면 서버에서 대신 읽지 않습니다.'));
       select(t('TTS 엔진'), { auto: t('자동 (edge → 로컬)'), local: t('로컬 음성만'), edge: 'edge-tts' }, 'engine',
         t('edge-tts는 읽을 텍스트를 외부 서비스에 보냅니다. 응답 끝부분 최대 200자를 읽습니다.'));
-      const min = document.createElement('input'); min.type = 'number'; min.className = 'vt-input'; min.style.width = '80px'; min.min = '0'; min.max = '600'; min.value = policy.min_sec;
-      min.onchange = () => save({ min_sec: Number(min.value) }); controls.push(min);
-      host.appendChild(row(t('최소 작업 시간 (초)'), min));
+      const min = numberSpinner({ value: policy.min_sec, min: 0, max: 600, onCommit: (value) => save({ min_sec: value }) });
+      controls.push(min.element);
+      host.appendChild(row(t('최소 작업 시간 (초)'), min.element));
       for (const [key, label] of [['success_only', t('오류 응답 제외')], ['only_unfocused', t('이 세션을 보고 있으면 서버 소리 끄기')]]) {
         const input = document.createElement('input'); input.type = 'checkbox'; input.checked = policy[key];
         input.onchange = () => save({ [key]: input.checked }); controls.push(input); host.appendChild(row(label, input));
@@ -127,8 +139,9 @@ export function renderVoiceDefaults() {
       const save = async (changes) => {
         try {
           await vtFetch('/voice/defaults', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ policy: changes }) });
-          await refresh();
-        } catch (e) { toast(e.message, 'error'); }
+          if (!disposed) await refreshNumberFocus(host, refresh);
+          return true;
+        } catch (e) { toast(e.message, 'error'); return false; }
       };
       const select = (label, values, key) => {
         const el = document.createElement('select'); el.className = 'vt-select';
@@ -140,8 +153,8 @@ export function renderVoiceDefaults() {
       select(t('새 세션 완료 알림'), { off: t('끔'), sound: t('완료음만'), speak: t('응답 읽기') }, 'mode');
       select(t('새 세션 재생 위치'), { browser: t('이 기기'), server: t('서버 컴퓨터') }, 'destination');
       select(t('새 세션 TTS 엔진'), { auto: t('자동 (edge → 로컬)'), local: t('로컬 음성만'), edge: 'edge-tts' }, 'engine');
-      const min = document.createElement('input'); min.type = 'number'; min.className = 'vt-input'; min.style.width = '80px'; min.min = '0'; min.max = '600'; min.value = policy.min_sec;
-      min.onchange = () => save({ min_sec: Number(min.value) }); host.appendChild(row(t('새 세션 최소 작업 시간 (초)'), min));
+      const min = numberSpinner({ value: policy.min_sec, min: 0, max: 600, onCommit: (value) => save({ min_sec: value }) });
+      host.appendChild(row(t('새 세션 최소 작업 시간 (초)'), min.element));
       const errors = document.createElement('input'); errors.type = 'checkbox'; errors.checked = policy.success_only;
       errors.onchange = () => save({ success_only: errors.checked }); host.appendChild(row(t('새 세션 오류 응답 제외'), errors));
     } catch (e) { if (!disposed) host.textContent = e.message; }

@@ -4147,5 +4147,8 @@ window.__VT_I18N = {
   "프런트엔드 의존성 설치": "Installing frontend dependencies",
   "확인이 필요합니다 — 터미널에서 실행하거나 지문을 확인한 뒤 --yes 를 주세요.": "Confirmation required — run in a terminal, or verify the fingerprint and pass --yes.",
   "훅 갱신 실패 — 'fsh hooks install' 로 다시 시도하세요": "hook update failed — retry with 'fsh hooks install'",
-  "훅 최신": "hooks are current"
+  "훅 최신": "hooks are current",
+  "{label} 늘리기": "Increase {label}",
+  "{label} 줄이기": "Decrease {label}",
+  "값을 저장하지 못했습니다": "Could not save the value"
 };

@@ -1535,3 +1535,22 @@
 .vt-child-heading span { font-weight: 400; color: var(--color-muted); }
 .vt-session-access-grants { margin-top: 16px; }
 .vt-session-access-grants .vt-authz-code { overflow-wrap: anywhere; }
+
+/* Shared settings number input: native semantics, FarShell step buttons. */
+.vt-number-spinner { display:inline-flex; flex:none; align-items:stretch; border:1px solid var(--color-line); border-radius:var(--radius-sm); background:var(--color-term-bg); }
+.vt-number-spinner:focus-within { outline:2px solid var(--color-acc); outline-offset:2px; }
+.vt-number-spinner .vt-range-number { box-sizing:border-box; width:62px; min-width:0; height:28px; padding:0 6px; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--color-txt); font:500 var(--fs-xs) var(--font-mono); text-align:right; appearance:textfield; -moz-appearance:textfield; }
+.vt-number-spinner .vt-range-number:focus { outline:none; box-shadow:none; }
+.vt-number-spinner .vt-range-number::-webkit-inner-spin-button,
+.vt-number-spinner .vt-range-number::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+.vt-number-steps { display:flex; flex-direction:column; }
+.vt-number-step { display:flex; align-items:center; justify-content:center; width:24px; height:14px; padding:0; border:0; border-radius:0; background:transparent; color:var(--color-sub); cursor:pointer; }
+.vt-number-step.up svg { transform:rotate(180deg); }
+.vt-number-step:hover:not(:disabled) { background:var(--color-bg-3); color:var(--color-txt); }
+.vt-number-step:disabled { opacity:.35; cursor:default; }
+.vt-number-step:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
+@media (pointer:coarse), (max-width:719px) {
+  .vt-number-spinner .vt-range-number { height:44px; }
+  .vt-number-steps { flex-direction:row; }
+  .vt-number-step { width:44px; height:44px; }
+}
