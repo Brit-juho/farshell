@@ -106,6 +106,7 @@ CREATE TABLE source_files(id TEXT PRIMARY KEY,source_id TEXT REFERENCES sources(
 CREATE TABLE manifests(id TEXT PRIMARY KEY,conversation_id TEXT REFERENCES conversations(id),file_id TEXT NOT NULL,
  generation TEXT NOT NULL,length INTEGER NOT NULL,digest TEXT NOT NULL,detail TEXT NOT NULL,created REAL NOT NULL);
 CREATE INDEX manifests_file ON manifests(file_id,created,id);
+CREATE INDEX manifests_conversation ON manifests(conversation_id,created);
 CREATE TABLE messages(id TEXT PRIMARY KEY,conversation_id TEXT REFERENCES conversations(id),generation TEXT NOT NULL,
  position INTEGER NOT NULL,role TEXT NOT NULL,body TEXT NOT NULL,created REAL NOT NULL,
  UNIQUE(conversation_id,generation,position,role));
@@ -161,6 +162,9 @@ def database(*, write=False):
         db.execute("BEGIN IMMEDIATE" if write else "BEGIN")
         if write:
             db.execute("INSERT OR IGNORE INTO meta VALUES('host',?)", (uid(),))
+            # 대화 목록의 저장 시각(MAX(created))이 이 인덱스 없이는 대화마다 manifests를 훑어 수 초가 걸려
+            # 목록 쿼리의 1초 제한에 걸린다. 이미 만들어진 저장소에도 첫 쓰기 연결에서 한 번 만든다.
+            db.execute("CREATE INDEX IF NOT EXISTS manifests_conversation ON manifests(conversation_id,created)")
         yield db
         db.commit()
     except (sqlite3.Error, OSError) as exc:

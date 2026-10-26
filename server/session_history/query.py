@@ -22,7 +22,8 @@ def listing(*, search='', provider='', limit=50, after=None, archived=False):
         if matched is not None:
             db.execute('CREATE TEMP TABLE search_hits(origin TEXT,id TEXT,PRIMARY KEY(origin,id)) WITHOUT ROWID')
             db.executemany('INSERT OR IGNORE INTO search_hits VALUES(?,?)', matched)
-        deadline = time.monotonic() + 1
+        # 인덱스를 만든 직후 첫 조회는 페이지 캐시가 차가워 1초 가까이 걸린다 — 제한이 너무 빡빡하면 목록이 통째로 비어 보인다.
+        deadline = time.monotonic() + 2
         db.set_progress_handler(lambda: int(time.monotonic() > deadline), 10000)
         local_sql = """SELECT c.*, (SELECT COUNT(*) FROM messages WHERE conversation_id=c.id) AS message_count,
           (SELECT MAX(created) FROM manifests WHERE conversation_id=c.id) AS saved_at,

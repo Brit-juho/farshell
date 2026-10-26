@@ -517,9 +517,12 @@ function Rail(props: { deps: RailDeps }) {
           </Show>
         </Show>
         <div class="vt-wgrail-head-actions">
-          <button type="button" class="vt-icon-btn sm" aria-label={t('대화 기록')} data-tip={t('대화 기록')} data-tip-sub={t('보관된 대화 검색 · 복구')}
-            data-tip-side="bottom"
-            onClick={() => { void import('../history/panel.js').then(m => m.openHistory()); }} innerHTML={icon('list', 14, 2)} />
+          {/* 접힌 레일은 여닫기 버튼만 둔다 — 대화 기록·설정은 펼쳤을 때만. */}
+          <Show when={!collapsed()}>
+            <button type="button" class="vt-icon-btn sm" aria-label={t('대화 기록')} data-tip={t('대화 기록')} data-tip-sub={t('보관된 대화 검색 · 복구')}
+              data-tip-side="bottom"
+              onClick={() => { void import('../history/panel.js').then(m => m.openHistory()); }} innerHTML={icon('list', 14, 2)} />
+          </Show>
           {/* 레일 설정 — 개입 필요 표시, 만든 곳별 표시, 저장소 표시. 접히지 않은 때만 그린다.
               머리글 줄은 구역 유무와 무관하게 항상 있어 설정에 늘 닿는다. */}
           <Show when={!collapsed()}>

@@ -969,3 +969,12 @@ def test_delete_blocked_by_delegation_relation(private_history):
         conn.execute("INSERT INTO relations VALUES('r1','delegation',?,'other','src','{}')", (s['id'],))
     with pytest.raises(db.Refused, match='session_has_relations'):
         db.delete_session(s['id'], row['revision'])
+
+
+def test_manifests_conversation_index_exists_even_on_old_stores(private_history):
+    from session_catalog import db
+    with db.database(write=True) as conn:
+        conn.execute('DROP INDEX manifests_conversation')
+    with db.database(write=True) as conn:
+        names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")}
+    assert 'manifests_conversation' in names
