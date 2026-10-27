@@ -90,7 +90,7 @@ fsh shell-init zsh     # 셸 init 스니펫 출력 (출력한 스니펫을 ~/.zs
 
 ## 네이티브 CLI 실행 프로필
 
-`fsh profile list`, `create <name> --tool claude|codex [--account <id>] [--test]`, `login <id>`, `status <id>`, `sources`, `retirement`으로 전용 설정 루트를 관리합니다. 로그인은 해당 호스트에서 대화형으로 실행합니다. 계정 라벨은 논리적 그룹이며 신원 증명이 아닙니다. 검토 가져오기·테스트 제한·현재 대체 범위는 [실행 프로필](docs/help/profiles.md)을 참고하세요.
+`fsh profile list`, `create <name> --tool claude|codex [--account <id>] [--test]`, `login <id>`, `status <id>`, `rename <id> <name>`, `archive <id>`, `restore <id>`, `sources`, `retirement`으로 전용 설정 루트를 관리합니다. 로그인은 해당 호스트에서 대화형으로 실행합니다. 계정 라벨은 논리적 그룹이며 신원 증명이 아닙니다. 검토 가져오기·테스트 제한·현재 대체 범위는 [실행 프로필](docs/help/profiles.md)을 참고하세요.
 
 ## `fsh start` / `fsh mobile` 옵션
 

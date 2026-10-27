@@ -629,7 +629,11 @@ def _source_has_api_quota(source):
              'api.minimax.io', 'api.minimaxi.com', 'token-plan.ap-southeast-1.maas.aliyuncs.com',
              'token-plan.cn-beijing.maas.aliyuncs.com', 'coding-intl.dashscope.aliyuncs.com', 'coding.dashscope.aliyuncs.com'}
     try:
-        return any(urlsplit(endpoint).hostname in known for endpoint in endpoints if isinstance(endpoint, str)) or own.get('provider') is not None
+        from usage.api_profiles import ALIBABA
+        hosts = [urlsplit(endpoint).hostname for endpoint in endpoints if isinstance(endpoint, str)]
+        if hosts and hosts[-1] in ALIBABA:
+            return False
+        return any(host in known for host in hosts) or own.get('provider') is not None
     except ValueError:
         return True
 
@@ -645,9 +649,11 @@ def retirement_report():
         has_observations = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='observations'").fetchone()
         observations = {r['profile_id']: dict(r) for r in db.execute('SELECT * FROM observations')} if has_observations else {}
         sessions = [dict(r) for r in db.execute('SELECT * FROM sessions')]
+        has_api = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='api_quota_observations'").fetchone()
+        api_observations = {r['profile_id']: dict(r) for r in db.execute('SELECT * FROM api_quota_observations')} if has_api else {}
     checked_sessions = [session_status(s['name']) for s in sessions]
     pinned = {s['profile_id'] for s in checked_sessions if s['state'] == 'running' and s['applied_revision'] == s['desired_revision']}
-    active = [profiles.get(pid) for pid in pinned]
+    active = [p for pid in pinned if (p := profiles.get(pid))['archived_at'] is None]
     concurrent_profiles = set()
     for index, first in enumerate(active):
         for second in active[index + 1:]:
@@ -659,6 +665,9 @@ def retirement_report():
             if fresh and a and a == b:
                 concurrent_profiles.update((first["id"], second["id"]))
             elif read_private(profiles.root(first['id'])) and read_private(profiles.root(second['id'])):
+                from usage.api_profiles import credential
+                if not credential(read_private(profiles.root(first['id']))) or not credential(read_private(profiles.root(second['id']))):
+                    continue
                 fingerprint = authentication_fingerprint(first['id'])
                 if fingerprint and fingerprint == authentication_fingerprint(second['id']):
                     concurrent_profiles.update((first['id'], second['id']))
@@ -673,15 +682,29 @@ def retirement_report():
         if legacy != 'absent':
             blockers.append('legacy-runtime-present' if legacy == 'present' else 'legacy-runtime-check-unavailable')
         candidates = []
+        resolved_by_profile = {}
         for config in configs:
             pid = config['profile_id']
             reasons = list(config['manifest'].get('warnings', []))
+            try:
+                from agent_profile_parity import compare
+                comparison = compare(source, pid, config['manifest'])
+                reasons = comparison['blockers']
+                resolved_by_profile[pid] = comparison['resolved_warnings']
+            except (ValueError, OSError, fsguard.FsDenied):
+                reasons.append('configuration-verification-unavailable')
             if pid not in concurrent_profiles:
                 reasons.append('same-account-concurrency-not-certified')
             if not config['manifest'].get('complete_skill_coverage'):
                 reasons.append('skill-coverage-incomplete')
             profile = profiles.get(pid)
+            if profile['archived_at'] is not None:
+                reasons.append('profile-archived')
             if profile['state'] != 'ready':
+                reasons.append('profile-recovery-required')
+            try:
+                profiles.require_no_pending_jobs(pid)
+            except profiles.Refused:
                 reasons.append('profile-recovery-required')
             root = profiles.root(pid)
             try:
@@ -696,16 +719,27 @@ def retirement_report():
                       and fingerprint and r['manifest'].get('auth_fingerprint') == fingerprint]
             if not probes:
                 reasons.append('native-inference-not-certified')
-            if read_private(root) is None:
-                observation = observations.get(pid, {})
+            from agent_profile_identity import requires_identity, matches
+            observation = observations.get(pid, {})
+            try:
+                if requires_identity(source['id']) and not matches(source['id'], observation, fingerprint):
+                    reasons.append('source-account-not-certified')
+            except (ValueError, OSError, fsguard.FsDenied):
+                reasons.append('source-account-not-certified')
+            from usage.api_profiles import declares_api_credentials
+            private = read_private(root)
+            if private is None or not declares_api_credentials(private):
                 test = refresh.get(pid, {})
-                if not observation.get('subject') or time.time() - observation.get('last_at', 0) > 1800:
+                if not observation.get('subject') or observation.get('last_fingerprint') != fingerprint or time.time() - observation.get('last_at', 0) > 1800:
                     reasons.append('native-usage-not-certified')
                 if not observation.get('rotation_after_expiry') and not test.get('completed_at'):
                     reasons.append('native-refresh-not-certified')
             else:
                 if _source_has_api_quota(source):
-                    reasons.append('api-provider-usage-not-certified')
+                    observation = api_observations.get(pid, {})
+                    private_fingerprint = profiles.digest(json.dumps(read_private(root), sort_keys=True).encode())
+                    if observation.get('auth_fingerprint') != private_fingerprint or time.time() - observation.get('checked_at', 0) > 1800:
+                        reasons.append('api-provider-usage-not-certified')
             if pid not in pinned:
                 reasons.append('live-profile-session-not-certified')
             candidates.append((pid, sorted(set(reasons))))
@@ -721,8 +755,20 @@ def retirement_report():
                        and r['manifest'].get('sha256') == row['sha256'] and r['manifest'].get('bundle_complete') and r['verified']]
             if not matches:
                 blockers.append('conversation-resume-not-verified')
+        limitations = []
+        try:
+            from usage.api_profiles import ALIBABA
+            own = tomllib.loads(fsguard.read_profile_bytes(source['root'], 'config.toml').decode())
+            from urllib.parse import urlsplit
+            env = own.get('env', {})
+            endpoint = (env.get('ANTHROPIC_BASE_URL') if isinstance(env, dict) else None) or own.get('base_url')
+            if isinstance(endpoint, str) and urlsplit(endpoint).hostname in ALIBABA:
+                limitations.append('alibaba-quota-unsupported')
+        except (ValueError, OSError, fsguard.FsDenied):
+            pass
         items.append({'source_id': source['id'], 'name': source['name'], 'tool': source['tool'], 'blockers': sorted(set(blockers)),
-                      'candidates': [{'profile_id': pid, 'blockers': reasons} for pid, reasons in candidates]})
+                      'accepted_limitations': limitations,
+                      'candidates': [{'profile_id': pid, 'blockers': reasons, 'resolved_warnings': resolved_by_profile.get(pid, [])} for pid, reasons in candidates]})
     return {'ready_to_retire': bool(items) and not any(i['blockers'] for i in items), 'profiles': items,
             'source_preserved': True, 'clauth_stopped': False, 'legacy_runtime_state': legacy, 'concurrency_certified': bool(concurrent_profiles),
             'note': tr("실제 로그인·갱신·사용량·대화 재개 검증 전에는 clauth를 중지하지 않습니다")}
@@ -733,7 +779,7 @@ def rollback(profile_id, revision, job_id, *, preview=False):
     profile = profiles.get(profile_id)
     profiles.require_revision(profile, revision)
     job = profiles.job_status(job_id)
-    if job['profile_id'] != profile_id or job['kind'] not in ('config-import', 'conversation-import', 'provider-edit') or job['state'] not in ('partial', 'done', 'partial-rollback'):
+    if job['profile_id'] != profile_id or job['kind'] not in ('config-import', 'conversation-import', 'provider-edit', 'hook-edit') or job['state'] not in ('partial', 'done', 'partial-rollback'):
         raise profiles.Refused(tr("되돌릴 수 있는 구성 가져오기 작업이 아닙니다"))
     files = job['result'].get('file_results', job['result'].get('files', []))
     if not isinstance(files, list) or not files:

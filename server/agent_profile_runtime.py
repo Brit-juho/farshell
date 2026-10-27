@@ -25,6 +25,7 @@ _BASE_ENV = {"PATH", "HOME", "TERM", "COLORTERM", "LANG", "LC_ALL", "LC_CTYPE", 
 
 def environment(profile_id, project=None, *, record=False):
     profile = profiles.get(profile_id)
+    profiles.require_active(profile)
     env = {k: v for k, v in os.environ.items() if k in _BASE_ENV}
     env["HOME"] = str(vt_paths.user_home())
     env['PATH'] = str(Path(sys.executable).parent) + os.pathsep + env.get('PATH', '')
@@ -71,6 +72,7 @@ def validate_native_files(profile_id):
         fsguard.profile_file(root, name)
     import agent_profile_config
     agent_profile_config._read(profile_id)
+    agent_profile_config.inventory(profile_id)
     if profile['tool'] == 'claude':
         import agent_profile_resources
         disabled = agent_profile_resources._disabled(root)
@@ -143,6 +145,9 @@ def login(profile_id):
     validate_native_files(profile_id)
     if not sys.stdin.isatty():
         raise profiles.Refused(tr("프로필 로그인은 대화형 터미널에서 실행하세요"))
+    profiles.require_active(profile)
+    profiles.require_no_pending_jobs(profile_id)
+    require_inactive(profile_id)
     args = ["auth", "login"] if profile["tool"] == "claude" else ["login", "--device-auth"]
     jid = profiles.job_begin(profile_id, 'login')
     code = None
@@ -233,6 +238,14 @@ def launch(profile_id, revision, cwd, conversation=None):
             raise profiles.Refused(tr("대화 ID가 올바르지 않습니다"))
         from agent_profile_migration import require_conversation
         require_conversation(profile_id, conversation)
+    launch_auth = authentication_fingerprint(profile_id)
+    launch_subject = None
+    with profiles.database() as db:
+        fields = {r[1] for r in db.execute('PRAGMA table_info(observations)')}
+        if 'last_fingerprint' in fields:
+            observed = db.execute('SELECT * FROM observations WHERE profile_id=?', (profile_id,)).fetchone()
+            if observed and observed['last_fingerprint'] == launch_auth and time.time() - observed['last_at'] <= 1800:
+                launch_subject = observed['subject']
     env = environment(profile_id, str(directory), record=True)
     argv = [binary(profile["tool"])]
     if conversation:
@@ -252,7 +265,7 @@ def launch(profile_id, revision, cwd, conversation=None):
             raise profiles.Refused(tr("프로필 세션을 시작하지 못했습니다"))
         created = _created(name)
         with profiles.database() as db:
-            db.execute("INSERT INTO sessions (name,profile_id,created,profile_revision,conversation,started_at,state) VALUES (?,?,?,?,?,?,?)", (name, profile_id, created, revision, conversation, started_at, "starting"))
+            db.execute("INSERT INTO sessions (name,profile_id,created,profile_revision,conversation,started_at,state,launch_auth_fingerprint,launch_subject) VALUES (?,?,?,?,?,?,?,?,?)", (name, profile_id, created, revision, conversation, started_at, "starting", launch_auth, launch_subject))
         return {"session": name, "profile_id": profile_id, "state": "starting", "applied_revision": revision}
     except BaseException:
         payload.unlink(missing_ok=True)
@@ -354,8 +367,15 @@ def probe(profile_id, revision):
 def authentication_fingerprint(profile_id):
     from agent_profile_secret import read, FILENAME
     root = profiles.root(profile_id)
-    if read(root) is not None:
-        return profiles.digest(fsguard.read_profile_bytes(root, FILENAME))
+    private = read(root)
+    if private is not None:
+        from usage.api_profiles import credential, declares_api_credentials
+        binding = profiles.digest(fsguard.read_profile_bytes(root, FILENAME))
+        if declares_api_credentials(private):
+            return binding if credential(private) is not None else None
+        from usage.profiles import _read_credentials
+        auth = _read_credentials(profiles.get(profile_id))
+        return profiles.digest(json.dumps([binding, auth['fingerprint']]).encode()) if auth else None
     from usage.profiles import _read_credentials
     auth = _read_credentials(profiles.get(profile_id))
     return auth['fingerprint'] if auth else None

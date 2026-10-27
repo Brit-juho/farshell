@@ -53,7 +53,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   `fsh sync` does the sync alone. Pin the release-signing key once with `fsh update trust`.
 - Managed Claude/Codex launch profiles with reviewed source-preserving imports, private
   API configuration test clones, native session attribution, profile quota readers,
-  fixed-snapshot local plugin installation and disposable OS-sandbox verification.
+  fixed-snapshot plugin installation and disposable OS-sandbox verification.
+  Add reversible archive/restore and rename, JSON/TOML hook disabling/restoration,
+  fixed-SHA public GitHub downloads, dependency bundles, native plugin update/recovery,
+  official API quota adapters, source OAuth identity and observed native-turn evidence.
+  Alibaba quota remains unsupported without collecting console credentials.
   Full OAuth replacement certification remains pending live account validation.
 - MCP·스킬·플러그인 통합 관리: 전체/선택 세션 보기, 프로필별 원본 설정,
   분류·설명·출처, 혼합 선택·프리셋, 비밀값 비표시 환경변수와 조건부 CLI resume,

@@ -75,6 +75,10 @@ def seatbelt(folder, allow_provider_network=False):
              '(allow network* (remote unix-socket (subpath ' + json.dumps(str(folder)) + ')))']
     if allow_provider_network:
         rules.append('(allow network-outbound (remote ip "*:*"))')
+        # getaddrinfo uses the system resolver socket on macOS. Allow only
+        # DNS, keeping production credential stores and other sockets denied.
+        for resolver in ('/var/run/mDNSResponder', '/private/var/run/mDNSResponder'):
+            rules.append('(allow network-outbound (remote unix-socket (path ' + json.dumps(resolver) + ')))')
     for name in ('.clauth', '.claude', '.codex', '.vt', '.ssh', '.aws', '.config/gh', '.vt.env'):
         rules.append('(deny file-read* (subpath ' + json.dumps(str(real_home / name)) + '))')
     path = folder / 'sandbox.sb'

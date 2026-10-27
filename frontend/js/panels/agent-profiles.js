@@ -20,6 +20,8 @@ export function mount(host) {
   let disposed = false;
   let busy = false;
   let profiles = [];
+  let archivedProfiles = [];
+  let showArchived = false;
   let accounts = [];
   let sources = [];
   let selected = '';
@@ -44,19 +46,35 @@ export function mount(host) {
     }
   }
 
-  async function perform(run) {
+  async function perform(run, origin = null) {
     if (busy || !alive()) return;
+    const sameControl = node => node.tagName === origin?.tagName &&
+      (node.getAttribute('aria-label') || node.textContent) ===
+      (origin?.getAttribute('aria-label') || origin?.textContent);
+    const occurrence = origin ? [...host.querySelectorAll('button, select')].filter(sameControl).indexOf(origin) : -1;
     busy = true;
     host.setAttribute('aria-busy', 'true');
     host.querySelectorAll('button, input, select').forEach(n => { n.disabled = true; });
     try { await run(); } catch (error) { if (alive()) status = error.message || t('프로필 작업을 완료하지 못했습니다'); }
-    finally { busy = false; if (alive()) { host.removeAttribute('aria-busy'); paint(); } }
+    finally {
+      busy = false;
+      if (alive()) {
+        const active = host.ownerDocument.activeElement;
+        const restoreFocus = origin && (active === host.ownerDocument.body || host.contains(active));
+        host.removeAttribute('aria-busy');
+        paint();
+        if (restoreFocus) {
+          const replacement = [...host.querySelectorAll('button, select')].filter(sameControl)[occurrence] || host.querySelector('select, button');
+          replacement?.focus({ preventScroll: true });
+        }
+      }
+    }
   }
 
   function button(label, run) {
     const node = el('button', 'vt-chip sm', label);
     node.type = 'button';
-    node.addEventListener('click', () => perform(run));
+    node.addEventListener('click', () => perform(run, node));
     return node;
   }
 
@@ -67,7 +85,7 @@ export function mount(host) {
     node.setAttribute('aria-label', label);
     for (const [key, title] of entries) { const item = el('option', null, title); item.value = key; node.appendChild(item); }
     node.value = value;
-    node.addEventListener('change', () => perform(() => change(node.value)));
+    node.addEventListener('change', () => perform(() => change(node.value), node));
     field.appendChild(node);
     return field;
   }
@@ -75,7 +93,8 @@ export function mount(host) {
   async function load() {
     const [registry, discovered] = await Promise.all([api('list'), api('sources')]);
     if (!alive()) return;
-    profiles = registry.profiles || [];
+    archivedProfiles = registry.archived_profiles || [];
+    profiles = showArchived ? archivedProfiles : registry.profiles || [];
     accounts = registry.accounts || [];
     jobs = registry.jobs || [];
     sources = discovered.sources || [];
@@ -117,17 +136,30 @@ export function mount(host) {
       if (result?.id) { selected = result.id; data = null; }
     }));
     top.appendChild(button(t('새로고침'), load));
+    top.appendChild(button(showArchived ? t('사용 중인 프로필') : t('보관된 프로필'), async () => { showArchived = !showArchived; data = null; await load(); }));
     top.appendChild(button(t('clauth 대체 준비 확인'), async () => { data = { kind: 'retirement', value: await api('retirement') }; }));
     host.appendChild(top);
     host.appendChild(el('p', 'vt-set-help', t('같은 계정에 여러 프로필을 만들 수 있습니다. 로그인·설정은 프로필마다 분리하며 공통·프로젝트 설정은 상속될 수 있습니다.')));
     if (status) { const notice = el('p', 'vt-ac-notice', status); notice.setAttribute('role', 'status'); host.appendChild(notice); }
-    if (!profiles.length) host.appendChild(el('p', 'vt-set-help', t('프로필을 만든 뒤 로그인하고 구성을 가져오세요. 기존 clauth는 그대로 유지됩니다.')));
+    if (showArchived && !profiles.length) host.appendChild(el('p', 'vt-set-help', t('보관된 프로필이 없습니다')));
+    if (!showArchived && !profiles.length) host.appendChild(el('p', 'vt-set-help', t('프로필을 만든 뒤 로그인하고 구성을 가져오세요. 기존 clauth는 그대로 유지됩니다.')));
     const row = profiles.find(p => p.id === selected);
     if (row) {
       host.appendChild(select(t('실행 프로필'), profiles.map(p => [p.id, `${p.name} · ${p.tool}`]), selected, async id => { selected = id; data = null; }));
       const account = accounts.find(a => a.id === row.account_id);
       host.appendChild(el('p', 'vt-mcp-meta', `${account?.label || ''} · ${t('계정 신원 미확인')} · ${t('구성 버전')} ${row.revision}`));
       const actions = el('div', 'vt-ac-controls');
+      if (showArchived) {
+        actions.appendChild(button(t('프로필 복원'), () => review('restore', { profile_id: selected, revision: row.revision })));
+        host.appendChild(actions);
+        if (busy) host.querySelectorAll('button, input, select').forEach(n => { n.disabled = true; });
+        return;
+      }
+      actions.appendChild(button(t('프로필 이름 변경'), async () => {
+        const name = await promptDialog(t('프로필 이름'), { defaultValue: row.name });
+        if (name) await review('rename', { profile_id: selected, revision: row.revision, name });
+      }));
+      actions.appendChild(button(t('프로필 보관'), () => review('archive', { profile_id: selected, revision: row.revision })));
       actions.appendChild(button(t('로그인 상태·방법'), async () => { data = { kind: 'auth', value: await api('auth-status', { profile_id: selected }) }; }));
       actions.appendChild(button(t('이 프로필로 새 세션'), async () => {
         const cwd = await promptDialog(t('작업 폴더의 절대경로'));
@@ -167,6 +199,16 @@ export function mount(host) {
       if (row.tool === 'claude') actions.appendChild(button(t('짧은 실제 호출 검증'), () => review('probe', { profile_id: selected, revision: row.revision })));
       if (row.purpose === 'test') actions.appendChild(button(t('사용 프로필로 전환'), () => review('adopt', { profile_id: selected, revision: row.revision })));
       if (row.purpose === 'test') actions.appendChild(button(t('네이티브 갱신 검증 준비'), () => review('refresh-test', { profile_id: selected, revision: row.revision })));
+      actions.appendChild(button(t('GitHub 플러그인 다운로드'), async () => {
+        const repo = await promptDialog(t('공개 GitHub 저장소: owner/repo'));
+        if (!repo) return;
+        const commit = await promptDialog(t('고정된 40자리 commit SHA'));
+        if (!commit) return;
+        const subdir = await promptDialog(t('플러그인 하위 경로'), { defaultValue: '.' });
+        if (subdir === null) return;
+        const result = await review('plugin-fetch', { profile_id: selected, revision: row.revision, repo, commit, subdir });
+        if (result) data = { kind: 'download', value: result };
+      }));
       actions.appendChild(button(t('플러그인 설치'), async () => {
         const plugin = await promptDialog(t('플러그인 이름: plugin@marketplace'));
         if (!plugin) return;
@@ -175,10 +217,16 @@ export function mount(host) {
       }));
       if (row.state !== 'ready') actions.appendChild(button(t('중단 작업 복구 확인'), () => review('recover', { profile_id: selected, revision: row.revision })));
       host.appendChild(actions);
-      for (const job of jobs.filter(j => j.profile_id === selected && ['config-import', 'conversation-import', 'provider-edit'].includes(j.kind) && ['done', 'partial', 'partial-rollback'].includes(j.state))) {
+      for (const job of jobs.filter(j => j.profile_id === selected && ['config-import', 'conversation-import', 'provider-edit', 'hook-edit'].includes(j.kind) && ['done', 'partial', 'partial-rollback'].includes(j.state))) {
         const recovery = el('div', 'vt-ac-preset');
         recovery.appendChild(el('code', null, `${job.kind} · ${job.state}`));
         recovery.appendChild(button(t('가져오기 되돌리기'), () => review('rollback', { profile_id: selected, revision: row.revision, job_id: job.id })));
+        host.appendChild(recovery);
+      }
+      for (const job of jobs.filter(j => j.profile_id === selected && ['plugin-install', 'plugin-update', 'plugin-remove'].includes(j.kind) && ['done', 'partial', 'interrupted'].includes(j.state))) {
+        const recovery = el('div', 'vt-ac-preset');
+        recovery.appendChild(el('code', null, `${job.kind} · ${job.state}`));
+        recovery.appendChild(button(t('플러그인 복구 검토'), () => review('plugin', { profile_id: selected, revision: row.revision, action: 'restore', job_id: job.id })));
         host.appendChild(recovery);
       }
       const compatible = sources.filter(s => s.tool === row.tool);
@@ -188,11 +236,19 @@ export function mount(host) {
         const imports = el('div', 'vt-ac-controls');
         imports.appendChild(button(t('구성 가져오기 검토'), () => review('config-import', { profile_id: selected, revision: row.revision, source_id: source })));
         if (row.purpose === 'test' && row.tool === 'claude' && compatible.find(s => s.id === source)?.kind === 'clauth') imports.appendChild(button(t('API 키 포함 테스트 복제 검토'), () => review('config-import', { profile_id: selected, revision: row.revision, source_id: source, include_private: true })));
+        if (compatible.find(s => s.id === source)?.kind === 'clauth') imports.appendChild(button(t('원본 OAuth 계정 확인'), () => review('source-identity', { source_id: source })));
         imports.appendChild(button(t('기존 대화 목록'), async () => { data = { kind: 'conversations', source_id: source, value: await api('conversations', { source_id: source }) }; }));
         host.appendChild(imports);
       }
     }
-    if (data?.kind === 'auth') {
+    if (data?.kind === 'download' && row) {
+      host.appendChild(el('p', 'vt-set-help', t('다운로드는 설치 승인이 아닙니다. 고정 보관본을 검토한 뒤 별도로 설치하세요')));
+      host.appendChild(el('pre', 'vt-ac-review', JSON.stringify(data.value, null, 2)));
+      host.appendChild(button(t('다운로드한 플러그인 설치 검토'), async () => {
+        const plugin = await promptDialog(t('플러그인 이름: plugin@marketplace'));
+        if (plugin) await review('plugin', { profile_id: selected, revision: row.revision, action: 'install', plugin, download_id: data.value.download_id });
+      }));
+    } else if (data?.kind === 'auth') {
       host.appendChild(el('p', 'vt-set-help', data.value.authenticated ? t('네이티브 CLI 로그인 확인됨') : t('프로필에 먼저 로그인하세요')));
       host.appendChild(el('p', 'vt-set-help', t('이 명령을 해당 호스트의 대화형 터미널에서 실행하세요. 로그인 토큰은 웹에 표시하지 않습니다.')));
       host.appendChild(el('pre', 'vt-ac-review', data.value.login_command));
@@ -223,6 +279,17 @@ export function mount(host) {
           await review('native-toggle', { profile_id: selected, revision: row.revision, changes: [{ id: resource.id, enabled: resource.enabled === false }] });
           data = { kind: 'inventory', value: await api('inventory', { profile_id: selected, plugins: true }) };
         }));
+        if (resource.kind === 'plugin' && resource.writable && resource.scope === 'global') {
+          item.appendChild(button(t('플러그인 업데이트'), async () => {
+            const path = await promptDialog(t('검토할 로컬 플러그인 폴더의 절대경로'));
+            if (path) await review('plugin', { profile_id: selected, revision: row.revision, action: 'update', plugin: resource.name, path });
+            data = { kind: 'inventory', value: await api('inventory', { profile_id: selected, plugins: true }) };
+          }));
+          item.appendChild(button(t('플러그인 제거'), async () => {
+            await review('plugin', { profile_id: selected, revision: row.revision, action: 'remove', plugin: resource.name });
+            data = { kind: 'inventory', value: await api('inventory', { profile_id: selected, plugins: true }) };
+          }));
+        }
         if (resource.kind === 'mcp' && resource.editable) item.appendChild(button(t('MCP 필드 수정'), async () => {
           const content = await promptDialog(t('변경할 MCP 필드만 JSON으로 입력하세요'));
           if (content === null) return;
@@ -237,6 +304,10 @@ export function mount(host) {
         const item = el('div', 'vt-ac-preset');
         item.appendChild(el('code', null, `${hook.event} · ${hook.type} · ${hook.sha256.slice(0, 12)}`));
         if (hook.owned) item.appendChild(el('span', 'vt-mcp-meta', t('FarShell 상태 훅')));
+        if (hook.writable) item.appendChild(button(hook.enabled ? t('끄기') : t('켜기'), async () => {
+          await review('hook', { profile_id: selected, revision: row.revision, hook_id: hook.id, enabled: !hook.enabled });
+          data = { kind: 'hooks', value: await api('hooks', { profile_id: selected }) };
+        }));
         if (hook.writable) item.appendChild(button(t('제거'), async () => {
           await review('hook', { profile_id: selected, revision: row.revision, remove_id: hook.id });
           data = { kind: 'hooks', value: await api('hooks', { profile_id: selected }) };
@@ -258,6 +329,7 @@ export function mount(host) {
       const item = el('div', 'vt-ac-preset');
       item.appendChild(el('code', null, `${session.session} · ${session.state}`));
       item.appendChild(button(t('실제 실행 확인'), async () => { Object.assign(session, await api('session-status', { session: session.session })); }));
+      if (row && session.profile_id === selected) item.appendChild(button(t('실제 대화 응답 확인'), () => review('session-proof', { profile_id: selected, revision: row.revision, session: session.session })));
       host.appendChild(item);
     }
     if (busy) host.querySelectorAll('button, input, select').forEach(n => { n.disabled = true; });

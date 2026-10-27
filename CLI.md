@@ -106,7 +106,7 @@ fsh shell-init zsh     # print the shell init snippet (add the printed snippet t
 
 ## Native CLI launch profiles
 
-Manage dedicated Claude/Codex roots with `fsh profile list`, `create <name> --tool claude|codex [--account <id>] [--test]`, `login <id>`, `status <id>`, `sources` and `retirement`. Login runs interactively on the owner host. Account labels are logical groups, not identity proof. See [Launch profiles](docs/help/en/profiles.md) for reviewed imports, test restrictions and current replacement limits.
+Manage dedicated Claude/Codex roots with `fsh profile list`, `create <name> --tool claude|codex [--account <id>] [--test]`, `login <id>`, `status <id>`, `rename <id> <name>`, `archive <id>`, `restore <id>`, `sources` and `retirement`. Login runs interactively on the owner host. Account labels are logical groups, not identity proof. See [Launch profiles](docs/help/en/profiles.md) for reviewed imports, test restrictions and current replacement limits.
 
 ## `fsh start` and `fsh mobile` options
 

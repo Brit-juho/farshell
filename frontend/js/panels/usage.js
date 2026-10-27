@@ -77,6 +77,10 @@ function renderWindow(w) {
 const _PROFILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 export function reauthCommand(p) {
+  if (p.profile_id != null) {
+    if (!/^[a-f0-9]{32}$/.test(p.profile_id) || p.quota_scope === 'api-key' || p.quota_scope === 'unsupported') return null;
+    return `fsh profile login ${p.profile_id}`;
+  }
   if (p.provider === 'codex') return 'codex login';
   if (!_PROFILE_RE.test(p.name || '')) return null;
   return `clauth login ${p.name}`;
@@ -142,7 +146,9 @@ function renderProfile(p, activeName) {
   if (needsAuth) {
     // terminal 상태다 — 자동 재시도로 감추지 않는다(계획서 §4).
     const warn = el('div', 'vt-usage-warn');
-    warn.appendChild(el('span', 'vt-usage-warn-text', !p.auth_ok
+    warn.appendChild(el('span', 'vt-usage-warn-text', p.profile_id && p.quota_scope === 'unsupported'
+      ? t('이 제공자의 사용량 조회는 지원하지 않습니다')
+      : p.profile_id && p.quota_scope === 'api-key' ? t('API 인증 설정을 확인하세요 ({status})', { status: p.auth_status }) : !p.auth_ok
       ? t('재인증 필요 ({status})', { status: p.auth_status })
       : t('조치 필요 — 인증이 만료됐습니다')));
     if (reauthCommand(p)) {
@@ -155,12 +161,17 @@ function renderProfile(p, activeName) {
     card.appendChild(warn);
   }
 
+  if (Array.isArray(p.balances)) {
+    for (const balance of p.balances) {
+      card.appendChild(el('div', 'vt-mcp-meta', t('잔액: {amount} {currency}', { amount: balance.remaining, currency: balance.currency })));
+    }
+  }
   if (!p.windows || p.windows.length === 0) {
     // provider:"generic" 등은 바를 그릴 데이터가 없다. 빈 바를 0%로 그리면
     // "안 쓰고 있다"는 거짓 정보가 된다. 카드는 머리 줄 하나로 줄인다 — 빈 카드가
     // 데이터 있는 카드만큼 자리를 차지하면 목록이 쓸데없이 길어진다.
     card.classList.add('compact');
-    head.appendChild(el('span', 'vt-usage-empty', needsAuth ? '' : t('사용량 정보 없음')));
+    head.appendChild(el('span', 'vt-usage-empty', needsAuth || p.balances?.length ? '' : t('사용량 정보 없음')));
   } else {
     for (const w of p.windows) card.appendChild(renderWindow(w));
   }

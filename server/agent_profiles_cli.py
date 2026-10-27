@@ -26,11 +26,19 @@ def main():
     for action in ("login", "status"):
         sub = subs.add_parser(action)
         sub.add_argument("profile")
+    for action in ('rename', 'archive', 'restore'):
+        sub = subs.add_parser(action)
+        sub.add_argument('profile')
+        if action == 'rename':
+            sub.add_argument('name')
     args = parser.parse_args()
     try:
         if args.action == "login":
             return agent_profile_runtime.login(args.profile)
-        if args.action == "status":
+        if args.action in ('rename', 'archive', 'restore'):
+            profile = agent_profiles.get(args.profile)
+            result = agent_profiles.metadata_change(profile['id'], profile['revision'], profile['metadata_revision'], args.action, getattr(args, 'name', None))
+        elif args.action == "status":
             result = agent_profile_runtime.auth_status(args.profile)
         elif args.action == "create":
             result = agent_profiles.create(args.name, args.tool, account_id=args.account, purpose="test" if args.test else "work")

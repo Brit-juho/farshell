@@ -48,6 +48,20 @@ test('원본 비밀값을 요청하지 않으며 프로필 이름은 텍스트�
   manager.dispose();
 });
 
+test('입력 취소 뒤 다시 그린 실행 버튼으로 키보드 초점을 복원한다', async () => {
+  const {host,document,calls,manager} = await setup();
+  const origin = [...host.querySelectorAll('button')].find(b => b.textContent === '프로필 이름 변경');
+  origin.focus();
+  origin.click();
+  for (let i=0;i<4;i++) await flush();
+  await answerConfirm(document, {accept:false});
+  for (let i=0;i<8;i++) await flush();
+  assert.equal(document.activeElement.textContent, '프로필 이름 변경');
+  assert.equal(document.activeElement.isConnected, true);
+  assert.equal(calls.some(c => c.route.endsWith('/apply')), false);
+  manager.dispose();
+});
+
 test('API 키 복제는 검토 전 적용하지 않고 적용에는 opaque 토큰만 보낸다', async () => {
   const {host,document,calls,manager} = await setup();
   [...host.querySelectorAll('button')].find(b => b.textContent === 'API 키 포함 테스트 복제 검토').click();
