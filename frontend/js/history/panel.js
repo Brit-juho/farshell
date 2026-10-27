@@ -1,6 +1,7 @@
 import { openDialog, confirmDialog } from '../core/dialog.js';
 import { t } from '../core/i18n.js';
 import { historyApi, operationId } from './api.js';
+import { notifyResumePolicy } from './session-actions.js';
 
 function node(tag, cls, text) {
   const el = document.createElement(tag);
@@ -97,9 +98,10 @@ export function openHistory(options = {}) {
       const controls = node('div', 'vt-history-actions');
       if (!item.replica) {
         controls.append(button(t('이어가기'), async () => {
-          if (!await confirmDialog(t('같은 대화를 새 CLI 실행에서 이어갈까요? 직전 권한 모드(예: bypass permissions)는 그대로 이어지고, FarShell 실행 권한은 자동 승계되지 않습니다.'))) return;
+          if (!await confirmDialog(t('같은 대화를 새 CLI 실행에서 이어갈까요? 마지막으로 기록된 bypass·YOLO ON/OFF와 권한 설정을 복원합니다. 설정을 확인할 수 없으면 시작하지 않습니다. FarShell 실행 권한은 자동 승계되지 않습니다.'))) return;
           const result = await api(path + '/resume', { body: { operation_id: operationId(), ...(options.sessionId ? { session_id: options.sessionId } : {}) } });
           status.textContent = t('CLI를 시작했습니다. 대화 식별자 확인을 기다립니다.'); emitChanged();
+          notifyResumePolicy(result);
           await window.vtOpenSessionFromRail?.({ tmuxName: result.name, catalogSessionId: result.session_id, runtimeId: result.runtime_id });
         }));
         controls.append(button(archived.checked ? t('보관 해제') : t('대화 보관'), async () => {

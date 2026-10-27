@@ -168,3 +168,17 @@ Shown only if you installed with voice mode.
 | You closed a pane but the session is still in the rail | Expected. Closing only removes it from the pane; the session keeps running. To end it, use **Kill** in the row menu |
 
 More troubleshooting: `fsh help troubleshoot`
+
+
+## Permissions when resuming a conversation
+
+Resume on a session and Continue in Conversation archive also restore the last recorded permissions.
+Claude bypass and Codex YOLO stay on or off as recorded. OFF is applied explicitly, so a later change
+to global settings cannot turn it on. Codex also restores its approval policy, sandbox and approval reviewer.
+A notice shows the restored mode after launch.
+
+If records are missing, corrupt, conflicting or unsupported, FarShell refuses to start and explains why.
+Old Claude records without a verified profile are insufficient; resume directly in the CLI to record a new owner hook.
+Legacy hooks without the PID needed for process verification still report state, but cannot supply a resume policy.
+Codex permission restoration requires version 0.164.0 or newer. Unsupported Codex settings include custom permission profiles and network access in read-only mode.
+Changes the CLI never recorded cannot be restored. FarShell execution grants are not inherited.

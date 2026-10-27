@@ -1,7 +1,7 @@
 """이어서 시작할 때 직전 Claude 권한 모드(bypass 등)를 되살린다.
 
 기록: 훅 payload의 permission_mode를 대화(native id)별로 저장한다.
-적용: resume 명령에 `--permission-mode`를 붙이되, 고정 허용 목록 안의 값만. default·미기록·모르는 값은 아무것도 안 붙인다.
+적용: resume 명령에 `--permission-mode`를 붙이되, 고정 허용 목록 안의 값만. default도 명시하며 미기록·모르는 값은 재개를 거부한다.
 """
 import pytest
 from starlette.testclient import TestClient
@@ -38,10 +38,10 @@ def test_latest_mode_wins_and_same_mode_is_not_rewritten(catalog):
     assert _mode(catalog) == "acceptEdits"
 
 
-def test_default_is_stored_but_adds_nothing(catalog):
+def test_default_is_stored_and_replayed_explicitly(catalog):
     catalog.record(NATIVE, "bypassPermissions")
     catalog.record(NATIVE, "default")                       # 사용자가 bypass를 껐다
-    assert _mode(catalog) is None
+    assert _mode(catalog) == "default"
 
 
 @pytest.mark.parametrize("mode", ["", None, "auto", "dontAsk", "BYPASSPERMISSIONS", "bypassPermissions --x", 7, ["plan"]])
@@ -60,18 +60,17 @@ def test_lookup_before_any_record_is_none(catalog):
     assert _mode(catalog) is None                           # 표가 아직 없어도 오류가 아니다
 
 
-def test_resume_argv_adds_flag_only_for_replayed_claude_modes():
+def test_resume_argv_restores_every_known_claude_mode_and_refuses_unknown():
     from session_catalog.lifecycle import resume_argv
-    base = resume_argv("claude", "/bin/claude", "/root", NATIVE, None)
-    assert base[-2:] == ["--resume", NATIVE] and "--permission-mode" not in base
-    for mode in ("acceptEdits", "plan", "bypassPermissions"):
+    from session_catalog.db import Refused
+    for mode in ("default", "acceptEdits", "plan", "bypassPermissions"):
         argv = resume_argv("claude", "/bin/claude", "/root", NATIVE, mode)
         assert argv[-4:] == ["--resume", NATIVE, "--permission-mode", mode]
-    for mode in ("default", "auto", "x; reboot", None):
-        assert "--permission-mode" not in resume_argv("claude", "/bin/claude", "/root", NATIVE, mode)
-    # codex는 플래그 체계가 달라 이번 범위 밖 — 모드가 와도 붙이지 않는다.
-    codex = resume_argv("codex", "/bin/codex", "/root", NATIVE, "bypassPermissions")
-    assert codex[-2:] == ["resume", NATIVE] and "--permission-mode" not in codex
+    for mode in ("auto", "x; reboot", None):
+        with pytest.raises(Refused, match="execution_policy_unavailable"):
+            resume_argv("claude", "/bin/claude", "/root", NATIVE, mode)
+    with pytest.raises(Refused, match="execution_policy_unavailable"):
+        resume_argv("codex", "/bin/codex", "/root", NATIVE, "bypassPermissions")
 
 
 def test_resume_argv_never_lets_a_mode_become_shell_text():
@@ -117,3 +116,62 @@ def test_event_without_mode_or_with_bad_mode_keeps_working(client, catalog):
     assert _event(client, payload={"permission_mode": None}).status_code == 200
     assert _event(client, payload={"permission_mode": "launch-missiles"}).status_code == 200
     assert _mode(catalog) is None
+
+
+def test_accepted_owner_hook_records_scoped_default(client, catalog, tmp_path, monkeypatch):
+    import pane_resolve, agent_status, agent_config_context, hook_identity
+    from session_catalog.db import database
+    root = str(tmp_path / 'claude-profile')
+    monkeypatch.setattr(pane_resolve, 'is_our_socket', lambda *args: True)
+    monkeypatch.setattr(hook_identity, 'classify', lambda *args: (hook_identity.OK, 42))
+    monkeypatch.setattr(pane_resolve, 'resolve', lambda *args, **kwargs: ('sample', 'pane'))
+    monkeypatch.setattr(agent_status, 'on_event', lambda *args, **kwargs: {'session_id': NATIVE, 'status': 'idle'})
+    monkeypatch.setattr(agent_config_context, 'identify', lambda *args: {'tool': 'claude', 'root': root, 'pid': 42})
+    assert _event(client, pane='%1', payload={'permission_mode': 'default'}).status_code == 200
+    with database() as db:
+        assert catalog.lookup(db, NATIVE, root=root) == 'default'
+
+
+def test_unknown_profile_on_newer_owner_hook_invalidates_old_bypass(client, catalog, tmp_path, monkeypatch):
+    import pane_resolve, agent_status, agent_config_context, hook_identity
+    from session_catalog.db import database
+    root = str(tmp_path / 'claude-profile')
+    monkeypatch.setattr(pane_resolve, 'is_our_socket', lambda *args: True)
+    monkeypatch.setattr(hook_identity, 'classify', lambda *args: (hook_identity.OK, 42))
+    catalog.record(NATIVE, 'bypassPermissions', root=root, observed_ns=1)
+    monkeypatch.setattr(pane_resolve, 'resolve', lambda *args, **kwargs: ('sample', 'pane'))
+    monkeypatch.setattr(agent_status, 'on_event', lambda *args, **kwargs: {'session_id': NATIVE, 'status': 'idle'})
+    def missing(*args):
+        raise ValueError('process gone')
+    monkeypatch.setattr(agent_config_context, 'identify', missing)
+    assert _event(client, pane='%1', payload={'permission_mode': 'default'}).status_code == 200
+    with database() as db:
+        assert catalog.lookup(db, NATIVE, root=root) is None
+
+
+def test_unverified_legacy_hook_keeps_reporting_but_cannot_supply_profile_policy(client, catalog, tmp_path, monkeypatch):
+    import pane_resolve, agent_status
+    from session_catalog.db import database
+    root = str(tmp_path / 'claude-profile')
+    catalog.record(NATIVE, 'bypassPermissions', root=root, observed_ns=1)
+    monkeypatch.setattr(pane_resolve, 'resolve', lambda *args, **kwargs: ('sample', 'pane'))
+    monkeypatch.setattr(agent_status, 'on_event', lambda *args, **kwargs: {'session_id': NATIVE, 'status': 'idle'})
+    assert _event(client, payload={'permission_mode': 'default'}).status_code == 200
+    assert _mode(catalog) == 'default'
+    with database() as db:
+        assert catalog.lookup(db, NATIVE, root=root) is None
+
+
+def test_hook_agent_pid_must_match_the_profile_process(client, catalog, tmp_path, monkeypatch):
+    import pane_resolve, agent_status, agent_config_context, hook_identity
+    from session_catalog.db import database
+    root = str(tmp_path / 'claude-profile')
+    catalog.record(NATIVE, 'bypassPermissions', root=root, observed_ns=1)
+    monkeypatch.setattr(pane_resolve, 'resolve', lambda *args, **kwargs: ('sample', 'pane'))
+    monkeypatch.setattr(pane_resolve, 'is_our_socket', lambda *args: True)
+    monkeypatch.setattr(hook_identity, 'classify', lambda *args: (hook_identity.OK, 42))
+    monkeypatch.setattr(agent_status, 'on_event', lambda *args, **kwargs: {'session_id': NATIVE, 'status': 'idle'})
+    monkeypatch.setattr(agent_config_context, 'identify', lambda *args: {'tool': 'claude', 'root': root, 'pid': 99})
+    assert _event(client, pane='%1', payload={'permission_mode': 'default'}).status_code == 200
+    with database() as db:
+        assert catalog.lookup(db, NATIVE, root=root) is None

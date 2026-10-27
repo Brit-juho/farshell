@@ -467,6 +467,7 @@ async def agent_event(request: Request):
     # (hook_identity). 같은 pane을 물려받은 자식(claude -p·MCP 자식·Codex 데몬)을 가려낸다.
     # 옛 훅은 hook_pid를 안 보내 `unknown` — 예전 규칙 그대로 간다(AGENTS.md 계약 8).
     verdict = hook_identity.UNKNOWN
+    _agent_pid = None
     if body.get("pane") and pane_resolve.is_our_socket(body.get("tmux")):
         try:
             verdict, _agent_pid = await asyncio.to_thread(
@@ -508,8 +509,28 @@ async def agent_event(request: Request):
         # 자식·하위 에이전트·pane 주장이 거짓인 훅은 위에서 이미 걸러졌다. 실패해도 훅 응답은 그대로.
         try:
             from session_catalog import permission_modes
+            import time
+            observed_ns = ts if ts is not None else time.time_ns()
             await asyncio.to_thread(permission_modes.record, payload.get("session_id"), payload.get("permission_mode"))
+            if session and state and payload.get('permission_mode') is not None:
+                if verdict != hook_identity.OK or _agent_pid is None:
+                    await asyncio.to_thread(permission_modes.invalidate, payload.get('session_id'), observed_ns=observed_ns)
+                    context = None
+                else:
+                    import agent_config_context
+                    context = await asyncio.to_thread(agent_config_context.identify, session)
+                if (context and context['tool'] == 'claude' and context['pid'] == _agent_pid
+                        and state.get('session_id') == payload.get('session_id')):
+                    await asyncio.to_thread(permission_modes.record, payload.get('session_id'),
+                                            payload.get('permission_mode'), root=context['root'], observed_ns=observed_ns)
+                elif context:
+                    await asyncio.to_thread(permission_modes.invalidate, payload.get('session_id'), observed_ns=observed_ns)
         except Exception as e:  # noqa: BLE001
+            if state and payload.get('permission_mode') is not None:
+                try:
+                    await asyncio.to_thread(permission_modes.invalidate, payload.get('session_id'), observed_ns=observed_ns)
+                except Exception:
+                    pass
             logger.debug("권한 모드 기록 실패: %s", type(e).__name__)
     released = bool((state or {}).get("released"))
     # 음성 실패는 상태 훅·큐 투입을 막지 않는다.

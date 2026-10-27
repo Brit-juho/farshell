@@ -3,6 +3,11 @@
 // 원문을 고치면 여기 키도 같이 고친다 — scripts/check_i18n.py가 빠진 키와 남은 키를 잡는다.
 // 본문은 JSON이어야 한다(검사 스크립트와 서버가 json으로 읽는다).
 window.__VT_I18N = {
+  "이전 권한 설정을 확인하지 못해 이어서 시작하지 않았습니다. CLI에서 직접 재개해 설정을 확인하세요": "Could not verify the previous permissions, so the conversation was not resumed. Resume in the CLI to check the settings.",
+  "이전 권한 설정을 이 실행 방식으로 정확히 복원할 수 없습니다. CLI에서 직접 재개하세요": "This launch method cannot restore the previous permissions exactly. Resume directly in the CLI.",
+  "권한 기록이 변경됐습니다. 새로고침 후 다시 시도하세요": "The permission record changed. Refresh and try again.",
+  "Codex YOLO를 켠 상태로 이어서 시작했습니다": "Resumed Codex with YOLO on",
+  "Codex YOLO를 끈 상태로 이어서 시작했습니다": "Resumed Codex with YOLO off",
   "1 MiB를 초과한 행": "Records exceeding 1 MiB",
   "해석할 수 없는 행": "Invalid records",
   "색인 크기 한도 초과": "Index size limit exceeded",
@@ -4189,7 +4194,7 @@ window.__VT_I18N = {
   "CLI 원본이 없습니다. 보관본에서 먼저 복구하세요": "CLI source is missing. Restore the archived copy first",
   "CLI를 시작했습니다. 대화 식별자 확인을 기다립니다.": "CLI started. Waiting to verify the conversation ID.",
   "같은 대화가 이미 실행 중입니다": "This conversation is already running",
-  "같은 대화를 새 CLI 실행에서 이어갈까요? 직전 권한 모드(예: bypass permissions)는 그대로 이어지고, FarShell 실행 권한은 자동 승계되지 않습니다.": "Continue this conversation in a new CLI process? The previous permission mode (for example bypass permissions) carries over; FarShell execution permissions are not inherited automatically.",
+  "같은 대화를 새 CLI 실행에서 이어갈까요? 마지막으로 기록된 bypass·YOLO ON/OFF와 권한 설정을 복원합니다. 설정을 확인할 수 없으면 시작하지 않습니다. FarShell 실행 권한은 자동 승계되지 않습니다.": "Resume the same conversation in a new CLI? The last recorded bypass/YOLO on/off state and permission settings will be restored. It will not start if those settings cannot be verified. FarShell execution grants are not inherited.",
   "검증된 복제본": "Verified replica",
   "기록 저장소를 읽을 수 없습니다. 기존 파일을 보존했습니다": "Cannot read the history store. Existing files have been preserved",
   "기본 작업 공간": "Main workspace",
