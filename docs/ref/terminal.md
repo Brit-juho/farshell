@@ -105,7 +105,11 @@ moves the active **view tab** at every width (it moved a session in the removed 
 
 ### View tab
 
-- Label (member names joined with `+`, unless the user named it) and ×. No agent icon, no state icon.
+- A 44px single-line tab shows its label (member names joined with `+`, unless the user named it),
+  pane count and ×. Pane count includes empty, file and panel panes; it is distinct from the session status segments.
+  The active tab has an accent line at the top and a selected background. Left/right arrows and Home/End
+  switch views while retaining keyboard focus in the tab list. Enter/Space selects the focused tab.
+  Mobile keeps the Fleet entry point; its Edit views list also shows each view's pane count.
 - A **state bar** along the bottom edge, split into one equal segment per session in pane order (top-left first).
   Single views get a one-segment bar.
 - Segment colour = state colour; only `waiting` breathes.
@@ -341,6 +345,11 @@ observations and recorded stop/resume operations. A complete batch observation u
 server socket/PID/birth epoch plus session ID/birth; partial observations mark executions unknown
 and cannot terminate them. Stopped catalog rows remain. Archive requires an explicitly stopped
 runtime. Independent delegated tmux sessions are not stopped together.
+
+Catalog resume creates an interactive shell, then sends the quoted Claude/Codex resume
+command to the exact pane ID returned by tmux. Exiting the CLI returns to that shell;
+it does not stop the tmux runtime. Creation or command-delivery uncertainty records
+`needs_review`, and retrying the operation never sends the command again.
 
 `server/session_history/` stores immutable SHA-256 raw chunks before committing manifests and
 normalizes supported Claude/Codex JSONL, including compressed Codex records. Claude child metadata

@@ -2466,7 +2466,8 @@ window.__VT_I18N = {
   "워크트리 삭제": "Delete worktree",
   "워크트리 삭제 실패: {error}": "Couldn't delete worktree: {error}",
   "워크트리 생성 실패": "Couldn't create worktree",
-  "워크트리 탭": "Worktree tabs",
+  "뷰": "Views",
+  "{n}칸": { "one": "1 pane", "other": "{n} panes" },
   "워크트리를 찾을 수 없습니다": "Worktree not found",
   "워크트리를 찾지 못했다": "Couldn't find the worktree",
   "워크트리에 변경사항이 있습니다": "The worktree has uncommitted changes",
@@ -4188,7 +4189,7 @@ window.__VT_I18N = {
   "CLI 원본이 없습니다. 보관본에서 먼저 복구하세요": "CLI source is missing. Restore the archived copy first",
   "CLI를 시작했습니다. 대화 식별자 확인을 기다립니다.": "CLI started. Waiting to verify the conversation ID.",
   "같은 대화가 이미 실행 중입니다": "This conversation is already running",
-  "같은 대화를 새 CLI 실행에서 이어갈까요? 이전 실행 권한은 자동 승계되지 않습니다.": "Continue this conversation in a new CLI process? Previous execution permissions are not inherited automatically.",
+  "같은 대화를 새 CLI 실행에서 이어갈까요? 직전 권한 모드(예: bypass permissions)는 그대로 이어지고, FarShell 실행 권한은 자동 승계되지 않습니다.": "Continue this conversation in a new CLI process? The previous permission mode (for example bypass permissions) carries over; FarShell execution permissions are not inherited automatically.",
   "검증된 복제본": "Verified replica",
   "기록 저장소를 읽을 수 없습니다. 기존 파일을 보존했습니다": "Cannot read the history store. Existing files have been preserved",
   "기본 작업 공간": "Main workspace",
@@ -4350,5 +4351,6 @@ window.__VT_I18N = {
   "최근 종료 표시 개수": "Recently ended shown",
   "skillOverrides 형식이 잘못됐습니다": "skillOverrides has an invalid format",
   "frontmatter 이름이 폴더 이름과 달라 켬·끔 대상을 확정할 수 없습니다": "The frontmatter name differs from the folder name, so the skill to turn on or off cannot be determined",
-  "알 수 없는 skillOverrides 값입니다": "Unknown skillOverrides value"
+  "알 수 없는 skillOverrides 값입니다": "Unknown skillOverrides value",
+  "{mode} 모드로 이어서 시작했습니다": "Resumed in {mode} mode"
 };

@@ -43,15 +43,17 @@ Each row has three lines: status, agent, name / branch, change count / status ke
 
 - **Kill** ends the tmux session, and the claude or shell inside it, with no undo. A confirmation always appears,
   and it warns you if the session is working or waiting for input. Panes open in other browser tabs become empty panes.
-- **Mobile session sheet list**: shown in view order. A group view (two or more panes) appears under its view name (or "Group view" if unnamed)
-  with its members together; a single view is one row. tmux sessions that aren't open appear below in the "Sessions not open" section, sorted by name.
-- **Mobile navigation order**: swipe left/right, the next/previous tab keys, the session sheet's list and `n/m`, and the palette all use the same order.
+- **Mobile session management**: tap the header session name to switch between the Sessions tab and the terminal. Use each session row's menu to open, close, rename or stop it.
+- **Mobile navigation order**: swipe left/right, the next/previous tab keys, the header's `n/m`, and the palette use the same order.
   It goes view tab order → pane order within a view (top left first), skips empty panes, and wraps from the end to the start. Navigating never moves a session;
-  it only goes to that session's view and pane. To change the order, drag the view tabs at the top on desktop, or on mobile tap the "Edit views" icon at the top of the session sheet (shown when there are two or more views)
-  and use the up/down buttons per view (a group view moves as one, and closing the sheet ends editing). The rail stays sorted by name.
-  While editing, each view also has a "Close" button, so you can close views on a phone (same as the tab `×`: the session stays alive, a group view's layout is remembered, and closing the last view
-  shows the start screen). When you open the sheet on a phone, empty single views ("Empty screen") are cleaned up automatically.
-- The **status bar** under the view tabs has one cell per session. Color is the state; a bold cell is a change you haven't checked yet.
+  it only goes to that session's view and pane. To change the order, drag the view tabs at the top on desktop, or enable Edit views on the mobile Sessions tab
+  and use the up/down buttons per view. A group view moves as one.
+  While editing, each view also has a Close button (same as the tab `×`: the session stays alive, a group view's layout is remembered, and closing the last view
+  shows the start screen). Opening the Sessions tab on a phone automatically cleans up empty single views ("Empty screen").
+- Each top view tab uses one 44px row for its name, pane count and close button. The count includes empty, file and panel panes.
+  A top accent line and background mark the active view. With a tab focused, use Left/Right arrows or Home/End to switch views.
+  On mobile, pane counts appear in Edit views on the Sessions tab. Closing a view keeps its execution running.
+- The **status bar** under the view tabs has one segment per session. Color is the state; a bold segment is a change you haven't checked yet.
 - **Agents and session sharing**: lets an agent (Claude Code, for example) read and type into **only the sessions you've shared** through the FarShell MCP tools.
   Agents can't create or close sessions.
   - **Sharing**: row menu "Share with agent…" → choose a nickname (1-32 characters: letters, digits, `_`, `-`) and a mode (Read-only / Read & write).

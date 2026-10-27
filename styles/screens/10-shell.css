@@ -16,13 +16,13 @@
 /* ---- 상단 통합 바 ------------------------------------------------------- */
 #topbar {
   display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); padding:0 calc(var(--spacing) * 2); height:var(--topbar-h);
-  /* 2026-09-17 — 38 → 32px. 안에 든 컨트롤이 28px이라 38px일 땐 위아래 5px씩
-     남았다. 32px에서 그 비율(3px씩)을 유지하려고 컨트롤도 26px로 같이 줄인다 —
-     바만 줄이면 버튼이 테두리에 닿아 눌린 것처럼 보인다.
-     터치 기기는 아래 `@media (pointer:coarse)`에서 44px로 따로 잡으므로
-     탭 영역은 이 값과 무관하다(WCAG 2.5.5). */
+  /* 뷰 탭은 넓은 화면에서 44px, 모바일 헤더는 아래 규칙의 52px을 쓴다. */
   background:var(--bar); flex-shrink:0; position:relative; z-index:60;
   border-bottom:1px solid var(--line);
+}
+@media (min-width:720px) {
+  :root, html[data-skin] { --topbar-h:44px; --topbar-popup-y:50px; }
+  #topbar { border-bottom:0; box-shadow:inset 0 -1px var(--color-line); }
 }
 html[data-skin="macos"] #topbar { -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px); }
 
@@ -117,9 +117,11 @@ html[data-skin="windows"] #topbar {
    위 버튼은 chevron-down 하나를 돌려 쓴다(icons.js 규칙). */
 .vt-order-view { padding-block:calc(var(--spacing) * 1); }
 .vt-order-body { flex:1; min-width:0; display:flex; flex-direction:column; gap:calc(var(--spacing) * 0.5); }
+.vt-order-heading { display:flex; align-items:center; gap:calc(var(--spacing) * 2); min-width:0; }
 .vt-order-label { font-size:var(--fs-xs); color:var(--sub); }
 .vt-order-single { font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .vt-order-member { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-order-count { flex:none; font:var(--fs-2xs) var(--font-mono); color:var(--color-sub); }
 .vt-order-up svg { transform:rotate(180deg); }
 .vt-order-note { margin:0 calc(var(--spacing) * 0.5) calc(var(--spacing) * 1); font-size:var(--fs-xs); color:var(--sub); }
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다. 닫기는 폰 터치 표적이라 xl(44px) */

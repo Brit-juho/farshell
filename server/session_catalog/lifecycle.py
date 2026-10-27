@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shlex
 import shutil
 import time
@@ -13,6 +14,7 @@ import fsguard
 import store_lock
 import tmux_runner
 from .db import database, directory, identifier, uid, encode, changed, host_id, resume_target, Refused
+from . import permission_modes
 from . import inventory
 
 
@@ -33,6 +35,37 @@ def _finish(opid, state, result):
     with database(write=True) as db:
         db.execute('UPDATE operations SET state=?,result=?,updated=? WHERE id=?', (state, encode(result), time.time(), opid))
         changed(db, 'operation', opid)
+
+
+def resume_argv(provider, binary, root, native, mode=None):
+    """The tmux command for a resume. `mode` is replayed only from the fixed allow-list, never as given."""
+    env_key = 'CLAUDE_CONFIG_DIR' if provider == 'claude' else 'CODEX_HOME'
+    argv = ['env', '-u', 'ANTHROPIC_API_KEY', '-u', 'OPENAI_API_KEY', '-u', 'CLAUDE_CODE_OAUTH_TOKEN',
+            f'{env_key}={root}', binary]
+    argv += ['--resume', native] if provider == 'claude' else ['resume', native]
+    if provider == 'claude' and mode in permission_modes.REPLAYED:
+        argv += ['--permission-mode', mode]
+    return argv
+
+
+def _launch_resume(name, cwd, argv):
+    """Keep the interactive shell alive after the CLI exits; never retry input."""
+    command = shlex.join(argv)
+    # PTY control bytes are interpreted before shell quoting (e.g. Ctrl-C).
+    if any(ord(char) < 32 or ord(char) == 127 for char in command):
+        return False
+    rc, output, _ = tmux_runner.run(
+        ['new-session', '-d', '-P', '-F', '#{pane_id}', '-s', name, '-c', str(cwd)], timeout=5)
+    if rc:
+        return False
+    pane = output.decode('utf-8', errors='replace').strip()
+    if not re.fullmatch(r'%[0-9]+', pane):
+        return False
+    rc, _, _ = tmux_runner.run(['send-keys', '-t', pane, '-l', '--', command], timeout=5)
+    if rc:
+        return False
+    rc, _, _ = tmux_runner.run(['send-keys', '-t', pane, 'Enter'], timeout=5)
+    return rc == 0
 
 
 def resume(cid, opid, *, sid=None):
@@ -75,13 +108,14 @@ def resume(cid, opid, *, sid=None):
         if not binary:
             raise Refused('cli_unavailable')
         native = conversation['native_id']
-        import re
         if not re.fullmatch(r'[A-Za-z0-9_-]{1,160}', native):
             raise Refused('native_identity_unverified')
-        env_key = 'CLAUDE_CONFIG_DIR' if source['provider'] == 'claude' else 'CODEX_HOME'
-        argv = ['env', '-u', 'ANTHROPIC_API_KEY', '-u', 'OPENAI_API_KEY', '-u', 'CLAUDE_CODE_OAUTH_TOKEN',
-                f'{env_key}={root}', binary]
-        argv += ['--resume', native] if source['provider'] == 'claude' else ['resume', native]
+        # Same permission mode as the previous run (Claude only); a missing record or `default` adds nothing.
+        mode = None
+        if source['provider'] == 'claude':
+            with database() as db:
+                mode = permission_modes.lookup(db, native)
+        argv = resume_argv(source['provider'], binary, root, native, mode)
         placement = inventory.inspect_workspace(str(cwd))
         now, name = time.time(), 'fsh-' + opid
         with database(write=True) as db:
@@ -95,11 +129,12 @@ def resume(cid, opid, *, sid=None):
                 db.execute('INSERT INTO sessions(id,host,workspace_id,title,origin,created,updated) VALUES(?,?,?,?,?,?,?)',
                            (sid, host_id(db), wid, conversation['title'] or native, 'local', now, now))
             result = {'session_id': sid, 'conversation_id': cid, 'name': name, 'native_id': native}
+            if mode:
+                result['permission_mode'] = mode
             prior = _begin(db, opid, 'resume', sid, {'conversation_id': cid, 'session_id': sid}, result)
             if prior:
                 return {'operation_id': opid, 'state': prior['state'], **json.loads(prior['result'])}
-        rc, output, _ = tmux_runner.run(['new-session', '-d', '-s', name, '-c', str(cwd), shlex.join(argv)], timeout=5)
-        if rc:
+        if not _launch_resume(name, cwd, argv):
             # A timeout can leave a created process: never retry this operation automatically.
             _finish(opid, 'needs_review', result)
             raise Refused('launch_needs_review', 503)

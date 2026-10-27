@@ -126,3 +126,41 @@ test('pruneBlankViews — 묶음·이름 붙은 뷰·하나뿐인 빈 뷰는 건
   assert.strictEqual(ctx.S.pruneBlankViews(), 0, '뷰 하나뿐(온보딩 상태)');
   assert.strictEqual(ctx.S.getTabs().length, 1);
 });
+
+test('뷰 칸 수는 세션 수와 구분하고 빈 칸 분할 뒤에도 즉시 갱신한다', async () => {
+  const ctx = await setup({ width: 1440 });
+  ctx.window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+  ctx.window.HTMLElement.prototype.scrollIntoView = function () {};
+  await importFresh(J('layout/tabbar.js'), ctx.env.context, ctx.cache);
+  const tab = () => ctx.doc.querySelector(`.vt-wtab[data-tab-id="${ctx.t2}"]`);
+  assert.strictEqual(tab().querySelector('.vt-wtab-count').textContent, '2칸');
+  ctx.S.switchLayoutTab(ctx.t2);
+  ctx.S.splitActivePane('row', null);
+  assert.strictEqual(tab().querySelector('.vt-wtab-count').textContent, '3칸');
+  assert.strictEqual(tab().querySelectorAll('.vt-seg').length, 2, '빈 칸에는 세션 상태를 만들지 않는다');
+  assert.match(tab().getAttribute('aria-label'), /3칸/);
+  ctx.S.setTabLabel(ctx.t1, '서버 작업');
+  await openEdit(ctx);
+  assert.deepStrictEqual([...ctx.doc.querySelectorAll('.vt-order-count')].map((n) => n.textContent), ['1칸', '3칸', '1칸']);
+  assert.match(ctx.doc.querySelector('.vt-order-heading').textContent, /^서버 작업/);
+  assert.match(ctx.doc.querySelector('.vt-order-btn').getAttribute('aria-label'), /^서버 작업/);
+});
+
+test('탭 키보드 이동은 배치를 바꾸지 않고 탭에 포커스를 유지한다', async () => {
+  const ctx = await setup({ width: 1440 });
+  ctx.window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+  ctx.window.HTMLElement.prototype.scrollIntoView = function () {};
+  await importFresh(J('layout/tabbar.js'), ctx.env.context, ctx.cache);
+  const before = JSON.stringify(ctx.S.getTabsWithTrees().map((t) => t.tree));
+  const key = (name) => {
+    const tab = ctx.doc.querySelector('.vt-wtab[aria-selected="true"]');
+    tab.focus();
+    tab.dispatchEvent(new ctx.window.KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true }));
+    assert.strictEqual(ctx.doc.activeElement, ctx.doc.querySelector('.vt-wtab[aria-selected="true"]'));
+  };
+  key('Home'); assert.strictEqual(ctx.S.getActiveTabId(), ctx.t1);
+  key('ArrowLeft'); assert.strictEqual(ctx.S.getActiveTabId(), ctx.t3);
+  key('ArrowRight'); assert.strictEqual(ctx.S.getActiveTabId(), ctx.t1);
+  key('End'); assert.strictEqual(ctx.S.getActiveTabId(), ctx.t3);
+  assert.strictEqual(JSON.stringify(ctx.S.getTabsWithTrees().map((t) => t.tree)), before);
+});

@@ -8,9 +8,9 @@
 // 3단계(6/n)에서 아래쪽 세션 탭 줄(`#tabs`)은 사라졌다. 그 줄이 하던 일은
 // 전부 옮겨졌다: 이름·순서는 세션 레코드로(core/store.js), 드래그 소스와
 // 닫기·이름 변경은 레일 세션 행으로, 상태·읽지 않음은 이 파일의 탭 아래
-// 가장자리 상태 바로(2026-10-04 리뉴얼 — 탭에는 라벨과 ×만 남는다).
+// 가장자리 상태 바로. 탭은 라벨·칸 수·×를 표시한다.
 import { getTabsWithTrees, getActiveTabId, switchLayoutTab, openLayoutTab, moveLayoutTab, tabDisplayLabel, onLayoutChange, isLayoutEmpty } from './store.js';
-import { collectSessions } from './tree.js';
+import { collectSessions, countLeaves } from './tree.js';
 import { allSessions, activeSessionId, getSession, sessionDisplayName } from '../core/store.js';
 import { saveLayoutNow } from './persist.js';
 import { closeView, renameView } from '../term/session-actions.js';
@@ -27,7 +27,7 @@ const HOST = 'vt-wtabs';
 const TAB_MIME = 'application/x-fsh-tab';
 
 // ── 탭 하나의 상태 바 ───────────────────────────────────────────────────
-// 탭 = [라벨][×] + 아래 가장자리 바. 바는 이 뷰의 칸(세션)마다 같은 폭의
+// 탭 = [라벨][칸 수][×] + 아래 가장자리 바. 바는 이 뷰의 칸(세션)마다 같은 폭의
 // 세그먼트 하나, 칸 순서(왼쪽 위부터)대로. 대표 상태로 접지 않는다.
 // 색 = 상태(.vt-seg[data-state]), 굵기 = 읽지 않음(.thick). 포커스 칸은
 // 굵기를 쓰지 않는다(굵기 의미와 겹친다) — 칸 테두리가 맡는다.
@@ -66,7 +66,7 @@ function paintTabs() {
       if (i.dataset.state !== s.status) i.dataset.state = s.status;
       i.classList.toggle('thick', s.thick);
     });
-    const label = tabDisplayLabel(tab);
+    const label = `${tabDisplayLabel(tab)} · ${t('{n}칸', { n: countLeaves(tab.tree) })}`;
     if (segs.length) {
       el.setAttribute('data-tip', segmentsTooltip(segs));
       el.setAttribute('data-tip-side', 'bottom');
@@ -156,7 +156,7 @@ function render() {
   const tabs = getTabsWithTrees();
   const activeId = getActiveTabId();
   const empty = isLayoutEmpty();
-  const key = JSON.stringify([activeId, empty, tabs.map((t) => [t.id, tabDisplayLabel(t)])]);
+  const key = JSON.stringify([activeId, empty, tabs.map((t) => [t.id, tabDisplayLabel(t), countLeaves(t.tree)])]);
   if (key === _renderedKey && host.childElementCount === (empty ? 0 : tabs.length)) { paintTabs(); return; }
   _renderedKey = key;
   // 2026-09-29(사용자 결정) — 탭이 하나여도 바를 그린다. 예전엔 하나뿐이면
@@ -179,6 +179,12 @@ function render() {
     name.className = 'vt-wtab-name';
     name.textContent = tabDisplayLabel(tab);
     el.appendChild(name);
+
+    const count = document.createElement('span');
+    count.className = 'vt-wtab-count';
+    count.textContent = t('{n}칸', { n: countLeaves(tab.tree) });
+    count.setAttribute('aria-hidden', 'true');
+    el.appendChild(count);
 
     const bar = document.createElement('span');
     bar.className = 'vt-wtab-bar';
@@ -210,6 +216,19 @@ function render() {
       saveLayoutNow();
       const s = getSession(activeSessionId());
       if (s && s.term) s.term.focus();
+    });
+    el.addEventListener('keydown', (e) => {
+      if (e.target !== el || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      const index = tabs.findIndex((entry) => entry.id === tab.id);
+      const target = e.key === 'ArrowRight' ? tabs[(index + 1) % tabs.length]
+        : e.key === 'ArrowLeft' ? tabs[(index + tabs.length - 1) % tabs.length]
+        : e.key === 'Home' ? tabs[0] : e.key === 'End' ? tabs[tabs.length - 1]
+        : e.key === 'Enter' || e.key === ' ' ? tab : null;
+      if (!target) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (switchLayoutTab(target.id)) saveLayoutNow();
+      [...host.querySelectorAll('.vt-wtab')].find((node) => node.dataset.tabId === target.id)?.focus();
     });
     _wireDrag(el, tab, host);
     host.appendChild(el);
