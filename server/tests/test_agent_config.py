@@ -228,6 +228,89 @@ def test_invalid_changes_and_corrupt_store_refuse_writes(setup):
     assert manager._path().read_text() == '{broken'
 
 
+def _claude_skill(home, name, frontmatter_name=None):
+    path = home / ".claude" / "skills" / name / "SKILL.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"---\nname: {frontmatter_name or name}\n---\nUse it.\n")
+    return path
+
+
+def _claude_rows(name, project=None):
+    rows = manager.full_inventory(None, "all")["items"]
+    return [r for r in rows if r["kind"] == "skill" and r["tool"] == "claude"
+            and r["name"] == name and r.get("project") == project]
+
+
+def test_claude_skill_global_toggle_writes_skill_overrides_only(setup):
+    home, repo, state, ctx = setup
+    _claude_skill(home, "review")
+    settings = home / ".claude" / "settings.json"
+    settings.write_text(json.dumps({"model": "sonnet", "env": {"TOKEN": "private-secret"},
+                                    "skillOverrides": {"other": "name-only"}}, indent=2))
+    row = _claude_rows("review")[0]
+    assert row["enabled"] is True and row["writable"] is True
+    assert row["write_source"] == str(settings)
+    plan = manager.preview([{"id": row["id"], "enabled": False}], None, "all")
+    assert manager.apply(plan["token"])["status"] == "ok"
+    data = json.loads(settings.read_text())
+    assert data["skillOverrides"] == {"other": "name-only", "review": "off"}
+    assert data["env"] == {"TOKEN": "private-secret"} and data["model"] == "sonnet"
+    row = _claude_rows("review")[0]
+    assert row["enabled"] is False
+    plan = manager.preview([{"id": row["id"], "enabled": True}], None, "all")
+    assert manager.apply(plan["token"])["status"] == "ok"
+    assert json.loads(settings.read_text())["skillOverrides"] == {"other": "name-only"}
+    assert list((state / "agent-config-backups").glob("*.bak"))
+
+
+def test_claude_skill_project_toggle_overrides_global_off(setup):
+    home, repo, state, ctx = setup
+    _claude_skill(home, "review")
+    settings = home / ".claude" / "settings.json"
+    settings.write_text(json.dumps({"skillOverrides": {"review": "off"}}))
+    before = settings.read_text()
+    global_row = _claude_rows("review")[0]
+    row = _claude_rows("review", str(repo))[0]
+    assert global_row["id"] != row["id"]
+    assert row["enabled"] is False and row["writable"] is True
+    local = repo / ".claude" / "settings.local.json"
+    assert row["write_source"] == str(local)
+    plan = manager.preview([{"id": row["id"], "enabled": True}], None, "all")
+    assert manager.apply(plan["token"])["status"] == "ok"
+    assert json.loads(local.read_text()) == {"skillOverrides": {"review": "on"}}
+    assert settings.read_text() == before
+    assert _claude_rows("review", str(repo))[0]["enabled"] is True
+    assert _claude_rows("review")[0]["enabled"] is False
+
+
+def test_claude_skill_toggle_refuses_unclear_name_and_corrupt_settings(setup):
+    home, repo, state, ctx = setup
+    _claude_skill(home, "renamed", frontmatter_name="other-name")
+    row = _claude_rows("renamed")[0]
+    assert row["writable"] is False and row["enabled"] is None and row["state_reason"]
+    _claude_skill(home, "review")
+    settings = home / ".claude" / "settings.json"
+    settings.write_text('{"skillOverrides": ')
+    row = _claude_rows("review")[0]
+    assert row["writable"] is False and row["enabled"] is None
+    with pytest.raises(ValueError):
+        manager.preview([{"id": row["id"], "enabled": False}], None, "all")
+    assert settings.read_text() == '{"skillOverrides": '
+
+
+def test_claude_skill_toggle_refuses_settings_changed_after_review(setup):
+    home, repo, state, ctx = setup
+    _claude_skill(home, "review")
+    settings = home / ".claude" / "settings.json"
+    settings.write_text(json.dumps({"model": "sonnet"}))
+    row = _claude_rows("review")[0]
+    plan = manager.preview([{"id": row["id"], "enabled": False}], None, "all")
+    settings.write_text(json.dumps({"model": "opus"}))
+    with pytest.raises(ValueError):
+        manager.apply(plan["token"])
+    assert json.loads(settings.read_text()) == {"model": "opus"}
+
+
 def test_skill_edit_round_trip_checks_review_revision(setup):
     home, repo, state, ctx = setup
     path = home / ".agents" / "skills" / "review" / "SKILL.md"
