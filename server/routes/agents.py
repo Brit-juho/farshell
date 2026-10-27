@@ -502,6 +502,15 @@ async def agent_event(request: Request):
     ignored = state is None and event in agent_status._HOOK_EVENTS
     if ignored:
         how = "ignored"
+    elif (agent_name == "claude" and not payload.get("agent_id")
+          and verdict in (hook_identity.OK, hook_identity.UNKNOWN)):
+        # 이어서 시작할 때 같은 권한 모드로 띄우기 위한 기록. 소유 세션의 본체 이벤트만 믿는다 —
+        # 자식·하위 에이전트·pane 주장이 거짓인 훅은 위에서 이미 걸러졌다. 실패해도 훅 응답은 그대로.
+        try:
+            from session_catalog import permission_modes
+            await asyncio.to_thread(permission_modes.record, payload.get("session_id"), payload.get("permission_mode"))
+        except Exception as e:  # noqa: BLE001
+            logger.debug("권한 모드 기록 실패: %s", type(e).__name__)
     released = bool((state or {}).get("released"))
     # 음성 실패는 상태 훅·큐 투입을 막지 않는다.
     if state is not None and not released:

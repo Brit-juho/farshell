@@ -13,6 +13,7 @@ import fsguard
 import store_lock
 import tmux_runner
 from .db import database, directory, identifier, uid, encode, changed, host_id, resume_target, Refused
+from . import permission_modes
 from . import inventory
 
 
@@ -33,6 +34,17 @@ def _finish(opid, state, result):
     with database(write=True) as db:
         db.execute('UPDATE operations SET state=?,result=?,updated=? WHERE id=?', (state, encode(result), time.time(), opid))
         changed(db, 'operation', opid)
+
+
+def resume_argv(provider, binary, root, native, mode=None):
+    """The tmux command for a resume. `mode` is replayed only from the fixed allow-list, never as given."""
+    env_key = 'CLAUDE_CONFIG_DIR' if provider == 'claude' else 'CODEX_HOME'
+    argv = ['env', '-u', 'ANTHROPIC_API_KEY', '-u', 'OPENAI_API_KEY', '-u', 'CLAUDE_CODE_OAUTH_TOKEN',
+            f'{env_key}={root}', binary]
+    argv += ['--resume', native] if provider == 'claude' else ['resume', native]
+    if provider == 'claude' and mode in permission_modes.REPLAYED:
+        argv += ['--permission-mode', mode]
+    return argv
 
 
 def resume(cid, opid, *, sid=None):
@@ -78,10 +90,12 @@ def resume(cid, opid, *, sid=None):
         import re
         if not re.fullmatch(r'[A-Za-z0-9_-]{1,160}', native):
             raise Refused('native_identity_unverified')
-        env_key = 'CLAUDE_CONFIG_DIR' if source['provider'] == 'claude' else 'CODEX_HOME'
-        argv = ['env', '-u', 'ANTHROPIC_API_KEY', '-u', 'OPENAI_API_KEY', '-u', 'CLAUDE_CODE_OAUTH_TOKEN',
-                f'{env_key}={root}', binary]
-        argv += ['--resume', native] if source['provider'] == 'claude' else ['resume', native]
+        # Same permission mode as the previous run (Claude only); a missing record or `default` adds nothing.
+        mode = None
+        if source['provider'] == 'claude':
+            with database() as db:
+                mode = permission_modes.lookup(db, native)
+        argv = resume_argv(source['provider'], binary, root, native, mode)
         placement = inventory.inspect_workspace(str(cwd))
         now, name = time.time(), 'fsh-' + opid
         with database(write=True) as db:
@@ -95,6 +109,8 @@ def resume(cid, opid, *, sid=None):
                 db.execute('INSERT INTO sessions(id,host,workspace_id,title,origin,created,updated) VALUES(?,?,?,?,?,?,?)',
                            (sid, host_id(db), wid, conversation['title'] or native, 'local', now, now))
             result = {'session_id': sid, 'conversation_id': cid, 'name': name, 'native_id': native}
+            if mode:
+                result['permission_mode'] = mode
             prior = _begin(db, opid, 'resume', sid, {'conversation_id': cid, 'session_id': sid}, result)
             if prior:
                 return {'operation_id': opid, 'state': prior['state'], **json.loads(prior['result'])}

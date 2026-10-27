@@ -3,11 +3,17 @@ import { t } from '../core/i18n.js';
 import { historyApi, operationId } from './api.js';
 
 const notify = () => window.dispatchEvent(new Event('vt:catalog-changed'));
+// Claude CLI가 화면에 쓰는 이름. 모르는 값은 그대로 보여 준다.
+const PERMISSION_MODE_LABEL = { bypassPermissions: 'bypass permissions', acceptEdits: 'accept edits', plan: 'plan' };
 
 /** 종료된 세션을 같은 세션 id로 이어서 시작하고, 열려 있는 터미널 화면으로 가져온다. */
 export async function resumeSession(id, { signal } = {}) {
   const result = await historyApi(`/api/session-catalog/sessions/${id}/resume`, { body: { operation_id: operationId() }, signal });
   notify();
+  // 직전 권한 모드를 되살려 띄웠으면 말해 준다 — 확인 없이 bypass가 다시 켜지므로 눈에 띄어야 한다.
+  if (result.permission_mode) {
+    window.showToast?.(t('{mode} 모드로 이어서 시작했습니다', { mode: PERMISSION_MODE_LABEL[result.permission_mode] || result.permission_mode }), 'warn');
+  }
   // 터미널 전환 실패는 시작 성공을 뒤집지 않는다. 행이 곧 실행 중 행으로 바뀐다.
   try {
     await window.vtOpenSessionFromRail?.({ sessionId: null, tmuxName: result.name, catalogSessionId: result.session_id, runtimeId: result.runtime_id });

@@ -4188,7 +4188,7 @@ window.__VT_I18N = {
   "CLI 원본이 없습니다. 보관본에서 먼저 복구하세요": "CLI source is missing. Restore the archived copy first",
   "CLI를 시작했습니다. 대화 식별자 확인을 기다립니다.": "CLI started. Waiting to verify the conversation ID.",
   "같은 대화가 이미 실행 중입니다": "This conversation is already running",
-  "같은 대화를 새 CLI 실행에서 이어갈까요? 이전 실행 권한은 자동 승계되지 않습니다.": "Continue this conversation in a new CLI process? Previous execution permissions are not inherited automatically.",
+  "같은 대화를 새 CLI 실행에서 이어갈까요? 직전 권한 모드(예: bypass permissions)는 그대로 이어지고, FarShell 실행 권한은 자동 승계되지 않습니다.": "Continue this conversation in a new CLI process? The previous permission mode (for example bypass permissions) carries over; FarShell execution permissions are not inherited automatically.",
   "검증된 복제본": "Verified replica",
   "기록 저장소를 읽을 수 없습니다. 기존 파일을 보존했습니다": "Cannot read the history store. Existing files have been preserved",
   "기본 작업 공간": "Main workspace",
@@ -4347,5 +4347,6 @@ window.__VT_I18N = {
   "종료 후 {n}일이 지난 세션이 자동으로 보관됩니다. 자동으로는 삭제하지 않습니다.": "Sessions are archived automatically {n} days after they end. Nothing is deleted automatically.",
   "종료한 세션": "Ended sessions",
   "최근 종료": "Recently ended",
-  "최근 종료 표시 개수": "Recently ended shown"
+  "최근 종료 표시 개수": "Recently ended shown",
+  "{mode} 모드로 이어서 시작했습니다": "Resumed in {mode} mode"
 };
