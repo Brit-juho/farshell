@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Fixed
+- Resume restores Claude bypass OFF explicitly and Codex YOLO ON/OFF with recorded approval, sandbox and reviewer settings. Profile-scoped Claude hooks and verified native Codex records prevent borrowing current defaults or another profile's policy; missing, corrupt or unsupported settings refuse launch.
 - Resuming a stopped Claude session now starts in the permission mode it last ran in (accept edits, plan, bypass permissions); before, `--resume` always came back in the default mode. The mode is read from the hook payload's `permission_mode` of the session's own main agent and kept per conversation in the session catalog; `default`, no record, or any mode outside that list adds nothing to the command. A notice shows when a non-default mode was restored, and the confirm text says so. Codex is unchanged. Delegated children still never inherit bypass.
 - Resume history indexing past oversized records with persisted skip checkpoints; distinguish preserved raw originals from omitted search content. Drain replication backlogs in bounded batches while retaining byte-rate, chunk and cancellation limits.
 - File popup/sheet over a terminal: the terminal area under the popup could go blank while output kept streaming (repaint only ran on open/move/resize/close). The visible session is now repainted every 300ms while the overlay is open, and the card sits on its own compositing layer.

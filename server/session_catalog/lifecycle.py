@@ -14,7 +14,7 @@ import fsguard
 import store_lock
 import tmux_runner
 from .db import database, directory, identifier, uid, encode, changed, host_id, resume_target, Refused
-from . import permission_modes
+from . import permission_modes, execution_policy
 from . import inventory
 
 
@@ -37,14 +37,22 @@ def _finish(opid, state, result):
         changed(db, 'operation', opid)
 
 
-def resume_argv(provider, binary, root, native, mode=None):
+def resume_argv(provider, binary, root, native, mode=None, *, policy=None):
     """The tmux command for a resume. `mode` is replayed only from the fixed allow-list, never as given."""
     env_key = 'CLAUDE_CONFIG_DIR' if provider == 'claude' else 'CODEX_HOME'
     argv = ['env', '-u', 'ANTHROPIC_API_KEY', '-u', 'OPENAI_API_KEY', '-u', 'CLAUDE_CODE_OAUTH_TOKEN',
             f'{env_key}={root}', binary]
     argv += ['--resume', native] if provider == 'claude' else ['resume', native]
-    if provider == 'claude' and mode in permission_modes.REPLAYED:
+    if provider == 'claude':
+        if not isinstance(mode, str) or mode not in permission_modes.REPLAYED:
+            raise Refused('execution_policy_unavailable')
         argv += ['--permission-mode', mode]
+    elif provider == 'codex':
+        if not isinstance(policy, dict):
+            raise Refused('execution_policy_unavailable')
+        argv += execution_policy.codex_args(policy)
+    else:
+        raise Refused('unsupported_provider')
     return argv
 
 
@@ -102,7 +110,9 @@ def resume(cid, opid, *, sid=None):
         # A stored reference alone does not prove that a native resume source exists.
         with database() as db:
             files = db.execute('SELECT relative_path FROM source_files WHERE conversation_id=?', (cid,)).fetchall()
-        if not any(_exists(root, r['relative_path'], source['provider'],conversation['native_id']) for r in files):
+        native_files = [r['relative_path'] for r in files
+                        if _exists(root, r['relative_path'], source['provider'], conversation['native_id'])]
+        if not native_files:
             raise Refused('native_source_missing')
         binary = shutil.which(conversation['provider'])
         if not binary:
@@ -110,15 +120,22 @@ def resume(cid, opid, *, sid=None):
         native = conversation['native_id']
         if not re.fullmatch(r'[A-Za-z0-9_-]{1,160}', native):
             raise Refused('native_identity_unverified')
-        # Same permission mode as the previous run (Claude only); a missing record or `default` adds nothing.
-        mode = None
+        # Restore the recorded policy explicitly, including OFF; current config is not evidence.
+        mode, policy, witnesses = None, None, []
         if source['provider'] == 'claude':
             with database() as db:
-                mode = permission_modes.lookup(db, native)
-        argv = resume_argv(source['provider'], binary, root, native, mode)
+                mode = permission_modes.lookup(db, native, root=str(root))
+        else:
+            policy, witnesses = execution_policy.read_codex(root, native_files, native)
+            execution_policy.require_cli(binary)
+        argv = resume_argv(source['provider'], binary, root, native, mode, policy=policy)
         placement = inventory.inspect_workspace(str(cwd))
         now, name = time.time(), 'fsh-' + opid
         with database(write=True) as db:
+            current_source = db.execute('SELECT * FROM sources WHERE id=?', (source['id'],)).fetchone()
+            if (not current_source or not current_source['enabled']
+                    or current_source['revision'] != source['revision'] or current_source['root'] != source['root']):
+                raise Refused('source_unavailable')
             if sid:
                 row = db.execute('SELECT * FROM sessions WHERE id=? AND deleted IS NULL AND archived IS NULL', (sid,)).fetchone()
                 if not row or db.execute('SELECT 1 FROM runtimes WHERE session_id=? AND ended IS NULL', (sid,)).fetchone():
@@ -131,9 +148,24 @@ def resume(cid, opid, *, sid=None):
             result = {'session_id': sid, 'conversation_id': cid, 'name': name, 'native_id': native}
             if mode:
                 result['permission_mode'] = mode
+            if policy:
+                result['execution_policy'] = execution_policy.summary(policy)
             prior = _begin(db, opid, 'resume', sid, {'conversation_id': cid, 'session_id': sid}, result)
             if prior:
                 return {'operation_id': opid, 'state': prior['state'], **json.loads(prior['result'])}
+        try:
+            execution_policy.recheck(witnesses)
+            with database() as db:
+                current_source = db.execute('SELECT * FROM sources WHERE id=?', (source['id'],)).fetchone()
+                if (not current_source or not current_source['enabled']
+                        or current_source['revision'] != source['revision'] or current_source['root'] != source['root']):
+                    raise Refused('source_unavailable')
+                if source['provider'] == 'claude':
+                    if permission_modes.lookup(db, native, root=str(root)) != mode:
+                        raise Refused('execution_policy_changed')
+        except Refused:
+            _finish(opid, 'needs_review', result)
+            raise
         if not _launch_resume(name, cwd, argv):
             # A timeout can leave a created process: never retry this operation automatically.
             _finish(opid, 'needs_review', result)

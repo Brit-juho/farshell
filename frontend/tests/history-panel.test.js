@@ -64,3 +64,32 @@ test('history deletion submits the explicitly chosen replica scope after confirm
   assert.equal(request.url,'/api/session-history/conversations/parent');
   assert.equal(request.body.delete_scope,'replicas');
 });
+
+for (const english of [false, true]) for (const yolo of [false, true]) {
+  test(`Codex resume reports restored YOLO ${yolo ? 'on' : 'off'} (${english ? 'en' : 'ko'})`, async () => {
+    const env = createDomEnv('<body></body>'); doms.push(env.dom);
+    if (english) {
+      const vm = require('node:vm'), fs = require('node:fs');
+      vm.runInContext(fs.readFileSync(path.join(__dirname,'../js/locales/en.js'),'utf8'),env.context);
+      env.window.vtT = source => env.window.__VT_I18N[source] || source;
+    }
+    const toasts = [], opened = [];
+    env.window.showToast = (...args) => toasts.push(args);
+    env.window.vtOpenSessionFromRail = async value => opened.push(value);
+    env.window.fetch = async () => ({ok:true,json:async()=>({session_id:'task',runtime_id:'run',name:'sample',execution_policy:{provider:'codex',yolo}})});
+    const m = await importFresh(path.join(__dirname,'../js/history/session-actions.js'),env.context,new Map());
+    await m.resumeSession('task');
+    assert.equal(toasts.length,1);
+    assert.equal(toasts[0][1],yolo ? 'warn' : 'info');
+    assert.ok(toasts[0][0].includes(english ? `YOLO ${yolo ? 'on' : 'off'}` : (yolo ? '켠' : '끈')));
+    assert.equal(opened[0].catalogSessionId,'task');
+  });
+}
+
+test('unknown permissions refuse resume without opening a terminal',async()=>{
+  const env=createDomEnv('<body></body>');doms.push(env.dom);
+  env.window.vtOpenSessionFromRail=()=>assert.fail('must not open');
+  env.window.fetch=async()=>({ok:false,status:409,json:async()=>({error:'execution_policy_unavailable'})});
+  const m=await importFresh(path.join(__dirname,'../js/history/session-actions.js'),env.context,new Map());
+  await assert.rejects(m.resumeSession('task'),/이전 권한 설정을 확인하지 못해/);
+});

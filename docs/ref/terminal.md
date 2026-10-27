@@ -351,6 +351,24 @@ command to the exact pane ID returned by tmux. Exiting the CLI returns to that s
 it does not stop the tmux runtime. Creation or command-delivery uncertainty records
 `needs_review`, and retrying the operation never sends the command again.
 
+Resume restores permissions as well as the conversation. Claude uses a verified owner-hook
+record keyed by native profile root and conversation ID, explicitly including `default`.
+Old unscoped records cannot establish which profile supplied the mode. Scoped writes require
+the verified hook agent PID to match the foreground CLI profile PID; older hooks still
+report state but cannot establish a permission policy for resume. Codex re-reads the
+catalog-bound native transcript immediately before launch, checks parent/native identity,
+and restores the final `turn_context` approval policy, sandbox details and reviewer. YOLO is
+`never` approval plus `danger-full-access`; OFF is replayed explicitly rather than inherited
+from current config. Codex 0.164.0 or newer is required; an unknown/older runtime is refused before launch.
+Custom/named permission profiles, unsupported policies and read-only
+network access cannot be faithfully represented by these CLI arguments and are refused.
+Malformed/incomplete latest records, conflicting native copies, unavailable policy and a
+changed file/source refuse without sending the command. Reads are bounded to 64 MiB and
+1 MiB per record; compressed sources must fit the decompression budget. Policies not yet
+written by the native CLI cannot be reconstructed. Claude hook timestamps prevent delayed
+older events from restoring an earlier bypass, including across server restart. A newer
+owner event whose profile cannot be verified invalidates older scoped records.
+
 `server/session_history/` stores immutable SHA-256 raw chunks before committing manifests and
 normalizes supported Claude/Codex JSONL, including compressed Codex records. Claude child metadata
 and selected tool-result attachments are raw archive units. `dependency_complete:false` remains
