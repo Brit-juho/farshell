@@ -88,13 +88,13 @@ async function openEditor(ctx) {
   ctx.S.onLayoutChange(() => ctx.O.renderOrderEditor(list));
   return { doc, list };
 }
-const rows = (doc) => [...doc.querySelectorAll('.vt-order-view')].map((r) => [...r.querySelectorAll('.vt-order-body > span')].map((x) => x.textContent).join(' '));
+const rows = (doc) => [...doc.querySelectorAll('.vt-order-view')].map((r) => [...r.querySelectorAll('.vt-order-heading > span, .vt-order-member')].map((x) => x.textContent).join(' '));
 
 test('편집기 — 뷰 블록만 그린다(행 클릭 이동 없음), 끝의 이동 버튼은 비활성', async () => {
   const ctx = await setup();
   const { doc } = await openEditor(ctx);
   assert.strictEqual(doc.querySelectorAll('.vt-order-view').length, 3);
-  assert.deepStrictEqual(rows(doc), ['a', '묶음 뷰 b c', 'd']);
+  assert.deepStrictEqual(rows(doc), ['a 1칸', '묶음 뷰 2칸 b c', 'd 1칸']);
   const btn = (tab, dir) => doc.querySelector(`.vt-order-btn[data-tab="${tab}"][data-dir="${dir}"]`);
   assert.strictEqual(btn(ctx.t1, -1).getAttribute('aria-disabled'), 'true', '맨 위의 위 버튼');
   assert.strictEqual(btn(ctx.t3, 1).getAttribute('aria-disabled'), 'true', '맨 아래의 아래 버튼');
@@ -106,7 +106,7 @@ test('편집기 — 위 버튼: 순서 즉시 갱신, 활성 뷰 불변, 포커�
   const { doc } = await openEditor(ctx);
   const activeBefore = ctx.S.getActiveTabId();                       // d 뷰
   doc.querySelector(`.vt-order-btn[data-tab="${ctx.t2}"][data-dir="-1"]`).click(); await flush();
-  assert.deepStrictEqual(rows(doc), ['묶음 뷰 b c', 'a', 'd']);
+  assert.deepStrictEqual(rows(doc), ['묶음 뷰 2칸 b c', 'a 1칸', 'd 1칸']);
   assert.strictEqual(ctx.S.getActiveTabId(), activeBefore);
   assert.strictEqual(ids(ctx.C), 'b,c,a,d');
   const f = doc.activeElement;

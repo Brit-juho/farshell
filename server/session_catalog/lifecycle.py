@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shlex
 import shutil
 import time
@@ -47,6 +48,26 @@ def resume_argv(provider, binary, root, native, mode=None):
     return argv
 
 
+def _launch_resume(name, cwd, argv):
+    """Keep the interactive shell alive after the CLI exits; never retry input."""
+    command = shlex.join(argv)
+    # PTY control bytes are interpreted before shell quoting (e.g. Ctrl-C).
+    if any(ord(char) < 32 or ord(char) == 127 for char in command):
+        return False
+    rc, output, _ = tmux_runner.run(
+        ['new-session', '-d', '-P', '-F', '#{pane_id}', '-s', name, '-c', str(cwd)], timeout=5)
+    if rc:
+        return False
+    pane = output.decode('utf-8', errors='replace').strip()
+    if not re.fullmatch(r'%[0-9]+', pane):
+        return False
+    rc, _, _ = tmux_runner.run(['send-keys', '-t', pane, '-l', '--', command], timeout=5)
+    if rc:
+        return False
+    rc, _, _ = tmux_runner.run(['send-keys', '-t', pane, 'Enter'], timeout=5)
+    return rc == 0
+
+
 def resume(cid, opid, *, sid=None):
     identifier(cid)
     identifier(opid)
@@ -87,7 +108,6 @@ def resume(cid, opid, *, sid=None):
         if not binary:
             raise Refused('cli_unavailable')
         native = conversation['native_id']
-        import re
         if not re.fullmatch(r'[A-Za-z0-9_-]{1,160}', native):
             raise Refused('native_identity_unverified')
         # Same permission mode as the previous run (Claude only); a missing record or `default` adds nothing.
@@ -114,8 +134,7 @@ def resume(cid, opid, *, sid=None):
             prior = _begin(db, opid, 'resume', sid, {'conversation_id': cid, 'session_id': sid}, result)
             if prior:
                 return {'operation_id': opid, 'state': prior['state'], **json.loads(prior['result'])}
-        rc, output, _ = tmux_runner.run(['new-session', '-d', '-s', name, '-c', str(cwd), shlex.join(argv)], timeout=5)
-        if rc:
+        if not _launch_resume(name, cwd, argv):
             # A timeout can leave a created process: never retry this operation automatically.
             _finish(opid, 'needs_review', result)
             raise Refused('launch_needs_review', 503)

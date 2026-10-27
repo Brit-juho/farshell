@@ -10,6 +10,7 @@ import { sessionDisplayName } from '../core/store.js';
 import { icon } from '../ui/icons.js';
 import { closeView } from '../term/session-actions.js';
 import { t } from '../core/i18n.js';
+import { countLeaves } from './tree.js';
 
 let _focus = null;   // 이동·닫기 직후 다시 그릴 때 포커스를 돌려줄 버튼 {tabId, dir} | {close:true, index}
 let _note = null;    // 스크린리더용 결과 안내 한 줄 {text, until} — 한 동작이 시트를 여러 번 다시 그리므로 1.5초간 유지
@@ -18,7 +19,7 @@ let _note = null;    // 스크린리더용 결과 안내 한 줄 {text, until} �
 export function orderedViews() {
   const order = openSessionOrder();
   return getTabsWithTrees()
-    .map((t, index) => ({ id: t.id, index, label: t.label || '', members: order.filter((e) => e.tabId === t.id).map((e) => e.id) }))
+    .map((t, index) => ({ id: t.id, index, label: t.label || '', panes: countLeaves(t.tree), members: order.filter((e) => e.tabId === t.id).map((e) => e.id) }))
     .filter((v) => v.members.length > 0);
 }
 
@@ -53,13 +54,18 @@ export function renderOrderEditor(list) {
     const body = document.createElement('div');
     body.className = 'vt-order-body';
     const grouped = v.members.length > 1;
-    if (grouped) {
-      const head = document.createElement('span');
-      head.className = 'vt-order-label';
-      head.textContent = viewTitle(v);
-      body.appendChild(head);
-    }
-    for (const id of v.members) {
+    const heading = document.createElement('div');
+    heading.className = 'vt-order-heading';
+    const head = document.createElement('span');
+    head.className = grouped ? 'vt-order-label' : 'vt-order-single';
+    head.textContent = viewTitle(v);
+    heading.appendChild(head);
+    const count = document.createElement('span');
+    count.className = 'vt-order-count';
+    count.textContent = t('{n}칸', { n: v.panes });
+    heading.appendChild(count);
+    body.appendChild(heading);
+    for (const id of grouped ? v.members : []) {
       const name = document.createElement('span');
       name.className = grouped ? 'vt-order-member' : 'vt-order-single';
       name.textContent = sessionDisplayName(id);
@@ -73,7 +79,7 @@ export function renderOrderEditor(list) {
       b.className = 'vt-icon-btn xl vt-order-btn' + (dir < 0 ? ' vt-order-up' : '');
       b.dataset.tab = v.id; b.dataset.dir = String(dir);
       b.innerHTML = icon('chevron-down', 18);
-      const label = grouped ? viewTitle(v) : sessionDisplayName(v.members[0]);
+      const label = viewTitle(v);
       b.setAttribute('aria-label', dir < 0 ? t('{label} 위로 옮기기', { label }) : t('{label} 아래로 옮기기', { label }));
       if (off) b.setAttribute('aria-disabled', 'true');
       b.onclick = () => {
