@@ -13,6 +13,7 @@
 //     쓸 수 없는 키 바인딩, 새 탭부터 적용되는 항목 등.
 import { openPanel, closePanel } from './panel.js';
 import { renderItems, group } from './settings/controls.js';
+import { createSectionPreview } from './settings/preview.js';
 import { TERMINAL_GROUPS, SECTION_META, SEARCH_ITEMS, SEARCH_ALIASES } from './settings/index-data.js';
 import { renderKeymapSection } from './settings/sections/keymap.js';
 import { renderVoiceSection, cleanupVoiceClients } from './settings/sections/voice.js';
@@ -67,6 +68,9 @@ const SECTIONS = SECTION_META.map((meta) => ({ ...meta, custom: SECTION_RENDERER
 let _activeSection = 'terminal';
 let _mobileHome = true;
 let _persistenceUnsub = null;
+// 오른쪽 미리보기 칸의 구독·옵서버 정리. 섹션을 옮기거나 패널이 닫힐 때 반드시 부른다.
+let _previewDispose = null;
+function disposePreview() { if (_previewDispose) { _previewDispose(); _previewDispose = null; } }
 
 function isCompact() { return window.matchMedia('(max-width:719px)').matches; }
 // 좁은 화면에는 하단바(HUD) 자체가 없다(DESIGN.md 「HUD 24px」) — 거기서 구성하는 섹션은 목록에서 뺀다.
@@ -153,6 +157,7 @@ function rerender(focusTarget = null) {
   // 「음성」 섹션을 떠나면 clients.js 폴링 타이머를 반드시 끊는다(rail.js의
   // _clientsCleanup과 같은 규칙 — 안 그러면 패널을 여닫을 때마다 쌓인다).
   if (_activeSection !== 'voice') cleanupVoiceClients();
+  disposePreview();
   body.innerHTML = '';
   body.classList.remove('mobile-home');
   if (isCompact() && _mobileHome) { renderMobileHome(body, focusTarget === 'home'); return; }
@@ -183,6 +188,9 @@ function rerender(focusTarget = null) {
   content.appendChild(intro);
   content.appendChild(section.custom ? section.custom() : renderItems(section));
   body.append(nav, content);
+  // 좁은 화면에는 미리보기 칸을 두지 않는다(CSS가 숨기지만 구독도 아예 만들지 않는다).
+  const preview = isCompact() ? null : createSectionPreview(section.id, content);
+  if (preview) { body.appendChild(preview.el); _previewDispose = preview.dispose; }
   if (focusTarget !== null) Promise.resolve().then(() => {
     const target = focusTarget && Array.from(content.querySelectorAll('.vt-set-label'))
       .find((el) => el.firstChild?.textContent === focusTarget);
@@ -199,8 +207,8 @@ export function showSettings(section) {
     ariaLabel: t('설정'),
     headHTML: `<div class="vt-vw-title">${t('설정')}</div><div class="vt-set-save" id="vt-set-save" role="status" aria-live="polite" data-state="saved">${t('변경 사항 자동 저장')}</div>`,
     bodyId: 'vt-set-body',
-    extraClass: 'vt-settings',
-    onClose: () => { cleanupVoiceClients(); if (_persistenceUnsub) { _persistenceUnsub(); _persistenceUnsub = null; } },
+    extraClass: 'vt-settings vt-wide',
+    onClose: () => { cleanupVoiceClients(); disposePreview(); if (_persistenceUnsub) { _persistenceUnsub(); _persistenceUnsub = null; } },
   });
   if (!panel) return;   // 토글 — 이미 열려 있어서 닫기만 했다
   _persistenceUnsub = subscribePersistence(({ status }) => {

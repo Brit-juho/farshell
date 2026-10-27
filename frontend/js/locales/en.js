@@ -4344,5 +4344,10 @@ window.__VT_I18N = {
   "종료 후 {n}일이 지난 세션이 자동으로 보관됩니다. 자동으로는 삭제하지 않습니다.": "Sessions are archived automatically {n} days after they end. Nothing is deleted automatically.",
   "종료한 세션": "Ended sessions",
   "최근 종료": "Recently ended",
-  "최근 종료 표시 개수": "Recently ended shown"
+  "최근 종료 표시 개수": "Recently ended shown",
+  "터미널 미리보기": "Terminal preview",
+  "스킨 미리보기": "Skin preview",
+  "지금 쓰는 스킨": "Current skin",
+  "누르면 적용됩니다": "Click to apply",
+  "이 칸 기준 한 줄에 약 {n}자 · 스크롤백 {lines}줄": "About {n} characters per line in this pane · {lines} lines of scrollback"
 };
