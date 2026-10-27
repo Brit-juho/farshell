@@ -149,16 +149,31 @@ def _scan(ctx: dict, plugins: bool) -> tuple[list[dict], list[dict]]:
                             rows.append({**raw, "scope": "project", "level": "project", "enabled": None,
                                          "source": str(Path(project) / ".claude" / "settings.json"), "writable": True})
                             existing.add((raw["name"], "project"))
+        if ctx["tool"] == "claude":
+            # 켬·끔은 SKILL.md가 아니라 settings의 skillOverrides다. 링크된 스킬도 이름으로
+            # 끄므로 링크를 따라 쓰지 않는다. 프로젝트 기준이면 그 프로젝트의 최종 상태다.
+            for row in rows:
+                if row["kind"] != "skill":
+                    continue
+                key, reason = mcp_skills.claude_skill_key(Path(row["source"]))
+                enabled, state_reason = mcp_skills.claude_state(key, project) if key else (None, None)
+                row["enabled"] = enabled
+                row["writable"] = enabled is not None
+                if reason or state_reason:
+                    row["state_reason"] = reason or state_reason
         for row in rows:
             if ctx.get("project_missing"):
                 row["writable"] = False
             row["context"] = {k: ctx.get(k) for k in ("tool", "root", "home", "project", "worktree", "session")}
-            project_scoped = row.get("scope") != "global" or (ctx["tool"] == "claude" and row["kind"] == "mcp")
+            # Claude 스킬의 켬·끔은 프로젝트마다 다르므로 전역 스킬도 프로젝트별 행으로 둔다.
+            project_scoped = row.get("scope") != "global" or (ctx["tool"] == "claude" and row["kind"] in ("mcp", "skill"))
             row["id"] = _id(ctx["tool"], ctx["root"], project if project_scoped else None,
                             row["kind"], row["source"], row["name"], row.get("scope"), bool(row.get("shared")))
             row["revision"] = mcp_adapters.file_revision(Path(row["source"]))
             if row["kind"] == "skill" and row["tool"] == "codex":
                 write_path = mcp_adapters.codex_paths()["global"]
+            elif row["kind"] == "skill" and row["tool"] == "claude":
+                write_path = mcp_skills.claude_override_target(project)
             elif row["kind"] == "mcp" and row["tool"] == "claude":
                 write_path = mcp_adapters.claude_paths()["global"]
             else:
@@ -430,6 +445,12 @@ def apply(token: str) -> dict:
                     elif row["kind"] == "mcp":
                         result = mcp_write.set_enabled(row["tool"], row["name"], enabled, scope=row["scope"],
                             worktree_id=row["context"].get("worktree"), shared=bool(row.get("shared")))
+                    elif row["kind"] == "skill" and row["tool"] == "claude":
+                        key, reason = mcp_skills.claude_skill_key(Path(row["source"]))
+                        if not key:
+                            raise ValueError(reason)
+                        result = mcp_skills.set_claude_enabled(Path(row["write_source"]), key, enabled,
+                                                               local=bool(row.get("project")))
                     elif row["kind"] == "skill":
                         result = mcp_skills.set_enabled(row["native_id"], enabled, row["context"].get("worktree")) if row["context"].get("worktree") else _toggle_user_skill(row, enabled)
                     elif row["scope"] == "project" or (row["tool"] == "codex" and row["scope"] == "local"):

@@ -78,6 +78,13 @@ their original tool settings for manual review. Import does not change those set
 Import uses a server-generated
 preview bound to the destination file; a changed file or existing name stops the
 write. Codex's `[[skills.config]]` can disable a direct skill without deleting it.
+Claude direct skills (including linked ones) toggle through `skillOverrides` by folder name:
+the global context writes the profile's `settings.json` (enable removes the entry, disable
+writes `"off"`), a project context writes `<project>/.claude/settings.local.json` (`"on"` or
+`"off"`). Effective state is local > project `settings.json` > user, per key (verified
+2026-10-27 with `claude -p`). Rows are project-scoped like Claude MCP rows. A skill whose
+frontmatter `name` differs from its folder, or an unreadable settings file, is not writable.
+Plugin skills are not affected by `skillOverrides`.
 The Current session view uses the agent reported for the focused tmux session and
 labels its merged configuration as the **next start** state, since a running agent
 may not have loaded later changes. Plugin-provided skills stay linked to the

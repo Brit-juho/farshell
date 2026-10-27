@@ -4344,5 +4344,8 @@ window.__VT_I18N = {
   "종료 후 {n}일이 지난 세션이 자동으로 보관됩니다. 자동으로는 삭제하지 않습니다.": "Sessions are archived automatically {n} days after they end. Nothing is deleted automatically.",
   "종료한 세션": "Ended sessions",
   "최근 종료": "Recently ended",
-  "최근 종료 표시 개수": "Recently ended shown"
+  "최근 종료 표시 개수": "Recently ended shown",
+  "skillOverrides 형식이 잘못됐습니다": "skillOverrides has an invalid format",
+  "frontmatter 이름이 폴더 이름과 달라 켬·끔 대상을 확정할 수 없습니다": "The frontmatter name differs from the folder name, so the skill to turn on or off cannot be determined",
+  "알 수 없는 skillOverrides 값입니다": "Unknown skillOverrides value"
 };

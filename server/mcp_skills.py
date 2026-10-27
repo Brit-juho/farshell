@@ -14,6 +14,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
+import config_io
 import mcp_adapters
 import mcp_scan
 import mcp_write
@@ -80,6 +81,99 @@ def scan(worktree_id: str | None = None) -> dict:
                                "enabled": str(path) not in disabled if tool == "codex" else None,
                                "writable": tool == "codex", "worktree_id": wt.get("id") if wt else None})
     return {"worktree": mcp_scan._public(wt), "skills": skills, "errors": errors}
+
+
+# Claude Code는 스킬을 `skillOverrides`(스킬 이름 → on·name-only·user-invocable-only·off)로
+# 숨긴다. 키 단위로 local > project > user 순서가 이긴다(2026-10-27 실측: 전역 off인
+# 스킬을 프로젝트 settings.local.json의 "on"이 되살렸다). 플러그인 스킬은 대상이 아니다.
+CLAUDE_OVERRIDE_STATES = ("on", "name-only", "user-invocable-only", "off")
+
+
+def claude_override_target(project: str | None) -> Path:
+    """켬·끔을 쓸 파일. 프로젝트 기준이면 개인용 local, 아니면 사용자 설정."""
+    if project:
+        return Path(project) / ".claude" / "settings.local.json"
+    return mcp_adapters.claude_settings_dir() / "settings.json"
+
+
+def _claude_overrides(path: Path) -> tuple[dict | None, str | None]:
+    raw, err = mcp_adapters._read_json(path)
+    if err:
+        return None, err
+    if raw is None:
+        return {}, None
+    if not isinstance(raw, dict):
+        return None, tr("설정 파일의 형식이 잘못됐습니다")
+    overrides = raw.get("skillOverrides", {})
+    if not isinstance(overrides, dict):
+        return None, tr("skillOverrides 형식이 잘못됐습니다")
+    return overrides, None
+
+
+def claude_skill_key(skill_md: Path) -> tuple[str | None, str | None]:
+    """`skillOverrides`에 쓸 이름. frontmatter `name`이 폴더 이름과 다르면 어느 쪽이
+    맞는지 확정할 수 없으므로 쓰지 않는다."""
+    folder = skill_md.parent.name
+    try:
+        head = skill_md.read_text(encoding="utf-8", errors="replace")[:4096]
+    except OSError as exc:
+        return None, exc.__class__.__name__
+    match = re.match(r"---\s*\n(.*?)\n---", head, re.S)
+    if match:
+        found = re.search(r"^name:\s*['\"]?([^'\"\n]+?)['\"]?\s*$", match.group(1), re.M)
+        if found and found.group(1).strip() != folder:
+            return None, tr("frontmatter 이름이 폴더 이름과 달라 켬·끔 대상을 확정할 수 없습니다")
+    return folder, None
+
+
+def claude_state(name: str, project: str | None) -> tuple[bool | None, str | None]:
+    """다음 세션에서 보일지(켬). `off`만 끔이다. 읽을 수 없는 파일이 끼면 확인 불가."""
+    paths = [mcp_adapters.claude_settings_dir() / "settings.json"]
+    if project:
+        paths += [Path(project) / ".claude" / "settings.json", Path(project) / ".claude" / "settings.local.json"]
+    value = "on"
+    for path in paths:
+        overrides, err = _claude_overrides(path)
+        if err:
+            return None, err
+        if name in overrides:
+            value = overrides[name]
+    if value not in CLAUDE_OVERRIDE_STATES:
+        return None, tr("알 수 없는 skillOverrides 값입니다")
+    return value != "off", None
+
+
+def set_claude_enabled(path: Path, name: str, enabled: bool, *, local: bool) -> dict:
+    """`skillOverrides[name]`만 바꾸고 나머지 키는 그대로 둔다.
+
+    사용자 설정에서 켜기는 항목을 지운다(없으면 on). 프로젝트 local에서 켜기는 전역 off를
+    덮어써야 하므로 "on"을 명시한다. 끄기는 어디서나 "off".
+    """
+    with config_io.locked(path):
+        stamp = config_io.stamp(path)
+        raw, err = mcp_adapters._read_json(path)
+        if err:
+            raise config_io.ConfigWriteRefused(err)
+        data = raw if raw is not None else {}
+        if not isinstance(data, dict) or not isinstance(data.get("skillOverrides", {}), dict):
+            raise config_io.ConfigWriteRefused(tr("설정 파일의 형식이 잘못됐습니다"))
+        overrides = dict(data.get("skillOverrides", {}))
+        if not enabled:
+            overrides[name] = "off"
+        elif local:
+            overrides[name] = "on"
+        else:
+            overrides.pop(name, None)
+        if overrides == data.get("skillOverrides", {}):
+            return {"status": "ok", "changed": False}
+        updated = dict(data)
+        if overrides:
+            updated["skillOverrides"] = overrides
+        else:
+            updated.pop("skillOverrides", None)
+        config_io.ensure_unchanged(path, stamp)
+        config_io.atomic_write(path, json.dumps(updated, ensure_ascii=False, indent=2) + "\n")
+    return {"status": "ok", "changed": True}
 
 
 def _find(skill_id: str, worktree_id: str | None) -> dict | None:
