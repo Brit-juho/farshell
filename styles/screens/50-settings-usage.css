@@ -168,9 +168,10 @@
    회색으로 읽혔다. 위 border-top으로 카드 사이 경계를 긋고(첫 카드는
    구분선이 필요 없어 제외), 이름을 굵고 한 단 키워 "이건 헤더다"를
    글자 크기로도 말하게 한다. */
-#vt-mcp .vt-vw-body { padding:calc(var(--spacing) * 3); }
-#vt-mcp .vt-viewer-card { width:min(880px, 100%); height:min(88vh, 820px); max-height:min(88vh, 820px); }
+#vt-mcp .vt-vw-body { padding:calc(var(--spacing) * 5) calc(var(--spacing) * 8); }
+#vt-mcp .vt-viewer-card { width:min(1240px, 100%); height:min(88vh, 860px); max-height:min(88vh, 860px); }
 #vt-mcp.vt-dock-panel .vt-viewer-card { width:100%; height:100%; max-height:none; }
+#vt-mcp.vt-dock-panel .vt-vw-body { padding:calc(var(--spacing) * 3); }
 #vt-mcp .vt-vw-title { font-size:var(--fs-md); }
 .vt-mcp-group { margin:calc(var(--spacing) * 3) 0; padding-top:calc(var(--spacing) * 3); border-top:1px solid var(--line); }
 .vt-mcp-group:first-child { margin-top:0; padding-top:0; border-top:0; }
@@ -750,3 +751,31 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
 .vt-setpv-foot { font:400 var(--fs-sm) / var(--leading-body) var(--ui); color:var(--sub); }
 @media (max-width:1099px) { .vt-set-preview { display:none; } }
 @media (prefers-reduced-motion: reduce) { .vt-setpv-cursor.blink { animation:none; } }
+
+/* ── MCP · 스킬 · 플러그인 글자 한 단계 키움 (2026-10-27 팝업 리뉴얼) ────────────────
+   카드를 1240px로 넓힌 만큼 12px 안팎이던 글자(3xs·xs)가 너무 작아 보였다. 위 규칙을 지우지 않고
+   이 블록이 나중에 덮는다 — 모달(#vt-mcp:not(.vt-dock-panel))일 때만, dock 탭에서는 그대로 둔다. */
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-tool { font-size:var(--fs-base); min-width:5.5em; }
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-meta,
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-verify,
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-applyinfo > summary,
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-filtermore > summary,
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-bulk > summary,
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-skillcopy > summary,
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-plugin-children > summary,
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-plugin-skill { font-size:var(--fs-sm); }
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-ctxlabel,
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-tabcount { font-size:var(--fs-xs); }
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-ctxname,
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-count,
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-tab,
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-worktab,
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-sectiontitle,
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-skillinfo strong,
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-sessionplugin > summary,
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-librarybar { font-size:var(--fs-base); }
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-toolnavitem { font-size:var(--fs-sm); min-height:48px; }
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-servhead .vt-set-label { font-size:var(--fs-lg); }
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-search { height:40px; font-size:var(--fs-base); }
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-row .vt-chip.sm { min-height:32px; font-size:var(--fs-sm); }
+#vt-mcp:not(.vt-dock-panel) .vt-mcp-group > .vt-set-help { max-width:64ch; margin-left:calc(5.5em + var(--spacing) * 1.5); }
