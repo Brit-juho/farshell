@@ -311,7 +311,12 @@ final reads after completion. Unsupported transcript formats fail explicitly.
 
 `agent_profiles.py` owns a private SQLite registry and persistent per-profile native
 roots. `agent_profile_runtime.py` provides sanitized launch environments, interactive
-native login, tmux/session attribution and test-only inference receipts. Configuration,
+native login, tmux/session attribution, test-only inference requests and observed
+native assistant-turn receipts. Lifecycle operations preserve native roots; archived
+profiles cannot launch. JSON/TOML hook disabling uses a private restoration vault.
+Fixed GitHub plugin snapshots support same-marketplace dependencies and native
+update/recovery. Official API quota adapters support DeepSeek, OpenRouter, Z.ai
+and MiniMax international; Alibaba quota remains unsupported. Configuration,
 conversation, hook and plugin adapters live in the `agent_profile_*` modules. Read and
 apply routes are human-only; review plans bind the exact elevated cookie, source hashes
 and profile revisions. Nested plans retain the profile ID for the operation lock.

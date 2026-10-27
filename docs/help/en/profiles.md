@@ -33,11 +33,17 @@ while disabling test-only forced expiration; conversion does not establish claut
 replacement readiness.
 
 Manage MCP additions, edits and enabled state, direct-skill enabled state, user
-hook additions and removal, and plugins. FarShell lifecycle hooks cannot be
+hook additions, removal, disabling and restoration, and plugins. FarShell lifecycle hooks cannot be
 removed. Plugins are installed natively from a fixed local snapshot after digest
-review. New installations remain disabled until a separate activation review.
-Remote downloads and dependency packages are not supported by this installation
-flow. Individual Codex plugin updates are also unsupported.
+review. New and recovered installations remain disabled until a separate activation
+review. Download public GitHub repositories by a fixed 40-character commit SHA and
+subdirectory; installation requires a separate review. Fixed dependencies within
+one marketplace, updates, removal and recovery are supported. Codex updates use
+native removal and reinstallation.
+
+Renaming preserves login and configuration revision. Archiving preserves login and
+conversations and refuses running profiles or unfinished jobs. Restore archived
+profiles from the separate archived list.
 
 Conversation import checks source hashes and ownership. Unknown or contested
 clauth shared conversations cannot be imported. Copy completion, native Codex
@@ -45,8 +51,10 @@ reading and verified native resume are separate results. Rollback refuses to
 overwrite files edited after import.
 
 `VT_USAGE_PROVIDER=native` reads managed native OAuth quotas without falling back
-to the clauth feed or default Codex credentials. API-key and custom-endpoint quota
-readers are currently unsupported. `none` disables usage display.
+to the clauth feed or default Codex credentials. Exact official HTTPS endpoints
+support DeepSeek and OpenRouter balances, plus Z.ai and MiniMax international
+quota. Alibaba, other endpoints and other regions remain unsupported and receive
+no keys. Alibaba console credentials are not collected. `none` disables usage display.
 
 Verify a short live request sends a small Claude model request and may incur
 provider charges. Prepare native refresh test expires only a test login. It
@@ -55,9 +63,12 @@ profiles cannot use this operation.
 
 Check clauth replacement readiness lists missing configuration, inference,
 refresh, usage, session and conversation-resume evidence. It does not delete or
-stop clauth. Automated inference verification currently supports Claude
-profiles only; full replacement requires real concurrent-account and OAuth
-refresh validation.
+stop clauth. A separate source OAuth review uses the existing access token only
+for official account identity lookup and comparison with the target. It never
+copies or refreshes source tokens. Verify actual conversation response observes
+verified Claude or Codex sessions and completed assistant responses without
+sending a new request. Automated inference requests support Claude only. Full
+replacement requires real concurrent-account and OAuth refresh validation.
 
 Management APIs are listed in the [API Reference](../../../API.md). They require a
 human login directly on the target host and password elevation for changes.

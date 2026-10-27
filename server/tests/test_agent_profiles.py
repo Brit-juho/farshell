@@ -50,6 +50,70 @@ def test_same_account_distinct_native_roots_and_no_token_copy(sandbox):
         profiles.create('other', 'codex', account_id=first['account_id'])
 
 
+def test_source_identity_is_read_only_account_bound_and_invalidated(sandbox, monkeypatch):
+    import agent_profile_identity as identity
+    from usage import profiles as usage
+    home, _ = sandbox
+    root = home / '.clauth' / 'profiles' / 'oauth-test'
+    root.mkdir(parents=True)
+    (root / 'config.toml').write_text('')
+    credential = root / 'credentials.json'
+    raw = json.dumps({'claudeAiOauth': {'accessToken': 'source-private-sentinel'}}).encode()
+    credential.write_bytes(raw)
+    source = next(r for r in migration.source_list()['sources'] if r['kind'] == 'clauth')
+    calls = []
+    def request(url, headers):
+        calls.append(url)
+        assert headers['Authorization'] == 'Bearer source-private-sentinel'
+        return {'account': {'uuid': 'sample-account'}, 'organization': {'uuid': 'sample-org'}}
+    monkeypatch.setattr(usage, '_request', request)
+    plan = identity.preview(source['id'])
+    assert 'source-private-sentinel' not in json.dumps(plan)
+    assert not calls
+    result = identity.apply(plan['token'])
+    assert calls == ['https://api.anthropic.com/api/oauth/profile']
+    assert credential.read_bytes() == raw
+    assert 'source-private-sentinel' not in json.dumps(result)
+    subject = profiles.digest(json.dumps(['claude', 'sample-account', 'sample-org']).encode())
+    observed = {'subject': subject, 'last_fingerprint': 'target-binding', 'last_at': time.time()}
+    assert identity.matches(source['id'], observed, 'target-binding')
+    assert not identity.matches(source['id'], {**observed, 'subject': 'other-account'}, 'target-binding')
+    assert not identity.matches(source['id'], observed, 'other-binding')
+    stale = identity.preview(source['id'])
+    credential.write_bytes(raw + b' ')
+    assert not identity.matches(source['id'], observed, 'target-binding')
+    with pytest.raises(ValueError):
+        identity.apply(stale['token'])
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize('tool', ['claude', 'codex'])
+def test_observed_turn_requires_native_assistant_text_and_zoned_timestamp(tool):
+    from agent_profile_turn import _assistant_time
+    message = {'content': [{'type': 'text' if tool == 'claude' else 'output_text', 'text': 'sample response'}]}
+    if tool == 'codex':
+        message.update(type='message', role='assistant')
+    row = {'type': 'assistant' if tool == 'claude' else 'response_item',
+           'message' if tool == 'claude' else 'payload': message, 'timestamp': '2030-01-01T00:00:00Z'}
+    assert _assistant_time(row, tool) is not None
+    assert _assistant_time({**row, 'timestamp': '2030-01-01T00:00:00'}, tool) is None
+    assert _assistant_time({**row, 'type': 'user'}, tool) is None
+    message['content'][0]['text'] = '   '
+    assert _assistant_time(row, tool) is None
+
+
+def test_http_dto_hides_private_file_and_authentication_hashes():
+    from routes.agent_profiles import _public_result
+    original = {'files': [{'path': '.farshell-provider.json', 'sha256': 'private-hash', 'before_sha256': 'old-private'},
+                          {'path': 'settings.json', 'sha256': 'public-config-hash'}],
+                'manifest': {'auth_fingerprint': 'authentication-hash', 'status': 'verified'}}
+    result = _public_result(original)
+    assert result['files'][0] == {'path': '.farshell-provider.json', 'private': True}
+    assert result['files'][1]['sha256'] == 'public-config-hash'
+    assert result['manifest'] == {'status': 'verified'}
+    assert original['files'][0]['sha256'] == 'private-hash'
+
+
 @pytest.mark.parametrize('bad', ['', '../private', 'x'*33, None, True, []])
 def test_profile_ids_cannot_nominate_paths(sandbox, bad):
     with pytest.raises(ValueError):
@@ -354,7 +418,9 @@ def test_plugin_review_uses_fixed_snapshot_and_refuses_tampering(sandbox, monkey
     pid = profiles.create('plugin-test', 'claude')['id']
     calls = []
     monkeypatch.setattr(runtime, 'run', lambda *a, **k: calls.append(a))
+    source_mode = source.stat().st_mode
     plan = plugins.preview(pid, 1, 'install', 'sample@sample-market', str(source))
+    assert source.stat().st_mode == source_mode
     assert not calls
     stage = Path(plan['staged_path'])
     (source / 'README.md').write_text('changed original')
@@ -555,3 +621,379 @@ def test_unrelated_account_concurrency_never_certifies_migrated_profile(sandbox,
     assert result['concurrency_certified'] is True
     assert result['ready_to_retire'] is False
     assert 'same-account-concurrency-not-certified' in result['profiles'][0]['candidates'][0]['blockers']
+
+
+def test_profile_lifecycle_preserves_native_root_login_and_config_revision(sandbox, monkeypatch):
+    row = profiles.create('before', 'claude')
+    root = profiles.root(row['id'])
+    auth = root / '.credentials.json'
+    auth.write_text('{"fixture":"preserved"}')
+    monkeypatch.setattr(runtime, 'require_inactive', lambda _: None)
+    renamed = profiles.metadata_change(row['id'], 1, 1, 'rename', 'after')
+    assert renamed['name'] == 'after' and renamed['revision'] == 1 and renamed['metadata_revision'] == 2
+    with pytest.raises(ValueError):
+        profiles.metadata_change(row['id'], 1, 1, 'archive')
+    archived = profiles.metadata_change(row['id'], 1, 2, 'archive')
+    assert not profiles.listing()['profiles'] and profiles.listing()['archived_profiles'][0]['id'] == row['id']
+    assert profiles.root(row['id']) == root and auth.read_text() == '{"fixture":"preserved"}'
+    with pytest.raises(ValueError):
+        runtime.environment(row['id'])
+    with pytest.raises(ValueError):
+        profiles.require_revision(archived, 1)
+    restored = profiles.metadata_change(row['id'], 1, 3, 'restore')
+    assert restored['archived_at'] is None and restored['revision'] == 1
+    assert auth.read_text() == '{"fixture":"preserved"}'
+
+
+def test_archive_refuses_live_partial_or_invalid_native_files(sandbox, monkeypatch):
+    row = profiles.create('safe', 'claude')
+    def live(_):
+        raise profiles.Refused('fixture live')
+    monkeypatch.setattr(runtime, 'require_inactive', live)
+    with pytest.raises(ValueError):
+        profiles.metadata_change(row['id'], 1, 1, 'archive')
+    monkeypatch.setattr(runtime, 'require_inactive', lambda _: None)
+    job = profiles.job_begin(row['id'], 'fixture')
+    profiles.job_finish(job, 'partial', {})
+    with pytest.raises(ValueError):
+        profiles.metadata_change(row['id'], 1, 1, 'archive')
+    profiles.job_finish(job, 'interrupted', {})
+    profiles.metadata_change(row['id'], 1, 1, 'archive')
+    (profiles.root(row['id']) / 'settings.json').write_text('{invalid')
+    with pytest.raises(ValueError):
+        profiles.metadata_change(row['id'], 1, 2, 'restore')
+    assert profiles.get(row['id'])['archived_at'] is not None
+
+
+def test_review_before_archive_restore_cannot_be_replayed(sandbox, monkeypatch):
+    from routes import agent_profiles as routes
+    row = profiles.create('epoch', 'claude', purpose='test')
+    plan = routes._read('preview', {'operation': 'adopt', 'payload': {'profile_id': row['id'], 'revision': 1}}, 'fixture-actor')
+    monkeypatch.setattr(runtime, 'require_inactive', lambda _: None)
+    profiles.metadata_change(row['id'], 1, 1, 'archive')
+    profiles.metadata_change(row['id'], 1, 2, 'restore')
+    with pytest.raises(ValueError):
+        routes._apply({'token': plan['token']}, 'fixture-actor')
+
+
+@pytest.mark.parametrize('tool,filename', [('claude', 'settings.json'), ('codex', 'hooks.json'), ('codex', 'config.toml')])
+def test_hook_toggle_preserves_groups_options_order_and_native_trust(sandbox, tool, filename):
+    import tomllib
+    row = profiles.create('hooks-toggle', tool)
+    root = profiles.root(row['id'])
+    path = root / filename
+    custom = [{'matcher': 'sample:*', 'customOption': 'preserve', 'hooks': [
+        {'type': 'command', 'command': 'sample-a', 'timeout': 21},
+        {'type': 'command', 'command': 'sample-b', 'timeout': 22}]},
+        {'matcher': 'another:*', 'hooks': [{'type': 'command', 'command': 'sample-c'}]}]
+    if filename.endswith('.json'):
+        data = json.loads(path.read_text()) if path.exists() else {}
+        data.setdefault('hooks', {}).setdefault('Stop', []).extend(custom)
+        path.write_text(json.dumps(data))
+        parse = json.loads
+    else:
+        path.write_text(path.read_text() + '\n# sample-user-comment\n' + migration._toml({'hooks': {'Stop': custom}}))
+        # A dotted inline assignment after existing tables would be relative;
+        # append actual TOML array tables instead.
+        original = path.read_text().split('\n# sample-user-comment')[0]
+        path.write_text(original + '\n# sample-user-comment\n[[hooks.Stop]]\nmatcher = "sample:*"\ncustomOption = "preserve"\n[[hooks.Stop.hooks]]\ntype = "command"\ncommand = "sample-a"\ntimeout = 21\n[[hooks.Stop.hooks]]\ntype = "command"\ncommand = "sample-b"\ntimeout = 22\n[[hooks.Stop]]\nmatcher = "another:*"\n[[hooks.Stop.hooks]]\ntype = "command"\ncommand = "sample-c"\n')
+        parse = tomllib.loads
+    before = parse(path.read_text())
+    for _ in range(3):
+        target = next(r for r in hooks.inventory(row['id'])['hooks'] if not r['owned'] and r['enabled'])
+        plan = hooks.preview(row['id'], profiles.get(row['id'])['revision'], hook_id=target['id'], enabled=False)
+        hooks.apply(plan['token'])
+    remaining = parse(path.read_text())['hooks']['Stop']
+    assert all(h.get('command', '').startswith('sample-') is False for g in remaining for h in g['hooks'])
+    disabled = [r for r in hooks.inventory(row['id'])['hooks'] if not r['owned']]
+    for index in (1, 0, 2):
+        target = disabled[index]
+        hooks.apply(hooks.preview(row['id'], profiles.get(row['id'])['revision'], hook_id=target['id'], enabled=True)['token'])
+    assert parse(path.read_text()) == before
+    assert not json.loads((root / '.farshell-hooks-disabled.json').read_text())
+    if filename.endswith('.toml'):
+        import codex_hooks
+        for marker in (codex_hooks.BEGIN, codex_hooks.STATE_BOUNDARY, codex_hooks.END, '# sample-user-comment'):
+            assert path.read_text().count(marker) == 1
+
+
+def test_hook_restore_refuses_external_edits_and_protects_owned_hook(sandbox):
+    row = profiles.create('conflict', 'claude')
+    root = profiles.root(row['id'])
+    hooks.apply(hooks.preview(row['id'], 1, 'Stop', 'sample-notify')['token'])
+    owned = next(r for r in hooks.inventory(row['id'])['hooks'] if r['owned'])
+    with pytest.raises(ValueError):
+        hooks.preview(row['id'], 2, hook_id=owned['id'], enabled=False)
+    own = next(r for r in hooks.inventory(row['id'])['hooks'] if not r['owned'])
+    hooks.apply(hooks.preview(row['id'], 2, hook_id=own['id'], enabled=False)['token'])
+    disabled = next(r for r in hooks.inventory(row['id'])['hooks'] if not r['owned'])
+    data = json.loads((root / 'settings.json').read_text())
+    data['hooks']['Stop'].append({'hooks': [{'type': 'command', 'command': 'external-edit'}]})
+    (root / 'settings.json').write_text(json.dumps(data))
+    with pytest.raises(ValueError):
+        hooks.preview(row['id'], 3, hook_id=disabled['id'], enabled=True)
+    assert 'external-edit' in (root / 'settings.json').read_text()
+
+
+def test_hook_partial_write_is_journaled_and_rollback_restores_both_files(sandbox, monkeypatch):
+    row = profiles.create('partial-hook', 'claude')
+    root = profiles.root(row['id'])
+    before = (root / 'settings.json').read_bytes()
+    plan = hooks.preview(row['id'], 1, 'Stop', 'sample-notify')
+    real_write = migration._write_bytes
+    def fail_vault(path, raw, *args, **kwargs):
+        if path.name == '.farshell-hooks-disabled.json':
+            raise OSError('fixture-write-failure')
+        return real_write(path, raw, *args, **kwargs)
+    monkeypatch.setattr(migration, '_write_bytes', fail_vault)
+    with pytest.raises(OSError):
+        hooks.apply(plan['token'])
+    assert profiles.get(row['id'])['state'] == 'partial'
+    job = profiles.listing()['jobs'][0]
+    assert job['state'] == 'partial' and job['kind'] == 'hook-edit'
+    monkeypatch.setattr(migration, '_write_bytes', real_write)
+    migration.rollback(row['id'], 2, job['id'])
+    assert (root / 'settings.json').read_bytes() == before
+    assert not (root / '.farshell-hooks-disabled.json').exists()
+
+
+def test_private_remediation_resolves_only_matching_api_and_environment_warnings(sandbox, monkeypatch):
+    from agent_profile_parity import compare
+    import agent_profile_provider as provider
+    home, _ = sandbox
+    (home / '.claude').mkdir()
+    (home / '.claude/settings.json').write_text(json.dumps({'env': {'TOKEN': 'source-env-secret'}, 'apiKeyHelper': 'clauth helper'}))
+    source_root = home / '.clauth/profiles/sample'
+    source_root.mkdir(parents=True)
+    (source_root / 'config.toml').write_text('api_key="source-api-secret"\nbase_url="https://proxy.example.invalid"\n[env]\nFEATURE="on"\n')
+    source = next(s for s in migration.sources().values() if s['kind'] == 'clauth')
+    row = profiles.create('remediation', 'claude')
+    migration.config_apply(migration.config_preview(row['id'], 1, source['id'])['token'])
+    with profiles.database() as db:
+        manifest = json.loads(db.execute("SELECT manifest FROM receipts WHERE kind='config'").fetchone()[0])
+    first = compare(source, row['id'], manifest)
+    assert 'api-key-login-required' in first['blockers'] and 'credentials-not-copied' in first['blockers']
+    monkeypatch.setattr(runtime, 'require_inactive', lambda _: None)
+    patch = {'api_key': 'source-api-secret', 'base_url': 'https://proxy.example.invalid', 'env': {'TOKEN': 'source-env-secret', 'FEATURE': 'on'}}
+    provider.apply(provider.preview(row['id'], 2, patch)['token'])
+    result = compare(source, row['id'], manifest)
+    assert result['blockers'] == []
+    assert {'api-key-login-required', 'credentials-not-copied', 'profile-environment-requires-setup'} <= set(result['resolved_warnings'])
+    patch['env']['TOKEN'] = 'different-private-value'
+    provider.apply(provider.preview(row['id'], 3, patch)['token'])
+    assert 'credentials-not-copied' in compare(source, row['id'], manifest)['blockers']
+    assert 'private-value' not in json.dumps(result) and 'source-api-secret' not in json.dumps(result)
+
+
+def test_plugin_name_alone_cannot_resolve_migration_warning(sandbox):
+    from agent_profile_parity import compare
+    import shutil
+    home, _ = sandbox
+    base = home / '.claude'
+    base.mkdir()
+    selector = 'sample@fixture'
+    (base / 'settings.json').write_text(json.dumps({'enabledPlugins': {selector: True}}))
+    original = base / 'plugins/cache/fixture/sample/1'
+    (original / '.claude-plugin').mkdir(parents=True)
+    (original / '.claude-plugin/plugin.json').write_text('{"name":"sample"}')
+    (original / 'content.txt').write_text('original-content')
+    (base / 'plugins/installed_plugins.json').write_text(json.dumps({'plugins': {selector: [{'scope': 'user', 'installPath': str(original)}]}}))
+    source = next(s for s in migration.sources().values() if s['tool'] == 'claude')
+    row = profiles.create('plugin-parity', 'claude')
+    migration.config_apply(migration.config_preview(row['id'], 1, source['id'])['token'])
+    with profiles.database() as db:
+        manifest = json.loads(db.execute("SELECT manifest FROM receipts WHERE kind='config'").fetchone()[0])
+    assert 'plugins-reinstall-required' in compare(source, row['id'], manifest)['blockers']
+    root = profiles.root(row['id'])
+    target = root / 'plugins/cache/fixture/sample/1'
+    shutil.copytree(original, target)
+    (root / 'plugins/installed_plugins.json').write_text(json.dumps({'plugins': {selector: [{'scope': 'user', 'installPath': str(target)}]}}))
+    settings = json.loads((root / 'settings.json').read_text())
+    settings['enabledPlugins'] = {selector: True}
+    (root / 'settings.json').write_text(json.dumps(settings))
+    assert 'plugins-reinstall-required' not in compare(source, row['id'], manifest)['blockers']
+    (target / 'content.txt').write_text('different-content')
+    assert 'plugins-reinstall-required' in compare(source, row['id'], manifest)['blockers']
+
+
+def _plugin_archive(entries):
+    import io
+    import tarfile
+    output = io.BytesIO()
+    with tarfile.open(fileobj=output, mode='w:gz') as archive:
+        for name, value, kind in entries:
+            entry = tarfile.TarInfo('sample-' + 'a' * 40 + '/' + name)
+            entry.mode = 0o755 if name.endswith('.sh') else 0o644
+            if kind == 'link':
+                entry.type = tarfile.SYMTYPE
+                entry.linkname = '/outside'
+                archive.addfile(entry)
+            else:
+                entry.size = len(value)
+                archive.addfile(entry, io.BytesIO(value))
+    return output.getvalue()
+
+
+def test_remote_download_is_fixed_private_reviewed_and_bound_to_profile(sandbox, monkeypatch):
+    import agent_profile_download as download
+    import agent_profile_plugins as plugins
+    row = profiles.create('download', 'claude')
+    other = profiles.create('other', 'claude')
+    raw = _plugin_archive([('plugin/.claude-plugin/plugin.json', b'{"name":"sample"}', 'file'), ('plugin/run.sh', b'#!/bin/sh\nexit 0\n', 'file')])
+    monkeypatch.setattr(download, '_fetch', lambda *args: raw)
+    result = download.fetch(row['id'], 1, 'fixture/sample', 'a' * 40, 'plugin')
+    assert result['install_review_required'] is True and profiles.get(row['id'])['revision'] == 1
+    tree = download.resolve(row['id'], result['download_id'])
+    assert (tree / 'run.sh').stat().st_mode & 0o777 == 0o700
+    with pytest.raises(ValueError):
+        download.resolve(other['id'], result['download_id'])
+    plan = plugins.preview(row['id'], 1, 'install', 'sample@fixture', download_id=result['download_id'])
+    assert (Path(plan['staged_path']) / 'package/run.sh').read_bytes().startswith(b'#!/bin/sh')
+    (tree / 'run.sh').write_text('changed after download')
+    with pytest.raises(ValueError):
+        download.resolve(row['id'], result['download_id'])
+
+
+@pytest.mark.parametrize('entries', [
+    [('plugin/../../outside', b'escape', 'file')],
+    [('plugin/link', b'', 'link')],
+    [('plugin/A', b'a', 'file'), ('plugin/a', b'b', 'file')],
+    [('plugin/.env', b'private-sentinel', 'file')],
+])
+def test_remote_archive_refuses_traversal_links_collisions_and_secrets(sandbox, monkeypatch, entries):
+    import agent_profile_download as download
+    row = profiles.create('bad-download', 'claude')
+    monkeypatch.setattr(download, '_fetch', lambda *args: _plugin_archive(entries))
+    with pytest.raises(ValueError):
+        download.fetch(row['id'], 1, 'fixture/sample', 'a' * 40, 'plugin')
+    assert profiles.listing()['jobs'][0]['state'] == 'failed'
+    assert profiles.get(row['id'])['state'] == 'ready'
+    assert not list((profiles.directory() / 'plugin-downloads').iterdir())
+
+
+@pytest.mark.parametrize('repo,commit,subdir', [('https://github.com/fixture/sample', 'a' * 40, '.'), ('fixture/sample', 'main', '.'), ('fixture/sample', 'a' * 40, '../outside')])
+def test_remote_download_refuses_unpinned_and_arbitrary_sources(repo, commit, subdir):
+    from agent_profile_download import validate
+    with pytest.raises(ValueError):
+        validate(repo, commit, subdir)
+
+
+def test_dependency_bundle_failure_restores_old_content_without_touching_peers_or_login(sandbox, monkeypatch):
+    import shutil
+    import agent_profile_plugins as plugins
+    home, _ = sandbox
+    row = profiles.create('bundle-recovery', 'claude')
+    root = profiles.root(row['id'])
+    auth = root / '.credentials.json'
+    auth.write_text('{"fixture-auth":"unchanged"}')
+    source = home / 'bundle'
+    (source / '.claude-plugin').mkdir(parents=True)
+    (source / '.claude-plugin/marketplace.json').write_text(json.dumps({'name': 'fixture', 'plugins': [
+        {'name': 'helper', 'source': './helper'}, {'name': 'main', 'source': './main', 'dependencies': ['helper@fixture']}]}))
+    for name in ('helper', 'main'):
+        folder = source / name
+        (folder / '.claude-plugin').mkdir(parents=True)
+        (folder / '.claude-plugin/plugin.json').write_text(json.dumps({'name': name, 'version': '1.0.0'}))
+        (folder / 'content.txt').write_text(name + '-old')
+    installed, marketplaces, failure = {}, {}, {'update': False}
+    def enabled(selector, value):
+        config = json.loads((root / 'settings.json').read_text())
+        config.setdefault('enabledPlugins', {})[selector] = value
+        (root / 'settings.json').write_text(json.dumps(config))
+    def native(pid, args, **kwargs):
+        if args[:3] == ['plugin', 'marketplace', 'add']:
+            stage = Path(args[3])
+            data = json.loads((stage / '.claude-plugin/marketplace.json').read_text())
+            marketplaces[data['name']] = (stage, data)
+        elif args[:2] in (['plugin', 'install'], ['plugin', 'update']):
+            selector = args[2]
+            name, market = selector.split('@')
+            stage, data = marketplaces[market]
+            entry = next(p for p in data['plugins'] if p['name'] == name)
+            package = stage / entry['source']
+            manifest = json.loads((package / '.claude-plugin/plugin.json').read_text())
+            dest = root / 'plugins/cache' / market / name / manifest['version']
+            if dest.exists():
+                shutil.rmtree(dest)
+            shutil.copytree(package, dest)
+            installed[selector] = dest
+            enabled(selector, True)
+            if args[1] == 'update' and failure['update']:
+                return 1, b''
+        elif args[:2] == ['plugin', 'uninstall']:
+            installed.pop(args[2], None)
+        elif args[:2] == ['plugin', 'disable']:
+            enabled(args[2], False)
+        else:
+            pytest.fail('unexpected native command')
+        return 0, b'{}'
+    monkeypatch.setattr(runtime, 'run', native)
+    monkeypatch.setattr(runtime, 'require_inactive', lambda _: None)
+    monkeypatch.setattr(plugins, '_installed', lambda p, selector, **kwargs: installed.get(selector))
+    monkeypatch.setattr(plugins, '_marketplace_peers', lambda p, market: sorted(k for k in installed if k.endswith('@' + market)))
+    result = plugins.apply(plugins.preview(row['id'], 1, 'install', 'main@fixture', str(source))['token'])
+    assert [p['plugin'] for p in result['progress']] == ['helper@fixture', 'main@fixture']
+    peer = root / 'plugins/cache/fixture/retained/1.0.0'
+    (peer / '.claude-plugin').mkdir(parents=True)
+    (peer / '.claude-plugin/plugin.json').write_text('{"name":"retained","version":"1.0.0"}')
+    (peer / 'content.txt').write_text('peer-stays')
+    installed['retained@fixture'] = peer
+    enabled('retained@fixture', True)
+    marker = source / 'main/.claude-plugin/plugin.json'
+    marker.write_text('{"name":"main","version":"1.1.0"}')
+    (source / 'main/content.txt').write_text('main-new')
+    failure['update'] = True
+    plan = plugins.preview(row['id'], 2, 'update', 'main@fixture', str(source))
+    assert any(p['plugin'] == 'retained@fixture' and p['operation'] == 'reuse' for p in plan['packages'])
+    with pytest.raises(ValueError):
+        plugins.apply(plan['token'])
+    job = next(j for j in profiles.listing()['jobs'] if j['kind'] == 'plugin-update')
+    assert job['state'] == 'partial' and profiles.get(row['id'])['state'] == 'partial'
+    with pytest.raises(ValueError):
+        profiles.require_no_pending_jobs(row['id'])
+    failure['update'] = False
+    restored = plugins.apply(plugins.preview(row['id'], 3, 'restore', job_id=job['id'])['token'])
+    assert restored['status'] == 'ok' and profiles.get(row['id'])['state'] == 'ready'
+    assert profiles.job_status(job['id'])['state'] == 'rolled-back'
+    assert (installed['main@fixture'] / 'content.txt').read_text() == 'main-old'
+    assert plugins._enabled(profiles.get(row['id']), 'main@fixture') is False
+    assert plugins._enabled(profiles.get(row['id']), 'retained@fixture') is True
+    assert (installed['retained@fixture'] / 'content.txt').read_text() == 'peer-stays'
+    assert auth.read_text() == '{"fixture-auth":"unchanged"}'
+
+
+def test_bundle_dependency_cycle_is_rejected_before_any_native_change(sandbox, monkeypatch):
+    import agent_profile_plugins as plugins
+    home, _ = sandbox
+    row = profiles.create('cycle', 'claude')
+    source = home / 'cycle-bundle'
+    (source / '.claude-plugin').mkdir(parents=True)
+    entries = []
+    for name, dependency in (('first', 'second'), ('second', 'first')):
+        folder = source / name
+        (folder / '.claude-plugin').mkdir(parents=True)
+        (folder / '.claude-plugin/plugin.json').write_text(json.dumps({'name': name}))
+        entries.append({'name': name, 'source': './' + name, 'dependencies': [dependency + '@fixture']})
+    (source / '.claude-plugin/marketplace.json').write_text(json.dumps({'name': 'fixture', 'plugins': entries}))
+    monkeypatch.setattr(runtime, 'require_inactive', lambda _: None)
+    monkeypatch.setattr(runtime, 'run', lambda *args, **kwargs: pytest.fail('must not invoke native CLI'))
+    with pytest.raises(ValueError):
+        plugins.preview(row['id'], 1, 'install', 'first@fixture', str(source))
+    assert profiles.get(row['id'])['revision'] == 1 and not profiles.listing()['jobs']
+
+
+def test_codex_install_verification_uses_actual_cache_not_marketplace_source(sandbox, monkeypatch):
+    import agent_profile_plugins as plugins
+    row = profiles.create('cache-check', 'codex')
+    root = profiles.root(row['id'])
+    cache = root / 'plugins/cache/fixture/sample/1.0.0'
+    cache.mkdir(parents=True)
+    (cache / 'content.txt').write_text('installed-old')
+    source = profiles.directory() / 'plugin-staging' / 'sample-source'
+    source.mkdir(parents=True)
+    (source / 'content.txt').write_text('marketplace-new')
+    body = {'installed': [{'pluginId': 'sample@fixture', 'version': '1.0.0', 'source': {'path': str(source)}}]}
+    monkeypatch.setattr(runtime, 'run', lambda *args, **kwargs: (0, json.dumps(body).encode()))
+    assert plugins._installed(row, 'sample@fixture') == cache
+    with pytest.raises(ValueError):
+        plugins._installed(row, 'sample@fixture', verify_source=True)

@@ -22,6 +22,26 @@ router = APIRouter(dependencies=[Depends(auth.require_human_session)])
 elevated_router = APIRouter(dependencies=[Depends(auth.require_human_session), Depends(auth.require_elevated)])
 
 
+def _public_result(value):
+    """Keep CAS evidence server-side when it fingerprints private material."""
+    if isinstance(value, list):
+        return [_public_result(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    private_names = {'.farshell-provider.json', '.farshell-hooks-disabled.json',
+                     '.credentials.json', 'credentials.json', 'auth.json'}
+    path = value.get('path', value.get('relative'))
+    private_file = isinstance(path, str) and path.replace('\\', '/').rsplit('/', 1)[-1] in private_names
+    hidden = {'auth_fingerprint', 'launch_auth_fingerprint', 'initial_access_fingerprint',
+              'last_access_fingerprint', 'credential_fingerprint'}
+    if private_file:
+        hidden.update({'sha256', 'before_sha256', 'fingerprint', 'before_hash', 'after_hash'})
+    result = {key: _public_result(item) for key, item in value.items() if key not in hidden}
+    if private_file:
+        result['private'] = True
+    return result
+
+
 async def _body(request):
     raw = await request.body()
     if len(raw) > 32 * 1024:
@@ -83,7 +103,21 @@ def _read(action, body, actor):
     _keys(body, ["operation", "payload"])
     if not isinstance(payload, dict):
         raise profiles.Refused(tr("잘못된 요청입니다"))
-    if operation == "create":
+    bound_profile = profiles.get(payload['profile_id']) if payload.get('profile_id') else None
+    if bound_profile is not None and operation != 'restore':
+        profiles.require_active(bound_profile)
+    if operation in ('rename', 'archive', 'restore'):
+        _keys(payload, ['profile_id', 'revision', 'name'] if operation == 'rename' else ['profile_id', 'revision'])
+        if bound_profile is None or type(payload.get('revision')) is not int or payload['revision'] != bound_profile['revision']:
+            raise profiles.Refused(tr("프로필이 바뀌었습니다. 다시 검토하세요"))
+        if operation == 'rename' and (not isinstance(payload.get('name'), str) or not 1 <= len(payload['name'].strip()) <= 80 or any(ord(c) < 32 or ord(c) == 127 for c in payload['name'])):
+            raise profiles.Refused(tr("프로필 이름 또는 도구가 올바르지 않습니다"))
+        if operation != 'rename':
+            profiles.require_no_pending_jobs(bound_profile['id'])
+            runtime.require_inactive(bound_profile['id'])
+        detail = {'operation': operation, 'profile_id': bound_profile['id'], 'name': payload.get('name', bound_profile['name']),
+                  'warning': tr("보관은 로그인·대화를 지우지 않으며 실행 중인 프로필은 보관할 수 없습니다")}
+    elif operation == "create":
         _keys(payload, ["name", "tool", "account_id", "account_label", "purpose"])
         if payload.get("tool") not in ("claude", "codex") or not isinstance(payload.get("name"), str) or not 1 <= len(payload["name"].strip()) <= 80:
             raise profiles.Refused(tr("프로필 이름 또는 도구가 올바르지 않습니다"))
@@ -115,8 +149,27 @@ def _read(action, body, actor):
         import agent_profile_provider
         detail = agent_profile_provider.preview(**payload)
         payload = {'profile_id': payload['profile_id'], 'token': detail.pop('token')}
+    elif operation == 'source-identity':
+        _keys(payload, ['source_id'])
+        import agent_profile_identity
+        detail = agent_profile_identity.preview(**payload)
+        payload = {'token': detail.pop('token')}
+    elif operation == 'session-proof':
+        _keys(payload, ['profile_id', 'revision', 'session'])
+        if bound_profile is None:
+            raise profiles.Refused(tr("프로필 ID가 올바르지 않습니다"))
+        profiles.require_revision(bound_profile, payload.get('revision'))
+        detail = {'session': payload.get('session'), 'model_request_sent': False}
+    elif operation == 'plugin-fetch':
+        _keys(payload, ['profile_id', 'revision', 'repo', 'commit', 'subdir'])
+        if bound_profile is None:
+            raise profiles.Refused(tr("프로필 ID가 올바르지 않습니다"))
+        profiles.require_revision(bound_profile, payload.get('revision'))
+        from agent_profile_download import validate
+        repo, commit, subdir = validate(payload.get('repo'), payload.get('commit'), payload.get('subdir', '.'))
+        detail = {'repo': repo, 'commit': commit, 'subdir': subdir, 'install_review_required': True}
     elif operation == "plugin":
-        _keys(payload, ["profile_id", "revision", "action", "plugin", "path"])
+        _keys(payload, ["profile_id", "revision", "action", "plugin", "path", "download_id", "job_id"])
         import agent_profile_plugins
         detail = agent_profile_plugins.preview(**payload)
         payload = {'profile_id': payload['profile_id'], 'token': detail.pop('token')}
@@ -137,7 +190,7 @@ def _read(action, body, actor):
         detail = migration.conversation_preview(**payload)
         payload = {"profile_id": payload["profile_id"], "token": detail.pop("token")}
     elif operation == "hook":
-        _keys(payload, ["profile_id", "revision", "event", "command", "matcher", "timeout", "remove_id"])
+        _keys(payload, ["profile_id", "revision", "event", "command", "matcher", "timeout", "remove_id", "hook_id", "enabled"])
         detail = config.preview(**payload)
         payload = {"profile_id": payload["profile_id"], "token": detail.pop("token")}
     elif operation in ("native-toggle", "native-edit"):
@@ -153,7 +206,7 @@ def _read(action, body, actor):
         payload = {"profile_id": profile["id"], "revision": profile["revision"], "token": detail.pop("token")}
     else:
         raise profiles.Refused(tr("지원하지 않는 관리 작업입니다"))
-    return {**detail, **mcp_plans.issue("profile-action", {"actor": actor, "operation": operation, "payload": payload})}
+    return {**detail, **mcp_plans.issue("profile-action", {"actor": actor, "operation": operation, "payload": payload, "metadata_revision": bound_profile["metadata_revision"] if bound_profile else None})}
 
 
 def _apply(body, actor):
@@ -177,6 +230,14 @@ def _apply(body, actor):
 
 def _execute(plan):
     operation, payload = plan["operation"], plan["payload"]
+    if payload.get('profile_id'):
+        current = profiles.get(payload['profile_id'])
+        if plan.get('metadata_revision') != current['metadata_revision']:
+            raise profiles.Refused(tr("프로필이 바뀌었습니다. 다시 검토하세요"))
+        if operation != 'restore':
+            profiles.require_active(current)
+    if operation in ('rename', 'archive', 'restore'):
+        return profiles.metadata_change(**payload, metadata_revision=plan['metadata_revision'], operation=operation)
     if operation == "create":
         return profiles.create(**payload)
     if operation == "launch":
@@ -195,6 +256,15 @@ def _execute(plan):
     if operation == "provider-edit":
         import agent_profile_provider
         return agent_profile_provider.apply(payload['token'])
+    if operation == 'source-identity':
+        import agent_profile_identity
+        return agent_profile_identity.apply(payload['token'])
+    if operation == 'session-proof':
+        from agent_profile_turn import certify
+        return certify(**payload)
+    if operation == 'plugin-fetch':
+        from agent_profile_download import fetch
+        return fetch(**payload)
     if operation == "plugin":
         import agent_profile_plugins
         return agent_profile_plugins.apply(payload['token'])
@@ -235,7 +305,7 @@ async def read(action: str, request: Request):
             # Password elevation reissues it, so doing that after preview would
             # invalidate the plan the person just reviewed.
             auth.require_elevated(request)
-        return await asyncio.to_thread(_read, action, await _body(request), _actor(request))
+        return _public_result(await asyncio.to_thread(_read, action, await _body(request), _actor(request)))
     except (ValueError, TypeError, OSError, RuntimeError, sqlite3.Error, fsguard.FsDenied) as exc:
         return _error(exc)
 
@@ -243,6 +313,6 @@ async def read(action: str, request: Request):
 @elevated_router.post("/api/agent-profiles/apply", response_model=dict)
 async def apply(request: Request):
     try:
-        return await asyncio.to_thread(_apply, await _body(request), _actor(request))
+        return _public_result(await asyncio.to_thread(_apply, await _body(request), _actor(request)))
     except (ValueError, TypeError, OSError, RuntimeError, sqlite3.Error, fsguard.FsDenied) as exc:
         return _error(exc)

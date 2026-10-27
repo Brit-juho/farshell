@@ -51,7 +51,7 @@ def database():
     try:
         db.execute("PRAGMA foreign_keys=ON")
         db.execute("PRAGMA journal_mode=DELETE")
-        if db.execute("PRAGMA user_version").fetchone()[0] not in (0, 1, 2, 3):
+        if db.execute("PRAGMA user_version").fetchone()[0] not in (0, 1, 2, 3, 4, 5):
             raise Refused(tr("프로필 저장소 버전을 지원하지 않습니다"))
         db.executescript("""
           CREATE TABLE IF NOT EXISTS accounts (
@@ -82,7 +82,16 @@ def database():
             db.execute("ALTER TABLE profiles ADD COLUMN purpose TEXT NOT NULL DEFAULT 'work'")
         if 'process_identity' not in {r[1] for r in db.execute('PRAGMA table_info(sessions)')}:
             db.execute('ALTER TABLE sessions ADD COLUMN process_identity TEXT')
-        db.execute("PRAGMA user_version=3")
+        columns = {r[1] for r in db.execute('PRAGMA table_info(profiles)')}
+        if 'metadata_revision' not in columns:
+            db.execute("ALTER TABLE profiles ADD COLUMN metadata_revision INTEGER NOT NULL DEFAULT 1")
+        if 'archived_at' not in columns:
+            db.execute("ALTER TABLE profiles ADD COLUMN archived_at REAL")
+        session_columns = {r[1] for r in db.execute('PRAGMA table_info(sessions)')}
+        for column in ('launch_auth_fingerprint', 'launch_subject'):
+            if column not in session_columns:
+                db.execute(f'ALTER TABLE sessions ADD COLUMN {column} TEXT')
+        db.execute("PRAGMA user_version=5")
         db.execute("BEGIN IMMEDIATE")
         yield db
         db.commit()
@@ -94,7 +103,7 @@ def database():
 
 
 def _public(row):
-    return {key: row[key] for key in ("id", "name", "tool", "account_id", "revision", "created_at", "state", "purpose")}
+    return {key: row[key] for key in ("id", "name", "tool", "account_id", "revision", "created_at", "state", "purpose", "metadata_revision", "archived_at")}
 
 
 def get(profile_id):
@@ -112,6 +121,7 @@ def root(profile_id):
 
 def context(profile_id, project=None):
     profile = get(profile_id)
+    require_active(profile)
     home = vt_paths.user_home().resolve()
     return {"tool": profile["tool"], "root": str(root(profile_id)), "home": str(home),
             "project": project, "worktree": None, "session": None,
@@ -121,13 +131,15 @@ def context(profile_id, project=None):
 def listing():
     candidate = vt_paths.state_dir() / 'agent-profiles'
     if not candidate.exists() and not candidate.is_symlink():
-        return {'profiles': [], 'accounts': [], 'jobs': [], 'sessions': []}
+        return {'profiles': [], 'archived_profiles': [], 'accounts': [], 'jobs': [], 'sessions': []}
     with database() as db:
         rows = [_public(row) for row in db.execute("SELECT * FROM profiles ORDER BY created_at,id")]
         accounts = [dict(row) | {"verification_state": "unverified"} for row in db.execute("SELECT * FROM accounts ORDER BY id")]
         jobs = [dict(row) for row in db.execute("SELECT id,profile_id,kind,state,created_at FROM jobs ORDER BY created_at DESC LIMIT 64")]
         sessions = [dict(row) for row in db.execute("SELECT name,profile_id,profile_revision,conversation,state FROM sessions ORDER BY started_at DESC LIMIT 64")]
-    return {"profiles": rows, "accounts": accounts, "jobs": jobs, "sessions": sessions}
+    return {"profiles": [r for r in rows if r["archived_at"] is None],
+            "archived_profiles": [r for r in rows if r["archived_at"] is not None],
+            "accounts": accounts, "jobs": jobs, "sessions": sessions}
 
 
 def create(name, tool, account_id=None, account_label=None, purpose="work"):
@@ -170,7 +182,13 @@ def create(name, tool, account_id=None, account_label=None, purpose="work"):
     return get(pid)
 
 
+def require_active(profile):
+    if profile.get('archived_at') is not None:
+        raise Refused(tr("보관된 프로필은 복원한 뒤 사용하세요"))
+
+
 def require_revision(profile, revision):
+    require_active(profile)
     if type(revision) is not int or revision != profile["revision"]:
         raise Refused(tr("프로필이 바뀌었습니다. 다시 검토하세요"))
 
@@ -250,6 +268,34 @@ def adopt(profile_id, revision):
         raise Refused(tr("준비된 테스트 프로필만 사용 프로필로 전환할 수 있습니다"))
     with database() as db:
         cursor = db.execute("UPDATE profiles SET purpose='work',revision=revision+1 WHERE id=? AND revision=? AND purpose='test' AND state='ready'", (profile_id, revision))
+        if cursor.rowcount != 1:
+            raise Refused(tr("프로필이 바뀌었습니다. 다시 검토하세요"))
+    return get(profile_id)
+
+
+def metadata_change(profile_id, revision, metadata_revision, operation, name=None):
+    profile = get(profile_id)
+    if type(revision) is not int or revision != profile['revision'] or type(metadata_revision) is not int or metadata_revision != profile['metadata_revision']:
+        raise Refused(tr("프로필이 바뀌었습니다. 다시 검토하세요"))
+    if operation not in ('rename', 'archive', 'restore'):
+        raise Refused(tr("지원하지 않는 관리 작업입니다"))
+    if operation != 'restore':
+        require_active(profile)
+    if operation == 'rename':
+        if not isinstance(name, str) or not 1 <= len(name.strip()) <= 80 or any(ord(c) < 32 or ord(c) == 127 for c in name):
+            raise Refused(tr("프로필 이름 또는 도구가 올바르지 않습니다"))
+    else:
+        require_no_pending_jobs(profile_id)
+        from agent_profile_runtime import require_inactive, validate_native_files
+        require_inactive(profile_id)
+        if profile['state'] != 'ready' or (operation == 'restore' and profile['archived_at'] is None):
+            raise Refused(tr("프로필 복구를 먼저 완료하세요"))
+        if operation == 'restore':
+            validate_native_files(profile_id)
+    with database() as db:
+        column, value = ('name', name.strip()) if operation == 'rename' else ('archived_at', time.time() if operation == 'archive' else None)
+        # Column comes only from the fixed operation mapping above.
+        cursor = db.execute(f"UPDATE profiles SET {column}=?,metadata_revision=metadata_revision+1 WHERE id=? AND revision=? AND metadata_revision=?", (value, profile_id, revision, metadata_revision))
         if cursor.rowcount != 1:
             raise Refused(tr("프로필이 바뀌었습니다. 다시 검토하세요"))
     return get(profile_id)

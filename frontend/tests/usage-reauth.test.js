@@ -31,3 +31,12 @@ test('reauthCommand — 셸 메타문자·공백·옵션처럼 보이는 이름�
   }
   assert.strictEqual(reauthCommand({ provider: 'anthropic' }), null);
 });
+
+test('reauthCommand — 관리 프로필은 FarShell 로그인만 사용하고 API 키에는 로그인 명령을 만들지 않는다', async () => {
+  const { reauthCommand } = await load();
+  const profile_id = 'a'.repeat(32);
+  assert.equal(reauthCommand({ profile_id, provider: 'codex', name: 'review' }), `fsh profile login ${profile_id}`);
+  assert.equal(reauthCommand({ profile_id, provider: 'claude', quota_scope: 'api-key' }), null);
+  assert.equal(reauthCommand({ profile_id, provider: 'claude', quota_scope: 'unsupported' }), null);
+  assert.equal(reauthCommand({ profile_id: 'bad; echo x', provider: 'codex' }), null);
+});
