@@ -23,6 +23,9 @@ export {
   parseQuery, fuzzyMatch, PLACEHOLDER, PREFIX_MODE, MODE_PREFIX,
   DEFAULT_COMMANDS, SETTINGS_COMMANDS, panelCommands,
 } from '../../js/shell/palette-data.js';
+export {
+  buildSettingEntries, matchSettingEntry, stepSettingValue, formatSettingValue, SECTION_META, RAIL_TOGGLES,
+} from '../../js/panels/settings/index-data.js';
 export { mountPalette } from '../../js/shell/Palette.tsx';
 export {
   buildHostMenu, resolveActiveHost, hostDetail, reasonLabel, LOCAL_HOST,

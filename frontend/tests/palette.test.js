@@ -469,3 +469,127 @@ test('파일 행 Cmd/Ctrl+Enter(새 pane에 열기) — 칸을 만들고 그 칸
   assert.deepStrictEqual(calls.openFileInPane, ['/repo/notes.md']);
   assert.deepStrictEqual(calls.openFile, [], '오버레이로 가면 빈 pane만 남는다');
 });
+
+// ── 3부: `>` 설정 색인 — 줄 안에서 값을 바꾼다 ────────────────────────────
+
+test('설정 색인 — 터미널 항목은 줄 안 컨트롤, 나머지 섹션은 link, 모바일에선 하단바가 빠진다', async () => {
+  const { buildSettingEntries } = await mod();
+  const all = buildSettingEntries();
+  const byLabel = (l) => all.find((e) => e.label === l);
+  assert.strictEqual(byLabel('글자 크기').kind, 'range');
+  assert.strictEqual(byLabel('글자 크기').key, 'terminal.fontSize');
+  assert.strictEqual(byLabel('커서 모양').kind, 'select');
+  assert.strictEqual(byLabel('커서 깜빡임').kind, 'bool');
+  assert.strictEqual(byLabel('등록 기기').kind, 'link', '보안 항목은 바꾸지 않고 해당 화면으로 보낸다');
+  assert.strictEqual(byLabel('등록 기기').section, 'security');
+  assert.strictEqual(byLabel('개입 필요 구역 표시').key, 'rail.attention.show');
+  assert.strictEqual(all.filter((e) => e.label === '글자 크기').length, 1, '인라인 항목은 link로 다시 나오지 않는다');
+  const ids = new Set(all.map((e) => e.id));
+  assert.strictEqual(ids.size, all.length, '항목 id는 겹치지 않는다');
+  const mobile = buildSettingEntries(['terminal', 'voice']);
+  assert.ok(!mobile.some((e) => e.kind === 'link' && e.section === 'security'), '보이지 않는 섹션의 link는 뺀다');
+});
+
+test('matchSettingEntry — 낱말을 전부 포함해야 하고 별칭·경로로도 찾는다', async () => {
+  const { buildSettingEntries, matchSettingEntry } = await mod();
+  const font = buildSettingEntries().find((e) => e.label === '글자 크기');
+  assert.ok(matchSettingEntry(font, ''));
+  assert.ok(matchSettingEntry(font, '폰트'), '별칭');
+  assert.ok(matchSettingEntry(font, '터미널 표시'), '경로의 낱말');
+  assert.ok(!matchSettingEntry(font, '터미널 음성'), '낱말 하나라도 없으면 탈락');
+});
+
+test('stepSettingValue — bool 뒤집기, select 순환, range 단계(방향 무관 bool)', async () => {
+  const { stepSettingValue, formatSettingValue, buildSettingEntries } = await mod();
+  const all = buildSettingEntries();
+  const get = (l) => all.find((e) => e.label === l);
+  assert.strictEqual(stepSettingValue(get('커서 깜빡임'), true, 1), false);
+  assert.strictEqual(stepSettingValue(get('커서 깜빡임'), false, -1), true);
+  assert.strictEqual(stepSettingValue(get('커서 모양'), 'block', 1), 'underline');
+  assert.strictEqual(stepSettingValue(get('커서 모양'), 'block', -1), 'bar', '앞쪽 끝에서 감싼다');
+  assert.strictEqual(stepSettingValue(get('글자 크기'), 14, 1), 15);
+  assert.strictEqual(stepSettingValue(get('스크롤백 줄 수'), 2000, 1), 2500, 'step이 있으면 그만큼');
+  assert.strictEqual(stepSettingValue(get('글자 크기'), 'x', 1), undefined);
+  assert.strictEqual(stepSettingValue(get('등록 기기'), null, 1), undefined, 'link는 바꿀 값이 없다');
+  assert.strictEqual(formatSettingValue(get('글자 크기'), 14), '14px');
+  assert.strictEqual(formatSettingValue(get('스크롤백 줄 수'), 5000), '5,000 줄');
+  assert.strictEqual(formatSettingValue(get('커서 모양'), 'bar'), '막대');
+});
+
+function settingsBridge(window, initial) {
+  const values = { ...initial };
+  const sets = [];
+  const listeners = new Set();
+  window.vtSettingsGet = (k) => values[k];
+  window.vtSettingsSet = (k, v) => { sets.push([k, v]); values[k] = v; for (const f of listeners) f({ [k]: v }); return Promise.resolve(true); };
+  window.vtSettingsSubscribe = (f) => { listeners.add(f); return () => listeners.delete(f); };
+  return { values, sets };
+}
+
+async function openSettingsPalette(initial, query = '>') {
+  const { mountPalette, document, window, root } = await mountFresh();
+  const bridge = settingsBridge(window, initial);
+  const actions = [];
+  const deps = fakeDeps(document, {
+    getAction: (name) => (name === 'settings.section' ? (...a) => actions.push(a) : undefined),
+  });
+  const api = mountPalette(root, deps);
+  api.open('settings');
+  await flush();
+  const input = document.getElementById('vt-qo-input');
+  input.value = query;
+  input.dispatchEvent(new window.Event('input', { bubbles: true }));
+  const rowOf = (text) => Array.from(document.querySelectorAll('.vt-qo-row')).find((r) => r.textContent.includes(text));
+  await waitFor(() => document.querySelector('.vt-qo-row.vt-qo-setting'));
+  const press = async (key) => {
+    document.dispatchEvent(new window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    await flush();
+  };
+  return { api, document, window, bridge, actions, rowOf, press, input };
+}
+
+test('`>` — 설정 줄이 이름·경로·현재 값을 보여주고, 중복되던 토글 명령은 사라진다', async () => {
+  const { document, rowOf } = await openSettingsPalette({ 'terminal.cursorBlink': true, 'terminal.cursorStyle': 'bar', 'terminal.fontSize': 14, 'mouse.autocopyOnSelect': true }, '> 커서');
+  const blink = rowOf('커서 깜빡임');
+  assert.ok(blink.textContent.includes('터미널 › 표시'), '경로가 이름 아래에 보인다');
+  assert.strictEqual(blink.querySelector('.vt-qo-switch').getAttribute('aria-checked'), 'true');
+  assert.ok(rowOf('커서 모양').querySelector('.vt-qo-val').textContent.includes('막대'));
+  assert.strictEqual(document.querySelectorAll('.vt-qo-row.vt-qo-setting').length, 2, '「커서」로 걸리는 줄은 둘');
+});
+
+test('`>` — Enter는 선택한 줄의 값을 바꾸되 팔레트를 닫지 않는다', async () => {
+  const { api, bridge, press, rowOf } = await openSettingsPalette({ 'terminal.fontSize': 14, 'terminal.cursorBlink': true });
+  await press('Enter');  // 첫 설정 줄 = 터미널 › 표시 › 글자 크기
+  assert.deepStrictEqual(bridge.sets, [['terminal.fontSize', 15]]);
+  assert.strictEqual(api.isOpen(), true, '바꾼 결과를 보며 이어서 바꾸도록 열려 있다');
+  await waitFor(() => rowOf('글자 크기').querySelector('.vt-qo-val').textContent.includes('15px'));
+});
+
+test('`>` — ←/→는 선택한 줄의 값을 옮기고, 값이 없는 줄에서는 캐럿에 넘긴다', async () => {
+  const { bridge, press, rowOf, document, window } = await openSettingsPalette({ 'terminal.cursorStyle': 'block', 'terminal.cursorBlink': true }, '> 커서 모양');
+  await waitFor(() => rowOf('커서 모양'));
+  await press('ArrowRight');
+  assert.deepStrictEqual(bridge.sets, [['terminal.cursorStyle', 'underline']]);
+  await waitFor(() => rowOf('커서 모양').querySelector('.vt-qo-val').textContent.includes('밑줄'));
+  await press('ArrowLeft');
+  assert.deepStrictEqual(bridge.sets.at(-1), ['terminal.cursorStyle', 'block']);
+
+  // 값이 없는 줄(link)에서는 가로채지 않는다 — 입력창 캐럿 이동을 막으면 검색어를 고칠 수 없다.
+  const input = document.getElementById('vt-qo-input');
+  input.value = '> 등록 기기';
+  input.dispatchEvent(new window.Event('input', { bubbles: true }));
+  await waitFor(() => rowOf('등록 기기'));
+  const ev = new window.KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true });
+  document.dispatchEvent(ev);
+  await flush();
+  assert.strictEqual(ev.defaultPrevented, false);
+  assert.strictEqual(bridge.sets.length, 2, 'link 줄에서는 값을 쓰지 않는다');
+});
+
+test('`>` — 바꿀 수 없는 항목은 해당 섹션으로 보내며 팔레트를 닫는다', async () => {
+  const { api, actions, rowOf } = await openSettingsPalette({}, '> 등록 기기');
+  await waitFor(() => rowOf('등록 기기'));
+  rowOf('등록 기기').click();
+  assert.deepStrictEqual(actions, [['security']]);
+  assert.strictEqual(api.isOpen(), false);
+});

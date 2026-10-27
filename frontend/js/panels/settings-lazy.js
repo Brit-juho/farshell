@@ -23,6 +23,8 @@ function open(section) {
 }
 
 registerAction('settings.show', () => open());
+// 빠른 열기(`>`)의 「바꿀 수 없는 항목」이 해당 섹션으로 보낼 때 쓴다 — 섹션 id는 settings/index-data.js.
+registerAction('settings.section', (section) => open(typeof section === 'string' ? section : undefined));
 registerAction('voice.settings', () => open('voice'));
 registerAction('permissions.show', () => open('permissions'));
 // S3에서 잡아둔 `Mod+,` 바인딩의 주인.

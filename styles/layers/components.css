@@ -1206,6 +1206,59 @@
   }
   .vt-qo-body .vt-qo-row.selected:not(.vt-card) .vt-qo-mark { color: var(--color-acc); }
 
+  /* 설정 줄(`>`) — 한 줄에 이름·경로·값이 같이 들어가므로 일반 줄(36px/12.5px)보다 키운다.
+   * 읽는 글이고 손가락으로도 눌리는 줄이라 높이 48px, 이름 --fs-base. 값은 mono 숫자 정렬. */
+  .vt-qo-body .vt-qo-row.vt-qo-setting:not(.vt-card) { min-height: 48px; padding-block: calc(var(--spacing) * 1.5); }
+  .vt-qo-body .vt-qo-row.vt-qo-setting:not(.vt-card) .vt-vw-name {
+    display: grid;
+    gap: 2px;
+    font-size: var(--fs-base);
+    color: var(--color-txt);
+  }
+  .vt-qo-name, .vt-qo-sub { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vt-qo-sub { color: var(--color-sub); font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui); }
+  .vt-qo-val {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 2);
+    padding: calc(var(--spacing) * 1) calc(var(--spacing) * 2.5);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-0);
+    box-shadow: inset 0 0 0 1px var(--color-line);
+    color: var(--color-txt);
+    font: var(--weight-medium) var(--fs-sm) / 1.2 var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .vt-qo-val-arrow { color: var(--color-faint); }
+  .vt-qo-row.selected .vt-qo-val-arrow { color: var(--color-acc); }
+  .vt-qo-switch {
+    flex: none;
+    position: relative;
+    width: 36px;
+    height: 20px;
+    border-radius: var(--radius-full);
+    background: var(--color-bg-3);
+    box-shadow: inset 0 0 0 1px var(--color-line-strong);
+    transition: background-color var(--dur-fast) var(--ease-out-quint);
+  }
+  .vt-qo-switch::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--color-muted);
+    transition: transform var(--dur-fast) var(--ease-out-quint);
+  }
+  .vt-qo-switch.on { background: var(--color-acc); box-shadow: none; }
+  .vt-qo-switch.on::after { transform: translateX(16px); background: var(--color-bg-0); }
+  @media (prefers-reduced-motion: reduce) {
+    .vt-qo-switch, .vt-qo-switch::after { transition: none; }
+  }
+
   .vt-qo-foot {
     display: flex;
     align-items: center;

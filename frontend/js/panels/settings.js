@@ -13,6 +13,7 @@
 //     쓸 수 없는 키 바인딩, 새 탭부터 적용되는 항목 등.
 import { openPanel, closePanel } from './panel.js';
 import { renderItems, group } from './settings/controls.js';
+import { TERMINAL_GROUPS, SECTION_META, SEARCH_ITEMS, SEARCH_ALIASES } from './settings/index-data.js';
 import { renderKeymapSection } from './settings/sections/keymap.js';
 import { renderVoiceSection, cleanupVoiceClients } from './settings/sections/voice.js';
 import { renderAppearanceSection } from './settings/sections/appearance.js';
@@ -27,64 +28,15 @@ import { t } from '../core/i18n.js';
 
 const PANEL_ID = 'vt-settings';
 
-function renderScrollbackGroup() {
-  // ADR-43(2.3.0) — 서버 디스크 영속화 토글(`renderScrollbackSection`)을
-  // 없앴다. 옵트인 기능이 한 번도 켜진 적이 없어(실측 0건) 위험만 있고
-  // 값어치가 없었다. 줄 수
-  // 설정(브라우저 쪽 xterm.js 버퍼)은 별개 기능이라 그대로 남는다.
-  return renderItems({ items: [
-    { key: 'terminal.scrollback', label: t('스크롤백 줄 수'), kind: 'range', step: 500, unit: '줄', presets: [2000, 5000, 10000] },
-  ] });
-}
-
-// 섹션 정의 — 자주 함께 쓰는 항목을 7개 범주로 묶는다. 「세션」은 rail 자체가
-// 그 화면이라 여기서 중복 노출하지 않는다. 「음성」의 푸시 구독 토글·음성 전용 모드는 원래
-// 이 설명대로 "다른 자리"(⋯ 메뉴 → legacy rail 플라이아웃)에 있었지만,
-// 2026-09-18 레일 교체로 그 자리 자체가 도달 불가능해져 이 섹션들로 옮겼다
-// (voice.js/appearance.js 참고) — 지금은 중복이 아니라 유일한 자리다.
-const TERMINAL_GROUPS = [
-  {
-    label: t('표시'),
-    items: [
-      { key: 'terminal.fontSize', label: t('글자 크기'), kind: 'range', unit: 'px' },
-      { key: 'terminal.cursorStyle', label: t('커서 모양'), kind: 'select',
-        labels: { block: t('블록'), underline: t('밑줄'), bar: t('막대') } },
-      { key: 'terminal.cursorBlink', label: t('커서 깜빡임'), kind: 'bool' },
-      // 2026-09-18 — ui/settings-toggles.js가 진작 스토어에 묶어뒀지만
-      // (E2), 그 체크박스가 살던 자리(legacy rail 플라이아웃)가 오늘
-      // 도달 불가능해지며 이 키를 끄고 켤 화면이 아예 없어졌다.
-      { key: 'session.openOnMac', label: t('새 세션 생성 시 맥 터미널에서도 열기'), kind: 'bool' },
-    ],
-  },
-  {
-    label: t('입력 및 선택'),
-    items: [
-      { key: 'mouse.forwardToApp', label: t('앱에 마우스 이벤트 전달'),
-        // S1 spike로 구현 가능함이 확인된 항목. 끄면 iTerm2 기본 동작이 된다.
-        help: t('끄면 vim·tmux가 마우스를 잡아도 항상 드래그로 선택할 수 있습니다 (iTerm2 기본 동작).'),
-        kind: 'bool' },
-      { key: 'mouse.autocopyOnSelect', label: t('드래그 시 자동 복사'), kind: 'bool' },
-      { key: 'mouse.touchTapToApp', label: t('터치 탭을 앱에 전달'),
-        help: t('터치 기기에서 짧은 탭을 앱으로 넘겨 커서를 옮깁니다.'), kind: 'bool' },
-    ],
-  },
-  {
-    label: t('접근성'),
-    items: [
-      { key: 'a11y.screenReader', label: t('스크린 리더 모드'), kind: 'select',
-        labels: { auto: t('자동 (터치 기기에서 켬)'), on: t('항상 켬'), off: t('항상 끔') },
-        help: t('새로 여는 탭부터 적용됩니다 — 터미널 내부 구조가 달라져 실행 중에는 바꿀 수 없습니다.') },
-    ],
-  },
-  {
-    label: t('스크롤백'), custom: renderScrollbackGroup,
-  },
-];
-
+// 섹션 정의 — 이름·설명·터미널 항목·검색 색인은 settings/index-data.js(순수 데이터, 빠른 열기
+// 팔레트와 공유)에 있고, 여기서는 id로 렌더 함수만 붙인다. 「세션」은 rail 자체가 그 화면이라
+// 여기서 중복 노출하지 않는다. 「음성」의 푸시 구독 토글·음성 전용 모드는 2026-09-18 레일 교체로
+// 원래 자리(⋯ 메뉴 → legacy rail 플라이아웃)가 도달 불가능해져 이 섹션들로 옮겼다(voice.js/appearance.js 참고).
+// 「테마 가져오기」(N14, Ghostty/Warp 파싱)는 2026-09-22 실사용 없어 제거.
 function renderTerminalSection() {
   const frag = document.createDocumentFragment();
   for (const part of TERMINAL_GROUPS) {
-    frag.appendChild(group(part.label, part.custom ? part.custom() : renderItems(part)));
+    frag.appendChild(group(part.label, renderItems(part)));
   }
   return frag;
 }
@@ -95,61 +47,21 @@ function renderAgentSection() {
   return frag;
 }
 
-const SECTIONS = [
-  { id: 'terminal', label: t('터미널'), description: t('표시, 입력, 접근성, 기록 방식을 설정합니다.'), custom: renderTerminalSection },
-  // N42(60-settings-palette.md §7) — 알림·음성 진단. 다섯 항목 전부 서버
-  // API는 이미 있고(push.py·voice.py·system.py) 이 섹션은 그 배선일 뿐이다.
-  { id: 'voice', label: t('음성 및 알림'), description: t('알림과 음성 입력 엔진을 관리합니다.'), custom: renderVoiceSection },
-  // N9/N45(80-multihost-agents.md §2) — CLI별 승인 대기 감지 커버리지 표.
-  { id: 'agents', label: t('에이전트'), description: t('에이전트 감지 상태를 확인합니다.'), custom: renderAgentSection },
-  { id: 'keymap', label: t('키맵'), description: t('단축키와 터미널 전달 여부를 바꿉니다.'), custom: () => renderKeymapSection(rerender) },
-  // 기본 6스킨 칩(2026-09-18부터 이 탭이 유일한 자리 — 위 주석 참고).
-  // 「테마 가져오기」(N14, Ghostty/Warp 파싱)는 2026-09-22 실사용 없어 제거.
-  { id: 'appearance', label: t('모양'), description: t('스킨, 화면 언어, 파일 뷰어 표시 방식을 고릅니다.'), custom: renderAppearanceSection },
-  { id: 'hud', label: t('하단바'), description: t('하단 상태바에 보일 칩과 순서를 고릅니다.'), custom: renderHudSection, desktopOnly: true },
-  { id: 'permissions', label: t('권한'), description: t('에이전트의 승인 요청, 페어, 폴더 lease, 허용된 권한, 감사 기록을 봅니다.'), custom: renderPermissionsSection },
-  { id: 'security', label: t('계정 및 보안'), description: t('로그인, OTP, 등록 기기와 현재 세션을 확인합니다.'), custom: renderSecuritySection },
-  // N13(80-multihost-agents.md §3) — 토글 자체는 스키마 항목이지만, 디스크
-  // 사용량은 서버에 물어봐야 하는 값이라(보안 섹션과 같은 이유로) custom.
-  { id: 'about', label: t('정보 및 진단'), description: t('훅과 사용량 공급자의 연결 상태를 진단합니다.'), custom: renderAboutSection },
-];
-
-const SEARCH_ITEMS = [
-  ['terminal', t('글자 크기')], ['terminal', t('커서 모양')], ['terminal', t('커서 깜빡임')],
-  ['terminal', t('새 세션 생성 시 맥 터미널에서도 열기')], ['terminal', t('앱에 마우스 이벤트 전달')],
-  ['terminal', t('드래그 시 자동 복사')], ['terminal', t('터치 탭을 앱에 전달')],
-  ['terminal', t('스크린 리더 모드')], ['terminal', t('스크롤백 줄 수')],
-  ['voice', t('웹 푸시 알림')], ['voice', t('완료 알림')], ['voice', t('알림 방식')], ['voice', t('음성 인식 모델')], ['voice', t('받아 둔 항목 관리')],
-  ['voice', t('현재 세션 음성')], ['voice', t('음성 전용 모드')],
-  ['agents', t('에이전트 감지 상태')],
-  ['keymap', t('단축키와 터미널 전달')],
-  ['appearance', t('스킨')], ['appearance', t('화면 언어')], ['appearance', t('파일 뷰어 표시 방식')],
-  ['permissions', t('승인 대기')], ['permissions', t('페어')], ['permissions', t('폴더 lease')], ['permissions', t('허용된 권한')], ['permissions', t('감사 기록')], ['permissions', t('비상 정지')],
-  ['security', t('로그인과 OTP')], ['security', t('등록 기기')], ['security', t('로그아웃')],
-  ['about', t('에이전트 훅')], ['about', t('사용량 공급자')], ['about', t('버전과 진단')],
-].map(([sectionId, label]) => ({ sectionId, label }));
-
-// 값은 화면에 나오지 않는 검색어 묶음이다. 영어 화면에서는 영어 검색어로 바뀐다.
-const SEARCH_ALIASES = {
-  [t('글자 크기')]: t('폰트 글꼴 확대 축소'),
-  [t('커서 모양')]: t('캐럿'),
-  [t('스킨')]: t('테마 색상 컬러'),
-  [t('파일 뷰어 표시 방식')]: t('코드 뷰어 시트 팝업 창 페인'),
-  [t('웹 푸시 알림')]: t('브라우저 알림 구독'),
-  [t('음성 인식 모델')]: t('음성 입력 받아쓰기 stt 모델 선택 받기 다운로드 qwen3 mlx llama 엔진 정확도 속도 메모리'),
-  [t('알림 방식')]: t('완료음 낭독 tts 소리 알림음 최소 작업 시간 오류 제외 웹 접속 중'),
-  [t('받아 둔 항목 관리')]: t('모델 삭제 지우기 용량 저장 공간 엔진 파일'),
-  [t('맥에서 음성만 쓰기')]: t('로컬 음성 입력 마이크'),
-  [t('등록 기기')]: t('디바이스 장치'),
-  [t('승인 대기')]: t('승인함 인박스 에이전트 요청 허용 거부'),
-  [t('페어')]: t('pair 짝 코드 합류 역할 교체 handoff driver navigator 운전자 길잡이 fsh pair'),
-  [t('폴더 lease')]: t('lease 잠금 폴더 점유 배타 경로 glob'),
-  [t('허용된 권한')]: t('grant 회수 철회 프리셋 보기 협업 운전 제어'),
-  [t('감사 기록')]: t('audit 로그 체인 거부 기록'),
-  [t('비상 정지')]: t('panic 모든 에이전트 권한 회수'),
-  [t('화면 언어')]: t('언어 language 한국어 영어 english'),
-  [t('에이전트 훅')]: 'hook codex claude',
+// N42 알림·음성 진단(서버 API는 이미 있고 이 섹션은 배선), N9/N45 CLI별 승인 대기 감지 커버리지 표,
+// N13 디스크 사용량(서버에 물어야 하는 값이라 보안 섹션과 같은 이유로 custom).
+const SECTION_RENDERERS = {
+  terminal: renderTerminalSection,
+  voice: renderVoiceSection,
+  agents: renderAgentSection,
+  keymap: () => renderKeymapSection(rerender),
+  appearance: renderAppearanceSection,
+  hud: renderHudSection,
+  permissions: renderPermissionsSection,
+  security: renderSecuritySection,
+  about: renderAboutSection,
 };
+const SECTIONS = SECTION_META.map((meta) => ({ ...meta, custom: SECTION_RENDERERS[meta.id] }));
+
 
 // ── 패널 ──────────────────────────────────────────────────────────────────
 let _activeSection = 'terminal';
