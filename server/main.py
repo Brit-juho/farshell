@@ -470,6 +470,9 @@ async def lifespan(_app: FastAPI):
     # 큐 재시도·멈춤 점검. 기동 시 지난 프로세스가 남긴 sending 항목부터 정리한다.
     import queue_runner
     queue_sweep_task = asyncio.create_task(queue_runner.sweep_loop())
+    # 소유자 셸에서 띄운 프로필 세션의 SessionStart 확인은 이 프로세스의 메모리에서만 가능하다.
+    import agent_profile_runtime
+    profile_session_task = asyncio.create_task(agent_profile_runtime.reconcile_loop())
     # 위임 점검 — 세션이 사라진 위임 정리, 재시작 전에 못 보낸 결과 재전송.
     import delegation
     delegation_sweep_task = asyncio.create_task(delegation.sweep_loop())
@@ -541,6 +544,9 @@ async def lifespan(_app: FastAPI):
         queue_sweep_task.cancel()
         with suppress(asyncio.CancelledError):
             await queue_sweep_task
+        profile_session_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await profile_session_task
         delegation_sweep_task.cancel()
         with suppress(asyncio.CancelledError):
             await delegation_sweep_task

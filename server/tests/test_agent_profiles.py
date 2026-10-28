@@ -507,6 +507,29 @@ def test_skill_report_separates_skills_that_contain_links(sandbox):
     assert any(f['path'].startswith('skills/plain/') for f in plan['files'])
 
 
+def test_session_reconcile_runs_server_side_without_creating_a_registry(sandbox, monkeypatch):
+    import agent_profile_runtime as runtime
+    home, _ = sandbox
+    import vt_paths
+    registry = vt_paths.state_dir() / 'agent-profiles' / 'registry.sqlite3'
+    registry.unlink(missing_ok=True)
+    assert runtime.reconcile_sessions() == 0 and not registry.exists()
+    pid = profiles.create('reconcile-test', 'claude')['id']
+    now = time.time()
+    with profiles.database() as db:
+        for name, state, age in (('profile-' + 'a' * 16, 'starting', 10), ('profile-' + 'b' * 16, 'unknown', 10),
+                                 ('profile-' + 'c' * 16, 'running', 10), ('profile-' + 'd' * 16, 'starting', 7200)):
+            db.execute("INSERT INTO sessions (name,profile_id,created,profile_revision,conversation,started_at,state,launch_auth_fingerprint,launch_subject) VALUES (?,?,?,?,?,?,?,?,?)",
+                       (name, pid, '$1:1', 1, None, now - age, state, None, None))
+    seen = []
+    monkeypatch.setattr(runtime, 'session_status', lambda name: seen.append(name))
+    assert runtime.reconcile_sessions() == 2
+    assert sorted(seen) == ['profile-' + 'a' * 16, 'profile-' + 'b' * 16]
+    assert runtime.session_recorded('profile-' + 'c' * 16)['state'] == 'running'
+    with pytest.raises(profiles.Refused):
+        runtime.session_recorded('not-a-session')
+
+
 def test_plugin_review_uses_fixed_snapshot_and_refuses_tampering(sandbox, monkeypatch):
     import agent_profile_plugins as plugins
     home, _ = sandbox

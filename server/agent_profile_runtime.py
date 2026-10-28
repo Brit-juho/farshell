@@ -1,7 +1,9 @@
 """Native profile launch/login. No global environment or auth-store swapping."""
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import os
 import re
 import secrets
@@ -19,6 +21,10 @@ import fsguard
 import tmux_runner
 import vt_paths
 from i18n import tr
+
+logger = logging.getLogger(__name__)
+
+RECONCILE_SECONDS = 5
 
 _BASE_ENV = {"PATH", "HOME", "TERM", "COLORTERM", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "USER", "LOGNAME", "SHELL", "DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "SSH_AUTH_SOCK"}
 
@@ -315,6 +321,45 @@ def session_status(name):
     return {"session": name, "profile_id": saved["profile_id"], "state": state,
             "applied_revision": saved["profile_revision"], "desired_revision": profiles.get(saved["profile_id"])["revision"],
             "conversation": saved["conversation"], "identity_state": "unverified", "evidence": evidence}
+
+
+def reconcile_sessions(max_age=3600):
+    """Check recently launched profile sessions from inside the server.
+
+    SessionStart evidence lives in this process's memory, so a session launched
+    from the owner's shell can only be verified here, not by that shell.
+    """
+    import sqlite3
+    if not (vt_paths.state_dir() / "agent-profiles" / "registry.sqlite3").exists():
+        return 0
+    with profiles.database() as db:
+        names = [r["name"] for r in db.execute("SELECT name FROM sessions WHERE state IN ('starting','unknown') AND started_at>?", (time.time() - max_age,))]
+    for name in names:
+        try:
+            session_status(name)
+        except (profiles.Refused, ValueError, OSError, sqlite3.Error):
+            continue
+    return len(names)
+
+
+async def reconcile_loop():
+    while True:
+        await asyncio.sleep(RECONCILE_SECONDS)
+        try:
+            await asyncio.to_thread(reconcile_sessions)
+        except Exception as exc:
+            logger.warning("profile session reconcile failed: %s", type(exc).__name__)
+
+
+def session_recorded(name):
+    """The registry's last recorded state, without re-deriving it (that needs server memory)."""
+    if not isinstance(name, str) or not re.fullmatch(r"profile-[a-f0-9]{16}", name):
+        raise profiles.Refused(tr("프로필 세션 이름이 올바르지 않습니다"))
+    with profiles.database() as db:
+        row = db.execute("SELECT name,profile_id,profile_revision,conversation,started_at,state FROM sessions WHERE name=?", (name,)).fetchone()
+    if row is None:
+        raise profiles.Refused(tr("프로필 세션을 찾지 못했습니다"))
+    return dict(row)
 
 
 def note_verified_restart(ctx):

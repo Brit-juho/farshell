@@ -106,7 +106,7 @@ fsh shell-init zsh     # print the shell init snippet (add the printed snippet t
 
 ## Native CLI launch profiles
 
-Manage dedicated Claude/Codex roots with `fsh profile list`, `create <name> --tool claude|codex [--account <id>] [--test]`, `login <id>`, `status <id>`, `rename <id> <name>`, `archive <id>`, `restore <id>`, `sources`, `retirement`, `import-config <id> <source> [--private] [--yes]`, `import-conversations <id> <source> [--yes]`, `launch <id> <cwd> [--resume <conversation>]`, `session <name>`, `probe <id>` and `adopt <id>`. The import commands print a summary and ask for confirmation (`--yes` states that you reviewed it) and reuse the web flow's checks. Login runs interactively on the owner host. Account labels are logical groups, not identity proof. See [Launch profiles](docs/help/en/profiles.md) for reviewed imports, test restrictions and current replacement limits.
+Manage dedicated Claude/Codex roots with `fsh profile list`, `create <name> --tool claude|codex [--account <id>] [--test]`, `login <id>`, `status <id>`, `rename <id> <name>`, `archive <id>`, `restore <id>`, `sources`, `retirement`, `import-config <id> <source> [--private] [--yes]`, `import-conversations <id> <source> [--yes]`, `launch <id> <cwd> [--resume <conversation>]`, `session <name>` (state recorded by the server), `probe <id>` and `adopt <id>`. The import commands print a summary and ask for confirmation (`--yes` states that you reviewed it) and reuse the web flow's checks. Login runs interactively on the owner host. Account labels are logical groups, not identity proof. See [Launch profiles](docs/help/en/profiles.md) for reviewed imports, test restrictions and current replacement limits.
 
 ## `fsh start` and `fsh mobile` options
 
