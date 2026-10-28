@@ -311,15 +311,27 @@ def profile_file(root: Path, relative: str) -> Path:
     return target
 
 
-def _shared_root(root: Path, relative: str) -> Path:
-    """The directory to open from: the global one when the path runs through a shared link."""
+def _shared_base(root: Path, relative: str) -> tuple:
+    """(directory, relative path) to open from when the path runs through a shared link.
+
+    The link was already accepted by profile_file, which also bounded where it may resolve, so
+    opening starts at the real directory the shared entry serves (a global entry may itself be a
+    link to a repository of the user's own) and keeps O_NOFOLLOW from there.
+    """
     parts = Path(relative).parts
     base = Path(root)
-    if parts and (base / parts[0]).is_symlink():
-        return global_claude_dir()
-    if len(parts) > 1 and parts[0] in SHARED_ITEMS and (base / parts[0] / parts[1]).is_symlink():
-        return global_claude_dir()
-    return base
+    if not parts:
+        return base, relative
+    first = base / parts[0]
+    if first.is_symlink():
+        if len(parts) > 1:
+            return Path(os.path.realpath(first)), os.path.join(*parts[1:])
+        return global_claude_dir(), relative
+    if len(parts) > 1 and parts[0] in SHARED_ITEMS and (first / parts[1]).is_symlink():
+        if len(parts) > 2:
+            return Path(os.path.realpath(first / parts[1])), os.path.join(*parts[2:])
+        return global_claude_dir(), relative
+    return base, relative
 
 
 @contextlib.contextmanager
@@ -327,7 +339,8 @@ def _profile_stream(root: Path, relative: str, limit: int):
     """Open one profile file with NOFOLLOW at every component; yield (stream, size)."""
     import stat
     profile_file(root, relative)
-    fd = os.open(_shared_root(root, relative), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    start, relative = _shared_base(root, relative)
+    fd = os.open(start, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         parts = Path(relative).parts
         for part in parts[:-1]:

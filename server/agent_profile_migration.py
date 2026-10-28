@@ -775,7 +775,8 @@ def retirement_report():
                 reasons.append('configuration-verification-unavailable')
             if pid not in concurrent_profiles:
                 reasons.append('same-account-concurrency-not-certified')
-            if not config['manifest'].get('complete_skill_coverage'):
+            from agent_profile_share import skills_covered
+            if not config['manifest'].get('complete_skill_coverage') and not skills_covered(pid):
                 reasons.append('skill-coverage-incomplete')
             profile = profiles.get(pid)
             if profile['archived_at'] is not None:

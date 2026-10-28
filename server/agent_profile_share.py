@@ -141,6 +141,24 @@ def sync(profile_id, *, replace=True):
     return {key: sorted(value) for key, value in run.report.items()}
 
 
+def skills_covered(profile_id):
+    """Every global skill is reachable from the profile (linked or the profile's own version)."""
+    glob = fsguard.global_claude_dir() / "skills"
+    folder = profiles.root(profile_id) / "skills"
+    if not glob.is_dir():
+        return True
+    return all((folder / e.name).exists() for e in os.scandir(glob)
+               if not e.name.startswith(".") and (Path(e.path) / "SKILL.md").is_file())
+
+
+def plugins_shared(profile_id):
+    try:
+        link = profiles.root(profile_id) / "plugins"
+        return link.is_symlink() and os.readlink(link) == str(fsguard.global_claude_dir() / "plugins")
+    except (OSError, profiles.Refused):
+        return False
+
+
 def is_history_shared(profile_id):
     """Whether the profile's conversations live in the global ~/.claude/projects."""
     try:

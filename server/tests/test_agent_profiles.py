@@ -806,6 +806,34 @@ def test_share_replaces_a_copy_of_a_global_entry_that_is_itself_a_link(sandbox):
     assert (root / 'skills' / 'delta' / 'SKILL.md').read_text() == '# delta\n'  # CC follows the chain
 
 
+def test_shared_skills_and_plugins_clear_their_retirement_blockers(sandbox):
+    import agent_profile_share as share
+    home, _ = sandbox
+    _global_claude(home)
+    (home / '.claude' / 'settings.json').write_text('{"enabledPlugins": {"x@y": true}}')
+    folder = home / '.clauth' / 'profiles' / 'first'
+    folder.mkdir(parents=True)
+    (folder / 'config.toml').write_text('')
+    source = next(s for s in migration.source_list()['sources'] if s['name'] == 'first')
+    pid = profiles.create('coverage-test', 'claude')['id']
+    # Imported without the skills that contain links: coverage is incomplete and plugins need reinstalling.
+    (home / '.claude' / 'skills' / 'linked').mkdir()
+    (home / '.claude' / 'skills' / 'linked' / 'SKILL.md').write_text('# linked\n')
+    (home / '.claude' / 'skills' / 'linked' / 'l.md').symlink_to(home / '.claude' / 'skills' / 'alpha' / 'SKILL.md')
+    migration.config_apply(migration.config_preview(pid, 1, source['id'], migration.skill_report(source['id'])['importable'])['token'])
+
+    def reasons():
+        item = next(i for i in migration.retirement_report()['profiles'] if i['name'] == 'first')
+        return {b for c in item['candidates'] for b in c['blockers']}
+
+    before = reasons()
+    assert {'skill-coverage-incomplete', 'plugins-reinstall-required'} <= before
+    share.sync(pid)
+    after = reasons()
+    assert 'skill-coverage-incomplete' not in after and 'plugins-reinstall-required' not in after
+    assert 'configuration-verification-unavailable' not in after and 'source-verification-unavailable' not in after
+
+
 def test_share_refuses_a_foreign_link_and_non_claude_profiles(sandbox):
     import agent_profile_share as share
     home, _ = sandbox

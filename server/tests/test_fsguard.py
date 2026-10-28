@@ -397,3 +397,29 @@ def test_profile_file_allows_only_the_sanctioned_shared_links(tmp_path, monkeypa
     for relative in ('secrets/secret.txt', 'settings.json'):
         with pytest.raises(fsguard.FsDenied):
             fsguard.profile_file(root, relative)
+
+
+def test_profile_file_reads_through_a_shared_item_that_is_itself_a_link(tmp_path, monkeypatch):
+    home = tmp_path / 'home'
+    repo = home / 'repo' / 'delta'
+    repo.mkdir(parents=True)
+    (repo / 'SKILL.md').write_text('# delta\n')
+    (repo / 'sub').mkdir()
+    (repo / 'sub' / 'note.md').write_text('note')
+    glob = home / '.claude'
+    (glob / 'skills').mkdir(parents=True)
+    (glob / 'skills' / 'delta').symlink_to(repo)
+    monkeypatch.setenv('HOME', str(home))
+    root = tmp_path / 'profile'
+    (root / 'skills').mkdir(parents=True)
+    (root / 'skills' / 'delta').symlink_to(fsguard.global_claude_dir() / 'skills' / 'delta')
+    assert fsguard.read_profile_bytes(root, 'skills/delta/SKILL.md') == b'# delta\n'
+    assert fsguard.read_profile_bytes(root, 'skills/delta/sub/note.md') == b'note'
+    # The chain still never escapes the user's home.
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    (outside / 'SKILL.md').write_text('x')
+    (glob / 'skills' / 'evil').symlink_to(outside)
+    (root / 'skills' / 'evil').symlink_to(fsguard.global_claude_dir() / 'skills' / 'evil')
+    with pytest.raises(fsguard.FsDenied):
+        fsguard.read_profile_bytes(root, 'skills/evil/SKILL.md')
