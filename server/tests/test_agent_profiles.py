@@ -577,6 +577,36 @@ def test_retirement_recomputes_the_recorded_skill_selection(sandbox):
     assert 'skill-coverage-incomplete' in reasons  # still reported: the linked package was not imported
 
 
+def test_retirement_keeps_each_source_receipts_apart(sandbox):
+    home, _ = sandbox
+    native = home / '.claude' / 'projects' / 'sample'
+    native.mkdir(parents=True)
+    owner = home / '.clauth'
+    for name in ('first', 'second'):
+        folder = owner / 'profiles' / name
+        folder.mkdir(parents=True)
+        (folder / 'config.toml').write_text('')
+    ids = ['50000000-0000-4000-8000-' + str(i).zfill(12) for i in range(2)]
+    for sid in ids:
+        (native / (sid + '.jsonl')).write_text('{"type":"user"}\n')
+    (owner / 'session_profiles.json').write_text(json.dumps({'sessions': {ids[0]: {'known': 'first'}, ids[1]: {'known': 'second'}}}))
+    sources = {s['name']: s for s in migration.source_list()['sources'] if s['name'] in ('first', 'second')}
+    for name, sid in (('first', ids[0]), ('second', ids[1])):
+        pid = profiles.create(name + '-profile', 'claude')['id']
+        migration.config_apply(migration.config_preview(pid, 1, sources[name]['id'])['token'])
+        row = next(r for r in migration.conversation_list(sources[name]['id'])['conversations'] if r['conversation'] == sid)
+        revision = profiles.get(pid)['revision']  # the configuration import advanced it
+        migration.conversation_apply(migration.conversation_preview(pid, revision, sources[name]['id'], row['id'])['token'])
+        migration.mark_resumed(pid, sid)
+    report = {i['name']: i for i in migration.retirement_report()['profiles']}
+    for name in ('first', 'second'):
+        # The second source is evaluated after the first one's conversation loop ran.
+        assert 'configuration-not-migrated' not in report[name]['blockers'], name
+        assert 'conversation-not-imported' not in report[name]['blockers'], name
+        assert 'conversation-resume-not-verified' not in report[name]['blockers'], name
+        assert report[name]['candidates'], name
+
+
 def test_plugin_review_uses_fixed_snapshot_and_refuses_tampering(sandbox, monkeypatch):
     import agent_profile_plugins as plugins
     home, _ = sandbox
