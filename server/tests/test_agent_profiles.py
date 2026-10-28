@@ -426,6 +426,67 @@ def test_conversation_listing_does_not_load_transcripts_or_cap_total_size(sandbo
     assert migration.retirement_report()['ready_to_retire'] is False
 
 
+def test_retirement_verifies_only_recent_conversations_and_lists_unowned(sandbox):
+    home, _ = sandbox
+    native = home / '.claude' / 'projects' / 'sample'
+    native.mkdir(parents=True)
+    owner = home / '.clauth'
+    folder = owner / 'profiles' / 'first'
+    folder.mkdir(parents=True)
+    (folder / 'config.toml').write_text('')
+    ids = ['30000000-0000-4000-8000-' + str(i).zfill(12) for i in range(8)]
+    for number, sid in enumerate(ids):
+        path = native / (sid + '.jsonl')
+        path.write_text('{"type":"user"}\n')
+        os.utime(path, (1_000_000 + number, 1_000_000 + number))
+    # The last conversation has no recorded owner: excluded, listed as a limitation.
+    (owner / 'session_profiles.json').write_text(json.dumps({'sessions': {sid: {'known': 'first'} for sid in ids[:7]}}))
+    source = next(s for s in migration.source_list()['sources'] if s['name'] == 'first')
+    pid = profiles.create('recent-test', 'claude')['id']
+
+    def report():
+        return next(i for i in migration.retirement_report()['profiles'] if i['name'] == 'first')
+
+    first = report()
+    assert 'conversation-resume-not-verified' in first['blockers'] and 'conversation-not-imported' in first['blockers']
+    assert first['accepted_limitations'] == ['conversation-ownership-unresolved']
+    for row in migration.conversation_list(source['id'])['conversations']:
+        if row['ownership'] == 'known':
+            migration.conversation_apply(migration.conversation_preview(pid, 1, source['id'], row['id'])['token'])
+    second = report()
+    assert 'conversation-not-imported' not in second['blockers'] and 'conversation-resume-not-verified' in second['blockers']
+    for sid in ids[2:7]:  # the five newest owned conversations
+        migration.mark_resumed(pid, sid)
+    third = report()
+    assert 'conversation-resume-not-verified' not in third['blockers'] and 'conversation-not-imported' not in third['blockers']
+
+
+def test_local_bulk_import_needs_confirmation_skips_unowned_and_reports(sandbox, monkeypatch):
+    import agent_profile_local as local
+    home, _ = sandbox
+    native = home / '.claude' / 'projects' / 'sample'
+    native.mkdir(parents=True)
+    owner = home / '.clauth'
+    folder = owner / 'profiles' / 'first'
+    folder.mkdir(parents=True)
+    (folder / 'config.toml').write_text('')
+    ids = ['40000000-0000-4000-8000-' + str(i).zfill(12) for i in range(4)]
+    for sid in ids:
+        (native / (sid + '.jsonl')).write_text('{"type":"user"}\n')
+    (owner / 'session_profiles.json').write_text(json.dumps({'sessions': {ids[0]: {'known': 'first'}, ids[1]: {'known': 'first'}, ids[2]: 'contested'}}))
+    pid = profiles.create('bulk-test', 'claude')['id']
+    monkeypatch.setattr('sys.stdin', type('NoTty', (), {'isatty': lambda self: False})())
+    with pytest.raises(profiles.Refused):
+        local.import_conversations(pid, 'first')
+    assert not (profiles.root(pid) / 'projects').exists()
+    result = local.import_conversations(pid, 'first', yes=True)
+    assert (result['imported'], result['already_present'], result['failed'], result['excluded_unowned']) == (2, 0, [], 2)
+    again = local.import_conversations(pid, 'first', yes=True)
+    assert (again['imported'], again['already_present']) == (0, 2)
+    with pytest.raises(profiles.Refused):
+        local.import_conversations(pid, 'missing', yes=True)
+
+
 def test_plugin_review_uses_fixed_snapshot_and_refuses_tampering(sandbox, monkeypatch):
     import agent_profile_plugins as plugins
     home, _ = sandbox

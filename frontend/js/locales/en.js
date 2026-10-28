@@ -3,6 +3,17 @@
 // 원문을 고치면 여기 키도 같이 고친다 — scripts/check_i18n.py가 빠진 키와 남은 키를 잡는다.
 // 본문은 JSON이어야 한다(검사 스크립트와 서버가 json으로 읽는다).
 window.__VT_I18N = {
+  "API 키·엔드포인트를 테스트 프로필로 복제": "Copy the API key and endpoint into a test profile",
+  "가져올 대화 {n}개 ({mib} MiB) · 소유 불명으로 제외 {skipped}개 · 원본은 그대로 둡니다": "{n} conversations to import ({mib} MiB) · {skipped} excluded for unknown ownership · originals stay untouched",
+  "대화형 터미널이 아니면 --yes로 검토를 마쳤음을 밝혀야 합니다": "Without an interactive terminal, pass --yes to confirm you reviewed the plan",
+  "소유가 확인된 대화를 일괄 가져옵니다": "Import conversations with a confirmed owner in bulk",
+  "시작한 세션의 검증 상태": "Verification state of a launched session",
+  "원본 설정을 가져옵니다(검토 후 적용)": "Import the source configuration (applied after review)",
+  "원본을 찾지 못했습니다": "Source not found",
+  "원본을 하나로 특정하지 못했습니다. 원본 ID를 쓰세요": "The source is ambiguous. Use its source ID",
+  "적용할까요? [y/N] ": "Apply? [y/N] ",
+  "취소했습니다": "Cancelled",
+  "프로필로 세션을 시작합니다": "Start a session with a profile",
   "이전 권한 설정을 확인하지 못해 이어서 시작하지 않았습니다. CLI에서 직접 재개해 설정을 확인하세요": "Could not verify the previous permissions, so the conversation was not resumed. Resume in the CLI to check the settings.",
   "이전 권한 설정을 이 실행 방식으로 정확히 복원할 수 없습니다. CLI에서 직접 재개하세요": "This launch method cannot restore the previous permissions exactly. Resume directly in the CLI.",
   "권한 기록이 변경됐습니다. 새로고침 후 다시 시도하세요": "The permission record changed. Refresh and try again.",

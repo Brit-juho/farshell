@@ -27,6 +27,9 @@ from i18n import tr
 MAX_FILES = 2000
 MAX_BYTES = 64 * 1024 * 1024
 MAX_FIRST_RECORD = 1024 * 1024
+# Retirement needs a verified native resume only for the newest conversations of a
+# source; older owned ones must be imported with a matching source hash.
+RETIRE_VERIFY_RECENT = 5
 _SID = re.compile(r"[a-fA-F0-9-]{32,36}")
 _SECRET = re.compile(r"(?i)(api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|authorization)")
 
@@ -429,7 +432,7 @@ def conversations(source_id):
                     ownership = 'contested' if owner == 'contested' else 'unknown'
             key = profiles.digest(str(path).encode())[:32]
             result[key] = {"id": key, "ownership": ownership, "conversation": sid, "relative": rel, "root": root,
-                           "bytes": size, "tool": source["tool"],
+                           "bytes": size, "mtime": path.stat().st_mtime, "tool": source["tool"],
                            "rollout_id": path.stem[-36:] if source['tool'] == 'codex' else sid,
                            "history_base": (first.get('payload') or {}).get('history_base') if source['tool'] == 'codex' else None}
     return result
@@ -747,12 +750,12 @@ def retirement_report():
             blockers.append('configuration-not-migrated')
         elif all(reasons for _, reasons in candidates):
             blockers.extend(min((reasons for _, reasons in candidates), key=len))
-        for row in conversations(source['id']).values():
-            if row['ownership'] in ('unknown', 'contested'):
-                blockers.append('conversation-ownership-unresolved')
-                continue
+        rows = sorted(conversations(source['id']).values(), key=lambda r: r['mtime'], reverse=True)
+        owned = [r for r in rows if r['ownership'] not in ('unknown', 'contested')]
+        unowned = len(rows) - len(owned)
+        for position, row in enumerate(owned):
             receipts = [r for r in imports if r['kind'] == 'conversation' and r['manifest'].get('conversation') == row['conversation']
-                        and r['manifest'].get('bundle_complete') and r['verified']]
+                        and r['manifest'].get('bundle_complete')]
             matches = []
             if receipts:
                 # Hash only conversations that have a receipt, streaming.
@@ -761,9 +764,12 @@ def retirement_report():
                 except fsguard.FsDenied:
                     current = None
                 matches = [r for r in receipts if r['manifest'].get('sha256') == current]
-            if not matches:
-                blockers.append('conversation-resume-not-verified')
-        limitations = []
+            if position < RETIRE_VERIFY_RECENT:
+                if not any(r['verified'] for r in matches):
+                    blockers.append('conversation-resume-not-verified')
+            elif not matches:
+                blockers.append('conversation-not-imported')
+        limitations = ['conversation-ownership-unresolved'] if unowned else []
         try:
             from usage.api_profiles import ALIBABA
             own = tomllib.loads(fsguard.read_profile_bytes(source['root'], 'config.toml').decode())
