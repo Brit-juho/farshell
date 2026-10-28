@@ -59,6 +59,9 @@ def import_config(profile_id, reference, *, include_private=False, skip_linked_s
 
 def import_conversations(profile_id, reference, *, yes=False):
     profile = profiles.get(profile_id)
+    from agent_profile_share import is_history_shared
+    if is_history_shared(profile["id"]):
+        raise profiles.Refused(tr("대화 기록을 전역과 공유하는 프로필은 대화를 가져올 필요가 없습니다"))
     source = _source(reference, profile["tool"])
     rows = sorted(migration.conversations(source["id"]).values(), key=lambda r: r["mtime"], reverse=True)
     eligible = [r for r in rows if r["ownership"] not in _SKIPPED]
@@ -96,6 +99,13 @@ def probe(profile_id):
 def adopt(profile_id):
     profile = profiles.get(profile_id)
     return profiles.adopt(profile["id"], profile["revision"])
+
+
+def share(profile_id):
+    """Link the profile to the global ~/.claude (replacing identical copies; the rest is kept)."""
+    import agent_profile_share
+    profile = profiles.get(profile_id)
+    return agent_profile_share.sync(profile["id"])
 
 
 def recover(profile_id):

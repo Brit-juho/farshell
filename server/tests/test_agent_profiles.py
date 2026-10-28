@@ -731,6 +731,106 @@ def test_long_lived_token_import_from_clauth_takes_only_a_real_mint(sandbox):
     assert not long_lived.configured(pid)
 
 
+def _global_claude(home):
+    base = home / '.claude'
+    for kind, names in (('skills', ('alpha', 'beta')), ('agents', ('a1.md',)), ('commands', ('c1.md',)), ('hooks', ('h1.sh',))):
+        (base / kind).mkdir(parents=True, exist_ok=True)
+        for name in names:
+            path = base / kind / name
+            if '.' in name:
+                path.write_text('global ' + name)
+            else:
+                path.mkdir(exist_ok=True)
+                (path / 'SKILL.md').write_text('# ' + name + '\n')
+    (base / 'CLAUDE.md').write_text('global instructions\n')
+    (base / 'plugins').mkdir(exist_ok=True)
+    (base / 'plugins' / 'installed_plugins.json').write_text('{}')
+    (base / 'projects' / 'sample').mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def test_share_links_global_entries_and_keeps_the_profiles_own_extensions(sandbox):
+    import agent_profile_share as share
+    home, _ = sandbox
+    base = _global_claude(home)
+    pid = profiles.create('share-test', 'claude')['id']
+    root = profiles.root(pid)
+    (root / 'skills' / 'alpha').mkdir(parents=True)  # an identical copy of the global one
+    (root / 'skills' / 'alpha' / 'SKILL.md').write_text('# alpha\n')
+    (root / 'skills' / 'beta').mkdir()
+    (root / 'skills' / 'beta' / 'SKILL.md').write_text('# beta, edited for this account\n')
+    (root / 'skills' / 'mine').mkdir()
+    (root / 'skills' / 'mine' / 'SKILL.md').write_text('# account only\n')
+    (root / 'projects' / 'old').mkdir(parents=True)
+    (root / 'projects' / 'old' / 'x.jsonl').write_text('imported copy')
+    (root / 'CLAUDE.md').write_text('account specific instructions\n')
+    report = share.sync(pid)
+    link = lambda path: os.readlink(path) if path.is_symlink() else None
+    assert link(root / 'skills' / 'alpha') == str(base / 'skills' / 'alpha') and 'skills/alpha' in report['moved_aside']
+    assert not (root / 'skills' / 'beta').is_symlink() and 'skills/beta' in report['kept_own']
+    assert (root / 'skills' / 'mine' / 'SKILL.md').read_text() == '# account only\n' and not (root / 'skills' / 'mine').is_symlink()
+    assert not (root / 'CLAUDE.md').is_symlink() and 'CLAUDE.md' in report['kept_own']
+    for kind, name in (('agents', 'a1.md'), ('commands', 'c1.md'), ('hooks', 'h1.sh')):
+        assert link(root / kind / name) == str(base / kind / name)
+    assert link(root / 'plugins') == str(base / 'plugins') and link(root / 'projects') == str(base / 'projects')
+    assert share.is_history_shared(pid)
+    moved = list((root / '.pre-share').glob('*/*'))  # nothing is deleted: replaced copies sit aside
+    assert any(m.name == 'projects' and (m / 'old' / 'x.jsonl').read_text() == 'imported copy' for m in moved)
+    # Stable on a second run, picks up new global entries and drops links whose target vanished.
+    (base / 'skills' / 'gamma').mkdir()
+    (base / 'skills' / 'gamma' / 'SKILL.md').write_text('# gamma\n')
+    (base / 'agents' / 'a1.md').unlink()
+    again = share.sync(pid, replace=False)
+    assert 'skills/gamma' in again['linked'] and 'agents/a1.md' in again['removed_stale'] and not again['moved_aside']
+    assert fsguard.read_profile_bytes(root, 'skills/gamma/SKILL.md') == b'# gamma\n'
+
+
+def test_share_refuses_a_foreign_link_and_non_claude_profiles(sandbox):
+    import agent_profile_share as share
+    home, _ = sandbox
+    _global_claude(home)
+    pid = profiles.create('foreign-link', 'claude')['id']
+    root = profiles.root(pid)
+    root.mkdir(parents=True, exist_ok=True)
+    elsewhere = home / 'elsewhere'
+    elsewhere.mkdir()
+    (root / 'projects').symlink_to(elsewhere)
+    report = share.sync(pid)
+    assert 'projects' in report['conflicts'] and os.readlink(root / 'projects') == str(elsewhere)
+    assert not share.is_history_shared(pid)
+    with pytest.raises(profiles.Refused):
+        share.sync(profiles.create('codex-share', 'codex')['id'])
+
+
+def test_shared_history_resume_needs_no_import_but_is_still_certified(sandbox):
+    import agent_profile_share as share
+    home, _ = sandbox
+    base = _global_claude(home)
+    owner = home / '.clauth' / 'profiles' / 'first'
+    owner.mkdir(parents=True)
+    (owner / 'config.toml').write_text('')
+    sid = '60000000-0000-4000-8000-000000000001'
+    (base / 'projects' / 'sample' / (sid + '.jsonl')).write_text('{"type":"user"}\n')
+    (home / '.clauth' / 'session_profiles.json').write_text(json.dumps({'sessions': {sid: {'known': 'first'}}}))
+    source = next(s for s in migration.source_list()['sources'] if s['name'] == 'first')
+    pid = profiles.create('shared-resume', 'claude')['id']
+    with pytest.raises(profiles.Refused):
+        migration.require_conversation(pid, sid)  # not shared yet: an import receipt is required
+    migration.config_apply(migration.config_preview(pid, 1, source['id'])['token'])
+    share.sync(pid)
+    row = next(r for r in migration.conversation_list(source['id'])['conversations'] if r['conversation'] == sid)
+    with pytest.raises(profiles.Refused):
+        migration.conversation_preview(pid, profiles.get(pid)['revision'], source['id'], row['id'])  # nothing to copy
+    migration.require_conversation(pid, sid)  # recorded, so a verified resume can be certified
+    with pytest.raises(profiles.Refused):
+        migration.require_conversation(pid, '60000000-0000-4000-8000-000000000099')  # not in the shared history
+    item = next(i for i in migration.retirement_report()['profiles'] if i['name'] == 'first')
+    assert 'conversation-resume-not-verified' in item['blockers'] and 'conversation-not-imported' not in item['blockers']
+    migration.mark_resumed(pid, sid)
+    item = next(i for i in migration.retirement_report()['profiles'] if i['name'] == 'first')
+    assert 'conversation-resume-not-verified' not in item['blockers']
+
+
 def test_plugin_review_uses_fixed_snapshot_and_refuses_tampering(sandbox, monkeypatch):
     import agent_profile_plugins as plugins
     home, _ = sandbox

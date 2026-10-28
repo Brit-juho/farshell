@@ -27,6 +27,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Compact HUD reset times and chip spacing; show only usage in GPU chips.
 
 ### Added
+- `fsh profile share <id>`: managed Claude profiles link the global `~/.claude` skills, agents, commands, hooks, plugins, `CLAUDE.md` and conversation history instead of keeping copies, like clauth's per-session tree. Profile-only extensions, the login/token and `settings.json` stay separate; replaced copies move to `.pre-share/`. `fsguard` accepts only a link to exactly the same-named global entry. History-sharing profiles skip conversation import and are certified by a verified resume.
 - Long-lived Claude tokens for managed profiles (`fsh profile token set|status|clear`): a `claude setup-token` mint is stored write-only (0600) and injected as `CLAUDE_CODE_OAUTH_TOKEN` for that profile's sessions, so sessions cannot be signed out by racing on a single-use refresh chain. `--from-clauth <name>` reuses a mint clauth already holds (refreshing logins are refused). Expiry warning 30 days ahead; usage and account identity are unavailable with this token and are reported as limitations.
 - `fsh profile import-config`, `import-conversations`, `launch`, `session`, `probe` and `adopt`: reviewed bulk imports and
   verification from the owner's shell, sharing the web flow's checks. Clauth replacement readiness now asks for a verified

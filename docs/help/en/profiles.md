@@ -54,6 +54,17 @@ most recently modified conversations of each source; older ones count once they 
 imported with a matching source hash, and excluded unowned conversations are listed
 as a limitation. Rollback refuses to overwrite files edited after import.
 
+Global sharing: `fsh profile share <id>` links the global `~/.claude` skills, agents, commands,
+hooks, plugins, `CLAUDE.md` and conversation history (`projects`) into the profile folder. The global
+copy is the source, so installing or updating once reaches every profile. What stays per profile is the
+login or token, `.claude.json`, `settings.json`, and any real extension (skill, agent, command, hook)
+that has no global twin or differs from it. A copy identical to the global one is replaced by a link and
+the original is moved under `.pre-share/`; nothing is deleted. Plugins share their install location and
+what differs per account is the enable/disable setting. A profile that shares the history needs no
+conversation import and only has its resume verified. Inside a profile folder only a link to exactly the
+same-named global entry is accepted, and removing the global folder affects every profile at once. New
+global entries are linked automatically when a profile is launched.
+
 Long-lived token: register a refresh-token-free `claude setup-token` value with
 `fsh profile token set <id>` and the profile's sessions run on it instead of a login. With nothing
 to refresh, sessions cannot be signed out by racing on one refresh chain. The token is kept

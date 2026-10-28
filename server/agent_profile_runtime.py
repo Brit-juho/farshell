@@ -262,6 +262,13 @@ def launch(profile_id, revision, cwd, conversation=None):
     directory = fsguard.resolve_under_roots(cwd, check_hidden=False)
     if not directory.is_dir():
         raise profiles.Refused(tr("작업 디렉터리를 찾지 못했습니다"))
+    if profile["tool"] == "claude":
+        # Add links to anything new in the global directory; replacing real entries is `fsh profile share`.
+        import agent_profile_share
+        try:
+            agent_profile_share.sync(profile_id, replace=False)
+        except profiles.Refused:
+            pass  # no global directory: the profile simply has nothing to link
     if not auth_status(profile_id)["authenticated"]:
         raise profiles.Refused(tr("프로필에 먼저 로그인하세요"))
     if conversation is not None:

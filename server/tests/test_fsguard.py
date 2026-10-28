@@ -358,3 +358,42 @@ def test_check_denylist_stays_a_pure_name_check():
     """routes/git.py 가 쓰는 이름 판정은 점 디렉토리 규칙과 무관하다."""
     assert fsguard._check_denylist(Path(".cache/x/y")) is None
     assert fsguard._check_denylist(Path(".git/config")) is None
+
+
+def test_profile_file_allows_only_the_sanctioned_shared_links(tmp_path, monkeypatch):
+    home = tmp_path / 'home'
+    glob = home / '.claude'
+    (glob / 'skills' / 'alpha').mkdir(parents=True)
+    (glob / 'skills' / 'alpha' / 'SKILL.md').write_text('# alpha\n')
+    (glob / 'projects' / 'p').mkdir(parents=True)
+    (glob / 'projects' / 'p' / 'c.jsonl').write_text('{"x":1}\n')
+    (glob / 'CLAUDE.md').write_text('global\n')
+    (glob / 'other').mkdir()
+    (glob / 'other' / 'secret.txt').write_text('no')
+    monkeypatch.setenv('HOME', str(home))
+    root = tmp_path / 'profile'
+    (root / 'skills').mkdir(parents=True)
+    expected = fsguard.global_claude_dir()
+    (root / 'skills' / 'alpha').symlink_to(expected / 'skills' / 'alpha')
+    (root / 'projects').symlink_to(expected / 'projects')
+    (root / 'CLAUDE.md').symlink_to(expected / 'CLAUDE.md')
+    # Exactly the sanctioned links work, for checks and for reads (opened from the global side).
+    for relative in ('skills/alpha/SKILL.md', 'projects/p/c.jsonl', 'CLAUDE.md'):
+        assert fsguard.profile_file(root, relative).exists()
+    assert fsguard.read_profile_bytes(root, 'projects/p/c.jsonl') == b'{"x":1}\n'
+    assert fsguard.hash_profile_file(root, 'CLAUDE.md', 1024)[1] == 7
+    # A link to another global entry, to anywhere else, or with a relative target is refused.
+    (root / 'agents').symlink_to(expected / 'other')
+    (root / 'plugins').symlink_to(tmp_path)
+    (root / 'skills' / 'beta').symlink_to(expected / 'other')
+    (root / 'commands').mkdir()
+    (root / 'commands' / 'rel').symlink_to('../../home/.claude/other')
+    for relative in ('agents/secret.txt', 'plugins/home', 'skills/beta/secret.txt', 'commands/rel/secret.txt'):
+        with pytest.raises(fsguard.FsDenied):
+            fsguard.profile_file(root, relative)
+    # Names outside the sanctioned set stay link-free, even when the target is a global entry.
+    (root / 'secrets').symlink_to(expected / 'other')
+    (root / 'settings.json').symlink_to(expected / 'CLAUDE.md')
+    for relative in ('secrets/secret.txt', 'settings.json'):
+        with pytest.raises(fsguard.FsDenied):
+            fsguard.profile_file(root, relative)

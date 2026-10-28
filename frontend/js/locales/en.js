@@ -3,6 +3,10 @@
 // 원문을 고치면 여기 키도 같이 고친다 — scripts/check_i18n.py가 빠진 키와 남은 키를 잡는다.
 // 본문은 JSON이어야 한다(검사 스크립트와 서버가 json으로 읽는다).
 window.__VT_I18N = {
+  "전역 ~/.claude 폴더를 확인하지 못했습니다": "Could not verify the global ~/.claude folder",
+  "공유 연결은 Claude 프로필에서만 쓸 수 있습니다": "Shared links work only on Claude profiles",
+  "대화 기록을 전역과 공유하는 프로필은 대화를 가져올 필요가 없습니다": "A profile that shares the global conversation history does not need conversations imported",
+  "공유 대화 기록에서 그 대화를 찾지 못했습니다": "That conversation was not found in the shared history",
   "clauth 프로필 이름이 올바르지 않습니다": "The clauth profile name is not valid",
   "그 clauth 프로필에는 장기 토큰이 없습니다": "That clauth profile has no long-lived token",
   "clauth 장기 토큰 파일의 형식이 올바르지 않습니다": "The clauth long-lived token file has an invalid format",

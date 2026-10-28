@@ -241,6 +241,42 @@ def private_profile_directory(path: Path, *, create: bool = True) -> Path:
     return current
 
 
+# Entries a managed profile may share with the user's global ~/.claude. Everything else in a
+# profile root stays link-free. A sanctioned link points at exactly the global entry of the same
+# name (an absolute path written by agent_profile_share), so a profile can never be made to read
+# or write anywhere else through one.
+SHARED_WHOLE = ("plugins", "projects")          # the directory itself is the link
+SHARED_ITEMS = ("skills", "agents", "commands", "hooks")   # a real directory of per-item links
+SHARED_FILES = ("CLAUDE.md",)
+
+
+def global_claude_dir() -> Path:
+    import vt_paths
+    return Path(os.path.realpath(vt_paths.user_home())) / ".claude"
+
+
+def shared_link_target(parts: tuple, index: int) -> Optional[Path]:
+    """Where the link named by parts[:index+1] must point if it is a sanctioned shared link."""
+    if not parts:
+        return None
+    name = parts[0]
+    if index == 0 and (name in SHARED_WHOLE or name in SHARED_FILES):
+        return global_claude_dir() / name
+    if index == 1 and name in SHARED_ITEMS:
+        return global_claude_dir() / name / parts[1]
+    return None
+
+
+def _shared_link_ok(base: Path, parts: tuple, index: int) -> bool:
+    expected = shared_link_target(parts, index)
+    if expected is None:
+        return False
+    try:
+        return os.readlink(base.joinpath(*parts[: index + 1])) == str(expected) and os.path.lexists(expected)
+    except OSError:
+        return False
+
+
 def profile_file(root: Path, relative: str) -> Path:
     """Only an approved native-relative path, without link traversal."""
     import stat
@@ -251,19 +287,39 @@ def profile_file(root: Path, relative: str) -> Path:
     if base.is_symlink() or not base.is_dir():
         raise FsDenied(tr("프로필 디렉터리를 확인하지 못했습니다"))
     target = base
-    for component in rel.parts:
+    shared = False
+    for index, component in enumerate(rel.parts):
         target /= component
         if target.is_symlink():
-            raise FsDenied(tr("프로필 파일에 심볼릭 링크가 있습니다"))
+            if not _shared_link_ok(base, rel.parts, index):
+                raise FsDenied(tr("프로필 파일에 심볼릭 링크가 있습니다"))
+            shared = True
         if target.exists():
             info = target.stat()
             if info.st_uid != os.getuid() or (stat.S_ISREG(info.st_mode) and info.st_nlink != 1):
                 raise FsDenied(tr("프로필 파일 소유권을 확인하지 못했습니다"))
             if not (stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode)):
                 raise FsDenied(tr("프로필 특수 파일은 지원하지 않습니다"))
-    if not target.resolve().is_relative_to(base.resolve()):
+    # A shared entry lives in the user's own home; the profile root bound applies to everything else.
+    resolved = target.resolve()
+    if shared:
+        import vt_paths
+        if not resolved.is_relative_to(Path(os.path.realpath(vt_paths.user_home()))):
+            raise FsDenied(tr("프로필 파일이 허용된 경로 밖에 있습니다"))
+    elif not resolved.is_relative_to(base.resolve()):
         raise FsDenied(tr("프로필 파일이 허용된 경로 밖에 있습니다"))
     return target
+
+
+def _shared_root(root: Path, relative: str) -> Path:
+    """The directory to open from: the global one when the path runs through a shared link."""
+    parts = Path(relative).parts
+    base = Path(root)
+    if parts and (base / parts[0]).is_symlink():
+        return global_claude_dir()
+    if len(parts) > 1 and parts[0] in SHARED_ITEMS and (base / parts[0] / parts[1]).is_symlink():
+        return global_claude_dir()
+    return base
 
 
 @contextlib.contextmanager
@@ -271,7 +327,7 @@ def _profile_stream(root: Path, relative: str, limit: int):
     """Open one profile file with NOFOLLOW at every component; yield (stream, size)."""
     import stat
     profile_file(root, relative)
-    fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    fd = os.open(_shared_root(root, relative), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         parts = Path(relative).parts
         for part in parts[:-1]:

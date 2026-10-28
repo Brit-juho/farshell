@@ -49,7 +49,7 @@ def main():
     run.add_argument("--resume")
     sess = subs.add_parser("session", help=tr("시작한 세션의 검증 상태(서버가 기록한 값)"))
     sess.add_argument("name")
-    for action in ("probe", "adopt", "recover"):
+    for action in ("probe", "adopt", "recover", "share"):
         subs.add_parser(action).add_argument("profile")
     tok = subs.add_parser("token", help=tr("장기 토큰(claude setup-token) 등록·상태·삭제"))
     tok.add_argument("op", choices=("set", "status", "clear"))
@@ -93,6 +93,8 @@ def main():
             result = local.adopt(args.profile)
         elif args.action == "recover":
             result = local.recover(args.profile)
+        elif args.action == "share":
+            result = local.share(args.profile)
         elif args.action == "status":
             result = agent_profile_runtime.auth_status(args.profile)
         elif args.action == "create":
