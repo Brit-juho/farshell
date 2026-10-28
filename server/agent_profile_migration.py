@@ -797,16 +797,16 @@ def retirement_report():
         owned = [r for r in rows if r['ownership'] not in ('unknown', 'contested')]
         unowned = len(rows) - len(owned)
         for position, row in enumerate(owned):
-            receipts = [r for r in imports if r['kind'] == 'conversation' and r['manifest'].get('conversation') == row['conversation']
-                        and r['manifest'].get('bundle_complete')]
+            row_receipts = [r for r in imports if r['kind'] == 'conversation' and r['manifest'].get('conversation') == row['conversation']
+                            and r['manifest'].get('bundle_complete')]
             matches = []
-            if receipts:
+            if row_receipts:
                 # Hash only conversations that have a receipt, streaming.
                 try:
                     current = fsguard.hash_profile_file(row['root'], row['relative'], MAX_BYTES)[0]
                 except fsguard.FsDenied:
                     current = None
-                matches = [r for r in receipts if r['manifest'].get('sha256') == current]
+                matches = [r for r in row_receipts if r['manifest'].get('sha256') == current]
             if position < RETIRE_VERIFY_RECENT:
                 if not any(r['verified'] for r in matches):
                     blockers.append('conversation-resume-not-verified')
