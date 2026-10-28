@@ -45,10 +45,14 @@ Renaming preserves login and configuration revision. Archiving preserves login a
 conversations and refuses running profiles or unfinished jobs. Restore archived
 profiles from the separate archived list.
 
-Conversation import checks source hashes and ownership. Unknown or contested
-clauth shared conversations cannot be imported. Copy completion, native Codex
-reading and verified native resume are separate results. Rollback refuses to
-overwrite files edited after import.
+`fsh profile import-config` and `import-conversations` run the same reviewed flow
+in bulk from a terminal. Conversation import checks source hashes and ownership.
+Unknown or contested clauth shared conversations cannot be imported. Copy
+completion, native Codex reading and verified native resume are separate results.
+The replacement readiness check requires a verified native resume only for the five
+most recently modified conversations of each source; older ones count once they are
+imported with a matching source hash, and excluded unowned conversations are listed
+as a limitation. Rollback refuses to overwrite files edited after import.
 
 `VT_USAGE_PROVIDER=native` reads managed native OAuth quotas without falling back
 to the clauth feed or default Codex credentials. Exact official HTTPS endpoints
