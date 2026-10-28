@@ -262,6 +262,19 @@ def _configuration(source, skill_names=None, private_root=None):
     return writes, stamps, sorted(set(warnings)), modes
 
 
+def recorded_skill_names(source, manifest):
+    """The skill selection a config import used, so later checks recompute the same files.
+
+    Receipts written before the selection was recorded and imported without full coverage
+    used the importable set (packages with links cannot be imported at all).
+    """
+    if manifest.get('complete_skill_coverage'):
+        return None
+    if 'skill_names' in manifest:
+        return manifest['skill_names']
+    return skill_report(source['id'])['importable']
+
+
 def skill_report(source_id):
     """Split source skills into importable names and ones whose tree holds links.
 
@@ -374,6 +387,7 @@ def config_apply(token):
                 profiles.job_finish(jid, 'running', {'files': results})
         manifest = {"files": results, "warnings": warnings,
                     "complete_skill_coverage": plan.get('skill_names') is None,
+                    "skill_names": plan.get('skill_names'),
                     "private_configuration": bool(plan.get('include_private')),
                     "source_fingerprint": profiles.digest(json.dumps(stamps, sort_keys=True).encode())}
         result = {"status": "ok", "files": results, "warnings": warnings, "credentials_copied": False,
@@ -739,7 +753,8 @@ def retirement_report():
                 reasons.append('profile-recovery-required')
             root = profiles.root(pid)
             try:
-                _, stamps, _, _ = _configuration(source, private_root=root if config['manifest'].get('private_configuration') else None)
+                _, stamps, _, _ = _configuration(source, recorded_skill_names(source, config['manifest']),
+                                                 root if config['manifest'].get('private_configuration') else None)
                 current = profiles.digest(json.dumps(stamps, sort_keys=True).encode())
                 if current != config['manifest'].get('source_fingerprint'):
                     reasons.append('source-changed-after-import')
