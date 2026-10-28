@@ -62,6 +62,9 @@ and never appears in a screen, API or log. Its lifetime is assumed to be about a
 server guarantee) and a warning starts 30 days before. It has no usage or account scope, so usage
 percentages and account identity cannot be checked; the readiness report lists that as a limitation.
 It cannot be combined with API authentication.
+`fsh profile token set <id> --from-clauth <name>` imports the long-lived token clauth already holds
+(`session-token.static.json`). A login with a refresh token or a scope beyond inference is not copied,
+because two holders would race on one chain; clauth's file is left untouched.
 
 `VT_USAGE_PROVIDER=native` reads managed native OAuth quotas without falling back
 to the clauth feed or default Codex credentials. Exact official HTTPS endpoints
