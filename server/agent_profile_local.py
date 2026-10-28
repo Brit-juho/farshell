@@ -96,3 +96,10 @@ def probe(profile_id):
 def adopt(profile_id):
     profile = profiles.get(profile_id)
     return profiles.adopt(profile["id"], profile["revision"])
+
+
+def recover(profile_id):
+    """Close interrupted jobs after re-reading the native files; never replays them."""
+    import agent_profile_config
+    profile = profiles.get(profile_id)
+    return agent_profile_config.recover(profile["id"], profile["revision"])

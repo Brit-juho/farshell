@@ -48,7 +48,7 @@ def main():
     run.add_argument("--resume")
     sess = subs.add_parser("session", help=tr("시작한 세션의 검증 상태(서버가 기록한 값)"))
     sess.add_argument("name")
-    for action in ("probe", "adopt"):
+    for action in ("probe", "adopt", "recover"):
         subs.add_parser(action).add_argument("profile")
     args = parser.parse_args()
     try:
@@ -69,6 +69,8 @@ def main():
             result = local.probe(args.profile)
         elif args.action == "adopt":
             result = local.adopt(args.profile)
+        elif args.action == "recover":
+            result = local.recover(args.profile)
         elif args.action == "status":
             result = agent_profile_runtime.auth_status(args.profile)
         elif args.action == "create":

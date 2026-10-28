@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Fixed
+- `fsh profile login` closes its job when the terminal hangs up or is terminated, so the profile is no longer left blocked; `fsh profile recover <id>` clears jobs interrupted by older crashes after re-reading the native files.
 - Profile sessions launched from the owner's shell are now verified by the server itself (a 5-second check of recent `starting` sessions); `fsh profile session` shows the recorded state, since SessionStart evidence lives only in the server's memory.
 - Profile conversation imports, resume checks and rollbacks stream (hash and copy in chunks, verified before the file becomes visible) instead of loading whole files, so transcripts and subagent records beyond 64 MiB import. A conversation bundle may use up to 2 GiB.
 - Listing profile-migration conversations no longer loads whole transcripts or caps the total size, so a
