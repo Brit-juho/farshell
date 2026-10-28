@@ -557,6 +557,26 @@ def test_login_closes_its_job_when_the_terminal_hangs_up_and_recover_clears_inte
         assert db.execute("SELECT state FROM jobs WHERE id=?", (jid,)).fetchone()['state'] == 'interrupted'
 
 
+def test_retirement_recomputes_the_recorded_skill_selection(sandbox):
+    home, _ = sandbox
+    skills = home / '.claude' / 'skills'
+    (skills / 'plain').mkdir(parents=True)
+    (skills / 'plain' / 'SKILL.md').write_text('# plain\n')
+    (skills / 'linked').mkdir()
+    (skills / 'linked' / 'SKILL.md').write_text('# linked\n')
+    (skills / 'linked' / 'shared.md').symlink_to(skills / 'plain' / 'SKILL.md')
+    (home / '.clauth' / 'profiles' / 'first').mkdir(parents=True)
+    (home / '.clauth' / 'profiles' / 'first' / 'config.toml').write_text('')
+    source = next(s for s in migration.source_list()['sources'] if s['name'] == 'first')
+    pid = profiles.create('selection-test', 'claude')['id']
+    selection = migration.skill_report(source['id'])['importable']
+    migration.config_apply(migration.config_preview(pid, 1, source['id'], selection)['token'])
+    item = next(i for i in migration.retirement_report()['profiles'] if i['name'] == 'first')
+    reasons = {b for c in item['candidates'] for b in c['blockers']}
+    assert 'source-verification-unavailable' not in reasons and 'configuration-verification-unavailable' not in reasons
+    assert 'skill-coverage-incomplete' in reasons  # still reported: the linked package was not imported
+
+
 def test_plugin_review_uses_fixed_snapshot_and_refuses_tampering(sandbox, monkeypatch):
     import agent_profile_plugins as plugins
     home, _ = sandbox

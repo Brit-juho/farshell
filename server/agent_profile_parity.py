@@ -163,7 +163,8 @@ def compare(source, profile_id, manifest):
         if _plugins_match(source, base, settings, profile_id):
             resolved.add('plugins-reinstall-required')
     reasons = [w for w in manifest.get('warnings', []) if w not in resolved]
-    writes, _, _, modes = migration._configuration(source, private_root=root if manifest.get('private_configuration') else None)
+    writes, _, _, modes = migration._configuration(source, migration.recorded_skill_names(source, manifest),
+                                                   root if manifest.get('private_configuration') else None)
     migration._preserve_private_helper(writes, root, manifest.get('private_configuration'))
     for name, expected in writes.items():
         path = fsguard.profile_file(root, name)
