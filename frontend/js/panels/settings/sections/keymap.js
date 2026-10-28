@@ -23,7 +23,7 @@ export function renderKeymapSection(rerender) {
   note.className = 'vt-set-note';
   note.textContent = t('단축키는 이 기기 종류에 저장됩니다. Mac·Windows·Linux·모바일 설정은 서로 독립적입니다.');
   frag.appendChild(note);
-  const option = selectControl('terminal.optionMode', { unicode: t('문자 입력 (기존 동작)'), meta: t('터미널 Meta 키') });
+  const option = selectControl('terminal.optionMode', { unicode: t('문자 입력'), meta: t('터미널 Meta 키') });
   frag.appendChild(row(t('Mac Option 키'), option, t('Meta 모드는 Option 조합을 터미널 명령에 사용합니다. 일반 특수문자 입력은 문자 입력 모드를 선택하세요.')));
   for (const b of keymap.list()) {
     const control = document.createElement('div');

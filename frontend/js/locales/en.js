@@ -1777,7 +1777,7 @@ window.__VT_I18N = {
     "one": "Couldn't open 1 session in the group, left its pane empty: {names}",
     "other": "Couldn't open {n} sessions in the group, left their panes empty: {names}"
   },
-  "문자 입력 (기존 동작)": "Type characters (default)",
+  "문자 입력": "Type characters",
   "문장당 속도": "Speed per sentence",
   "미등록": "Not registered",
   "미등록/불일치: {missing}— 'fsh hooks install'": "missing or mismatched: {missing}— run 'fsh hooks install'",
