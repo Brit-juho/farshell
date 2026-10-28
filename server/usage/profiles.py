@@ -157,6 +157,14 @@ class NativeProfileProvider:
                "auth_status": "unavailable", "fetch_status": "Unavailable", "has_live_session": False,
                "rolling_token": False, "stale": False, "windows": [], "fallback": None,
                "checked_at": now, "quota_scope": "account", "identity_state": "unverified"}
+        from agent_profile_token import configured as token_configured, status as token_status
+        if token_configured(self.id):
+            # A setup-token mint has no usage/profile scope: the provider answers 403, so none is asked.
+            info = token_status(self.id)
+            row.update(auth_ok=not info['expired'], auth_status='expired' if info['expired'] else 'static-token',
+                       fetch_status='Unsupported', token=info)
+            self.cache = row
+            return dict(row)
         if api_mode:
             from .api_profiles import fetch, RejectedKey
             try:

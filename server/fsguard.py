@@ -50,7 +50,7 @@ MAX_ENTRIES = 1000
 # 루트 안에 있어도 절대 내보내지 않는다. 실제로 ~/GitHub/services/*/.env 가 존재한다.
 
 DENY_NAMES = {
-    ".farshell-provider.json", ".farshell-hooks-disabled.json", ".credentials.json",
+    ".farshell-provider.json", ".farshell-hooks-disabled.json", ".farshell-token.json", ".credentials.json",
     ".env", ".vt.env", ".netrc", ".npmrc", ".pypirc", ".htpasswd",
     "credentials", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519",
     "secrets.json", "serviceaccount.json", ".git-credentials",

@@ -54,6 +54,15 @@ most recently modified conversations of each source; older ones count once they 
 imported with a matching source hash, and excluded unowned conversations are listed
 as a limitation. Rollback refuses to overwrite files edited after import.
 
+Long-lived token: register a refresh-token-free `claude setup-token` value with
+`fsh profile token set <id>` and the profile's sessions run on it instead of a login. With nothing
+to refresh, sessions cannot be signed out by racing on one refresh chain. The token is kept
+write-only in a 0600 file, passed as `CLAUDE_CODE_OAUTH_TOKEN` to that profile's sessions only,
+and never appears in a screen, API or log. Its lifetime is assumed to be about a year (not a
+server guarantee) and a warning starts 30 days before. It has no usage or account scope, so usage
+percentages and account identity cannot be checked; the readiness report lists that as a limitation.
+It cannot be combined with API authentication.
+
 `VT_USAGE_PROVIDER=native` reads managed native OAuth quotas without falling back
 to the clauth feed or default Codex credentials. Exact official HTTPS endpoints
 support DeepSeek and OpenRouter balances, plus Z.ai and MiniMax international

@@ -49,6 +49,14 @@ Codex 업데이트는 네이티브 제거·재설치로 진행합니다.
 충족으로 봅니다. 소유 불명 대화는 제외 사실을 한계로 표시합니다. 가져오기 뒤 사용자가 수정한
 파일은 되돌리기로 덮어쓰지 않습니다.
 
+장기 토큰: refresh token이 없는 `claude setup-token` 값을 `fsh profile token set <id>`로 등록하면
+로그인 대신 그 토큰으로 세션을 띄웁니다. 갱신할 것이 없어서 여러 세션이 같은 refresh 체인을 두고
+다투다 로그아웃되는 일이 없습니다. 토큰은 권한 0600 파일에 쓰기 전용으로 두고 그 프로필의
+세션에만 `CLAUDE_CODE_OAUTH_TOKEN`으로 전달하며 어떤 화면·API·로그에도 나오지 않습니다.
+수명은 약 1년으로 가정하며(서버가 보증한 값이 아님) 30일 전부터 경고합니다. 이 토큰에는
+사용량·계정 조회 범위가 없어 사용량 %와 계정 신원은 확인할 수 없고, 은퇴 판정의 한계로 표시합니다.
+API 인증이 있는 프로필과는 함께 쓸 수 없습니다.
+
 `VT_USAGE_PROVIDER=native`는 관리 프로필의 네이티브 OAuth 사용량을 읽으며
 clauth 피드나 기본 Codex 자격증명을 대신 사용하지 않습니다. 정확히 일치하는 공식
 HTTPS endpoint의 DeepSeek·OpenRouter 잔액, Z.ai·MiniMax international quota를

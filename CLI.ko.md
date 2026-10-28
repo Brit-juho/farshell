@@ -90,7 +90,7 @@ fsh shell-init zsh     # 셸 init 스니펫 출력 (출력한 스니펫을 ~/.zs
 
 ## 네이티브 CLI 실행 프로필
 
-`fsh profile list`, `create <name> --tool claude|codex [--account <id>] [--test]`, `login <id>`, `status <id>`, `rename <id> <name>`, `archive <id>`, `restore <id>`, `sources`, `retirement`, `import-config <id> <원본> [--private] [--yes]`, `import-conversations <id> <원본> [--yes]`, `launch <id> <cwd> [--resume <대화>]`, `session <이름>`(서버가 기록한 상태), `probe <id>`, `adopt <id>`, `recover <id>`(중단된 작업 정리)로 전용 설정 루트를 관리합니다. 가져오기 명령은 요약을 보여 주고 확인을 받으며(`--yes`는 검토를 마쳤다는 뜻) 웹 흐름과 같은 검사를 거칩니다. 로그인은 해당 호스트에서 대화형으로 실행합니다. 계정 라벨은 논리적 그룹이며 신원 증명이 아닙니다. 검토 가져오기·테스트 제한·현재 대체 범위는 [실행 프로필](docs/help/profiles.md)을 참고하세요.
+`fsh profile list`, `create <name> --tool claude|codex [--account <id>] [--test]`, `login <id>`, `status <id>`, `rename <id> <name>`, `archive <id>`, `restore <id>`, `sources`, `retirement`, `import-config <id> <원본> [--private] [--yes]`, `import-conversations <id> <원본> [--yes]`, `launch <id> <cwd> [--resume <대화>]`, `session <이름>`(서버가 기록한 상태), `probe <id>`, `adopt <id>`, `recover <id>`(중단된 작업 정리), `token set|status|clear <id>`(`claude setup-token`으로 만든 장기 토큰. `set`은 입력이 보이지 않게 받고, `--stdin`이면 한 줄을 읽음)로 전용 설정 루트를 관리합니다. 가져오기 명령은 요약을 보여 주고 확인을 받으며(`--yes`는 검토를 마쳤다는 뜻) 웹 흐름과 같은 검사를 거칩니다. 로그인은 해당 호스트에서 대화형으로 실행합니다. 계정 라벨은 논리적 그룹이며 신원 증명이 아닙니다. 검토 가져오기·테스트 제한·현재 대체 범위는 [실행 프로필](docs/help/profiles.md)을 참고하세요.
 
 ## `fsh start` / `fsh mobile` 옵션
 

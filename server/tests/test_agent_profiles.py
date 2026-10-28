@@ -607,6 +607,88 @@ def test_retirement_keeps_each_source_receipts_apart(sandbox):
         assert report[name]['candidates'], name
 
 
+def test_long_lived_token_is_validated_stored_privately_and_injected_only_for_its_profile(sandbox, monkeypatch):
+    import agent_profile_runtime as runtime
+    import agent_profile_token as long_lived
+    mint = 'sk-ant-oat01-' + 'A1b2' * 12
+    pid = profiles.create('token-test', 'claude')['id']
+    other = profiles.create('other-test', 'claude')['id']
+    for bad in ('', '   ', 'sk-ant-api03-' + 'x' * 50, 'not-a-token' * 8, 'sk-ant-oat01-short', 'sk-ant-oat01-' + 'a b' * 20):
+        with pytest.raises(profiles.Refused):
+            long_lived.set_token(pid, bad)
+    assert not (profiles.root(pid) / long_lived.FILENAME).exists()
+    monkeypatch.setenv('CLAUDE_CODE_OAUTH_TOKEN', 'ambient-should-never-pass')
+    assert 'CLAUDE_CODE_OAUTH_TOKEN' not in runtime.environment(pid)
+    summary = long_lived.set_token(pid, '  ' + mint + '\n')
+    assert summary['configured'] and 360 <= summary['days_left'] <= 365 and not summary['expiring']
+    assert mint not in json.dumps(summary) and mint not in json.dumps(long_lived.status(pid))
+    path = profiles.root(pid) / long_lived.FILENAME
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert runtime.environment(pid)['CLAUDE_CODE_OAUTH_TOKEN'] == mint
+    assert 'CLAUDE_CODE_OAUTH_TOKEN' not in runtime.environment(other)
+    monkeypatch.setattr(runtime, 'run', lambda profile_id, args, timeout=30: (0, b'{"loggedIn": true, "authMethod": "oauth_token"}'))
+    status = runtime.auth_status(pid)
+    assert status['auth_mode'] == 'long-lived-token' and status['authenticated'] and 'token set' in status['login_command']
+    assert mint not in json.dumps(status)
+    # Authentication binding changes when the token does, and never contains it.
+    first = runtime.authentication_fingerprint(pid)
+    long_lived.set_token(pid, 'sk-ant-oat01-' + 'Z9y8' * 12)
+    assert first and runtime.authentication_fingerprint(pid) != first and mint not in runtime.authentication_fingerprint(pid)
+    monkeypatch.setattr('sys.stdin', type('Tty', (), {'isatty': lambda self: True})())
+    monkeypatch.setattr(runtime, 'validate_native_files', lambda profile_id: None)
+    with pytest.raises(profiles.Refused):
+        runtime.login(pid)  # a token profile is re-registered with `token set`, not logged in again
+    long_lived.clear(pid)
+    assert not path.exists() and 'CLAUDE_CODE_OAUTH_TOKEN' not in runtime.environment(pid)
+
+
+def test_long_lived_token_expiry_warning_and_usage_row(sandbox):
+    import agent_profile_token as long_lived
+    from usage import profiles as usage_profiles
+    pid = profiles.create('expiry-test', 'claude')['id']
+    long_lived.set_token(pid, 'sk-ant-oat01-' + 'Q7w8' * 12)
+    path = profiles.root(pid) / long_lived.FILENAME
+    value = json.loads(path.read_text())
+    value['expires_at'] = time.time() + 10 * 86400
+    path.write_text(json.dumps(value))
+    assert long_lived.status(pid)['expiring'] and not long_lived.status(pid)['expired']
+    row = usage_profiles.NativeProfileProvider(pid).snapshot()
+    assert row['auth_status'] == 'static-token' and row['fetch_status'] == 'Unsupported' and row['windows'] == []
+    assert 'sk-ant' not in json.dumps(row)
+    value['expires_at'] = time.time() - 5
+    path.write_text(json.dumps(value))
+    assert long_lived.status(pid)['expired']
+    assert usage_profiles.NativeProfileProvider(pid).snapshot()['auth_status'] == 'expired'
+
+
+def test_long_lived_token_refuses_api_profiles_and_codex(sandbox):
+    import agent_profile_token as long_lived
+    codex = profiles.create('codex-token', 'codex')['id']
+    with pytest.raises(profiles.Refused):
+        long_lived.set_token(codex, 'sk-ant-oat01-' + 'A1b2' * 12)
+
+
+def test_retirement_reports_token_profiles_as_limitations_not_unclearable_blockers(sandbox):
+    import agent_profile_token as long_lived
+    home, _ = sandbox
+    (home / '.claude').mkdir(parents=True, exist_ok=True)
+    folder = home / '.clauth' / 'profiles' / 'first'
+    folder.mkdir(parents=True)
+    (folder / 'config.toml').write_text('')
+    source = next(s for s in migration.source_list()['sources'] if s['name'] == 'first')
+    oauth = profiles.create('oauth-profile', 'claude')['id']
+    mint = profiles.create('mint-profile', 'claude')['id']
+    for pid in (oauth, mint):
+        migration.config_apply(migration.config_preview(pid, 1, source['id'])['token'])
+    long_lived.set_token(mint, 'sk-ant-oat01-' + 'M3n4' * 12)
+    item = next(i for i in migration.retirement_report()['profiles'] if i['name'] == 'first')
+    by_profile = {c['profile_id']: set(c['blockers']) for c in item['candidates']}
+    assert {'native-refresh-not-certified', 'native-usage-not-certified'} <= by_profile[oauth]
+    assert not {'native-refresh-not-certified', 'native-usage-not-certified', 'source-account-not-certified'} & by_profile[mint]
+    assert 'native-inference-not-certified' in by_profile[mint]  # a real request is still required
+    assert 'long-lived-token-usage-and-identity-unverified' in item['accepted_limitations']
+
+
 def test_plugin_review_uses_fixed_snapshot_and_refuses_tampering(sandbox, monkeypatch):
     import agent_profile_plugins as plugins
     home, _ = sandbox

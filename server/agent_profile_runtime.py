@@ -56,6 +56,13 @@ def environment(profile_id, project=None, *, record=False):
         from agent_profile_migration import _private_configuration
         raw, _ = _private_configuration(private, profiles.root(profile_id))
         env.update(json.loads(raw)['env'])
+    from agent_profile_token import environment_value
+    token = environment_value(profile_id)
+    if token:
+        if private is not None:
+            raise profiles.Refused(tr("API 인증과 장기 토큰이 함께 설정되어 있습니다. 하나만 남기세요"))
+        # Only the profile's own stored mint reaches the CLI, never an ambient value.
+        env["CLAUDE_CODE_OAUTH_TOKEN"] = token
     return env
 
 
@@ -140,9 +147,16 @@ def auth_status(profile_id):
         # not silently look up the ID in the person's production ~/.vt.
         command = ['env', 'HOME=' + str(vt_paths.user_home()),
                    *[key + '=' + os.environ[key] for key in ('VT_CONFIG', 'VT_STATE_DIR', 'VT_RUN_DIR') if os.environ.get(key)], *command]
-    return {"profile_id": profile_id, "authenticated": logged_in,
-            "identity_state": "unverified", "checked_at": time.time(),
-            "login_command": shlex.join(command)}
+    result = {"profile_id": profile_id, "authenticated": logged_in,
+              "identity_state": "unverified", "checked_at": time.time(),
+              "login_command": shlex.join(command), "auth_mode": "login"}
+    from agent_profile_token import configured as token_configured, status as token_status
+    if token_configured(profile_id):
+        # `auth status` only sees the injected variable: it proves a token is present,
+        # not that the provider still accepts it (that takes a real request: probe).
+        result.update(auth_mode="long-lived-token", token=token_status(profile_id),
+                      login_command=shlex.join([*command[:-2], "token", "set", profile_id]))
+    return result
 
 
 def login(profile_id):
@@ -152,6 +166,9 @@ def login(profile_id):
     if not sys.stdin.isatty():
         raise profiles.Refused(tr("프로필 로그인은 대화형 터미널에서 실행하세요"))
     profiles.require_active(profile)
+    from agent_profile_token import configured as token_configured
+    if token_configured(profile_id):
+        raise profiles.Refused(tr("장기 토큰 프로필입니다. 다시 등록하려면 fsh profile token set을 쓰세요"))
     profiles.require_no_pending_jobs(profile_id)
     require_inactive(profile_id)
     args = ["auth", "login"] if profile["tool"] == "claude" else ["login", "--device-auth"]
@@ -420,6 +437,9 @@ def probe(profile_id, revision):
 def authentication_fingerprint(profile_id):
     from agent_profile_secret import read, FILENAME
     root = profiles.root(profile_id)
+    from agent_profile_token import FILENAME as TOKEN_FILE, configured as token_configured
+    if token_configured(profile_id):
+        return profiles.digest(fsguard.read_profile_bytes(root, TOKEN_FILE))
     private = read(root)
     if private is not None:
         from usage.api_profiles import credential, declares_api_credentials
