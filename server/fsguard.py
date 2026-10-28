@@ -303,18 +303,55 @@ def read_profile_head(root: Path, relative: str, head: int = 1024 * 1024) -> tup
         return stream.read(head), size
 
 
-def hash_profile_file(root: Path, relative: str, limit: int) -> tuple[str, int]:
-    """Streaming SHA-256 of a profile file; refuses a file larger than `limit`."""
+class FsChanged(FsDenied):
+    """A profile file no longer matches the digest that was reviewed."""
+
+
+def hash_profile_file(root: Path, relative: str, limit: int, prefix: Optional[int] = None) -> tuple:
+    """Streaming SHA-256 -> (full digest, size, digest of the first `prefix` bytes or None)."""
     import hashlib
-    digest = hashlib.sha256()
+    full = hashlib.sha256()
+    head = hashlib.sha256() if prefix is not None else None
     with _profile_stream(root, relative, limit) as (stream, _size):
         total = 0
         while chunk := stream.read(1024 * 1024):
+            if head is not None and total < prefix:
+                head.update(chunk[:prefix - total])
             total += len(chunk)
             if total > limit:
                 raise FsDenied(tr("프로필 파일이 너무 큽니다"))
-            digest.update(chunk)
-    return digest.hexdigest(), total
+            full.update(chunk)
+    return full.hexdigest(), total, (head.hexdigest() if head is not None and total >= prefix else None)
+
+
+def copy_profile_file(root: Path, relative: str, destination: Path, expected_sha256: str, limit: int, mode: int = 0o600) -> None:
+    """Stream a profile file to `destination`, verifying its digest before it becomes visible."""
+    import hashlib
+    import tempfile
+    digest = hashlib.sha256()
+    fd, temporary = tempfile.mkstemp(prefix=".profile-", dir=destination.parent)
+    try:
+        with os.fdopen(fd, "wb") as out, _profile_stream(root, relative, limit) as (stream, _size):
+            total = 0
+            while chunk := stream.read(1024 * 1024):
+                total += len(chunk)
+                if total > limit:
+                    raise FsDenied(tr("프로필 파일이 너무 큽니다"))
+                digest.update(chunk)
+                out.write(chunk)
+            out.flush()
+            os.fsync(out.fileno())
+        if digest.hexdigest() != expected_sha256:
+            raise FsChanged(tr("프로필 파일이 검토한 내용과 다릅니다"))
+        os.chmod(temporary, mode)
+        os.replace(temporary, destination)
+        directory_fd = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
 
 
 def profile_tree(root: Path, *, limit: int = 2000):

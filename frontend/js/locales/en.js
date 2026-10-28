@@ -3,6 +3,8 @@
 // 원문을 고치면 여기 키도 같이 고친다 — scripts/check_i18n.py가 빠진 키와 남은 키를 잡는다.
 // 본문은 JSON이어야 한다(검사 스크립트와 서버가 json으로 읽는다).
 window.__VT_I18N = {
+  "프로필 파일이 검토한 내용과 다릅니다": "The profile file differs from what was reviewed",
+  "링크가 든 스킬은 빼고 가져옵니다(커버리지는 불완전로 남음)": "Leave out skills that contain links (coverage stays incomplete)",
   "API 키·엔드포인트를 테스트 프로필로 복제": "Copy the API key and endpoint into a test profile",
   "가져올 대화 {n}개 ({mib} MiB) · 소유 불명으로 제외 {skipped}개 · 원본은 그대로 둡니다": "{n} conversations to import ({mib} MiB) · {skipped} excluded for unknown ownership · originals stay untouched",
   "대화형 터미널이 아니면 --yes로 검토를 마쳤음을 밝혀야 합니다": "Without an interactive terminal, pass --yes to confirm you reviewed the plan",

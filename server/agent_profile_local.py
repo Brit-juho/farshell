@@ -40,13 +40,17 @@ def _locked(profile_id):
     return config_io.locked(profiles.root(profile_id) / ".profile-operation")
 
 
-def import_config(profile_id, reference, *, include_private=False, yes=False):
+def import_config(profile_id, reference, *, include_private=False, skip_linked_skills=False, yes=False):
     profile = profiles.get(profile_id)
     source = _source(reference, profile["tool"])
     # skill_names=None copies every skill, the only choice that counts as complete coverage.
-    plan = migration.config_preview(profile["id"], profile["revision"], source["id"], None, include_private)
+    skills, left_out = None, []
+    if skip_linked_skills:
+        report = migration.skill_report(source["id"])
+        skills, left_out = report["importable"], report["blocked"]
+    plan = migration.config_preview(profile["id"], profile["revision"], source["id"], skills, include_private)
     summary = {"files": plan["files"], "warnings": plan["warnings"], "private_api_configuration_copied": plan["private_api_configuration_copied"],
-               "credentials_copied": plan["credentials_copied"]}
+               "credentials_copied": plan["credentials_copied"], "skills_left_out_for_links": left_out}
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     _confirm(yes)
     with _locked(profile["id"]):

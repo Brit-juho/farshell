@@ -487,6 +487,26 @@ def test_local_bulk_import_needs_confirmation_skips_unowned_and_reports(sandbox,
         local.import_conversations(pid, 'missing', yes=True)
 
 
+def test_skill_report_separates_skills_that_contain_links(sandbox):
+    home, _ = sandbox
+    skills = home / '.claude' / 'skills'
+    (skills / 'plain').mkdir(parents=True)
+    (skills / 'plain' / 'SKILL.md').write_text('# plain\n')
+    (skills / 'linked').mkdir()
+    (skills / 'linked' / 'SKILL.md').write_text('# linked\n')
+    (skills / 'linked' / 'shared.md').symlink_to(skills / 'plain' / 'SKILL.md')
+    (home / '.clauth' / 'profiles' / 'first').mkdir(parents=True)
+    (home / '.clauth' / 'profiles' / 'first' / 'config.toml').write_text('')
+    source = next(s for s in migration.source_list()['sources'] if s['name'] == 'first')
+    report = migration.skill_report(source['id'])
+    assert report == {'importable': ['plain'], 'blocked': ['linked']}
+    pid = profiles.create('skill-test', 'claude')['id']
+    with pytest.raises(fsguard.FsDenied):
+        migration.config_preview(pid, 1, source['id'])
+    plan = migration.config_preview(pid, 1, source['id'], report['importable'])
+    assert any(f['path'].startswith('skills/plain/') for f in plan['files'])
+
+
 def test_plugin_review_uses_fixed_snapshot_and_refuses_tampering(sandbox, monkeypatch):
     import agent_profile_plugins as plugins
     home, _ = sandbox
@@ -567,6 +587,37 @@ def test_claude_conversation_bundle_copies_sidecars_and_rejects_source_changes(s
     (profiles.root(pid) / sidecar.relative_to(source_root)).write_text('changed target')
     with pytest.raises(ValueError):
         migration.require_conversation(pid, sid)
+
+
+def test_large_conversation_is_streamed_beyond_the_memory_bound(sandbox, monkeypatch):
+    source_root, source = _native(sandbox)
+    monkeypatch.setattr(migration, 'MAX_BYTES', 1024)  # configuration/memory bound; conversations stream past it
+    sid = '10000000-0000-4000-8000-000000000021'
+    rel = Path('projects/sample') / (sid + '.jsonl')
+    main = source_root / rel
+    main.parent.mkdir(parents=True)
+    main.write_bytes(b'{"type":"user"}\n' + b'a' * 300_000)
+    sidecar = source_root / rel.with_suffix('') / 'subagents' / 'agent-1.jsonl'
+    sidecar.parent.mkdir(parents=True)
+    sidecar.write_bytes(b'{"type":"user"}\n' + b'b' * 200_000)
+    pid = profiles.create('stream-test', 'claude')['id']
+    row = next(r for r in migration.conversation_list(source['id'])['conversations'] if r['conversation'] == sid)
+    plan = migration.conversation_preview(pid, 1, source['id'], row['id'])
+    assert plan['bytes'] > 500_000
+    sidecar.write_bytes(sidecar.read_bytes() + b'c')  # source changes after review: refused, nothing half-copied
+    with pytest.raises(ValueError):
+        migration.conversation_apply(plan['token'])
+    assert not (profiles.root(pid) / rel).exists()
+    migration.conversation_apply(migration.conversation_preview(pid, 1, source['id'], row['id'])['token'])
+    for original in (main, sidecar):
+        assert (profiles.root(pid) / original.relative_to(source_root)).read_bytes() == original.read_bytes()
+    migration.require_conversation(pid, sid)
+    target = profiles.root(pid) / rel
+    target.write_bytes(target.read_bytes() + b'turn')  # appended turns after a verified resume are accepted
+    with pytest.raises(ValueError):
+        migration.require_conversation(pid, sid)
+    migration.mark_resumed(pid, sid)
+    migration.require_conversation(pid, sid)
 
 
 def test_codex_history_base_follows_rollout_filename_not_stable_thread_id(sandbox, monkeypatch):
