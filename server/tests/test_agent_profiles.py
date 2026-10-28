@@ -530,6 +530,33 @@ def test_session_reconcile_runs_server_side_without_creating_a_registry(sandbox,
         runtime.session_recorded('not-a-session')
 
 
+def test_login_closes_its_job_when_the_terminal_hangs_up_and_recover_clears_interrupted(sandbox, monkeypatch):
+    import signal
+    import agent_profile_local as local
+    import agent_profile_runtime as runtime
+    pid = profiles.create('login-hup', 'claude')['id']
+    monkeypatch.setattr('sys.stdin', type('Tty', (), {'isatty': lambda self: True})())
+    monkeypatch.setattr(runtime, 'validate_native_files', lambda profile_id: None)
+    monkeypatch.setattr(runtime, 'require_inactive', lambda profile_id: None)
+    monkeypatch.setattr(runtime, 'binary', lambda tool: '/bin/true')
+    monkeypatch.setattr(runtime, 'environment', lambda profile_id: {})
+    monkeypatch.setattr(runtime.subprocess, 'call', lambda *a, **k: signal.raise_signal(signal.SIGHUP))
+    before = signal.getsignal(signal.SIGHUP)
+    with pytest.raises(SystemExit):
+        runtime.login(pid)
+    assert signal.getsignal(signal.SIGHUP) == before
+    with profiles.database() as db:
+        assert [r['state'] for r in db.execute("SELECT state FROM jobs WHERE profile_id=? AND kind='login'", (pid,))] == ['interrupted']
+    # A job left "running" (older crash) blocks the profile until recover closes it.
+    jid = profiles.job_begin(pid, 'login')
+    with pytest.raises(profiles.Refused):
+        profiles.require_no_pending_jobs(pid)
+    local.recover(pid)
+    profiles.require_no_pending_jobs(pid)
+    with profiles.database() as db:
+        assert db.execute("SELECT state FROM jobs WHERE id=?", (jid,)).fetchone()['state'] == 'interrupted'
+
+
 def test_plugin_review_uses_fixed_snapshot_and_refuses_tampering(sandbox, monkeypatch):
     import agent_profile_plugins as plugins
     home, _ = sandbox

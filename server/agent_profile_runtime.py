@@ -159,10 +159,18 @@ def login(profile_id):
     code = None
     with profiles.database() as db:
         db.execute('DELETE FROM refresh_tests WHERE profile_id=?', (profile_id,))
+    import signal
+
+    def hangup(*_):
+        # A closed terminal window must still close this job, or the profile stays "running".
+        raise SystemExit(129)
+    previous = {sig: signal.signal(sig, hangup) for sig in (signal.SIGHUP, signal.SIGTERM)}
     try:
         code = subprocess.call([binary(profile["tool"]), *args], env=environment(profile_id), cwd=profiles.root(profile_id))
         return code
     finally:
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
         profiles.job_finish(jid, 'done' if code == 0 else 'interrupted', {'exit_code': code})
 
 
