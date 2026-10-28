@@ -91,7 +91,8 @@ class _Run:
             if not self.replace:
                 self.report["kept_own"].append(label)
                 return
-            if not whole and not _same(path, expected):
+            # A global entry may itself be a link to a repository of the user's own: compare the content it serves.
+            if not whole and not _same(path, os.path.realpath(expected)):
                 self.report["kept_own"].append(label)  # the profile's own version wins
                 return
             self.aside(path)

@@ -785,6 +785,27 @@ def test_share_links_global_entries_and_keeps_the_profiles_own_extensions(sandbo
     assert fsguard.read_profile_bytes(root, 'skills/gamma/SKILL.md') == b'# gamma\n'
 
 
+def test_share_replaces_a_copy_of_a_global_entry_that_is_itself_a_link(sandbox):
+    import agent_profile_share as share
+    home, _ = sandbox
+    base = _global_claude(home)
+    repo = home / 'repo' / 'delta'
+    repo.mkdir(parents=True)
+    (repo / 'SKILL.md').write_text('# delta\n')
+    (base / 'skills' / 'delta').symlink_to(repo)
+    pid = profiles.create('link-target', 'claude')['id']
+    root = profiles.root(pid)
+    (root / 'skills' / 'delta').mkdir(parents=True)
+    (root / 'skills' / 'delta' / 'SKILL.md').write_text('# delta\n')  # the copy an earlier import made
+    (root / 'skills' / 'epsilon').mkdir()
+    (root / 'skills' / 'epsilon' / 'SKILL.md').write_text('# differs\n')
+    (base / 'skills' / 'epsilon').symlink_to(repo)
+    report = share.sync(pid)
+    assert os.readlink(root / 'skills' / 'delta') == str(base / 'skills' / 'delta') and 'skills/delta' in report['moved_aside']
+    assert 'skills/epsilon' in report['kept_own'] and not (root / 'skills' / 'epsilon').is_symlink()
+    assert (root / 'skills' / 'delta' / 'SKILL.md').read_text() == '# delta\n'  # CC follows the chain
+
+
 def test_share_refuses_a_foreign_link_and_non_claude_profiles(sandbox):
     import agent_profile_share as share
     home, _ = sandbox

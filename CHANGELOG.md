@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Fixed
+- `fsh profile share` compares a profile's copy with what a global entry serves when that entry is itself a link, so copies of skills kept in a repository are replaced by links instead of being left as stale profile-only versions.
 - Clauth replacement readiness no longer loses the second source's configuration and conversation receipts: a loop variable shadowed the receipts list, so every source after the first looked unmigrated.
 - Clauth replacement readiness recomputes a configuration import with the skill selection that import recorded; before, packages left out for containing links made every later check fail with `source-verification-unavailable`.
 - `fsh profile login` closes its job when the terminal hangs up or is terminated, so the profile is no longer left blocked; `fsh profile recover <id>` clears jobs interrupted by older crashes after re-reading the native files.
