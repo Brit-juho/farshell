@@ -528,6 +528,9 @@ def _conversation_bundle(source_id, row, rows):
 def conversation_preview(profile_id, revision, source_id, conversation_id):
     profile = profiles.get(profile_id)
     profiles.require_revision(profile, revision)
+    from agent_profile_share import is_history_shared
+    if is_history_shared(profile['id']):
+        raise profiles.Refused(tr("대화 기록을 전역과 공유하는 프로필은 대화를 가져올 필요가 없습니다"))
     source = _source(source_id)
     rows = conversations(source_id)
     row = rows.get(profiles.identifier(conversation_id))
@@ -604,7 +607,38 @@ def conversation_apply(token):
         raise
 
 
+def ensure_shared_receipt(profile_id, sid):
+    """Bookkeeping for a resume in a profile that shares the global history.
+
+    The conversation is the global file itself, so there is nothing to copy or hash-pin; this only
+    records that it was opened so a verified resume can be certified like an imported one.
+    """
+    if not _SID.fullmatch(sid):
+        raise profiles.Refused(tr("대화 ID가 올바르지 않습니다"))
+    root = profiles.root(profile_id)
+    base = root / 'projects'
+    found = None
+    for folder in sorted(os.scandir(base), key=lambda e: e.name) if base.is_dir() else []:
+        if folder.is_dir() and (Path(folder.path) / (sid + '.jsonl')).is_file():
+            found = 'projects/' + folder.name + '/' + sid + '.jsonl'
+            break
+    if found is None:
+        raise profiles.Refused(tr("공유 대화 기록에서 그 대화를 찾지 못했습니다"))
+    with profiles.database() as db:
+        for row in db.execute("SELECT manifest FROM receipts WHERE profile_id=? AND kind='conversation'", (profile_id,)):
+            data = json.loads(row['manifest'])
+            if data.get('shared') and data.get('conversation') == sid:
+                return
+    sha, size, _ = fsguard.hash_profile_file(root, found, MAX_CONVERSATION_BYTES)
+    _receipt(profile_id, '', 'conversation', {'conversation': sid, 'relative': found, 'bytes': size, 'sha256': sha,
+                                              'bundle': [], 'bundle_complete': True, 'shared': True})
+
+
 def require_conversation(profile_id, sid):
+    from agent_profile_share import is_history_shared
+    if is_history_shared(profile_id):
+        ensure_shared_receipt(profile_id, sid)
+        return
     with profiles.database() as db:
         rows = db.execute("SELECT manifest,verified FROM receipts WHERE profile_id=? AND kind='conversation'", (profile_id,)).fetchall()
     for row in rows:
@@ -801,6 +835,9 @@ def retirement_report():
             blockers.append('configuration-not-migrated')
         elif all(reasons for _, reasons in candidates):
             blockers.extend(min((reasons for _, reasons in candidates), key=len))
+        from agent_profile_share import is_history_shared
+        shared_pids = {pid for pid, _ in candidates if is_history_shared(pid)}
+        shared_receipts = [r for r in receipts if r['kind'] == 'conversation' and r['manifest'].get('shared') and r['profile_id'] in shared_pids]
         rows = sorted(conversations(source['id']).values(), key=lambda r: r['mtime'], reverse=True)
         owned = [r for r in rows if r['ownership'] not in ('unknown', 'contested')]
         unowned = len(rows) - len(owned)
@@ -815,10 +852,12 @@ def retirement_report():
                 except fsguard.FsDenied:
                     current = None
                 matches = [r for r in row_receipts if r['manifest'].get('sha256') == current]
+            # Where history is shared every conversation is already visible; only the newest need a verified resume.
+            shared_here = [r for r in shared_receipts if r['manifest'].get('conversation') == row['conversation']]
             if position < RETIRE_VERIFY_RECENT:
-                if not any(r['verified'] for r in matches):
+                if not any(r['verified'] for r in matches + shared_here):
                     blockers.append('conversation-resume-not-verified')
-            elif not matches:
+            elif not matches and not shared_pids:
                 blockers.append('conversation-not-imported')
         limitations = ['conversation-ownership-unresolved'] if unowned else []
         if uses_token:
