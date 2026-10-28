@@ -21,6 +21,7 @@ P2(코드 뷰어)는 읽기 전용이지만, 공개 터널 너머로 열리는 A
 from __future__ import annotations
 
 import logging
+import contextlib
 import os
 import re
 from pathlib import Path
@@ -265,8 +266,9 @@ def profile_file(root: Path, relative: str) -> Path:
     return target
 
 
-def read_profile_bytes(root: Path, relative: str, limit: int = 8 * 1024 * 1024) -> bytes:
-    """Open every component relative to a directory fd with NOFOLLOW."""
+@contextlib.contextmanager
+def _profile_stream(root: Path, relative: str, limit: int):
+    """Open one profile file with NOFOLLOW at every component; yield (stream, size)."""
     import stat
     profile_file(root, relative)
     fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
@@ -281,12 +283,38 @@ def read_profile_bytes(root: Path, relative: str, limit: int = 8 * 1024 * 1024) 
             info = os.fstat(stream.fileno())
             if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.getuid() or info.st_size > limit:
                 raise FsDenied(tr("프로필 파일을 안전하게 읽지 못했습니다"))
-            data = stream.read(limit + 1)
-            if len(data) > limit:
-                raise FsDenied(tr("프로필 파일이 너무 큽니다"))
-            return data
+            yield stream, info.st_size
     finally:
         os.close(fd)
+
+
+def read_profile_bytes(root: Path, relative: str, limit: int = 8 * 1024 * 1024) -> bytes:
+    """Open every component relative to a directory fd with NOFOLLOW."""
+    with _profile_stream(root, relative, limit) as (stream, _size):
+        data = stream.read(limit + 1)
+        if len(data) > limit:
+            raise FsDenied(tr("프로필 파일이 너무 큽니다"))
+        return data
+
+
+def read_profile_head(root: Path, relative: str, head: int = 1024 * 1024) -> tuple[bytes, int]:
+    """First `head` bytes and the full size, without loading the whole file."""
+    with _profile_stream(root, relative, 1 << 62) as (stream, size):
+        return stream.read(head), size
+
+
+def hash_profile_file(root: Path, relative: str, limit: int) -> tuple[str, int]:
+    """Streaming SHA-256 of a profile file; refuses a file larger than `limit`."""
+    import hashlib
+    digest = hashlib.sha256()
+    with _profile_stream(root, relative, limit) as (stream, _size):
+        total = 0
+        while chunk := stream.read(1024 * 1024):
+            total += len(chunk)
+            if total > limit:
+                raise FsDenied(tr("프로필 파일이 너무 큽니다"))
+            digest.update(chunk)
+    return digest.hexdigest(), total
 
 
 def profile_tree(root: Path, *, limit: int = 2000):

@@ -26,6 +26,7 @@ from i18n import tr
 
 MAX_FILES = 2000
 MAX_BYTES = 64 * 1024 * 1024
+MAX_FIRST_RECORD = 1024 * 1024
 _SID = re.compile(r"[a-fA-F0-9-]{32,36}")
 _SECRET = re.compile(r"(?i)(api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|authorization)")
 
@@ -388,7 +389,7 @@ def conversations(source_id):
     if source["kind"] == "clauth":
         roots += [source["root"] / "codex-home", home / (".claude" if source["tool"] == "claude" else ".codex")]
     result = {}
-    scanned = total = 0
+    scanned = 0
     owners = {}
     if source['kind'] == 'clauth':
         owner_root = home / '.clauth'
@@ -407,12 +408,11 @@ def conversations(source_id):
                 raise profiles.Refused(tr("대화가 너무 많습니다. 원본 범위를 좁히세요"))
             rel = str(path.relative_to(root))
             path = fsguard.profile_file(root, rel)
-            if path.stat().st_size > MAX_BYTES - total:
-                raise profiles.Refused(tr("대화 파일의 전체 크기가 한도를 넘었습니다"))
-            raw = fsguard.read_profile_bytes(root, rel, MAX_BYTES - total)
-            total += len(raw)
+            # Listing never loads whole transcripts (a shared ~/.claude holds
+            # gigabytes): only the first record and the size are read here.
+            head, size = fsguard.read_profile_head(root, rel, MAX_FIRST_RECORD)
             try:
-                first = json.loads(raw.splitlines()[0])
+                first = json.loads(head.splitlines()[0])
             except (ValueError, IndexError):
                 continue
             sid = path.stem if source["tool"] == "claude" else (first.get("payload") or {}).get("id") if isinstance(first, dict) else None
@@ -429,14 +429,14 @@ def conversations(source_id):
                     ownership = 'contested' if owner == 'contested' else 'unknown'
             key = profiles.digest(str(path).encode())[:32]
             result[key] = {"id": key, "ownership": ownership, "conversation": sid, "relative": rel, "root": root,
-                           "bytes": len(raw), "sha256": profiles.digest(raw), "tool": source["tool"],
+                           "bytes": size, "tool": source["tool"],
                            "rollout_id": path.stem[-36:] if source['tool'] == 'codex' else sid,
                            "history_base": (first.get('payload') or {}).get('history_base') if source['tool'] == 'codex' else None}
     return result
 
 
 def conversation_list(source_id):
-    return {"conversations": [{k: row[k] for k in ("id", "conversation", "bytes", "sha256", "tool", "ownership")} for row in conversations(source_id).values()]}
+    return {"conversations": [{k: row[k] for k in ("id", "conversation", "bytes", "tool", "ownership")} for row in conversations(source_id).values()]}
 
 
 def _conversation_bundle(source_id, row, rows):
@@ -501,9 +501,9 @@ def conversation_preview(profile_id, revision, source_id, conversation_id):
             raise profiles.Refused(tr("대화 부속 파일의 경로가 충돌합니다"))
         targets[relative] = existing
     plan = {'profile_id': profile_id, 'revision': revision, 'source_id': source_id, 'conversation_id': conversation_id,
-            'bundle': bundle, 'targets': targets, 'sha256': row['sha256'], 'relative': row['relative']}
+            'bundle': bundle, 'targets': targets, 'sha256': bundle[row['relative']]['sha256'], 'relative': row['relative']}
     return {**mcp_plans.issue('profile-conversation', plan), 'conversation': row['conversation'],
-            'bytes': sum(i['bytes'] for i in bundle.values()), 'files': len(bundle), 'sha256': row['sha256'], 'source_preserved': True,
+            'bytes': sum(i['bytes'] for i in bundle.values()), 'files': len(bundle), 'sha256': bundle[row['relative']]['sha256'], 'source_preserved': True,
             'warning': tr("대상 계정으로 기존 대화를 보낼 수 있습니다. 조직과 과금 계정을 확인하세요")}
 
 
@@ -545,7 +545,7 @@ def conversation_apply(token):
         if row['tool'] == 'codex':
             from agent_profile_runtime import codex_read
             native_read = codex_read(profile['id'], row['conversation'])
-        manifest = {'conversation': row['conversation'], 'relative': row['relative'], 'bytes': row['bytes'], 'sha256': row['sha256'],
+        manifest = {'conversation': row['conversation'], 'relative': row['relative'], 'bytes': plan['bundle'][row['relative']]['bytes'], 'sha256': plan['sha256'],
                     'bundle': [{k: item[k] for k in ('relative', 'bytes', 'sha256')} for item in plan['bundle'].values()],
                     'bundle_complete': True, 'native_read_verified': native_read}
         result = {'status': 'copied', 'conversation': row['conversation'], 'files': len(plan['bundle']),
@@ -751,8 +751,16 @@ def retirement_report():
             if row['ownership'] in ('unknown', 'contested'):
                 blockers.append('conversation-ownership-unresolved')
                 continue
-            matches = [r for r in imports if r['kind'] == 'conversation' and r['manifest'].get('conversation') == row['conversation']
-                       and r['manifest'].get('sha256') == row['sha256'] and r['manifest'].get('bundle_complete') and r['verified']]
+            receipts = [r for r in imports if r['kind'] == 'conversation' and r['manifest'].get('conversation') == row['conversation']
+                        and r['manifest'].get('bundle_complete') and r['verified']]
+            matches = []
+            if receipts:
+                # Hash only conversations that have a receipt, streaming.
+                try:
+                    current = fsguard.hash_profile_file(row['root'], row['relative'], MAX_BYTES)[0]
+                except fsguard.FsDenied:
+                    current = None
+                matches = [r for r in receipts if r['manifest'].get('sha256') == current]
             if not matches:
                 blockers.append('conversation-resume-not-verified')
         limitations = []
