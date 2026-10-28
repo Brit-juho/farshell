@@ -30,6 +30,9 @@ MAX_FIRST_RECORD = 1024 * 1024
 # Retirement needs a verified native resume only for the newest conversations of a
 # source; older owned ones must be imported with a matching source hash.
 RETIRE_VERIFY_RECENT = 5
+# Conversations are streamed (hashed and copied in chunks), never loaded whole, so their
+# limit is a disk budget rather than the 64 MiB memory bound used for configuration files.
+MAX_CONVERSATION_BYTES = 2 * 1024 * 1024 * 1024
 _SID = re.compile(r"[a-fA-F0-9-]{32,36}")
 _SECRET = re.compile(r"(?i)(api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|authorization)")
 
@@ -259,6 +262,30 @@ def _configuration(source, skill_names=None, private_root=None):
     return writes, stamps, sorted(set(warnings)), modes
 
 
+def skill_report(source_id):
+    """Split source skills into importable names and ones whose tree holds links.
+
+    Packages that contain links (for example bundles installed by another tool)
+    cannot be copied; they are listed so the person reinstalls them per profile.
+    """
+    source = _source(source_id)
+    home = mcp_adapters._home()
+    base = source["root"] if source["kind"] == "native" else home / (".claude" if source["tool"] == "claude" else ".codex")
+    skill_base = base / "skills"
+    ready, blocked = [], []
+    if skill_base.is_dir():
+        for package in sorted(itertools.islice(skill_base.iterdir(), 501)):
+            if not package.is_dir() or not (package / "SKILL.md").is_file():
+                continue
+            try:
+                for _ in fsguard.profile_tree(fsguard.skill_import_source(package, home)):
+                    pass
+                ready.append(package.name)
+            except fsguard.FsDenied:
+                blocked.append(package.name)
+    return {"importable": ready, "blocked": blocked}
+
+
 def _preserve_private_helper(writes, target, include_private):
     if include_private or 'settings.json' not in writes:
         return
@@ -452,11 +479,11 @@ def _conversation_bundle(source_id, row, rows):
             if files[relative]['root'] != str(root):
                 raise profiles.Refused(tr("대화 부속 파일의 경로가 충돌합니다"))
             return
-        raw = fsguard.read_profile_bytes(root, relative, MAX_BYTES - total)
-        total += len(raw)
+        sha, size, _ = fsguard.hash_profile_file(root, relative, MAX_CONVERSATION_BYTES - total)
+        total += size
         if len(files) >= MAX_FILES:
             raise profiles.Refused(tr("대화 파일의 전체 크기가 한도를 넘었습니다"))
-        files[relative] = {'root': str(root), 'relative': relative, 'bytes': len(raw), 'sha256': profiles.digest(raw)}
+        files[relative] = {'root': str(root), 'relative': relative, 'bytes': size, 'sha256': sha}
     def collect(item, depth=0):
         identity = (str(item['root']), item['relative'])
         if identity in visited or depth > 32:
@@ -499,7 +526,7 @@ def conversation_preview(profile_id, revision, source_id, conversation_id):
     targets = {}
     for relative, item in bundle.items():
         target = fsguard.profile_file(target_root, relative)
-        existing = profiles.digest(fsguard.read_profile_bytes(target_root, relative, MAX_BYTES)) if target.exists() else None
+        existing = fsguard.hash_profile_file(target_root, relative, MAX_CONVERSATION_BYTES)[0] if target.exists() else None
         if existing is not None and existing != item['sha256']:
             raise profiles.Refused(tr("대화 부속 파일의 경로가 충돌합니다"))
         targets[relative] = existing
@@ -527,7 +554,7 @@ def conversation_apply(token):
         # Validate the whole destination before starting a multi-file copy.
         for relative, expected in plan['targets'].items():
             target = fsguard.profile_file(root, relative)
-            actual = profiles.digest(fsguard.read_profile_bytes(root, relative, MAX_BYTES)) if target.exists() else None
+            actual = fsguard.hash_profile_file(root, relative, MAX_CONVERSATION_BYTES)[0] if target.exists() else None
             if actual != expected:
                 raise profiles.Refused(tr("대상 설정이 바뀌었습니다. 다시 검토하세요"))
         for relative, item in plan['bundle'].items():
@@ -538,12 +565,12 @@ def conversation_apply(token):
             with config_io.locked(target):
                 if target.exists():
                     raise profiles.Refused(tr("대화 부속 파일의 경로가 충돌합니다"))
-                raw = fsguard.read_profile_bytes(Path(item['root']), relative, MAX_BYTES)
-                if profiles.digest(raw) != item['sha256']:
-                    raise profiles.Refused(tr("대화 원본이 바뀌었습니다. 다시 검토하세요"))
                 written.append({'path': relative, 'sha256': item['sha256'], 'before_sha256': None})
                 profiles.job_finish(jid, 'running', {'files': written})
-                _write_bytes(target, raw)
+                try:
+                    fsguard.copy_profile_file(Path(item['root']), relative, target, item['sha256'], MAX_CONVERSATION_BYTES)
+                except fsguard.FsChanged:
+                    raise profiles.Refused(tr("대화 원본이 바뀌었습니다. 다시 검토하세요"))
         native_read = False
         if row['tool'] == 'codex':
             from agent_profile_runtime import codex_read
@@ -570,20 +597,21 @@ def require_conversation(profile_id, sid):
         data = json.loads(row["manifest"])
         if data["conversation"] != sid:
             continue
-        raw = fsguard.read_profile_bytes(profiles.root(profile_id), data["relative"], MAX_BYTES)
+        target_root = profiles.root(profile_id)
         for item in data.get('bundle', []):
             if item['relative'] == data['relative']:
                 continue
-            companion = fsguard.read_profile_bytes(profiles.root(profile_id), item['relative'], MAX_BYTES)
-            appended = row['verified'] and item['relative'].endswith('.jsonl') and len(companion) >= item['bytes'] and profiles.digest(companion[:item['bytes']]) == item['sha256']
-            if profiles.digest(companion) != item['sha256'] and not appended:
+            full, size, head = fsguard.hash_profile_file(target_root, item['relative'], MAX_CONVERSATION_BYTES, item['bytes'])
+            appended = row['verified'] and item['relative'].endswith('.jsonl') and size >= item['bytes'] and head == item['sha256']
+            if full != item['sha256'] and not appended:
                 raise profiles.Refused(tr("검토한 대화 부속 파일이 바뀌었습니다"))
-        if profiles.digest(raw) == data['sha256']:
+        size = data.get('bytes')
+        full, length, head = fsguard.hash_profile_file(target_root, data["relative"], MAX_CONVERSATION_BYTES, size if type(size) is int else None)
+        if full == data['sha256']:
             return
         # A verified native resume may append turns. Preserve the reviewed
         # prefix; replacement/truncation never becomes an accepted resume.
-        size = data.get('bytes')
-        if row['verified'] and type(size) is int and len(raw) >= size and profiles.digest(raw[:size]) == data['sha256']:
+        if row['verified'] and type(size) is int and length >= size and head == data['sha256']:
             return
     raise profiles.Refused(tr("검토한 대화 이관 기록이 없습니다"))
 
@@ -807,8 +835,7 @@ def rollback(profile_id, revision, job_id, *, preview=False):
     for row in files:
         rel = row['path']
         path = fsguard.profile_file(root, rel)
-        raw = fsguard.read_profile_bytes(root, rel) if path.exists() else None
-        actual = profiles.digest(raw) if raw is not None else None
+        actual = fsguard.hash_profile_file(root, rel, MAX_CONVERSATION_BYTES)[0] if path.exists() else None
         if actual == row.get('before_sha256'):
             continue
         if actual != row['sha256']:
@@ -817,14 +844,14 @@ def rollback(profile_id, revision, job_id, *, preview=False):
         saved = fsguard.read_profile_bytes(backup, profiles.digest(rel.encode()) + '.bak') if before else None
         if saved is not None and profiles.digest(saved) != before:
             raise profiles.Refused(tr("복구 보관본이 바뀌었습니다"))
-        restores.append((path, raw, saved, row.get('before_mode', 0o600)))
+        restores.append((path, actual, saved, row.get('before_mode', 0o600)))
     if preview:
         return {'profile_id': profile_id, 'job_id': job_id, 'files': [r['path'] for r in files], 'source_preserved': True}
     done = []
     try:
         for path, expected, saved, mode in reversed(restores):
             with config_io.locked(path):
-                if (fsguard.read_profile_bytes(root, str(path.relative_to(root))) if path.exists() else None) != expected:
+                if (fsguard.hash_profile_file(root, str(path.relative_to(root)), MAX_CONVERSATION_BYTES)[0] if path.exists() else None) != expected:
                     raise profiles.Refused(tr("가져온 뒤 수정된 파일이 있어 되돌리기를 중단했습니다"))
                 if saved is None:
                     path.unlink()

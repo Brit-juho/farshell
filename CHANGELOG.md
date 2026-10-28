@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Fixed
+- Profile conversation imports, resume checks and rollbacks stream (hash and copy in chunks, verified before the file becomes visible) instead of loading whole files, so transcripts and subagent records beyond 64 MiB import. A conversation bundle may use up to 2 GiB.
 - Listing profile-migration conversations no longer loads whole transcripts or caps the total size, so a
   shared multi-gigabyte `~/.claude` can be scanned; hashes are streamed only when a conversation is reviewed.
 - Resume restores Claude bypass OFF explicitly and Codex YOLO ON/OFF with recorded approval, sandbox and reviewer settings. Profile-scoped Claude hooks and verified native Codex records prevent borrowing current defaults or another profile's policy; missing, corrupt or unsupported settings refuse launch.
