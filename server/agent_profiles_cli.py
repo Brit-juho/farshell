@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import sys
 
@@ -50,6 +51,10 @@ def main():
     sess.add_argument("name")
     for action in ("probe", "adopt", "recover"):
         subs.add_parser(action).add_argument("profile")
+    tok = subs.add_parser("token", help=tr("장기 토큰(claude setup-token) 등록·상태·삭제"))
+    tok.add_argument("op", choices=("set", "status", "clear"))
+    tok.add_argument("profile")
+    tok.add_argument("--stdin", action="store_true", help=tr("토큰 한 줄을 표준입력에서 읽음(터미널이 아닐 때)"))
     args = parser.parse_args()
     try:
         if args.action == "login":
@@ -67,6 +72,20 @@ def main():
             result = agent_profile_runtime.session_recorded(args.name)
         elif args.action == "probe":
             result = local.probe(args.profile)
+        elif args.action == "token":
+            import agent_profile_token as long_lived
+            if args.op == "set":
+                if args.stdin:
+                    raw = sys.stdin.readline()
+                elif sys.stdin.isatty():
+                    raw = getpass.getpass(tr("claude setup-token으로 받은 토큰(입력은 보이지 않습니다): "))
+                else:
+                    raise agent_profiles.Refused(tr("대화형 터미널이 아니면 --stdin으로 토큰을 넘기세요"))
+                result = long_lived.set_token(args.profile, raw)
+            elif args.op == "clear":
+                result = long_lived.clear(args.profile)
+            else:
+                result = long_lived.status(args.profile)
         elif args.action == "adopt":
             result = local.adopt(args.profile)
         elif args.action == "recover":

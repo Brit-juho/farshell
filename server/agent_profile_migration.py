@@ -728,6 +728,7 @@ def retirement_report():
             blockers.append('legacy-runtime-present' if legacy == 'present' else 'legacy-runtime-check-unavailable')
         candidates = []
         resolved_by_profile = {}
+        uses_token = False
         for config in configs:
             pid = config['profile_id']
             reasons = list(config['manifest'].get('warnings', []))
@@ -766,15 +767,22 @@ def retirement_report():
             if not probes:
                 reasons.append('native-inference-not-certified')
             from agent_profile_identity import requires_identity, matches
+            from agent_profile_token import configured as token_configured
+            token_mode = token_configured(pid)
+            uses_token = uses_token or token_mode
             observation = observations.get(pid, {})
             try:
-                if requires_identity(source['id']) and not matches(source['id'], observation, fingerprint):
+                # A long-lived mint cannot read /profile, so its account has no provider proof;
+                # that is reported as a limitation below instead of a blocker no action can clear.
+                if not token_mode and requires_identity(source['id']) and not matches(source['id'], observation, fingerprint):
                     reasons.append('source-account-not-certified')
             except (ValueError, OSError, fsguard.FsDenied):
                 reasons.append('source-account-not-certified')
             from usage.api_profiles import declares_api_credentials
             private = read_private(root)
-            if private is None or not declares_api_credentials(private):
+            if token_mode:
+                pass  # no refresh chain to certify and no usage scope on the mint
+            elif private is None or not declares_api_credentials(private):
                 test = refresh.get(pid, {})
                 if not observation.get('subject') or observation.get('last_fingerprint') != fingerprint or time.time() - observation.get('last_at', 0) > 1800:
                     reasons.append('native-usage-not-certified')
@@ -813,6 +821,8 @@ def retirement_report():
             elif not matches:
                 blockers.append('conversation-not-imported')
         limitations = ['conversation-ownership-unresolved'] if unowned else []
+        if uses_token:
+            limitations.append('long-lived-token-usage-and-identity-unverified')
         try:
             from usage.api_profiles import ALIBABA
             own = tomllib.loads(fsguard.read_profile_bytes(source['root'], 'config.toml').decode())

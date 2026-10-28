@@ -3,6 +3,19 @@
 // 원문을 고치면 여기 키도 같이 고친다 — scripts/check_i18n.py가 빠진 키와 남은 키를 잡는다.
 // 본문은 JSON이어야 한다(검사 스크립트와 서버가 json으로 읽는다).
 window.__VT_I18N = {
+  "API 인증과 장기 토큰이 함께 설정되어 있습니다. 하나만 남기세요": "Both API authentication and a long-lived token are set. Keep only one",
+  "API 인증이 설정된 프로필입니다. 장기 토큰과 함께 쓸 수 없습니다": "This profile uses API authentication and cannot also use a long-lived token",
+  "API 키(sk-ant-api...)입니다. 장기 토큰이 아닙니다": "That is an API key (sk-ant-api...), not a long-lived token",
+  "`claude setup-token`이 만든 값(sk-ant-...)이 아닙니다": "That is not a value made by `claude setup-token` (sk-ant-...)",
+  "claude setup-token으로 받은 토큰(입력은 보이지 않습니다): ": "Token from claude setup-token (input is hidden): ",
+  "대화형 터미널이 아니면 --stdin으로 토큰을 넘기세요": "Without an interactive terminal, pass the token with --stdin",
+  "붙여 넣은 토큰이 없습니다": "No token was pasted",
+  "장기 토큰 프로필입니다. 다시 등록하려면 fsh profile token set을 쓰세요": "This profile uses a long-lived token. Use fsh profile token set to register it again",
+  "장기 토큰(claude setup-token) 등록·상태·삭제": "Register, inspect or remove a long-lived token (claude setup-token)",
+  "장기 토큰은 Claude 프로필에서만 쓸 수 있습니다": "Long-lived tokens work only on Claude profiles",
+  "토큰 길이가 올바르지 않습니다": "The token length is not valid",
+  "토큰 한 줄을 표준입력에서 읽음(터미널이 아닐 때)": "Read the token line from standard input (when not a terminal)",
+  "토큰에 공백이나 제어 문자가 있습니다. 일부만 붙여 넣었을 수 있습니다": "The token contains whitespace or control characters. It may be a partial paste",
   "프로필 파일이 검토한 내용과 다릅니다": "The profile file differs from what was reviewed",
   "링크가 든 스킬은 빼고 가져옵니다(커버리지는 불완전로 남음)": "Leave out skills that contain links (coverage stays incomplete)",
   "API 키·엔드포인트를 테스트 프로필로 복제": "Copy the API key and endpoint into a test profile",
