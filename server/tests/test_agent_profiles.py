@@ -407,6 +407,25 @@ def test_shared_clauth_conversations_use_ownership_map(sandbox):
                 migration.conversation_preview(pid, 1, source['id'], row['id'])
 
 
+def test_conversation_listing_does_not_load_transcripts_or_cap_total_size(sandbox, monkeypatch):
+    home, _ = sandbox
+    native = home / '.claude' / 'projects' / 'sample'
+    native.mkdir(parents=True)
+    owner = home / '.clauth' / 'profiles' / 'first'
+    owner.mkdir(parents=True)
+    (owner / 'config.toml').write_text('')
+    monkeypatch.setattr(migration, 'MAX_BYTES', 2048)
+    ids = ['20000000-0000-4000-8000-' + str(i).zfill(12) for i in range(3)]
+    for sid in ids:
+        # Each file fits the cap but the shared root is far over it in total.
+        (native / (sid + '.jsonl')).write_text('{"type":"user"}\n' + 'x' * 1500)
+    source = next(s for s in migration.source_list()['sources'] if s['name'] == 'first')
+    rows = migration.conversation_list(source['id'])['conversations']
+    assert {r['conversation'] for r in rows} == set(ids)
+    assert all(r['bytes'] > 1500 and 'sha256' not in r for r in rows)
+    assert migration.retirement_report()['ready_to_retire'] is False
+
+
 def test_plugin_review_uses_fixed_snapshot_and_refuses_tampering(sandbox, monkeypatch):
     import agent_profile_plugins as plugins
     home, _ = sandbox
