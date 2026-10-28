@@ -160,7 +160,8 @@ def compare(source, profile_id, manifest):
     if _secrets_match(credential_settings, actual, source_env, effective):
         resolved.add('credentials-not-copied')
     if 'plugins-reinstall-required' in manifest.get('warnings', []):
-        if _plugins_match(source, base, settings, profile_id):
+        from agent_profile_share import plugins_shared
+        if plugins_shared(profile_id) or _plugins_match(source, base, settings, profile_id):
             resolved.add('plugins-reinstall-required')
     reasons = [w for w in manifest.get('warnings', []) if w not in resolved]
     writes, _, _, modes = migration._configuration(source, migration.recorded_skill_names(source, manifest),
