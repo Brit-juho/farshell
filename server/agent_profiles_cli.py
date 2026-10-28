@@ -46,7 +46,7 @@ def main():
     run.add_argument("profile")
     run.add_argument("cwd")
     run.add_argument("--resume")
-    sess = subs.add_parser("session", help=tr("시작한 세션의 검증 상태"))
+    sess = subs.add_parser("session", help=tr("시작한 세션의 검증 상태(서버가 기록한 값)"))
     sess.add_argument("name")
     for action in ("probe", "adopt"):
         subs.add_parser(action).add_argument("profile")
@@ -64,7 +64,7 @@ def main():
         elif args.action == "launch":
             result = local.launch(args.profile, args.cwd, args.resume)
         elif args.action == "session":
-            result = agent_profile_runtime.session_status(args.name)
+            result = agent_profile_runtime.session_recorded(args.name)
         elif args.action == "probe":
             result = local.probe(args.profile)
         elif args.action == "adopt":

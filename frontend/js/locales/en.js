@@ -9,7 +9,7 @@ window.__VT_I18N = {
   "가져올 대화 {n}개 ({mib} MiB) · 소유 불명으로 제외 {skipped}개 · 원본은 그대로 둡니다": "{n} conversations to import ({mib} MiB) · {skipped} excluded for unknown ownership · originals stay untouched",
   "대화형 터미널이 아니면 --yes로 검토를 마쳤음을 밝혀야 합니다": "Without an interactive terminal, pass --yes to confirm you reviewed the plan",
   "소유가 확인된 대화를 일괄 가져옵니다": "Import conversations with a confirmed owner in bulk",
-  "시작한 세션의 검증 상태": "Verification state of a launched session",
+  "시작한 세션의 검증 상태(서버가 기록한 값)": "Verification state of a launched session (as recorded by the server)",
   "원본 설정을 가져옵니다(검토 후 적용)": "Import the source configuration (applied after review)",
   "원본을 찾지 못했습니다": "Source not found",
   "원본을 하나로 특정하지 못했습니다. 원본 ID를 쓰세요": "The source is ambiguous. Use its source ID",
