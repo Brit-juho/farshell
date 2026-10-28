@@ -3,6 +3,12 @@
 // 원문을 고치면 여기 키도 같이 고친다 — scripts/check_i18n.py가 빠진 키와 남은 키를 잡는다.
 // 본문은 JSON이어야 한다(검사 스크립트와 서버가 json으로 읽는다).
 window.__VT_I18N = {
+  "clauth 프로필 이름이 올바르지 않습니다": "The clauth profile name is not valid",
+  "그 clauth 프로필에는 장기 토큰이 없습니다": "That clauth profile has no long-lived token",
+  "clauth 장기 토큰 파일의 형식이 올바르지 않습니다": "The clauth long-lived token file has an invalid format",
+  "갱신되는 로그인이어서 복사하지 않습니다. 장기 토큰만 가져올 수 있습니다": "That is a refreshing login, so it is not copied. Only a long-lived token can be imported",
+  "clauth 장기 토큰이 이미 만료됐거나 만료일이 없습니다": "The clauth long-lived token has expired or has no expiry date",
+  "clauth가 이미 가진 장기 토큰을 가져옴(원본은 그대로)": "Import the long-lived token clauth already holds (the original is left untouched)",
   "API 인증과 장기 토큰이 함께 설정되어 있습니다. 하나만 남기세요": "Both API authentication and a long-lived token are set. Keep only one",
   "API 인증이 설정된 프로필입니다. 장기 토큰과 함께 쓸 수 없습니다": "This profile uses API authentication and cannot also use a long-lived token",
   "API 키(sk-ant-api...)입니다. 장기 토큰이 아닙니다": "That is an API key (sk-ant-api...), not a long-lived token",

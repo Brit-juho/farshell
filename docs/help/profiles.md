@@ -56,6 +56,9 @@ Codex 업데이트는 네이티브 제거·재설치로 진행합니다.
 수명은 약 1년으로 가정하며(서버가 보증한 값이 아님) 30일 전부터 경고합니다. 이 토큰에는
 사용량·계정 조회 범위가 없어 사용량 %와 계정 신원은 확인할 수 없고, 은퇴 판정의 한계로 표시합니다.
 API 인증이 있는 프로필과는 함께 쓸 수 없습니다.
+`fsh profile token set <id> --from-clauth <이름>`은 clauth가 이미 가진 장기 토큰(`session-token.static.json`)을
+가져옵니다. refresh token이 있거나 추론 범위를 넘는 로그인은 두 보관자가 한 체인을 다투게 되므로
+복사하지 않고, clauth 원본은 건드리지 않습니다.
 
 `VT_USAGE_PROVIDER=native`는 관리 프로필의 네이티브 OAuth 사용량을 읽으며
 clauth 피드나 기본 Codex 자격증명을 대신 사용하지 않습니다. 정확히 일치하는 공식

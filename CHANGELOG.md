@@ -27,7 +27,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Compact HUD reset times and chip spacing; show only usage in GPU chips.
 
 ### Added
-- Long-lived Claude tokens for managed profiles (`fsh profile token set|status|clear`): a `claude setup-token` mint is stored write-only (0600) and injected as `CLAUDE_CODE_OAUTH_TOKEN` for that profile's sessions, so sessions cannot be signed out by racing on a single-use refresh chain. Expiry warning 30 days ahead; usage and account identity are unavailable with this token and are reported as limitations.
+- Long-lived Claude tokens for managed profiles (`fsh profile token set|status|clear`): a `claude setup-token` mint is stored write-only (0600) and injected as `CLAUDE_CODE_OAUTH_TOKEN` for that profile's sessions, so sessions cannot be signed out by racing on a single-use refresh chain. `--from-clauth <name>` reuses a mint clauth already holds (refreshing logins are refused). Expiry warning 30 days ahead; usage and account identity are unavailable with this token and are reported as limitations.
 - `fsh profile import-config`, `import-conversations`, `launch`, `session`, `probe` and `adopt`: reviewed bulk imports and
   verification from the owner's shell, sharing the web flow's checks. Clauth replacement readiness now asks for a verified
   native resume only for the five newest conversations per source and lists unowned conversations as a limitation.

@@ -689,6 +689,48 @@ def test_retirement_reports_token_profiles_as_limitations_not_unclearable_blocke
     assert 'long-lived-token-usage-and-identity-unverified' in item['accepted_limitations']
 
 
+def test_long_lived_token_import_from_clauth_takes_only_a_real_mint(sandbox):
+    import agent_profile_runtime as runtime
+    import agent_profile_token as long_lived
+    home, _ = sandbox
+    folder = home / '.clauth' / 'profiles' / 'first'
+    folder.mkdir(parents=True)
+    (folder / 'config.toml').write_text('')
+    sidecar = folder / 'session-token.static.json'
+    mint = 'sk-ant-oat01-' + 'K5l6' * 12
+    expires_ms = int((time.time() + 200 * 86400) * 1000)
+
+    def write(oauth):
+        sidecar.write_text(json.dumps({'claudeAiOauth': oauth}))
+        sidecar.chmod(0o600)
+
+    pid = profiles.create('import-test', 'claude')['id']
+    write({'accessToken': mint, 'expiresAt': expires_ms, 'scopes': ['user:inference', 'user:sessions:claude_code']})
+    before = sidecar.read_bytes()
+    summary = long_lived.import_from_clauth(pid, 'first')
+    assert 195 <= summary['days_left'] <= 200 and mint not in json.dumps(summary)
+    assert runtime.environment(pid)['CLAUDE_CODE_OAUTH_TOKEN'] == mint
+    assert sidecar.read_bytes() == before  # the clauth original is never modified
+    long_lived.clear(pid)
+    # A rotating pair or a wider scope would create a second holder of a single-use chain.
+    write({'accessToken': mint, 'refreshToken': 'r' * 40, 'expiresAt': expires_ms, 'scopes': ['user:inference']})
+    with pytest.raises(profiles.Refused):
+        long_lived.import_from_clauth(pid, 'first')
+    write({'accessToken': mint, 'expiresAt': expires_ms, 'scopes': ['user:inference', 'user:profile']})
+    with pytest.raises(profiles.Refused):
+        long_lived.import_from_clauth(pid, 'first')
+    write({'accessToken': mint, 'expiresAt': int((time.time() - 60) * 1000), 'scopes': ['user:inference']})
+    with pytest.raises(profiles.Refused):
+        long_lived.import_from_clauth(pid, 'first')
+    write({'accessToken': 'sk-ant-api03-' + 'x' * 50, 'expiresAt': expires_ms, 'scopes': ['user:inference']})
+    with pytest.raises(profiles.Refused):
+        long_lived.import_from_clauth(pid, 'first')
+    for name in ('missing', '../first', ''):
+        with pytest.raises(profiles.Refused):
+            long_lived.import_from_clauth(pid, name)
+    assert not long_lived.configured(pid)
+
+
 def test_plugin_review_uses_fixed_snapshot_and_refuses_tampering(sandbox, monkeypatch):
     import agent_profile_plugins as plugins
     home, _ = sandbox
