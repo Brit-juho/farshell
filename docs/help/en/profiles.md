@@ -65,6 +65,21 @@ conversation import and only has its resume verified. Inside a profile folder on
 same-named global entry is accepted, and removing the global folder affects every profile at once. New
 global entries are linked automatically when a profile is launched.
 
+Settings sync: `fsh profile sync-settings <id>` (also when a profile is launched) only reads the global
+`settings.json` and the MCP server definitions in `~/.claude.json` and aligns the profile key by key. A key
+the profile has not touched since the last apply follows the global one (a removal included); a key the
+profile changed keeps its value and a later global change does not overwrite it. `--take-global <key>`
+returns a key to the global value and `--dry-run` shows key names only. Only the on/off state of plugins,
+skills, hooks and MCP servers differs per profile; each plugin's configuration, the skill files and the MCP
+definitions with the keys they carry are shared. `fsh profile toggle <id> plugin|skill <name> on|off` changes
+that profile only, and switching an MCP server or hook off in the MCP, skills and plugins manager is kept.
+The model, `apiKeyHelper`, `forceLogin*` and `env` keys that start with `ANTHROPIC_` or `AWS_` or contain
+KEY, TOKEN, SECRET or HEADERS are account keys and are copied in neither direction. Hooks follow event by
+event except FarShell's status hooks; an event with some hooks switched off here and hooks carrying a stale
+clauth runtime path are skipped. A remote MCP server that signs in with OAuth stores that login in the
+profile's own config directory, so each profile signs in to it once (copying a refresh token would put two
+holders on one chain). MCP definitions are applied the next time when a session is running.
+
 Long-lived token: register a refresh-token-free `claude setup-token` value with
 `fsh profile token set <id>` and the profile's sessions run on it instead of a login. With nothing
 to refresh, sessions cannot be signed out by racing on one refresh chain. The token is kept

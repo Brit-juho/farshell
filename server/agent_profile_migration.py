@@ -792,7 +792,8 @@ def retirement_report():
                 _, stamps, _, _ = _configuration(source, recorded_skill_names(source, config['manifest']),
                                                  root if config['manifest'].get('private_configuration') else None)
                 current = profiles.digest(json.dumps(stamps, sort_keys=True).encode())
-                if current != config['manifest'].get('source_fingerprint'):
+                from agent_profile_settings import following
+                if current != config['manifest'].get('source_fingerprint') and not following(pid):
                     reasons.append('source-changed-after-import')
             except (ValueError, OSError, fsguard.FsDenied):
                 reasons.append('source-verification-unavailable')

@@ -108,6 +108,20 @@ def share(profile_id):
     return agent_profile_share.sync(profile["id"])
 
 
+def sync_settings(profile_id, *, dry_run=False, take_global=()):
+    import agent_profile_settings
+    profile = profiles.get(profile_id)
+    return agent_profile_settings.sync(profile["id"], dry_run=dry_run, take_global=take_global, include_mcp=None if not dry_run else False)
+
+
+def toggle(profile_id, kind, name, state):
+    import agent_profile_settings
+    profile = profiles.get(profile_id)
+    if state not in ("on", "off"):
+        raise profiles.Refused(tr("on 또는 off만 쓸 수 있습니다"))
+    return agent_profile_settings.set_state(profile["id"], kind, name, state == "on")
+
+
 def recover(profile_id):
     """Close interrupted jobs after re-reading the native files; never replays them."""
     import agent_profile_config
