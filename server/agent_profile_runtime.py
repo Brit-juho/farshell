@@ -269,6 +269,11 @@ def launch(profile_id, revision, cwd, conversation=None):
             agent_profile_share.sync(profile_id, replace=False)
         except profiles.Refused:
             pass  # no global directory: the profile simply has nothing to link
+        import agent_profile_settings
+        try:
+            agent_profile_settings.sync(profile_id)
+        except (profiles.Refused, ValueError, OSError, fsguard.FsDenied):
+            pass  # a settings problem must not stop a launch; `fsh profile sync-settings --dry-run` shows it
     if not auth_status(profile_id)["authenticated"]:
         raise profiles.Refused(tr("프로필에 먼저 로그인하세요"))
     if conversation is not None:

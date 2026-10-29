@@ -3,6 +3,16 @@
 // 원문을 고치면 여기 키도 같이 고친다 — scripts/check_i18n.py가 빠진 키와 남은 키를 잡는다.
 // 본문은 JSON이어야 한다(검사 스크립트와 서버가 json으로 읽는다).
 window.__VT_I18N = {
+  "설정 동기화 기록의 형식이 올바르지 않습니다": "The settings sync record has an invalid format",
+  "전역 설정을 안전하게 읽지 못했습니다": "Could not safely read the global settings",
+  "설정 동기화는 Claude 프로필에서만 쓸 수 있습니다": "Settings sync works only on Claude profiles",
+  "켜기/끄기를 바꿀 수 없는 항목입니다": "This item cannot be turned on or off",
+  "그런 플러그인이나 스킬이 없습니다": "No such plugin or skill",
+  "on 또는 off만 쓸 수 있습니다": "Only on or off is accepted",
+  "전역 설정을 따라가도록 맞춥니다(전역은 읽기만)": "Make the profile follow the global settings (the global files are only read)",
+  "바꾸지 않고 키 이름만 보여 줌": "Change nothing; show key names only",
+  "그 키를 프로필 값 대신 전역 값으로 되돌림": "Return that key to the global value instead of the profile's",
+  "이 프로필에서만 플러그인·스킬을 켜거나 끕니다": "Turn a plugin or skill on or off for this profile only",
   "전역 ~/.claude 폴더를 확인하지 못했습니다": "Could not verify the global ~/.claude folder",
   "공유 연결은 Claude 프로필에서만 쓸 수 있습니다": "Shared links work only on Claude profiles",
   "대화 기록을 전역과 공유하는 프로필은 대화를 가져올 필요가 없습니다": "A profile that shares the global conversation history does not need conversations imported",

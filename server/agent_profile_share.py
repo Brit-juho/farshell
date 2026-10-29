@@ -129,8 +129,11 @@ def sync(profile_id, *, replace=True):
                 run.report["conflicts"].append(name)
                 continue
             fsguard.private_profile_directory(folder)
+            parked = set()
+            if name == "skills" and (root / ".farshell-disabled-skills").is_dir():
+                parked = {e.name for e in os.scandir(root / ".farshell-disabled-skills")}
             for entry in sorted(os.scandir(source), key=lambda e: e.name):
-                if entry.name.startswith(".") or not _NAME.fullmatch(entry.name):
+                if entry.name.startswith(".") or not _NAME.fullmatch(entry.name) or entry.name in parked:
                     continue
                 run.link(folder / entry.name, source / entry.name)
             for entry in os.scandir(folder):

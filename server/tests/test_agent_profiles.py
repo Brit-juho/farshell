@@ -880,6 +880,124 @@ def test_shared_history_resume_needs_no_import_but_is_still_certified(sandbox):
     assert 'conversation-resume-not-verified' not in item['blockers']
 
 
+def _global_settings_fixture(home):
+    base = home / '.claude'
+    base.mkdir(parents=True, exist_ok=True)
+    settings = {
+        'theme': 'dark', 'language': 'korean', 'model': 'global-model', 'apiKeyHelper': '/bin/global-helper',
+        'permissions': {'allow': ['Bash(ls:*)'], 'defaultMode': 'default'},
+        'enabledPlugins': {'alpha@mk': True, 'beta@mk': True},
+        'skillOverrides': {'noisy': 'off'},
+        'env': {'ENABLE_TOOL_SEARCH': 'true', 'ANTHROPIC_AUTH_TOKEN': 'global-account-secret', 'MY_API_KEY': 'k', 'PLAIN': 'p'},
+        'hooks': {'SessionStart': [{'hooks': [{'type': 'command', 'command': '/opt/gstack/session-update'}]}],
+                  'Stop': [{'hooks': [{'type': 'command', 'command': '/x/.clauth/profiles/a/runtime-1-0/stale-hook.sh'}]}]},
+    }
+    (base / 'settings.json').write_text(json.dumps(settings))
+    (home / '.claude.json').write_text(json.dumps({'mcpServers': {
+        'notion': {'type': 'stdio', 'command': 'npx', 'args': ['x'], 'env': {'NOTION_TOKEN': 'shared-mcp-key'}},
+        'remote': {'type': 'http', 'url': 'https://example.invalid/mcp'}}}))
+    return base / 'settings.json'
+
+
+def test_settings_sync_follows_global_keeps_per_account_keys_and_per_profile_switches(sandbox, monkeypatch):
+    import agent_profile_settings as sync
+    home, _ = sandbox
+    gpath = _global_settings_fixture(home)
+    monkeypatch.setattr(sync, '_active', lambda profile_id: False)
+    pid = profiles.create('settings-sync', 'claude')['id']
+    root = profiles.root(pid)
+    (root / 'skills').mkdir(parents=True, exist_ok=True)
+    (root / 'skills' / 'noisy').mkdir()
+    (root / 'settings.json').write_text(json.dumps({'model': 'profile-model', 'language': 'english'}))
+    before = (gpath.read_bytes(), (home / '.claude.json').read_bytes())
+    dry = sync.sync(pid, dry_run=True)
+    assert json.loads((root / 'settings.json').read_text())['model'] == 'profile-model' and not (root / sync.BASE).exists()
+    report = sync.sync(pid)
+    mine = json.loads((root / 'settings.json').read_text())
+    # Followed: shared preferences, plugin switches, permissions, plain env, third-party hooks.
+    assert mine['theme'] == 'dark' and mine['enabledPlugins'] == {'alpha@mk': True, 'beta@mk': True}
+    assert mine['permissions']['allow'] == ['Bash(ls:*)'] and mine['env'] == {'ENABLE_TOOL_SEARCH': 'true', 'PLAIN': 'p'}
+    assert mine['skillOverrides'] == {'noisy': 'off'}
+    assert any('gstack' in h['command'] for g in mine['hooks']['SessionStart'] for h in g['hooks'])
+    assert any('agent_hook.sh' in h['command'] for g in mine['hooks']['SessionStart'] for h in g['hooks'])  # FarShell's own stay
+    assert 'Stop' not in json.dumps([g for g in mine['hooks'].get('Stop', []) if 'runtime-' in json.dumps(g)])  # stale clauth path never copied
+    # Account keys are never touched: not copied in, not overwritten, not reported.
+    assert mine['model'] == 'profile-model' and 'apiKeyHelper' not in mine and 'ANTHROPIC_AUTH_TOKEN' not in mine['env'] and 'MY_API_KEY' not in mine['env']
+    # A value the profile already had counts as its own.
+    assert mine['language'] == 'english' and 'language' in report['own']
+    # MCP definitions follow with the keys they carry.
+    native = json.loads((root / '.claude.json').read_text())
+    assert native['mcpServers']['notion']['env']['NOTION_TOKEN'] == 'shared-mcp-key' and native['mcpServers']['remote']['url'].startswith('https://')
+    assert (root / '.claude.json').stat().st_mode & 0o777 == 0o600 and (root / sync.BASE).stat().st_mode & 0o777 == 0o600
+    # The report names keys only; the global files are untouched.
+    assert 'shared-mcp-key' not in json.dumps(report) and 'global-account-secret' not in json.dumps(report) and 'dark' not in json.dumps(report)
+    assert 'model' not in report['follow'] + report['keep'] + report['own']
+    assert (gpath.read_bytes(), (home / '.claude.json').read_bytes()) == before and dry['dry_run']
+    assert 'shared-mcp-key' not in (root / sync.BASE).read_text()
+    # Per-profile switches: off here, and it stays off while everything else keeps following.
+    sync.set_state(pid, 'plugin', 'beta@mk', False)
+    sync.set_state(pid, 'skill', 'noisy', True)
+    changed = json.loads(gpath.read_text())
+    changed['theme'] = 'light'
+    changed['enabledPlugins'] = {'alpha@mk': False, 'beta@mk': True, 'gamma@mk': True}
+    changed['skillOverrides'] = {'noisy': 'off', 'other': 'off'}
+    gpath.write_text(json.dumps(changed))
+    sync.sync(pid)
+    mine = json.loads((root / 'settings.json').read_text())
+    assert mine['theme'] == 'light'
+    assert mine['enabledPlugins'] == {'alpha@mk': False, 'beta@mk': False, 'gamma@mk': True}
+    assert mine['skillOverrides'] == {'noisy': 'on', 'other': 'off'}
+    assert mine['language'] == 'english'  # the profile's own choice survives a global change
+    # The global value can be taken back explicitly.
+    sync.sync(pid, take_global=['enabledPlugins.beta@mk', 'language'])
+    mine = json.loads((root / 'settings.json').read_text())
+    assert mine['enabledPlugins']['beta@mk'] is True and mine['language'] == 'korean'
+    with pytest.raises(profiles.Refused):
+        sync.set_state(pid, 'plugin', 'missing@mk', False)
+    with pytest.raises(profiles.Refused):
+        sync.set_state(pid, 'skill', '../escape', False)
+
+
+def test_settings_sync_respects_parked_mcp_and_hooks_and_defers_mcp_while_running(sandbox, monkeypatch):
+    import agent_profile_settings as sync
+    home, _ = sandbox
+    gpath = _global_settings_fixture(home)
+    pid = profiles.create('settings-parked', 'claude')['id']
+    root = profiles.root(pid)
+    (root / '.farshell-disabled-mcp.json').write_text(json.dumps({'remote': {'type': 'http', 'url': 'https://example.invalid/mcp'}}))
+    monkeypatch.setattr(sync, '_active', lambda profile_id: True)
+    report = sync.sync(pid)
+    assert report['mcp_deferred'] is True and not (root / '.claude.json').exists()  # a running session owns that file
+    assert json.loads((root / sync.BASE).read_text())['mcp'] == {}  # nothing is recorded as applied
+    monkeypatch.setattr(sync, '_active', lambda profile_id: False)
+    sync.sync(pid)
+    names = set(json.loads((root / '.claude.json').read_text())['mcpServers'])
+    assert names == {'notion'}  # the one switched off in this profile is not brought back
+    # An event with hooks switched off in this profile is left to the manager.
+    vault = {'settings.json:SessionStart': {'base': [{'hooks': [{'type': 'command', 'command': '/opt/gstack/session-update'}]}], 'disabled': ['0:0'], 'active_hash': 'x'}}
+    (root / '.farshell-hooks-disabled.json').write_text(json.dumps(vault))
+    (root / '.farshell-hooks-disabled.json').chmod(0o600)
+    changed = json.loads(gpath.read_text())
+    changed['hooks']['SessionStart'] = [{'hooks': [{'type': 'command', 'command': '/opt/gstack/new-hook'}]}]
+    gpath.write_text(json.dumps(changed))
+    again = sync.sync(pid)
+    assert 'hooks.SessionStart' in again['skipped']
+    assert 'new-hook' not in (root / 'settings.json').read_text()
+
+
+def test_settings_sync_rejects_codex_and_a_following_profile_is_not_flagged_as_stale(sandbox, monkeypatch):
+    import agent_profile_settings as sync
+    home, _ = sandbox
+    _global_settings_fixture(home)
+    with pytest.raises(profiles.Refused):
+        sync.sync(profiles.create('codex-sync', 'codex')['id'])
+    pid = profiles.create('follow-flag', 'claude')['id']
+    assert not sync.following(pid)
+    monkeypatch.setattr(sync, '_active', lambda profile_id: False)
+    sync.sync(pid)
+    assert sync.following(pid)
+
+
 def test_plugin_review_uses_fixed_snapshot_and_refuses_tampering(sandbox, monkeypatch):
     import agent_profile_plugins as plugins
     home, _ = sandbox

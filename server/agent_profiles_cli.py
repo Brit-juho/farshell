@@ -56,6 +56,15 @@ def main():
     tok.add_argument("profile")
     tok.add_argument("--stdin", action="store_true", help=tr("토큰 한 줄을 표준입력에서 읽음(터미널이 아닐 때)"))
     tok.add_argument("--from-clauth", metavar="NAME", help=tr("clauth가 이미 가진 장기 토큰을 가져옴(원본은 그대로)"))
+    sync_cmd = subs.add_parser("sync-settings", help=tr("전역 설정을 따라가도록 맞춥니다(전역은 읽기만)"))
+    sync_cmd.add_argument("profile")
+    sync_cmd.add_argument("--dry-run", action="store_true", help=tr("바꾸지 않고 키 이름만 보여 줌"))
+    sync_cmd.add_argument("--take-global", action="append", default=[], metavar="KEY", help=tr("그 키를 프로필 값 대신 전역 값으로 되돌림"))
+    tog = subs.add_parser("toggle", help=tr("이 프로필에서만 플러그인·스킬을 켜거나 끕니다"))
+    tog.add_argument("profile")
+    tog.add_argument("kind", choices=("plugin", "skill"))
+    tog.add_argument("name")
+    tog.add_argument("state", choices=("on", "off"))
     args = parser.parse_args()
     try:
         if args.action == "login":
@@ -93,6 +102,10 @@ def main():
             result = local.adopt(args.profile)
         elif args.action == "recover":
             result = local.recover(args.profile)
+        elif args.action == "sync-settings":
+            result = local.sync_settings(args.profile, dry_run=args.dry_run, take_global=args.take_global)
+        elif args.action == "toggle":
+            result = local.toggle(args.profile, args.kind, args.name, args.state)
         elif args.action == "share":
             result = local.share(args.profile)
         elif args.action == "status":
