@@ -3,6 +3,12 @@
 // 원문을 고치면 여기 키도 같이 고친다 — scripts/check_i18n.py가 빠진 키와 남은 키를 잡는다.
 // 본문은 JSON이어야 한다(검사 스크립트와 서버가 json으로 읽는다).
 window.__VT_I18N = {
+  "{tool} 프로필이 없습니다. `fsh profile create <이름> --tool {tool}`로 만드세요": "There is no {tool} profile. Create one with `fsh profile create <name> --tool {tool}`",
+  "그런 프로필이 없습니다. 있는 프로필: {names}": "No such profile. Available profiles: {names}",
+  "기본 프로필이 없습니다. `fsh profile default <이름>`으로 정하거나 이름을 쓰세요: {names}": "There is no default profile. Set one with `fsh profile default <name>` or give a name: {names}",
+  "이름 없이 쓸 기본 프로필을 보거나 정합니다": "Show or set the default profile used without a name",
+  "이름이 같은 프로필이 둘 이상입니다. ID를 쓰세요: {names}": "More than one profile has that name. Use the ID: {names}",
+  "프로필로 세션을 열고 바로 붙습니다(fsh claude / fsh codex)": "Open a session with a profile and attach (fsh claude / fsh codex)",
   "설정 동기화 기록의 형식이 올바르지 않습니다": "The settings sync record has an invalid format",
   "전역 설정을 안전하게 읽지 못했습니다": "Could not safely read the global settings",
   "설정 동기화는 Claude 프로필에서만 쓸 수 있습니다": "Settings sync works only on Claude profiles",

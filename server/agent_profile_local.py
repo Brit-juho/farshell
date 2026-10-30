@@ -8,6 +8,7 @@ token, key or transcript content.
 from __future__ import annotations
 
 import json
+import os
 import sys
 
 import agent_profile_migration as migration
@@ -84,6 +85,74 @@ def import_conversations(profile_id, reference, *, yes=False):
             else:
                 failed.append({"conversation": row["conversation"], "bytes": row["bytes"], "reason": reason})
     return {"imported": imported, "already_present": existing, "failed": failed, "excluded_unowned": skipped}
+
+
+_DEFAULTS = "defaults.json"
+
+
+def _defaults():
+    path = fsguard.profile_file(profiles.directory(), _DEFAULTS)
+    if not path.exists():
+        return {}
+    value = json.loads(fsguard.read_profile_bytes(profiles.directory(), _DEFAULTS, 16 * 1024))
+    return value if isinstance(value, dict) else {}
+
+
+def _active(tool=None):
+    return [p for p in profiles.listing()["profiles"] if p["archived_at"] is None and (tool is None or p["tool"] == tool)]
+
+
+def resolve(reference, tool=None):
+    """A profile by exact name or ID. An unknown or ambiguous reference is refused, never guessed."""
+    rows = [p for p in _active(tool) if reference in (p["name"], p["id"])]
+    if len(rows) == 1:
+        return rows[0]
+    names = ", ".join(sorted(p["name"] for p in _active(tool))) or tr("없음")
+    if rows:
+        raise profiles.Refused(tr("이름이 같은 프로필이 둘 이상입니다. ID를 쓰세요: {names}", names=names))
+    raise profiles.Refused(tr("그런 프로필이 없습니다. 있는 프로필: {names}", names=names))
+
+
+def default_for(tool):
+    """The profile `fsh claude` / `fsh codex` use without a name: the one marked default, else the only one."""
+    rows = _active(tool)
+    wanted = _defaults().get(tool)
+    chosen = [p for p in rows if p["id"] == wanted]
+    if chosen:
+        return chosen[0]
+    if len(rows) == 1:
+        return rows[0]
+    if not rows:
+        raise profiles.Refused(tr("{tool} 프로필이 없습니다. `fsh profile create <이름> --tool {tool}`로 만드세요", tool=tool))
+    names = ", ".join(sorted(p["name"] for p in rows))
+    raise profiles.Refused(tr("기본 프로필이 없습니다. `fsh profile default <이름>`으로 정하거나 이름을 쓰세요: {names}", names=names))
+
+
+def set_default(reference=None):
+    if reference is None:
+        return {tool: next((p["name"] for p in _active(tool) if p["id"] == pid), None) for tool, pid in _defaults().items()}
+    chosen = resolve(reference)
+    from agent_profile_migration import _write_bytes
+    values = _defaults()
+    values[chosen["tool"]] = chosen["id"]
+    _write_bytes(fsguard.profile_file(profiles.directory(), _DEFAULTS), json.dumps(values).encode(), 0o600)
+    return {"tool": chosen["tool"], "default": chosen["name"]}
+
+
+def run(tool, reference=None, *, cwd, conversation=None):
+    """Start a session with the profile and attach to it, `clauth start` style.
+
+    The session lives in FarShell's tmux, so detaching leaves it running. Without a terminal
+    the session is started and its name returned instead of attaching.
+    """
+    chosen = resolve(reference, tool) if reference else default_for(tool)
+    started = launch(chosen["id"], cwd, conversation)
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        return {**started, "profile": chosen["name"], "attached": False}
+    import tmux_runner
+    env = {k: v for k, v in os.environ.items() if k != "TMUX"}  # a different tmux server may be nested
+    sys.stdout.flush()
+    os.execvpe("tmux", ["tmux", "-u", "-L", tmux_runner.VT_TMUX_SOCKET, "attach-session", "-t", "=" + started["session"]], env)
 
 
 def launch(profile_id, cwd, conversation=None):

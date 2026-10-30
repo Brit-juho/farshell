@@ -1073,6 +1073,76 @@ def test_session_view_trusts_the_recorded_state_only_while_tmux_still_has_the_se
     assert runtime.session_view(other)['state'] == 'unknown'
 
 
+def test_fsh_claude_resolves_names_exactly_and_never_guesses(sandbox):
+    import agent_profile_local as local
+    claude_a = profiles.create('alice', 'claude')['id']
+    claude_b = profiles.create('acme', 'claude')['id']
+    codex = profiles.create('desk', 'codex')['id']
+    assert local.resolve('alice', 'claude')['id'] == claude_a and local.resolve(claude_b, 'claude')['name'] == 'acme'
+    for wrong in ('acne', 'Alice', 'alice ', '', 'ali'):
+        with pytest.raises(profiles.Refused) as caught:
+            local.resolve(wrong, 'claude')
+        assert 'alice' in str(caught.value) and 'acme' in str(caught.value)  # the real names are listed
+    with pytest.raises(profiles.Refused):
+        local.resolve('desk', 'claude')  # a Codex profile is not a Claude profile
+    assert local.resolve('desk', 'codex')['id'] == codex
+    profiles.create('twin', 'claude'), profiles.create('twin', 'claude')
+    with pytest.raises(profiles.Refused) as twins:
+        local.resolve('twin', 'claude')  # two profiles with one name: asked for the ID, not picked
+    assert 'ID' in str(twins.value)
+    profiles.metadata_change(claude_a, profiles.get(claude_a)['revision'], profiles.get(claude_a)['metadata_revision'], 'archive', None)
+    with pytest.raises(profiles.Refused):
+        local.resolve('alice', 'claude')  # archived profiles are not offered
+
+
+def test_fsh_claude_without_a_name_uses_the_default_or_the_only_profile(sandbox):
+    import agent_profile_local as local
+    with pytest.raises(profiles.Refused) as none:
+        local.default_for('claude')
+    assert 'fsh profile create' in str(none.value) and '--tool claude' in str(none.value)
+    only = profiles.create('solo', 'claude')['id']
+    assert local.default_for('claude')['id'] == only  # exactly one: unambiguous
+    other = profiles.create('second', 'claude')['id']
+    with pytest.raises(profiles.Refused) as caught:
+        local.default_for('claude')
+    assert 'solo' in str(caught.value) and 'second' in str(caught.value) and 'default' in str(caught.value)
+    assert local.set_default('second') == {'tool': 'claude', 'default': 'second'}
+    assert local.default_for('claude')['id'] == other
+    assert local.set_default() == {'claude': 'second'}
+    assert (profiles.directory() / 'defaults.json').stat().st_mode & 0o777 == 0o600
+    profiles.metadata_change(other, profiles.get(other)['revision'], profiles.get(other)['metadata_revision'], 'archive', None)
+    assert local.default_for('claude')['id'] == only  # a default that was archived falls back
+    assert local.set_default() == {'claude': None}
+
+
+def test_fsh_claude_attaches_in_the_fsh_tmux_without_nesting_trouble_or_just_prints(sandbox, monkeypatch):
+    import agent_profile_local as local
+    import tmux_runner
+    pid = profiles.create('alice', 'claude')['id']
+    started = []
+    monkeypatch.setattr(local, 'launch', lambda profile_id, cwd, conversation=None: started.append((profile_id, cwd, conversation)) or {'session': 'profile-' + 'a' * 16})
+    class Tty:
+        def isatty(self): return True
+        def flush(self): pass
+    calls = []
+    monkeypatch.setattr(os, 'execvpe', lambda file, argv, env: calls.append((file, argv, env)))
+    monkeypatch.setattr('sys.stdin', Tty())
+    monkeypatch.setattr('sys.stdout', Tty())
+    monkeypatch.setenv('TMUX', '/tmp/tmux-501/default,1,0')
+    local.run('claude', 'alice', cwd='/work/here', conversation='a' * 32)
+    assert started == [(pid, '/work/here', 'a' * 32)]
+    file, argv, env = calls[0]
+    assert file == 'tmux' and argv[:4] == ['tmux', '-u', '-L', tmux_runner.VT_TMUX_SOCKET] and argv[-2:] == ['-t', '=profile-' + 'a' * 16]
+    assert 'TMUX' not in env  # a client of another tmux server can still attach
+    # No terminal: the session is started and named, nothing is attached.
+    calls.clear()
+    monkeypatch.setattr('sys.stdin', type('NoTty', (), {'isatty': lambda self: False})())
+    result = local.run('claude', None, cwd='/work/here')
+    assert result['attached'] is False and result['session'].startswith('profile-') and result['profile'] == 'alice' and not calls
+    with pytest.raises(profiles.Refused):
+        local.run('codex', 'alice', cwd='/work/here')  # a Claude profile cannot start Codex
+
+
 def test_plugin_review_uses_fixed_snapshot_and_refuses_tampering(sandbox, monkeypatch):
     import agent_profile_plugins as plugins
     home, _ = sandbox

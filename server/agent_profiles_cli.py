@@ -65,6 +65,13 @@ def main():
     tog.add_argument("kind", choices=("plugin", "skill"))
     tog.add_argument("name")
     tog.add_argument("state", choices=("on", "off"))
+    start = subs.add_parser("run", help=tr("프로필로 세션을 열고 바로 붙습니다(fsh claude / fsh codex)"))
+    start.add_argument("tool", choices=("claude", "codex"))
+    start.add_argument("name", nargs="?")
+    start.add_argument("--cwd", default=None)
+    start.add_argument("--resume")
+    default = subs.add_parser("default", help=tr("이름 없이 쓸 기본 프로필을 보거나 정합니다"))
+    default.add_argument("name", nargs="?")
     args = parser.parse_args()
     try:
         if args.action == "login":
@@ -102,6 +109,11 @@ def main():
             result = local.adopt(args.profile)
         elif args.action == "recover":
             result = local.recover(args.profile)
+        elif args.action == "run":
+            import os
+            result = local.run(args.tool, args.name, cwd=args.cwd or os.getcwd(), conversation=args.resume)
+        elif args.action == "default":
+            result = local.set_default(args.name)
         elif args.action == "sync-settings":
             result = local.sync_settings(args.profile, dry_run=args.dry_run, take_global=args.take_global)
         elif args.action == "toggle":

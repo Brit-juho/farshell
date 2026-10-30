@@ -1945,6 +1945,8 @@ cmd_help() {
     fsh template            Save/apply CLAUDE.md templates
     fsh usage               Record/show cumulative usage (local LLMs etc.)
     fsh profile             Manage native CLI launch profiles (fsh help profiles)
+    fsh claude [name]       Open a Claude session with a profile and attach (no name = the default profile)
+    fsh codex [name]        Same for Codex
     fsh clauth              Show usage (clauth integration, read-only)
 
   Security and other Macs
@@ -2016,6 +2018,8 @@ HELP_EN
     fsh template            CLAUDE.md 템플릿 저장/적용
     fsh usage               누적 사용량 기록/조회 (로컬 LLM 등)
     fsh profile             네이티브 CLI 실행 프로필 관리 (fsh help profiles)
+    fsh claude [이름]       프로필로 Claude 세션을 열고 바로 붙기 (이름 없으면 기본 프로필)
+    fsh codex [이름]        Codex도 같은 방식
     fsh clauth              사용량 조회 (clauth 연동, 읽기 전용)
 
   보안과 다른 맥
@@ -5320,6 +5324,8 @@ case "${1:-help}" in
   pane)     shift; cmd_pane "$@" ;;
   clauth)   shift; cmd_clauth "$@" ;;
   profile)  shift; (cd "$VT_DIR/server" && "$VT_PYTHON" -m agent_profiles_cli "$@") ;;
+  # The profile CLI runs from server/ (imports); the caller's directory is the session's working directory.
+  claude|codex) _tool="$1"; shift; _caller_dir="$PWD"; (cd "$VT_DIR/server" && "$VT_PYTHON" -m agent_profiles_cli run "$_tool" --cwd "$_caller_dir" "$@") ;;
   update)   shift; cmd_update "$@" ;;
   sync)     shift; cmd_update sync "$@" ;;
   password) shift; cmd_password "$@" ;;
