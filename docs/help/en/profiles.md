@@ -107,7 +107,12 @@ Check clauth replacement readiness lists missing configuration, inference,
 refresh, usage, session and conversation-resume evidence. It does not delete or
 stop clauth. A separate source OAuth review uses the existing access token only
 for official account identity lookup and comparison with the target. It never
-copies or refreshes source tokens. Verify actual conversation response observes
+copies or refreshes source tokens. Concurrency: a refreshing login counts only when two different profiles on one account run at the same time.
+A long-lived token or API key profile has nothing to refresh, so two sessions of the same profile running at once
+count; that observation is recorded against the authentication and required again when the token changes. A check run
+from a shell also judges sessions by the state the server recorded and whether the tmux session still exists.
+
+Verify actual conversation response observes
 verified Claude or Codex sessions and completed assistant responses without
 sending a new request. Automated inference requests support Claude only. Full
 replacement requires real concurrent-account and OAuth refresh validation.

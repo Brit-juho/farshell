@@ -719,7 +719,7 @@ def _source_has_api_quota(source):
 
 def retirement_report():
     """Read current independent evidence; never infer readiness from import alone."""
-    from agent_profile_runtime import authentication_fingerprint, session_status
+    from agent_profile_runtime import authentication_fingerprint, session_view
     from agent_profile_secret import read as read_private
     source_rows = [s for s in sources().values() if s['kind'] == 'clauth']
     with profiles.database() as db:
@@ -730,8 +730,9 @@ def retirement_report():
         sessions = [dict(r) for r in db.execute('SELECT * FROM sessions')]
         has_api = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='api_quota_observations'").fetchone()
         api_observations = {r['profile_id']: dict(r) for r in db.execute('SELECT * FROM api_quota_observations')} if has_api else {}
-    checked_sessions = [session_status(s['name']) for s in sessions]
-    pinned = {s['profile_id'] for s in checked_sessions if s['state'] == 'running' and s['applied_revision'] == s['desired_revision']}
+    checked_sessions = [session_view(s['name']) for s in sessions]
+    live_sessions = [s for s in checked_sessions if s['state'] == 'running' and s['applied_revision'] == s['desired_revision']]
+    pinned = {s['profile_id'] for s in live_sessions}
     active = [p for pid in pinned if (p := profiles.get(pid))['archived_at'] is None]
     concurrent_profiles = set()
     for index, first in enumerate(active):
@@ -750,6 +751,29 @@ def retirement_report():
                 fingerprint = authentication_fingerprint(first['id'])
                 if fingerprint and fingerprint == authentication_fingerprint(second['id']):
                     concurrent_profiles.update((first['id'], second['id']))
+    # A login with a refresh token can only be raced by another profile on the same account (above).
+    # With nothing to rotate (long-lived token, API key) the thing that matters is several sessions of
+    # one profile at once, and that observation is kept as a receipt so it does not have to be repeated.
+    from agent_profile_token import configured as token_configured
+    from usage.api_profiles import declares_api_credentials
+    per_profile = {}
+    for s in live_sessions:
+        per_profile[s['profile_id']] = per_profile.get(s['profile_id'], 0) + 1
+    for pid in {r['profile_id'] for r in receipts if r['kind'] == 'concurrency'} | {p for p, n in per_profile.items() if n >= 2}:
+        try:
+            private = read_private(profiles.root(pid))
+            if not (token_configured(pid) or (private is not None and declares_api_credentials(private))):
+                continue
+            fingerprint = authentication_fingerprint(pid)
+        except (ValueError, OSError, fsguard.FsDenied, profiles.Refused):
+            continue
+        if fingerprint and per_profile.get(pid, 0) >= 2 and not any(
+                r['kind'] == 'concurrency' and r['profile_id'] == pid and r['manifest'].get('auth_fingerprint') == fingerprint for r in receipts):
+            _receipt(pid, '', 'concurrency', {'auth_fingerprint': fingerprint, 'sessions': per_profile[pid]}, verified=True)
+            receipts.append({'profile_id': pid, 'kind': 'concurrency', 'verified': 1, 'manifest': {'auth_fingerprint': fingerprint}, 'source_id': ''})
+        if fingerprint and any(r['kind'] == 'concurrency' and r['verified'] and r['profile_id'] == pid
+                               and r['manifest'].get('auth_fingerprint') == fingerprint for r in receipts):
+            concurrent_profiles.add(pid)
     legacy = _legacy_runtime_state()
     items = []
     for source in source_rows:

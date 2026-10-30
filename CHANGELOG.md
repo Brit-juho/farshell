@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Fixed
+- Clauth replacement readiness judged sessions from the process running the check, so a run from the shell could never see a running session; it now uses the state the server recorded plus tmux liveness. A long-lived token or API key profile is certified for concurrency by two simultaneous sessions of the same profile, recorded against its authentication.
 - Reads through a shared global entry that is itself a link (a skill kept in a repository) now start at the directory it serves, still O_NOFOLLOW and bounded to the user's home; linked skills and shared plugins no longer leave `skill-coverage-incomplete`, `plugins-reinstall-required` or `configuration-verification-unavailable` in the readiness report.
 - `fsh profile share` compares a profile's copy with what a global entry serves when that entry is itself a link, so copies of skills kept in a repository are replaced by links instead of being left as stale profile-only versions.
 - Clauth replacement readiness no longer loses the second source's configuration and conversation receipts: a loop variable shadowed the receipts list, so every source after the first looked unmigrated.
