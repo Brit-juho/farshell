@@ -56,8 +56,8 @@ async def catalog(limit: int = 50, after: str | None = None, archived: bool = Fa
 
 
 @router.get('/api/session-history')
-async def history(search: str = '', provider: str = '', limit: int = 50, after: str | None = None, archived: bool = False):
-    return await _call(query.listing, search=search, provider=provider, limit=limit, after=after, archived=archived)
+async def history(search: str = '', provider: str = '', limit: int = 50, after: str | None = None, archived: bool = False, mode: str = 'phrase'):
+    return await _call(query.listing, search=search, provider=provider, limit=limit, after=after, archived=archived, mode=mode)
 
 
 @router.get('/api/session-history/status')

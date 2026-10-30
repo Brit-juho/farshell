@@ -8,6 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- Session history search takes `mode=all|any` besides the default whole-phrase match: `all` finds conversations that contain every whitespace-separated term in any order, `any` at least one (max 8 terms). Results keep their key order.
+
 ### Fixed
 - Mac Option now defaults to the terminal Meta key (`terminal.optionMode` = `meta`), so Option combos such as Option+P in Claude Code reach the terminal instead of typing `π`. Devices that already saved a choice keep it; switch to 문자 입력 in Settings → Keymap to type Option special characters.
 - Resume restores Claude bypass OFF explicitly and Codex YOLO ON/OFF with recorded approval, sandbox and reviewer settings. Profile-scoped Claude hooks and verified native Codex records prevent borrowing current defaults or another profile's policy; missing, corrupt or unsupported settings refuse launch.
