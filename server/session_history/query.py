@@ -7,21 +7,60 @@ import time
 from session_catalog.db import database, identifier, page, changed, Refused, setting, set_setting
 
 
-def listing(*, search='', provider='', limit=50, after=None, archived=False):
+MAX_TERMS = 8
+
+
+def _like(text):
+    return '%' + text.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
+
+
+def _terms(search, mode):
+    """phrase = whole string as one term (legacy); all/any = whitespace-split terms (max MAX_TERMS)."""
+    if not search:
+        return []
+    if mode == 'phrase':
+        return [search]
+    terms = list(dict.fromkeys(search.split()))
+    if len(terms) > MAX_TERMS:
+        raise Refused('too_many_terms', 400)
+    return terms
+
+
+def listing(*, search='', provider='', limit=50, after=None, archived=False, mode='phrase'):
     page(limit)
     if after is not None:
         if not isinstance(after, str) or len(after) != 65 or after[32] != ':':
             raise Refused('invalid_cursor', 400)
         identifier(after[:32]); identifier(after[33:])
-    if not isinstance(search, str) or len(search) > 256 or provider not in ('', 'claude', 'codex'):
+    if not isinstance(search, str) or len(search) > 256 or provider not in ('', 'claude', 'codex') or mode not in ('phrase', 'all', 'any'):
         raise Refused('invalid_query', 400)
-    pattern = '%' + search.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
+    terms = _terms(search, mode)
+    joiner = ' OR ' if mode == 'any' else ' AND '
     with database() as db:
         from .search import matches
-        matched = matches(db, search) if search else None
-        if matched is not None:
-            db.execute('CREATE TEMP TABLE search_hits(origin TEXT,id TEXT,PRIMARY KEY(origin,id)) WITHOUT ROWID')
-            db.executemany('INSERT OR IGNORE INTO search_hits VALUES(?,?)', matched)
+        local_terms, replica_terms, local_args, replica_args = [], [], [], []
+        for index, term in enumerate(terms):
+            pattern = _like(term)
+            matched = matches(db, term)
+            if matched is not None:
+                table = 'search_hits_%d' % index
+                db.execute('CREATE TEMP TABLE %s(origin TEXT,id TEXT,PRIMARY KEY(origin,id)) WITHOUT ROWID' % table)
+                db.executemany('INSERT OR IGNORE INTO %s VALUES(?,?)' % table, matched)
+                local_body = 'EXISTS(SELECT 1 FROM %s h WHERE h.origin=c.host AND h.id=c.id)' % table
+                replica_body = 'EXISTS(SELECT 1 FROM %s h WHERE h.origin=r.origin AND h.id=r.id)' % table
+                body_args = []
+            else:
+                local_body = "EXISTS(SELECT 1 FROM messages m WHERE m.conversation_id=c.id AND m.body LIKE ? ESCAPE '\\')"
+                replica_body = ("EXISTS(SELECT 1 FROM replicas m WHERE m.origin=r.origin AND m.kind='message' "
+                                "AND json_extract(m.payload,'$.conversation_id')=r.id AND json_extract(m.payload,'$.body') LIKE ? ESCAPE '\\')")
+                body_args = [pattern]
+            local_terms.append("(c.title LIKE ? ESCAPE '\\' OR c.native_id LIKE ? ESCAPE '\\' OR c.cwd LIKE ? ESCAPE '\\' OR " + local_body + ')')
+            local_args += [pattern, pattern, pattern] + body_args
+            replica_terms.append("(json_extract(r.payload,'$.title') LIKE ? ESCAPE '\\' OR json_extract(r.payload,'$.native_id') LIKE ? ESCAPE '\\' "
+                                 "OR json_extract(r.payload,'$.cwd') LIKE ? ESCAPE '\\' OR " + replica_body + ')')
+            replica_args += [pattern, pattern, pattern] + body_args
+        local_text = '(' + joiner.join(local_terms) + ')' if terms else '1'
+        replica_text = '(' + joiner.join(replica_terms) + ')' if terms else '1'
         # 인덱스를 만든 직후 첫 조회는 페이지 캐시가 차가워 1초 가까이 걸린다 — 제한이 너무 빡빡하면 목록이 통째로 비어 보인다.
         deadline = time.monotonic() + 2
         db.set_progress_handler(lambda: int(time.monotonic() > deadline), 10000)
@@ -29,32 +68,17 @@ def listing(*, search='', provider='', limit=50, after=None, archived=False):
           (SELECT MAX(created) FROM manifests WHERE conversation_id=c.id) AS saved_at,
           EXISTS(SELECT 1 FROM source_files WHERE conversation_id=c.id AND state='source_missing') AS source_missing
           FROM conversations c WHERE c.deleted IS NULL AND (c.archived IS NOT NULL)=?
-          AND (?='' OR c.provider=?) AND (? IS NULL OR c.host||':'||c.id>?) AND (?='' OR c.title LIKE ? ESCAPE '\\'
-          OR c.native_id LIKE ? ESCAPE '\\' OR c.cwd LIKE ? ESCAPE '\\'
-          OR EXISTS(SELECT 1 FROM messages m WHERE m.conversation_id=c.id AND m.body LIKE ? ESCAPE '\\'))
+          AND (?='' OR c.provider=?) AND (? IS NULL OR c.host||':'||c.id>?) AND """ + local_text + """
           ORDER BY c.host,c.id LIMIT ?"""
-        if matched is not None:
-            start = local_sql.index('OR EXISTS(SELECT 1 FROM messages')
-            end = local_sql.index('\n          ORDER BY',start)
-            local_sql = local_sql[:start] + 'OR EXISTS(SELECT 1 FROM search_hits h WHERE h.origin=c.host AND h.id=c.id AND ? IS NOT NULL))' + local_sql[end:]
-        rows = db.execute(local_sql, (int(archived), provider, provider, after, after, search, pattern, pattern, pattern, pattern, limit+1)).fetchall()
+        rows = db.execute(local_sql, [int(archived), provider, provider, after, after] + local_args + [limit+1]).fetchall()
         local = [{**dict(r), 'detail': json.loads(r['detail']), 'key': r['host'] + ':' + r['id'], 'replica': False} for r in rows]
         replica_sql = """SELECT r.origin,r.id,r.payload FROM replicas r WHERE r.kind='conversation'
           AND json_extract(r.payload,'$.deleted') IS NULL
           AND (json_extract(r.payload,'$.archived') IS NOT NULL)=?
           AND (?='' OR json_extract(r.payload,'$.provider')=?) AND (? IS NULL OR r.origin||':'||r.id>?)
-          AND (?='' OR json_extract(r.payload,'$.title') LIKE ? ESCAPE '\\'
-          OR json_extract(r.payload,'$.native_id') LIKE ? ESCAPE '\\'
-          OR json_extract(r.payload,'$.cwd') LIKE ? ESCAPE '\\'
-          OR EXISTS(SELECT 1 FROM replicas m WHERE m.origin=r.origin AND m.kind='message'
-          AND json_extract(m.payload,'$.conversation_id')=r.id AND json_extract(m.payload,'$.body') LIKE ? ESCAPE '\\'))
+          AND """ + replica_text + """
           ORDER BY r.origin,r.id LIMIT ?"""
-        if matched is not None:
-            start=replica_sql.index('OR EXISTS(SELECT 1 FROM replicas m')
-            end=replica_sql.index('\n          ORDER BY',start)
-            replica_sql=replica_sql[:start]+'OR EXISTS(SELECT 1 FROM search_hits h WHERE h.origin=r.origin AND h.id=r.id AND ? IS NOT NULL))'+replica_sql[end:]
-        replicated=db.execute(replica_sql,
-          (int(archived),provider,provider,after,after,search,pattern,pattern,pattern,pattern,limit+1)).fetchall()
+        replicated = db.execute(replica_sql, [int(archived), provider, provider, after, after] + replica_args + [limit+1]).fetchall()
         central = [{**json.loads(r['payload']), 'key': r['origin'] + ':' + r['id'], 'replica': True,
                     'origin': r['origin'], 'saved_at': None, 'source_missing': False} for r in replicated]
         merged = sorted(local + central, key=lambda r:r['key'])
