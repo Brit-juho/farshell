@@ -978,3 +978,24 @@ def test_manifests_conversation_index_exists_even_on_old_stores(private_history)
     with db.database(write=True) as conn:
         names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")}
     assert 'manifests_conversation' in names
+
+
+def test_search_modes_match_terms_in_any_order(private_history):
+    import pytest
+    from session_history import archive, query, search
+    from session_catalog.db import Refused
+    root, folder, source = _source(private_history)
+    (folder/'a.jsonl').write_text('{"sessionId":"a","type":"user","message":{"content":"배포 중에 서버 오류가 났다"}}\n')
+    (folder/'b.jsonl').write_text('{"sessionId":"b","type":"user","message":{"content":"배포 완료 확인"}}\n')
+    archive.scan_source(source)
+    for indexed in (False, True):
+        if indexed:
+            search.refresh()
+        assert len(query.listing(search='배포 오류')['items']) == 0                      # phrase: unchanged
+        assert len(query.listing(search='오류 배포', mode='all')['items']) == 1          # order-independent AND
+        assert len(query.listing(search='오류 배포', mode='any')['items']) == 2          # OR
+        assert len(query.listing(search='배포 없는단어', mode='all')['items']) == 0
+        assert len(query.listing(search='배포', mode='all')['items']) == 2
+    for bad in ({'mode': 'fuzzy'}, {'search': ' '.join(f'w{i}' for i in range(9)), 'mode': 'all'}):
+        with pytest.raises(Refused):
+            query.listing(**{'search': 'x', **bad})
