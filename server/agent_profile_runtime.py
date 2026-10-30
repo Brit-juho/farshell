@@ -393,10 +393,30 @@ def session_recorded(name):
     if not isinstance(name, str) or not re.fullmatch(r"profile-[a-f0-9]{16}", name):
         raise profiles.Refused(tr("프로필 세션 이름이 올바르지 않습니다"))
     with profiles.database() as db:
-        row = db.execute("SELECT name,profile_id,profile_revision,conversation,started_at,state FROM sessions WHERE name=?", (name,)).fetchone()
+        row = db.execute("SELECT name,profile_id,profile_revision,conversation,started_at,state,created FROM sessions WHERE name=?", (name,)).fetchone()
     if row is None:
         raise profiles.Refused(tr("프로필 세션을 찾지 못했습니다"))
     return dict(row)
+
+
+def session_view(name):
+    """A session's state for readiness checks, usable from any process.
+
+    SessionStart evidence lives in the server's memory, which a shell cannot read, so this trusts
+    what the server recorded (it re-checks starting sessions every few seconds) and only confirms
+    that the tmux session it names is still the same one.
+    """
+    saved = session_recorded(name)
+    state = saved["state"]
+    if state == "running":
+        try:
+            alive = _created(name) == saved["created"]
+        except profiles.Refused:
+            alive = False
+        if not alive:
+            state = "ended"
+    return {"name": name, "profile_id": saved["profile_id"], "state": state, "applied_revision": saved["profile_revision"],
+            "desired_revision": profiles.get(saved["profile_id"])["revision"]}
 
 
 def note_verified_restart(ctx):

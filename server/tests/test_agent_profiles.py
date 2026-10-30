@@ -998,6 +998,81 @@ def test_settings_sync_rejects_codex_and_a_following_profile_is_not_flagged_as_s
     assert sync.following(pid)
 
 
+def _fake_sessions(pid, count, state='running', created='$1:1', revision=None):
+    now = time.time()
+    names = []
+    revision = revision or profiles.get(pid)['revision']
+    with profiles.database() as db:
+        for index in range(count):
+            name = 'profile-' + format(abs(hash((pid, index, state, now))) % (16 ** 16), '016x')
+            db.execute('INSERT INTO sessions (name,profile_id,created,profile_revision,started_at,state) VALUES (?,?,?,?,?,?)',
+                       (name, pid, created, revision, now, state))
+            names.append(name)
+    return names
+
+
+def test_concurrent_sessions_of_a_token_profile_certify_once_and_are_remembered(sandbox, monkeypatch):
+    import agent_profile_runtime as runtime
+    import agent_profile_token as long_lived
+    home, _ = sandbox
+    folder = home / '.clauth' / 'profiles' / 'first'
+    folder.mkdir(parents=True)
+    (folder / 'config.toml').write_text('')
+    source = next(s for s in migration.source_list()['sources'] if s['name'] == 'first')
+    pid = profiles.create('token-concurrency', 'claude')['id']
+    migration.config_apply(migration.config_preview(pid, 1, source['id'])['token'])
+    long_lived.set_token(pid, 'sk-ant-oat01-' + 'C4d5' * 12)
+    monkeypatch.setattr(migration, '_legacy_runtime_state', lambda: 'absent')
+    alive = {'value': True}
+    monkeypatch.setattr(runtime, '_created', lambda name: '$1:1' if alive['value'] else (_ for _ in ()).throw(profiles.Refused('gone')))
+
+    def blockers():
+        item = next(i for i in migration.retirement_report()['profiles'] if i['name'] == 'first')
+        return {b for c in item['candidates'] for b in c['blockers']}
+
+    _fake_sessions(pid, 1)
+    one = blockers()
+    assert 'same-account-concurrency-not-certified' in one and 'live-profile-session-not-certified' not in one  # one session is pinned, not concurrent
+    _fake_sessions(pid, 1)
+    two = blockers()
+    assert 'same-account-concurrency-not-certified' not in two
+    with profiles.database() as db:
+        assert db.execute("SELECT COUNT(*) FROM receipts WHERE kind='concurrency' AND profile_id=? AND verified=1", (pid,)).fetchone()[0] == 1
+    # The observation is remembered, but a tmux session that no longer exists is no live evidence.
+    alive['value'] = False
+    after = blockers()
+    assert 'same-account-concurrency-not-certified' not in after and 'live-profile-session-not-certified' in after
+    # A new token is a different authentication: the old observation does not carry over.
+    long_lived.set_token(pid, 'sk-ant-oat01-' + 'E6f7' * 12)
+    assert 'same-account-concurrency-not-certified' in blockers()
+
+
+def test_concurrency_is_not_taken_from_a_refreshing_login_profile(sandbox, monkeypatch):
+    import agent_profile_runtime as runtime
+    pid = profiles.create('login-concurrency', 'claude')['id']
+    monkeypatch.setattr(runtime, '_created', lambda name: '$1:1')
+    monkeypatch.setattr(runtime, 'authentication_fingerprint', lambda _: 'a-real-looking-login-fingerprint')  # so only the rule can refuse it
+    monkeypatch.setattr(migration, '_legacy_runtime_state', lambda: 'absent')
+    _fake_sessions(pid, 3)
+    migration.retirement_report()
+    with profiles.database() as db:
+        assert db.execute("SELECT COUNT(*) FROM receipts WHERE kind='concurrency'").fetchone()[0] == 0
+
+
+def test_session_view_trusts_the_recorded_state_only_while_tmux_still_has_the_session(sandbox, monkeypatch):
+    import agent_profile_runtime as runtime
+    pid = profiles.create('view-test', 'claude')['id']
+    name = _fake_sessions(pid, 1)[0]
+    monkeypatch.setattr(runtime, '_created', lambda n: '$1:1')
+    assert runtime.session_view(name)['state'] == 'running'
+    monkeypatch.setattr(runtime, '_created', lambda n: '$9:9')  # the name was reused by another tmux session
+    assert runtime.session_view(name)['state'] == 'ended'
+    monkeypatch.setattr(runtime, '_created', lambda n: (_ for _ in ()).throw(profiles.Refused('gone')))
+    assert runtime.session_view(name)['state'] == 'ended'
+    other = _fake_sessions(pid, 1, state='unknown')[0]
+    assert runtime.session_view(other)['state'] == 'unknown'
+
+
 def test_plugin_review_uses_fixed_snapshot_and_refuses_tampering(sandbox, monkeypatch):
     import agent_profile_plugins as plugins
     home, _ = sandbox
@@ -1236,7 +1311,7 @@ def test_unrelated_account_concurrency_never_certifies_migrated_profile(sandbox,
             name = 'profile-' + str(index) * 16
             db.execute('INSERT INTO sessions (name,profile_id,created,profile_revision,started_at,state) VALUES (?,?,?,?,?,?)', (name, row['id'], 'fixture', 1, now, 'running'))
             db.execute('INSERT INTO observations VALUES (?,?,?,?)', (row['id'], 'same-proven-subject', now, 'current-auth'))
-    monkeypatch.setattr(runtime, 'session_status', lambda name: {'profile_id': first['id'] if name.endswith('0') else second['id'], 'state': 'running', 'applied_revision': 1, 'desired_revision': 1})
+    monkeypatch.setattr(runtime, 'session_view', lambda name: {'profile_id': first['id'] if name.endswith('0') else second['id'], 'state': 'running', 'applied_revision': 1, 'desired_revision': 1})
     monkeypatch.setattr(runtime, 'authentication_fingerprint', lambda _: 'current-auth')
     monkeypatch.setattr(migration, '_legacy_runtime_state', lambda: 'absent')
     result = migration.retirement_report()
