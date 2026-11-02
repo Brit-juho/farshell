@@ -209,8 +209,8 @@ def capture(source, relative, *, max_bytes=PASS_BYTES):
                              and prior.get('projection', {}).get('version') != 1)
         if (previous and previous['fingerprint'] == fingerprint and previous['offset'] == st.st_size
                 and previous['state'] != 'indexing' and not legacy_incomplete):
-            with database(write=True) as db:
-                db.execute("UPDATE source_files SET seen=? WHERE id=?", (time.time(), previous['id']))
+            # No write here: `seen` is only read by scan_source, which stamps it itself before calling capture.
+            # A commit (fsync) per unchanged file every collector tick kept fseventsd/Spotlight saturated.
             return False
         _quota()
         begin = 0

@@ -137,11 +137,17 @@ def _reconcile(snapshot=None):
                 rid = row["id"]
                 if detail != row["detail"] or row["state"] != "running":
                     changed(db, "runtime", rid)
-                db.execute("UPDATE runtimes SET name=?,state='running',observed=?,detail=? WHERE id=?", (item["name"], now, detail, rid))
+                # `observed` is a liveness stamp nobody compares; refresh it only with a real change or once a minute.
+                # An unconditional UPDATE here committed (and checkpointed the WAL) on every 5s reconcile.
+                if detail != row["detail"] or row["state"] != "running" or row["name"] != item["name"] or now - row["observed"] >= 60:
+                    db.execute("UPDATE runtimes SET name=?,state='running',observed=?,detail=? WHERE id=?", (item["name"], now, detail, rid))
             for pane in item["panes"]:
                 key = f"{pane['pane_id']}:{pane['pid']}"
+                encoded = encode(pane)
+                if row and db.execute("SELECT 1 FROM pane_executions WHERE runtime_id=? AND physical_key=? AND detail=?", (rid, key, encoded)).fetchone():
+                    continue
                 db.execute("INSERT INTO pane_executions VALUES(?,?,?,?) ON CONFLICT(runtime_id,physical_key) DO UPDATE SET detail=excluded.detail",
-                           (uid(), rid, key, encode(pane)))
+                           (uid(), rid, key, encoded))
     return snapshot
 
 
