@@ -18,6 +18,7 @@ import {
   splitPane, setRatio, getActiveTabHostId,
 } from './store.js';
 import { findNode } from './tree.js';
+import { setBranchChips, branchOf } from './branch-chips.js';
 import { closePaneAction } from '../term/session-actions.js';
 import { paneElId, splitElId } from './dom-ids.js';
 import { snapPx, cellSizeFrom } from './snap.js';
@@ -102,10 +103,10 @@ function _paneSessionId(paneId) {
 // term/tab-worktree.js가 워크트리 목록을 받을 때마다 setBranchChipMap을
 // 부른다 — 그 지도는 **저장소에 워크트리가 둘 이상일 때만** 항목을 담는다
 // (워크트리가 하나뿐이면 구분할 게 없으니 칩 자체가 안 보여야 한다).
-let _branchChips = new Map();   // tmux 세션 이름 → 브랜치
+// 지도 자체는 layout/branch-chips.js가 갖는다(뷰 탭 툴팁과 공유).
 
 export function setBranchChipMap(map) {
-  _branchChips = map || new Map();
+  setBranchChips(map);
   _paintAllChips();
 }
 
@@ -115,7 +116,7 @@ function _paintChip(paneEl) {
   const sid = _paneSessionId(paneEl.dataset.paneId);
   const s = sid ? getSession(sid) : null;
   const tmux = s && (s.tmuxName || s.tmux_name);
-  const branch = tmux ? _branchChips.get(tmux) : null;
+  const branch = branchOf(tmux);
   chip.textContent = branch || '';
   chip.hidden = !branch;
   if (branch) chip.setAttribute('data-tip', t('현재 작업 디렉터리의 브랜치')); else chip.removeAttribute('data-tip');

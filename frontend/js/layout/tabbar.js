@@ -18,6 +18,7 @@ import { icon } from '../ui/icons.js';
 import { getStatus, isUnseen, onStatusChange } from '../agent/state.js';
 import { viewSegments, segmentsTooltip, segmentsAria } from '../design/state-classes.js';
 import { t } from '../core/i18n.js';
+import { branchOf } from './branch-chips.js';
 
 const HOST = 'vt-wtabs';
 
@@ -39,7 +40,7 @@ function tabEntries(tab) {
   for (const sid of collectSessions(tab.tree)) {
     const s = all[sid];
     const tmux = s && (s.tmuxName || s.tmux_name);
-    if (tmux) out.push({ name: sessionDisplayName(sid), status: getStatus(tmux), unseen: isUnseen(tmux) });
+    if (tmux) out.push({ name: sessionDisplayName(sid), status: getStatus(tmux), unseen: isUnseen(tmux), branch: branchOf(tmux) });
   }
   return out;
 }
@@ -229,6 +230,13 @@ function render() {
       e.stopPropagation();
       if (switchLayoutTab(target.id)) saveLayoutNow();
       [...host.querySelectorAll('.vt-wtab')].find((node) => node.dataset.tabId === target.id)?.focus();
+    });
+    el.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      const box = el.getBoundingClientRect();
+      // 키보드(Menu 키)로 열리면 좌표가 0이라 탭 아래쪽 가장자리에 띄운다.
+      // 메뉴 코드는 처음 쓸 때만 받는다(초기 페이로드 상한 — vite.config.js 'screens' 청크).
+      void import('./tab-menu.js').then((m) => m.openTabMenu(tab, e.clientX || box.left, e.clientY || box.bottom));
     });
     _wireDrag(el, tab, host);
     host.appendChild(el);
