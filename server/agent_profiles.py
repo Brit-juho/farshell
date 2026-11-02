@@ -43,9 +43,14 @@ def database():
     path = folder / "registry.sqlite3"
     if path.exists() or path.is_symlink():
         fsguard.profile_file(folder, "registry.sqlite3")
-    fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
-    os.close(fd)
-    os.chmod(path, 0o600)
+    # Never open/close an existing registry here: closing any descriptor drops every POSIX lock this
+    # process holds on the file, including SQLite's locks of other live connections (session_catalog.db.private_file).
+    try:
+        os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_RDWR | os.O_NOFOLLOW, 0o600))
+    except FileExistsError:
+        pass
+    if os.lstat(path).st_mode & 0o777 != 0o600:
+        os.chmod(path, 0o600)
     db = sqlite3.connect(path, timeout=5)
     db.row_factory = sqlite3.Row
     try:

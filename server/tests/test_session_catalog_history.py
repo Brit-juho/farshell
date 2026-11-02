@@ -556,6 +556,132 @@ def test_replica_chunks_do_not_consume_origin_quota(private_history):
         archive._quota(replica=True)
 
 
+def test_quota_full_count_is_cached_but_new_chunks_count_at_once(private_history, monkeypatch):
+    from session_history import archive
+    from session_catalog.db import database, set_setting, Refused
+    with database(write=True) as db:
+        set_setting(db, 'quota_bytes', 100)
+    counted = []
+    real = archive._count_usage
+    monkeypatch.setattr(archive, '_count_usage', lambda: counted.append(1) or real())
+    archive._quota()
+    archive._quota()
+    assert len(counted) == 1  # one full count per window, not one per call
+    archive.put_chunk(b'x' * 200)  # an orphan chunk counts for both roles
+    with pytest.raises(Refused, match='archive_quota_reached'):
+        archive._quota()
+    assert len(counted) == 1  # refused from the running total, without recounting
+    monkeypatch.setattr(archive, 'QUOTA_RECOUNT', 0)
+    with pytest.raises(Refused, match='archive_quota_reached'):
+        archive._quota()  # an expired window recounts and still sees the chunk on disk
+    assert len(counted) == 2
+
+
+def test_private_file_corrects_a_wrong_mode_but_never_rechmods_a_right_one(private_history, monkeypatch):
+    from session_catalog import db
+    path = db.directory() / 'catalog.sqlite3'
+    os.chmod(path, 0o644)
+    db.private_file(path)
+    assert path.stat().st_mode & 0o777 == 0o600
+    calls = []
+    monkeypatch.setattr(os, 'fchmod', lambda fd, mode: calls.append(mode))
+    db.private_file(path)
+    assert calls == []  # a chmod posts a file-system event even when nothing changes
+
+
+def test_wal_anchor_keeps_the_wal_across_short_connections(private_history):
+    from session_catalog import db
+    wal = db.directory() / 'catalog.sqlite3-wal'
+    with db.database(write=True) as conn:
+        db.set_setting(conn, 'probe', 1)
+    assert not wal.exists()  # the last connection closing checkpoints and deletes it
+    db.hold_wal()
+    try:
+        for value in range(2, 6):  # each call runs private_file on the store and its companions
+            with db.database(write=True) as conn:
+                db.set_setting(conn, 'probe', value)
+            assert wal.exists()
+        with db.database() as conn:
+            assert db.setting(conn, 'probe', None) == 5
+    finally:
+        db.release_wal()
+    assert db._anchor is None
+
+
+def test_private_file_never_drops_locks_another_connection_holds(private_history):
+    """Closing any descriptor of a file drops every POSIX lock the process holds on it."""
+    import fcntl
+    from session_catalog import db
+    path = db.directory() / 'catalog.sqlite3'
+    db.private_file(path)
+    holder = os.open(path, os.O_RDWR)
+    try:
+        fcntl.lockf(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        db.private_file(path)  # must not open/close the existing file
+        probe = os.fork()
+        if probe == 0:  # another process sees whether the lock survived
+            other = os.open(path, os.O_RDWR)
+            try:
+                fcntl.lockf(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                os._exit(1)
+            except OSError:
+                os._exit(0)
+        _, status = os.waitpid(probe, 0)
+        assert os.waitstatus_to_exitcode(status) == 0
+    finally:
+        os.close(holder)
+
+
+def _manifest_rows(db, file_id, items):
+    """items: (id, generation, created); detail is empty because retention never reads it."""
+    from session_catalog.db import encode
+    for mid, generation, created in items:
+        db.execute('INSERT INTO manifests VALUES(?,?,?,?,?,?,?,?)', (mid, None, file_id, generation, 0, 'd' * 64, encode({'chunks': []}), created))
+        db.execute("INSERT INTO change_log(kind,resource,created) VALUES('manifest',?,?)", (mid, created))
+
+
+def test_manifest_retention_keeps_recent_each_generation_and_each_day(private_history):
+    import time as clock
+    from session_history import archive
+    from session_catalog.db import database, encode
+    today = clock.mktime((2026, 10, 30, 12, 0, 0, 0, 0, -1))
+    day = 86400
+    items = [('old-gen', 'g0', today - 3 * day)]                      # last state of a rewritten file
+    items += [(f'day{n}-{k}', 'g1', today - n * day + k) for n in (2, 1) for k in range(3)]
+    items += [(f'now-{k:02d}', 'g1', today + k) for k in range(30)]    # one busy day
+    with database(write=True) as db:
+        _manifest_rows(db, 'file-a', items)
+        _manifest_rows(db, 'file-b', [('solo', 'g', today)])
+        db.execute('INSERT INTO replicas VALUES(?,?,?,?,?)', ('peer', 'r-old', 'manifest', encode({'file_id': 'f', 'generation': 'g', 'created': today - day}), 1))
+        for k in range(25):
+            db.execute('INSERT INTO replicas VALUES(?,?,?,?,?)', ('peer', f'r{k:02d}', 'manifest', encode({'file_id': 'f', 'generation': 'g', 'created': today + k}), 1))
+    result = archive.prune_manifests()
+    with database() as db:
+        kept = {r[0] for r in db.execute('SELECT id FROM manifests')}
+        received = {r[0] for r in db.execute("SELECT id FROM replicas WHERE kind='manifest'")}
+    assert kept == {f'now-{k:02d}' for k in range(10, 30)} | {'day2-2', 'day1-2', 'old-gen', 'solo'}
+    assert received == {f'r{k:02d}' for k in range(5, 25)} | {'r-old'}
+    assert result == {'local': len(items) - 23, 'received': 5}
+    assert archive.prune_manifests() == {'local': 0, 'received': 0}  # idempotent
+
+
+def test_manifest_retention_waits_for_every_send_peer(private_history):
+    from session_history import archive
+    from session_catalog.db import database
+    with database(write=True) as db:
+        _manifest_rows(db, 'file-a', [(f'm{k:02d}', 'g', 1_800_000_000 + k) for k in range(25)])
+        seq = {r[0]: r[1] for r in db.execute("SELECT resource,seq FROM change_log WHERE kind='manifest'")}
+        for peer in ('fast', 'slow'):
+            db.execute('INSERT INTO replication_grants VALUES(?,?,?,?,?,?)', (peer, 'send', 'k', 1, 1, 0))
+        db.execute('INSERT INTO replica_checkpoints VALUES(?,?,?)', ('fast', seq['m24'], 0))
+        db.execute('INSERT INTO replica_checkpoints VALUES(?,?,?)', ('slow', seq['m02'], 0))
+    archive.prune_manifests()
+    with database() as db:
+        kept = {r[0] for r in db.execute('SELECT id FROM manifests')}
+    # m00..m04 fall outside the newest 20; only those the slowest peer has passed (m00..m02) may go.
+    assert kept == {f'm{k:02d}' for k in range(3, 25)}
+
+
 def test_pair_and_lease_relationships_do_not_survive_epoch_reuse(private_history, monkeypatch):
     from session_catalog import identity, inventory
     from authz import pairs, leases

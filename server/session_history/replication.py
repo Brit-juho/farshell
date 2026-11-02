@@ -295,14 +295,22 @@ def push_once(peer,*,max_chunks=None,should_stop=lambda:False):
             return False
         manifest=None;messages=[]
         if event['kind']=='manifest':
-            manifest=dict(db.execute('SELECT * FROM manifests WHERE id=?',(event['resource'],)).fetchone())
-            row=db.execute('SELECT * FROM conversations WHERE id=?',(manifest['conversation_id'],)).fetchone()
+            found=db.execute('SELECT * FROM manifests WHERE id=?',(event['resource'],)).fetchone()
+            # Retention only drops manifests every send peer has passed; one missing here was pruned for
+            # a peer added later. Skip it instead of stalling the queue on it forever.
+            manifest=dict(found) if found else None
+            row=db.execute('SELECT * FROM conversations WHERE id=?',(manifest['conversation_id'],)).fetchone() if manifest else None
         else:
             row=db.execute('SELECT * FROM conversations WHERE id=?',(event['resource'],)).fetchone()
         conv=dict(row) if row else None
         origin=host_id(db)
         if manifest and conv and conv['deleted'] is None:
-            messages=[dict(r) for r in db.execute('SELECT * FROM messages WHERE conversation_id=? AND created=?',(conv['id'],manifest['created']))]
+            # Messages since the conversation's previous surviving manifest: identical to "this capture's
+            # messages" without retention, and it folds in the captures retention dropped, so a peer added
+            # later still receives every message.
+            since=db.execute('SELECT MAX(created) FROM manifests WHERE conversation_id=? AND created<?',(conv['id'],manifest['created'])).fetchone()[0]
+            messages=[dict(r) for r in db.execute('SELECT * FROM messages WHERE conversation_id=? AND created>? AND created<=? ORDER BY created,position',
+                                                  (conv['id'],-1 if since is None else since,manifest['created']))]
     if not conv or ('*' not in grant['sources'] and conv['scope'] not in grant['sources']):
         _checkpoint(peer,event['seq']);return True
     if event['kind']=='history_delete':

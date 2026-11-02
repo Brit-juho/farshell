@@ -531,6 +531,8 @@ async def lifespan(_app: FastAPI):
         with suppress(asyncio.CancelledError):
             await history_replica_task
         with suppress(Exception):
+            history_worker.shutdown()
+        with suppress(Exception):
             await sock_service.stop()
         authz_legacy_use.flush()
         if browser_broker.enabled():

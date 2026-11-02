@@ -56,14 +56,34 @@ def directory():
 
 
 def private_file(path: Path):
-    fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    """Create the file 0600 if missing; refuse anything but a private regular file of ours.
+
+    An existing file is checked with lstat and never opened here. POSIX locks belong to the process,
+    and closing *any* descriptor of a file drops all of them, so the old open/close on every call
+    silently released SQLite's locks held by other live connections in this process (other threads,
+    or a long-lived connection). A descriptor is opened only to create the file or to fix a wrong
+    mode, both rare. A chmod is skipped when the mode is already right: each one posts an FSEvents
+    change, and this runs for the database and each companion on every connection.
+    """
     try:
-        st = os.fstat(fd)
-        if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or st.st_nlink != 1:
-            raise Refused("unsafe_store", 503)
-        os.fchmod(fd, 0o600)
-    finally:
-        os.close(fd)
+        st = os.lstat(path)
+    except FileNotFoundError:
+        try:
+            os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_RDWR | os.O_NOFOLLOW, 0o600))
+        except FileExistsError:
+            pass  # created concurrently; checked below like any existing file
+        st = os.lstat(path)
+    if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or st.st_nlink != 1:
+        raise Refused("unsafe_store", 503)
+    if stat.S_IMODE(st.st_mode) != 0o600:
+        fd = os.open(path, os.O_RDWR | os.O_NOFOLLOW)
+        try:
+            again = os.fstat(fd)
+            if (again.st_dev, again.st_ino) != (st.st_dev, st.st_ino) or again.st_nlink != 1:
+                raise Refused("unsafe_store", 503)
+            os.fchmod(fd, 0o600)
+        finally:
+            os.close(fd)
 
 
 DDL = """
@@ -125,6 +145,40 @@ CREATE TABLE deletion_tombstones(kind TEXT NOT NULL,resource TEXT NOT NULL,creat
 """
 
 
+_anchor = None
+
+
+def hold_wal():
+    """Keep one idle connection open while the server runs.
+
+    Every `database()` call opens and closes its own connection. When the last connection to a WAL
+    database closes, SQLite checkpoints into the main file and deletes `-wal`, so the next call
+    recreates it: a checkpoint into the whole catalog plus file churn many times a second. An idle
+    connection that has read once holds the WAL open; checkpoints then happen only by the normal
+    auto-checkpoint. It holds no transaction, so it never blocks writers or checkpoints. This relies on
+    private_file never closing a descriptor of an existing store file (that would drop its locks).
+    """
+    global _anchor
+    if _anchor is not None:
+        return
+    with database():
+        pass  # creates or validates the store and puts it in WAL mode first
+    anchor = sqlite3.connect(directory() / "catalog.sqlite3", timeout=2, check_same_thread=False)
+    try:
+        anchor.execute("SELECT 1 FROM meta LIMIT 1").fetchall()
+    except sqlite3.Error:
+        anchor.close()
+        raise
+    _anchor = anchor
+
+
+def release_wal():
+    global _anchor
+    anchor, _anchor = _anchor, None
+    if anchor is not None:
+        anchor.close()
+
+
 @contextmanager
 def database(*, write=False):
     root = directory()
@@ -159,6 +213,9 @@ def database(*, write=False):
                 db.executescript("BEGIN IMMEDIATE;" + DDL + f"PRAGMA user_version={SCHEMA_VERSION}; COMMIT;")
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("PRAGMA synchronous=FULL")
+        # With the WAL kept open (hold_wal) it is reused instead of deleted, so a large batch would
+        # otherwise leave it at its peak size; cut it back after each checkpoint that resets it.
+        db.execute("PRAGMA journal_size_limit=33554432")
         db.execute("BEGIN IMMEDIATE" if write else "BEGIN")
         if write:
             db.execute("INSERT OR IGNORE INTO meta VALUES('host',?)", (uid(),))

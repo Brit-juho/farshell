@@ -6,6 +6,7 @@ import io
 import json
 import os
 import shutil
+import threading
 import time
 from pathlib import Path
 
@@ -44,6 +45,7 @@ def put_chunk(data):
             out.flush()
             os.fsync(out.fileno())
         os.replace(temp, dest)
+        _note_written(len(data))
         folder = os.open(dest.parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(folder)
@@ -113,9 +115,8 @@ def register_source(provider, root):
     return {'id': sid, **preview}
 
 
-def _quota(*,replica=False,additional=0):
+def _count_usage():
     with database() as db:
-        quota = setting(db, 'replica_quota_bytes' if replica else 'quota_bytes', (50 if replica else 20) * 1024**3)
         # A shared physical chunk counts against each role that references it.
         # Pending receiver manifests count too, so interrupted transfers stay bounded.
         local, remote = set(), set()
@@ -125,11 +126,42 @@ def _quota(*,replica=False,additional=0):
             payload = json.loads(row['payload'])
             manifest = payload['manifest'] if row['kind'] == 'pending' else payload
             remote.update(part['digest'] for part in json.loads(manifest['detail'])['chunks'])
-    owned = remote if replica else local
     known = local | remote
+    totals = {'local': 0, 'remote': 0}
     # Uncommitted/orphan bytes also consume quota; failed captures cannot evade it.
-    total = sum(path.stat().st_size for path in (directory() / 'chunks').glob('*')
-                if path.is_file() and not path.is_symlink() and (path.name in owned or path.name not in known))
+    for path in (directory() / 'chunks').glob('*'):
+        if not path.is_file() or path.is_symlink():
+            continue
+        size = path.stat().st_size
+        if path.name in local or path.name not in known:
+            totals['local'] += size
+        if path.name in remote or path.name not in known:
+            totals['remote'] += size
+    return totals
+
+
+# The full count parses every manifest and stats every chunk (over a second on a large archive) and
+# used to run for every changed file on every 2s collector tick, holding the GIL the terminal needs.
+# It is now redone at most every QUOTA_RECOUNT seconds; bytes of chunks created in between are added
+# to both roles, so the cached check can only overestimate usage, never let a write past the quota.
+QUOTA_RECOUNT = 300
+_usage = {'root': None, 'at': 0.0, 'local': 0, 'remote': 0, 'written': 0}
+_usage_lock = threading.Lock()
+
+
+def _note_written(size):
+    with _usage_lock:
+        _usage['written'] += size
+
+
+def _quota(*,replica=False,additional=0):
+    with database() as db:
+        quota = setting(db, 'replica_quota_bytes' if replica else 'quota_bytes', (50 if replica else 20) * 1024**3)
+    root = str(directory())
+    with _usage_lock:
+        if _usage['root'] != root or time.monotonic() - _usage['at'] >= QUOTA_RECOUNT:
+            _usage.update(_count_usage(), root=root, at=time.monotonic(), written=0)
+        total = _usage['remote' if replica else 'local'] + _usage['written']
     if total + additional >= quota or shutil.disk_usage(directory()).free - additional < 2 * 1024**3:
         raise Refused('archive_quota_reached', 507)
 
@@ -185,6 +217,77 @@ def _projection(stream, provider, begin, end, *, seek=True, checkpoint=None):
     checkpoint.update(version=1, skipping_oversized=skipping, omitted_reasons=sorted(reasons),
                       incomplete_record=incomplete)
     return out, offset, bool(reasons or skipping or incomplete)
+
+
+# Every capture of a growing transcript adds a manifest listing all of that file's chunks, so an active
+# file gathered hundreds of near-identical restore points and the catalog grew quadratically. Per file
+# we keep the newest KEEP_RECENT_MANIFESTS, the newest of each generation (the last state before the file
+# was rewritten) and the newest of each local day, forever. Within a generation the chunk lists are
+# prefixes of the newest one, so no chunk loses its last reference.
+KEEP_RECENT_MANIFESTS = 20
+PRUNE_BATCH = 500
+
+
+def _retained(rows):
+    """`rows` are (id, generation, created) of one file, newest first."""
+    keep, generations, days = set(), set(), set()
+    for index, (mid, generation, created) in enumerate(rows):
+        day = time.strftime('%Y-%m-%d', time.localtime(created))
+        if index < KEEP_RECENT_MANIFESTS or generation not in generations or day not in days:
+            keep.add(mid)
+        generations.add(generation)
+        days.add(day)
+    return keep
+
+
+def _prunable(rows, key):
+    """Group rows (sorted by key, newest first within a key) and return what retention drops."""
+    drop, group, current = [], [], object()
+    for row in rows + [None]:
+        if row is None or key(row) != current:
+            if group:
+                keep = _retained([(r['id'], r['generation'], r['created']) for r in group])
+                drop += [r for r in group if r['id'] not in keep]
+            if row is None:
+                break
+            group, current = [], key(row)
+        group.append(row)
+    return drop
+
+
+def prune_manifests():
+    """Apply manifest retention to local captures and to manifests received from peers.
+
+    A local manifest is dropped only after every send peer's checkpoint has passed it: messages
+    replicate together with their manifest, so dropping an unsent one would lose them on the peer.
+    Received manifests are only stored here; their origin keeps its own copies.
+    """
+    with database() as db:
+        local = [dict(r) for r in db.execute('SELECT id,file_id,generation,created FROM manifests ORDER BY file_id,created DESC,id DESC')]
+        senders = [r['peer'] for r in db.execute("SELECT peer FROM replication_grants WHERE direction='send'")]
+        sent = {r['peer']: r['seq'] for r in db.execute('SELECT peer,seq FROM replica_checkpoints')}
+        sent_upto = min((sent.get(peer, 0) for peer in senders), default=None)
+        seqs = {}
+        if sent_upto is not None:
+            seqs = {r['resource']: r['seq'] for r in db.execute("SELECT resource,MAX(seq) AS seq FROM change_log WHERE kind='manifest' GROUP BY resource")}
+        received = [dict(r) for r in db.execute(
+            "SELECT origin,id,json_extract(payload,'$.file_id') AS file_id,json_extract(payload,'$.generation') AS generation,"
+            "json_extract(payload,'$.created') AS created FROM replicas WHERE kind='manifest' ORDER BY origin,file_id,created DESC,id DESC")]
+    drop_local = [r['id'] for r in _prunable(local, lambda r: r['file_id'])
+                  if sent_upto is None or (r['id'] in seqs and seqs[r['id']] <= sent_upto)]
+    drop_received = [(r['origin'], r['id']) for r in _prunable(
+        [r for r in received if isinstance(r['created'], (int, float)) and isinstance(r['generation'], str)],
+        lambda r: (r['origin'], r['file_id']))]
+    # Small batches keep each write transaction short next to live capture and terminal traffic.
+    # The newest manifest of a file is always retained, and a capture landing meanwhile only adds a newer
+    # one, so nothing dropped here can be the manifest the next capture continues from.
+    for start in range(0, len(drop_local), PRUNE_BATCH):
+        with database(write=True) as db:
+            db.executemany('DELETE FROM manifests WHERE id=?', [(mid,) for mid in drop_local[start:start + PRUNE_BATCH]])
+    for start in range(0, len(drop_received), PRUNE_BATCH):
+        with database(write=True) as db:
+            db.executemany("DELETE FROM replicas WHERE origin=? AND kind='manifest' AND id=?", drop_received[start:start + PRUNE_BATCH])
+    return {'local': len(drop_local), 'received': len(drop_received)}
 
 
 def capture(source, relative, *, max_bytes=PASS_BYTES):
