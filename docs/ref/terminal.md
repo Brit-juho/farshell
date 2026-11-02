@@ -397,6 +397,18 @@ replica quotas are accounted separately, including pending and orphan bytes. Rec
 retains old private keys for in-flight packets; keys are excluded from backup exports. Explicit deletion
 can request replica tombstones with delivery ACKs, while source disappearance emits no deletion.
 Raw chunks remain until a separate cleanup operation; a tombstone is not a physical secure erase.
+
+Restore points are thinned hourly (`archive.prune_manifests`): per file the newest 20 manifests, the
+newest of each generation and the newest of each local day are kept forever; manifests received
+from peers get the same rule per origin and file. Within a generation chunk lists are prefixes of the
+newest one, so no chunk loses its last reference. A local manifest is dropped only after every send
+peer's checkpoint has passed it, and a manifest event carries the conversation's messages since its
+previous surviving manifest, so a peer added later still receives every message. Origin and replica
+quota usage is counted in full at most every 5 minutes; chunks created in between are added to both
+roles, so the cached check can only overestimate. The server keeps one idle catalog connection so the
+WAL is not checkpointed and deleted on every short connection; `private_file` therefore checks an
+existing store file with `lstat` and never opens and closes it (closing any descriptor drops every
+POSIX lock the process holds on that file).
 Receiver records never become local executions.
 Protocol tests cover large projections, lost ACKs and revoked grants; these are not evidence of
 an operational central host connection.

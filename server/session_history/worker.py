@@ -50,8 +50,9 @@ class Collector:
         if now - self.last_auto_archive >= 3600:
             from session_catalog import db as catalog_db
             catalog_db.auto_archive()
+            archive.prune_manifests()
             self.last_auto_archive = now
-        with database(write=True) as db:
+        with database() as db:
             sources = [dict(r) for r in db.execute('SELECT * FROM sources WHERE enabled=1')]
         updated, failures, limited = 0, 0, False
         for source in sources:
@@ -160,7 +161,8 @@ class Collector:
                 if prior and (prior['parent_id']!=parent or prior['child_id']!=child):
                     continue
                 if prior:
-                    db.execute('UPDATE relations SET detail=? WHERE id=?',(detail,prior['id']))
+                    if prior['detail']!=detail:
+                        db.execute('UPDATE relations SET detail=? WHERE id=?',(detail,prior['id']))
                 else:
                     db.execute('INSERT INTO relations VALUES(?,?,?,?,?,?)',(uid(),'delegation',parent,child,source,detail))
 
@@ -245,4 +247,15 @@ async def index_history():
 
 async def initialize():
     from session_catalog.identity import enable
+    from session_catalog.db import hold_wal
     await _offload(enable)
+    try:
+        await _offload(hold_wal)
+    except Exception:
+        # Without the anchor the catalog still works; it only checkpoints on every close again.
+        logger.warning('session catalog WAL anchor unavailable')
+
+
+def shutdown():
+    from session_catalog.db import release_wal
+    release_wal()
