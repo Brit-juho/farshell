@@ -412,7 +412,7 @@ $ fsh start
 $ fsh manage                                             [server/tui/, standalone]
 ```
 
-PIDs are stored in `/tmp/vt-pids/{server,tunnel,voice}.pid`. `fsh stop`
+PIDs are stored in `~/.vt/run/vt-pids/{server,tunnel,voice}.pid`. `fsh stop`
 cleans them all up.
 
 ---

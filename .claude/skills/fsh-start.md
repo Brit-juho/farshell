@@ -57,7 +57,7 @@ fsh restart --voice
 
 ### 4. 접속 정보 안내
 
-주소는 **`fsh status`가 말하는 것**을 쓰세요. `/tmp/cloudflared.log`를 직접 grep하면
+주소는 **`fsh status`가 말하는 것**을 쓰세요. `~/.vt/run/cloudflared.log`를 직접 grep하면
 제공자가 cloudflare가 아닐 때(ngrok, 명명 터널, none) 틀린 답을 냅니다 — `_main_tunnel_url()`이
 단일 진실의 원천입니다.
 
@@ -96,8 +96,8 @@ tunnel"`이나 `pkill -f voice_daemon.py`를 치지 마세요 — 파일 이름�
 
 ```bash
 fsh doctor                  # 13개 항목 진단 (Python·venv·패키지·tmux·cloudflared·포트·토큰…)
-cat /tmp/vt-server.log      # 서버 로그
-cat /tmp/cloudflared.log    # 터널 로그
+cat ~/.vt/run/vt-server.log      # 서버 로그
+cat ~/.vt/run/cloudflared.log    # 터널 로그
 ```
 
 tmux 세션이 안 보인다면: FarShell은 격리된 `-L fsh` 소켓을 씁니다. 맨 `tmux ls`는

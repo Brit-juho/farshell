@@ -32,7 +32,7 @@ An anonymous quick tunnel's address is bound to the **cloudflared process lifeti
 
 ### Automatic tunnel zombie-reconnect recovery
 
-cloudflared can fall into a zombie state where the process is alive (`kill -0` succeeds) but only the QUIC control stream to the edge is cut, endlessly retrying reconnection (static files occasionally return 200, API returns 503). `server/tunnel_watchdog.py` auto-starts with `fsh start`/`voice`/`mobile`, watches `/tmp/cloudflared.log` for reconnect-failure patterns (default: 4+ times within 90 seconds), and automatically calls `fsh tunnel restart`. Manual check/start: `fsh tunnel watchdog`; manual forced restart: `fsh tunnel restart`
+cloudflared can fall into a zombie state where the process is alive (`kill -0` succeeds) but only the QUIC control stream to the edge is cut, endlessly retrying reconnection (static files occasionally return 200, API returns 503). `server/tunnel_watchdog.py` auto-starts with `fsh start`/`voice`/`mobile`, watches `$VT_RUN_DIR/cloudflared.log` for reconnect-failure patterns (default: 4+ times within 90 seconds), and automatically calls `fsh tunnel restart`. Manual check/start: `fsh tunnel watchdog`; manual forced restart: `fsh tunnel restart`
 
 ### Tailscale remote access (D9)
 
@@ -41,6 +41,10 @@ cloudflared can fall into a zombie state where the process is alive (`kill -0` s
 ### Client connection notifications (D9)
 
 `VT_NOTIFY_CLIENT_EVENTS=1` — tmux client-attached/detached hook → ntfy/Telegram push
+
+### Runtime folder (`VT_RUN_DIR`, 2.7)
+
+Logs, pid files and the extra-port registry (`vt-pids/tunnels.tsv`) live in `VT_RUN_DIR`, by default `${VT_STATE_DIR:-~/.vt}/run` — the folder of the unix socket. Before 2.7 the default was the shared `/tmp` with fixed names, and `mkdir -p` / `: >` reused whatever was already there: another account on the same Mac could pre-create `/tmp/vt-pids` or `/tmp/cloudflared.log`, write its own trycloudflare URL into the log (the URL regex accepts any trycloudflare host) and have `fsh mobile`'s QR ticket and `/p/authorize`'s port ticket sent there, or plant pid files for `fsh stop` to kill. Extra-port cloudflared logs (`cloudflared-<port>.log`) also ignored `VT_RUN_DIR` and were 0644. Now `lib/run_dir.sh` `_vt_private_dir` (bin/fsh) and `vt_paths.check_private_dir` (server start-up) use the folder only if it is mine, not a symlink and 0700 (a loose folder of mine is tightened; anything else refuses to start). Upgrade: `start`/`stop`/`restart`/`voice`/`clip`/`mobile`/`update` move my own, non-symlink files from `/tmp` once (`_vt_migrate_legacy_run`), only for a default install (neither `VT_RUN_DIR` nor `VT_STATE_DIR` set — an isolated instance must not take the default instance's pid files) and not when the new folder is already in use; `fsh status` warns while a pre-upgrade server still runs from `/tmp`. Tests: `server/tests/test_runtime_dir.py` (sources only `lib/run_dir.sh` — running all of `bin/fsh stop` would also hit this tree's live daemons).
 
 ### Reading the quick-tunnel URL (2026-09-30)
 

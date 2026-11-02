@@ -186,6 +186,10 @@ _t_en_lookup() {
     '{action} 핫키 → {value}') _T_OUT='{action} hotkey → {value}' ;;
     '{action} 핫키 디폴트로 복구') _T_OUT='{action} hotkey restored to default' ;;
     '{action} 핫키 비활성화') _T_OUT='{action} hotkey disabled' ;;
+    '{dir} 가 심볼릭 링크라 런타임 폴더로 쓰지 않습니다') _T_OUT='{dir} is a symbolic link; not using it as the runtime folder' ;;
+    '{dir} 를 만들 수 없습니다') _T_OUT='Cannot create {dir}' ;;
+    '{dir} 의 권한을 0700 으로 바꿀 수 없습니다') _T_OUT='Cannot set the permissions of {dir} to 0700' ;;
+    '{dir} 의 소유자가 내가 아니라 쓰지 않습니다 — 다른 계정이 먼저 만든 폴더일 수 있습니다. VT_RUN_DIR 를 내 폴더로 지정하세요') _T_OUT='{dir} is not owned by you, so it is not used — another account may have created it first. Point VT_RUN_DIR at a folder of your own' ;;
     '{domain} (고정)') _T_OUT='{domain} (fixed)' ;;
     '{ev} 이벤트: {reason}') _T_OUT='{ev} event: {reason}' ;;
     '{file} 읽기 실패 (원본 유지)') _T_OUT='Couldn'\''t read {file} (original kept)' ;;
@@ -290,6 +294,7 @@ _t_en_lookup() {
     '디폴트') _T_OUT='default' ;;
     '또는 ~/.vt.env에 VT_PYTHON=/path/to/python 지정') _T_OUT='Or set VT_PYTHON=/path/to/python in ~/.vt.env' ;;
     '또는:') _T_OUT='Or:' ;;
+    '런타임 파일을 {old} 에서 {new} 로 옮겼습니다') _T_OUT='Moved runtime files from {old} to {new}' ;;
     '로그: {path}') _T_OUT='Log: {path}' ;;
     '릴리스 패키지 — 빌드된 프런트엔드가 포함돼 있습니다 (node 불필요)') _T_OUT='Release package - the built frontend is included (no node needed)' ;;
     '마지막 훅 전송이 실패했습니다 — 등록은 됐지만 서버에 닿지 못합니다.') _T_OUT='The last hook delivery failed — the hooks are registered but can'\''t reach the server.' ;;
@@ -472,6 +477,7 @@ _t_en_lookup() {
     '알 수 없음') _T_OUT='unknown' ;;
     '알릴 URL이 없습니다 (터널 미실행)') _T_OUT='No URL to report (tunnel isn'\''t running)' ;;
     '언어 설정을 ~/.vt.env 에 저장하지 못했습니다 — 나중에 설정 화면에서 바꿀 수 있습니다') _T_OUT='Couldn'\''t save the language to ~/.vt.env - you can change it later in Settings' ;;
+    '업그레이드 전 서버가 옛 위치({old})로 돌고 있습니다 — fsh restart 를 한 번 실행하세요') _T_OUT='A server from before the upgrade is running from the old location ({old}) — run fsh restart once' ;;
     '없음') _T_OUT='None' ;;
     '없음. install.sh가 자동 생성') _T_OUT='not found. install.sh creates it' ;;
     '에이전트 훅 등록 상태') _T_OUT='Agent hook registration' ;;

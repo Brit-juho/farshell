@@ -86,8 +86,9 @@ def test_state_dir_default_is_dot_vt(monkeypatch):
     assert vt_paths.state_dir() == Path("/home/u/.vt")
 
 
-def test_run_dir_default_is_tmp():
-    assert vt_paths.run_dir() == Path("/tmp")
+def test_run_dir_default_is_under_state_dir():
+    # 2.7: 공용 /tmp 가 아니라 state_dir()/run(유닉스 소켓과 같은 폴더) — test_runtime_dir.py
+    assert vt_paths.run_dir() == vt_paths.state_dir() / "run"
 
 
 def test_run_dir_honors_override(monkeypatch):
@@ -135,10 +136,9 @@ def test_tunnel_log_is_under_run_dir(monkeypatch):
     assert vt_paths.tunnel_log() == Path("/tmp/iso/cloudflared.log")
 
 
-def test_tunnel_log_default_matches_the_old_hardcoded_path():
-    """E8 — 기본값은 예전 하드코딩(`/tmp/cloudflared.log`)과 같아야 한다.
-    격리하지 않은 서버의 동작은 안 바뀐다."""
-    assert vt_paths.tunnel_log() == Path("/tmp/cloudflared.log")
+def test_tunnel_log_default_follows_run_dir():
+    """2.7 — 기본 위치가 공용 /tmp 에서 state_dir()/run 으로 옮겨졌다(bin/fsh 와 같은 규칙, test_runtime_dir.py)."""
+    assert vt_paths.tunnel_log() == vt_paths.state_dir() / "run" / "cloudflared.log"
 
 
 def test_is_isolated_false_when_both_unset():

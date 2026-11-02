@@ -42,11 +42,11 @@
     ~/.vt.env에서 VT_PORT 변경
 
 ### 서버 시작 실패
-    cat /tmp/vt-server.log
+    cat ~/.vt/run/vt-server.log
 
 ### Cloudflare Tunnel URL 안 뜸
 - `fsh status`로 cloudflared 동작 확인
-- `cat /tmp/cloudflared.log`
+- `cat ~/.vt/run/cloudflared.log`
 - 안 깔렸으면: `brew install cloudflared` (macOS) / 공식 바이너리 (Linux)
 
 ### tmux 세션 이름 변경했는데 안 바뀜
@@ -79,9 +79,9 @@
 
 | 항목 | 경로 |
 |---|---|
-| 서버 | `/tmp/vt-server.log` |
-| Cloudflare Tunnel | `/tmp/cloudflared.log` |
-| Voice Daemon | `/tmp/vt-voice-daemon.log` |
-| PID 파일 | `/tmp/vt-pids/` |
+| 서버 | `~/.vt/run/vt-server.log` |
+| Cloudflare Tunnel | `~/.vt/run/cloudflared.log` |
+| Voice Daemon | `~/.vt/run/vt-voice-daemon.log` |
+| PID 파일 | `~/.vt/run/vt-pids/` |
 | 음성 타깃 lock | `~/.vt/voice_target` |
 | 환경 설정 | `~/.vt.env` |

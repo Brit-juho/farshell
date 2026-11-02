@@ -101,8 +101,34 @@ def state_dir() -> Path:
 
 
 def run_dir() -> Path:
-    """VT_RUN_DIR. 기본 /tmp — pid·터널 로그 등 휘발성 런타임 파일."""
-    return _resolve("VT_RUN_DIR", Path("/tmp"))
+    """VT_RUN_DIR. 기본 `state_dir()/run` — pid·터널 로그 등 휘발성 런타임 파일(유닉스 소켓과 같은 폴더).
+
+    2.7 전 기본값은 공용 `/tmp`였다. 고정 이름(`vt-pids/`, `cloudflared.log`)을 같은 맥의 다른 계정이
+    먼저 만들어 두면 터널 주소·PID를 바꿔치기할 수 있었다. bin/fsh의 `_vt_run_default`와 같은 규칙이다.
+    """
+    return _resolve("VT_RUN_DIR", state_dir() / "run")
+
+
+class UnsafeRunDir(RuntimeError):
+    pass
+
+
+def check_private_dir(path: Path) -> None:
+    """런타임 폴더는 내 소유·심볼릭 링크 아님·0700 이어야 한다. 내 소유인데 느슨하면 0700으로 조이고,
+    남의 것이거나 링크면 `UnsafeRunDir`. bin/fsh `_vt_private_dir`와 같은 판정(서버만 따로 띄운 경우용)."""
+    try:
+        st = path.lstat()
+    except FileNotFoundError:
+        return  # 아직 없다 — 만드는 쪽(bin/fsh)이 0700으로 만든다
+    import stat as _stat
+    if _stat.S_ISLNK(st.st_mode):
+        raise UnsafeRunDir(f"{path} 가 심볼릭 링크다")
+    if not _stat.S_ISDIR(st.st_mode):
+        raise UnsafeRunDir(f"{path} 가 폴더가 아니다")
+    if st.st_uid != os.getuid():
+        raise UnsafeRunDir(f"{path} 의 소유자(uid {st.st_uid})가 내가 아니다")
+    if st.st_mode & 0o077:
+        os.chmod(path, 0o700)
 
 
 def workspace_path() -> Path:

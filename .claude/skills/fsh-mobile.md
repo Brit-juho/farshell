@@ -22,7 +22,7 @@ fsh start      # 서버·터널이 안 떠 있으면 시작
 fsh mobile     # 접속 URL + QR 코드
 ```
 
-**URL은 `fsh`가 말하는 것을 쓰세요.** `/tmp/cloudflared.log`를 직접 grep하면 제공자가
+**URL은 `fsh`가 말하는 것을 쓰세요.** `~/.vt/run/cloudflared.log`를 직접 grep하면 제공자가
 cloudflare가 아닐 때(ngrok·명명 터널·none) 틀린 답이 나옵니다 — `_main_tunnel_url()`이
 단일 진실의 원천이고 `fsh status`/`fsh mobile`이 그걸 씁니다.
 

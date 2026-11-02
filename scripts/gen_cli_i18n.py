@@ -17,7 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DICT = ROOT / "frontend" / "js" / "locales" / "en.js"
 OUT = ROOT / "lib" / "locales" / "en.sh"
-SHELL_FILES = ["bin/fsh", "install.sh", "run_server.sh", "lib/vt_env.sh", "lib/i18n.sh"]
+SHELL_FILES = ["bin/fsh", "install.sh", "run_server.sh", "lib/vt_env.sh", "lib/i18n.sh", "lib/run_dir.sh"]
 
 # _t '원문' …  /  _t "원문" …   (따옴표 안은 이스케이프 허용)
 CALL = re.compile(r"""(?<![\w$])_t\s+(?:'([^']*)'|"((?:[^"\\]|\\.)*)")""")

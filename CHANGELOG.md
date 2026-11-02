@@ -8,6 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Security
+- Runtime files (logs, pid files, the tunnel registry) moved from the shared `/tmp` to `~/.vt/run` (0700, next to the unix socket). Another account on the same Mac could pre-create `/tmp/vt-pids` or `/tmp/cloudflared.log` and redirect the `fsh mobile` QR ticket and port tickets to its own tunnel, or plant pid files for `fsh stop`. The folder is used only if it is yours, not a symlink and 0700. **After upgrading run `fsh restart` once**: it moves your own files from `/tmp`; `fsh status` warns until then. An explicit `VT_RUN_DIR` must also be a folder of your own.
+
 ### Changed
 - View tabs: text is one step larger (15px, tabs at least 200px wide), the hover card lists each member as `name · state · branch`, and right-clicking a tab (or the Menu key) opens a menu with 이름 변경 and 뷰 닫기. There is no ungroup item; the menu loads on first use so the initial payload stays under its cap.
 - A web terminal whose tmux session ended while other sessions remain is now closed (4004) instead of silently showing another session in its pane. With `detach-on-destroy off` tmux moves the client to a surviving session, so the screen never learned the session was gone; the server now tracks each PTY's tmux session id and ends the PTY when that id disappears (renames and deliberate session switches are not affected).

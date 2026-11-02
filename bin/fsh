@@ -114,17 +114,28 @@ _resolve_disallowed_tools() {
   fi
 }
 
-# 런타임 산출물(로그·PID·터널 레지스트리·업로드)의 뿌리. 기본 /tmp 라서 기존 경로는
-# 그대로다 — 문서와 스킬이 /tmp/vt-server.log 를 안내하고 있다.
+# 런타임 산출물(로그·PID·터널 레지스트리)의 뿌리. 기본 `${VT_STATE_DIR:-~/.vt}/run`(0700) — 유닉스 소켓
+# fsh.sock 과 같은 폴더다(lib/fsh_client.sh 와 같은 규칙, server 쪽은 vt_paths.run_dir()).
+#
+# 2.7 전에는 공용 /tmp 였다. 고정 이름(/tmp/vt-pids/, /tmp/cloudflared.log)은 같은 맥의 다른 계정이 먼저
+# 만들어 둘 수 있고, `mkdir -p`·`: >` 는 남의 것을 그대로 쓴다 — 그 사람이 로그에 자기 터널 주소를 써 넣으면
+# `fsh mobile` QR·노출 포트 티켓이 그 주소로 갔고, PID 파일을 바꾸면 `fsh stop` 이 엉뚱한 프로세스를 죽였다.
+# 그래서 폴더는 내 소유·심볼릭 링크 아님·0700 이 아니면 쓰지 않는다(_vt_private_dir).
 #
 # 이걸 바꾸면 한 머신에서 **두 인스턴스를 동시에** 돌릴 수 있다. 예전엔 PID 파일이
 # 공유돼서, 다른 트리에서 `fsh stop` 을 치면 돌아가던 서버를 죽였다.
 # 격리 실행에는 VT_PORT · VT_TMUX_SOCKET · VT_STATE_DIR · VT_CONFIG ·
 # VT_WORKSPACE_PATH 와 함께 쓴다. server 쪽은 tunnel_registry.py / routes/pty.py 가
 # 같은 변수를 읽는다(bin/fsh 가 export 하므로 값이 갈라지지 않는다).
-VT_RUN_DIR="${VT_RUN_DIR:-/tmp}"
+# 판정 함수는 lib/run_dir.sh(테스트가 그 파일만 불러 시험한다).
+_VT_LEGACY_RUN=/tmp
+# shellcheck source=../lib/run_dir.sh
+. "$VT_DIR/lib/run_dir.sh"
+
+[ -n "${VT_RUN_DIR:-}" ] && _VT_RUN_DIR_EXPLICIT=1
+VT_RUN_DIR="${VT_RUN_DIR:-$(_vt_run_default)}"
 export VT_RUN_DIR
-mkdir -p "$VT_RUN_DIR"
+_vt_private_dir "$VT_RUN_DIR" || exit 1
 SERVER_LOG="$VT_RUN_DIR/vt-server.log"
 TUNNEL_LOG="$VT_RUN_DIR/cloudflared.log"
 NGROK_LOG="$VT_RUN_DIR/ngrok.log"
@@ -133,7 +144,8 @@ CLIP_DAEMON_LOG="$VT_RUN_DIR/vt-clipboard-daemon.log"
 WATCHDOG_LOG="$VT_RUN_DIR/vt-tunnel-watchdog.log"
 HOOK_RETRY_LOG="$VT_RUN_DIR/vt-tunnel-hook-retry.log"
 PID_DIR="$VT_RUN_DIR/vt-pids"
-mkdir -p "$PID_DIR"
+_vt_private_dir "$PID_DIR" || exit 1
+
 # 추가 포트 터널 레지스트리 (TSV: port<TAB>url<TAB>label)
 TUNNEL_REGISTRY="$PID_DIR/tunnels.tsv"
 
@@ -465,7 +477,7 @@ _extra_tunnel_log() {
   if [ "$(_tunnel_provider)" = "ngrok" ]; then
     echo "$VT_RUN_DIR/ngrok-$1.log"
   else
-    echo "/tmp/cloudflared-$1.log"
+    echo "$VT_RUN_DIR/cloudflared-$1.log"
   fi
 }
 
@@ -4117,7 +4129,7 @@ cmd_run() {
   # lockfile — 같은 프롬프트 중복 실행 방지 (reminder-watch 패턴)
   local prompt_hash
   prompt_hash="$(printf '%s' "$prompt" | shasum 2>/dev/null | cut -c1-8 || echo "$$")"
-  local LOCK="/tmp/vt-run-${prompt_hash}.lock"
+  local LOCK="$VT_RUN_DIR/vt-run-${prompt_hash}.lock"
   if [ -f "$LOCK" ]; then
     local lock_pid
     lock_pid="$(cat "$LOCK" 2>/dev/null)"
@@ -4131,7 +4143,7 @@ cmd_run() {
     fi
   fi
 
-  local LOG="/tmp/vt-run-${prompt_hash}-$(date +%s).log"
+  local LOG="$VT_RUN_DIR/vt-run-${prompt_hash}-$(date +%s).log"
   local TIMEOUT="${VT_RUN_TIMEOUT:-3600}"
   local disallowed
   disallowed="$(_resolve_disallowed_tools)"
@@ -4176,8 +4188,8 @@ cmd_run() {
       curl -sf -X POST "http://localhost:${VT_PORT}/voice/output" \
         -H 'Content-Type: application/json' \
         -d "$(python3 -c "import json,sys; print(json.dumps({'text': sys.argv[1][:200]}))" "$result")" \
-        -o /tmp/vt-run-tts.mp3 2>/dev/null && \
-        afplay /tmp/vt-run-tts.mp3 2>/dev/null
+        -o "$VT_RUN_DIR/vt-run-tts.mp3" 2>/dev/null && \
+        afplay "$VT_RUN_DIR/vt-run-tts.mp3" 2>/dev/null
     else
       # fallback: macOS say
       command -v say >/dev/null && say -v Yuna "${result:0:200}" 2>/dev/null
@@ -5194,6 +5206,11 @@ cmd_status() {
   echo ""
   echo "  📊 fsh status"
   echo ""
+  if _vt_legacy_pid_dir_ok && [ -f "$_VT_LEGACY_RUN/vt-pids/server.pid" ] \
+      && kill -0 "$(cat "$_VT_LEGACY_RUN/vt-pids/server.pid" 2>/dev/null)" 2>/dev/null; then
+    echo "  ⚠ $(_t '업그레이드 전 서버가 옛 위치({old})로 돌고 있습니다 — fsh restart 를 한 번 실행하세요' old="$_VT_LEGACY_RUN")"
+    echo ""
+  fi
 
   local server_status; server_status="✗ $(_t '중지')"
   local tunnel_status; tunnel_status="✗ $(_t '중지')"
@@ -5296,6 +5313,10 @@ cmd_status() {
 }
 
 # --- Main ---
+# 서버·터널을 (다시) 띄우거나 내리는 명령만 옛 /tmp 런타임 파일을 옮긴다(_vt_migrate_legacy_run 주석).
+case "${1:-help}" in
+  start|stop|restart|voice|clip|mobile|update) _vt_migrate_legacy_run ;;
+esac
 case "${1:-help}" in
   voice)   cmd_voice ;;
   clip)    cmd_clip ;;
