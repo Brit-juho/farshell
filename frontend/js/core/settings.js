@@ -74,7 +74,9 @@ export const SCHEMA = {
   // 어긋난다 — 키맵의 진짜 스키마는 core/keymap.js의 ACTIONS 하나뿐이다.
   'keymap.overrides':       { type: 'str', def: '{}' }, // V1 읽기 호환
   'keymap.bindingsV2':      { type: 'str', def: '', scope: 'device' },
-  'terminal.optionMode':    { type: 'enum', def: 'unicode', values: ['unicode', 'meta'], scope: 'device' },
+  // 기본은 meta: Option+P(모델 선택)·Option+B/F 같은 터미널 앱 조합이 π·∫ 같은 문자로 바뀌지 않게 한다.
+  // 특수문자를 Option으로 입력하려면 설정 → 키맵에서 unicode로 바꾼다(저장된 선택은 그대로 유지된다).
+  'terminal.optionMode':    { type: 'enum', def: 'meta', values: ['unicode', 'meta'], scope: 'device' },
   // 2026-09-23(2.1 D6) — 빠른 열기(팔레트) 기본 화면의 "최근 사용 기능" 2개.
   // action id(레이블 아님 — 레이블은 바뀔 수 있다) 배열을 최신순 JSON
   // 문자열로 저장한다. 기기마다 쓰는 기능이 달라 device 스코프다.
