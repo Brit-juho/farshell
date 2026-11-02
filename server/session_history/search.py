@@ -3,16 +3,36 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from pathlib import Path
 
 from session_catalog.db import database, directory, private_file, host_id
+
+
+# The index stores no copy of the bodies (`content=''`): searches only need which conversation matched,
+# kept in `owners`, and every hit is re-read and permission-checked in the catalog anyway. The old layout
+# kept a full second copy of every message (~0.4 GB) and is rebuilt once from scratch.
+SCHEMA = (
+    "CREATE VIRTUAL TABLE IF NOT EXISTS bodies USING fts5(body,content='',tokenize='trigram')",
+    'CREATE TABLE IF NOT EXISTS owners(rowid INTEGER PRIMARY KEY,origin TEXT NOT NULL,conversation TEXT NOT NULL)',
+    'CREATE TABLE IF NOT EXISTS progress(kind TEXT PRIMARY KEY,position INTEGER NOT NULL)',
+)
+
+
+def _outdated(path):
+    """True for an index in the old self-contained layout (bodies without owners)."""
+    if not path.is_file() or path.is_symlink():
+        return False
+    with sqlite3.connect(f'file:{path}?mode=ro', uri=True, timeout=.2) as index:
+        names = {r[0] for r in index.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    return 'bodies' in names and 'owners' not in names
 
 
 def _refresh(limit=1000):
     path = directory() / 'search.sqlite3'
     private_file(path)
     with database() as source, sqlite3.connect(path, timeout=.2) as index:
-        index.execute("CREATE VIRTUAL TABLE IF NOT EXISTS bodies USING fts5(origin UNINDEXED,conversation UNINDEXED,body,tokenize='trigram')")
-        index.execute('CREATE TABLE IF NOT EXISTS progress(kind TEXT PRIMARY KEY,position INTEGER NOT NULL)')
+        for statement in SCHEMA:
+            index.execute(statement)
         origin = host_id(source)
         for kind, sql in (
             ('local', 'SELECT rowid,id,conversation_id,body FROM messages WHERE rowid>? ORDER BY rowid LIMIT ?'),
@@ -27,7 +47,8 @@ def _refresh(limit=1000):
                 else:
                     message = json.loads(record['payload'])
                     owner, cid, body = record['origin'], message['conversation_id'], message['body']
-                index.execute('INSERT INTO bodies(origin,conversation,body) VALUES(?,?,?)', (owner,cid,body))
+                rowid = index.execute('INSERT INTO owners(origin,conversation) VALUES(?,?)', (owner, cid)).lastrowid
+                index.execute('INSERT INTO bodies(rowid,body) VALUES(?,?)', (rowid, body))
             if rows:
                 position = rows[-1]['rowid']
             if rows or row is None:
@@ -53,7 +74,7 @@ def matches(source, search):
             if progress.get('local',0) < local or progress.get('replica',0) < remote:
                 return None
             query = '"' + search.replace('"','""') + '"'
-            rows = index.execute('SELECT DISTINCT origin,conversation FROM bodies WHERE bodies MATCH ? LIMIT 10001', (query,)).fetchall()
+            rows = index.execute('SELECT DISTINCT o.origin,o.conversation FROM bodies b JOIN owners o ON o.rowid=b.rowid WHERE bodies MATCH ? LIMIT 10001', (query,)).fetchall()
             return rows if len(rows) <= 10000 else None
     except sqlite3.Error:
         # Index loss/corruption does not make the archive unavailable.
@@ -65,6 +86,11 @@ def refresh(limit=1000):
     import os
     path=directory()/'search.sqlite3'
     try:
+        if _outdated(path):
+            # Disposable: searches fall back to SQL LIKE (matches() returns None) until it has caught up.
+            path.unlink()
+            for suffix in ('-journal','-wal','-shm'):
+                Path(str(path)+suffix).unlink(missing_ok=True)
         _refresh(limit)
     except (sqlite3.DatabaseError,Refused) as error:
         cause=error.__cause__ if isinstance(error,Refused) else error

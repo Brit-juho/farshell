@@ -387,7 +387,9 @@ within a one-second scheduling window, preserving the existing request timeout, 
 limits; a bounded event already begun can outlast that window so a slow host still advances.
 Explicit cancellation is also checked within the event and prevents subsequent work.
 The disposable trigram index can fall back to normalized SQL
-search while absent or behind the catalog.
+search while absent or behind the catalog. It keeps no copy of the bodies (`content=''`); an `owners`
+table maps each row to its origin and conversation, and an index in the older self-contained layout
+is rebuilt from scratch.
 
 Archive APIs are direct-host human only; sensitive operations additionally require elevation.
 They are absent from broad relay and agent socket allowlists. Replication uses a distinct human
