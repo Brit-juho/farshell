@@ -9,6 +9,7 @@ import re
 import subprocess
 import time
 import urllib.request
+import git_safe
 from pathlib import Path
 
 import agent_config as manager
@@ -189,9 +190,8 @@ def apply_edit(token):
 
 
 def _git(path, *args, strip=True):
-    result = subprocess.run(["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-C", str(path), *args],
-                            capture_output=True, text=True, timeout=3,
-                            env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0"})
+    result = subprocess.run(git_safe.argv(*args, cwd=path), capture_output=True, text=True, timeout=3,
+                            env=git_safe.env())
     if result.returncode or len(result.stdout) > MAX_CONTENT:
         return None
     return result.stdout.strip() if strip else result.stdout

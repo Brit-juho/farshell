@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Optional
 
 import fsguard
+import git_safe
 import mcp_adapters
 import mcp_sources
 import tmux_runner
@@ -82,8 +83,8 @@ TOOLS = ("claude", "codex", "agy", "opencode")
 def _git_toplevel(path: Path) -> Optional[Path]:
     try:
         r = subprocess.run(
-            ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
-            capture_output=True, text=True, timeout=_GIT_TIMEOUT,
+            git_safe.argv("rev-parse", "--show-toplevel", cwd=path),
+            capture_output=True, text=True, timeout=_GIT_TIMEOUT, env=git_safe.env(),
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -94,8 +95,8 @@ def _git_toplevel(path: Path) -> Optional[Path]:
 def _git_branch(path: Path) -> str:
     try:
         r = subprocess.run(
-            ["git", "-C", str(path), "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True, text=True, timeout=_GIT_TIMEOUT,
+            git_safe.argv("rev-parse", "--abbrev-ref", "HEAD", cwd=path),
+            capture_output=True, text=True, timeout=_GIT_TIMEOUT, env=git_safe.env(),
         )
     except (OSError, subprocess.SubprocessError):
         return ""

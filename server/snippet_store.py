@@ -22,6 +22,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import fsguard
+import git_safe
 import store_lock
 import vt_paths
 from i18n import tr
@@ -64,8 +65,8 @@ def resolve_project_key(cwd: str | None) -> str | None:
         return None
     try:
         result = subprocess.run(
-            ["git", "-C", str(p), "rev-parse", "--show-toplevel"],
-            capture_output=True, text=True, timeout=3,
+            git_safe.argv("rev-parse", "--show-toplevel", cwd=p),
+            capture_output=True, text=True, timeout=3, env=git_safe.env(),
         )
     except Exception:
         return None

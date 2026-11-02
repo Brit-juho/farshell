@@ -26,6 +26,7 @@ from pathlib import Path
 
 import agents
 import fsguard
+import git_safe
 import mcp_env
 import tmux_runner
 # 순수 파서는 worktree_parse.py로 옮겼다. **이름은 여기 그대로 남긴다** —
@@ -103,10 +104,13 @@ class WorktreeError(Exception):
 # --- git 실행 헬퍼 ------------------------------------------------------------
 
 
-def _git(args: list[str], cwd: Path, timeout: float = GIT_TIMEOUT) -> tuple[int, bytes, bytes]:
+def _git(args: list[str], cwd: Path, timeout: float = GIT_TIMEOUT, *, hooks: bool = False) -> tuple[int, bytes, bytes]:
+    """`git_safe`로 저장소 설정이 프로그램을 띄우지 못하게 한다. `hooks=True`는 사용자가 요청한
+    worktree 만들기·지우기에만(git CLI와 같이 post-checkout 등 저장소 훅이 돈다)."""
     try:
         proc = subprocess.run(
-            ["git", *args], cwd=str(cwd), capture_output=True, timeout=timeout, check=False,
+            git_safe.argv(*args, hooks=hooks), cwd=str(cwd), capture_output=True, timeout=timeout,
+            check=False, env=git_safe.env(),
         )
         return proc.returncode, proc.stdout, proc.stderr
     except FileNotFoundError:
@@ -145,7 +149,7 @@ def _ahead_behind(path: Path) -> tuple[int, int]:
 
 
 def _changed_stat(path: Path) -> dict:
-    rc, out, _ = _git(["diff", "HEAD", "--shortstat"], cwd=path)
+    rc, out, _ = _git(["diff", *git_safe.DIFF_FLAGS, "HEAD", "--shortstat"], cwd=path)
     if rc != 0:
         return {"files": 0, "add": 0, "del": 0}
     return parse_shortstat(out.decode("utf-8", errors="replace"))
@@ -598,6 +602,10 @@ def _validate_create_body(body: dict) -> tuple[str, str, str, str, dict, str, st
 
     if not repo_raw or not base or not name:
         raise WorktreeError(400, {"error": tr("repo/base/name이 필요합니다")})
+    # base 는 `git show {base}:package.json`·`git worktree add ... {base}`에 그대로 들어간다 — `-`로 시작하면
+    # 옵션으로 읽혀(`--output=<path>` 등) 임의 경로에 파일을 쓴다. 실제 존재 여부는 create_worktree가 rev-parse로 본다.
+    if base.startswith("-") or any(c in base for c in "\0\n\r") or len(base) > 255:
+        raise WorktreeError(400, {"error": tr("유효하지 않은 base입니다")})
     if not _SLUG_RE.fullmatch(name):
         raise WorktreeError(400, {"error": tr("name은 영숫자/-/_ 만 가능합니다")})
     if branch.startswith("-") or not _BRANCH_RE.fullmatch(branch):
@@ -638,7 +646,7 @@ def create_worktree(body: dict) -> dict:
 
     # 1) git worktree add — 실패하면 아무것도 안 만들어졌으니 롤백 불필요.
     dest_resolved.parent.mkdir(parents=True, exist_ok=True)
-    rc, _, err = _git(["worktree", "add", "-b", branch, str(dest_resolved), base], cwd=repo_path)
+    rc, _, err = _git(["worktree", "add", "-b", branch, str(dest_resolved), base], cwd=repo_path, hooks=True)
     if rc != 0:
         raise WorktreeError(400, {"error": tr("git worktree add 실패"), "detail": err.decode("utf-8", errors="replace")})
 
@@ -743,7 +751,7 @@ def delete_worktree(wt_id: str, *, force: bool = False, kill_sessions: bool = Fa
     if force:
         args.append("--force")
     args.append(str(path))
-    rc, _, err = _git(args, cwd=repo)
+    rc, _, err = _git(args, cwd=repo, hooks=True)
     if rc != 0:
         raise WorktreeError(500, {"error": tr("git worktree remove 실패"), "detail": err.decode("utf-8", errors="replace")})
 

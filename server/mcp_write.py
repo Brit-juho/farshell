@@ -41,6 +41,7 @@ from typing import Optional
 
 import codex_cli
 import config_io
+import git_safe
 import mcp_adapters
 import mcp_scan
 from i18n import tr
@@ -942,8 +943,8 @@ def _git_ignored(path: Path) -> bool:
     import subprocess
     try:
         r = subprocess.run(
-            ["git", "-C", str(path.parent.parent), "check-ignore", "-q", str(path)],
-            capture_output=True, timeout=2.0,
+            git_safe.argv("check-ignore", "-q", str(path), cwd=path.parent.parent),
+            capture_output=True, timeout=2.0, env=git_safe.env(),
         )
     except (OSError, subprocess.SubprocessError):
         return True

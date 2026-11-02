@@ -2607,6 +2607,7 @@ window.__VT_I18N = {
   "위험한 포트라 노출하지 않았습니다. 정말 열려면 --force를 붙이세요.": "Not exposed: this port is risky. Add --force if you really want to open it.",
   "유저": "User",
   "유효하지 않은 브랜치 이름입니다": "Invalid branch name",
+  "유효하지 않은 base입니다": "Invalid base",
   "유효하지 않은 세션 이름": "Invalid session name",
   "유휴": "Idle",
   "음성 기능 미설치 ('./install.sh voice'로 추가)": "voice not installed (add it with './install.sh voice')",

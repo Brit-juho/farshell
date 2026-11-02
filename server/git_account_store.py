@@ -32,6 +32,7 @@ from urllib.request import Request as _UrlRequest
 from urllib.request import urlopen
 
 import store_lock
+import git_safe
 import vt_paths
 
 PROVIDERS = {"github", "gitlab"}
@@ -360,8 +361,8 @@ def git_remote_url(repo_path: str, remote: str = "origin") -> Optional[str]:
     import subprocess
     try:
         result = subprocess.run(
-            ["git", "-C", repo_path, "remote", "get-url", remote],
-            capture_output=True, text=True, timeout=3,
+            git_safe.argv("remote", "get-url", remote, cwd=repo_path),
+            capture_output=True, text=True, timeout=3, env=git_safe.env(),
         )
     except Exception:
         return None
