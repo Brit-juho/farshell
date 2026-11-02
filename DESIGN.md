@@ -393,10 +393,10 @@ always visible; only `waiting` breathes (`vt-status-breathe`; under
 "waiting"). **Thickness carries "unseen"**: 6px = changed and not yet looked at,
 3px = seen. The focused pane is never shown by thickness (it would collide) — the
 pane's own border does that. Colour alone is not the signal: the hover tooltip lists
-`name · state[ · 확인 안 함]` per session and the tab's `aria-label` repeats it
+`name · state[ · branch][ · 확인 안 함]` per session (the branch only when known) and the tab's `aria-label` repeats it without the branch
 (`api, 작업 중 · web, 입력 대기(확인 안 함)`). The active tab is a filled background
 (the old accent underline gave way to the bar). × is shown even when there is one
-view. Hidden below 720px, as before. Right:
+view. Tab text is 15px (`--fs-base`, 2026-11), the pane count 12.5px, tabs at least 200px wide and 44px high. **Right-click (or the Menu key) opens a two-item menu — 이름 변경 / 뷰 닫기** (`layout/tab-menu.js`, loaded on first use); there is deliberately no ungroup item. Hidden below 720px, as before. Right:
 `⌘K` (palette), a connected-screens icon + count, settings ⚙. Dragging a tab
 to drop it on a pane still uses the existing `layout/dnd.js`
 (`frontend/js/shell/HeaderExtras.tsx` only draws the new workspace chip and

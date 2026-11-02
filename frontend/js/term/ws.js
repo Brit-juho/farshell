@@ -21,6 +21,13 @@ import { updateConnStatus, _setConnOverlayDetail } from './conn-overlay.js';
 import { t } from '../core/i18n.js';
 
 const TERMINAL_CLOSE_CODES = new Set([4001, 4004, 4005]);
+
+// 세션이 끝난 것이 확인됐을 때의 정리 — 뷰의 마지막 세션이면 뷰째 닫는다(term/session-actions.js
+// closeEndedSession). 그 브리지가 아직 없으면(부팅 초기) 예전처럼 칸만 비운다.
+function _closeEnded(id) {
+  const fn = window.vtCloseEndedSession || window.vtCloseSession;
+  if (typeof fn === 'function') fn(id);
+}
 const STABLE_MS = 3000;
 
 // addSession에서 term.open() 직후 호출. onResize 함수를 반환한다 —
@@ -185,15 +192,15 @@ export function startSessionSocket(id, term) {
         if (code === 4004 && typeof window.vtRecoverSession === 'function' && (s.tmuxName || s.tmux_name) && !s.remote) {
           window.vtRecoverSession(id).then((r) => {
             if (r === true) return;
-            if (r === false) { if (typeof window.vtCloseSession === 'function') window.vtCloseSession(id); return; }
+            if (r === false) { _closeEnded(id); return; }
             const cur = getSession(id);
             if (cur) _scheduleRetry(cur);
           });
           return;
         }
         // (복구 대상이 아니면) 4004 = 다른 곳에서 종료됨 → 닫기와 같은 경로로 칸을 비운다(2026-10-03).
-        if (code === 4004 && typeof window.vtCloseSession === 'function') {
-          window.vtCloseSession(id);
+        if (code === 4004 && (window.vtCloseEndedSession || window.vtCloseSession)) {
+          _closeEnded(id);
           return;
         }
         if (code === 4001) {

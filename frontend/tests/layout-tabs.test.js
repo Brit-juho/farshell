@@ -226,3 +226,39 @@ test('revealSessionPane — 어느 탭에도 없으면 false, 상태는 그대�
   assert.strictEqual(S.getActiveTabId(), before.tab);
   assert.strictEqual(S.getActivePaneId(), before.pane);
 });
+
+// ── 이어서 시작한 세션이 들어갈 자리(복원 뒤 「실행 확인 필요」로 남은 칸) ────────
+const _stale = (id, cat, host = 'local') => ({ t: 'leaf', id, session: null, kind: 'terminal', file: null, panel: null, worktree: null, host,
+  unreachable: { host, tmux: 'old', catalogSessionId: cat, runtimeId: 'r1' } });
+
+test('stalePaneByCatalog/fillStalePane — 같은 카탈로그 세션의 칸에 새 세션을 놓고 표시를 거둔다', async () => {
+  const { S } = await load();
+  S.openTabWithTree({ tree: _stale('p-stale', 'cat1') });
+  assert.strictEqual(S.stalePaneByCatalog('cat1'), 'p-stale');
+  assert.strictEqual(S.stalePaneByCatalog('other'), null);
+
+  assert.strictEqual(S.fillStalePane('p-stale', 'web-1'), true);
+  const leaf = S.getTree();
+  assert.strictEqual(leaf.session, 'web-1');
+  assert.strictEqual(leaf.unreachable, undefined, '자리표시자(실행 확인 필요)는 끝난다');
+  assert.strictEqual(S.stalePaneByCatalog('cat1'), null, '한 번 채우면 다시 찾히지 않는다');
+});
+
+test('fillStalePane — 그 세션이 이미 다른 칸에 열려 있으면 놓지 않고 표시만 거둔다', async () => {
+  const { S } = await load();
+  S.setPaneSession('web-1');                                  // 첫 탭의 칸에 이미 열려 있다고 가정
+  const first = S.getActiveTabId();
+  S.openTabWithTree({ tree: _stale('p-stale', 'cat1') });
+  S.switchLayoutTab(first);
+  S.setPaneSession('web-1');
+  assert.strictEqual(S.fillStalePane('p-stale', 'web-1'), false, '같은 세션을 두 칸에 두지 않는다');
+  assert.strictEqual(S.stalePaneByCatalog('cat1'), null, '자리표시자는 거둔다');
+});
+
+test('fillStalePane — 이미 채워진 칸이면 아무것도 하지 않는다', async () => {
+  const { S } = await load();
+  S.openTabWithTree({ tree: _stale('p-stale', 'cat1') });
+  assert.strictEqual(S.fillStalePane('p-stale', 'web-1'), true);
+  assert.strictEqual(S.fillStalePane('p-stale', 'web-2'), false);
+  assert.strictEqual(S.getTree().session, 'web-1');
+});

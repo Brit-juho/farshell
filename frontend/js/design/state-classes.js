@@ -93,14 +93,17 @@ export function viewSegments(entries) {
     if (!e || !e.name) continue;
     const status = normalizeState(e.status);
     const unseen = !!e.unseen;
-    out.push({ name: e.name, status, unseen, thick: unseen, label: stateLabel(status) });
+    out.push({ name: e.name, status, unseen, thick: unseen, label: stateLabel(status), branch: e.branch || null });
   }
   return out;
 }
 
-/** 호버 툴팁 — 세션마다 한 줄: "이름 · 상태[ · 확인 안 함]". */
+/** 호버 툴팁 — 세션마다 한 줄: "이름 · 상태[ · 브랜치][ · 확인 안 함]". 브랜치는 알 때만 넣는다. */
 export function segmentsTooltip(segs) {
-  return segs.map((s) => (s.unseen ? t('{name} · {label} · 확인 안 함', { name: s.name, label: s.label }) : `${s.name} · ${s.label}`)).join('\n');
+  return segs.map((s) => {
+    const base = s.branch ? `${s.name} · ${s.label} · ${s.branch}` : `${s.name} · ${s.label}`;
+    return s.unseen ? `${base} · ${t('확인 안 함')}` : base;
+  }).join('\n');
 }
 
 /** 스크린 리더용 한 줄 — "api, 작업 중 · web, 입력 대기(확인 안 함)". */

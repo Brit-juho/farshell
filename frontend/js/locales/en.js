@@ -4472,5 +4472,10 @@ window.__VT_I18N = {
   "스킨 미리보기": "Skin preview",
   "지금 쓰는 스킨": "Current skin",
   "누르면 적용됩니다": "Click to apply",
-  "이 칸 기준 한 줄에 약 {n}자 · 스크롤백 {lines}줄": "About {n} characters per line in this pane · {lines} lines of scrollback"
+  "이 칸 기준 한 줄에 약 {n}자 · 스크롤백 {lines}줄": "About {n} characters per line in this pane · {lines} lines of scrollback",
+  "'{name}' 세션이 끝나 뷰를 닫았습니다. 레일에서 이어서 시작할 수 있습니다.": "Session '{name}' ended, so its view was closed. You can resume it from the rail.",
+  "확인 안 함": "unseen",
+  "뷰 이름": "View name",
+  "뷰 이름 변경": "Rename view",
+  "뷰 이름을 저장하지 못했습니다. 이름은 128자까지 입력할 수 있습니다.": "Could not save the view name. Names can be up to 128 characters."
 };

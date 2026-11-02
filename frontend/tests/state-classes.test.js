@@ -135,3 +135,16 @@ test('segmentsTooltip / segmentsAria — 세션마다 이름·상태, 읽지 않
   assert.strictEqual(segmentsTooltip(segs), 'api · 작업 중\nweb · 입력 대기 · 확인 안 함');
   assert.strictEqual(segmentsAria(segs), 'api, 작업 중 · web, 입력 대기(확인 안 함)');
 });
+
+test('segmentsTooltip — 브랜치를 알면 상태 뒤에 넣고, 모르면 빼며, 읽지 않음은 맨 뒤', async () => {
+  const { viewSegments, segmentsTooltip, segmentsAria } = await load(SC_JS);
+  const segs = viewSegments([
+    { name: 'api', status: 'working', branch: 'feat/x' },
+    { name: 'web', status: 'waiting', unseen: true, branch: 'main' },
+    { name: 'db', status: 'idle' },
+  ]);
+  assert.strictEqual(segs[0].branch, 'feat/x');
+  assert.strictEqual(segs[2].branch, null);
+  assert.strictEqual(segmentsTooltip(segs), 'api · 작업 중 · feat/x\nweb · 입력 대기 · main · 확인 안 함\ndb · 유휴');
+  assert.ok(!segmentsAria(segs).includes('feat/x'), '스크린 리더 문장은 그대로(길이를 늘리지 않는다)');
+});

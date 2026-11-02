@@ -40,6 +40,10 @@ notify_clients: set[WebSocket] = set()
 # 질문·중단 문구가 원래 세션에 적용됐다. 화면 감지 경로는 이 값을 먼저 본다. 화면(프런트)이
 # 보는 session_store 값은 바꾸지 않는다 — 탭과 PTY의 짝은 프런트의 계약이다.
 _pty_tmux_now: dict[str, str] = {}
+# 웹 PTY → 그 클라이언트가 **원래 세션에 붙어 있음을 확인했을 때** 그 세션의 tmux 불변 id(`$3`).
+# 클라이언트가 다른 세션으로 옮겨 갔을 때 원래 세션이 이름 변경·switch-client로 살아 있는지, 종료됐는지를
+# 가르는 근거다(이름은 바뀌거나 재사용되지만 id는 그렇지 않다). 아직 못 새긴 PTY는 판정하지 않는다.
+_pty_tmux_uid: dict[str, str] = {}
 
 
 def tmux_for_pty(pty_session_id: str) -> str | None:
@@ -63,18 +67,42 @@ def _read_tmux_state() -> tuple[list[tuple[str, str]], dict[str, str]] | None:
     return live, by_tty
 
 
+def _end_pty_of_dead_session(sid: str) -> None:
+    """원래 세션이 끝난 웹 PTY를 닫는다. session_store는 남긴다 — routes/pty.py `_watch_pty_exit`가 그 이름의
+    tmux가 정말 없음을 보고 소켓을 4004로 닫고, 프런트가 복구 시도(없음 확인) 뒤 뷰를 정리한다."""
+    logger.info("웹 PTY %s의 tmux 세션이 끝났다 — 옮겨 간 클라이언트를 닫는다", sid[:8])
+    pty_mgr.destroy_session(sid)
+    output_watcher.remove_session(sid)
+    _pty_tmux_now.pop(sid, None)
+    _pty_tmux_uid.pop(sid, None)
+
+
 def apply_tmux_state(live: list[tuple[str, str]], by_tty: dict[str, str]) -> None:
     """tmux에서 읽은 값을 반영한다(이벤트 루프에서 — agent_status는 루프 안에서만 바꾼다)."""
     agent_status.reconcile_sessions(live)
     for sid in list(_pty_tmux_now):
         if sid not in pty_mgr.sessions:
             del _pty_tmux_now[sid]
+    for sid in list(_pty_tmux_uid):
+        if sid not in pty_mgr.sessions:
+            del _pty_tmux_uid[sid]
+    live_ids = {uid for uid, _ in live if uid}
+    uid_of = {name: uid for uid, name in live if uid}
     for sid, s in list(pty_mgr.sessions.items()):
         info = session_store.get(sid)
         tty = getattr(s, "tty", "")
         if not info or not info.tmux_name or not tty or tty not in by_tty:
             continue
         cur = by_tty[tty]
+        if cur == info.tmux_name and info.tmux_name in uid_of:
+            _pty_tmux_uid[sid] = uid_of[info.tmux_name]
+        elif cur != info.tmux_name and _pty_tmux_uid.get(sid) and _pty_tmux_uid[sid] not in live_ids:
+            # 원래 세션이 끝났다(id가 목록에서 사라졌다). `detach-on-destroy off`는 그 클라이언트를 남은
+            # 세션으로 옮겨 PTY가 EOF되지 않으니, 여기서 PTY를 닫아 소켓이 4004(세션 종료)로 끝나게 한다 —
+            # 안 그러면 화면이 종료된 세션 자리에서 엉뚱한 세션을 보여 주고 프런트는 종료를 모른다.
+            # 이름 변경(id 유지)·일부러 한 switch-client(원래 세션 생존)는 이 분기에 오지 않는다.
+            _end_pty_of_dead_session(sid)
+            continue
         if cur == tmux_for_pty(sid):
             continue
         if cur == info.tmux_name:

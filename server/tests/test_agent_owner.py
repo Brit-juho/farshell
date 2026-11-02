@@ -293,3 +293,84 @@ def test_reconcile_follows_rename_of_an_entry_created_after_the_last_check():
     _ev("pre", "s", session="old", tool_name="Bash")   # 아직 tmux id가 없다
     A.reconcile_sessions([("$1", "new")])
     assert A.status_for_session("new") == A.WORKING
+
+
+def _pty_fixture(monkeypatch, destroyed):
+    import deps
+    from types import SimpleNamespace
+    monkeypatch.setattr(deps.pty_mgr, "_sessions", {"w1": SimpleNamespace(tty="/dev/ttys009")})
+    monkeypatch.setattr(deps.pty_mgr, "destroy_session", lambda sid: destroyed.append(sid))
+    deps.session_store.add("w1", name="alpha")
+    deps.session_store.update_tmux_name("w1", "alpha")
+    return deps
+
+
+def _cleanup(deps):
+    deps.session_store.remove("w1")
+    deps._pty_tmux_now.clear()
+    deps._pty_tmux_uid.clear()
+
+
+def test_pty_is_closed_when_its_original_session_ended(monkeypatch):
+    """원래 세션이 종료돼 `detach-on-destroy off`가 클라이언트를 다른 세션으로 옮기면 웹 PTY를 닫아 4004로 끝나게 한다."""
+    destroyed = []
+    deps = _pty_fixture(monkeypatch, destroyed)
+    try:
+        deps.apply_tmux_state([("$1", "alpha"), ("$2", "beta")], {"/dev/ttys009": "alpha"})   # 붙어 있음을 확인
+        assert deps._pty_tmux_uid["w1"] == "$1"
+        deps.apply_tmux_state([("$2", "beta")], {"/dev/ttys009": "beta"})                     # alpha 종료, beta로 이동
+        assert destroyed == ["w1"]
+        assert "w1" not in deps._pty_tmux_uid and "w1" not in deps._pty_tmux_now
+    finally:
+        _cleanup(deps)
+
+
+def test_pty_is_not_closed_when_the_user_switched_clients_on_purpose(monkeypatch):
+    destroyed = []
+    deps = _pty_fixture(monkeypatch, destroyed)
+    try:
+        deps.apply_tmux_state([("$1", "alpha"), ("$2", "beta")], {"/dev/ttys009": "alpha"})
+        deps.apply_tmux_state([("$1", "alpha"), ("$2", "beta")], {"/dev/ttys009": "beta"})    # alpha는 살아 있다
+        assert destroyed == []
+        assert deps.tmux_for_pty("w1") == "beta"
+    finally:
+        _cleanup(deps)
+
+
+def test_pty_is_not_closed_by_a_rename(monkeypatch):
+    destroyed = []
+    deps = _pty_fixture(monkeypatch, destroyed)
+    try:
+        deps.apply_tmux_state([("$1", "alpha")], {"/dev/ttys009": "alpha"})
+        # 훅이 API 응답보다 먼저 와서 info.tmux_name은 아직 옛 이름이다 — id가 그대로면 종료가 아니다.
+        deps.apply_tmux_state([("$1", "renamed")], {"/dev/ttys009": "renamed"})
+        assert destroyed == []
+        deps.session_store.update_tmux_name("w1", "renamed")
+        deps.apply_tmux_state([("$1", "renamed")], {"/dev/ttys009": "renamed"})
+        assert destroyed == [] and deps._pty_tmux_uid["w1"] == "$1"
+    finally:
+        _cleanup(deps)
+
+
+def test_pty_is_closed_when_a_new_session_reuses_the_dead_name(monkeypatch):
+    destroyed = []
+    deps = _pty_fixture(monkeypatch, destroyed)
+    try:
+        deps.apply_tmux_state([("$1", "alpha"), ("$2", "beta")], {"/dev/ttys009": "alpha"})
+        # alpha($1)가 끝나고 같은 이름의 새 세션($3)이 생겼다. 클라이언트는 beta로 옮겨 갔다.
+        deps.apply_tmux_state([("$2", "beta"), ("$3", "alpha")], {"/dev/ttys009": "beta"})
+        assert destroyed == ["w1"], "이름이 아니라 id로 판정한다"
+    finally:
+        _cleanup(deps)
+
+
+def test_pty_without_a_recorded_id_is_left_alone(monkeypatch):
+    """원래 세션에 붙어 있음을 한 번도 못 봤으면(만들자마자 종료 등) 오판해 닫지 않는다."""
+    destroyed = []
+    deps = _pty_fixture(monkeypatch, destroyed)
+    try:
+        deps.apply_tmux_state([("$2", "beta")], {"/dev/ttys009": "beta"})
+        assert destroyed == []
+        assert deps.tmux_for_pty("w1") == "beta"
+    finally:
+        _cleanup(deps)
