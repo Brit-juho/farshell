@@ -682,6 +682,45 @@ def test_manifest_retention_waits_for_every_send_peer(private_history):
     assert kept == {f'm{k:02d}' for k in range(3, 25)}
 
 
+def test_bind_conversations_verifies_a_live_agent_once_not_every_tick(private_history, monkeypatch):
+    import agent_status, agent_config_context, delegation
+    from session_history import worker
+    from session_catalog.db import database
+    root = private_history / '.claude'
+    with database(write=True) as db:
+        db.execute("INSERT INTO sources(id,provider,root,scope,enabled,created) VALUES('s','claude',?,'l',1,1)", (str(root),))
+        db.execute("INSERT INTO sessions(id,host,title,origin,created,updated) VALUES('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','h','t','local',1,1)")
+        db.execute("INSERT INTO runtimes VALUES('eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','e','k','work','running',1,NULL,1,'{}')")
+        db.execute("INSERT INTO conversations(id,host,provider,scope,native_id,created,updated) VALUES('cccccccccccccccccccccccccccccccc','h','claude','l','n1',1,1)")
+    entry = {'session_id': 'n1', 'tmux_session': 'work', 'agent': 'claude'}
+    monkeypatch.setattr(agent_status, 'visible_state', lambda: {'x': entry})
+    monkeypatch.setattr(agent_status, 'public_entry', lambda e: e)
+    monkeypatch.setattr(delegation, 'list_all', lambda: [])
+    calls = []
+    monkeypatch.setattr(agent_config_context, 'identify', lambda name: calls.append(name) or {'tool': 'claude', 'root': str(root), 'pane': '%1'})
+    for _ in range(3):
+        worker.Collector.bind_conversations()
+    assert calls == ['work']  # spawning tmux/ps/git once, not on every 2s tick
+    with database() as db:
+        rows = db.execute('SELECT conversation_id,runtime_id,pane_id,verified FROM conversation_executions').fetchall()
+    assert [tuple(r) for r in rows] == [('cccccccccccccccccccccccccccccccc', 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', '%1', 1)]
+
+
+def test_visible_ledger_does_not_ask_tmux_without_delegations_or_when_cached(private_history, monkeypatch):
+    from session_catalog import identity, inventory
+    from session_catalog.db import database, set_setting
+    with database(write=True) as db:
+        set_setting(db, 'authority_identity_version', 2)
+    calls = []
+    monkeypatch.setattr(inventory, 'observe', lambda: calls.append(1) or {'complete': True, 'epoch': 'e', 'sessions': []})
+    assert identity.visible_ledger([]) == []
+    item = {'id': 'd1', 'parent': {'key': 'a'}, 'child': {'key': 'b'}}
+    identity.visible_ledger([item], cached=True)
+    assert calls == []
+    identity.visible_ledger([item])
+    assert calls == [1]  # the default still verifies against live tmux
+
+
 def test_pair_and_lease_relationships_do_not_survive_epoch_reuse(private_history, monkeypatch):
     from session_catalog import identity, inventory
     from authz import pairs, leases

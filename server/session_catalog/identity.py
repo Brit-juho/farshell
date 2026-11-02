@@ -206,11 +206,18 @@ def require_ledger(item,role='parent'):
         raise Refused('identity_migration_required',403)
 
 
-def visible_ledger(items):
+def visible_ledger(items,*,cached=False):
+    """`cached` reads running runtimes from the catalog (kept by the 5s reconcile) instead of asking tmux.
+
+    The collector projects display edges against those same catalog runtimes, so it passes cached=True;
+    calling tmux (3 commands plus ps) on every 2s tick, even with no delegations, was needless spawning.
+    """
+    if not items:
+        return items
     try:
         if not enabled():
             return items
-        bindings=current()
+        bindings=current(cached=cached)
         from authz import store
         raw,bad=store._read('grants')
         by_deleg={}
