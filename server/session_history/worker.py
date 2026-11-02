@@ -110,9 +110,18 @@ class Collector:
                 runtimes=db.execute('SELECT * FROM runtimes WHERE name=? AND ended IS NULL',(name,)).fetchall()
                 conversations=db.execute('SELECT c.*,s.root FROM conversations c JOIN sources s ON s.scope=c.scope WHERE c.native_id=? AND c.provider=? AND c.deleted IS NULL',(native,tool)).fetchall()
                 if len(runtimes)==1 and len(conversations)==1:
-                    candidates.append((dict(runtimes[0]),dict(conversations[0]),agent_status.public_entry(e)))
+                    known=db.execute('SELECT pane_id FROM conversation_executions WHERE conversation_id=? AND runtime_id=? AND verified=1 ORDER BY pane_id LIMIT 1',
+                                     (conversations[0]['id'],runtimes[0]['id'])).fetchone()
+                    candidates.append((dict(runtimes[0]),dict(conversations[0]),agent_status.public_entry(e),known['pane_id'] if known else None))
         verified=[]
-        for runtime,conversation,e in candidates:
+        for runtime,conversation,e,pane in candidates:
+            if pane is not None:
+                # Already verified for this runtime (same tmux session incarnation). identify() spawns tmux,
+                # ps and git; repeating it every 2s for every live agent was most of the server's process
+                # spawning. A different CLI or profile in that session is a different conversation and is
+                # verified on its own first.
+                verified.append((runtime,conversation,e,{'pane':pane}))
+                continue
             try:
                 ctx=agent_config_context.identify(runtime['name'])
                 from pathlib import Path
@@ -145,7 +154,7 @@ class Collector:
         import delegation
         try:
             from session_catalog.identity import visible_ledger
-            delegations=visible_ledger(delegation.list_all())
+            delegations=visible_ledger(delegation.list_all(),cached=True)
         except (OSError,ValueError):
             return
         with database(write=True) as db:
