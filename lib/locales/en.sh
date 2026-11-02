@@ -514,6 +514,8 @@ _t_en_lookup() {
     '이 설정 없이도 '\''fsh voice'\''는 동작하지만, 새 창에서 자동 attach가 더 편리합니다.') _T_OUT=''\''fsh voice'\'' works without it, but auto-attach in new windows is more convenient.' ;;
     '이 저장소에 설치됨 (서버가 안 닿으면 경고만, 최근 24h 건너뜀 {n}회)') _T_OUT='installed in this repository (warns only when the server is unreachable; skipped {n} time(s) in the last 24h)' ;;
     '이 저장소에는 설치 안 됨 (선택) — '\''fsh lease guard install'\''') _T_OUT='not installed in this repository (optional) — '\''fsh lease guard install'\''' ;;
+    '이 터미널에 없음 — 시스템 설정 > 개인정보 보호 및 보안 > 전체 디스크 접근에 터미널 앱을 한 번 추가하고, 버전 경로(~/.local/share/claude/versions/*) 항목은 지우세요') _T_OUT='not granted to this terminal: add your terminal app once under System Settings > Privacy & Security > Full Disk Access, and remove the per-version claude entries (~/.local/share/claude/versions/*)' ;;
+    '이 터미널에 허용됨 — claude 버전이 바뀌어도 다시 묻지 않음') _T_OUT='granted to this terminal; claude upgrades will not prompt again' ;;
     '이름:    ') _T_OUT='Name:     ' ;;
     '이미 3.11+ 를 갖고 있다면 그 python으로 직접 venv를 만들고') _T_OUT='If you already have 3.11+, create the venv with that python yourself' ;;
     '이미 tmux 안 ({session}). 추가 동작 없음.') _T_OUT='Already inside tmux ({session}). Nothing to do.' ;;

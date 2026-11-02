@@ -8,6 +8,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+- `fsh claude [name]` / `fsh codex [name]` now start the CLI with the profile right in the current terminal, like typing `claude`, instead of creating a new FarShell tmux session and attaching to it. Such a run is not recorded by the server (session-state and retirement checks do not see it). `--tmux` keeps the old behaviour; without a terminal it is used automatically.
+
+### Added
+- `fsh claude|codex --bypass` skips permission prompts for that one session (`--dangerously-skip-permissions` / `--dangerously-bypass-approvals-and-sandbox`). Shell aliases never reached the profile's process, so there was no way to start a profile session in bypass mode; the default stays the CLI's own.
+- `fsh doctor` checks whether the terminal has macOS Full Disk Access. Granting it once to the terminal app stops macOS from asking again for every new `~/.local/share/claude/versions/<version>` binary.
+
 ### Fixed
 - The session history collector committed to `catalog.sqlite3` every 2 seconds even when nothing had changed (a `seen` stamp per unchanged file, the worker and replication heartbeats, re-upserting already-verified executions, and an unconditional `runtimes`/pane update on every 5-second reconcile), and the search index rewrote its progress row on every pass. Each commit is a WAL write plus fsync, which kept `fseventsd` and Spotlight busy and the machine laggy. These writes now happen only on a real change, heartbeats at most every 15 seconds, the liveness stamp at most every 60 seconds.
 - Clauth replacement readiness judged sessions from the process running the check, so a run from the shell could never see a running session; it now uses the state the server recorded plus tmux liveness. A long-lived token or API key profile is certified for concurrency by two simultaneous sessions of the same profile, recorded against its authentication.

@@ -3302,6 +3302,17 @@ cmd_doctor() {
     _check "Python" fail "$VT_PYTHON — $(_t '실행 불가. install.sh 재실행')"
   fi
 
+  # 1-1. macOS 전체 디스크 접근 — claude 버전 폴더(~/.local/share/claude/versions/<버전>)를 항목마다 허용하게 되는 것을 막는다.
+  # TCC는 권한을 실제 바이너리 경로에 묶으므로 버전 경로가 바뀔 때마다 새로 묻는다. claude를 띄우는 상위 앱(터미널)에
+  # 한 번만 주면 자식 프로세스가 이어받는다.
+  if [ "$(uname -s)" = "Darwin" ]; then
+    if head -c1 "/Library/Application Support/com.apple.TCC/TCC.db" >/dev/null 2>&1; then
+      _check "Full Disk Access" ok "$(_t '이 터미널에 허용됨 — claude 버전이 바뀌어도 다시 묻지 않음')"
+    else
+      _check "Full Disk Access" warn "$(_t "이 터미널에 없음 — 시스템 설정 > 개인정보 보호 및 보안 > 전체 디스크 접근에 터미널 앱을 한 번 추가하고, 버전 경로(~/.local/share/claude/versions/*) 항목은 지우세요")"
+    fi
+  fi
+
   # 2. venv
   if [ -d "$VT_DIR/.venv" ]; then
     _check "venv" ok "$VT_DIR/.venv"
