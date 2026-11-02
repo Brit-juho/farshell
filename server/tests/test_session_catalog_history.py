@@ -311,6 +311,29 @@ def test_search_index_can_be_lost_and_rebuilt(private_history):
     assert len(query.listing(search='hello-world')['items']) == 1
 
 
+def test_search_index_keeps_no_body_copy_and_rebuilds_the_old_layout(private_history):
+    import sqlite3
+    from session_history import archive, query, search
+    from session_catalog.db import directory, database
+    root, folder, source = _source(private_history)
+    (folder/'a.jsonl').write_text('{"sessionId":"a","type":"user","message":{"content":"contentless needle-xyz"}}\n')
+    archive.scan_source(source)
+    path = directory()/'search.sqlite3'
+    path.unlink(missing_ok=True)
+    with sqlite3.connect(path) as old:  # the previous self-contained layout
+        old.execute("CREATE VIRTUAL TABLE bodies USING fts5(origin UNINDEXED,conversation UNINDEXED,body,tokenize='trigram')")
+        old.execute('CREATE TABLE progress(kind TEXT PRIMARY KEY,position INTEGER NOT NULL)')
+        old.execute("INSERT INTO progress VALUES('local',999999)")
+    search.refresh()
+    with sqlite3.connect(path) as index:
+        tables = {r[0] for r in index.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert 'owners' in tables and 'bodies_content' not in tables  # no second copy of the bodies
+        assert index.execute("SELECT body FROM bodies WHERE bodies MATCH '\"needle-xyz\"'").fetchall() == [(None,)]
+    with database() as source_db:
+        assert search.matches(source_db, 'needle-xyz') is not None  # the rebuilt index is used, not LIKE
+    assert len(query.listing(search='needle-xyz')['items']) == 1
+
+
 def test_backup_restores_into_empty_state_with_capture_disabled(private_history, monkeypatch):
     from session_history import archive, backup, query
     root, folder, source = _source(private_history)
