@@ -5,8 +5,8 @@
 // import를 못 해 맨 아래 window 브리지를 쓴다.
 import { closeLayoutTab, getTabsWithTrees, getTree, getActiveTabId, countLeaves, closePane,
   isLayoutEmpty, rememberClosedView, findClosedViewByTmux, findClosedViewByCatalog, peekClosedView, takeClosedView, forgetClosedMembers,
-  openTabWithTree, getActivePaneId, setTabLabel } from '../layout/store.js';
-import { collectSessions, findNode, findPaneBySession } from '../layout/tree.js';
+  openTabWithTree, getActivePaneId, setTabLabel, stalePaneByCatalog, fillStalePane } from '../layout/store.js';
+import { collectSessions, findNode, findPaneBySession, isOnlySession } from '../layout/tree.js';
 import { applyPaneDrop, canSplit } from '../layout/dnd.js';
 import { COMPACT_MAX } from '../layout/breakpoints.js';
 import { _isCoarsePointer } from '../core/env.js';
@@ -15,7 +15,7 @@ import { removeSession, attachTmux, revealSession } from './session.js';
 import { showOnboarding } from './boot.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
-import { getSession, allSessions } from '../core/store.js';
+import { getSession, allSessions, sessionDisplayName } from '../core/store.js';
 import { getStatus } from '../agent/state.js';
 import { confirmDialog } from '../core/dialog.js';
 import { t } from '../core/i18n.js';
@@ -27,6 +27,27 @@ export async function closeSession(sessionId) {
 }
 
 export const detachSession = closeSession;   // 옛 이름
+
+/** 세션이 **끝난 것이 확인됐을 때**의 정리 — 터미널이 4004로 끊기고 서버 tmux 목록에도 없을 때, 그리고
+ * 사용자가 종료를 눌렀을 때. 그 세션이 뷰의 마지막 세션이면(단독 뷰이거나, 묶음에서 나머지가 이미 끝나
+ * 빈 칸만 남았으면) 뷰째 닫는다. 아직 다른 세션·뷰어·패널 칸이 있는 묶음은 이전과 같이 그 칸만 빈 칸으로
+ * 남긴다(칸 ×와 같다). 칸 ×·뷰 ×·묶음 규칙은 바꾸지 않는다 — 여기는 「세션이 끝났다」는 사실에만 반응한다.
+ * 원격 호스트 세션은 호스트가 잠깐 꺼진 것과 구분되지 않아 예전대로 칸만 비운다. 뷰를 닫았으면 true. */
+export async function closeEndedSession(sessionId, { notify = true } = {}) {
+  const s = getSession(sessionId);
+  const tab = getTabsWithTrees().find((x) => collectSessions(x.tree).includes(sessionId));
+  if (!s || !tab || s.remote || !isOnlySession(tab.tree, sessionId)) {
+    await closeSession(sessionId);
+    return false;
+  }
+  const name = sessionDisplayName(sessionId);
+  closeLayoutTab(tab.id);
+  await closeSession(sessionId);
+  saveLayoutNow();
+  _showEmptyIfNoViews();
+  if (notify) showToast(t("'{name}' 세션이 끝나 뷰를 닫았습니다. 레일에서 이어서 시작할 수 있습니다.", { name }));
+  return true;
+}
 export const collectTreeSessions = collectSessions;   // 옛 이름
 
 /** 열린/닫힌 묶음 제목 편집. 세션 이름·cwd·브랜치를 바꾸지 않고 스냅샷에 저장한다. */
@@ -144,6 +165,18 @@ export async function openSessionFromRail({ sessionId = null, tmuxName = null, c
   if (!tmuxName) return null;
   const view = catalogSessionId ? findClosedViewByCatalog(catalogSessionId) : findClosedViewByTmux(tmuxName);
   if (view && await reopenClosedView(view.id, tmuxName)) return true;
+  // 재시작·재부팅 뒤 「실행 확인 필요」로 남은 같은 세션의 칸이 있으면 새 탭을 만들지 않고 그 칸에 붙인다.
+  // 이어서 시작한 세션은 tmux 이름이 새로 만들어져 이름으로는 못 찾는다 — 카탈로그 세션 id가 근거다.
+  const stale = catalogSessionId ? stalePaneByCatalog(catalogSessionId) : null;
+  if (stale) {
+    const id = await attachTmux(tmuxName, { place: 'none', catalogSessionId, runtimeId });
+    if (id && typeof id === 'string') {
+      fillStalePane(stale, id);
+      saveLayoutNow();
+      revealSession(id);
+      return id;
+    }
+  }
   return attachTmux(tmuxName, { catalogSessionId, runtimeId });
 }
 
@@ -188,7 +221,8 @@ export function killWarning(name, status) {
  * 4004로 칸을 비운다(term/ws.js). */
 export async function killSession(name, webSessionId) {
   if (webSessionId && getSession(webSessionId)) {
-    await closeSession(webSessionId);
+    // 종료를 누른 사용자는 결과를 이미 안다 — 알림 없이 뷰까지 정리한다.
+    await closeEndedSession(webSessionId, { notify: false });
   }
   try {
     const res = await apiFetch(`${API_BASE}/api/tmux/kill/${encodeURIComponent(name)}`, { method: 'DELETE' });
@@ -211,6 +245,7 @@ export async function confirmAndKillSession(name, webSessionId) {
 }
 
 window.vtCloseSession = closeSession;
+window.vtCloseEndedSession = closeEndedSession;
 window.vtDetachSession = closeSession;   // 옛 이름(외부 스크립트 호환)
 window.vtCloseView = closeView;
 window.vtRenameTab = renameView;

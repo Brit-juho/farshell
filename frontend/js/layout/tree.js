@@ -177,6 +177,39 @@ export function setSession(tree, paneId, sessionId) {
   return walk(tree);
 }
 
+// 세션이 끝났을 때 **뷰째 정리해도 되는가**. sessionId 말고 이 뷰에 남길 이유가 있는 칸이
+// 없어야 한다 — 다른 세션이 든 칸, 뷰어·패널 칸, 못 닿는 중(unreachable)·복원 대기(lost)
+// 칸이 그 이유다. 평범한 빈 터미널 칸(묶음에서 먼저 끝난 세션의 자리)은 이유가 아니다.
+// sessionId가 이 트리에 없으면 false.
+export function isOnlySession(tree, sessionId) {
+  let found = false;
+  const ok = (n) => {
+    if (n.t !== 'leaf') return ok(n.a) && ok(n.b);
+    if (n.session === sessionId) { found = true; return true; }
+    return !n.session && !n.unreachable && !n.lost && (n.kind || 'terminal') === 'terminal';
+  };
+  return ok(tree) && found;
+}
+
+// 복원 때 못 닿아 `unreachable`로 남은 **로컬 카탈로그 세션** 칸(「실행 확인 필요」) 중
+// catalogSessionId가 같은 것의 paneId. 이어서 시작한 세션은 tmux 이름이 새로 만들어져
+// 이름으로는 못 찾고, 카탈로그 세션 id가 같은 세션임을 말해 주는 유일한 근거다.
+export function findStaleLeafByCatalog(tree, catalogSessionId, host = 'local') {
+  if (!catalogSessionId) return null;
+  let hit = null;
+  const walk = (n) => {
+    if (hit) return;
+    if (n.t === 'leaf') {
+      const u = n.session ? null : n.unreachable;
+      if (u && u.catalogSessionId === catalogSessionId && (u.host || n.host || 'local') === host) hit = n.id;
+      return;
+    }
+    walk(n.a); walk(n.b);
+  };
+  walk(tree);
+  return hit;
+}
+
 // splitId가 가리키는 split의 ratio를 바꾼다. 0.1~0.9로 clamp — 어느 한쪽이
 // 완전히 0이 되면 구분선을 다시 잡을 수 없는 상태가 된다.
 // 트리의 **모든** 분할을 반반으로. 드래그로 흐트러진 배치를 한 번에 되돌린다 —

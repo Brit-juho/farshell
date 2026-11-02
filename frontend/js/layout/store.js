@@ -9,7 +9,7 @@ import { isMobileLayout } from './breakpoints.js';
 // 들어간다" 같은 상태 불일치가 애초에 생길 수 없다 — 착수 전 설계 리뷰에서
 // 정리한 원칙(30-layout-shell.md L3) 중 하나.
 import { activeSessionId, setActive, sessionDisplayName } from '../core/store.js';
-import { makeLeaf, splitPane as _splitPane, closePane as _closePane, setSession as _setSession, setLeafViewer as _setLeafViewer, setLeafPanel as _setLeafPanel, setRatio as _setRatio, evenRatios as _evenRatios, countLeaves as _countLeaves, findNode, findPaneBySession, collectSessions } from './tree.js';
+import { makeLeaf, splitPane as _splitPane, closePane as _closePane, setSession as _setSession, setLeafViewer as _setLeafViewer, setLeafPanel as _setLeafPanel, setRatio as _setRatio, evenRatios as _evenRatios, countLeaves as _countLeaves, findNode, findPaneBySession, collectSessions, findStaleLeafByCatalog } from './tree.js';
 import { t } from '../core/i18n.js';
 
 function _genId(prefix) {
@@ -498,10 +498,33 @@ export function fillLostPane(paneId, sessionId) {
   return !placed;
 }
 
+/** 이어서 시작할 세션이 들어갈 자리 — 복원 뒤 「실행 확인 필요」로 남은 같은 카탈로그 세션의 칸. 없으면 null. */
+export function stalePaneByCatalog(catalogSessionId, host = 'local') {
+  _sync();
+  for (const t of _tabs) {
+    const id = findStaleLeafByCatalog(t.tree, catalogSessionId, host);
+    if (id) return id;
+  }
+  return null;
+}
+
+/** `stalePaneByCatalog`가 찾은 칸에 세션을 놓는다. fillLostPane과 같은 규칙 — 그 사이 칸이 채워졌거나 세션이
+ * 이미 다른 칸에 열려 있으면 놓지 않고 표시만 거둔다. 놓았으면 true. */
+export function fillStalePane(paneId, sessionId) {
+  _sync();
+  const tab = _tabs.find((t) => { const n = findNode(t.tree, paneId); return n && n.t === 'leaf' && !n.session && (n.unreachable || n.lost); });
+  if (!tab) return false;
+  const placed = _tabs.some((t) => collectSessions(t.tree).includes(sessionId));
+  tab.tree = placed ? _clearLost(tab.tree, paneId) : _setSession(tab.tree, paneId, sessionId);
+  _tree = _tabs[_activeTabIndex].tree;
+  _notify();
+  return !placed;
+}
+
 function _clearLost(node, paneId) {
   if (node.t === 'leaf') {
     if (node.id !== paneId) return node;
-    const { lost, ...rest } = node;
+    const { lost, unreachable, ...rest } = node;
     return rest;
   }
   return { ...node, a: _clearLost(node.a, paneId), b: _clearLost(node.b, paneId) };

@@ -703,3 +703,73 @@ test('확인된 tmux 종료만 복원에서 빠진다', async () => {
   const { attachLayoutSessions } = await importFresh(path.join(__dirname, '../js/term/workspace.js'), built.context, built.cache);
   assert.strictEqual(await attachLayoutSessions([{ id: 'old', tmux: 'ta' }]), 0);
 });
+
+// ── 세션이 끝나면 뷰도 정리한다(2026-11, 상단 뷰 리뉴얼) ────────────────────
+// 4004 + 서버 tmux 목록에 없음 = 끝난 것이 확인된 경우. 그 세션이 뷰의 마지막 세션이면 뷰째 닫는다.
+// 묶음에서 다른 세션이 남아 있으면 예전처럼 그 칸만 빈 칸으로 둔다.
+async function endedFixture() {
+  const t = await buildTerminalWindow({ fetchImpl: recoverFetch({ alive: [] }) });
+  await importFresh(SESSION_ACTIONS_JS, t.context, t.cache);
+  return t;
+}
+const tabIds = (S) => S.getTabs().map((x) => x.id);
+
+test('세션 종료 — 단독 뷰는 다른 뷰가 있으면 뷰째 닫힌다', async () => {
+  const { window, addSession, layoutStore } = await endedFixture();
+  addSession('a', 'A', { tmuxName: 'ta' }); window.sessions.a.tmuxName = 'ta';
+  addSession('b', 'B', { tmuxName: 'tb' }); window.sessions.b.tmuxName = 'tb';
+  assert.strictEqual(layoutStore.getTabs().length, 2, '세션마다 단독 뷰');
+  const before = tabIds(layoutStore);
+
+  window.sessions.a.ws.onclose({ code: 4004 });
+  await _flush();
+
+  assert.strictEqual(layoutStore.getTabs().length, 1, '끝난 세션의 뷰가 사라진다');
+  assert.ok(!tabIds(layoutStore).includes(before[0]));
+  assert.strictEqual(layoutStore.getTree().session, 'b', '남은 뷰는 그대로');
+});
+
+test('세션 종료 — 마지막 뷰면 빈 뷰 하나(온보딩)로 돌아간다', async () => {
+  const { window, addSession, layoutStore } = await endedFixture();
+  addSession('a', 'A', { tmuxName: 'ta' }); window.sessions.a.tmuxName = 'ta';
+  window.sessions.a.ws.onclose({ code: 4004 });
+  await _flush();
+  assert.strictEqual(layoutStore.getTabs().length, 1);
+  assert.strictEqual(layoutStore.getTree().session, null);
+  assert.ok(layoutStore.isLayoutEmpty());
+});
+
+test('세션 종료 — 묶음에 다른 세션이 남아 있으면 그 칸만 빈 칸으로 남고 뷰는 유지된다', async () => {
+  const { window, addSession, layoutStore } = await endedFixture();
+  addSession('a', 'A', { tmuxName: 'ta' }); window.sessions.a.tmuxName = 'ta';
+  addSession('b', 'B', { place: 'none', tmuxName: 'tb' }); window.sessions.b.tmuxName = 'tb';
+  layoutStore.splitActivePane('row', 'b');                 // 같은 뷰 안에 a | b
+  assert.strictEqual(layoutStore.getTabs().length, 1);
+
+  window.sessions.a.ws.onclose({ code: 4004 });
+  await _flush();
+
+  assert.strictEqual(layoutStore.getTabs().length, 1, '묶음 뷰는 남는다');
+  assert.strictEqual(layoutStore.countLeaves(), 2, '칸도 없애지 않는다');
+  assert.ok(window.sessions.b, '다른 세션은 그대로');
+
+  // 이어서 마지막 세션도 끝나면 뷰가 정리된다 — 빈 칸만 남은 묶음을 남기지 않는다.
+  window.sessions.b.ws.onclose({ code: 4004 });
+  await _flush();
+  assert.strictEqual(layoutStore.countLeaves(), 1, '빈 칸 두 개짜리 뷰가 아니라 빈 뷰 하나');
+  assert.ok(layoutStore.isLayoutEmpty());
+});
+
+test('세션 종료 — 뷰어 칸이 있는 뷰는 닫지 않는다', async () => {
+  const { window, addSession, layoutStore } = await endedFixture();
+  addSession('a', 'A', { tmuxName: 'ta' }); window.sessions.a.tmuxName = 'ta';
+  addSession('b', 'B', { tmuxName: 'tb' }); window.sessions.b.tmuxName = 'tb';
+  layoutStore.switchLayoutTab(layoutStore.getTabs()[0].id);
+  layoutStore.openViewerPane('/tmp/x.md');          // a 칸을 쪼개 옆에 파일 뷰어를 붙인다
+  const tabs = layoutStore.getTabs().length;
+
+  window.sessions.a.ws.onclose({ code: 4004 });
+  await _flush();
+
+  assert.strictEqual(layoutStore.getTabs().length, tabs, '파일을 보던 뷰는 세션이 끝나도 유지된다');
+});

@@ -224,3 +224,35 @@ test('findPaneBySession — 없는 세션·null이면 null', async () => {
   assert.strictEqual(T.findPaneBySession(tree, 's-nope'), null);
   assert.strictEqual(T.findPaneBySession(tree, null), null);
 });
+
+// ── 세션 종료 정리 판정 / 이어서 시작 자리 찾기 ───────────────────────────────
+function _tree(T, a, b) { return T.makeSplit('sp', 'row', a, b, 0.5); }
+
+test('isOnlySession — 단독 칸과, 나머지가 평범한 빈 칸뿐인 묶음은 true', async () => {
+  const T = await loadTree();
+  assert.strictEqual(T.isOnlySession(T.makeLeaf('p1', 's1'), 's1'), true);
+  assert.strictEqual(T.isOnlySession(_tree(T, T.makeLeaf('p1', 's1'), T.makeLeaf('p2')), 's1'), true);
+});
+
+test('isOnlySession — 다른 세션·뷰어·패널·복원 대기 칸이 있거나 세션이 없으면 false', async () => {
+  const T = await loadTree();
+  const mine = T.makeLeaf('p1', 's1');
+  assert.strictEqual(T.isOnlySession(_tree(T, mine, T.makeLeaf('p2', 's2')), 's1'), false, '다른 세션');
+  assert.strictEqual(T.isOnlySession(_tree(T, mine, T.setLeafViewer(T.makeLeaf('p2'), 'p2', '/x')), 's1'), false, '뷰어');
+  assert.strictEqual(T.isOnlySession(_tree(T, mine, T.setLeafPanel(T.makeLeaf('p2'), 'p2', 'queue')), 's1'), false, '패널');
+  assert.strictEqual(T.isOnlySession(_tree(T, mine, { ...T.makeLeaf('p2'), lost: { tmux: 'x' } }), 's1'), false, '복원 대기');
+  assert.strictEqual(T.isOnlySession(_tree(T, mine, { ...T.makeLeaf('p2'), unreachable: { host: 'local', tmux: 'x' } }), 's1'), false, '못 닿는 중');
+  assert.strictEqual(T.isOnlySession(mine, 'nope'), false, '이 트리에 없는 세션');
+});
+
+test('findStaleLeafByCatalog — 같은 카탈로그 세션의 로컬 unreachable 칸만 찾는다', async () => {
+  const T = await loadTree();
+  const stale = { ...T.makeLeaf('p2'), unreachable: { host: 'local', tmux: 'old', catalogSessionId: 'cat1' } };
+  const tree = _tree(T, T.makeLeaf('p1', 's1'), stale);
+  assert.strictEqual(T.findStaleLeafByCatalog(tree, 'cat1'), 'p2');
+  assert.strictEqual(T.findStaleLeafByCatalog(tree, 'cat2'), null);
+  assert.strictEqual(T.findStaleLeafByCatalog(tree, null), null);
+  assert.strictEqual(T.findStaleLeafByCatalog(tree, 'cat1', 'mac-2'), null, '다른 호스트의 칸은 아니다');
+  const remote = { ...T.makeLeaf('p3'), unreachable: { host: 'mac-2', tmux: 'x', catalogSessionId: 'cat1' } };
+  assert.strictEqual(T.findStaleLeafByCatalog(remote, 'cat1'), null);
+});
