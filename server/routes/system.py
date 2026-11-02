@@ -694,7 +694,7 @@ async def port_share_authorize(request: Request):
     device_id = device.get("id") or "-"
     ticket = await asyncio.to_thread(
         auth.issue_ticket, "port-share", PORT_TICKET_TTL,
-        share=share["shareId"], device=device_id,
+        purpose=auth.PURPOSE_PORT_SHARE, share=share["shareId"], device=device_id,
     )
     target = (
         f"{entry['url'].rstrip('/')}/__fsh/cb"

@@ -375,3 +375,37 @@ def test_classify_client(host, headers, expected):
     """CF 헤더는 루프백(cloudflared)에서 온 요청에서만 본다 — LAN에서 직접 온 요청이
     헤더를 꾸며도 기록이 바뀌지 않는다."""
     assert client_info.classify_client(host, headers) == expected
+
+
+# --- 티켓 용도(S4) -----------------------------------------------------------------
+# 노출 포트 `session` 모드 티켓(60초, 노출 앱 주소 `/__fsh/cb?t=`에 실려 다님)으로 메인 로그인을 하면
+# 비밀번호·OTP 없이 90일짜리 기기와 셸을 얻는다. 용도가 다르면 거절하고, 태우지도 않는다.
+
+
+def test_port_share_ticket_cannot_register_a_device(client, auth):
+    raw = auth.issue_ticket("port-share", 60, purpose=auth.PURPOSE_PORT_SHARE, share="s1", device="-")
+    r = client.post("/api/auth", json={"ticket": raw})
+    assert r.status_code == 401 and r.json()["error"] == "ticket_invalid"
+    assert "vt_device" not in r.cookies and "vt_session" not in r.cookies
+    # 거절은 소멸이 아니다 — 원래 자리(포트 콜백)에서는 여전히 쓸 수 있다.
+    assert auth.consume_ticket(raw, auth.PURPOSE_PORT_SHARE)["share"] == "s1"
+
+
+def test_legacy_port_ticket_without_purpose_is_still_port_share(client, auth):
+    """purpose 필드 전에 발급된(업그레이드 직전) 포트 티켓도 share 묶음으로 가려 거절한다."""
+    raw = auth.issue_ticket("port-share", 60, share="s1", device="-")
+    data = json.loads(auth.TICKETS_PATH.read_text())
+    for rec in data["tickets"]:
+        rec.pop("purpose", None)
+    auth.TICKETS_PATH.write_text(json.dumps(data))
+    assert client.post("/api/auth", json={"ticket": raw}).status_code == 401
+
+
+def test_ticket_purpose_is_required_and_reserved(auth):
+    with pytest.raises(TypeError):
+        auth.consume_ticket(auth.issue_ticket("x"))  # 용도 없이 소비하는 호출부는 만들 수 없다
+    with pytest.raises(ValueError):
+        auth.issue_ticket("x", purpose="other")
+    raw = auth.issue_ticket("x", purpose=auth.PURPOSE_DEVICE, exp=9_999_999_999)
+    rec = auth.consume_ticket(raw, auth.PURPOSE_DEVICE)
+    assert rec["purpose"] == "device" and rec["exp"] < 9_999_999_999

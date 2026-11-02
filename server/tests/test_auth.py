@@ -77,9 +77,9 @@ def test_ticket_single_use(auth):
     """1회용 등록 티켓은 정확히 한 번만 소모돼야 한다."""
     raw = auth.issue_ticket(label="qr-scan")
 
-    first = auth.consume_ticket(raw)
+    first = auth.consume_ticket(raw, auth.PURPOSE_DEVICE)
     assert first is not None
     assert first["label"] == "qr-scan"
 
-    second = auth.consume_ticket(raw)
+    second = auth.consume_ticket(raw, auth.PURPOSE_DEVICE)
     assert second is None, "같은 티켓이 두 번 소모되면 QR 하나로 기기가 무한 등록된다"

@@ -354,7 +354,7 @@ def test_upstream_set_cookie_domain_is_stripped(env):
 def test_callback_consumes_ticket_and_sets_cookie(env):
     import auth
     share, _ = env.store.create_share(env.port, "앱", "session", HOUR)
-    t = auth.issue_ticket(label="port", ttl=60, share=share["shareId"], device="-")
+    t = auth.issue_ticket(label="port", ttl=60, purpose=auth.PURPOSE_PORT_SHARE, share=share["shareId"], device="-")
     with env.client() as c:
         r = c.get(f"/__fsh/cb?t={t}&next=/welcome", follow_redirects=False)
     assert r.status_code == 303
@@ -362,10 +362,21 @@ def test_callback_consumes_ticket_and_sets_cookie(env):
     assert _cookie_of(r, "fsh_pshare")
 
 
+def test_device_ticket_is_rejected_and_not_burned(env):
+    """`fsh mobile` 기기 등록 티켓은 포트 콜백에서 쓰이지 않고, 넣어 본 것만으로 소멸하지도 않는다."""
+    import auth
+    env.store.create_share(env.port, "앱", "session", HOUR)
+    t = auth.issue_ticket(label="mobile")
+    with env.client() as c:
+        r = c.get(f"/__fsh/cb?t={t}", follow_redirects=False)
+    assert r.status_code == 401 and r.json()["error"] == "bad_ticket"
+    assert auth.consume_ticket(t, auth.PURPOSE_DEVICE) is not None
+
+
 def test_ticket_cannot_be_reused(env):
     import auth
     share, _ = env.store.create_share(env.port, "앱", "session", HOUR)
-    t = auth.issue_ticket(label="port", ttl=60, share=share["shareId"], device="-")
+    t = auth.issue_ticket(label="port", ttl=60, purpose=auth.PURPOSE_PORT_SHARE, share=share["shareId"], device="-")
     with env.client() as c:
         assert c.get(f"/__fsh/cb?t={t}", follow_redirects=False).status_code == 303
         again = c.get(f"/__fsh/cb?t={t}", follow_redirects=False)
@@ -376,7 +387,7 @@ def test_ticket_of_other_share_is_rejected(env):
     import auth
     env.store.create_share(env.port, "앱", "session", HOUR)
     other, _ = env.store.create_share(env.port + 1, "다른앱", "session", HOUR)
-    t = auth.issue_ticket(label="port", ttl=60, share=other["shareId"], device="-")
+    t = auth.issue_ticket(label="port", ttl=60, purpose=auth.PURPOSE_PORT_SHARE, share=other["shareId"], device="-")
     with env.client() as c:
         r = c.get(f"/__fsh/cb?t={t}", follow_redirects=False)
     assert r.status_code == 401
@@ -397,7 +408,7 @@ def test_next_must_be_a_path(env, evil):
     """`//evil.com`은 프로토콜 상대 URL이라 브라우저가 외부로 나간다."""
     import auth
     share, _ = env.store.create_share(env.port, "앱", "session", HOUR)
-    t = auth.issue_ticket(label="port", ttl=60, share=share["shareId"], device="-")
+    t = auth.issue_ticket(label="port", ttl=60, purpose=auth.PURPOSE_PORT_SHARE, share=share["shareId"], device="-")
     with env.client() as c:
         r = c.get(f"/__fsh/cb?t={t}&next={evil}", follow_redirects=False)
     assert r.headers["location"] == "/"

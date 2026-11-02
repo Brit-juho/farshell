@@ -164,7 +164,7 @@ def test_cookie_of_expired_device_is_rejected(env, tmp_path, monkeypatch):
 def test_callback_rejects_ticket_whose_device_expired(env, monkeypatch):
     share, _ = env.store.create_share(env.port, "앱", "session", HOUR)
     monkeypatch.setattr(env.auth_mod, "consume_ticket",
-                        lambda t: {"share": share["shareId"], "device": "dev1"})
+                        lambda t, purpose: {"share": share["shareId"], "device": "dev1"})
     monkeypatch.setattr(env.auth_mod, "find_alive_device", lambda did: None)
     with env.client() as c:
         r = c.get("/__fsh/cb?t=x", follow_redirects=False)

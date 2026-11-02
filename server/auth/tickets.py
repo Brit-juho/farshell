@@ -32,7 +32,24 @@ def _load_tickets() -> list:
     return [t for t in (items or []) if int(t.get("exp", 0)) > now]
 
 
-def issue_ticket(label: str = "", ttl: int | None = None, **extra) -> str:
+# 티켓 용도. 기기 등록(`fsh mobile` QR)과 노출 포트 `session` 모드 입장이 한 저장소를 쓰므로, 소비하는 쪽이
+# 자기 용도의 티켓만 받아야 한다 — 안 그러면 노출 앱 주소(`/__fsh/cb?t=`)에 실려 다니는 60초짜리 포트 티켓으로
+# 메인 `/api/auth`에서 기기를 등록해 비밀번호·OTP 없이 셸을 얻는다.
+PURPOSE_DEVICE = "device"
+PURPOSE_PORT_SHARE = "port-share"
+_PURPOSES = (PURPOSE_DEVICE, PURPOSE_PORT_SHARE)
+_RESERVED = ("hash", "exp", "label", "purpose")
+
+
+def _purpose_of(rec: dict) -> str:
+    """기록된 용도. 이 필드가 생기기 전에 발급된 티켓(최대 5분 수명)은 share 묶음 여부로 가린다."""
+    p = rec.get("purpose")
+    if p in _PURPOSES:
+        return p
+    return PURPOSE_PORT_SHARE if "share" in rec else PURPOSE_DEVICE
+
+
+def issue_ticket(label: str = "", ttl: int | None = None, *, purpose: str = PURPOSE_DEVICE, **extra) -> str:
     """1회용 기기 등록 티켓 발급 → URL/QR에 실을 원문 반환.
 
     QR을 띄우는 시점에 맥에 대한 물리적 접근이 이미 증명된 것이므로, 스캔을
@@ -43,24 +60,32 @@ def issue_ticket(label: str = "", ttl: int | None = None, **extra) -> str:
     줄인다. 티켓이 URL에 실리는 것은 감수하는 대신 창을 좁히는 쪽이다.
     묶인 값은 `consume_ticket`이 그대로 돌려주므로 호출부가 대조할 수 있다.
     """
+    if purpose not in _PURPOSES:
+        raise ValueError(f"unknown ticket purpose: {purpose!r}")
     raw = secrets.token_urlsafe(24)
     tickets = _load_tickets()
     rec = {
         "hash": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
         "exp": int(time.time()) + int(ttl if ttl is not None else auth.TICKET_TTL),
         "label": (label or "")[:60],
+        "purpose": purpose,
     }
     # 예약어를 덮어쓰지 못하게 한다 — 호출부가 exp를 늘려버리면 수명 제한이 무의미해진다.
     for k, v in extra.items():
-        if k not in ("hash", "exp", "label"):
+        if k not in _RESERVED:
             rec[k] = v
     tickets.append(rec)
     fileio._write_json_secure(auth.TICKETS_PATH, {"version": 1, "tickets": tickets})
     return raw
 
 
-def consume_ticket(raw: str) -> Optional[dict]:
-    """티켓 검증 + 즉시 소멸(1회용). 유효하면 티켓 레코드, 아니면 None."""
+def consume_ticket(raw: str, purpose: str) -> Optional[dict]:
+    """티켓 검증 + 즉시 소멸(1회용). 유효하고 `purpose`가 맞으면 티켓 레코드, 아니면 None.
+
+    용도가 다른 티켓은 **소멸시키지 않고** None — 엉뚱한 곳에 넣어 본 것만으로 정상 티켓을 태우지 않는다.
+    `purpose`는 필수 인자다(기본값을 두면 새 호출부가 용도 검사를 빠뜨려도 조용히 통과한다)."""
+    if purpose not in _PURPOSES:
+        raise ValueError(f"unknown ticket purpose: {purpose!r}")
     if not raw:
         return None
     digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -70,7 +95,7 @@ def consume_ticket(raw: str) -> Optional[dict]:
         if hmac.compare_digest(t.get("hash", ""), digest):
             hit = t
             break
-    if hit is None:
+    if hit is None or _purpose_of(hit) != purpose:
         return None
     tickets.remove(hit)
     fileio._write_json_secure(auth.TICKETS_PATH, {"version": 1, "tickets": tickets})

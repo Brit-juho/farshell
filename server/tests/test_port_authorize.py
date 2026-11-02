@@ -133,7 +133,7 @@ def test_ticket_is_bound_to_share_and_device(sysmod):
     share, _ = _store().create_share(3000, "앱", "session", HOUR)
     r = _call(sysmod, {"share": share["shareId"]}, AUTHED)
     ticket = parse_qs(urlsplit(_loc(r)).query)["t"][0]
-    rec = auth.consume_ticket(ticket)
+    rec = auth.consume_ticket(ticket, auth.PURPOSE_PORT_SHARE)
     assert rec["share"] == share["shareId"]
     assert rec["device"] == "dev-1"
 

@@ -814,7 +814,7 @@ async def auth_login(request: Request):
     ) or "unknown"
 
     if ticket:
-        hit = auth.consume_ticket(ticket)
+        hit = auth.consume_ticket(ticket, auth.PURPOSE_DEVICE)
         if not hit:
             authz_preauth.fail(authz_preauth.source_of(request), "ticket")
             return JSONResponse({"error": "ticket_invalid"}, status_code=401)

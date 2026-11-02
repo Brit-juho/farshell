@@ -170,6 +170,8 @@ from auth.totp import (  # noqa: E402,F401
     verify_totp,
 )
 from auth.tickets import (  # noqa: E402,F401
+    PURPOSE_DEVICE,
+    PURPOSE_PORT_SHARE,
     _load_tickets,
     consume_ticket,
     issue_ticket,
