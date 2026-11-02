@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 
 # Bound GIL-held parsing/commit work while interactive terminal streams are active.
 CAPTURE_BYTES = 256 * 1024
+HEARTBEAT = 15  # seconds between unchanged `worker` status commits
+_replication_beat = {'last': None, 'at': 0}
 
 
 async def _offload(fn,*,on_cancel=None):
@@ -37,6 +39,8 @@ class Collector:
         self.last_inventory = 0
         self.last_discovery = 0
         self.last_auto_archive = 0
+        self.last_beat = None
+        self.last_beat_at = 0
 
     def step(self):
         now = time.monotonic()
@@ -81,9 +85,12 @@ class Collector:
                     break
         # Verification observes accepted agent state, never raw unauthenticated hook data.
         self.bind_conversations()
-        with database(write=True) as db:
-            set_setting(db, 'worker', {'state': 'degraded' if failures else 'running', 'checked_at': time.time(),
-                                     'updated': updated, 'errors': failures, 'truncated': limited})
+        # The heartbeat is committed when it changes or every HEARTBEAT seconds, not on every 2s tick.
+        beat = {'state': 'degraded' if failures else 'running', 'updated': updated, 'errors': failures, 'truncated': limited}
+        if beat != self.last_beat or now - self.last_beat_at >= HEARTBEAT:
+            with database(write=True) as db:
+                set_setting(db, 'worker', {**beat, 'checked_at': time.time()})
+            self.last_beat, self.last_beat_at = beat, now
         from . import backup
         backup.maybe_snapshot()
 
@@ -118,7 +125,9 @@ class Collector:
                 current=db.execute('SELECT ended,epoch,physical_key FROM runtimes WHERE id=?',(runtime['id'],)).fetchone()
                 if not current or current['ended'] is not None or current['epoch']!=runtime['epoch'] or current['physical_key']!=runtime['physical_key']:
                     continue
-                db.execute('INSERT INTO conversation_executions VALUES(?,?,?,1) ON CONFLICT(conversation_id,runtime_id,pane_id) DO UPDATE SET verified=1',(conversation['id'],runtime['id'],ctx['pane']))
+                # An upsert of an already-verified row still rewrites pages (and checkpoints the WAL) every tick.
+                if not db.execute('SELECT 1 FROM conversation_executions WHERE conversation_id=? AND runtime_id=? AND pane_id=? AND verified=1',(conversation['id'],runtime['id'],ctx['pane'])).fetchone():
+                    db.execute('INSERT INTO conversation_executions VALUES(?,?,?,1) ON CONFLICT(conversation_id,runtime_id,pane_id) DO UPDATE SET verified=1',(conversation['id'],runtime['id'],ctx['pane']))
                 children=e.get('subagents',{}).get('items',[])
                 for child in children:
                     if not isinstance(child,dict) or not isinstance(child.get('id'),str):
@@ -190,8 +199,12 @@ def _replicate_once(stop=None):
                     break
         except Exception:
             failed.append(peer)
-    with database(write=True) as db:
-        set_setting(db,'replication_worker',{'state':'degraded' if failed else 'running','failed':failed,'checked_at':time.time()})
+    beat = {'state': 'degraded' if failed else 'running', 'failed': failed}
+    now = time.monotonic()
+    if beat != _replication_beat['last'] or now - _replication_beat['at'] >= HEARTBEAT:
+        with database(write=True) as db:
+            set_setting(db,'replication_worker',{**beat,'checked_at':time.time()})
+        _replication_beat.update(last=beat, at=now)
     if failed:
         raise Refused('replication_delayed',503)
 

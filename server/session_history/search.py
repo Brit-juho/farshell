@@ -30,7 +30,8 @@ def _refresh(limit=1000):
                 index.execute('INSERT INTO bodies(origin,conversation,body) VALUES(?,?,?)', (owner,cid,body))
             if rows:
                 position = rows[-1]['rowid']
-            index.execute('INSERT INTO progress VALUES(?,?) ON CONFLICT(kind) DO UPDATE SET position=excluded.position', (kind,position))
+            if rows or row is None:
+                index.execute('INSERT INTO progress VALUES(?,?) ON CONFLICT(kind) DO UPDATE SET position=excluded.position', (kind,position))
 
 
 def matches(source, search):
