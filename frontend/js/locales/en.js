@@ -4467,5 +4467,10 @@ window.__VT_I18N = {
   "플러그인 제거": "Remove plugin",
   "플러그인 하위 경로": "Plugin subdirectory",
   "플러그인 하위 경로가 올바르지 않습니다": "Invalid plugin subdirectory",
-  "현재 프로필과 검증된 실행 세션이 일치하지 않습니다": "The current profile does not match the verified running session"
+  "현재 프로필과 검증된 실행 세션이 일치하지 않습니다": "The current profile does not match the verified running session",
+  "터미널 미리보기": "Terminal preview",
+  "스킨 미리보기": "Skin preview",
+  "지금 쓰는 스킨": "Current skin",
+  "누르면 적용됩니다": "Click to apply",
+  "이 칸 기준 한 줄에 약 {n}자 · 스크롤백 {lines}줄": "About {n} characters per line in this pane · {lines} lines of scrollback"
 };

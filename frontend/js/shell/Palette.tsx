@@ -21,6 +21,9 @@ import {
   parseQuery, fuzzyMatch, PLACEHOLDER, DEFAULT_COMMANDS, SETTINGS_COMMANDS,
   type PaletteMode, type CommandDescriptor,
 } from './palette-data.js';
+import {
+  SECTION_META, buildSettingEntries, matchSettingEntry, stepSettingValue, formatSettingValue,
+} from '../panels/settings/index-data.js';
 
 export interface SessionTab { id: string; name: string; }
 export interface KeymapBinding { id: string; label: string; combo: string; passthrough: boolean; unavailable: boolean; }
@@ -51,10 +54,15 @@ export interface PaletteDeps {
 
 interface Row {
   key: string;
-  kind: 'session' | 'file' | 'command' | 'queue' | 'port' | 'scrollback' | 'keymap' | 'empty' | 'recent';
+  kind: 'session' | 'file' | 'command' | 'queue' | 'port' | 'scrollback' | 'keymap' | 'setting' | 'empty' | 'recent';
   label: string;
   hint?: string;
   hintHtml?: string;            // 단축키 — SVG 기호가 섞인 마크업(core/keymap.js displayComboHtml)
+  sub?: string;                // 이름 아래 한 줄(설정의 경로 «터미널 › 표시»)
+  /** 줄 안에서 바로 바꾸는 값. bool은 스위치, 나머지는 ‹ 값 › 로 그린다. */
+  ctl?: { kind: 'bool' | 'select' | 'range'; on: boolean; text: string };
+  /** ←/→(dir ±1)로 값을 한 칸 옮긴다. 없으면 방향키는 입력창의 캐럿을 그대로 움직인다. */
+  onAdjust?: (dir: number) => void;
   el?: HTMLElement;            // 이미 만들어진 DOM(세션 라이브 프리뷰 카드)
   onOpen?: () => void;
   onOpenNewPane?: () => void;
@@ -75,6 +83,7 @@ const KIND_META: Record<string, { label: string; icon: string }> = {
   file:       { label: t('파일'),     icon: 'file' },
   command:    { label: t('명령'),     icon: 'list' },
   keymap:     { label: t('키맵'),     icon: 'keyboard' },
+  setting:    { label: t('설정'),     icon: 'settings' },
   queue:      { label: t('큐'),       icon: 'list' },
   port:       { label: t('포트'),     icon: 'plug' },
   scrollback: { label: t('스크롤백'), icon: 'search' },
@@ -102,7 +111,7 @@ interface PaletteBodyProps {
   query: () => string;
   wide: () => boolean;
   onRequestClose: () => void;
-  onApi: (api: { selectAndFire: (d: number) => void; openSelected: (newPane: boolean) => void; queueSelected: () => void }) => void;
+  onApi: (api: { selectAndFire: (d: number) => void; openSelected: (newPane: boolean) => void; queueSelected: () => void; adjustSelected: (dir: number) => boolean }) => void;
 }
 
 function PaletteBody(props: PaletteBodyProps) {
@@ -150,9 +159,13 @@ function PaletteBody(props: PaletteBodyProps) {
   const [scrollbackResults, setScrollbackResults] = createSignal<any[]>([]);
   const [scrollbackLoading, setScrollbackLoading] = createSignal(false);
   const [selected, setSelected] = createSignal(0);
+  // 설정 값이 바뀌면(이 줄에서든 다른 화면에서든) 줄의 값 표시를 다시 읽는다.
+  const [settingsRev, setSettingsRev] = createSignal(0);
   const [previewText, setPreviewText] = createSignal<string[] | null>(null);
 
   onMount(() => {
+    const off = (window as any).vtSettingsSubscribe?.(() => setSettingsRev((n) => n + 1));
+    if (typeof off === 'function') onCleanup(off);
     deps.loadViewer().then((v) => setRecentFiles(v._loadRecent())).catch(() => {});
     refreshTmux();
   });
@@ -347,6 +360,35 @@ function PaletteBody(props: PaletteBodyProps) {
     }));
   }
 
+  // 설정 색인(panels/settings/index-data.js)의 줄. 값은 window.vtSettings* 브리지로만 읽고 쓴다
+  // (이 모듈은 core/settings.js를 import하지 않는다 — 파일 머리 주석).
+  function settingEntryRows(q: string): Row[] {
+    settingsRev(); // 값이 바뀌면 다시 계산
+    const w = window as any;
+    const compact = window.matchMedia?.('(max-width:719px)').matches;
+    const shown = SECTION_META.filter((s) => !(compact && s.desktopOnly)).map((s) => s.id);
+    return buildSettingEntries(shown).filter((e) => matchSettingEntry(e, q)).map((e): Row => {
+      if (e.kind === 'link') {
+        return {
+          key: `setting:${e.id}`, kind: 'setting', label: e.label, sub: e.path,
+          onOpen: () => { props.onRequestClose(); deps.getAction('settings.section')?.(e.section); },
+        };
+      }
+      const value = w.vtSettingsGet?.(e.key);
+      const adjust = (dir: number) => {
+        const next = stepSettingValue(e, w.vtSettingsGet?.(e.key), dir);
+        if (next !== undefined) w.vtSettingsSet?.(e.key, next);
+      };
+      return {
+        key: `setting:${e.key}`, kind: 'setting', label: e.label, sub: e.path,
+        ctl: { kind: e.kind as 'bool' | 'select' | 'range', on: e.kind === 'bool' ? !!value : false, text: formatSettingValue(e, value) },
+        // 줄을 눌러도, Enter를 눌러도 창은 닫지 않는다 — 바꾼 결과를 보면서 이어서 바꾸려는 줄이다.
+        onOpen: () => adjust(1),
+        onAdjust: adjust,
+      };
+    });
+  }
+
   function keymapRow(b: KeymapBinding): Row {
     return {
       key: `keymap:${b.id}`,
@@ -427,9 +469,15 @@ function PaletteBody(props: PaletteBodyProps) {
         return ports().filter((p2) => fuzzyMatch(`${p2.port} ${p2.cmd || ''}`, q)).map(portRow);
       case 'scrollback':
         return scrollbackResults().map((r, i) => scrollbackRow(r, i));
-      case 'settings':
-        return [...themeRows(), ...SETTINGS_COMMANDS.filter((c) => fuzzyMatch(c.label, q)).map(commandRow).filter(Boolean) as Row[]]
-          .filter((r) => fuzzyMatch(r.label, q));
+      case 'settings': {
+        const entryRows = settingEntryRows(q);
+        // 「드래그 시 자동 복사」처럼 색인에 줄 안 컨트롤로 이미 있는 토글은 명령 목록에서 뺀다 — 같은 항목이 두 줄로 나온다.
+        const inlineKeys = new Set(entryRows.map((r) => r.key.slice('setting:'.length)));
+        const commands = SETTINGS_COMMANDS
+          .filter((c) => !(c.action?.startsWith('__toggle:') && inlineKeys.has(c.action.slice('__toggle:'.length))))
+          .filter((c) => fuzzyMatch(c.label, q)).map(commandRow).filter(Boolean) as Row[];
+        return [...entryRows, ...themeRows().filter((r) => fuzzyMatch(r.label, q)), ...commands];
+      }
       default: {
         // 2026-09-23(2.1 D6) — 세션은 여기서 뺐다(사용자 요청 — 세션 이동·
         // 관리는 세션 탭에서 하고, 팔레트에서는 `@`로만 찾는다). 순서는
@@ -552,8 +600,16 @@ function PaletteBody(props: PaletteBodyProps) {
     r?.onSendToQueue?.();
   }
 
+  // ←/→ — 선택한 줄에 값이 있으면 그 값을 옮기고 true(방향키를 입력창 캐럿에 넘기지 않는다).
+  function adjustSelected(dir: number): boolean {
+    const r = rows()[selected()];
+    if (!r?.onAdjust) return false;
+    r.onAdjust(dir);
+    return true;
+  }
+
   // 키보드는 상위(Overlay)의 document keydown 리스너가 이 API로 위임한다.
-  props.onApi({ selectAndFire, openSelected, queueSelected });
+  props.onApi({ selectAndFire, openSelected, queueSelected, adjustSelected });
 
   return (
     <div class={`vt-qo-body ${showPreview() ? 'two-col' : ''}`} id="vt-qo-body">
@@ -586,12 +642,28 @@ function PaletteBody(props: PaletteBodyProps) {
               <Show when={row.el} fallback={
                 <div
                   class="vt-vw-row vt-qo-row"
-                  classList={{ selected: i() === selected() }}
+                  classList={{ selected: i() === selected(), 'vt-qo-setting': row.kind === 'setting' }}
                   onMouseEnter={() => setSelected(i())}
                   onClick={() => row.onOpen?.()}
                 >
                   <span class="vt-qo-mark" aria-hidden="true" innerHTML={markFor(row)} />
-                  <div class="vt-vw-name">{row.label}</div>
+                  <div class="vt-vw-name">
+                    <Show when={row.sub} fallback={row.label}>
+                      <span class="vt-qo-name">{row.label}</span>
+                      <span class="vt-qo-sub">{row.sub}</span>
+                    </Show>
+                  </div>
+                  <Show when={row.ctl}>
+                    {(ctl) => (
+                      <Show when={ctl().kind === 'bool'} fallback={
+                        <span class="vt-qo-val" role="status" aria-label={`${row.label}: ${ctl().text}`}>
+                          <span class="vt-qo-val-arrow" aria-hidden="true">‹</span>{ctl().text}<span class="vt-qo-val-arrow" aria-hidden="true">›</span>
+                        </span>
+                      }>
+                        <span class="vt-qo-switch" classList={{ on: ctl().on }} role="switch" aria-checked={ctl().on} aria-label={row.label} />
+                      </Show>
+                    )}
+                  </Show>
                   <Show when={row.hint}>
                     <Show when={row.hintHtml} fallback={<div class="vt-qo-hint">{row.hint}</div>}>
                       <div class="vt-qo-hint" aria-label={row.hint} innerHTML={row.hintHtml} />
@@ -665,6 +737,9 @@ export function mountPalette(root: HTMLElement, deps: PaletteDeps): PaletteApi {
     if (ev.key === 'Escape') { ev.preventDefault(); close(); return; }
     if (ev.key === 'ArrowDown') { ev.preventDefault(); bodyApi?.selectAndFire(1); return; }
     if (ev.key === 'ArrowUp') { ev.preventDefault(); bodyApi?.selectAndFire(-1); return; }
+    if ((ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') && !ev.metaKey && !ev.ctrlKey && !ev.altKey && !ev.shiftKey) {
+      if (bodyApi?.adjustSelected(ev.key === 'ArrowRight' ? 1 : -1)) { ev.preventDefault(); return; }
+    }
     if (ev.key === 'Tab') { ev.preventDefault(); bodyApi?.queueSelected(); return; }
     if (ev.key === 'Enter') {
       ev.preventDefault();
