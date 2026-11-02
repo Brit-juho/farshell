@@ -806,12 +806,12 @@ async def auth_login(request: Request):
     device_secret = ""
     device_id = ""
     device_life = 0  # 이 응답 시점의 기기 남은 수명(초) — 세션·쿠키 수명 상한
-    # D14/D15: 잠금은 기기/IP 단위로 건다(전역 X) — 한 클라이언트의 실패가 다른
-    # 클라이언트의 로그인·기기 등록까지 막지 않도록. 신뢰 프록시 설정을 그대로 따른다
-    # (NetworkAccessMiddleware와 동일한 _effective_client_ip).
-    client_key = _effective_client_ip(
-        request.client.host if request.client else None, request.headers
-    ) or "unknown"
+    # D14/D15: 잠금은 출처 단위로 건다 — 한 클라이언트의 실패가 다른 클라이언트의 로그인·기기 등록까지 막지
+    # 않도록. 출처 키는 preauth와 같다(`authz_preauth.source_of`): 터널로 들어온 요청은 전부 loopback이라
+    # 예전처럼 접속 IP를 키로 쓰면 인터넷의 모든 방문자가 `127.0.0.1` 키 하나를 나눠 써서, URL을 아는 누구나
+    # 10분마다 5번 틀려 주인을 계속 잠갔다. 그 대신 출처를 바꿔 가며 때리는 것은 등록되지 않은 기기 전체
+    # 상한(`auth.new_device_lock_remaining`)이 막는다. 헤더를 위조하는 로컬 프로세스는 잠금 키만 바꿀 뿐이다.
+    client_key = authz_preauth.source_of(request)
 
     if ticket:
         hit = auth.consume_ticket(ticket)
@@ -832,10 +832,21 @@ async def auth_login(request: Request):
             return JSONResponse(
                 {"error": "password_locked", "retry_after": locked}, status_code=429
             )
+        # 등록된 기기는 전체 상한에서 빠진다 — 낯선 출처들이 실패를 채워도 주인의 폰은 로그인된다.
+        registered = auth.verify_device(request.cookies.get("vt_device", "")) is not None
+        if not registered:
+            locked = auth.new_device_lock_remaining()
+            if locked:
+                return JSONResponse(
+                    {"error": "password_locked", "retry_after": locked, "scope": "new_device"},
+                    status_code=429,
+                )
 
         kind = auth.credential_kind(cred)
         if kind is None:
             auth.password_note_failure(client_key)
+            if not registered:
+                auth.new_device_note_failure()
             authz_preauth.fail(authz_preauth.source_of(request), "login")
             return JSONResponse({"error": "invalid"}, status_code=401)
         auth.password_reset_failures(client_key)
@@ -856,6 +867,7 @@ async def auth_login(request: Request):
                         return JSONResponse({"error": "otp_required"}, status_code=401)
                     if not auth.verify_totp(otp):
                         auth.otp_note_failure(client_key)
+                        auth.new_device_note_failure()  # 이 분기는 등록되지 않은 기기뿐이다
                         authz_preauth.fail(authz_preauth.source_of(request), "otp")
                         return JSONResponse(
                             {"error": "otp_invalid",
@@ -961,9 +973,7 @@ async def auth_elevate(request: Request):
     password = str(body.get("password", "") or "")
     otp = str(body.get("otp", "") or "")
 
-    client_key = _effective_client_ip(
-        request.client.host if request.client else None, request.headers
-    ) or "unknown"
+    client_key = authz_preauth.source_of(request)  # 로그인과 같은 출처 키(auth_login 주석)
 
     locked = auth.password_lock_remaining(client_key)
     if locked:
