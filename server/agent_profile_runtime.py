@@ -253,7 +253,21 @@ def _created(name):
     return value.strip()
 
 
-def launch(profile_id, revision, cwd, conversation=None):
+# 이 세션 한 번만 권한 확인을 건너뛰는 CLI별 플래그. 쉘 alias는 tmux 자식에 닿지 않으므로 명시할 때만 붙인다.
+BYPASS_FLAGS = {"claude": "--dangerously-skip-permissions", "codex": "--dangerously-bypass-approvals-and-sandbox"}
+
+
+def launch_argv(tool, path, conversation=None, bypass=False):
+    argv = [path]
+    if bypass:
+        argv.append(BYPASS_FLAGS[tool])
+    if conversation:
+        argv += ["--resume", conversation] if tool == "claude" else ["resume", conversation]
+    return argv
+
+
+def prepare_launch(profile_id, revision, cwd, conversation=None, *, bypass=False):
+    """Every check and the environment of a launch, without starting anything."""
     profile = profiles.get(profile_id)
     profiles.require_revision(profile, revision)
     profiles.require_no_pending_jobs(profile_id)
@@ -290,9 +304,12 @@ def launch(profile_id, revision, cwd, conversation=None):
             if observed and observed['last_fingerprint'] == launch_auth and time.time() - observed['last_at'] <= 1800:
                 launch_subject = observed['subject']
     env = environment(profile_id, str(directory), record=True)
-    argv = [binary(profile["tool"])]
-    if conversation:
-        argv += ["--resume", conversation] if profile["tool"] == "claude" else ["resume", conversation]
+    argv = launch_argv(profile["tool"], binary(profile["tool"]), conversation, bypass)
+    return profile, directory, env, argv, launch_auth, launch_subject
+
+
+def launch(profile_id, revision, cwd, conversation=None, *, bypass=False):
+    profile, directory, env, argv, launch_auth, launch_subject = prepare_launch(profile_id, revision, cwd, conversation, bypass=bypass)
     name = "profile-" + secrets.token_hex(8)
     folder = fsguard.private_profile_directory(profiles.directory() / "launch")
     payload = folder / (secrets.token_hex(16) + ".json")

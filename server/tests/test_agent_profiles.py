@@ -1115,12 +1115,42 @@ def test_fsh_claude_without_a_name_uses_the_default_or_the_only_profile(sandbox)
     assert local.set_default() == {'claude': None}
 
 
+def test_fsh_claude_runs_in_this_terminal_by_default_and_creates_no_session(sandbox, monkeypatch):
+    import agent_profile_local as local
+    pid = profiles.create('alice', 'claude')['id']
+    monkeypatch.setattr(local, 'launch', lambda *a, **k: pytest.fail('a tmux session must not be created'))
+    monkeypatch.setattr(runtime, 'prepare_launch', lambda profile_id, revision, cwd, conversation=None, bypass=False: (None, '/work/here', {'FSH_PROFILE_ID': profile_id}, ['/bin/claude', '--dangerously-skip-permissions'] if bypass else ['/bin/claude'], None, None))
+    class Tty:
+        def isatty(self): return True
+        def flush(self): pass
+    monkeypatch.setattr('sys.stdin', Tty())
+    monkeypatch.setattr('sys.stdout', Tty())
+    moved, calls = [], []
+    monkeypatch.setattr(os, 'chdir', moved.append)
+    def fake_exec(file, argv, env):
+        calls.append((file, argv, env))
+        raise SystemExit  # a real exec never returns
+    monkeypatch.setattr(os, 'execvpe', fake_exec)
+    with pytest.raises(SystemExit):
+        local.run('claude', 'alice', cwd='/work/here', bypass=True)
+    assert moved == ['/work/here']
+    assert calls == [('/bin/claude', ['/bin/claude', '--dangerously-skip-permissions'], {'FSH_PROFILE_ID': pid})]
+
+
+def test_bypass_flag_is_added_only_when_asked_and_per_cli():
+    assert runtime.launch_argv('claude', '/bin/claude') == ['/bin/claude']
+    assert runtime.launch_argv('claude', '/bin/claude', None, True) == ['/bin/claude', '--dangerously-skip-permissions']
+    assert runtime.launch_argv('claude', '/bin/claude', 'c' * 32, True) == ['/bin/claude', '--dangerously-skip-permissions', '--resume', 'c' * 32]
+    assert runtime.launch_argv('codex', '/bin/codex', 'c' * 32, True) == ['/bin/codex', '--dangerously-bypass-approvals-and-sandbox', 'resume', 'c' * 32]
+    assert runtime.launch_argv('codex', '/bin/codex') == ['/bin/codex']
+
+
 def test_fsh_claude_attaches_in_the_fsh_tmux_without_nesting_trouble_or_just_prints(sandbox, monkeypatch):
     import agent_profile_local as local
     import tmux_runner
     pid = profiles.create('alice', 'claude')['id']
     started = []
-    monkeypatch.setattr(local, 'launch', lambda profile_id, cwd, conversation=None: started.append((profile_id, cwd, conversation)) or {'session': 'profile-' + 'a' * 16})
+    monkeypatch.setattr(local, 'launch', lambda profile_id, cwd, conversation=None, bypass=False: started.append((profile_id, cwd, conversation)) or {'session': 'profile-' + 'a' * 16})
     class Tty:
         def isatty(self): return True
         def flush(self): pass
@@ -1129,7 +1159,7 @@ def test_fsh_claude_attaches_in_the_fsh_tmux_without_nesting_trouble_or_just_pri
     monkeypatch.setattr('sys.stdin', Tty())
     monkeypatch.setattr('sys.stdout', Tty())
     monkeypatch.setenv('TMUX', '/tmp/tmux-501/default,1,0')
-    local.run('claude', 'alice', cwd='/work/here', conversation='a' * 32)
+    local.run('claude', 'alice', cwd='/work/here', conversation='a' * 32, tmux=True)
     assert started == [(pid, '/work/here', 'a' * 32)]
     file, argv, env = calls[0]
     assert file == 'tmux' and argv[:4] == ['tmux', '-u', '-L', tmux_runner.VT_TMUX_SOCKET] and argv[-2:] == ['-t', '=profile-' + 'a' * 16]

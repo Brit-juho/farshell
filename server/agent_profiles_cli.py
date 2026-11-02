@@ -65,11 +65,13 @@ def main():
     tog.add_argument("kind", choices=("plugin", "skill"))
     tog.add_argument("name")
     tog.add_argument("state", choices=("on", "off"))
-    start = subs.add_parser("run", help=tr("프로필로 세션을 열고 바로 붙습니다(fsh claude / fsh codex)"))
+    start = subs.add_parser("run", help=tr("프로필로 지금 터미널에서 바로 실행합니다(fsh claude / fsh codex)"))
     start.add_argument("tool", choices=("claude", "codex"))
     start.add_argument("name", nargs="?")
     start.add_argument("--cwd", default=None)
     start.add_argument("--resume")
+    start.add_argument("--bypass", action="store_true", help=tr("권한 확인을 건너뜁니다(이번 세션만, 기본값은 그대로)"))
+    start.add_argument("--tmux", action="store_true", help=tr("지금 터미널 대신 FarShell tmux 세션으로 열고 붙습니다(폰에서도 보이고 서버가 기록)"))
     default = subs.add_parser("default", help=tr("이름 없이 쓸 기본 프로필을 보거나 정합니다"))
     default.add_argument("name", nargs="?")
     args = parser.parse_args()
@@ -111,7 +113,7 @@ def main():
             result = local.recover(args.profile)
         elif args.action == "run":
             import os
-            result = local.run(args.tool, args.name, cwd=args.cwd or os.getcwd(), conversation=args.resume)
+            result = local.run(args.tool, args.name, cwd=args.cwd or os.getcwd(), conversation=args.resume, bypass=args.bypass, tmux=args.tmux)
         elif args.action == "default":
             result = local.set_default(args.name)
         elif args.action == "sync-settings":

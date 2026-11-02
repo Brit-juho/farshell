@@ -139,14 +139,19 @@ def set_default(reference=None):
     return {"tool": chosen["tool"], "default": chosen["name"]}
 
 
-def run(tool, reference=None, *, cwd, conversation=None):
-    """Start a session with the profile and attach to it, `clauth start` style.
+def run(tool, reference=None, *, cwd, conversation=None, bypass=False, tmux=False):
+    """Start the CLI with the profile right here, like typing `claude`.
 
-    The session lives in FarShell's tmux, so detaching leaves it running. Without a terminal
-    the session is started and its name returned instead of attaching.
+    `tmux=True` (or no terminal at all) keeps the old behaviour: a session in FarShell's tmux that
+    survives detaching and is recorded by the server. The direct run is not recorded as a session.
     """
     chosen = resolve(reference, tool) if reference else default_for(tool)
-    started = launch(chosen["id"], cwd, conversation)
+    if not tmux and sys.stdin.isatty() and sys.stdout.isatty():
+        _, directory, env, argv, _, _ = runtime.prepare_launch(chosen["id"], profiles.get(chosen["id"])["revision"], cwd, conversation, bypass=bypass)
+        os.chdir(directory)
+        sys.stdout.flush()
+        os.execvpe(argv[0], argv, env)
+    started = launch(chosen["id"], cwd, conversation, bypass=bypass)
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         return {**started, "profile": chosen["name"], "attached": False}
     import tmux_runner
@@ -155,9 +160,9 @@ def run(tool, reference=None, *, cwd, conversation=None):
     os.execvpe("tmux", ["tmux", "-u", "-L", tmux_runner.VT_TMUX_SOCKET, "attach-session", "-t", "=" + started["session"]], env)
 
 
-def launch(profile_id, cwd, conversation=None):
+def launch(profile_id, cwd, conversation=None, *, bypass=False):
     profile = profiles.get(profile_id)
-    return runtime.launch(profile["id"], profile["revision"], cwd, conversation)
+    return runtime.launch(profile["id"], profile["revision"], cwd, conversation, bypass=bypass)
 
 
 def probe(profile_id):
