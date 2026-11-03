@@ -358,6 +358,8 @@ def reconcile_orphans() -> dict:
 
 VALID_SHARE_MODES = {"device", "pin"}
 MAX_PIN_ATTEMPTS = 5
+MIN_PIN_LEN = 6   # 새로 만드는 공유의 PIN 최소 길이(UI·API·CLI). 이미 있는 공유는 그대로 둔다.
+MAX_PIN_LEN = 20
 
 
 def hash_pin(pin: str, salt: str) -> str:
@@ -389,6 +391,33 @@ def add_share(file_id: str, mode: str, ttl: int, once: bool, pin: str | None = N
         item.setdefault("shares", []).append(share)
         _write_unlocked(items)
     return share
+
+
+def reserve_pin_attempt(file_id: str, share_id: str) -> tuple[str, dict | None]:
+    """PIN 시도 한 번을 **검증보다 먼저, 락 안에서** 예약한다. ("ok", 최신 공유) | ("exhausted", None) | ("gone", None).
+
+    예전에는 요청 처음에 읽어 둔 공유로 시도 횟수를 판단하고, 틀리면 읽어 둔 값 + 1 을 덮어썼다. 폼을 읽는 await 에서
+    다른 요청이 끼어들기 때문에, 한 번에 몰려 온 요청 N개가 전부 `attempts=0` 을 보고 검증까지 마친 뒤 `1` 을 써서
+    5회 제한이 무력했다(4자리 PIN 은 몇 묶음이면 전수 대입). 여기서는 락 안에서 최신 값을 읽고 올려 쓰므로
+    동시에 몇 개가 와도 MAX_PIN_ATTEMPTS 번째까지만 검증에 도달하고, 한도에 닿으면 공유를 없앤다.
+    """
+    with _locked():
+        items = _read_unlocked()
+        item = next((x for x in items if x["id"] == file_id), None)
+        if item is None:
+            return "gone", None
+        shares = item.get("shares", [])
+        share = next((s for s in shares if s.get("shareId") == share_id), None)
+        if share is None:
+            return "gone", None
+        used = int(share.get("attempts", 0) or 0)
+        if used >= MAX_PIN_ATTEMPTS:
+            item["shares"] = [s for s in shares if s.get("shareId") != share_id]
+            _write_unlocked(items)
+            return "exhausted", None
+        share["attempts"] = used + 1
+        _write_unlocked(items)
+        return "ok", dict(share)
 
 
 def get_item_and_share(file_id: str, share_id: str) -> tuple[dict | None, dict | None]:
@@ -527,7 +556,7 @@ def _cli(argv: list[str]) -> int:
                 return 0
             pin = None
             if want_pin:
-                pin = secrets.token_hex(2)  # 4자리 숫자 대용(hex) — 화면에 보여줄 값
+                pin = secrets.token_hex(MIN_PIN_LEN // 2)  # hex 문자 — 화면에 보여줄 값
                 print(f"  ℹ PIN: {pin}")
             share = add_share(item["id"], "pin" if want_pin else "device", ttl, False, pin=pin)
             token = build_share_token(item["id"], share)
@@ -575,7 +604,7 @@ def _cli(argv: list[str]) -> int:
             return 2
         pin = None
         if want_pin:
-            pin = secrets.token_hex(2)
+            pin = secrets.token_hex(MIN_PIN_LEN // 2)
             print(f"  ℹ PIN: {pin}")
         share = add_share(item["id"], "pin" if want_pin else "device", ttl, want_once, pin=pin)
         token = build_share_token(item["id"], share)

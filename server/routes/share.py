@@ -32,6 +32,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 
 import auth
 from i18n import tr
+from authz import preauth as authz_preauth
 import file_store
 import fsguard
 from routes.files import _file_public
@@ -156,7 +157,7 @@ async def create_share(file_id: str, request: Request):
         return JSONResponse({"error": "bad_mode"}, status_code=400)
     if ttl not in VALID_TTLS:
         return JSONResponse({"error": "bad_ttl"}, status_code=400)
-    if mode == "pin" and not (isinstance(pin, str) and 4 <= len(pin) <= 20):
+    if mode == "pin" and not (isinstance(pin, str) and file_store.MIN_PIN_LEN <= len(pin) <= file_store.MAX_PIN_LEN):
         return JSONResponse({"error": "bad_pin"}, status_code=400)
     share = file_store.add_share(file_id, mode, ttl, once, pin=pin if mode == "pin" else None)
     if share is None:
@@ -278,6 +279,28 @@ async def share_download(token: str, request: Request):
     return HTMLResponse(_pin_page(token))
 
 
+_PIN_FORM_MAX = 4096
+
+
+async def _read_pin(request: Request) -> str | None:
+    """`application/x-www-form-urlencoded` 본문에서 pin 만 읽는다. 4KB 를 넘으면 None.
+
+    `request.form()` 은 본문 전체를 메모리에 올린다 — 로그인 전 공개 경로라 아무나 큰 본문을 보낼 수 있었다.
+    PIN 은 20자 이하이니 4KB 면 충분하다(노출 포트 PIN 폼과 같은 상한)."""
+    if int(request.headers.get("content-length") or 0) > _PIN_FORM_MAX:
+        return None
+    body = b""
+    async for chunk in request.stream():
+        body += chunk
+        if len(body) > _PIN_FORM_MAX:
+            return None
+    if "application/x-www-form-urlencoded" not in request.headers.get("content-type", ""):
+        return ""
+    from urllib.parse import parse_qs
+    values = parse_qs(body.decode("utf-8", errors="replace"), keep_blank_values=True).get("pin", [""])
+    return values[0]
+
+
 @public_router.post("/s/{token}/pin")
 async def share_pin_submit(token: str, request: Request):
     item, share = _resolve(token)
@@ -286,22 +309,25 @@ async def share_pin_submit(token: str, request: Request):
     if share["mode"] != "pin":
         return JSONResponse({"error": "not_pin_mode"}, status_code=400)
 
-    form = await request.form()
-    pin = str(form.get("pin", ""))
+    source = authz_preauth.source_of(request)
+    pin = await _read_pin(request)
+    if pin is None:
+        return JSONResponse({"error": "payload_too_large"}, status_code=413)
 
-    if share.get("attempts", 0) >= file_store.MAX_PIN_ATTEMPTS:
-        file_store.remove_share(item["id"], share["shareId"])
-        logger.warning(f"[share] PIN 시도 초과로 공유 취소: file={item['id']} share={share['shareId']}")
+    # 시도를 **검증 전에, 락 안에서** 예약한다 — 동시에 몰려 와도 한도(5회)를 넘겨 검증되지 않는다(file_store).
+    state, share = file_store.reserve_pin_attempt(item["id"], share["shareId"])
+    if state != "ok":
+        if state == "exhausted":
+            logger.warning(f"[share] PIN 시도 초과로 공유 취소: file={item['id']}")
         return JSONResponse({"error": "not_found"}, status_code=404)
 
     expected = file_store.hash_pin(pin, share.get("pinSalt", ""))
     if not hmac.compare_digest(expected, share.get("pinHash", "")):
-        attempts = share.get("attempts", 0) + 1
-        if attempts >= file_store.MAX_PIN_ATTEMPTS:
+        authz_preauth.fail(source, "share_pin")   # 출처별 잠금(10회/60초 → 5분)에도 센다
+        if share.get("attempts", 0) >= file_store.MAX_PIN_ATTEMPTS:
             file_store.remove_share(item["id"], share["shareId"])
-            logger.warning(f"[share] PIN 5회 실패로 공유 취소: file={item['id']} share={share['shareId']}")
+            logger.warning(f"[share] PIN {file_store.MAX_PIN_ATTEMPTS}회 실패로 공유 취소: file={item['id']} share={share['shareId']}")
             return JSONResponse({"error": "not_found"}, status_code=404)
-        file_store.update_share(item["id"], share["shareId"], attempts=attempts)
         return HTMLResponse(_pin_page(token, tr("PIN이 올바르지 않습니다")), status_code=401)
 
     secret = secrets.token_urlsafe(24)

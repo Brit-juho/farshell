@@ -102,7 +102,7 @@ def test_device_mode_with_unregistered_device_cookie_redirects(client, anon):
 
 def test_pin_mode_get_shows_pin_page_not_file(client, anon):
     fid = _upload(client)
-    token = _share(client, fid, "pin", pin="1234")["token"]
+    token = _share(client, fid, "pin", pin="123456")["token"]
     r = anon.get(f"/s/{token}")
     assert r.status_code == 200
     assert "PIN" in r.text
@@ -111,8 +111,8 @@ def test_pin_mode_get_shows_pin_page_not_file(client, anon):
 
 def test_pin_mode_correct_pin_then_downloads(client, anon):
     fid = _upload(client)
-    token = _share(client, fid, "pin", pin="1234")["token"]
-    r1 = anon.post(f"/s/{token}/pin", data={"pin": "1234"}, follow_redirects=False)
+    token = _share(client, fid, "pin", pin="123456")["token"]
+    r1 = anon.post(f"/s/{token}/pin", data={"pin": "123456"}, follow_redirects=False)
     assert r1.status_code == 303
     r2 = anon.get(f"/s/{token}")  # anon 클라이언트가 쿠키를 그대로 들고 있다
     assert r2.status_code == 200
@@ -122,7 +122,7 @@ def test_pin_mode_correct_pin_then_downloads(client, anon):
 
 def test_pin_mode_wrong_pin_does_not_download(client, anon):
     fid = _upload(client)
-    token = _share(client, fid, "pin", pin="1234")["token"]
+    token = _share(client, fid, "pin", pin="123456")["token"]
     r = anon.post(f"/s/{token}/pin", data={"pin": "0000"})
     assert r.status_code == 401
     assert "set-cookie" not in r.headers  # 다운로드 쿠키는 정답일 때만 발급된다
@@ -130,21 +130,21 @@ def test_pin_mode_wrong_pin_does_not_download(client, anon):
 
 def test_pin_mode_five_failures_cancels_share(client, anon):
     fid = _upload(client)
-    token = _share(client, fid, "pin", pin="1234")["token"]
+    token = _share(client, fid, "pin", pin="123456")["token"]
     for _ in range(4):
         r = anon.post(f"/s/{token}/pin", data={"pin": "0000"})
         assert r.status_code == 401
     r = anon.post(f"/s/{token}/pin", data={"pin": "0000"})
     assert r.status_code == 404
     # 취소됐으므로 이후 올바른 PIN을 넣어도 이미 404 — 공유 자체가 사라졌다.
-    r2 = anon.post(f"/s/{token}/pin", data={"pin": "1234"})
+    r2 = anon.post(f"/s/{token}/pin", data={"pin": "123456"})
     assert r2.status_code == 404
 
 
 def test_pin_download_cookie_is_single_use(client, anon):
     fid = _upload(client)
-    token = _share(client, fid, "pin", pin="1234")["token"]
-    anon.post(f"/s/{token}/pin", data={"pin": "1234"}, follow_redirects=False)
+    token = _share(client, fid, "pin", pin="123456")["token"]
+    anon.post(f"/s/{token}/pin", data={"pin": "123456"}, follow_redirects=False)
     r2 = anon.get(f"/s/{token}")
     assert r2.status_code == 200
     # 같은 쿠키로 다시 받으면 서버가 지운 쿠키라 다시 PIN 페이지로 떨어진다.
@@ -250,8 +250,8 @@ def test_share_import_snapshots_and_shares(client, anon, browse):
     again = client.post("/api/fs/share-import", json={"path": str(browse / "note.md")}).json()["item"]
     assert again["id"] == item["id"]
     # 발급 → PIN 모드로 받기
-    token = _share(client, item["id"], "pin", pin="1234")["token"]
-    assert anon.post(f"/s/{token}/pin", data={"pin": "1234"}, follow_redirects=False).status_code == 303
+    token = _share(client, item["id"], "pin", pin="123456")["token"]
+    assert anon.post(f"/s/{token}/pin", data={"pin": "123456"}, follow_redirects=False).status_code == 303
     assert anon.get(f"/s/{token}").content == b"v1"
     # 원본이 바뀌어도 스냅샷은 그대로, 새로 가져오면 새 스냅샷이다
     (browse / "note.md").write_text("version-2")
@@ -287,3 +287,83 @@ def test_share_import_size_cap_and_elevation(client, anon, browse, monkeypatch):
     assert r.status_code == 413
     # 승격이 없는 클라이언트는 거부된다
     assert anon.post("/api/fs/share-import", json={"path": str(browse / "big.bin")}).status_code in (401, 403)
+
+
+# --- S8: PIN 시도 제한 --------------------------------------------------------------
+# 예전에는 요청 처음에 읽어 둔 공유로 횟수를 판단하고 `읽은 값 + 1`을 덮어써서, 동시에 몰려 온 요청이 전부
+# attempts=0 을 보고 검증까지 마쳤다 — 5회 제한이 무력했다.
+
+
+def test_concurrent_pin_guesses_are_bounded_by_the_attempt_limit(client, anon, monkeypatch):
+    import threading
+    import time as _time
+    import file_store
+    # 읽기와 쓰기 사이의 틈(옛 코드는 hash_pin 이 그 안에 있었다)을 넓혀 경쟁을 결정적으로 만든다 — 로직은 그대로다.
+    real_hash = file_store.hash_pin
+    monkeypatch.setattr(file_store, "hash_pin", lambda pin, salt: (_time.sleep(0.15), real_hash(pin, salt))[1])
+    fid = _upload(client)
+    share = _share(client, fid, "pin", pin="123456")
+    token = share["token"]
+    seen = []
+    lock = threading.Lock()
+    gate = threading.Barrier(40)
+
+    def guess(i):
+        gate.wait()
+        with TestClient(main.app) as c:
+            r = c.post(f"/s/{token}/pin", data={"pin": f"{i:06d}"})
+        with lock:
+            seen.append(r.status_code)
+
+    threads = [threading.Thread(target=guess, args=(i,)) for i in range(40)]
+    [t.start() for t in threads]
+    [t.join(timeout=60) for t in threads]
+    assert len(seen) == 40
+    verified = seen.count(401)          # 틀린 PIN 으로 실제 검증까지 간 요청
+    assert verified <= file_store.MAX_PIN_ATTEMPTS - 1, seen
+    assert seen.count(404) >= 40 - file_store.MAX_PIN_ATTEMPTS
+    assert anon.post(f"/s/{token}/pin", data={"pin": "123456"}).status_code == 404  # 공유가 사라졌다
+
+
+def test_reserve_pin_attempt_is_atomic_in_the_store(client):
+    import threading
+    import file_store
+    fid = _upload(client)
+    sid = _share(client, fid, "pin", pin="123456")["share"]["shareId"]
+    out = []
+    gate = threading.Barrier(30)
+
+    def go():
+        gate.wait()
+        out.append(file_store.reserve_pin_attempt(fid, sid)[0])
+
+    ts = [threading.Thread(target=go) for _ in range(30)]
+    [t.start() for t in ts]
+    [t.join(timeout=60) for t in ts]
+    assert out.count("ok") == file_store.MAX_PIN_ATTEMPTS
+    assert out.count("exhausted") == 1 and out.count("gone") == 30 - file_store.MAX_PIN_ATTEMPTS - 1
+
+
+def test_wrong_pins_also_count_toward_the_source_lockout(client, anon):
+    from authz import preauth
+    fid = _upload(client)
+    for n in range(2):  # 공유마다 5회에서 취소되므로 둘에 걸쳐 출처 한도(10회)를 채운다
+        token = _share(client, fid, "pin", pin="123456")["token"]
+        for _ in range(5):
+            anon.post(f"/s/{token}/pin", data={"pin": "000000"})
+    assert preauth.LIMITER.lock_remaining(preauth.source_key("testclient", {})) > 0
+
+
+def test_oversized_pin_form_is_refused_without_reading_it_all(client, anon):
+    fid = _upload(client)
+    token = _share(client, fid, "pin", pin="123456")["token"]
+    r = anon.post(f"/s/{token}/pin", data={"pin": "x" * 100_000})
+    assert r.status_code == 413
+
+
+def test_new_pins_must_be_at_least_six_characters(client):
+    fid = _upload(client)
+    for bad in ("1234", "12345", "x" * 21):
+        r = client.post(f"/api/files/{fid}/share", json={"mode": "pin", "ttl": 3600, "once": False, "pin": bad})
+        assert r.status_code == 400 and r.json()["error"] == "bad_pin", bad
+    assert client.post(f"/api/files/{fid}/share", json={"mode": "pin", "ttl": 3600, "once": False, "pin": "123456"}).status_code == 200
