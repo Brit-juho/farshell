@@ -3,7 +3,7 @@
 
 쓰기는 여전히 bin/fsh(bash, `_registry_set`/`_registry_del`)만 한다 — 여기선 그
 레지스트리를 읽기만 한다. 경로·포맷은 bin/fsh의 TUNNEL_REGISTRY와 동일해야
-한다("port\turl\tlabel", `/tmp/vt-pids/tunnels.tsv`) — 두 곳이 갈라지면 조용히
+한다("port\turl\tlabel", `$VT_RUN_DIR/vt-pids/tunnels.tsv`) — 두 곳이 갈라지면 조용히
 어긋난다는 게 유일한 위험이라 경로를 상수 하나로 여기 박아둔다.
 """
 
@@ -12,9 +12,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import vt_paths
+
 # bin/fsh 의 VT_RUN_DIR 과 같은 값을 봐야 한다 — 갈라지면 CLI 가 만든 레지스트리를
 # 서버가 못 찾는다. bin/fsh 가 export 하므로 서버 프로세스에도 전달된다.
-PID_DIR = Path(os.environ.get("VT_RUN_DIR", "/tmp")) / "vt-pids"
+PID_DIR = vt_paths.run_dir() / "vt-pids"
 REGISTRY_PATH = PID_DIR / "tunnels.tsv"
 
 

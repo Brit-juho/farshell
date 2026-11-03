@@ -390,6 +390,9 @@ async def lifespan(_app: FastAPI):
     FastAPI의 ``on_event`` API는 deprecated 상태다. lifespan으로 옮기면 startup과
     shutdown의 짝이 같은 스코프에 놓여, 백그라운드 task를 확실히 취소할 수 있다.
     """
+    # 런타임 폴더(pid·터널 로그·레지스트리)가 남의 것이면 기동하지 않는다 — 터널 주소와 노출 포트 티켓의
+    # 목적지를 그 파일에서 읽기 때문이다(vt_paths.check_private_dir). bin/fsh 도 같은 검사를 먼저 한다.
+    vt_paths.check_private_dir(vt_paths.run_dir())
     # A5: 기본 자세가 open이면(인증 없음 + IP 필터 없음) 명시적으로 경고. LAN 노출 시
     # 인증 없는 터미널 = 원격 코드 실행이므로 사용자가 인지하도록 한다.
     spec = network_access.get_current_spec()

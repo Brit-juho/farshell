@@ -42,11 +42,11 @@ Checks your install and environment automatically (Python, venv, tmux, cloudflar
     Change VT_PORT in ~/.vt.env
 
 ### The server fails to start
-    cat /tmp/vt-server.log
+    cat ~/.vt/run/vt-server.log
 
 ### No Cloudflare Tunnel URL
 - Check that cloudflared is running with `fsh status`
-- `cat /tmp/cloudflared.log`
+- `cat ~/.vt/run/cloudflared.log`
 - If it isn't installed: `brew install cloudflared` (macOS) / the official binary (Linux)
 
 ### Renamed a tmux session but the name didn't change
@@ -79,9 +79,9 @@ Checks your install and environment automatically (Python, venv, tmux, cloudflar
 
 | Item | Path |
 |---|---|
-| Server | `/tmp/vt-server.log` |
-| Cloudflare Tunnel | `/tmp/cloudflared.log` |
-| Voice Daemon | `/tmp/vt-voice-daemon.log` |
-| PID files | `/tmp/vt-pids/` |
+| Server | `~/.vt/run/vt-server.log` |
+| Cloudflare Tunnel | `~/.vt/run/cloudflared.log` |
+| Voice Daemon | `~/.vt/run/vt-voice-daemon.log` |
+| PID files | `~/.vt/run/vt-pids/` |
 | Voice target lock | `~/.vt/voice_target` |
 | Environment config | `~/.vt.env` |

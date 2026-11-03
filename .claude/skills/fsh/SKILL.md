@@ -30,7 +30,7 @@ fsh status
 ```
 
 - 서버/터널이 **이미 실행 중**이면: 새로 시작하지 말고 기존 정보를 안내하세요.
-  - 터널 URL: `cat /tmp/cloudflared.log | grep -o 'https://[^ ]*trycloudflare.com'`
+  - 터널 URL: `cat ~/.vt/run/cloudflared.log | grep -o 'https://[^ ]*trycloudflare.com'`
   - "이미 실행 중입니다. 접속 URL: ..." 형태로 알려주세요.
 - 서버/터널이 **중지 상태**일 때만 새로 시작하세요.
 
@@ -223,8 +223,8 @@ fsh stop --purge         # tmux 세션까지 완전 종료
 |------|------|
 | `fsh: command not found` | `~/.local/bin`이 PATH에 있는지 확인. 없으면: `export PATH="$HOME/.local/bin:$PATH"` |
 | Voice Daemon 핫키 안 먹힘 | macOS 시스템 설정 → 개인정보 → 접근성에서 터미널 앱 허용 |
-| 서버 시작 실패 | `cat /tmp/vt-server.log` 확인 |
-| 터널 URL 안 뜸 | `cat /tmp/cloudflared.log` 확인. cloudflared 설치: `brew install cloudflared` |
+| 서버 시작 실패 | `cat ~/.vt/run/vt-server.log` 확인 |
+| 터널 URL 안 뜸 | `cat ~/.vt/run/cloudflared.log` 확인. cloudflared 설치: `brew install cloudflared` |
 | 새 터미널 창이 안 열림 | 고른 터미널(`fsh terminal`)이 설치돼 있지 않거나 osascript(자동화) 권한이 없음. 출력된 수동 명령(`tmux new -A -s dev 'claude --resume'`)을 다른 터미널에서 실행 |
 | `claude --resume`에서 대화 못 찾음 | resume 목록은 시간순. 가장 최근 항목을 고르거나, ID로 직접: `claude --resume <conversation-id>` |
 
