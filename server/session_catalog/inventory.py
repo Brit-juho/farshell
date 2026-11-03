@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 import fsguard
+import git_safe
 import tmux_runner
 from .db import database, host_id, uid, encode, changed, Refused
 
@@ -61,8 +62,8 @@ def inspect_workspace(cwd):
         path = fsguard.resolve_under_roots(cwd)
         if not path.is_dir():
             return None
-        result = subprocess.run(["git", "-C", str(path), "rev-parse", "--show-toplevel", "--path-format=absolute", "--git-common-dir"],
-                                capture_output=True, timeout=2, check=False)
+        result = subprocess.run(git_safe.argv("rev-parse", "--show-toplevel", "--path-format=absolute", "--git-common-dir", cwd=path),
+                                capture_output=True, timeout=2, check=False, env=git_safe.env())
         roots = result.stdout.decode("utf-8", "strict").splitlines() if result.returncode == 0 else []
         if len(roots) == 2:
             path = fsguard.resolve_under_roots(roots[0])

@@ -617,12 +617,13 @@ def _child_name(parent_name: str, title: str, existing: set[str]) -> str:
 def _prepare_worktree(parent_cwd: str, branch: str, name: str, check=None) -> str:
     import subprocess
 
+    import git_safe
     import worktree
     try:
-        top = subprocess.run(["git", "-C", parent_cwd, "rev-parse", "--show-toplevel"],
-                             capture_output=True, text=True, timeout=5).stdout.strip()
-        head = subprocess.run(["git", "-C", parent_cwd, "rev-parse", "HEAD"],
-                              capture_output=True, text=True, timeout=5).stdout.strip()
+        top = subprocess.run(git_safe.argv("rev-parse", "--show-toplevel", cwd=parent_cwd),
+                             capture_output=True, text=True, timeout=5, env=git_safe.env()).stdout.strip()
+        head = subprocess.run(git_safe.argv("rev-parse", "HEAD", cwd=parent_cwd),
+                              capture_output=True, text=True, timeout=5, env=git_safe.env()).stdout.strip()
     except (OSError, subprocess.SubprocessError) as e:
         raise DelegationError("worktree_failed", f"git을 실행하지 못했습니다: {e}", 400) from e
     if not top or not head:

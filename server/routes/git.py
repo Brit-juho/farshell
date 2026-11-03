@@ -24,6 +24,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
 import fsguard
+import git_safe
 from authz import leases as authz_leases
 from i18n import tr
 
@@ -47,12 +48,16 @@ def _denied(reason: str) -> JSONResponse:
 # --- git ---------------------------------------------------------------------
 
 
-def _git(repo: Path, *args: str) -> tuple[int, str]:
-    """git 호출. shell 을 쓰지 않고 인자 배열로만 넘긴다(인젝션 차단)."""
+def _git(repo: Path, *args: str, hooks: bool = False) -> tuple[int, str]:
+    """git 호출. shell 을 쓰지 않고 인자 배열로만 넘긴다(인젝션 차단).
+
+    저장소 설정이 프로그램을 띄우지 못하게 `git_safe`를 거친다 — 레일 배지는 pane cwd 마다 이 함수로
+    `status`를 부르므로, 안 그러면 악성 저장소에 `cd`만 해도 fsmonitor가 실행된다. `hooks=True`는
+    사용자가 누른 git 동작(commit)에만 쓴다."""
     try:
         proc = subprocess.run(
-            ["git", "-C", str(repo), *args],
-            capture_output=True, timeout=GIT_TIMEOUT,
+            git_safe.argv(*args, cwd=repo, hooks=hooks),
+            capture_output=True, timeout=GIT_TIMEOUT, env=git_safe.env(),
         )
     except subprocess.TimeoutExpired:
         return 124, ""
@@ -106,7 +111,7 @@ def _parse_branch_header(line: str) -> dict:
 
 def _diff_stat(top: Path) -> dict:
     """워킹트리+인덱스 전체의 +/− 합. HEAD가 없는 저장소(커밋 0개)면 0."""
-    rc, out = _git(top, "diff", "--numstat", "HEAD")
+    rc, out = _git(top, "diff", *git_safe.DIFF_FLAGS, "--numstat", "HEAD")
     if rc != 0:
         if rc in (124, 127):
             return {"insertions": 0, "deletions": 0, "error": "git_diff_unavailable"}
@@ -244,7 +249,7 @@ def _collect_diff(repo: Path, file: str, staged: bool) -> dict:
     top = _git_toplevel(repo)
     if top is None:
         return {"repo": False, "diff": "", "truncated": False}
-    args = ["diff", "--no-color"]
+    args = ["diff", "--no-color", *git_safe.DIFF_FLAGS]
     if staged:
         args.append("--cached")
     if file:
@@ -421,7 +426,7 @@ def _collect_commit_meta(repo: Path, sha: str) -> dict | None:
 
 
 def _collect_commit_file_diff(repo: Path, sha: str, file: str) -> dict:
-    args = ["show", "--no-color", "--format="]
+    args = ["show", "--no-color", *git_safe.DIFF_FLAGS, "--format="]
     args.append(sha)
     if file:
         args += ["--", file]
@@ -561,15 +566,15 @@ def _has_staged_changes(repo: Path) -> bool:
 def _staged_paths(repo: Path) -> list[str]:
     """스테이지된 경로 전부(이름 바꾸기도 옛 이름·새 이름 둘 다) — `-z` 로 NUL 구분."""
     try:
-        proc = subprocess.run(["git", "-C", str(repo), "diff", "--cached", "--name-only", "-z", "--no-renames"],
-                              capture_output=True, timeout=GIT_TIMEOUT)
+        proc = subprocess.run(git_safe.argv("diff", "--cached", "--name-only", "-z", "--no-renames", cwd=repo),
+                              capture_output=True, timeout=GIT_TIMEOUT, env=git_safe.env())
     except (OSError, ValueError, subprocess.TimeoutExpired):
         return []
     return [x for x in proc.stdout.decode("utf-8", "surrogateescape").split("\0") if x]
 
 
 def _commit(repo: Path, message: str) -> tuple[int, str]:
-    return _git(repo, "commit", "-m", message)
+    return _git(repo, "commit", "-m", message, hooks=True)
 
 
 @router.post("/api/git/commit")

@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Optional
 
 import fsh_client
+import git_safe
 from i18n import tr
 
 MARK = "# fsh-lease-guard v1"
@@ -208,7 +209,10 @@ def cmd_release(argv: list[str]) -> int:
 
 def _git(cwd: str, *args: str) -> Optional[bytes]:
     try:
-        r = subprocess.run(["git", "-C", cwd, *args], capture_output=True, timeout=GIT_TIMEOUT)
+        # hooks=True: `rev-parse --git-path hooks` must report the real core.hooksPath (guard install);
+        # none of these subcommands runs a hook.
+        r = subprocess.run(git_safe.argv(*args, cwd=cwd, hooks=True), capture_output=True, timeout=GIT_TIMEOUT,
+                           env=git_safe.env())
     except (OSError, subprocess.TimeoutExpired):
         return None
     return r.stdout if r.returncode == 0 else None

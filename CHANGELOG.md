@@ -8,6 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Security
+- Opening a cloned repository could run a command as the FarShell server without any click: a bare-repository-shaped folder committed inside the repository is discovered as the repository once a pane `cd`s into it, and the rail badge's automatic `git status` then ran its `core.fsmonitor`. Every server git call now goes through `server/git_safe.py` (`safe.bareRepository=explicit`, `core.fsmonitor=false`, no hooks for calls you did not ask for, `--no-ext-diff --no-textconv` on diffs). Dock commit and worktree create/remove still run the repository's hooks, like the git CLI. `worktree create` also refuses a `base` that starts with `-` (it was passed to git as an option). See `docs/ref/worktree.md`.
+
 ### Changed
 - View tabs: text is one step larger (15px, tabs at least 200px wide), the hover card lists each member as `name · state · branch`, and right-clicking a tab (or the Menu key) opens a menu with 이름 변경 and 뷰 닫기. There is no ungroup item; the menu loads on first use so the initial payload stays under its cap.
 - A web terminal whose tmux session ended while other sessions remain is now closed (4004) instead of silently showing another session in its pane. With `detach-on-destroy off` tmux moves the client to a surviving session, so the screen never learned the session was gone; the server now tracks each PTY's tmux session id and ends the PTY when that id disappears (renames and deliberate session switches are not affected).
