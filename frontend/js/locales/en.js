@@ -1524,7 +1524,7 @@ window.__VT_I18N = {
   "끊기": "Stop",
   "끊기 실패": "Couldn't disconnect",
   "끊을 화면이 없습니다": "No screens to disconnect",
-  "끌어서 순서를 바꿉니다. 행 메뉴의 위로·아래로 이동도 됩니다.": "Drag to reorder. Move up / Move down in the row menu also work.",
+  "끌어서 순서를 바꿉니다.": "Drag to reorder.",
   "끔": "Off",
   "나": "You",
   "나 · 모든 프로젝트": "Me · all projects",

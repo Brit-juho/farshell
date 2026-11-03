@@ -15,7 +15,7 @@ import { t } from '../core/i18n.js';
 import {
   buildRailLists, splitRunning, groupSessionRows, compactRailRows, rowMenuItems, rowSummaryDetails, runRowMenu, defaultRailCollapsed,
   ATTENTION_COLLAPSED_KEY, ORDER_KEY, LINEAGE_KEY, VIEW_KEY, encodeOrder, encodeLineagePrefs, encodeRailView,
-  buildSessionTree, kidsProgress, moveInOrder, stepInOrder,
+  buildSessionTree, kidsProgress, moveInOrder,
   type SessionRow, type RailSort, type TreeEntry,
 } from './rail-data.js';
 import {
@@ -268,7 +268,6 @@ function Rail(props: { deps: RailDeps }) {
     // 수동 순서는 지우지 않는다 — 다시 수동을 고르면 그대로 돌아온다.
     setPref(ORDER_KEY, encodeOrder(s, s === 'manual' ? topOrder() : prefs().order));
   };
-  const moveRow = (row: SessionRow, dir: -1 | 1) => saveOrder(stepInOrder(topOrder(), rowKey(row), dir));
   const flip = (list: string[], name: string) => (list.includes(name) ? list.filter((n) => n !== name) : [...list, name]);
   const toggleKids = (name: string) => setPref(LINEAGE_KEY, encodeLineagePrefs(flip(prefs().kidsCollapsed, name), prefs().closedOpen));
   const toggleClosed = (name: string) => setPref(LINEAGE_KEY, encodeLineagePrefs(prefs().kidsCollapsed, flip(prefs().closedOpen, name)));
@@ -372,17 +371,14 @@ function Rail(props: { deps: RailDeps }) {
     const m = ctxMenu();
     if (!m) return [];
     const row = m.row;
-    const order = topOrder();
-    const at = isTop(row) && prefs().sort === 'manual' ? order.indexOf(rowKey(row)) : -1;
-    const move = at < 0 ? undefined : { up: at > 0, down: at < order.length - 1 };
     const linked = catalogOf(row);
-    return rowMenuItems(row, { split: splitAvailable(row), share: viewHostId === LOCAL_HOST, move, record: !!linked }).map((it) => ({
+    return rowMenuItems(row, { split: splitAvailable(row), share: viewHostId === LOCAL_HOST, record: !!linked }).map((it) => ({
       label: it.label, detail: it.detail, danger: it.danger,
       run: () => {
         if (it.id === 'record' && linked) { void openRecordOf(linked); return; }
         // 열려 있지 않은 행은 웹 세션이 없어 제자리 편집이 안 된다 — 카탈로그 제목만 바꾼다.
         if (it.id === 'rename' && linked && !row.sessionId) { void renameCatalogSession(linked).then(() => refreshCatalog()); return; }
-        runRowMenu(it.id, row, window, () => startRenameSession(row.sessionId, row.name), (d) => moveRow(row, d));
+        runRowMenu(it.id, row, window, () => startRenameSession(row.sessionId, row.name));
       },
     }));
   };
@@ -626,7 +622,7 @@ function Rail(props: { deps: RailDeps }) {
                       role="radio"
                       class="vt-rail-sort-opt"
                       aria-checked={prefs().sort === id}
-                      data-tip={id === 'manual' ? t('끌어서 순서를 바꿉니다. 행 메뉴의 위로·아래로 이동도 됩니다.') : undefined}
+                      data-tip={id === 'manual' ? t('끌어서 순서를 바꿉니다.') : undefined}
                       data-tip-side="bottom"
                       onClick={() => setSort(id)}
                     >{label}</button>
