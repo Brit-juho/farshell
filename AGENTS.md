@@ -93,6 +93,12 @@ Verify affected behavior with actual responses, operations and logs.
   One exception was made on 2026-10-23, before the repository was made public: history was rewritten
   once to drop a personal file, and every branch and tag was force-pushed. Clones made before that
   date must be discarded and cloned again.
+  A second one was made on 2026-11-03, again before the repository was made public: a device name
+  that appeared in a few commit messages and two comments was replaced throughout the history
+  (`git filter-repo`), which changed the hashes of every commit from 2026-09-10 on and of the tags
+  `v2.1.0`–`v2.6.0`; the release assets of `v2.2.0`–`v2.6.0` were rebuilt from the new tags. Clones
+  made before that date must be discarded and cloned again (or `git fetch --force --tags origin &&
+  git reset --hard origin/dev` in a clean one).
 
 ## Working rules
 
