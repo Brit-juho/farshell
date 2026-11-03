@@ -168,11 +168,11 @@ def test_migration_is_only_called_from_stop_and_start_not_from_the_dispatcher():
     import re
     text = (ROOT / "bin" / "fsh").read_text()
     calls = [m.start() for m in re.finditer(r"^\s*(?:_port_in_use \"\$VT_PORT\" \|\| )?_vt_migrate_legacy_run\s*$", text, re.M)]
-    assert len(calls) == 2, "cmd_start 와 cmd_stop 두 곳뿐이어야 한다"
+    assert len(calls) == 3, "cmd_start·cmd_stop·cmd_restart 세 곳뿐이어야 한다"
     for pos in calls:
         head = text[:pos].rsplit("\n", 40)[0]
         owner = re.findall(r"^(cmd_\w+)\(\) \{", text[:pos], re.M)[-1]
-        assert owner in ("cmd_start", "cmd_stop"), owner
+        assert owner in ("cmd_start", "cmd_stop", "cmd_restart"), owner
     assert "start|stop|restart|voice|clip|mobile|update|tunnel) _vt_migrate_legacy_run" not in text
 
 
@@ -218,3 +218,9 @@ def test_migration_ends_a_legacy_watchdog_but_never_an_unrelated_process(tmp_pat
         assert bystander.poll() is None, "워치독이 아닌 프로세스를 끝내면 안 된다"
     finally:
         bystander.kill()
+
+
+def test_restart_migrates_before_it_reads_the_tunnel_url():
+    text = (ROOT / "bin" / "fsh").read_text()
+    body = text[text.index("cmd_restart() {"):]
+    assert body.index("_vt_migrate_legacy_run") < body.index('url_before="$(_main_tunnel_url)"')

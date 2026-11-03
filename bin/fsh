@@ -3299,6 +3299,10 @@ cmd_restart() {
   echo ""
   echo "  ♻️  fsh restart — $(_t '서버만 재기동 (입구 유지)')"
 
+  # 업그레이드 뒤 첫 재시작이면 터널 로그가 아직 옛 /tmp 에 있다 — 주소를 읽기 전에 옮긴다. 안 그러면 before 가 비어
+  # 같은 주소인데도 「접속 주소가 바뀌었습니다」라고 말한다(2026-11-03 실제로 봤다). 서버를 내리기 전이라 옛 서버는
+  # 이 명령이 곧 내린다.
+  _vt_migrate_legacy_run
   local url_before
   url_before="$(_main_tunnel_url)"
 
