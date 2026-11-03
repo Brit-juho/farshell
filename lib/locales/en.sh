@@ -55,6 +55,7 @@ _t_en_lookup() {
     'Cloudflare Tunnel 상태') _T_OUT='Cloudflare Tunnel status' ;;
     'Cloudflare 계정') _T_OUT='A Cloudflare account' ;;
     'Cloudflare 명명 터널 시작 중 (name={name} → {host})...') _T_OUT='Starting Cloudflare named tunnel (name={name} -> {host})...' ;;
+    'Cloudflare 익명 터널 시작 중 (이메일 관문: {mail})...') _T_OUT='Starting Cloudflare quick tunnel (email gate: {mail})...' ;;
     'Cloudflare 익명 터널 시작 중...') _T_OUT='Starting Cloudflare anonymous tunnel...' ;;
     'Codex hooks.json 의 FarShell 중복 훅 제거') _T_OUT='Removing duplicate FarShell hooks from Codex hooks.json' ;;
     'Codex 훅') _T_OUT='Codex hooks' ;;
@@ -88,6 +89,7 @@ _t_en_lookup() {
     'VT_NGROK_DOMAIN 미설정 — 매번 임시 주소가 발급됩니다') _T_OUT='VT_NGROK_DOMAIN not set — you get a temporary address each time' ;;
     'VT_PYTHON 미설정/실행불가. '\''fsh doctor'\''로 확인하세요.') _T_OUT='VT_PYTHON isn'\''t set or isn'\''t executable. Check with '\''fsh doctor'\''.' ;;
     'VT_TERMINAL={term} 이(가) 설치돼 있지 않아 자동 선택으로 열림 (fsh terminal)') _T_OUT='VT_TERMINAL={term} isn'\''t installed, so one is chosen automatically (fsh terminal)' ;;
+    'VT_TUNNEL_ALLOWED_MAIL 값이 올바르지 않습니다(이메일·*@도메인을 쉼표로): {v}') _T_OUT='VT_TUNNEL_ALLOWED_MAIL is not valid (emails or *@domain, comma-separated): {v}' ;;
     'VT_TUNNEL_HOOK 미설정 — URL이 바뀌어도 아무 곳에도 알리지 않습니다.') _T_OUT='VT_TUNNEL_HOOK is not set — nothing is notified when the URL changes.' ;;
     'VT_TUNNEL_PROVIDER=ngrok인데 미설치. brew install ngrok') _T_OUT='VT_TUNNEL_PROVIDER=ngrok but ngrok isn'\''t installed. brew install ngrok' ;;
     'VT_TUNNEL_PROVIDER=none — 공개 터널을 띄우지 않습니다') _T_OUT='VT_TUNNEL_PROVIDER=none: not starting a public tunnel' ;;
@@ -523,6 +525,7 @@ _t_en_lookup() {
     '이 터미널에 없음 — 시스템 설정 > 개인정보 보호 및 보안 > 전체 디스크 접근에 터미널 앱을 한 번 추가하고, 버전 경로(~/.local/share/claude/versions/*) 항목은 지우세요') _T_OUT='not granted to this terminal: add your terminal app once under System Settings > Privacy & Security > Full Disk Access, and remove the per-version claude entries (~/.local/share/claude/versions/*)' ;;
     '이 터미널에 허용됨 — claude 버전이 바뀌어도 다시 묻지 않음') _T_OUT='granted to this terminal; claude upgrades will not prompt again' ;;
     '이름:    ') _T_OUT='Name:     ' ;;
+    '이메일 관문 없이 열지 않습니다 — 값을 고치거나 지우세요.') _T_OUT='Not opening without the email gate — fix the value or remove it.' ;;
     '이미 3.11+ 를 갖고 있다면 그 python으로 직접 venv를 만들고') _T_OUT='If you already have 3.11+, create the venv with that python yourself' ;;
     '이미 tmux 안 ({session}). 추가 동작 없음.') _T_OUT='Already inside tmux ({session}). Nothing to do.' ;;
     '이미 노출 중: {url}') _T_OUT='Already exposed: {url}' ;;

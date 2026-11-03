@@ -188,6 +188,7 @@ BOUNDARY_KEYS = (
     "VT_STATE_DIR",           # 기기 목록·OTP가 사는 곳
     # 레거시 이름도 같은 경계값이다 — 하나만 막으면 옛 이름으로 우회된다.
     "VT_TUNNEL_HOOK",         # URL 변경 시 실행되는 임의 명령
+    "VT_TUNNEL_ALLOWED_MAIL", # 공개 터널 앞 이메일 관문
     # 레거시 이름도 같은 경계값이다 — 하나만 막으면 옛 이름으로 우회된다.
     "VT_TOKEN",
     "VT_PASSWORD_HASH",

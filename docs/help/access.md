@@ -26,6 +26,8 @@ fsh start --voice                      # Voice Daemon도 함께
   비밀번호를 만들어 터미널에 한 번만 보여 주고** 해시만 저장한다. 바꾸려면 `fsh password`.
   터미널이 아닌 곳(스크립트·자동 실행)에서는 만들지 않고 멈춘다 — 먼저 `fsh password`를 실행한다.
   비밀번호를 만들 수 없을 때 위험을 알고도 열려면 `fsh start --force`.
+- 공개 주소가 새는 것까지 막으려면 `~/.vt.env`에 `VT_TUNNEL_ALLOWED_MAIL=내이메일`을 넣고 `fsh tunnel restart`. 터널 앞에서
+  Cloudflare가 그 이메일로 PIN을 보내 확인한다. 브라우저 전용이라 터널 주소로 붙는 다른 Mac 연결은 막히니 다른 Mac은 Tailscale로 잇는다.
 - 이미 서버가 떠 있으면 `--network`/`--safe`는 **다음 재시작부터** 적용된다:
   `fsh restart --network tailscale`.
 - `fsh restart`는 직전에 정한 접근 범위를 그대로 이어간다. `fsh stop`(전체 종료)을 하면 기록이 지워진다.

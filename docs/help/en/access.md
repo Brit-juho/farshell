@@ -26,6 +26,8 @@ fsh start --voice                      # also start the Voice Daemon
   **create a random web sign-in password, show it once in the terminal** and store only its hash. Change it with `fsh password`.
   Outside a terminal (scripts, automatic starts) nothing is created and the start stops — run `fsh password` first.
   If a password cannot be created and you accept the risk, `fsh start --force` still opens it.
+- To guard against a leaked public URL, put `VT_TUNNEL_ALLOWED_MAIL=you@example.com` in `~/.vt.env` and run `fsh tunnel restart`.
+  Cloudflare then asks for a PIN sent to that email before the page loads. Browser-only, so another Mac connecting through the tunnel URL is blocked — pair Macs over Tailscale.
 - If the server is already running, `--network` and `--safe` apply **from the next restart**:
   `fsh restart --network tailscale`.
 - `fsh restart` keeps the access scope you chose last time. `fsh stop` (full shutdown) clears it.
