@@ -381,7 +381,7 @@ def _cb_handler(port: int):
             return JSONResponse({"error": "not_session_mode"}, status_code=400)
 
         ticket = request.query_params.get("t", "")
-        rec = await asyncio.to_thread(auth.consume_ticket, ticket)  # 1회용 — 즉시 소멸
+        rec = await asyncio.to_thread(auth.consume_ticket, ticket, auth.PURPOSE_PORT_SHARE)  # 1회용 — 즉시 소멸
         if rec is None:
             return JSONResponse({"error": "bad_ticket"}, status_code=401)
         # 티켓은 이 share에 묶여 발급된다. 다른 share의 티켓으로는 못 들어온다.

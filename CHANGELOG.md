@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Security
 - Opening a cloned repository could run a command as the FarShell server without any click: a bare-repository-shaped folder committed inside the repository is discovered as the repository once a pane `cd`s into it, and the rail badge's automatic `git status` then ran its `core.fsmonitor`. Every server git call now goes through `server/git_safe.py` (`safe.bareRepository=explicit`, `core.fsmonitor=false`, no hooks for calls you did not ask for, `--no-ext-diff --no-textconv` on diffs). Dock commit and worktree create/remove still run the repository's hooks, like the git CLI. `worktree create` also refuses a `base` that starts with `-` (it was passed to git as an option). See `docs/ref/worktree.md`.
+- An exposed port's one-time `session` ticket (60 seconds, carried in the app's `/__fsh/cb?t=` URL) was also accepted by the main login, registering a 90-day device without password or OTP. Tickets now carry a purpose (`device` / `port-share`) and each side accepts only its own; a ticket used in the wrong place is refused without being consumed.
 
 ### Changed
 - View tabs: text is one step larger (15px, tabs at least 200px wide), the hover card lists each member as `name · state · branch`, and right-clicking a tab (or the Menu key) opens a menu with 이름 변경 and 뷰 닫기. There is no ungroup item; the menu loads on first use so the initial payload stays under its cap.
