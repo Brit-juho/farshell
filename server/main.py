@@ -43,6 +43,7 @@ import port_proxy
 import tunnel
 import vt_paths
 from host_guard import HostGuardMiddleware
+from security_headers import SecurityHeadersMiddleware
 from deps import pty_mgr, output_watcher
 from routes.pty import router as pty_router, on_task_complete
 from routes.tmux import router as tmux_router
@@ -635,6 +636,8 @@ app.add_middleware(OriginGuardMiddleware)
 # Host 허용 목록이 가장 바깥 — DNS rebinding이면 Origin과 Host가 둘 다 공격자 이름이라 Origin 검사가
 # 통과시킨다. 그 이름 자체를 받지 않는다(host_guard.py).
 app.add_middleware(HostGuardMiddleware)
+# 보안 헤더는 그보다도 바깥 — Host/Origin/인증이 403·401 로 끊은 응답에도 붙는다(security_headers.py).
+app.add_middleware(SecurityHeadersMiddleware)
 
 # 정적 파일
 #
