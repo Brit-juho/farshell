@@ -33,14 +33,22 @@ _NO_HOOKS = ("-c", "core.hooksPath=/dev/null")
 DIFF_FLAGS = ("--no-ext-diff", "--no-textconv")
 
 
-def argv(*args: str, cwd: str | os.PathLike | None = None, hooks: bool = False) -> list[str]:
-    """`git [-C cwd] <hardening> <args>`. `hooks=True` only for a git action the user asked for."""
+def argv(*args: str, cwd: str | os.PathLike | None = None, hooks: bool = False,
+         readable_paths: bool = False) -> list[str]:
+    """`git [-C cwd] <hardening> <args>`. `hooks=True` only for a git action the user asked for.
+
+    `readable_paths=True` (diff/show text shown to people) keeps non-ASCII file names unquoted in headers
+    (`core.quotePath=false`); `"`, backslash and control characters are still C-quoted, which
+    `routes/git.py` `_redact_diff` parses.
+    """
     head = ["git"]
     if cwd is not None:
         head += ["-C", os.fspath(cwd)]
     head += list(_COMMON)
     if not hooks:
         head += list(_NO_HOOKS)
+    if readable_paths:
+        head += ["-c", "core.quotePath=false"]
     return head + list(args)
 
 
