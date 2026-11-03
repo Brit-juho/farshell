@@ -61,5 +61,5 @@ shasum -a 256 -c farshell-X.Y.Z.tar.gz.sha256
 gh attestation verify farshell-X.Y.Z.tar.gz --repo <owner>/farshell   # build provenance, when present
 ```
 
-The attestation is produced by the release workflow; releases published before it was added do not have one.
+The attestation is produced by the release workflow once the repository is public; releases built before that do not have one.
 `install.sh` clones the `master` branch, which only ever holds released code.

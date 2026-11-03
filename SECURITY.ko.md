@@ -58,5 +58,5 @@ shasum -a 256 -c farshell-X.Y.Z.tar.gz.sha256
 gh attestation verify farshell-X.Y.Z.tar.gz --repo <owner>/farshell   # 빌드 출처 증명(있을 때)
 ```
 
-증명은 릴리스 워크플로가 만들며, 그 단계가 생기기 전 릴리스에는 없습니다. `install.sh`는 릴리스된 코드만 담는
+증명은 저장소가 공개된 뒤 릴리스 워크플로가 만들며, 그 전에 빌드한 릴리스에는 없습니다. `install.sh`는 릴리스된 코드만 담는
 `master`를 클론합니다.
