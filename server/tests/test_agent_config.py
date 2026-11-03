@@ -485,7 +485,9 @@ int main(int argc, char **argv) {
             if result["state"] not in ("waiting", "restarting"):
                 break
             time.sleep(.1)
-        assert result["state"] == "resumed", result
+        # 실패하면 pytest 가 dict 를 `...` 로 줄여 원인(error 필드)이 안 보인다 — 전체를 메시지에 싣는다.
+        import json
+        assert result["state"] == "resumed", json.dumps(result, ensure_ascii=False, default=str)[:4000]
         assert out.read_text().splitlines() == [sid, "sample-value"]
         assert not list((state / "agent-launch").glob("*.json"))
     finally:
