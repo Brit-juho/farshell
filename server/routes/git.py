@@ -48,7 +48,7 @@ def _denied(reason: str) -> JSONResponse:
 # --- git ---------------------------------------------------------------------
 
 
-def _git(repo: Path, *args: str, hooks: bool = False) -> tuple[int, str]:
+def _git(repo: Path, *args: str, hooks: bool = False, readable_paths: bool = False) -> tuple[int, str]:
     """git 호출. shell 을 쓰지 않고 인자 배열로만 넘긴다(인젝션 차단).
 
     저장소 설정이 프로그램을 띄우지 못하게 `git_safe`를 거친다 — 레일 배지는 pane cwd 마다 이 함수로
@@ -56,7 +56,7 @@ def _git(repo: Path, *args: str, hooks: bool = False) -> tuple[int, str]:
     사용자가 누른 git 동작(commit)에만 쓴다."""
     try:
         proc = subprocess.run(
-            git_safe.argv(*args, cwd=repo, hooks=hooks),
+            git_safe.argv(*args, cwd=repo, hooks=hooks, readable_paths=readable_paths),
             capture_output=True, timeout=GIT_TIMEOUT, env=git_safe.env(),
         )
     except subprocess.TimeoutExpired:
@@ -188,30 +188,143 @@ async def git_status(repo: str = Query(...)):
     return await asyncio.to_thread(_collect_status, p)
 
 
-# diff 섹션 헤더: "diff --git a/path b/path" — b/ 쪽 경로를 실제 대상 파일로 취급한다
-# (rename의 경우도 b/ 가 결과 경로). a/, b/ 접두사는 git이 항상 붙이므로 그대로 벗긴다.
-_DIFF_HEADER_RE = re.compile(r"^diff --git a/(.+) b/(.+)$")
+# diff 섹션 헤더. git 은 `diff --git a/<경로> b/<경로>`(병합 충돌·병합 커밋은 `diff --cc <경로>` /
+# `diff --combined <경로>`)로 시작하고, 비ASCII·`"`·역슬래시·제어 문자가 든 경로는 C 방식으로 따옴표를 씌운다
+# (`diff --git "a/\354\204\234.pem" "b/..."`). 예전 정규식은 따옴표 헤더를 못 읽어 본문이 그대로 나갔고, 그 헤더를
+# 새 섹션으로도 치지 않아 앞 섹션에 흡수됐다. 지금은 (1) 모든 시작 줄을 섹션으로 쪼개고, (2) 따옴표를 풀고,
+# (3) 공백 때문에 경로가 모호하면 가능한 모든 분할을 검사하고, (4) 읽지 못하면 **가린다**(열린 채로 실패하지 않는다).
+_DIFF_STARTS = ("diff --git ", "diff --cc ", "diff --combined ")
 
 REDACTION_PLACEHOLDER = "[내용 가려짐 — 보호된 경로]"
 
+_C_ESCAPES = {"a": 7, "b": 8, "f": 12, "n": 10, "r": 13, "t": 9, "v": 11, '"': 34, "\\": 92}
+
+
+def _unquote_c(text: str) -> tuple[str, str] | None:
+    """`"..."`로 시작하는 git C 인용 하나를 풀어 (경로, 나머지)를 돌려준다. 닫는 따옴표가 없으면 None."""
+    if not text.startswith('"'):
+        return None
+    out = bytearray()
+    i, n = 1, len(text)
+    while i < n:
+        ch = text[i]
+        if ch == '"':
+            return out.decode("utf-8", errors="replace"), text[i + 1:]
+        if ch == "\\" and i + 1 < n:
+            nxt = text[i + 1]
+            if nxt in "01234567":
+                j = i + 1
+                while j < n and j < i + 4 and text[j] in "01234567":
+                    j += 1
+                out.append(int(text[i + 1:j], 8) & 0xFF)
+                i = j
+                continue
+            if nxt in _C_ESCAPES:
+                out.append(_C_ESCAPES[nxt])
+                i += 2
+                continue
+            return None
+        out += ch.encode("utf-8")
+        i += 1
+    return None
+
+
+def _strip_prefix(path: str) -> str:
+    return path[2:] if path[:2] in ("a/", "b/") else path
+
+
+def _header_paths(line: str) -> list[str] | None:
+    """섹션 시작 줄에서 나올 수 있는 모든 경로(a/·b/ 접두사 제거). 읽지 못하면 None.
+
+    인용되지 않은 `a/X b/Y`는 X나 Y에 공백이 있으면 모호하다 — ` b/`가 나오는 자리마다 분할해 그 후보를
+    전부 돌려주므로 호출부는 하나라도 거부 대상이면 가린다(과하게 가리는 쪽으로만 틀린다).
+    """
+    for prefix in _DIFF_STARTS:
+        if line.startswith(prefix):
+            rest = line[len(prefix):]
+            break
+    else:
+        return None
+    if prefix != "diff --git ":
+        q = _unquote_c(rest)
+        path = q[0] if q and not q[1] else rest
+        return [path] if path else None
+    paths: list[str] = []
+    if rest.startswith('"'):
+        first = _unquote_c(rest)
+        if first is None:
+            return None
+        paths.append(_strip_prefix(first[0]))
+        tail = first[1].lstrip(" ")
+        if tail.startswith('"'):
+            second = _unquote_c(tail)
+            if second is None:
+                return None
+            paths.append(_strip_prefix(second[0]))
+        elif tail:
+            paths.append(_strip_prefix(tail))
+        return paths or None
+    if not rest.startswith("a/"):
+        return None
+    pos = rest.find(" b/")
+    while pos != -1:
+        paths += [rest[2:pos], rest[pos + 3:]]
+        pos = rest.find(" b/", pos + 1)
+    # `a/X "b/Y"` — 이름이 바뀐 파일은 한쪽만 인용될 수 있다. 인용 시작(` "`)마다 뒤를 풀어 본다.
+    pos = rest.find(' "')
+    while pos != -1:
+        q = _unquote_c(rest[pos + 1:])
+        if q is not None and not q[1]:
+            paths += [rest[2:pos], _strip_prefix(q[0])]
+        pos = rest.find(' "', pos + 1)
+    return paths or None
+
+
+def _section_paths(section: list[str]) -> list[str] | None:
+    """헤더 줄 + 그 아래 `rename from/to`·`copy from/to`·`---`/`+++` 줄(첫 `@@` 전)의 모든 경로."""
+    paths = _header_paths(section[0])
+    if paths is None:
+        return None
+    for line in section[1:]:
+        if line.startswith("@"):
+            break
+        for key in ("rename from ", "rename to ", "copy from ", "copy to "):
+            if line.startswith(key):
+                value = line[len(key):]
+                q = _unquote_c(value)
+                paths.append(q[0] if q else value)
+        if line.startswith(("--- ", "+++ ")):
+            value = line[4:].split("\t", 1)[0]
+            if value == "/dev/null":
+                continue
+            q = _unquote_c(value)
+            paths.append(_strip_prefix(q[0] if q else value))
+    return paths
+
 
 def _diff_path_denied(path: str) -> bool:
-    """git diff 헤더에 나온 저장소 상대경로가 fsguard 거부 목록에 걸리는지 확인.
+    """git diff 헤더에 나온 저장소 상대경로가 열람 규칙에 걸리는지 확인.
 
     fsguard.resolve_under_roots()는 루트 경계 검사 + 존재 확인까지 하므로 여기서는
     쓸 수 없다(diff에 나온 경로는 루트 기준 절대경로가 아니고, 삭제된 파일은 더는
-    존재하지 않을 수도 있다). 순수 이름 판정 로직(_check_denylist)만 재구현 없이
-    그대로 재사용한다 — 거부 목록은 fsguard.py 한 곳에만 있어야 한다.
+    존재하지 않을 수도 있다). 순수 이름 판정 로직을 재구현 없이 그대로 재사용한다 —
+    규칙은 fsguard.py 한 곳에만 있어야 한다:
+    - 거부 목록(`_check_denylist`): .env·*.pem·id_rsa·.ssh/ …
+    - 점 디렉터리(`ALLOWED_DOT_DIRS` 밖): 뷰어가 `.sometool/state.json`을 거부하는데 diff 가 내주면 그 방어가
+      무의미하다. 마지막 구성요소(파일)는 점 파일(`.gitignore`)이라도 열람 대상이므로 보지 않는다.
     """
-    return fsguard._check_denylist(Path(path)) is not None
+    p = Path(path)
+    if fsguard._check_denylist(p) is not None:
+        return True
+    return any(fsguard.is_hidden_state_dir_name(part) for part in p.parts[:-1])
 
 
 def _redact_diff(diff_text: str, is_denied=_diff_path_denied) -> str:
-    """거부 목록에 걸리는 파일의 diff 본문을 플레이스홀더로 치환한다.
+    """열람 규칙에 걸리는 파일의 diff 본문을 플레이스홀더로 치환한다.
 
     /api/fs/file 은 .env·*.pem·id_rsa 등을 절대 내보내지 않는데, 같은 파일이 git diff에는
     그대로 실려 나가면 그 방어가 무의미해진다. 파일 경로(헤더 줄)는 "뭐가 바뀌었는지"
-    UI에 보여줘야 하므로 남기고, 실제 내용(hunk 본문)만 가린다.
+    UI에 보여줘야 하므로 남기고, 실제 내용(hunk 본문)만 가린다. 경로를 읽지 못한 섹션도 가린다.
     """
     if not diff_text:
         return diff_text
@@ -220,24 +333,23 @@ def _redact_diff(diff_text: str, is_denied=_diff_path_denied) -> str:
     i = 0
     n = len(lines)
     while i < n:
-        m = _DIFF_HEADER_RE.match(lines[i])
-        if not m:
+        if not lines[i].startswith(_DIFF_STARTS):
             out.append(lines[i])
             i += 1
             continue
-        path_b = m.group(2)
         section_start = i
         i += 1
-        while i < n and not lines[i].startswith("diff --git a/"):
+        while i < n and not lines[i].startswith(_DIFF_STARTS):
             i += 1
         section = lines[section_start:i]
-        if is_denied(path_b):
+        paths = _section_paths(section)
+        if paths is None or any(is_denied(p) for p in paths):
             # "diff --git", "index", "---", "+++" 같은 헤더 줄만 남기고 hunk(@@ ...)는 버린다.
             kept = []
             for hl in section:
-                kept.append(hl)
-                if hl.startswith("+++ "):
+                if hl.startswith("@"):
                     break
+                kept.append(hl)
             out.extend(kept)
             out.append(tr("[내용 가려짐 — 보호된 경로]"))
         else:
@@ -255,7 +367,7 @@ def _collect_diff(repo: Path, file: str, staged: bool) -> dict:
     if file:
         # '--' 뒤에 두면 파일명이 옵션으로 해석되지 않는다.
         args += ["--", file]
-    rc, out = _git(top, *args)
+    rc, out = _git(top, *args, readable_paths=True)
     if rc == 124:
         return {"repo": True, "diff": "", "truncated": False,
                 "error": tr("git diff 시간 초과")}
@@ -430,7 +542,7 @@ def _collect_commit_file_diff(repo: Path, sha: str, file: str) -> dict:
     args.append(sha)
     if file:
         args += ["--", file]
-    rc, out = _git(repo, *args)
+    rc, out = _git(repo, *args, readable_paths=True)
     if rc == 124:
         return {"diff": "", "truncated": False, "error": tr("git show 시간 초과")}
     out = _redact_diff(out)
