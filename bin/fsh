@@ -134,6 +134,10 @@ _VT_LEGACY_RUN=/tmp
 # shellcheck source=../lib/run_dir.sh
 . "$VT_DIR/lib/run_dir.sh"
 
+# 2.7 전 bin/fsh 는 VT_RUN_DIR=/tmp 를 **늘** export 했다 — 그때 띄운 tmux 세션·데몬·워치독의 환경에 그 값이
+# 남아 있다(설정 파일보다 낡은 export 가 이기는 같은 함정). 사용자가 고른 값이 아니라 옛 기본값이므로 미지정으로
+# 본다. 안 그러면 업그레이드 뒤 pane 에서 친 `fsh restart` 가 "/tmp 는 링크" 로 거부되고 옛 파일도 옮기지 못한다.
+case "${VT_RUN_DIR:-}" in /tmp|/tmp/|/private/tmp|/private/tmp/) unset VT_RUN_DIR ;; esac
 [ -n "${VT_RUN_DIR:-}" ] && _VT_RUN_DIR_EXPLICIT=1
 VT_RUN_DIR="${VT_RUN_DIR:-$(_vt_run_default)}"
 export VT_RUN_DIR
@@ -5339,7 +5343,7 @@ cmd_status() {
 # --- Main ---
 # 서버·터널을 (다시) 띄우거나 내리는 명령만 옛 /tmp 런타임 파일을 옮긴다(_vt_migrate_legacy_run 주석).
 case "${1:-help}" in
-  start|stop|restart|voice|clip|mobile|update) _vt_migrate_legacy_run ;;
+  start|stop|restart|voice|clip|mobile|update|tunnel) _vt_migrate_legacy_run ;;
 esac
 case "${1:-help}" in
   voice)   cmd_voice ;;
