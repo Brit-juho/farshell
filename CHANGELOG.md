@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+---
+
+## [2.7.0] — 2026-11-03
+
 ### Security
 - CI workflows: the token is read-only (`permissions: contents: read`), every GitHub Action is pinned to a commit SHA, and the release workflow no longer interpolates the tag name into a shell script (it validates `vX.Y.Z` first), attaches a `.sha256` file and requests a build provenance attestation (GitHub stores attestations only for public repositories, so releases built while the repository is private have none; the step never blocks a release).
 - Frontend tooling dependencies updated until `npm audit` reports nothing (vite 7.3.7, solid-js 1.9.18 with seroval 1.6.12, undici 7.30.1, source-map-js 1.2.2); `package.json` now says MIT like `LICENSE`. All of these are build/test tools — nothing from them runs on your Mac at runtime. Python requirements audit clean (`pip-audit`), but they are still lower-bounded only (`>=`) without hashes.

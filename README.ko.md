@@ -3,7 +3,7 @@
 [![CI](https://github.com/Brit-juho/farshell/actions/workflows/ci.yml/badge.svg)](https://github.com/Brit-juho/farshell/actions/workflows/ci.yml)
 
 [![English](https://img.shields.io/badge/lang-English-lightgrey.svg)](./README.md)
-[![Version](https://img.shields.io/badge/version-2.6.0-blue.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.7.0-blue.svg)](./CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-informational.svg)](./docs/guide/platforms.ko.md)
 [![Self-hosted](https://img.shields.io/badge/self--hosted-yes-success.svg)](#설치)
 
