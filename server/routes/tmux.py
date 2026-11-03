@@ -257,7 +257,12 @@ async def collect_tmux_sessions() -> list[dict]:
             )
 
     from session_context import contexts_for
-    contexts = await contexts_for(["", *(p[1] for p in pane_by_session.values())])
+    import agent_status
+    # 위치·브랜치는 터미널(셸)이 아니라 그 세션의 에이전트 CLI 기준이다. CLI가 알린 cwd가 있으면
+    # 그걸로 Git을 읽고, 없거나 못 읽으면 pane cwd로 되돌아간다(에이전트 없는 세션은 그대로).
+    agent_cwd = {name: agent_status.agent_cwd_for(name) for name in pane_by_session}
+    contexts = await contexts_for(["", *(p[1] for p in pane_by_session.values()),
+                                   *(c for c in agent_cwd.values() if c)])
     live_ptys = pty_mgr.sessions  # 복사본이라 한 번만 받는다
     keys: dict[str, str] = {}
     for line in sessions_text.strip().split("\n"):
@@ -276,6 +281,10 @@ async def collect_tmux_sessions() -> list[dict]:
                         if info.session_id in live_ptys]
         web_session = web_sessions[0] if web_sessions else None
         attached = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
+        context_cwd, context_source = cwd, "terminal"
+        a_cwd = agent_cwd.get(name)
+        if a_cwd and a_cwd != cwd and contexts[a_cwd].get("status") != "unavailable":
+            context_cwd, context_source = a_cwd, "agent"
         sessions.append({
             "name": name,
             "physical_key": f"{parts[7]}:{parts[8]}" if len(parts) > 8 else None,
@@ -287,7 +296,11 @@ async def collect_tmux_sessions() -> list[dict]:
             "otherClients": max(0, attached - len(web_sessions)),
             "command": cmd,
             "cwd": cwd,
-            "context": contexts[cwd],
+            "context": contexts[context_cwd],
+            # context가 읽은 위치와 그 출처. "agent"면 `cwd`(터미널 pane)와 다르다 — 화면은
+            # 에이전트 기준으로 그리고 터미널 위치는 툴팁에만 둔다.
+            "contextCwd": context_cwd,
+            "contextSource": context_source,
             "pane_id": pane_id,
             "web_session_id": web_session.session_id if web_session else None,
             "wt_id": parts[3] if len(parts) > 3 else "",

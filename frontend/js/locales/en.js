@@ -3410,6 +3410,8 @@ window.__VT_I18N = {
   "헬퍼 빌드에 실패했습니다: {tail}": "Couldn't build the helper: {tail}",
   "현재 tmux 클라이언트를 '{target}'으로 전환": "Switched the current tmux client to '{target}'",
   "현재 등록된 기기는 그대로 통과합니다:": "Devices already registered keep working:",
+  "터미널 위치": "Terminal location",
+  "터미널: {cwd}": "Terminal: {cwd}",
   "현재 디렉터리": "Current directory",
   "현재 디렉토리에 CLAUDE.md가 없습니다": "No CLAUDE.md in the current directory",
   "현재 설정: {name} → {host}": "Current: {name} → {host}",

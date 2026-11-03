@@ -1,6 +1,7 @@
 """CLI와 무관한 세션 작업 위치/Git 스냅샷. tmux 목록과 push가 같이 쓴다.
 
-현재 cwd만 키로 쓰며 생성 시의 워크트리 태그나 agent hook cwd를 섞지 않는다.
+주어진 cwd 하나만 키로 쓰며 생성 시의 워크트리 태그를 섞지 않는다. **어느 cwd를 줄지는 호출자가 정한다** —
+세션 목록(`routes/tmux.py`)은 터미널 pane cwd가 아니라 에이전트 CLI가 훅으로 알린 cwd를 우선한다.
 Git I/O는 스레드에서 수행하고 같은 cwd 조회는 합친다. 실패는 nonrepo와 구분한다.
 """
 from __future__ import annotations

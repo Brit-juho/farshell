@@ -49,3 +49,30 @@ test('작업 위치 상세는 임의 경로 문자를 HTML로 해석하지 않�
   assert.strictEqual(details.querySelector('img'), null);
   assert.ok(details.textContent.includes('별도 워크트리'));
 });
+
+const agentSession = () => ({
+  name: 'cli', cwd: '/repo', contextCwd: '/trees/task/src', contextSource: 'agent',
+  context: { cwd: '/trees/task/src', root: '/trees/task', status: 'ready', branch: 'feat/task',
+    worktree: { kind: 'linked', status: 'ready', name: 'task', relative: 'src', repositoryRoot: '/repo' } },
+});
+
+test('에이전트 CLI 기준으로 읽은 브랜치를 보이고 터미널 위치는 툴팁에만 둔다', async () => {
+  const { contextLabel, sessionContext, locationTip } = await load();
+  assert.strictEqual(contextLabel(agentSession()), 'WT task/src · feat/task');
+  const ctx = sessionContext(agentSession());
+  assert.strictEqual(ctx.terminalCwd, '/repo');
+  assert.strictEqual(locationTip(ctx), '/trees/task/src · 터미널: /repo');
+});
+
+test('터미널 기준이거나 위치가 같으면 툴팁에 터미널 위치를 덧붙이지 않는다', async () => {
+  const { sessionContext, locationTip } = await load();
+  assert.strictEqual(locationTip(sessionContext(session())), '/trees/task/src');
+  const same = { ...agentSession(), cwd: '/trees/task/src' };
+  assert.strictEqual(sessionContext(same).terminalCwd, null);
+});
+
+test('contextCwd와 스냅샷의 cwd가 어긋나면 에이전트 기준이어도 추정하지 않는다', async () => {
+  const { contextLabel } = await load();
+  const s = agentSession(); s.contextCwd = '/trees/other';
+  assert.strictEqual(contextLabel(s), 'other · 정보 갱신 대기');
+});
