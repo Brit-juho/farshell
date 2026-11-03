@@ -176,7 +176,9 @@ def server(tmp_path_factory):
         yield external.rstrip("/"), os.environ.get("VT_E2E_TOKEN", "")
         return
 
+    global _LOCAL_STATE_DIR
     tmp = tmp_path_factory.mktemp("e2e")
+    _LOCAL_STATE_DIR = tmp / "state"
     port = _free_port()
     token = "e2e-smoke-token"
     # ⚠ 서버 로그는 **파일로** 받는다. 예전엔 stdout=PIPE였는데 그 파이프를 읽는
@@ -304,19 +306,51 @@ def browser(_pw):
 # 정리로 세션만 지워질 뿐 트리 구조(빈 leaf 2개)는 그대로 남아 **다음
 # isolated_page 테스트가 그 유령 split 위에서 시작**했다(실측: 새 세션 2개만
 # 만들었는데 pane이 3개였다). 모듈 최상위로 뽑아 두 픽스처가 함께 쓴다.
-def _reset_saved_layout(base: str, token: str) -> None:
+# 이 스위트가 직접 띄운 격리 서버의 상태 폴더(`VT_STATE_DIR`). 외부 서버(VT_E2E_URL)를 쓰면 None — 거기는 파일을 못 건드린다.
+_LOCAL_STATE_DIR: Path | None = None
+
+
+def _api(base: str, token: str, method: str, path: str, payload=None):
     # 브라우저 컨텍스트가 **닫힌 뒤에도** 불러야 하므로(page 픽스처의 teardown)
     # `ctx.request`를 쓰지 않는다 — 컨텍스트와 수명을 같이하기 때문이다.
+    req = urllib.request.Request(
+        f"{base}{path}",
+        data=None if payload is None else json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+        method=method,
+    )
+    with urllib.request.urlopen(req, timeout=5) as r:
+        return json.loads(r.read() or b"null")
+
+
+def _reset_saved_layout(base: str, token: str) -> None:
+    """앞 테스트가 서버에 남긴 **화면 상태**를 비운다 — 테스트 순서에 결과가 달라지지 않게.
+
+    남는 곳이 셋이다. 예전엔 첫째만 지워서 전체 스위트가 5건씩 **늘 같은 자리에서** 깨졌다(2026-11-03 확인 —
+    단독으로 돌리면 통과하고 전체로 돌리면 실패하는 순서 의존이었다):
+      1. `/api/workspace` 의 `ui.layout`   — 옛 단일 배치 키.
+      2. `/api/workspace` 의 `ui.layouts`  — **화면별** 배치(프런트가 지금 쓰는 키). 이게 안 지워지면 다음 테스트가
+         앞 테스트가 만든 패널 칸을 복원해 온보딩·레일 시트를 가린다. 키를 `None`으로 보내야 지워진다.
+      3. 기기 설정(`state/device-settings/*.json`) — dock 탭·접힘·폭, 레일 폭 등. 이 값이 남으면 「dock은 wide에서
+         접힘이 기본」이 깨지고, `_open_dock`은 이미 열린 탭을 다시 눌러 닫는다. 서버가 파일에서 읽으므로 컨텍스트를
+         닫은 뒤 지우면 된다(API에는 삭제가 없다).
+    """
     try:
-        req = urllib.request.Request(
-            f"{base}/api/workspace",
-            data=json.dumps({"ui": {"layout": None}}).encode(),
-            headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
-            method="PUT",
-        )
-        urllib.request.urlopen(req, timeout=5).close()
+        try:
+            cur = _api(base, token, "GET", "/api/workspace") or {}
+            ui = (cur.get("data") or cur).get("ui") or {}
+            stale = {k: None for k in (ui.get("layouts") or {})}
+        except Exception:
+            stale = {}
+        _api(base, token, "PUT", "/api/workspace", {"ui": {"layout": None, **({"layouts": stale} if stale else {})}})
     except Exception:
         pass   # 정리 실패가 테스트 결과를 덮으면 안 된다
+    if _LOCAL_STATE_DIR is not None:
+        for f in (_LOCAL_STATE_DIR / "device-settings").glob("*.json"):
+            try:
+                f.unlink()
+            except OSError:
+                pass
 
 
 @pytest.fixture
@@ -730,6 +764,9 @@ def test_레일에서_연_시트가_온보딩_위에_뜬다(page):
     page.wait_for_function(
         "() => { const s = document.getElementById('login-spinner');"
         "        return !s || s.offsetParent === null; }", timeout=15000)
+    # 브리지는 레일 컴포넌트가 마운트될 때 만들어진다(Rail.tsx) — 레일은 지연 청크라 온보딩이 보인 뒤에야 올 수 있다.
+    # 이걸 기다리지 않으면 단독으로는 통과하고 브라우저가 오래 돈 전체 실행에서만 깨진다(2026-11-03 확인).
+    page.wait_for_function("() => typeof window.vtOpenWorktreeDialog === 'function'", timeout=15000)
     page.evaluate("() => window.vtOpenWorktreeDialog()")
     page.wait_for_selector(".vt-wtd-backdrop .vt-viewer-card", timeout=10000)
     got = page.evaluate(
@@ -1548,11 +1585,12 @@ def test_워크트리_탭은_하나뿐이면_안_보이고_열면_나타난다(p
 
 
 def test_워크트리_탭은_라벨과_상태_바와_닫기만_갖고_세션이_없으면_바가_비어_있다(page):
-    """10 §4 — 탭 구성은 `[라벨][상태 바][닫기]`(2026-10-04 리뉴얼, layout/tabbar.js). 옛 `[에이전트 마크]
-    [이름][상태 dot][읽지 않음][닫기]` 자리는 사라졌고 상태·읽지 않음은 탭 아래 가장자리의 세그먼트 바가 맡는다.
+    """10 §4 — 탭 구성은 `[라벨][칸 수][상태 바][닫기]`(2026-10-04 리뉴얼에 8cdc3fe가 칸 수 칩을 더했다, layout/tabbar.js).
+    옛 `[에이전트 마크][이름][상태 dot][읽지 않음][닫기]` 자리는 사라졌고 상태·읽지 않음은 탭 아래 가장자리의
+    세그먼트 바가 맡는다.
 
     CI에는 에이전트도 tmux 세션도 없으니 **idle일 때의 규칙**을 본다: 칸(세션)이 없으면 바는 세그먼트
-    없이 비어 있고, 툴팁 대신 라벨만 aria-label로 남는다. 회색 점이 상시로 붙어 있으면 정보가 아니라
+    없이 비어 있고, 툴팁 대신 라벨과 칸 수만 aria-label로 남는다. 회색 점이 상시로 붙어 있으면 정보가 아니라
     노이즈라는 게 이 규칙의 이유다."""
     page.evaluate("() => window.openGroupTab({ worktreeId: 'wt-marks', label: 'repo/marks' })")
     page.wait_for_timeout(250)
@@ -1569,10 +1607,11 @@ def test_워크트리_탭은_라벨과_상태_바와_닫기만_갖고_세션이_
           };
         }"""
     )
-    assert shape["slots"] == ["vt-wtab-name", "vt-wtab-bar", "vt-icon-btn"], shape["slots"]
+    assert shape["slots"] == ["vt-wtab-name", "vt-wtab-count", "vt-wtab-bar", "vt-icon-btn"], shape["slots"]
     assert shape["segments"] == 0, f"세션이 없는데 세그먼트가 그려졌다: {shape}"
     assert shape["tip"] is False, "idle 탭에는 상태 툴팁이 없다"
-    assert shape["aria"] == shape["name"], f"idle 탭의 aria-label은 라벨 그대로다: {shape}"
+    # idle 탭의 aria-label은 상태 없이 라벨과 칸 수뿐이다(`— 상태`가 붙지 않는다) — tabbar.js `label`.
+    assert shape["aria"] == f"{shape['name']} · 1칸", f"idle 탭의 aria-label은 라벨과 칸 수뿐이다: {shape}"
 
 
 def test_탭마다_자기_pane_트리를_가진다(page):
