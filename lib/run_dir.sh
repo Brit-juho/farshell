@@ -30,7 +30,9 @@ _vt_run_default() {
 
 # 2.7 업그레이드 — 예전 기본 위치(/tmp)에 PID·터널 기록이 남아 있으면 한 번 옮긴다. 안 옮기면 업그레이드 직후
 # `fsh stop`/`restart` 가 돌고 있는 서버·터널을 못 찾아 포트가 겹친다. 서버를 다시 띄우는 명령에서만 부른다
-# (main 의 case) — 옛 서버는 /tmp 를 보고 있어서, 옮긴 뒤 재시작 전까지는 터널 주소를 못 읽기 때문이다.
+# (cmd_start·cmd_stop 맨 앞) — 옛 서버는 /tmp 를 보고 있어서, 옮긴 뒤 재시작 전까지는 터널 주소를 못 읽는다. 그래서
+# 서버를 내리고 다시 띄우는 그 명령 안에서만 옮기고, `fsh update trust`·`fsh tunnel`·`fsh mobile` 처럼 돌고 있는
+# 옛 서버 곁에서 도는 명령은 옮기지 않는다(2026-11-03 실제 서버에서 확인한 사고).
 # **내 소유이고 심볼릭 링크가 아닌 것만** 옮긴다: 남이 만들어 둔 /tmp 파일은 믿지 않는다(bin/fsh 의 VT_RUN_DIR 주석).
 # 기본 설치(VT_RUN_DIR·VT_STATE_DIR 둘 다 미지정)만 옮긴다 — VT_STATE_DIR 만 바꾼 격리 인스턴스가 옮기면
 # 같은 맥에서 돌고 있는 기본 인스턴스의 PID·터널 기록을 가져가 버린다.
@@ -52,6 +54,14 @@ _vt_migrate_legacy_run() {
     case "$f" in */vt-pids/*) mv -f "$f" "$PID_DIR/" ;; *) mv -f "$f" "$VT_RUN_DIR/" ;; esac && moved=1
   done
   rmdir "$_VT_LEGACY_RUN/vt-pids" 2>/dev/null
+  # 옛 워치독은 환경에 VT_RUN_DIR=/tmp 를 들고 있어 옮겨진 터널 로그를 못 본다 — 좀비 재연결 감시가 조용히 멎는다.
+  # 끝내 두면 이어지는 start 가 새 환경으로 다시 띄운다(_start_tunnel → _start_tunnel_watchdog). pid 파일은 낡았을 수
+  # 있으니(번호 재사용) 명령줄이 워치독일 때만 끝낸다.
+  local wpid; wpid="$(cat "$PID_DIR/tunnel-watchdog.pid" 2>/dev/null)"
+  if [ -n "$wpid" ] && ps -o command= -p "$wpid" 2>/dev/null | grep -q "tunnel_watchdog.py"; then
+    kill "$wpid" 2>/dev/null
+    rm -f "$PID_DIR/tunnel-watchdog.pid"
+  fi
   [ "$moved" = 1 ] && echo "  ⓘ $(_t '런타임 파일을 {old} 에서 {new} 로 옮겼습니다' old="$_VT_LEGACY_RUN" new="$VT_RUN_DIR")" >&2
   return 0
 }
