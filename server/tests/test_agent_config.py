@@ -486,7 +486,24 @@ int main(int argc, char **argv) {
                 break
             time.sleep(.1)
         # 실패하면 pytest 가 dict 를 `...` 로 줄여 원인(error 필드)이 안 보인다 — 전체를 메시지에 싣는다.
+        # CI 에서만 나는 실패라(3.13·3.14 Linux 러너) 그 시점의 tmux 창·프로세스·화면도 함께 싣는다.
         import json
+        if result["state"] != "resumed":
+            def sh(*argv):
+                try:
+                    return subprocess.run(list(argv), capture_output=True, text=True, timeout=10).stdout[-1500:]
+                except Exception as e:  # 진단이 테스트 결과를 덮으면 안 된다
+                    return f"(failed: {e})"
+            diag = {
+                "result": result,
+                "pane": tmux_runner.run_text(["list-panes", "-a", "-F", "#{session_name} dead=#{pane_dead} status=#{pane_dead_status} pid=#{pane_pid} cmd=#{pane_current_command}"]),
+                "screen": tmux_runner.run_text(["capture-pane", "-p", "-t", "config-resume"]),
+                "ps": sh("ps", "-eo", "pid,ppid,stat,etime,command", "--sort=pid"),
+                "fixture_pid": actual.get("pid"),
+                "env_lang": {k: os.environ.get(k) for k in ("LANG", "LC_ALL", "LC_CTYPE", "TERM", "TMUX")},
+                "tmux_version": sh("tmux", "-V"),
+            }
+            pytest.fail(json.dumps(diag, ensure_ascii=False, default=str)[:6000])
         assert result["state"] == "resumed", json.dumps(result, ensure_ascii=False, default=str)[:4000]
         assert out.read_text().splitlines() == [sid, "sample-value"]
         assert not list((state / "agent-launch").glob("*.json"))
