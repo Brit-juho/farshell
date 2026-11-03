@@ -1443,7 +1443,6 @@ window.__VT_I18N = {
   "공용으로 관리": "Manage as shared",
   "공유": "Share",
   "공유 · {nick} · {mode}": "Shared · {nick} · {mode}",
-  "공유 링크 발급": "Create share link",
   "공유 링크 발급에는 비밀번호 확인이 필요합니다.": "Creating a share link requires your password.",
   "공유 링크가 걸린 파일 {n}개도 함께 무효가 됩니다.": {
     "one": "Share links on 1 file will stop working too.",
@@ -1881,6 +1880,7 @@ window.__VT_I18N = {
   "받지 못했습니다: {error}": "Couldn't download: {error}",
   "발급": "Create",
   "발급 실패: {msg}": "Couldn't create link: {msg}",
+  "발급된 링크": "Issued links",
   "발급된 링크가 없습니다.": "No links yet.",
   "발송 실패": "Couldn't send",
   "발송됨 · 구독 {n}건": {

@@ -511,6 +511,17 @@ async function _unexposeTunnel(ctx, port) {
 
     // 2.2 — 「누가 열 수 있나」 3지 선택 + 만료. files.js openShareDialog와 같은
     // 뼈대(core/dialog.js의 openDialog)를 쓴다. 취소/배경클릭/Esc는 null.
+    function exposeModeRadio(value, name, help, checked = false) {
+      return `
+        <label class="vt-share-mode">
+          <input type="radio" name="vt-pt-mode" value="${value}"${checked ? ' checked' : ''}>
+          <span class="vt-share-mode-text">
+            <span class="vt-share-mode-name">${vtEsc(name)}</span>
+            <span class="vt-share-mode-help">${vtEsc(help)}</span>
+          </span>
+        </label>`;
+    }
+
     function openExposeDialog(port) {
       const id = nextId();
       return new Promise((resolve) => {
@@ -520,26 +531,30 @@ async function _unexposeTunnel(ctx, port) {
         const { body } = openDialog({
           id, title: t('포트 {port} 공개', { port }), onClose: finish,
           bodyHTML: `
-            <div class="vt-fl-field">
-              <div class="vt-fl-field-label">${t('누가 열 수 있나')}</div>
-              <label class="vt-fl-radio"><input type="radio" name="vt-pt-mode" value="session" checked> ${t('내 기기만')} <span class="vt-fl-hint">${t('이 FarShell에 로그인한 기기에서만 열립니다')}</span></label>
-              <label class="vt-fl-radio"><input type="radio" name="vt-pt-mode" value="pin"> ${t('접속 코드')} <span class="vt-fl-hint">${t('서버가 코드를 만들어 보여줍니다 — 코드를 아는 사람이면 누구나')}</span></label>
-              <label class="vt-fl-radio"><input type="radio" name="vt-pt-mode" value="public"> ${t('누구나')} <span class="vt-fl-hint">${t('URL을 아는 사람 모두 — 인증 없음')}</span></label>
+            <div class="vt-share-field" role="radiogroup" aria-label="${t('누가 열 수 있나')}">
+              <div class="vt-share-label">${t('누가 열 수 있나')}</div>
+              ${exposeModeRadio('session', t('내 기기만'), t('이 FarShell에 로그인한 기기에서만 열립니다'), true)}
+              ${exposeModeRadio('pin', t('접속 코드'), t('서버가 코드를 만들어 보여줍니다 — 코드를 아는 사람이면 누구나'))}
+              ${exposeModeRadio('public', t('누구나'), t('URL을 아는 사람 모두 — 인증 없음'))}
             </div>
-            <div class="vt-fl-field">
-              <div class="vt-fl-field-label">${t('만료 · 필수')}</div>
-              <select id="vt-pt-ttl" class="vt-input lg">
+            <div class="vt-share-field">
+              <label class="vt-share-label" for="vt-pt-ttl">${t('만료 · 필수')}</label>
+              <select id="vt-pt-ttl" class="vt-input lg vt-fl-input">
                 ${TTLS.map((o) => `<option value="${o.v}"${o.v === 3600 ? ' selected' : ''}>${vtEsc(o.label)}</option>`).join('')}
               </select>
             </div>
-            <div class="vt-fl-field">
-              <div class="vt-fl-field-label">${t('자동 재노출')}</div>
-              <label class="vt-fl-check"><input type="checkbox" id="vt-pt-auto"> ${t('기간이 끝나거나 재부팅해도 자동으로 다시 열기')}</label>
-              <span class="vt-fl-hint">${t('만료되면 같은 기간만큼 연장하고, 터널이 사라지면 서버가 다시 엽니다. 다시 열면 주소가 바뀔 수 있습니다.')}</span>
+            <div class="vt-share-field">
+              <div class="vt-share-label">${t('자동 재노출')}</div>
+              <label class="vt-share-mode"><input type="checkbox" id="vt-pt-auto">
+                <span class="vt-share-mode-text">
+                  <span class="vt-share-mode-name">${t('기간이 끝나거나 재부팅해도 자동으로 다시 열기')}</span>
+                  <span class="vt-share-mode-help">${t('만료되면 같은 기간만큼 연장하고, 터널이 사라지면 서버가 다시 엽니다. 다시 열면 주소가 바뀔 수 있습니다.')}</span>
+                </span>
+              </label>
             </div>
             <div class="vt-dialog-actions">
-              <button type="button" class="vt-btn vt-dialog-cancel">${t('취소')}</button>
-              <button type="button" class="vt-btn solid vt-dialog-ok">${t('공개')}</button>
+              <button type="button" class="vt-btn lg vt-dialog-cancel">${t('취소')}</button>
+              <button type="button" class="vt-btn lg solid vt-dialog-ok">${t('공개')}</button>
             </div>`,
         });
         if (!body) { resolve(null); return; }
