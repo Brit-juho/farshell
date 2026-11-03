@@ -27,6 +27,16 @@ _jobs: dict[str, dict] = {}
 _lock = threading.Lock()
 
 
+
+def _wait_exited(pid: int, tries: int = 100, delay: float = .2) -> bool:
+    """`/exit` 를 보낸 CLI 가 끝났는지 기다린다 — `ps` 표에서 사라졌거나, 끝났지만 부모(tmux)가 아직 수거하지 않은
+    좀비(`hook_identity._ps_zombies`)면 끝난 것이다. 못 끝나면 False(그러면 재시작을 중단한다)."""
+    for _ in range(tries):
+        if pid not in (hook_identity._ps_table() or {}) or pid in hook_identity._ps_zombies():
+            return True
+        time.sleep(delay)
+    return False
+
 def _owner(ctx):
     entries = [e for e in agent_status.visible_state().values() if e.get("host", "local") == "local"
                and e.get("tmux_session") == ctx["session"] and e.get("agent") == ctx["tool"]]
@@ -177,18 +187,17 @@ def _run(job_id, plan):
                 requested_at = time.time()
                 if tmux_runner.run(["send-keys", "-t", pane, "-l", "/exit"])[0] or tmux_runner.run(["send-keys", "-t", pane, "Enter"])[0]:
                     raise ValueError(tr("CLI 정상 종료 요청을 보내지 못했습니다"))
-                for _ in range(100):
-                    if ctx["pid"] not in (hook_identity._ps_table() or {}):
-                        break
-                    time.sleep(.2)
-                else:
+                if not _wait_exited(ctx["pid"]):
                     raise ValueError(tr("CLI가 정상 종료되지 않아 재시작을 중단했습니다"))
                 # A surviving non-shell foreground process means somebody else
                 # took over the pane. Never respawn over that process.
                 table = hook_identity._ps_table()
                 if table is None:
                     raise ValueError(tr("터미널 프로세스를 확인하지 못했습니다"))
+                zombies = hook_identity._ps_zombies()
                 for pid, (parent, pgid, tpgid, comm) in table.items():
+                    if pid in zombies:
+                        continue   # 이미 끝난 프로세스다 — 수거가 늦을 뿐 터미널을 쓰고 있지 않다
                     if pgid == tpgid and not hook_identity.is_shell(comm):
                         from share_identity import chain_reaches
                         pane_pid = int((tmux_runner.run_text(["display-message", "-p", "-t", pane, "#{pane_pid}"]) or "0").strip())
