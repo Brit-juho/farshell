@@ -1,10 +1,10 @@
 # 음성 입력(STT) 엔진 — 설정 「음성 및 알림」에서 모델을 고른다. 모델 파일은 여기서 받지 않고 설정에서 승인 후 받는다.
 # 애플 칩 맥: Qwen3-ASR (MLX, torch 불필요). 이 줄이 맥 권장 경로를 쓰는 데 필요한 패키지다.
-mlx-qwen3-asr>=0.4; sys_platform == "darwin" and platform_machine == "arm64"
+mlx-qwen3-asr>=0.4.4; sys_platform == "darwin" and platform_machine == "arm64"
 # 모델 파일 내려받기(llama.cpp 경로 포함 모든 플랫폼). llama-server 실행 파일은 pip가 아니라 설정에서 받는다.
-huggingface-hub>=0.30
-edge-tts>=6.1
-sounddevice>=0.4
-numpy>=1.24
-pynput>=1.7
-av>=11.0  # pyav: in-process audio decode (Phase 9 #10), ffmpeg subprocess 대체
+huggingface-hub>=2.4.0
+edge-tts>=7.3.1
+sounddevice>=0.5.6
+numpy>=2.5.4
+pynput>=1.8.2
+av>=19.0.2  # pyav: in-process audio decode (Phase 9 #10), ffmpeg subprocess 대체

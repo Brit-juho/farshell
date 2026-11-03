@@ -8,4 +8,4 @@
 #     playwright install chromium      # ~130MB
 #
 # 둘 중 하나라도 없으면 그 테스트 파일은 통째로 skip된다(사유가 -v에 찍힌다).
-playwright>=1.40
+playwright>=1.64.1
