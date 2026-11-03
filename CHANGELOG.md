@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Security
+- CI workflows: the token is read-only (`permissions: contents: read`), every GitHub Action is pinned to a commit SHA, and the release workflow no longer interpolates the tag name into a shell script (it validates `vX.Y.Z` first), attaches a `.sha256` file and requests a build provenance attestation (not yet exercised on a real tag).
 - Frontend tooling dependencies updated until `npm audit` reports nothing (vite 7.3.7, solid-js 1.9.18 with seroval 1.6.12, undici 7.30.1, source-map-js 1.2.2); `package.json` now says MIT like `LICENSE`. All of these are build/test tools — nothing from them runs on your Mac at runtime. Python requirements audit clean (`pip-audit`), but they are still lower-bounded only (`>=`) without hashes.
 - The app is no longer frameable (`X-Frame-Options: DENY`, `frame-ancestors 'none'`), so a page cannot overlay a terminal for clickjacking. Responses also carry `nosniff`, `Referrer-Policy: same-origin` and a `Permissions-Policy` that disables camera, location, payment, USB, serial, Bluetooth and HID. A full script CSP is still to do.
 - A file path typed into a terminal after an upload carried the file's name as is, and the sender chooses that name (for example another paired Mac), so a name like `a$(…).png` or one with a backtick or `;` ran when you pressed Enter. Inserted paths are now shell-quoted when they contain anything but letters, digits and `_@%+=:,./-` (ordinary names are unchanged), and the hook commands written to the Claude Code and Codex settings quote an install folder that has a space or shell characters.
@@ -30,6 +31,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - `fsh claude [name]` / `fsh codex [name]` now start the CLI with the profile right in the current terminal, like typing `claude`, instead of creating a new FarShell tmux session and attaching to it. Such a run is not recorded by the server (session-state and retirement checks do not see it). `--tmux` keeps the old behaviour; without a terminal it is used automatically.
 
 ### Added
+- `SECURITY.md` / `SECURITY.ko.md` (how to report privately, what FarShell does and does not defend against, hardening checklist, how to verify a download) and `.github/dependabot.yml`.
 - `VT_TUNNEL_ALLOWED_MAIL` (opt-in): put Cloudflare's email-PIN gate in front of the quick tunnel (`cloudflared --allowed-mail`), so a leaked URL does not even reach the login page. Browser-only — pair other Macs over Tailscale.
 - Session history search takes `mode=all|any` besides the default whole-phrase match: `all` finds conversations that contain every whitespace-separated term in any order, `any` at least one (max 8 terms). Results keep their key order.
 - `fsh claude|codex --bypass` skips permission prompts for that one session (`--dangerously-skip-permissions` / `--dangerously-bypass-approvals-and-sandbox`). Shell aliases never reached the profile's process, so there was no way to start a profile session in bypass mode; the default stays the CLI's own.

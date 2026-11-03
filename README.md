@@ -98,15 +98,16 @@ the server, tunnel and daemons while leaving tmux sessions alive.
 
 ## Security
 
-The default is **no authentication**. Set a password with `fsh password` before
-exposing anything; `fsh start` refuses to open a public tunnel without it.
+FarShell never starts a server without a password: if none is set, `fsh start` creates a random one, shows it
+once in the terminal and stores only its hash (change it with `fsh password`). Report vulnerabilities privately —
+see [`SECURITY.md`](./SECURITY.md).
 
 | Layer | Method |
 |---|---|
 | Login | Password (scrypt hash) or a machine token (`VT_AUTH_TOKEN`), with an HMAC-signed 24h session cookie |
 | New devices | Per-device trust via a 90-day cookie. `fsh otp setup` adds a 6-digit gate for unseen devices only |
 | Revocation | `fsh device revoke <id>` — kills that device's sessions immediately |
-| Cross-site | HTTP and WS both return 403 when the Origin isn't self. No CORS wildcard |
+| Cross-site | HTTP and WS both return 403 when the Origin isn't self or the Host is a name an attacker could point at this Mac (DNS rebinding). No CORS wildcard, no framing |
 | Code viewer | Read-only, confined to configured roots, with a denylist (`.env*`, `*.pem`, `.ssh/`, …) applied to file reads and `git diff` alike |
 | E2E encryption | `--e2e` — X25519 key exchange + NaCl SecretBox, session key signed by a long-lived Ed25519 identity for TOFU protection against active MITM |
 

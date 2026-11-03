@@ -96,15 +96,16 @@ fsh voice-target dev      # 입력을 dev 세션으로 고정
 
 ## 보안
 
-기본값은 **무인증**입니다. 원격에 노출하기 전에 `fsh password`로 비밀번호를 설정하세요.
-설정하지 않으면 `fsh start`가 공개 터널 열기를 거부합니다.
+FarShell은 비밀번호 없이는 서버를 띄우지 않습니다. 설정하지 않았다면 `fsh start`가 무작위 비밀번호를 만들어
+터미널에 한 번만 보여 주고 해시만 저장합니다(바꾸려면 `fsh password`). 취약점은 비공개로 제보해 주세요 —
+[`SECURITY.ko.md`](./SECURITY.ko.md).
 
 | 계층 | 방식 |
 |---|---|
 | 로그인 | 비밀번호(scrypt 해시) 또는 기계용 토큰(`VT_AUTH_TOKEN`), HMAC 서명 세션 쿠키(24h) |
 | 새 기기 | 90일 쿠키로 기기별 신뢰. `fsh otp setup`을 켜면 처음 보는 기기에만 6자리 코드 요구 |
 | 폐기 | `fsh device revoke <id>` — 해당 기기의 세션까지 즉시 무효화 |
-| 크로스 사이트 | Origin이 자기 자신이 아니면 HTTP·WS 모두 403. CORS 와일드카드 없음 |
+| 크로스 사이트 | Origin이 자기 자신이 아니거나 Host가 공격자가 이 맥으로 돌릴 수 있는 이름(DNS rebinding)이면 HTTP·WS 모두 403. CORS 와일드카드·프레임 삽입 없음 |
 | 코드 뷰어 | 읽기 전용, 지정한 루트 안으로 제한, 거부 목록(`.env*`·`*.pem`·`.ssh/` 등)이 파일 열람과 `git diff`에 동일 적용 |
 | E2E 암호화 | `--e2e` — X25519 키교환 + NaCl SecretBox, 장기 Ed25519 신원키로 세션 키를 서명해 TOFU 방식으로 능동적 중간자 공격 방어 |
 
