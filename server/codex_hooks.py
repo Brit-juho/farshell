@@ -16,6 +16,7 @@ from pathlib import Path
 
 import config_io
 import store_lock
+from shell_quote import shell_quote_path
 from i18n import tr
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -42,7 +43,8 @@ def settings_path() -> Path:
 
 def hook_command(event: str, repo_root: Path | None = None) -> str:
     root = repo_root or REPO_ROOT
-    return f"{root / 'server' / 'agent_hook.sh'} {EVENTS[event]} codex"
+    # 셸이 해석하는 명령이다 — 안전하지 않은 경로(공백·`$`·`;` …)만 인용한다(claude_hooks.hook_command와 같다).
+    return f"{shell_quote_path(str(root / 'server' / 'agent_hook.sh'))} {EVENTS[event]} codex"
 
 
 def load_text(path: Path) -> str:
@@ -266,7 +268,8 @@ def _iter_groups(data: dict):
 
 
 def _script_args(command: str) -> str:
-    return command.split(SCRIPT_NAME, 1)[1].strip()
+    # 인용된 경로(`'/a b/server/agent_hook.sh' pre codex`)는 스크립트 이름 뒤에 닫는 따옴표가 먼저 온다.
+    return command.split(SCRIPT_NAME, 1)[1].lstrip("'\"").strip()
 
 
 def _is_ours(hook) -> bool:

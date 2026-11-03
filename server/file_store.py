@@ -645,7 +645,7 @@ def _cli(argv: list[str]) -> int:
         if not pane:
             print(tr("  ✗ 대상 tmux pane을 찾지 못했습니다"), file=sys.stderr)
             return 1
-        if not tmux_target.type_to_tmux(pane, str(fp)):
+        if not tmux_target.type_path_to_tmux(pane, str(fp)):
             print(tr("  ✗ 삽입 실패"), file=sys.stderr)
             return 1
         print(tr("  ✓ 삽입됨 → {pane} ({mode})", pane=pane, mode=mode))

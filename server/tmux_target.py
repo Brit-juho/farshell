@@ -22,6 +22,7 @@ import uuid
 
 import tmux_runner
 import vt_env
+from shell_quote import shell_quote_path  # noqa: F401 — 파일 경로 입력에 쓴다(type_path_to_tmux)
 
 logger = logging.getLogger(__name__)
 
@@ -277,6 +278,11 @@ def session_of_pane(pane_id: str) -> str | None:
         return None
     name = out.decode("utf-8", "replace").strip()
     return name or None
+
+
+def type_path_to_tmux(pane_id: str, path: str) -> bool:
+    """`type_to_tmux`로 파일 경로를 입력한다 — 셸 인용을 거친다(`shell_quote_path`)."""
+    return type_to_tmux(pane_id, shell_quote_path(path))
 
 
 def type_to_tmux(pane_id: str, text: str) -> bool:
