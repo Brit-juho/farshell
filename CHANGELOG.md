@@ -25,6 +25,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - `fsh claude [name]` / `fsh codex [name]` now start the CLI with the profile right in the current terminal, like typing `claude`, instead of creating a new FarShell tmux session and attaching to it. Such a run is not recorded by the server (session-state and retirement checks do not see it). `--tmux` keeps the old behaviour; without a terminal it is used automatically.
 
 ### Added
+- `VT_TUNNEL_ALLOWED_MAIL` (opt-in): put Cloudflare's email-PIN gate in front of the quick tunnel (`cloudflared --allowed-mail`), so a leaked URL does not even reach the login page. Browser-only — pair other Macs over Tailscale.
 - Session history search takes `mode=all|any` besides the default whole-phrase match: `all` finds conversations that contain every whitespace-separated term in any order, `any` at least one (max 8 terms). Results keep their key order.
 - `fsh claude|codex --bypass` skips permission prompts for that one session (`--dangerously-skip-permissions` / `--dangerously-bypass-approvals-and-sandbox`). Shell aliases never reached the profile's process, so there was no way to start a profile session in bypass mode; the default stays the CLI's own.
 - `fsh doctor` checks whether the terminal has macOS Full Disk Access. Granting it once to the terminal app stops macOS from asking again for every new `~/.local/share/claude/versions/<version>` binary.

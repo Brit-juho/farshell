@@ -456,9 +456,25 @@ _start_tunnel_impl() {
   fi
 
   # 익명 터널 (옵션 A 기본 동작)
-  echo "▸ $(_t 'Cloudflare 익명 터널 시작 중...')"
+  # VT_TUNNEL_ALLOWED_MAIL — 터널 앞에 Cloudflare 이메일 PIN 관문을 세운다(cloudflared --allowed-mail).
+  # 주소가 새어도 그 이메일로 PIN을 받지 못하면 FarShell 로그인 화면조차 보이지 않는다. 브라우저 전용이라
+  # 터널로 붙는 비대화형 클라이언트(스크립트, 터널 주소로 맺은 다른 Mac 연결)는 막힌다 — 다른 Mac은 Tailscale로.
+  # 인자는 --url **앞에** 둔다: 프로세스를 찾는 pgrep 패턴이 명령줄 끝의 `--url http://localhost:PORT`에 고정돼 있다.
+  local mail_args=()
+  if [ -n "${VT_TUNNEL_ALLOWED_MAIL:-}" ]; then
+    case "$VT_TUNNEL_ALLOWED_MAIL" in
+      *[!A-Za-z0-9._%+@*,-]*)
+        echo "  ✗ $(_t 'VT_TUNNEL_ALLOWED_MAIL 값이 올바르지 않습니다(이메일·*@도메인을 쉼표로): {v}' v="$VT_TUNNEL_ALLOWED_MAIL")"
+        echo "    $(_t '이메일 관문 없이 열지 않습니다 — 값을 고치거나 지우세요.')"
+        return 1 ;;
+    esac
+    mail_args=(--allowed-mail "$VT_TUNNEL_ALLOWED_MAIL")
+    echo "▸ $(_t 'Cloudflare 익명 터널 시작 중 (이메일 관문: {mail})...' mail="$VT_TUNNEL_ALLOWED_MAIL")"
+  else
+    echo "▸ $(_t 'Cloudflare 익명 터널 시작 중...')"
+  fi
   : > "$TUNNEL_LOG"
-  nohup cloudflared tunnel --url http://localhost:$VT_PORT > "$TUNNEL_LOG" 2>&1 &
+  nohup cloudflared tunnel ${mail_args[@]+"${mail_args[@]}"} --url http://localhost:$VT_PORT > "$TUNNEL_LOG" 2>&1 &
   echo $! > "$PID_DIR/tunnel.pid"
   for i in $(seq 1 30); do
     local url
