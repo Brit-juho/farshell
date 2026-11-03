@@ -12,6 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - The bottom status bar moved to the top as a full-width, Mac-style **menu bar** (28px, on every skin; wide and regular screens only). The tab row sits below it, and the rail, dock and page start under it. Settings → 하단바 is now **메뉴바** and keeps your saved chip layout.
 - GitHub Actions in CI and the release workflow moved to their current majors (checkout 7, setup-node 7, setup-python 7, upload-artifact 7, action-gh-release 3), still pinned to commit SHAs. The majors only move the actions to the Node 24 runtime; verified with a full CI run on `dev`.
 - Frontend tooling: `vite-plugin-solid` 2.11.14 → 2.11.15 (patch). vite 8 and jsdom 30 were deliberately not taken: vite 8 no longer bundles esbuild, so `vite.config.js` (which calls `transformWithEsbuild`) fails to build, and jsdom 30 changes focus restoration after `click()` and breaks one voice-panel test.
+- Dependabot: vite and jsdom major updates are ignored until the vite 8 build config and one jsdom 30 test are sorted out, and pip version-update PRs are off (they only raised `>=` floors, which would break the voice install on Python 3.11; security updates still arrive).
 
 ### Added
 - **FarShell menu** at the left of the menu bar: new session, quick open, copy the access address, settings and menu bar settings.
