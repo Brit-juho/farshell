@@ -8,6 +8,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+- The bottom status bar moved to the top as a full-width, Mac-style **menu bar** (28px, on every skin; wide and regular screens only). The tab row sits below it, and the rail, dock and page start under it. Settings → 하단바 is now **메뉴바** and keeps your saved chip layout.
+
+### Added
+- **FarShell menu** at the left of the menu bar: new session, quick open, copy the access address, settings and menu bar settings.
+- Three menu bar chips: **agents** (`개입 N · 작업 N · 완료 N`; click to jump to the session that has waited longest), **알림** (this browser's push notifications on/off, click to toggle) and a **clock**. If you had customised the layout before, they are added once at their default places.
+
 ### Fixed
 - The first `fsh restart` after upgrading to 2.7 no longer says the access address changed when it did not (it read the tunnel log before moving it to its new folder).
 

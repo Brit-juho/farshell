@@ -25,13 +25,17 @@ hydrateIcons();
 // N34 — HUD(지연 청크)에 넘겨줄 것들. 위 부수효과 import와 같은 모듈 인스턴스라
 // 여기서 이름으로 한 번 더 가져와도 중복 평가는 없다(ES 모듈 캐시).
 import { vtFetch } from './core/api.js';
-import { getSession, activeSessionId } from './core/store.js';
-import { getAction } from './core/dom.js';
+import { getSession, activeSessionId, allSessions } from './core/store.js';
+import { allStatuses, agentDetails, isUnseen, onStatusChange } from './agent/state.js';
+import { copyToClipboard } from './term/clipboard.js';
+import { lang } from './core/i18n.js';
+import { isMac } from './core/env.js';
+import { getAction, registerAction } from './core/dom.js';
 import { E2E_ENABLED } from './term/e2e.js';
 import { get as settingGet, subscribe as settingSubscribe } from './core/settings.js';  // S2 — 설정 스토어(모듈 평가 시점에 캐시+마이그레이션 동기 적용)
 import './core/keymap.js';    // S3 — 키맵 레지스트리(각 모듈이 register()로 액션을 붙인다)
 import './core/dom.js';
-import './ui/toast.js';   // F5 — showToast/dismissToast. 다른 모듈이 참조하므로 먼저.
+import { showToast } from './ui/toast.js';   // F5 — showToast/dismissToast. 다른 모듈이 참조하므로 먼저.
 import { autoEnhanceSelects } from './ui/select.js';  // 기본 <select> 팝업 대신 FarShell 드롭다운(모든 select에 자동)
 import { initTooltips } from './ui/tooltip.js';  // 2026-09-18 — 네이티브 title 대체(data-tip)
 import './theme.js';      // F5 — classic script에서 전환. term/xterm-setup.js가 이걸 import한다.
@@ -148,11 +152,52 @@ try {
     return `/api/tmux/clients?session=${encodeURIComponent(name)}`;
   };
 
+  // 메뉴바의 에이전트 집계 칩. 4상태는 agent/state.js가 유일한 출처다(키: tmux 이름).
+  // 완료는 「확인하지 않은 것」만 센다 — 이미 본 완료까지 세면 영원히 0이 안 된다.
+  const agentCounts = () => {
+    let waiting = 0, working = 0, done = 0;
+    for (const [name, st] of allStatuses()) {
+      if (st === 'waiting') waiting += 1;
+      else if (st === 'working') working += 1;
+      else if (st === 'done' && isUnseen(name)) done += 1;
+    }
+    return { waiting, working, done };
+  };
+  // 가장 오래 기다린 입력 대기 세션으로 이동한다. since를 모르는 항목은 맨 뒤로 보낸다.
+  registerAction('agents.jump', () => {
+    const details = agentDetails();
+    const sinceOf = (name) => {
+      const v = details[name] && details[name].since;
+      const n = typeof v === 'number' ? v : Date.parse(v);
+      return Number.isFinite(n) ? n : Infinity;
+    };
+    const waiting = [...allStatuses()].filter(([, st]) => st === 'waiting').map(([name]) => name);
+    if (!waiting.length) return;
+    waiting.sort((a, b) => sinceOf(a) - sinceOf(b));
+    const tmuxName = waiting[0];
+    const sessions = allSessions();
+    const sessionId = Object.keys(sessions).find((id) => {
+      const s = sessions[id];
+      return s && (s.tmuxName || s.tmux_name) === tmuxName && !s.remote;
+    }) || null;
+    const open = window.vtOpenSessionFromRail;
+    if (typeof open === 'function') open({ sessionId, tmuxName });
+  });
+  // 푸시 구독 상태. 이 브라우저가 못 쓰면(비보안 컨텍스트·미지원) 칩 자체를 안 그린다.
+  const pushState = async () => {
+    const P = window.VTPush;
+    if (!P || P.blockReason()) return 'unavailable';
+    return (await P.isSubscribed()) ? 'on' : 'off';
+  };
+
   const hudRoot = document.getElementById('vt-hud');
   if (hudRoot) {
     import('./shell/Hud.tsx')
       .then(({ mountHud }) => mountHud(hudRoot, {
         vtFetch, activeTmuxName, activeClientsPath, getAction, e2eEnabled: E2E_ENABLED,
+        agentCounts, subscribeAgents: onStatusChange, pushState,
+        copyText: copyToClipboard, toast: showToast,
+        locale: () => (lang() === 'en' ? 'en-US' : 'ko-KR'), isMac,
         // 배치(ui.hud.layout)는 설정 화면에서 바뀐다 — core/settings.js는 지연 청크가 직접 못 읽으므로 여기서 넘긴다.
         getLayout: () => settingGet('ui.hud.layout'),
         subscribeLayout: (fn) => settingSubscribe((changed) => {

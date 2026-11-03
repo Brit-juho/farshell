@@ -336,16 +336,19 @@
     <button data-action="search.close" aria-label="검색 닫기" data-i18n-attr="aria-label"><svg data-icon="x" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg></button>
   </div>
 
+  <!-- 2026-11 메뉴바 — macOS 메뉴바 모양의 맨 위 한 줄(regular 이상). 예전 하단 상태바(HUD)를
+       여기로 옮겼다. 내용은 shell/Hud.tsx(Solid, 지연 로드)가 채운다: 왼쪽 FarShell 메뉴 ·
+       워크스페이스 칩(#vt-workspace-chip-slot, shell/HeaderExtras.tsx) · 칩, 오른쪽 칩(시계 포함).
+       compact(<720px)에서는 CSS로 통째로 숨는다(하단 내비가 그 자리를 쓴다).
+       "값이 없는 항목은 숨긴다"가 규칙이라 빈 상태에서는 아무 칩도 안 나온다.
+       id·클래스가 vt-hud-*인 것은 이름만 옛것이다(토스트·테스트가 기대는 계약이라 그대로 둔다). -->
+  <div id="vt-hud" role="region" aria-label="상태" data-i18n-attr="aria-label">
+    <div id="vt-workspace-chip-slot"></div>
+  </div>
+
   <!-- 상단 통합 바 -->
   <header id="topbar">
     <div class="traffic" aria-hidden="true"><i class="c1"></i><i class="c2"></i><i class="c3"></i></div>
-
-    <!-- N37 §4 — 워크스페이스 칩("farshell / 호스트"). 내용은 shell/HeaderExtras.tsx
-         (Solid, 지연 로드)가 채운다. 클릭 → 팔레트(§4: "@ 모드"는 60 §3이 생기면).
-         2026-09-23 — compact(<720px)에서는 항상 숨긴다(10-shell.css). 대신
-         세션 버튼 아랫줄이 "이 기기가 무엇인가"를 보여준다 — 리포지토리
-         이름은 폰에서 매번 훑을 정보가 아니라는 사용자 판단. -->
-    <div id="vt-workspace-chip-slot"></div>
 
     <!-- 10-shell-layout.md §4 3단계 — **탭 = 열려 있는 워크트리**. 탭마다 자기
          pane 트리를 가진다(layout/store.js의 탭 집합). 세션 탭 줄(#tabs)은
@@ -477,11 +480,6 @@
        사용량 레일(#vt-right-rail)은 이 dock의 「사용량」 탭이 대신하므로
        CSS로만 숨긴다 — DOM은 남겨 둔다(usage.js가 id로 직접 찾는다). -->
   <div id="vt-dock-slot"></div>
-
-  <!-- N34 §7 — 상태바 HUD 24px. 내용은 shell/Hud.tsx(Solid)가 채운다.
-       compact(<720px)에서는 CSS로 통째로 숨는다(하단 내비가 그 자리를 쓴다).
-       "값이 없는 항목은 숨긴다"가 규칙이라 빈 상태에서는 아무 칩도 안 나온다. -->
-  <footer id="vt-hud" aria-label="상태" data-i18n-attr="aria-label"></footer>
 
   <!-- L8/U2: 우측 레일 — wide(≥1024px)에서만 상시 노출된다. 사용량의 요점이
        "상시 노출로 신뢰감을 만든다"(60-usage-provider.md §왜 하는가)인데 패널을

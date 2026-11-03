@@ -62,7 +62,7 @@
 /* 빈 상태 온보딩 — 상단 헤더(#topbar)는 가리지 않고 그 아래 영역만 채운다.
    inset:0로 전체를 덮으면 헤더가 안 보여서 새 세션/메뉴 접근이 막힌다. */
 .vt-onboarding {
-  position:fixed; top:calc(var(--topbar-h) + env(safe-area-inset-top,0px)); left:0; right:0; bottom:0;
+  position:fixed; top:calc(var(--menubar-h) + var(--topbar-h) + env(safe-area-inset-top,0px)); left:0; right:0; bottom:0;
   background:var(--win); z-index:500;
   display:flex; flex-direction:column; align-items:center; justify-content:center;
   gap:calc(var(--spacing) * 5); padding:calc(var(--spacing) * 10); text-align:center;
@@ -514,6 +514,7 @@ body.vt-kb-focus #vt-right-rail,
 body.vt-kb-focus #vt-mnav-bottom,
 body.vt-kb-focus .vt-pane-head { display:none; }
 body.vt-kb-focus {
+  padding-top:env(safe-area-inset-top) !important;
   padding-left:env(safe-area-inset-left) !important;
   padding-right:env(safe-area-inset-right) !important;
 }

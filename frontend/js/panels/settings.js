@@ -73,7 +73,7 @@ let _previewDispose = null;
 function disposePreview() { if (_previewDispose) { _previewDispose(); _previewDispose = null; } }
 
 function isCompact() { return window.matchMedia('(max-width:719px)').matches; }
-// 좁은 화면에는 하단바(HUD) 자체가 없다(DESIGN.md 「HUD 24px」) — 거기서 구성하는 섹션은 목록에서 뺀다.
+// 좁은 화면에는 메뉴바(HUD) 자체가 없다(DESIGN.md 「메뉴바 28px」) — 거기서 구성하는 섹션은 목록에서 뺀다.
 const shownSections = () => (isCompact() ? SECTIONS.filter((s) => !s.desktopOnly) : SECTIONS);
 
 function openTool(action) {
