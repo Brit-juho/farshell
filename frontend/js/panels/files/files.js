@@ -654,8 +654,8 @@ function openShareDialog(item, { snapshot = false } = {}) {
           <label class="vt-fl-radio disabled"><input type="radio" name="vt-fl-mode" value="public" disabled> ${t('누구나 열기')} <span class="vt-fl-hint">${t('제공하지 않습니다')}</span></label>
         </div>
         <div class="vt-fl-field" id="vt-fl-pin-field" hidden>
-          <div class="vt-fl-field-label">${t('PIN · 4~20자')}</div>
-          <input type="text" id="vt-fl-pin" class="vt-input lg vt-fl-input" autocomplete="off" inputmode="numeric" placeholder="${t('예: 4821')}" />
+          <div class="vt-fl-field-label">${t('PIN · 6~20자')}</div>
+          <input type="text" id="vt-fl-pin" class="vt-input lg vt-fl-input" autocomplete="off" inputmode="numeric" placeholder="${t('예: 482193')}" />
         </div>
         <div class="vt-fl-field">
           <div class="vt-fl-field-label">${t('만료 · 필수')}</div>
@@ -696,8 +696,8 @@ async function issueShare(item, wrap) {
   const ttl = Number(wrap.querySelector('#vt-fl-ttl').value);
   const once = wrap.querySelector('#vt-fl-once').checked;
   const pin = wrap.querySelector('#vt-fl-pin').value.trim();
-  if (mode === 'pin' && (pin.length < 4 || pin.length > 20)) {
-    showToast(t('PIN은 4~20자여야 합니다'), 'error');
+  if (mode === 'pin' && (pin.length < 6 || pin.length > 20)) {
+    showToast(t('PIN은 6~20자여야 합니다'), 'error');
     return;
   }
   const body = { mode, ttl, once };

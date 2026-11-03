@@ -261,7 +261,7 @@ download API — `/api/files/{file_id}/download` is id-only by design.
 | POST | `/api/files/delete` | Bulk delete (JSON: `{ids:[...]}`, max 500) → `{ok, deleted:[...], missing:[...]}`. Not elevated — same reason single delete isn't (repeated single calls would bypass it anyway) |
 | POST | `/api/files/{file_id}/insert` | Type the file's path into a tmux session's pane (JSON: `session`), no Enter |
 | POST | `/api/files/{file_id}/send` | Copy the file to a remote host (JSON: `host`, optional `session`) and, with `session`, have that host type its own path into the pane. Ordinary login auth here; the outbound leg carries the peer signature. Re-sending the same file is skipped by origin |
-| POST | `/api/files/{file_id}/share` | **Elevated.** Issue a share link (JSON: `mode:"device"\|"pin"`, `ttl`, `once`, `pin?`) → `{share, token, url}` |
+| POST | `/api/files/{file_id}/share` | **Elevated.** Issue a share link (JSON: `mode:"device"\|"pin"`, `ttl`, `once`, `pin?` — 6 to 20 characters, else 400 `bad_pin`) → `{share, token, url}` |
 | DELETE | `/api/files/{file_id}/share/{share_id}` | **Elevated.** Cancel a share — the URL 404s immediately even with a still-valid signature |
 
 Public download entry point (not under the api prefix, and not behind the usual session/token auth —
@@ -270,7 +270,7 @@ Public download entry point (not under the api prefix, and not behind the usual 
 | Method | Path | Description |
 |--------|------|------|
 | GET | `/s/{token}` | Share download. `device` mode: serves if `vt_device`+`vt_session` are valid, else 302 to `/?next=/s/{token}`. `pin` mode: PIN entry page unless a valid one-time download cookie is present |
-| POST | `/s/{token}/pin` | Verify a PIN (form: `pin`) → 60s one-time download cookie + redirect. 5 failed attempts cancels the share |
+| POST | `/s/{token}/pin` | Verify a PIN (form: `pin`, at most 4KB → 413) → 60s one-time download cookie + redirect. 5 failed attempts cancels the share (counted atomically, also under concurrent requests) |
 | GET | `/p/authorize?share=&next=` | **2.2** — cross-origin handshake for an exposed port's `session` mode (`docs/ref/tunnel.md`). Verifies login + registered device on the **main** origin, then redirects to the exposed host's `/__fsh/cb` with a 60-second one-time ticket bound to that share and device. Takes no destination parameter from the client — the target URL is looked up from the tunnel registry by `share` id, so there is no open-redirect surface. Since 2026-10 this is **the entry point** for a `session` share: the exposed host no longer redirects cookie-less visitors here (it shows a notice instead, so the main URL isn't revealed), and the ports panel / `fsh tunnel expose` link to this route |
 
 ## Multi-host peering (N7/N39, stage 1)
