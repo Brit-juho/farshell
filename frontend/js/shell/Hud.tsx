@@ -1,5 +1,5 @@
-// N34 §7 — 상태바 HUD 24px. hud-data.ts가 만든 칩 배열을 그리기만 한다.
-// 첫 Solid 소비처다(N17/N18 파이프라인 위).
+// N34 §7 — HUD. hud-data.ts가 만든 칩 배열을 그리기만 한다. 첫 Solid 소비처다(N17/N18 파이프라인 위).
+// 2026-11 — 하단 상태바에서 맨 위 메뉴바(28px)로 옮겼고, 맨 앞에 FarShell 메뉴(MenuButton)가 붙었다.
 //
 // ⚠ **이 파일은 core/*를 직접 import하지 않는다.** main.js가 `import()`로 이걸
 // 지연 로드하고(ADR-26 번들 게이트), 그 지연 청크가 core/api·core/store·
@@ -10,8 +10,10 @@
 // 중복 문제와 정확히 같은 함정이다. 그래서 필요한 것들을 main.js가 인자로
 // 넘겨준다(HudDeps).
 import { createSignal, createEffect, onCleanup, For, Show } from 'solid-js';
-import { render } from 'solid-js/web';
-import { buildHudChips, parseHudLayout, type HudChip, type HudInput, type HudLayout } from './hud-data.js';
+import { render, Portal } from 'solid-js/web';
+import { t } from '../core/i18n.js';
+import { icon } from '../ui/icons.js';
+import { buildHudChips, parseHudLayout, type AgentCounts, type HudChip, type HudInput, type HudLayout } from './hud-data.js';
 
 const POLL_MS = 30000;
 const SCREEN_POLL_MS = 5000;
@@ -29,6 +31,20 @@ export interface HudDeps {
   getLayout?: () => string | undefined;
   /** 배치가 바뀌면 부른다. 해제 함수를 돌려준다. */
   subscribeLayout?: (fn: () => void) => () => void;
+  /** 에이전트 4상태 집계(agent/state.js). 지연 청크가 core/*를 직접 못 읽으니 main.js가 넘긴다. */
+  agentCounts?: () => AgentCounts;
+  /** 집계가 바뀔 수 있을 때 부른다. 해제 함수를 돌려준다. */
+  subscribeAgents?: (fn: () => void) => () => void;
+  /** 이 브라우저의 푸시 구독 상태. */
+  pushState?: () => Promise<'on' | 'off' | 'unavailable'>;
+  /** 클립보드 복사(term/clipboard.js). 성공 여부를 돌려준다. */
+  copyText?: (text: string) => Promise<boolean>;
+  /** 토스트(ui/toast.js). */
+  toast?: (msg: string, type?: string) => void;
+  /** 시계 표기용 로케일(`ko-KR`/`en-US`). */
+  locale?: () => string;
+  /** 맥 키보드인가 — 메뉴의 단축키 표기(⌘/Ctrl)에 쓴다. */
+  isMac?: boolean;
 }
 
 // 실패한 조회는 조용히 "값 없음"으로 떨어뜨린다 — HUD는 부가 정보라, 한
@@ -46,7 +62,7 @@ async function collect(deps: HudDeps): Promise<HudInput> {
   const clientsPath = deps.activeClientsPath?.() ||
     (tmuxName ? `/api/tmux/clients?session=${encodeURIComponent(tmuxName)}` : '');
 
-  const [caps, safeMode, usage, clients, stats] = await Promise.all([
+  const [caps, safeMode, usage, clients, stats, push] = await Promise.all([
     safeFetch<HudInput['caps']>(deps, '/api/capabilities'),
     safeFetch<HudInput['safeMode']>(deps, '/api/safe-mode'),
     safeFetch<HudInput['usage']>(deps, '/api/usage'),
@@ -54,9 +70,11 @@ async function collect(deps: HudDeps): Promise<HudInput> {
       ? safeFetch<{ clients?: unknown[] }>(deps, clientsPath)
       : Promise.resolve(null),
     safeFetch<HudInput['stats']>(deps, '/api/system/stats'),
+    deps.pushState ? deps.pushState().catch(() => 'unavailable' as const) : Promise.resolve(null),
   ]);
 
   return {
+    push,
     port: location.port,
     caps,
     e2e: deps.e2eEnabled,
@@ -144,13 +162,175 @@ function fitChips(host: HTMLElement) {
   }
 }
 
+interface MenuEntry {
+  id: string;
+  iconName?: string;
+  label: string;
+  keys?: string;
+  disabled?: boolean;
+  /** 이 항목 위에 구분선을 긋는다. */
+  sepBefore?: boolean;
+  run: (anchor: HTMLElement) => void;
+}
+
+// 접속 주소 — 터널이 떠 있으면 공개 주소, 아니면 지금 이 화면의 origin. 공개 주소 자체는 비밀이 아니다
+// (들어가려면 로그인과 기기 등록이 따로 필요하다). 기기 등록용 QR·OTP는 여기서 만들지 않는다 — `fsh mobile`이 한다.
+function accessUrl(caps: unknown): string {
+  const tun = (caps as { tunnel?: { running?: boolean; url?: unknown } } | null | undefined)?.tunnel;
+  if (tun && tun.running !== false && typeof tun.url === 'string' && /^https:\/\//.test(tun.url)) return tun.url;
+  return location.origin;
+}
+
+/**
+ * 맥 메뉴바의 첫 칸에 해당하는 FarShell 메뉴. 새 세션 · 빠른 열기 · 접속 주소 복사 · 설정 · 메뉴바 설정.
+ * 드롭다운은 Portal로 body에 그린다 — #vt-hud가 overflow를 자르고 backdrop-filter가 fixed의 기준 상자를
+ * 바꿔서 안에 두면 잘린다. 닫기: 바깥 클릭 · Esc · 항목 실행 · 스크롤/리사이즈. 키보드: ↑↓ Home End.
+ */
+function MenuButton(props: { deps: HudDeps; getCaps: () => unknown }) {
+  const [open, setOpen] = createSignal(false);
+  const [pos, setPos] = createSignal({ top: 0, left: 0 });
+  let btn: HTMLButtonElement | undefined;
+  let pop: HTMLDivElement | undefined;
+
+  const act = (name: string, ...args: unknown[]) => {
+    const fn = props.deps.getAction(name);
+    if (typeof fn === 'function') (fn as (...a: unknown[]) => void)(...args);
+  };
+  const mod = props.deps.isMac ? '⌘' : 'Ctrl+';
+
+  const entries = (): MenuEntry[] => [
+    { id: 'new', iconName: 'plus', label: t('새 세션'), run: (el) => act('session.add-menu', el) },
+    { id: 'quick', iconName: 'search', label: t('빠른 열기'), keys: `${mod}K`, run: () => act('quickopen.open') },
+    {
+      id: 'copy-url', iconName: 'link', label: t('접속 주소 복사'), sepBefore: true,
+      run: () => {
+        const url = accessUrl(props.getCaps());
+        void (props.deps.copyText?.(url) ?? Promise.resolve(false)).then((ok) => {
+          props.deps.toast?.(ok ? t('주소를 복사했습니다') : t('복사하지 못했습니다'), ok ? 'success' : 'error');
+        });
+      },
+    },
+    { id: 'settings', iconName: 'settings', label: t('설정'), keys: `${mod},`, sepBefore: true, run: () => act('settings.show') },
+    { id: 'menubar-settings', iconName: 'settings', label: t('메뉴바 설정'), run: () => act('settings.section', 'hud') },
+  ];
+
+  const close = (restoreFocus = false) => {
+    setOpen(false);
+    if (restoreFocus) btn?.focus();
+  };
+  const toggle = () => {
+    if (open()) { close(); return; }
+    const r = btn!.getBoundingClientRect();
+    setPos({ top: Math.round(r.bottom + 4), left: Math.max(8, Math.round(r.left)) });
+    setOpen(true);
+    // 첫 항목에 포커스 — Portal이 그린 다음 프레임에.
+    requestAnimationFrame(() => pop?.querySelector<HTMLElement>('.vt-mb-item:not([disabled])')?.focus());
+  };
+
+  createEffect(() => {
+    if (!open()) return;
+    const onDown = (e: MouseEvent) => {
+      const el = e.target as Node;
+      if (pop?.contains(el) || btn?.contains(el)) return;
+      close();
+    };
+    const onAway = () => close();
+    document.addEventListener('mousedown', onDown, true);
+    window.addEventListener('resize', onAway);
+    window.addEventListener('blur', onAway);
+    onCleanup(() => {
+      document.removeEventListener('mousedown', onDown, true);
+      window.removeEventListener('resize', onAway);
+      window.removeEventListener('blur', onAway);
+    });
+  });
+
+  const onPopKey = (e: KeyboardEvent) => {
+    const items = [...(pop?.querySelectorAll<HTMLElement>('.vt-mb-item:not([disabled])') ?? [])];
+    const i = items.indexOf(document.activeElement as HTMLElement);
+    const go = (n: number) => { e.preventDefault(); items[(n + items.length) % items.length]?.focus(); };
+    if (e.key === 'Escape') { e.preventDefault(); close(true); }
+    else if (e.key === 'ArrowDown') go(i + 1);
+    else if (e.key === 'ArrowUp') go(i < 0 ? items.length - 1 : i - 1);
+    else if (e.key === 'Home') go(0);
+    else if (e.key === 'End') go(items.length - 1);
+    else if (e.key === 'Tab') close();
+  };
+
+  const runItem = (it: MenuEntry) => {
+    close();
+    // 닫는 것과 실행을 분리한다 — 실행이 앵커(버튼)를 기준으로 팝업을 열 수 있다(새 세션).
+    it.run(btn!);
+  };
+
+  return (
+    <>
+      <button
+        ref={btn}
+        type="button"
+        class="vt-mb-menu"
+        aria-haspopup="menu"
+        aria-expanded={open()}
+        aria-label={t('FarShell 메뉴')}
+        data-tip={t('FarShell 메뉴')}
+        data-tip-side="bottom"
+        onClick={toggle}
+        onKeyDown={(e: KeyboardEvent) => {
+          if (e.key === 'ArrowDown' && !open()) { e.preventDefault(); toggle(); }
+        }}
+      >
+        <span innerHTML={icon('square-terminal', 14, 2)} style="display:contents" />
+        <span>FarShell</span>
+        <span innerHTML={icon('chevron-down', 12, 2)} style="display:contents" />
+      </button>
+      <Show when={open()}>
+        <Portal>
+          <div
+            ref={pop}
+            class="vt-mb-pop"
+            role="menu"
+            aria-label={t('FarShell 메뉴')}
+            style={{ top: `${pos().top}px`, left: `${pos().left}px` }}
+            onKeyDown={onPopKey}
+          >
+            <For each={entries()}>{(it) => (
+              <>
+                <Show when={it.sepBefore}><div class="vt-mb-sep" role="separator" /></Show>
+                <button type="button" role="menuitem" class="vt-mb-item" disabled={it.disabled} onClick={() => runItem(it)}>
+                  <Show when={it.iconName}><span innerHTML={icon(it.iconName!, 14, 2)} style="display:contents" /></Show>
+                  <span class="vt-mb-label">{it.label}</span>
+                  <Show when={it.keys}><span class="vt-mb-keys">{it.keys}</span></Show>
+                </button>
+              </>
+            )}</For>
+          </div>
+        </Portal>
+      </Show>
+    </>
+  );
+}
+
 function Hud(props: { deps: HudDeps; root: HTMLElement }) {
   const [chips, setChips] = createSignal<HudChip[]>([]);
   let snapshot: HudInput | null = null;
   // 배치는 설정에서 바뀐다(즉시 반영 — 새로고침 없음). 폴링 결과와 배치가 만나는 자리는
   // publish() 하나다: 어느 쪽이 바뀌어도 같은 함수로 칩을 다시 만든다.
   let layout: HudLayout = parseHudLayout(props.deps.getLayout?.());
-  const publish = () => { if (snapshot) setChips(buildHudChips(snapshot, layout)); };
+  // 폴링 결과(snapshot)와 별개로 흐르는 값들 — 에이전트 집계(상태 이벤트마다), 시계(분마다), 푸시(클릭 뒤).
+  // 이 셋은 서버 조회가 아니라서 snapshot에 섞지 않고 publish가 합친다.
+  let agents: AgentCounts | null = props.deps.agentCounts?.() ?? null;
+  let now = Date.now();
+  let push: HudInput['push'] = null;
+  const publish = () => {
+    if (!snapshot) return;
+    setChips(buildHudChips({
+      ...snapshot,
+      agents,
+      now,
+      locale: props.deps.locale?.(),
+      push: push ?? snapshot.push,
+    }, layout));
+  };
   const unsubscribe = props.deps.subscribeLayout?.(() => {
     layout = parseHudLayout(props.deps.getLayout?.());
     publish();
@@ -162,8 +342,46 @@ function Hud(props: { deps: HudDeps; root: HTMLElement }) {
   // 상태는 탭·레일이 이미 실시간으로 보여준다. 백그라운드 탭에서는 쉰다.
   const refresh = async () => {
     snapshot = await collect(props.deps);
+    push = null;   // 방금 조회한 값이 최신이다
     publish();
   };
+
+  // 에이전트 상태는 이벤트로 오고 짧은 시간에 여러 번 바뀐다 — 한 프레임에 한 번만 다시 만든다.
+  let agentRaf = 0;
+  const unsubAgents = props.deps.subscribeAgents?.(() => {
+    if (agentRaf) return;
+    agentRaf = requestAnimationFrame(() => {
+      agentRaf = 0;
+      agents = props.deps.agentCounts?.() ?? null;
+      publish();
+    });
+  });
+  onCleanup(() => { unsubAgents?.(); if (agentRaf) cancelAnimationFrame(agentRaf); });
+
+  // 시계: 분이 바뀔 때만 칩을 다시 만든다(5초마다 보되 같은 분이면 아무것도 안 한다).
+  let lastMinute = Math.floor(now / 60000);
+  const clockTimer = setInterval(() => {
+    now = Date.now();
+    const m = Math.floor(now / 60000);
+    if (m === lastMinute) return;
+    lastMinute = m;
+    publish();
+  }, 5000);
+  onCleanup(() => clearInterval(clockTimer));
+
+  // 푸시 칩을 눌러 구독이 바뀌면 30초를 기다리지 않고 바로 다시 읽는다. 구독/해지는 권한 창과
+  // 서버 왕복이 끼어 즉시 끝나지 않으므로 잠깐 간격을 두고 두 번 본다.
+  const onPushClick = (e: Event) => {
+    if (!(e.target as HTMLElement | null)?.closest?.('[data-chip="push"]')) return;
+    for (const ms of [600, 2500]) {
+      setTimeout(async () => {
+        const st = await props.deps.pushState?.().catch(() => null);
+        if (st) { push = st; publish(); }
+      }, ms);
+    }
+  };
+  props.root.addEventListener('click', onPushClick);
+  onCleanup(() => props.root.removeEventListener('click', onPushClick));
 
   // attach/detach는 사용량보다 빨리 변한다. 다른 HUD 데이터의 30초 주기는
   // 유지하고 화면 수만 목록 패널과 같은 5초 간격으로 갱신한다.
@@ -190,6 +408,7 @@ function Hud(props: { deps: HudDeps; root: HTMLElement }) {
   const screenTimer = setInterval(() => { if (!document.hidden) refreshScreens(); }, SCREEN_POLL_MS);
   onCleanup(() => { clearInterval(timer); clearInterval(screenTimer); clearInterval(statsTimer); });
 
+  const publishedCaps = () => snapshot?.caps ?? null;
   const side = (s: 'left' | 'right') => chips().filter((c) => c.side === s);
 
   // 다시 재야 하는 때는 둘뿐이다 — 칩 내용이 바뀌었을 때(값이 길어지면 폭도
@@ -220,6 +439,7 @@ function Hud(props: { deps: HudDeps; root: HTMLElement }) {
 
   return (
     <>
+      <MenuButton deps={props.deps} getCaps={() => (publishedCaps())} />
       <For each={side('left')}>{(c) => <Chip chip={c} deps={props.deps} />}</For>
       <div class="vt-hud-spacer" />
       <For each={side('right')}>{(c) => <Chip chip={c} deps={props.deps} />}</For>

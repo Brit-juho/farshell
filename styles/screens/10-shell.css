@@ -20,9 +20,14 @@
   background:var(--bar); flex-shrink:0; position:relative; z-index:60;
   border-bottom:1px solid var(--line);
 }
+/* --menubar-h: 맨 위 메뉴바(#vt-hud)가 차지하는 높이. compact에는 메뉴바가 없어 0이다.
+   #topbar 아래로 떨어지는 팝업·오버레이의 top은 이 값을 더한다. */
+:root { --menubar-h:0px; }
 @media (min-width:720px) {
-  :root, html[data-skin] { --topbar-h:44px; --topbar-popup-y:50px; }
+  :root, html[data-skin] { --topbar-h:44px; --menubar-h:var(--hud-h); --topbar-popup-y:calc(50px + var(--hud-h)); }
   #topbar { border-bottom:0; box-shadow:inset 0 -1px var(--color-line); }
+  /* 메뉴바(#vt-hud)는 fixed라 흐름에서 빠진다 — 본문이 그 밑으로 흘러들지 않게 그만큼 민다. */
+  body { padding-top:calc(env(safe-area-inset-top) + var(--menubar-h)); }
 }
 html[data-skin="macos"] #topbar { -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px); }
 
@@ -278,7 +283,7 @@ html[data-skin="windows"] .caption { display:flex; }
 
 /* ---- ⋯ 팝업 메뉴 ------------------------------------------------------- */
 #more-menu {
-  position:absolute; top:calc(var(--topbar-h) + 2px); right:8px; z-index:520; width:250px;
+  position:absolute; top:calc(var(--menubar-h) + var(--topbar-h) + 2px); right:8px; z-index:520; width:250px;
   max-height:calc(100vh - var(--topbar-popup-y) - env(safe-area-inset-bottom,0px) - 12px);
   overflow-y:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none;
   background:var(--menu); color:var(--txt); border-radius:var(--radius-lg); padding:calc(var(--spacing) * 1.5);

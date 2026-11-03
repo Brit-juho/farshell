@@ -1,4 +1,4 @@
-// N34 §7 — HUD(상태바 24px)가 그릴 칩 목록을 만드는 **순수 함수**. DOM도
+// N34 §7 — HUD(2026-11부터 맨 위 메뉴바 28px)가 그릴 칩 목록을 만드는 **순수 함수**. DOM도
 // fetch도 모른다: 여러 API 응답을 모아 놓은 평범한 객체 하나를 받아 칩 배열을
 // 돌려준다. Hud.tsx는 이 결과를 그대로 렌더만 한다.
 //
@@ -76,6 +76,14 @@ const PRIORITY = {
   devToggle: 7,
   /** 버전 — 설정 → 정보에 늘 있다. 가장 먼저 양보한다. */
   version: 8,
+  /** 시계 — 맥 메뉴바 오른쪽 끝의 그 시계. OS 시계가 바로 옆에 있어 양보할 수 있지만 버전보다는 위다. */
+  clock: 7,
+  /** 푸시 알림 켜짐/꺼짐 — 설정에서도 바꿀 수 있어 평상시에는 양보한다. */
+  push: 7,
+  /** 개입이 필요한 에이전트 — 이 제품이 존재하는 이유다. 서버 다음으로 끝까지 남는다. */
+  agentsAlert: 1,
+  /** 개입 필요는 없고 작업 중·완료만 있을 때. */
+  agents: 4,
 } as const;
 
 export interface HudInput {
@@ -93,6 +101,22 @@ export interface HudInput {
   usage?: UsageSnapshot | null;
   /** /api/system/stats 응답. 읽지 못한 항목은 null이고, 그 칩은 그리지 않는다. */
   stats?: SystemStats | null;
+  /** 에이전트 상태 집계(agent/state.js의 4상태). 셋 다 0이면 칩이 없다. */
+  agents?: AgentCounts | null;
+  /** 푸시 알림 상태. `unavailable`(이 브라우저에서 못 씀)·null(아직 모름)이면 칩이 없다. */
+  push?: 'on' | 'off' | 'unavailable' | null;
+  /** 시계 칩에 쓸 지금 시각(ms). 없으면 시계 칩이 없다 — 순수 함수라 시계를 직접 읽지 않는다. */
+  now?: number | null;
+  /** 시계 표기에 쓸 로케일(예: `ko-KR`). 비면 브라우저 기본. */
+  locale?: string;
+}
+
+export interface AgentCounts {
+  /** 입력 대기(승인·선택·질문) — 사람이 와야 풀린다. */
+  waiting: number;
+  working: number;
+  /** 끝났는데 아직 이 브라우저에서 확인하지 않은 것. */
+  done: number;
 }
 
 export interface SystemStats {
@@ -193,6 +217,51 @@ function statsChips(stats: SystemStats): HudChip[] {
   return out;
 }
 
+// 시계 문구 — "11월 3일 (화) 14:05". 날짜까지 싣는 이유는 맥 메뉴바와 같다: 터미널 앞에 오래 앉아 있으면
+// 며칠째 같은 화면인지 잊는다. 24시간제로 고정한다 — 로케일이 12시간제여도 칩 폭이 요일·AM/PM으로 흔들리지 않게.
+export function formatClock(now: number, locale?: string): string {
+  const d = new Date(now);
+  if (Number.isNaN(d.getTime())) return '';
+  try {
+    const date = new Intl.DateTimeFormat(locale || undefined, { month: 'short', day: 'numeric', weekday: 'short' }).format(d);
+    const time = new Intl.DateTimeFormat(locale || undefined, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
+    return `${date} ${time}`;
+  } catch (_) {
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+}
+
+// 에이전트 집계 칩 — 「개입 2 · 작업 1 · 완료 1」. 0인 항목은 적지 않고, 셋 다 0이면 칩을 안 만든다.
+// 개입이 있으면 값(굵은 글씨)이 개입 수이고 주의 색이다. 없으면 가장 급한 것(작업 > 완료)이 값이 된다.
+function agentsChip(c: AgentCounts): HudChip | null {
+  const waiting = Math.max(0, c.waiting | 0);
+  const working = Math.max(0, c.working | 0);
+  const done = Math.max(0, c.done | 0);
+  if (!waiting && !working && !done) return null;
+  const parts: Array<[string, number]> = [];
+  if (waiting) parts.push([t('개입'), waiting]);
+  if (working) parts.push([t('작업'), working]);
+  if (done) parts.push([t('완료'), done]);
+  const [label, value] = parts[0];
+  const rest = parts.slice(1).map(([l, n]) => `${l} ${n}`).join(' · ');
+  const tooltip = waiting
+    ? t('입력을 기다리는 세션 {n}개 — 누르면 가장 오래 기다린 세션으로 이동', { n: waiting })
+    : t('에이전트 상태 — 작업 중이거나 확인하지 않은 완료');
+  return {
+    id: 'agents',
+    kind: 'agents',
+    label,
+    value: String(value),
+    hint: rest ? `· ${rest}` : undefined,
+    tooltip,
+    tone: waiting ? 'warn' : 'plain',
+    // 개입할 게 없을 때 누르면 아무 데도 못 가므로 클릭 불가로 둔다.
+    action: waiting ? 'agents.jump' : undefined,
+    side: 'left',
+    priority: waiting ? PRIORITY.agentsAlert : PRIORITY.agents,
+  };
+}
+
 export function buildHudChips(input: HudInput, layout: HudLayout = DEFAULT_HUD_LAYOUT): HudChip[] {
   const chips: HudChip[] = [];
 
@@ -248,9 +317,29 @@ export function buildHudChips(input: HudInput, layout: HudLayout = DEFAULT_HUD_L
     }
   }
 
+  if (input.agents) {
+    const chip = agentsChip(input.agents);
+    if (chip) chips.push(chip);
+  }
+
+  // 푸시: 이 브라우저에서 못 쓰면(비보안 컨텍스트·미지원) 칩 자체가 없다 — 눌러 봐야 사유만 나오는 칩은 소음이다.
+  if (input.push === 'on' || input.push === 'off') {
+    const on = input.push === 'on';
+    chips.push({
+      id: 'push', kind: 'push', label: t('알림'), value: on ? t('켜짐') : t('꺼짐'),
+      tooltip: on ? t('푸시 알림 끄기') : t('푸시 알림 켜기'),
+      tone: on ? 'ok' : 'plain', action: 'push.toggle', side: 'right', priority: PRIORITY.push,
+    });
+  }
+
   const version = (input.caps?.version || '').trim();
   if (version) {
     chips.push({ id: 'version', kind: 'version', label: '', value: `v${version}`, tone: 'plain', side: 'right', priority: PRIORITY.version });
+  }
+
+  if (typeof input.now === 'number') {
+    const text = formatClock(input.now, input.locale);
+    if (text) chips.push({ id: 'clock', kind: 'clock', label: '', value: text, tone: 'plain', side: 'right', priority: PRIORITY.clock });
   }
 
   // 배치 적용 — 칩이 스스로 정한 side는 무시하고 사용자가 정한 구역·순서를 따른다.

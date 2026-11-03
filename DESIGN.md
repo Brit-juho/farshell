@@ -242,8 +242,8 @@ enough, refresh it.
 - **Breakpoints:** `--breakpoint-regular`(720px) / `--breakpoint-wide`(1280px) /
   `--breakpoint-xwide`(1600px). The JS-side constants live in exactly **one**
   place, `frontend/js/layout/breakpoints.js` (`COMPACT_MAX`/`REGULAR_MAX`/`WIDE_MAX`).
-- **Shell dimensions:** header 36px · worktree rail default 252px (resizable
-  240~480) · dock default 392px (320~560, collapses to 36px) · HUD 24px. The
+- **Shell dimensions:** menu bar 28px (top, full width) · tab row 44px · worktree rail default 252px (resizable
+  240~480) · dock default 392px (320~560, collapses to 36px). The
   rail's and dock's width/collapse state are **device-scoped settings**
   (`ui.rail.*`/`ui.dock.*`, §6 "Settings") — collapsing it on a phone must not
   affect the Mac.
@@ -325,16 +325,16 @@ stay in the DOM, and `visibility: hidden` keeps their box measurable so
 cols/rows survive).
 
 ```
-┌ header 36 ────────────────────────────────────────────────────────────┐
-│ [workspace chip] [tabs…] [+]                     [⌘K] [screens N] [⚙]│
+┌ menu bar 28 (full width, fixed) ───────────────────────────────────────┐
+│ ◆FarShell ▾ [workspace chip] [agents]…        [CPU RAM NET …] [v] [clock]│
+├ tab row 44 ───────────────────────────────────────────────────────────┤
+│ [tabs…] [+]                                               [⌘K]        │
 ├──────────┬───────────────────────────────────────────┬───────────────┤
 │ rail 252 │ pane tree                                  │ dock 392      │
 │(worktree)│ ┌ pane header 24 ┐                         │ ┌ tabs 28 ┐   │
 │          │ │ cwd · agent     │                        │ │scm|q|…  │   │
 │          │ └─────────────────┘                        │ └─────────┘  │
-├──────────┴───────────────────────────────────────────┴───────────────┤
-│ HUD 24                                                                │
-└─────────────────────────────────────────────────────────────────────┘
+└──────────┴───────────────────────────────────────────┴───────────────┘
 ```
 
 ### 4 responsive tiers
@@ -358,7 +358,7 @@ you chose** — `ui.rail.width`/`ui.rail.collapsed` are device-scoped settings
 - **Collapse default** (`defaultRailCollapsed`): on a device that has never
   stated a preference, the rail starts collapsed below wide (<1280). `Dock.tsx`
   already made this call (`innerWidth < WIDE_MAX`) and the rail didn't, so a
-  narrow screen opened with both panels expanded and left the HUD 472px for
+  narrow screen opened with both panels expanded and left the menu bar 472px for
   667px of chips.
 - **Rendered width clamp**: `--vt-wgrail-w` is `min(<stored>px, 40vw)`. The
   stored value says how wide you want it; the clamp asks whether the window can
@@ -378,10 +378,9 @@ collapsing it on a phone must not carry over to the Mac. The tier boundaries
 live in exactly one place, `layout/breakpoints.js`. Past the cap, the split
 button goes disabled **with the reason in its tooltip**.
 
-### Header 36px
+### Tab row 44px (was "Header 36px")
 
-Left: a workspace chip (repo name + host, clicking it opens the palette's `@`
-mode). Center: **view tabs** (`#vt-wtabs`, `layout/tabbar.js`). A tab is a view,
+Since 2026-11 the workspace chip lives in the menu bar above (§「Menu bar 28px」), and `⌘K` stays at the right of this row. Left: **view tabs** (`#vt-wtabs`, `layout/tabbar.js`). A tab is a view,
 not a session, and holds only `[label][×]` — no agent mark, no state icon, no dot
 (2026-10-04 rework). The label is the member names joined with `+`, or the name the
 user gave it. State lives in a **state bar** along the tab's bottom edge
@@ -397,7 +396,7 @@ pane's own border does that. Colour alone is not the signal: the hover tooltip l
 (`api, 작업 중 · web, 입력 대기(확인 안 함)`). The active tab is a filled background
 (the old accent underline gave way to the bar). × is shown even when there is one
 view. Tab text is 15px (`--fs-base`, 2026-11), the pane count 12.5px, tabs at least 200px wide and 44px high. **Right-click (or the Menu key) opens a two-item menu — 이름 변경 / 뷰 닫기** (`layout/tab-menu.js`, loaded on first use); there is deliberately no ungroup item. Hidden below 720px, as before. Right:
-`⌘K` (palette), a connected-screens icon + count, settings ⚙. Dragging a tab
+`⌘K` (palette). Dragging a tab
 to drop it on a pane still uses the existing `layout/dnd.js`
 (`frontend/js/shell/HeaderExtras.tsx` only draws the new workspace chip and
 connected-screens icon; it doesn't touch the tabs themselves).
@@ -467,12 +466,33 @@ See [docs/ref/files.md](./docs/ref/files.md). In `layout/tree.js`, a pane leaf c
 only a file path; a `panel` leaf has one registered dock panel name. Both keep
 `session: null`.
 
-### HUD 24px (`shell/Hud.tsx`)
+### Menu bar 28px (`shell/Hud.tsx`, element `#vt-hud`)
+
+**2026-11: the bottom status bar moved to the top and became a macOS-style menu bar.** The ids and
+classes keep their old `vt-hud-*` names (toasts and tests depend on them). It is `position: fixed`
+across the full width at the very top, so the rail, dock and body start `--menubar-h` (28px) lower
+(`.vt-sidepanel { top: var(--menubar-h) }`, `body { padding-top }`); anything positioned from the top
+(`--topbar-popup-y`, onboarding, the dock viewer) adds `--menubar-h` too. Look: UI font, no chip
+dividers, a translucent blurred bar, hover pills — shared by every skin (colours come from skin tokens).
+Compact (<720px) has no menu bar, so `--menubar-h` is 0 there.
+
+Left to right: the **FarShell menu** (`MenuButton`, first cell: 새 세션 · 빠른 열기 · 접속 주소 복사 ·
+설정 · 메뉴바 설정; the dropdown is a `Portal` into `body` because the bar clips overflow and its
+`backdrop-filter` would trap `position: fixed`; Esc/outside click/↑↓/Home/End work), the workspace chip
+(`#vt-workspace-chip-slot`, moved here from the tab row), then the chips below. **접속 주소 복사** copies
+the public tunnel URL if one is running, else `location.origin`; it never mints a device-registration QR/OTP
+— that stays in `fsh mobile`.
+
+New chip kinds in 2026-11: **`agents`** (`개입 N · 작업 N · 완료 N`; zeros are omitted; with `개입` it is
+warn-coloured, ranks 1 and jumps to the longest-waiting `waiting` session via the `agents.jump` action;
+`완료` counts only completions not yet seen on this browser), **`push`** (`알림 켜짐/꺼짐` for this browser's
+Web Push subscription, click toggles; hidden where push is unavailable) and **`clock`** (date + 24-hour
+time, rebuilt only when the minute changes).
 
 A row of chips like `screens 3 · E2E ON · safe mode ON · CPU 17% · GPU 0% · RAM 72% ·
 NET ↓12K ↑3K · Claude 62% · 4h12m · v2.6.0`. Polled every 30s, plus
 immediate refresh on `/ws-notify` events. A chip with no value is **hidden**
-(no usage provider → no chip, the 2.0 rule kept). There is no HUD at all in
+(no usage provider → no chip, the 2.0 rule kept). There is no menu bar at all in
 compact — the bottom nav takes its place. Chip padding is 6px horizontally,
 with 3px internal gaps. Reset wording appears in tooltips; GPU chips show only usage.
 
@@ -488,7 +508,10 @@ read `.ts`; `hud-data.ts` applies the layout *after* it builds the chips, so «n
 chip» and the squeeze order below still hold wherever a chip is placed. The settings screen
 edits the layout three ways — drag, a position select and up/down buttons — all through the same
 `moveHudKind`/`stepHudKind` (the select and buttons are the keyboard path, not an extra), shows a
-preview with sample values, and is hidden in compact (there is no HUD there).
+preview with sample values, and is hidden in compact (there is no menu bar there). The settings section is
+**메뉴바** (id `hud`). The saved layout carries a generation (`{"v":2,…}`): a layout saved before 2026-11 has
+no `v`, so the new kinds are added once at their default places when it is read (not for an all-off layout, which
+is a choice); saving writes `v`.
 
 **"No value" hides a chip; "no room" drops the least important one.** These are
 two different axes. The first is `buildHudChips` declining to emit a chip. The
@@ -1084,11 +1107,11 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
   repeat badge. Color goes on the text and the bar only; filling the background
   with a status color turns three stacked toasts into a block of colour.
   **Where it lands is decided by severity, because the goal is to not cover the
-  terminal.** `info`/`success` take over the 24px HUD strip (`#vt-hud`), which
-  lives in normal flow and therefore hides nothing — the terminal's own message
-  line, like tmux's status line or vim's echo area. Only `warn`/`error` float,
-  as a card just above the HUD on the right, clear of the prompt line at the
-  bottom left. In compact (<720px) there is no HUD, so everything is a card,
+  terminal.** `info`/`success` take over the 28px menu bar (`#vt-hud`) for a moment — it
+  covers no terminal rows, like tmux's status line or vim's echo area (since
+  2026-11 it is at the top; the toast replaces the chips in place). Only `warn`/`error` float,
+  as a card at the bottom right, clear of the prompt line at the
+  bottom left. In compact (<720px) there is no menu bar, so everything is a card,
   sitting on the **measured** height of the keybar and bottom nav
   (`--kb-height`/`--kb-overlap`) and following the software keyboard up.
   Translucency is not an answer here: behind a toast is monospace text, so a
@@ -1210,7 +1233,7 @@ design.
 | `frontend/js/core/types.ts` | Shared TS types |
 | `frontend/js/shell/Rail.tsx` | Worktree rail, 252px (N36) |
 | `frontend/js/shell/Dock.tsx` | Dock frame, 392px (N35) |
-| `frontend/js/shell/Hud.tsx` · `hud-data.ts` | HUD, 24px (N34) |
+| `frontend/js/shell/Hud.tsx` · `hud-data.ts` | Menu bar, 28px at the top (N34; was the bottom HUD until 2026-11) |
 | `frontend/js/shell/HeaderExtras.tsx` | Workspace chip · connected screens (N37) |
 | `frontend/js/shell/Fleet.tsx` | Mobile fleet home (N38) |
 | `frontend/js/shell/Palette.tsx` · `palette-data.ts` | Command palette, 7+1 modes (N5/N40/N46) |
