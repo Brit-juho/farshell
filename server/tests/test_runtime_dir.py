@@ -5,6 +5,7 @@
 `fsh stop` 이 엉뚱한 프로세스를 죽였다. bin/fsh 를 통째로 돌리지 않고 lib/run_dir.sh 만 불러 시험한다.
 """
 import os
+import sys
 import subprocess
 from pathlib import Path
 
@@ -156,3 +157,64 @@ def test_fsh_in_a_pre_upgrade_pane_uses_the_new_default(tmp_path):
     assert r.returncode == 0, r.stderr
     assert "symbolic link" not in r.stderr
     assert (home / ".vt" / "run" / "vt-pids").is_dir()
+
+
+# --- 이전은 서버를 내리고 올리는 명령 안에서만 ---------------------------------------------
+# 2026-11-03: `fsh update trust` 가 이 Mac 의 **돌고 있는 옛 서버** 곁에서 /tmp 파일을 옮겨 버렸다(서버·터널·워치독은 /tmp 를
+# 보고 있다). 이전은 cmd_stop(restart·update --restart 포함)과, 서버가 안 떠 있을 때의 cmd_start 에서만 일어난다.
+
+
+def test_migration_is_only_called_from_stop_and_start_not_from_the_dispatcher():
+    import re
+    text = (ROOT / "bin" / "fsh").read_text()
+    calls = [m.start() for m in re.finditer(r"^\s*(?:_port_in_use \"\$VT_PORT\" \|\| )?_vt_migrate_legacy_run\s*$", text, re.M)]
+    assert len(calls) == 2, "cmd_start 와 cmd_stop 두 곳뿐이어야 한다"
+    for pos in calls:
+        head = text[:pos].rsplit("\n", 40)[0]
+        owner = re.findall(r"^(cmd_\w+)\(\) \{", text[:pos], re.M)[-1]
+        assert owner in ("cmd_start", "cmd_stop"), owner
+    assert "start|stop|restart|voice|clip|mobile|update|tunnel) _vt_migrate_legacy_run" not in text
+
+
+def test_non_lifecycle_commands_leave_a_running_legacy_installs_files_alone(tmp_path):
+    legacy = tmp_path / "legacy"
+    (legacy / "vt-pids").mkdir(parents=True)
+    sleeper = subprocess.Popen(["sleep", "60"])
+    try:
+        (legacy / "vt-pids" / "server.pid").write_text(f"{sleeper.pid}\n")
+        (legacy / "cloudflared.log").write_text("x\n")
+        home = tmp_path / "home"
+        home.mkdir()
+        (home / ".vt.env").write_text("")
+        env = {"PATH": os.environ["PATH"], "HOME": str(home), "VT_LANG": "en", "_VT_LEGACY_RUN": str(legacy), "VT_PORT": "7899"}
+        for args in (["status"], ["tunnel", "list"], ["help"]):
+            r = subprocess.run([str(ROOT / "bin" / "fsh"), *args], capture_output=True, text=True, timeout=60, env=env)
+            assert (legacy / "vt-pids" / "server.pid").exists(), (args, r.stderr[-300:])
+            assert (legacy / "cloudflared.log").exists(), args
+            assert not list((home / ".vt" / "run" / "vt-pids").iterdir()), args
+        r = subprocess.run([str(ROOT / "bin" / "fsh"), "status"], capture_output=True, text=True, timeout=60, env=env)
+        assert "old location" in r.stdout, "옛 위치에서 서버가 돌면 status 가 알려야 한다"
+    finally:
+        sleeper.kill()
+        sleeper.wait()
+
+
+def test_migration_ends_a_legacy_watchdog_but_never_an_unrelated_process(tmp_path):
+    old, new = _legacy(tmp_path)
+    watchdog = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)", "tunnel_watchdog.py"])
+    try:
+        (new / "vt-pids" / "tunnel-watchdog.pid").unlink(missing_ok=True)
+        (old / "vt-pids" / "tunnel-watchdog.pid").write_text(f"{watchdog.pid}\n")
+        _migrate(old, new)
+        assert watchdog.wait(timeout=10) is not None            # 끝났다
+        assert not (new / "vt-pids" / "tunnel-watchdog.pid").exists()
+    finally:
+        watchdog.kill()
+    old, new = _legacy(tmp_path / "second")
+    bystander = subprocess.Popen(["sleep", "60"])                # pid 번호가 재사용된 무관한 프로세스
+    try:
+        (old / "vt-pids" / "tunnel-watchdog.pid").write_text(f"{bystander.pid}\n")
+        _migrate(old, new)
+        assert bystander.poll() is None, "워치독이 아닌 프로세스를 끝내면 안 된다"
+    finally:
+        bystander.kill()

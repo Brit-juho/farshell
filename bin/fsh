@@ -130,7 +130,7 @@ _resolve_disallowed_tools() {
 # VT_WORKSPACE_PATH 와 함께 쓴다. server 쪽은 tunnel_registry.py / routes/pty.py 가
 # 같은 변수를 읽는다(bin/fsh 가 export 하므로 값이 갈라지지 않는다).
 # 판정 함수는 lib/run_dir.sh(테스트가 그 파일만 불러 시험한다).
-_VT_LEGACY_RUN=/tmp
+_VT_LEGACY_RUN="${_VT_LEGACY_RUN:-/tmp}"   # 시험이 가짜 옛 폴더를 가리킬 수 있게 환경으로 덮는다
 # shellcheck source=../lib/run_dir.sh
 . "$VT_DIR/lib/run_dir.sh"
 
@@ -1547,6 +1547,9 @@ _start_usage() {
 }
 
 cmd_start() {
+  # 옛 /tmp 런타임 파일은 서버를 내리고 올리는 이 명령과 cmd_stop 안에서만 옮긴다(lib/run_dir.sh). 옛 서버가 아직
+  # 돌고 있으면 옮기지 않는다 — 그 서버는 /tmp 를 보고 있다. 재시작은 cmd_stop 이 먼저 옮기고 서버를 내린다.
+  _port_in_use "$VT_PORT" || _vt_migrate_legacy_run
   # 서버 + 접속 경로를 시작한다. 폰 접속 주소/QR은 `fsh mobile`.
   # 음성은 기본 OFF — 켜려면 --voice 명시하거나 별도로 'fsh voice' 실행.
   # 항상 켜져 있던 예전 동작을 기대하고 핫키가 안 먹는다고 헷갈리지 않도록,
@@ -3122,6 +3125,8 @@ cmd_manage() {
 }
 
 cmd_stop() {
+  # 옛 /tmp 런타임 파일을 먼저 옮긴다 — 아래가 새 위치의 pid 파일로 옛 서버를 찾는다(restart·update --restart 도 여기를 지난다).
+  _vt_migrate_legacy_run
   # Wave 1 W1-4: --purge 옵션으로 tmux까지 종료
   #
   # --keep-tunnel: 공개 입구(cloudflared/ngrok + 워치독)는 남기고 서버만 내린다.
@@ -5341,10 +5346,6 @@ cmd_status() {
 }
 
 # --- Main ---
-# 서버·터널을 (다시) 띄우거나 내리는 명령만 옛 /tmp 런타임 파일을 옮긴다(_vt_migrate_legacy_run 주석).
-case "${1:-help}" in
-  start|stop|restart|voice|clip|mobile|update|tunnel) _vt_migrate_legacy_run ;;
-esac
 case "${1:-help}" in
   voice)   cmd_voice ;;
   clip)    cmd_clip ;;
