@@ -131,3 +131,28 @@ def test_migration_ignores_symlinked_legacy_entries(tmp_path):
     _migrate(old, new)
     assert not (new / "cloudflared.log").exists()
     assert target.read_text() == "secret\n"
+
+
+# --- 옛 export(VT_RUN_DIR=/tmp) ------------------------------------------------------
+# 2.7 전 bin/fsh 가 늘 export 하던 값이라 그때 띄운 tmux pane·데몬의 환경에 남아 있다. 그 pane 에서 친
+# `fsh restart` 가 거부되면 업그레이드 경로가 막힌다.
+
+
+@pytest.mark.parametrize("legacy", ["/tmp", "/tmp/", "/private/tmp"])
+def test_python_treats_legacy_tmp_export_as_unset(monkeypatch, legacy):
+    monkeypatch.setenv("VT_RUN_DIR", legacy)
+    monkeypatch.setenv("VT_STATE_DIR", "/srv/x/.vt")
+    assert vt_paths.run_dir() == Path("/srv/x/.vt/run")
+    monkeypatch.setenv("VT_RUN_DIR", "/tmp/iso-run")  # /tmp 아래의 내 폴더는 그대로 존중한다
+    assert vt_paths.run_dir() == Path("/tmp/iso-run")
+
+
+def test_fsh_in_a_pre_upgrade_pane_uses_the_new_default(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / ".vt.env").write_text("")
+    r = subprocess.run([str(ROOT / "bin" / "fsh"), "help"], capture_output=True, text=True, timeout=60,
+                       env={"PATH": os.environ["PATH"], "HOME": str(home), "VT_RUN_DIR": "/tmp", "VT_LANG": "en"})
+    assert r.returncode == 0, r.stderr
+    assert "symbolic link" not in r.stderr
+    assert (home / ".vt" / "run" / "vt-pids").is_dir()

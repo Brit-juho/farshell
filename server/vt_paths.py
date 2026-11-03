@@ -106,6 +106,10 @@ def run_dir() -> Path:
     2.7 전 기본값은 공용 `/tmp`였다. 고정 이름(`vt-pids/`, `cloudflared.log`)을 같은 맥의 다른 계정이
     먼저 만들어 두면 터널 주소·PID를 바꿔치기할 수 있었다. bin/fsh의 `_vt_run_default`와 같은 규칙이다.
     """
+    raw = _raw("VT_RUN_DIR")
+    # 2.7 전 bin/fsh 가 늘 export 하던 옛 기본값 — 그때 뜬 프로세스의 환경에 남아 있다. 미지정으로 본다(bin/fsh 와 같다).
+    if raw is not None and raw.rstrip("/") in ("/tmp", "/private/tmp"):
+        return state_dir() / "run"
     return _resolve("VT_RUN_DIR", state_dir() / "run")
 
 
