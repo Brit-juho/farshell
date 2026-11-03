@@ -49,6 +49,30 @@ class _KeyedLockout:
         }
 
 
+class _GlobalWindow:
+    """출처와 무관한 전체 실패 상한(슬라이딩 창 여러 개). 키별 잠금은 출처를 바꿔 가며 때리면(IP 순환) 뚫리므로,
+    그 위에 전체 총량을 둔다. code-server의 「분당 2회 + 시간당 12회」와 같은 발상이고 값은 넉넉히 잡았다."""
+
+    def __init__(self, windows: tuple[tuple[int, int], ...]):
+        self._windows = windows  # (창 길이 초, 그 안의 최대 실패 수)
+        self._fails: list[float] = []
+
+    def remaining(self) -> int:
+        now = time.time()
+        wait = 0
+        for span, limit in self._windows:
+            recent = [t for t in self._fails if now - t < span]
+            if len(recent) >= limit:
+                wait = max(wait, int(span - (now - recent[-limit])) + 1)
+        return wait
+
+    def note(self) -> None:
+        now = time.time()
+        longest = max(span for span, _ in self._windows)
+        self._fails = [t for t in self._fails if now - t < longest]
+        self._fails.append(now)
+
+
 _otp_lockout = _KeyedLockout(auth.OTP_MAX_FAILS, auth.OTP_LOCK_SEC)
 _password_lockout = _KeyedLockout(auth.PASSWORD_MAX_FAILS, auth.PASSWORD_LOCK_SEC)
 
@@ -83,6 +107,19 @@ def password_reset_failures(key: str) -> None:
     _password_lockout.reset_failures(key)
 
 
+# 등록되지 않은 기기의 비밀번호·OTP 실패 전체 총량. 등록된 기기(유효한 vt_device 쿠키)는 이 상한에서 빠진다 —
+# 안 그러면 URL을 아는 누구나 실패를 채워 주인의 폰까지 잠근다. 상한에 걸리면 새 기기 등록만 잠시 막힌다.
+_new_device_failures = _GlobalWindow(auth.NEW_DEVICE_FAIL_WINDOWS)
+
+
+def new_device_lock_remaining() -> int:
+    return _new_device_failures.remaining()
+
+
+def new_device_note_failure() -> None:
+    _new_device_failures.note()
+
+
 def reset_all() -> None:
     """모든 잠금 카운터를 비운다. **테스트 격리 전용.**
 
@@ -94,3 +131,4 @@ def reset_all() -> None:
     """
     _otp_lockout._failures.clear()
     _password_lockout._failures.clear()
+    _new_device_failures._fails.clear()

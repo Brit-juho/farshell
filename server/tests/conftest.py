@@ -208,3 +208,11 @@ def _isolate_catalog_background_workers(monkeypatch):
     monkeypatch.setattr(worker,'initialize',initialized)
     for name in ('run','replicate','discover','index_history'):
         monkeypatch.setattr(worker,name,dormant)
+
+
+@pytest.fixture(autouse=True)
+def _reset_new_device_login_cap():
+    """등록되지 않은 기기 로그인 실패 전체 상한(auth.lockout)은 프로세스 전역이다 — 앞 테스트의 실패가 새지 않게."""
+    from auth import lockout
+    lockout._new_device_failures._fails.clear()
+    yield

@@ -105,6 +105,10 @@ OTP_MAX_FAILS = 5  # 6자리 코드는 무제한 시도면 실제로 뚫린다 �
 OTP_LOCK_SEC = 600
 PASSWORD_MAX_FAILS = 5  # D14: scrypt 자체가 시도당 비용을 부과하지만, 무제한 시도 자체는 별개 문제
 PASSWORD_LOCK_SEC = 600  # OTP와 동일한 정책 — 같은 파일 안에서 자격증명 종류별로 위협모델을 다르게 다루지 않는다
+# 등록되지 않은 기기의 로그인 실패 전체 상한(출처 무관): 1분 20회, 1시간 30회. 키별 잠금(5회/10분)은 출처를
+# 바꿔 가며(IP 순환) 우회되므로 그 위의 총량이다. 등록된 기기는 빠진다(lockout.py). 1분 값은 출처별 preauth
+# 한도(1분 10회)보다 커야 한다 — 같으면 출처 하나가 전체를 막는다.
+NEW_DEVICE_FAIL_WINDOWS = ((60, 20), (3600, 30))
 
 # 잠금 상태를 추적할 키(IP)가 무한정 늘어나는 걸 막는 상한. 스크립트가 IP를 계속 바꿔가며
 # 때리는 극단적 경우에도 메모리가 무한 증가하진 않게 한다(개인용 단일 프로세스 전제).
@@ -138,6 +142,8 @@ from auth.lockout import (  # noqa: E402,F401
     # **다시 묶는** 건 안 먹는다 — 그럴 땐 lockout.reset_all()을 쓸 것.
     _otp_lockout,
     _password_lockout,
+    new_device_lock_remaining,
+    new_device_note_failure,
     reset_all as _reset_lockouts,
     otp_failure_count,
     otp_lock_remaining,
