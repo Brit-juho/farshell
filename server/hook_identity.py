@@ -68,6 +68,30 @@ def _ps_table() -> Optional[dict[int, tuple[int, int, int, str]]]:
     return table
 
 
+def _ps_zombies() -> set[int]:
+    """끝났는데 부모가 아직 수거하지 않은 프로세스(`ps` 상태 `Z`)의 pid 집합. `ps`가 실패하면 빈 집합.
+
+    tmux 는 `remain-on-exit` 창의 자식을 바로 수거하지 않을 수 있다 — Ubuntu 24.04 의 tmux 3.4 에서 21초 넘게 좀비로
+    남는 것을 CI 에서 봤다(Debian 의 3.3a 는 바로 수거). 좀비는 `ps` 표에 그대로 있으므로 「표에서 사라질 때까지」
+    기다리면 이미 정상 종료한 CLI 를 못 끝났다고 판단한다. 빈 집합으로 실패하면 예전처럼 표에서 사라져야 끝난 것이다.
+    """
+    try:
+        out = subprocess.run(["ps", "-axo", "pid=,stat="], capture_output=True, text=True, timeout=2.0)
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    if out.returncode != 0:
+        return set()
+    zombies: set[int] = set()
+    for line in out.stdout.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[1].startswith("Z"):
+            try:
+                zombies.add(int(parts[0]))
+            except ValueError:
+                continue
+    return zombies
+
+
 def _is_shell(comm: str) -> bool:
     # macOS는 경로째(`/bin/zsh`), 로그인 셸은 `-zsh`로 보인다.
     return os.path.basename(comm).lstrip("-") in _SHELLS

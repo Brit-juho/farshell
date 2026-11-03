@@ -16,6 +16,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Three menu bar chips: **agents** (`개입 N · 작업 N · 완료 N`; click to jump to the session that has waited longest), **알림** (this browser's push notifications on/off, click to toggle) and a **clock**. If you had customised the layout before, they are added once at their default places.
 
 ### Fixed
+- Restarting a CLI after a settings change (the agent-config restart) gave up with "the CLI did not exit normally" even though it had exited, when tmux was slow to reap the finished process (it stayed as a `<defunct>` zombie for 20+ seconds with tmux 3.4 on Ubuntu 24.04). An exited-but-unreaped process now counts as exited, both when waiting for the CLI to quit and when checking that nothing else took over the pane.
 - The first `fsh restart` after upgrading to 2.7 no longer says the access address changed when it did not (it read the tunnel log before moving it to its new folder).
 
 ---
