@@ -581,7 +581,7 @@ async def insert_file(file_id: str, request: Request):
         blocked = await authz_leases.enforce_write(request, [cwd] if cwd else [], op="insert")
         if blocked is not None:
             return blocked
-    ok = await asyncio.to_thread(tmux_target.type_to_tmux, pane, str(fp))
+    ok = await asyncio.to_thread(tmux_target.type_path_to_tmux, pane, str(fp))
     if not ok:
         return JSONResponse({"error": "insert_failed"}, status_code=500)
     return {"ok": True}

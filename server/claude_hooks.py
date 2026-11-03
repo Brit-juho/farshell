@@ -40,6 +40,7 @@ from pathlib import Path
 
 import config_io
 import store_lock
+from shell_quote import shell_quote_path
 from i18n import tr
 
 # 훅 이벤트 → agent_hook.sh 인자. Claude Code의 이벤트 이름이 키다.
@@ -100,7 +101,9 @@ def hook_command(event: str, repo_root: Path | None = None) -> str:
     # "claude"로 떨어지지만, `codex_hooks.py:39`는 이미 "codex"를 명시한다.
     # 암묵적 기본값에 기대지 말고 여기도 명시한다 — 훅 스크립트의 기본값이
     # 나중에 바뀌면 여기 아무 변경 없이 조용히 깨지는 걸 막는다.
-    return f"{root / 'server' / 'agent_hook.sh'} {EVENTS[event]} claude"
+    # 훅은 셸이 해석한다 — 설치 폴더에 공백이나 `$`·`;`가 있으면 그대로 쓰면 깨지거나 해석된다. 안전한 경로는
+    # 그대로 두므로(보통의 설치) 이미 등록된 항목과 문자열이 같다.
+    return f"{shell_quote_path(str(root / 'server' / 'agent_hook.sh'))} {EVENTS[event]} claude"
 
 
 def load_settings(path: Path) -> dict:
