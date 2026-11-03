@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 - The bottom status bar moved to the top as a full-width, Mac-style **menu bar** (28px, on every skin; wide and regular screens only). The tab row sits below it, and the rail, dock and page start under it. Settings → 하단바 is now **메뉴바** and keeps your saved chip layout.
+- Frontend tooling: `vite-plugin-solid` 2.11.14 → 2.11.15 (patch). vite 8 and jsdom 30 were deliberately not taken: vite 8 no longer bundles esbuild, so `vite.config.js` (which calls `transformWithEsbuild`) fails to build, and jsdom 30 changes focus restoration after `click()` and breaks one voice-panel test.
 
 ### Added
 - **FarShell menu** at the left of the menu bar: new session, quick open, copy the access address, settings and menu bar settings.
