@@ -21,21 +21,31 @@ on:
         required: true
 
 permissions:
-  contents: write   # 릴리스 생성에 필요. 그 외 권한은 주지 않는다.
+  contents: write       # 릴리스 생성에 필요.
+  id-token: write       # 빌드 출처 증명(attest-build-provenance) — 서명용 단기 토큰.
+  attestations: write   # 증명을 저장소에 기록한다. 그 외 권한은 주지 않는다.
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
           fetch-depth: 0   # CHANGELOG 전체가 필요하다(릴리스 노트 추출)
 
+      # 입력과 ref 이름은 **환경변수로** 받는다 — `${{ … }}`를 셸 스크립트 안에 직접 쓰면 값이 코드가 된다
+      # (태그 이름이나 수동 실행 입력에 `$(…)`를 넣을 수 있다). 형식도 확인해 이후 단계가 안심하고 쓰게 한다.
       - name: 태그·버전 확정
         id: ver
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          TAG="${INPUT_TAG:-$REF_NAME}"
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.]+)?$'; then
+            echo "태그 형식이 올바르지 않습니다: $TAG" >&2; exit 1
+          fi
           VERSION="${TAG#v}"
           echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -49,7 +59,7 @@ jobs:
           echo "VERSION 파일: $FILE_VERSION / 태그: ${{ steps.ver.outputs.version }}"
           [ "$FILE_VERSION" = "${{ steps.ver.outputs.version }}" ]
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
         with:
           node-version: '20'
           cache: 'npm'
@@ -97,9 +107,23 @@ jobs:
           # tarball로 설치하는 경로가 실제로 성립하는지 확인 — dist가 빠지면
           # 사용자는 node를 요구받게 되고, 이 릴리스의 목적 자체가 무너진다.
           tar tzf "$NAME.tar.gz" | grep -q "$NAME/frontend/dist/app.js"
+          # 받은 사람이 파일이 온전한지 확인할 수 있게 해시를 같이 올린다(`shasum -a 256 -c`).
+          shasum -a 256 "$NAME.tar.gz" > "$NAME.tar.gz.sha256"
+          cat "$NAME.tar.gz.sha256"
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
-          files: farshell-*.tar.gz
+          files: |
+            farshell-*.tar.gz
+            farshell-*.tar.gz.sha256
           body_path: RELEASE_NOTES.md
+
+      # 빌드 출처 증명 — 이 tarball 이 이 저장소의 이 워크플로·이 커밋에서 만들어졌다는 서명된 기록
+      # (`gh attestation verify farshell-X.Y.Z.tar.gz --repo <owner>/<repo>`). 공개 저장소에서 처음 태그를
+      # 달 때까지 한 번도 돌려 보지 못했으므로, 안 되더라도 릴리스 자체는 막지 않는다.
+      - name: 빌드 출처 증명
+        continue-on-error: true
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-path: farshell-*.tar.gz
