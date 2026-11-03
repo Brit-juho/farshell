@@ -21,9 +21,11 @@ fsh start --voice                      # also start the Voice Daemon
 | `lan` | Devices on the same network only | none |
 | `localhost` | This Mac only | none |
 
-- **`all` refuses to start without auth.** A public URL with no auth is a remote shell open to the world.
-  Set `fsh password` (web sign-in password) or `VT_AUTH_TOKEN` (machine token) first.
-  To open it anyway, run `fsh start --force`.
+- **No scope starts a server without auth.** A server without auth is a shell for anyone who can reach it (same
+  network, tailnet, public URL, or a malicious web page opened on this Mac). With no password set, `fsh start`/`voice`/`clip`
+  **create a random web sign-in password, show it once in the terminal** and store only its hash. Change it with `fsh password`.
+  Outside a terminal (scripts, automatic starts) nothing is created and the start stops — run `fsh password` first.
+  If a password cannot be created and you accept the risk, `fsh start --force` still opens it.
 - If the server is already running, `--network` and `--safe` apply **from the next restart**:
   `fsh restart --network tailscale`.
 - `fsh restart` keeps the access scope you chose last time. `fsh stop` (full shutdown) clears it.

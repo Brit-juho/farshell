@@ -255,7 +255,6 @@ _t_en_lookup() {
     '그 뒤 PATH가 새 python3를 가리키는지 확인: python3 -V') _T_OUT='Then check that PATH points to the new python3: python3 -V' ;;
     '기간이 끝나거나 재부팅해도 이 포트를 자동으로 다시 열까요? (y/N)') _T_OUT='Re-open this port automatically when it expires or after a reboot? (y/N)' ;;
     '기계 토큰') _T_OUT='machine token' ;;
-    '기계용 토큰 설정') _T_OUT='Set a machine token' ;;
     '기기 이름 변경:') _T_OUT='Device renamed:' ;;
     '기기 폐기 완료 — 해당 기기의 세션도 즉시 무효화됩니다') _T_OUT='Device revoked — its sessions are invalidated immediately' ;;
     '기본 동작은 가능하지만 일부 기능 미설치. ⚠ 항목 확인 권장.') _T_OUT='Core features work, but some are missing. Review the ⚠ items.' ;;
@@ -301,7 +300,7 @@ _t_en_lookup() {
     '만료') _T_OUT='expired' ;;
     '만료된 기기 {n}개를 목록에서 지웠습니다') _T_OUT='Removed {n} expired device(s) from the list' ;;
     '맥북 시스템 클립보드 변경 감지 → 웹이 열린 기기의 클립보드로 push') _T_OUT='Watches the Mac'\''s system clipboard and pushes changes to devices with the web app open' ;;
-    '먼저 다음 중 하나를 하세요:') _T_OUT='Do one of these first:' ;;
+    '먼저 비밀번호를 설정하세요:') _T_OUT='Set a password first:' ;;
     '먼저 웹 로그인 비밀번호를 설정하세요:') _T_OUT='Set a web login password first:' ;;
     '메인 터미널') _T_OUT='Main terminal' ;;
     '메인 터미널 설정을 지웠습니다 (자동 선택)') _T_OUT='Main terminal setting cleared (auto-detect)' ;;
@@ -343,8 +342,9 @@ _t_en_lookup() {
     '붙여넣기 진단') _T_OUT='paste diagnostics' ;;
     '브라우저') _T_OUT='Browser' ;;
     '비밀번호') _T_OUT='Password' ;;
-    '비밀번호 설정 (권장)') _T_OUT='Set a password (recommended)' ;;
     '비밀번호가 비어 있습니다.') _T_OUT='The password is empty.' ;;
+    '비밀번호가 없어서 무작위 웹 로그인 비밀번호를 만들었습니다 (지금 한 번만 보여 줍니다):') _T_OUT='No password was set, so a random web login password was created (shown only this once):' ;;
+    '비밀번호를 만들지 못했습니다. fsh password 로 직접 설정하세요.') _T_OUT='Could not create a password. Set one with fsh password.' ;;
     '비밀번호에 제어문자가 들어 있습니다. 다시 입력하세요.') _T_OUT='The password contains control characters. Enter it again.' ;;
     '비활성 (DISABLED)') _T_OUT='inactive (DISABLED)' ;;
     '비활성 — 비밀번호만으로 동작 (기존과 동일)') _T_OUT='disabled — password only (same as before)' ;;
@@ -540,6 +540,7 @@ _t_en_lookup() {
     '인증 문제입니다. ~/.vt.env의 VT_AUTH_TOKEN을 확인하세요.') _T_OUT='Auth problem. Check VT_AUTH_TOKEN in ~/.vt.env.' ;;
     '인증 실패') _T_OUT='authentication failed' ;;
     '인증 앱에 등록하세요 (1Password / Authy / Google Authenticator 등)') _T_OUT='Add it to an authenticator app (1Password / Authy / Google Authenticator, etc.)' ;;
+    '인증(비밀번호)이 없어 서버를 띄우지 않습니다. 터미널에서 fsh password 로 설정하세요.') _T_OUT='No authentication (password) is set, so the server is not started. Set one in a terminal with fsh password.' ;;
     '인증(비밀번호/VT_AUTH_TOKEN)이 설정되지 않았습니다.') _T_OUT='Auth (password / VT_AUTH_TOKEN) isn'\''t set up.' ;;
     '인증:    ') _T_OUT='Auth:     ' ;;
     '인증:       ') _T_OUT='Auth:        ' ;;
@@ -556,6 +557,7 @@ _t_en_lookup() {
     '재시작 실패') _T_OUT='Restart failed' ;;
     '재시작 완료') _T_OUT='Restarted' ;;
     '저장 위치:') _T_OUT='Stored in:' ;;
+    '저장된 것은 해시뿐이라 다시 볼 수 없습니다. 바꾸려면: fsh password') _T_OUT='Only its hash is stored, so it cannot be shown again. To change it: fsh password' ;;
     '적용하려면 서버 재시작: fsh restart') _T_OUT='To apply it, restart the server: fsh restart' ;;
     '적용하려면: fsh restart --network {mode}') _T_OUT='To apply it: fsh restart --network {mode}' ;;
     '전달할 내용 (stdin):') _T_OUT='Payload (stdin):' ;;

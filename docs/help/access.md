@@ -21,9 +21,11 @@ fsh start --voice                      # Voice Daemon도 함께
 | `lan` | 같은 네트워크 기기만 | 없음 |
 | `localhost` | 이 맥만 | 없음 |
 
-- **`all`은 인증이 없으면 시작을 거부한다.** 공개 주소가 곧 인증 없는 원격 셸이 되기 때문이다.
-  먼저 `fsh password`(웹 로그인 비밀번호) 또는 `VT_AUTH_TOKEN`(기계용 토큰)을 설정한다.
-  위험을 알고도 열려면 `fsh start --force`.
+- **어느 범위든 인증 없이는 서버를 띄우지 않는다.** 인증 없는 서버는 닿는 누구나(같은 망·tailnet·공개 주소,
+  또는 이 맥에서 연 악성 웹페이지)에게 셸이다. 비밀번호가 없으면 `fsh start`·`voice`·`clip`이 **무작위 웹 로그인
+  비밀번호를 만들어 터미널에 한 번만 보여 주고** 해시만 저장한다. 바꾸려면 `fsh password`.
+  터미널이 아닌 곳(스크립트·자동 실행)에서는 만들지 않고 멈춘다 — 먼저 `fsh password`를 실행한다.
+  비밀번호를 만들 수 없을 때 위험을 알고도 열려면 `fsh start --force`.
 - 이미 서버가 떠 있으면 `--network`/`--safe`는 **다음 재시작부터** 적용된다:
   `fsh restart --network tailscale`.
 - `fsh restart`는 직전에 정한 접근 범위를 그대로 이어간다. `fsh stop`(전체 종료)을 하면 기록이 지워진다.

@@ -101,16 +101,17 @@ fsh shell-init zsh     # 셸 init 스니펫 출력 (출력한 스니펫을 ~/.zs
 ```bash
 fsh start --network <범위>             # localhost | lan | tailscale | all (기본값)
 fsh start --safe                       # 위험 명령(rm -rf /, sudo 등) 사전 차단
-fsh start --force                      # 인증(비밀번호/토큰) 미설정이어도 공개 터널 강행 — 비권장
+fsh start --force                      # 비밀번호를 만들 수 없어도 그대로 시작 — 비권장
 fsh mobile --e2e                       # X25519 핸드셰이크 + NaCl SecretBox E2E 암호화
                                        #   (서버 장기 신원키로 서명 — TOFU pinning, 첫 접속 신뢰)
 fsh mobile --temp                      # 이 QR로 등록한 기기는 1일 뒤 만료
 fsh mobile --session <tmux세션>        # 폰이 열릴 때 이 tmux 세션을 바로 보기 (fsh handoff mobile과 같음)
 ```
 
-`--network all`(기본)로 공개 터널을 열려면 먼저 `fsh password` 또는 `VT_AUTH_TOKEN`으로 인증을
-설정해야 합니다 — 설정하지 않으면 `fsh start`가 거부합니다(인증 없는 원격 코드 실행 방지).
-위험을 알고도 진행하려면 `fsh start --force`.
+어느 범위든 인증 없이는 서버를 띄우지 않습니다(인증 없는 원격 코드 실행 방지). 비밀번호가 없으면
+`fsh start`·`voice`·`clip`이 무작위 웹 로그인 비밀번호를 만들어 터미널에 한 번만 보여 주고 scrypt 해시만
+저장합니다(바꾸려면 `fsh password`). 터미널이 아닌 곳에서는 아무것도 만들지 않고 멈춥니다.
+`fsh start --force`는 비밀번호를 만들 수 없을 때 위험을 알고 진행하는 경우에만 씁니다.
 
 예전엔 이 옵션들이 `fsh mobile`에 있었습니다. `mobile`에 `--network`/`--safe`/`--force`를 주면
 `fsh start`를 대신 실행하고 안내를 출력합니다. 자세히: `fsh help access`.

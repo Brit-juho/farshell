@@ -117,17 +117,18 @@ Start a session the short way: `fsh claude [name] [--resume <conversation>] [--b
 ```bash
 fsh start --network <scope>            # localhost | lan | tailscale | all (default)
 fsh start --safe                       # Pre-block dangerous commands (rm -rf /, sudo, etc.)
-fsh start --force                      # Force a public tunnel even without auth (password/token) set — not recommended
+fsh start --force                      # Start even if no password could be created — not recommended
 fsh mobile --e2e                       # X25519 handshake + NaCl SecretBox E2E encryption
                                        #   (signed with the server's long-term identity key — TOFU pinning, trust on first connect)
 fsh mobile --session <tmux-session>    # the phone opens straight into this tmux session (also: fsh handoff mobile)
 fsh mobile --temp                      # The device registered by this QR expires after 1 day (fixed) — for lending access briefly
 ```
 
-To open a public tunnel with `--network all` (the default), you must first set up
-authentication via `fsh password` or `VT_AUTH_TOKEN` — if unset, `fsh start` is rejected
-(to prevent unauthenticated remote code execution). To proceed anyway at your own
-risk, use `fsh start --force`.
+No scope starts a server without authentication (to prevent unauthenticated remote code
+execution). With no password set, `fsh start` / `voice` / `clip` create a random web sign-in
+password, show it once in the terminal and store only its scrypt hash (change it with
+`fsh password`); outside a terminal they create nothing and stop. `fsh start --force` is
+only for the case where no password could be created and you accept the risk.
 
 The options used to live on `fsh mobile`; passing `--network`/`--safe`/`--force` to it still
 works (it runs `fsh start` for you) but prints a notice. Details: `fsh help access`.

@@ -41,6 +41,8 @@ fi
 [ -f "$VT_DIR/lib/i18n.sh" ] && . "$VT_DIR/lib/i18n.sh"
 # shellcheck source=../lib/fsh_client.sh
 [ -f "$VT_DIR/lib/fsh_client.sh" ] && . "$VT_DIR/lib/fsh_client.sh"
+# shellcheck source=../lib/auth_bootstrap.sh
+. "$VT_DIR/lib/auth_bootstrap.sh"
 
 # 설정 파일 로드 — defaults 먼저, 그 다음 사용자 override.
 #
@@ -266,6 +268,9 @@ _start_server() {
     echo "✓ $(_t '서버 이미 실행 중 (port {port})' port="$VT_PORT")"
     return 0
   fi
+  # 어느 경로로 띄우든(start·voice·clip·restart) 인증 없이는 뜨지 않는다(lib/auth_bootstrap.sh).
+  # --force 로 공개 터널을 감수한 start 만 예외다(_VT_FORCE_NO_AUTH, cmd_start).
+  _vt_ensure_auth || [ "${_VT_FORCE_NO_AUTH:-}" = 1 ] || return 1
   echo "▸ $(_t '서버 시작 중...')"
   cd "$VT_DIR/server"
   # VT_NETWORK_MODE를 실제 bind 주소에 반영한다. 예전엔 무조건 0.0.0.0으로 열고
@@ -1493,9 +1498,7 @@ _require_auth_for_public() {
   echo "    이 맥에서 명령을 실행할 수 있습니다."
   fi
   echo ""
-  echo "    $(_t '먼저 다음 중 하나를 하세요:')"
-  echo "      fsh password              $(_t '비밀번호 설정 (권장)')"
-  echo "      export VT_AUTH_TOKEN=... $(_t '기계용 토큰 설정')"
+  echo "    $(_t '먼저 비밀번호를 설정하세요:') fsh password"
   echo ""
   echo "    $(_t '공개하지 않으려면: fsh start --network tailscale   (또는 lan / localhost)')"
   echo "    $(_t '위험을 감수하고 그대로 진행하려면: fsh start --force')"
@@ -1562,6 +1565,11 @@ cmd_start() {
   esac
   export VT_NETWORK_MODE="$network_mode"
 
+  # 인증이 없으면 여기서 무작위 비밀번호를 만든다(터미널일 때만). 못 만들면 --force 가 아닌 한 멈춘다.
+  if ! _port_in_use "$VT_PORT"; then
+    _vt_ensure_auth || [ "$want_force" -eq 1 ] || return 1
+  fi
+  [ "$want_force" -eq 1 ] && _VT_FORCE_NO_AUTH=1
   if [ "$network_mode" = "all" ]; then
     _require_auth_for_public "$want_force" || return 1
   fi
