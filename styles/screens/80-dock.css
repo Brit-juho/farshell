@@ -330,8 +330,6 @@
   background:var(--win); border:1px solid var(--line);
 }
 .vt-pane-body.vt-pane-viewer .vt-pane-share { right:calc(var(--spacing) * 3 + 32px); }
-/* 파일 탭에서 연 공유 다이얼로그의 스냅샷 안내 — 필드 안쪽 들여쓰기(20px)가 아닌 맨 위 줄이다. */
-.vt-fl-share-card .vt-vw-body > .vt-fl-hint { margin:0 0 calc(var(--spacing) * 3); }
 /* 뷰어 페인이 열려 있으면 온보딩(세션 0개 안내)은 나오지 않는다 — 볼 것이 있다. */
 body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 
@@ -458,23 +456,18 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 .vt-fl-gauge-fill.warn{ background:var(--err); }
 .vt-fl-footer-text{ margin-top:calc(var(--spacing) * 1.5); font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
 
-/* 링크 발급 다이얼로그(§3 화면 3b). dock 안이 아니라 항상 모달이다 — 발급은
-   되돌리기 전에 한 번 더 보게 해야 하는 조작이라 화면을 덮는 게 맞다. */
-.vt-fl-share-card{ max-width:420px; }
-.vt-fl-field{ margin-bottom:calc(var(--spacing) * 3); }
-.vt-fl-field-label{
-  margin-bottom:calc(var(--spacing) * 1.5);
-}
-.vt-fl-radio{ display:block; font:400 var(--fs-sm) var(--ui); color:var(--txt); margin-bottom:calc(var(--spacing) * 1.5); cursor:pointer; }
-.vt-fl-radio.disabled{ opacity:.5; cursor:not-allowed; }
-.vt-fl-hint{ display:block; font:400 var(--fs-2xs) var(--mono); color:var(--sub); margin-left:20px; }
-.vt-fl-input{
-  width:100%;
-  /* 16px — iOS 확대 방지(.vt-q-compose와 같은 이유) */;
-}
-.vt-fl-check{ display:block; font:400 var(--fs-sm) var(--ui); color:var(--txt); margin-bottom:calc(var(--spacing) * 3); cursor:pointer; }
-.vt-fl-share-actions{ display:flex; justify-content:flex-end; margin-bottom:calc(var(--spacing) * 3); }
-.vt-fl-share-list{ border-top:1px solid var(--line); padding-top:calc(var(--spacing) * 2); }
+/* 링크 발급 다이얼로그(§3 화면 3b). 뼈대는 core/dialog.js의 openDialog, 필드·라디오 카드·버튼줄은
+   세션 공유 다이얼로그와 같은 .vt-share-* / .vt-dialog-actions 를 쓴다(components.css). 여기는 이
+   화면에만 있는 것 — 만료 select 폭, 1회용 행, 발급된 링크 목록 — 만 남긴다. 발급은 되돌리기 전에 한 번
+   더 보게 해야 하는 조작이라 dock 안이 아니라 항상 모달이다. */
+.vt-fl-input{ width:100%; box-sizing:border-box; }
+.vt-share-mode-disabled{ opacity:.5; cursor:not-allowed; }
+.vt-fl-once{ margin:0 0 calc(var(--spacing) * 4); }
+.vt-fl-once input{ margin:0; accent-color:var(--acc); }
+.vt-fl-issued{ margin-top:calc(var(--spacing) * 5); padding-top:calc(var(--spacing) * 3); border-top:1px solid var(--line); }
+.vt-fl-issued .vt-share-label{ margin:0 0 calc(var(--spacing) * 1); }
+.vt-fl-hint{ display:block; font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
+.vt-fl-share-list{ min-height:0; }
 .vt-fl-share-row{ display:flex; align-items:center; gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 1.5) 0; }
 .vt-fl-share-label{ flex:1 1 auto; min-width:0; font:400 var(--fs-xs) var(--mono); color:var(--txt); }
 .vt-fl-share-row .vt-fl-act{ font:500 var(--fs-2xs) var(--mono); padding:0 calc(var(--spacing) * 1.5); min-width:auto; }

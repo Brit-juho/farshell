@@ -214,8 +214,8 @@ export function WorktreeDialog(props: Props) {
           </Show>
         </div>
         <div class="vt-wtd-foot">
-          <button type="button" class="vt-wtd-cancel" onClick={props.onClose}>{t('취소')}</button>
-          <button type="button" class="vt-wtd-submit" disabled={!canSubmit()} onClick={submit}>
+          <button type="button" class="vt-btn lg vt-wtd-cancel" onClick={props.onClose}>{t('취소')}</button>
+          <button type="button" class="vt-btn lg solid vt-wtd-submit" disabled={!canSubmit()} onClick={submit}>
             {submitting() ? t('만드는 중…') : t('만들고 전환')}
           </button>
         </div>
