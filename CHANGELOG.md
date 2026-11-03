@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 - The bottom status bar moved to the top as a full-width, Mac-style **menu bar** (28px, on every skin; wide and regular screens only). The tab row sits below it, and the rail, dock and page start under it. Settings → 하단바 is now **메뉴바** and keeps your saved chip layout.
+- Dependabot: vite and jsdom major updates are ignored until the vite 8 build config and one jsdom 30 test are sorted out, and pip version-update PRs are off (they only raised `>=` floors, which would break the voice install on Python 3.11; security updates still arrive).
 
 ### Added
 - **FarShell menu** at the left of the menu bar: new session, quick open, copy the access address, settings and menu bar settings.
