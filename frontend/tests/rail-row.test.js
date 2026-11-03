@@ -148,7 +148,8 @@ test('내부 에이전트는 기록 조회로, 위임 세션은 별도 레이블
   ] } };
   env.mountNativeChildren(root, row);
   assert.match(root.querySelector('.vt-child-heading').textContent, /에이전트 내부기록 조회/);
-  assert.match(root.querySelector('.vt-native-tool').textContent, /Bash/);
+  assert.strictEqual(root.querySelector('.vt-native-tool'), null, '도구 줄은 그리지 않는다 — 호출마다 생겼다 사라져 깜빡인다');
+  assert.ok(!/Bash/.test(root.querySelector('.vt-native-row').textContent), '행에 도구 이름이 새지 않는다');
   env.mountRow(root, { row, kidsCount: 1, progress: { reported: 0, open: 1 }, onToggleKids() {}, onOpen() {}, onContext() {} });
   assert.match(root.querySelector('.vt-srow-kids').textContent, /위임 보고 0\/1/);
   assert.match(root.querySelector('.vt-native-chip').textContent, /내부 1 작업 중/);
