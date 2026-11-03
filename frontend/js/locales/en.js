@@ -1107,7 +1107,6 @@ window.__VT_I18N = {
   "{name} {tool} 스킬 꺼짐": "{name} {tool} skill off",
   "{name} {tool} 스킬 켜짐": "{name} {tool} skill on",
   "{name} · {key} 값": "{name} · {key} value",
-  "{name} · {label} · 확인 안 함": "{name} · {label} · unseen",
   "{name} · 읽기 전용": "{name} · read-only",
   "{name} — 호스트가 돌아오면 이 자리에 복구됩니다.": "{name} — restores here when the host comes back.",
   "{name} 관리 대상": "{name} managed for",
