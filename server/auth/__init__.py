@@ -565,6 +565,18 @@ def _cli(argv: list) -> int:
     cmd = argv[0] if argv else "status"
     arg = argv[1] if len(argv) > 1 else ""
 
+    if cmd == "generate-password":
+        # 인증 없이 기동하려 할 때 bin/fsh가 부른다(lib/auth_bootstrap.sh). 1행 원문, 2행 scrypt 해시.
+        # 원문은 이 stdout(셸 변수)으로만 나간다 — argv·환경변수·파일에는 남지 않는다.
+        # 20자 × 31글자 알파벳(헷갈리는 0/o/1/l/i 제외 소문자+숫자) ≈ 99비트. 소문자·숫자·하이픈만이라
+        # 로그인 폼의 한글 IME 역변환(gate.js)과 폰 키보드에서도 그대로 입력된다.
+        import secrets as _secrets
+        alphabet = "abcdefghjkmnpqrstuvwxyz23456789"
+        raw = "".join(_secrets.choice(alphabet) for _ in range(20))
+        pw = "-".join(raw[i:i + 5] for i in range(0, 20, 5))
+        print(pw)
+        print(hash_password(pw))
+        return 0
     if cmd == "otp-setup":
         secret = totp_new_secret()
         print(json.dumps({"secret": secret, "uri": totp_uri(secret)}, ensure_ascii=False))
