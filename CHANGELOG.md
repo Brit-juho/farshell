@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 - The bottom status bar moved to the top as a full-width, Mac-style **menu bar** (28px, on every skin; wide and regular screens only). The tab row sits below it, and the rail, dock and page start under it. Settings → 하단바 is now **메뉴바** and keeps your saved chip layout.
+- GitHub Actions in CI and the release workflow moved to their current majors (checkout 7, setup-node 7, setup-python 7, upload-artifact 7, action-gh-release 3), still pinned to commit SHAs. The majors only move the actions to the Node 24 runtime; verified with a full CI run on `dev`.
 
 ### Added
 - **FarShell menu** at the left of the menu bar: new session, quick open, copy the access address, settings and menu bar settings.
