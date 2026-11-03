@@ -42,6 +42,7 @@ import network_access
 import port_proxy
 import tunnel
 import vt_paths
+from host_guard import HostGuardMiddleware
 from deps import pty_mgr, output_watcher
 from routes.pty import router as pty_router, on_task_complete
 from routes.tmux import router as tmux_router
@@ -629,8 +630,11 @@ if _cors:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-# Origin 검사는 가장 바깥 — 인증 여부와 무관하게 크로스 사이트 접근을 먼저 끊는다.
+# Origin 검사 — 인증 여부와 무관하게 크로스 사이트 접근을 먼저 끊는다.
 app.add_middleware(OriginGuardMiddleware)
+# Host 허용 목록이 가장 바깥 — DNS rebinding이면 Origin과 Host가 둘 다 공격자 이름이라 Origin 검사가
+# 통과시킨다. 그 이름 자체를 받지 않는다(host_guard.py).
+app.add_middleware(HostGuardMiddleware)
 
 # 정적 파일
 #

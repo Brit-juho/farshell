@@ -178,6 +178,7 @@ BOUNDARY_KEYS = (
     "VT_BROWSE_ROOTS",        # 코드 뷰어 열람 경계
     "VT_NETWORK_MODE",        # IP 필터
     "VT_ALLOWED_ORIGINS",     # 교차 출처 허용
+    "VT_ALLOWED_HOSTS",       # Host 허용 목록(DNS rebinding)
     "VT_TRUST_PROXY",         # 프록시 헤더 신뢰 여부
     "VT_AUTH_TOKEN",          # 기계 토큰
     "VT_AUTH_PASSWORD_HASH",  # 웹 로그인 비밀번호 해시
