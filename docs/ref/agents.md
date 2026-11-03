@@ -279,7 +279,7 @@ The user shares an ordinary tmux session (nickname + `read`/`readwrite`) and the
 ## Native subagents
 
 Native CLI children appear below their parent in the expanded desktop rail; Fleet shows
-a count chip that opens the child list and fullscreen record sheet. These are read-only records, separate from delegated tmux sessions.
+a count chip that opens the child list and fullscreen record sheet. These are read-only records, separate from delegated tmux sessions. A row shows name, state and elapsed time only — the child's current tool is not drawn (it appears and vanishes with every call, so it flickered); the record viewer still lists tool calls.
 The record viewer shows instructions, responses and tool calls/results as literal text.
 Thinking/reasoning is excluded by the server. API details live in [API.md](../../API.md#native-subagent-transcripts).
 

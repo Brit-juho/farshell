@@ -61,7 +61,6 @@ export function NativeChildren(props: { row: SessionRow }) {
           <span class="vt-native-name">{child.label}</span>
           <span class="vt-native-time">{formatRelativeTime(child.started_at)}</span>
         </span>
-        <Show when={child.tool}><span class="vt-native-tool">{child.tool}</span></Show>
       </span>
     </button>
     <button type="button" class="vt-icon-btn xs vt-native-menu-btn" aria-label={t('서브에이전트 메뉴')} aria-haspopup="menu" onClick={(e) => openMenu(e, child)} innerHTML={icon('more-horizontal', 14, 2)} />
