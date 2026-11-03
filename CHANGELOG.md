@@ -8,6 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+- The first `fsh restart` after upgrading to 2.7 no longer says the access address changed when it did not (it read the tunnel log before moving it to its new folder).
+
 ---
 
 ## [2.7.0] — 2026-11-03
