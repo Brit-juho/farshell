@@ -9,8 +9,8 @@
 - 소유자(principal)당 진행 중 녹음은 1건이다. 새 녹음이 시작되면 이전 열린 녹음은 폐기된다(STT가 직렬이다).
 - 마지막 요청 후 IDLE_TTL초가 지나면 폐기하고, 폐기·취소한 id는 잠깐 묘비로 남겨 늦게 온 조각이
   새 녹음으로 오인되지 않게 한다.
-- 후속(부분 인식·서버 VAD)용 자리: 이어 붙은 앞부분은 `Recording.contiguous_pcm()`으로 언제든 복사해 볼 수 있다.
-  지금은 쓰지 않는다.
+- 녹음 중 처리(서버 VAD 자동 종료·부분 인식)는 voice_live.py가 `Recording.live`에 붙어서 한다. 여기서는 기록을 버리거나
+  끝낼 때 `live.close()`를 불러 그 백그라운드 작업을 정리하는 것만 책임진다(asyncio를 import하지 않는다).
 """
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ class ChunkError(Exception):
 
 class Recording:
     __slots__ = ("voice_id", "owner", "token", "parts", "pending", "pending_bytes", "total_bytes",
-                 "final_seq", "state", "result", "created", "last", "future")
+                 "final_seq", "state", "result", "created", "last", "future", "live")
 
     def __init__(self, voice_id: str, owner: str, token: str, now: float):
         self.voice_id, self.owner, self.token = voice_id, owner, token
@@ -58,6 +58,7 @@ class Recording:
         self.result: Optional[dict] = None
         self.created = self.last = now
         self.future = None                      # finishing 동안 결과를 기다리는 asyncio.Future(routes가 만든다)
+        self.live = None                        # voice_live.Live — 녹음 중 VAD·부분 인식(routes가 붙인다)
 
     @property
     def next_seq(self) -> int:
@@ -69,8 +70,19 @@ class Recording:
         return len(self.parts) - 1
 
     def contiguous_pcm(self) -> bytes:
-        """지금까지 빠짐없이 이어 붙은 PCM의 복사본(후속 단계의 중간 스냅샷용)."""
+        """지금까지 빠짐없이 이어 붙은 PCM의 복사본."""
         return b"".join(self.parts)
+
+    def tail_pcm(self, max_bytes: int) -> tuple:
+        """이어 붙은 PCM의 끝 max_bytes 이하(조각 경계 단위)의 복사본과 잘렸는지 여부. 부분 인식 스냅샷용 —
+        전체(최대 1.9MB)를 매번 복사하지 않게 필요한 끝 조각만 붙인다."""
+        picked, size = [], 0
+        for part in reversed(self.parts):
+            if size + len(part) > max_bytes and picked:
+                break
+            picked.append(part)
+            size += len(part)
+        return b"".join(reversed(picked)), len(picked) < len(self.parts)
 
     def complete(self) -> bool:
         return self.final_seq is not None and self.next_seq == self.final_seq + 1
@@ -93,8 +105,24 @@ def _clock() -> float:
     return time.monotonic()
 
 
+def _close_live(rec: Recording) -> None:
+    live, rec.live = rec.live, None
+    if live is not None:
+        try:
+            live.close()
+        except Exception:                           # 정리 실패가 기록 정리를 막지 않게
+            pass
+
+
 def reset() -> None:
+    """모든 기록을 버린다(테스트·서버 종료). 녹음 중 작업도 함께 정리한다."""
+    for rec in list(_recordings.values()):
+        _close_live(rec)
     _recordings.clear(); _by_owner.clear(); _tombstones.clear()
+
+
+def peek(owner: str, voice_id: str) -> Optional[Recording]:
+    return _recordings.get((owner, voice_id))
 
 
 def _forget(rec: Recording, reason: Optional[str], now: float) -> None:
@@ -104,6 +132,7 @@ def _forget(rec: Recording, reason: Optional[str], now: float) -> None:
         del _recordings[key]
     if _by_owner.get(rec.owner) == rec.voice_id:
         del _by_owner[rec.owner]
+    _close_live(rec)
     rec.parts, rec.pending = [], {}
     rec.pending_bytes = 0
     if reason:
@@ -203,6 +232,7 @@ def accept(voice_id: str, owner: str, token: str, seq: int, data: bytes, final: 
             _forget(rec, "rejected", now)
             raise ChunkError(400, "empty_recording", tr("녹음된 소리가 없습니다"))
         rec.state = "finishing"
+        _close_live(rec)                             # 최종 인식이 맡는다 — 진행 중 부분 인식 결과는 버린다
         if _by_owner.get(owner) == voice_id:        # 인식이 도는 동안 같은 소유자의 새 녹음을 막지 않는다
             del _by_owner[owner]
         return Outcome("complete", rec.ack_seq, rec)
@@ -254,6 +284,7 @@ def take_pcm(rec: Recording) -> bytes:
 
 def finish(rec: Recording, result: dict, now: Optional[float] = None) -> None:
     """인식이 끝났다 — 조각 메모리는 놓고 결과만 DONE_TTL 동안 남긴다(재전송 응답용)."""
+    _close_live(rec)
     rec.state = "done"
     rec.result = result
     rec.parts, rec.pending, rec.pending_bytes = [], {}, 0

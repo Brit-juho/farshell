@@ -70,6 +70,29 @@ test('자동 재생 차단 후 취소하면 수동 재생 버튼과 오디오를
   assert.ok(w.voiceWS.sent.some((m) => m.id === 'one' && m.status === 'cancelled'));
 });
 
+test('녹음 중 재연결돼도 TTS를 재생하지 않고 일시정지를 다시 보내며, 녹음이 끝나면 다시 재생한다', async () => {
+  const { w, recording } = await build();
+  let played = 0;
+  w.Audio = class { pause() {} load() {} removeAttribute() {} play() { played++; return Promise.resolve(); } };
+  w.voiceWS.onmessage({ data: JSON.stringify({ type: 'voice_connected', generation: 'g' }) });
+  await recording.startRecording();
+  assert.ok(w.voiceWS.sent.some((m) => m.type === 'voice_barge' && m.pause === true));
+  w.voiceWS.sent = [];
+  // 녹음 중 웹소켓 재연결(서버는 끊긴 화면의 일시정지를 지운다) — 다시 보낸다
+  w.voiceWS.onmessage({ data: JSON.stringify({ type: 'voice_connected', generation: 'g2' }) });
+  assert.deepStrictEqual(w.voiceWS.sent[0], { type: 'voice_barge', pause: true });   // 연결 직후 맨 먼저
+  // 그 틈에 도착한 음성은 재생하지 않고 취소로 알린다
+  await w.voiceWS.onmessage({ data: JSON.stringify({ type: 'voice_audio', id: 'late', generation: 'g2', name: 'A', media_type: 'audio/wav', audio: w.btoa('audio') }) });
+  await flush();
+  assert.strictEqual(played, 0);
+  assert.ok(w.voiceWS.sent.some((m) => m.id === 'late' && m.status === 'cancelled'));
+  recording.stopRecording(); await flush(); await flush();
+  assert.ok(w.voiceWS.sent.some((m) => m.type === 'voice_barge' && m.pause === false));
+  await w.voiceWS.onmessage({ data: JSON.stringify({ type: 'voice_audio', id: 'next', generation: 'g2', name: 'A', media_type: 'audio/wav', audio: w.btoa('audio') }) });
+  await flush();
+  assert.strictEqual(played, 1);
+});
+
 const uniq = (requests, part) => requests.filter((r) => r.url.includes(part)).length;
 
 test('마이크가 없으면 입력 대상을 만들지 않고 이전 재전송 보관분도 건드리지 않는다', async () => {

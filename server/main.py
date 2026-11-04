@@ -568,6 +568,7 @@ async def lifespan(_app: FastAPI):
         await coordinator.close()
         stt_idle_task.cancel()
         voice_chunks_task.cancel()
+        voice_chunks.reset()            # 녹음 중 부분 인식 작업까지 취소한다
         files_cleanup_task.cancel()
         with suppress(asyncio.CancelledError):
             await stt_idle_task

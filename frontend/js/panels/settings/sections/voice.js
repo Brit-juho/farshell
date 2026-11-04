@@ -2,7 +2,8 @@ import { renderSessionVoice, renderVoiceDefaults } from './voice-session.js';
 import { vtFetch } from '../../../core/api.js';
 import { activeSessionId, getSession } from '../../../core/store.js';
 import { mountClients } from '../../../layout/clients.js';
-import { row, statusLine, toast, renderItems, group } from '../controls.js';
+import { row, statusLine, toast, renderItems, group, boolControl } from '../controls.js';
+import { scopeOf } from '../../../core/settings.js';
 import { renderVoiceInput, cleanupVoiceModels } from './voice-models.js';
 import { togglePush, refreshPushLabel } from '../../../pushui.js';
 import { getAction } from '../../../core/dom.js';
@@ -75,6 +76,15 @@ export function renderVoiceSection() {
   statusBtn.textContent = t('음성 상태 열기');
   statusBtn.addEventListener('click', () => getAction('voice.status')?.());
   vm.input.prepend(row(t('입력 현황'), statusBtn));
+  // 녹음 중 처리 — 서버가 녹음 시작에 읽는다(녹음 중에 바꾸면 다음 녹음부터). 파일 한 번 전송(폴백) 경로에는 없다.
+  vm.input.append(
+    row(t('자동 종료'), boolControl('voice.autoStop'),
+      t('말이 끝나고 1초 동안 조용하면 녹음을 자동으로 끝내고 전송합니다. 말을 시작하지 않으면 끝내지 않습니다.'),
+      { scope: scopeOf('voice.autoStop'), key: 'voice.autoStop' }),
+    row(t('부분 결과 표시'), boolControl('voice.partialResults'),
+      t('녹음하는 동안 인식 중인 문장을 흐리게 미리 보여 줍니다. 입력은 녹음이 끝난 뒤 최종 결과로만 합니다. 서버의 음성 인식을 더 씁니다.'),
+      { scope: scopeOf('voice.partialResults'), key: 'voice.partialResults' }),
+  );
 
   // 5. 음성 전용 모드 — 실제 토글 로직·시각 상태(.active)는
   // voice/media-session.js의 toggleVoiceOnly()가 갖고 있다(그 파일은 별도

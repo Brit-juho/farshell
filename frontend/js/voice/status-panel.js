@@ -26,6 +26,7 @@ export function mountVoiceStatus() {
   const meta = document.getElementById('voice-record-meta');
   const record = document.getElementById('voice-panel-record');
   const meter = document.getElementById('voice-meter');
+  const partial = document.getElementById('voice-partial');
   const close = document.getElementById('voice-status-close');
   // 별도 버튼은 두지 않는다 — 마이크 버튼이 녹음 토글이면서 상태 점(data-voice-state)을 겸하고,
   // 길게 누르기·우클릭·팔레트(voice.status)로 이 패널을 연다.
@@ -81,6 +82,21 @@ export function mountVoiceStatus() {
     meter.setAttribute('aria-valuenow', String(Math.round(v * 100)));
     if (clip) meter.dataset.clip = '1'; else delete meter.dataset.clip;
   }
+  // 부분 결과 — 서버가 녹음 중에 인식한 미리보기(voice 번들이 'vt:voice-partial'로 보낸다). 입력되지 않으며
+  // 녹음·인식 중에만 보이고, 최종 결과·오류·새 녹음이 오면 지운다. 스크린리더에는 읽히지 않게 aria-live를 두지 않는다
+  // (1.5초마다 바뀌어 최종 결과 낭독을 가린다).
+  function paintPartial(text, clipped) {
+    if (!partial) return;
+    const s = typeof text === 'string' ? text.trim() : '';
+    partial.textContent = s ? (clipped ? '… ' : '') + s : '';
+    partial.hidden = !s;
+    if (s) partial.title = t('미리 보기 — 녹음이 끝나면 다시 인식합니다');
+    else partial.removeAttribute('title');
+  }
+  window.addEventListener('vt:voice-partial', (e) => {
+    if (phase !== 'recording' && phase !== 'processing') return;
+    paintPartial(e.detail?.text, e.detail?.clipped === true);
+  });
   window.addEventListener('vt:voice-level', (e) => {
     if (phase !== 'recording') return;
     const now = performance.now();
@@ -161,6 +177,7 @@ export function mountVoiceStatus() {
     phase = e.detail.phase;
     if (e.detail.target !== undefined) targetName = e.detail.target;
     if (phase === 'recording') startedAt = Date.now();
+    if (phase !== 'recording' && phase !== 'processing') paintPartial('');
     paintMic(); paintRecord(); open(mic);
     if (['idle', 'ready', 'error', 'done'].includes(phase)) refresh();
   });

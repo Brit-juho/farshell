@@ -231,6 +231,32 @@ def transcribe_wav(wav: bytes, language: Optional[str]) -> tuple:
     return text, timing
 
 
+def transcribe_partial(wav: bytes, language: Optional[str]) -> Optional[str]:
+    """녹음 중 부분 인식(블로킹, 스레드에서 부른다). **기다리지 않는다** — 다른 인식이 엔진을 쓰고 있거나 줄 서 있으면,
+    또는 고른 모델이 메모리에 올라가 있지 않으면 None(건너뜀). 모델을 올리지 않고(부분 인식 때문에 수 초짜리 적재가
+    일어나 최종 인식을 막지 않게), 줄 선 요청 수(_waiting)에 들어가지 않아 다른 요청을 Busy로 만들지 않으며,
+    마지막 오류·시간(_last_error/_last_timing)도 바꾸지 않는다(상태 화면은 최종 인식 기준). 엔진 예외는 그대로 던진다.
+
+    한계: 이미 엔진에 들어간 부분 인식은 멈출 수 없어서, 그 사이 도착한 최종 인식은 최대 부분 인식 한 번만큼 기다린다.
+    길이는 호출부(voice_live)가 창 길이와 점유율 상한으로 묶는다."""
+    with _state_lock:
+        if _waiting > 0:
+            return None
+    if not _run_lock.acquire(blocking=False):
+        return None
+    try:
+        eng = _loaded_engine()
+        sel = selection()
+        if (eng is None or not sel.valid or sel.spec is None or eng.id != sel.spec.engine
+                or eng.loaded() != sel.spec.id):
+            return None
+        text = eng.transcribe(wav, language)
+    finally:
+        _run_lock.release()
+    _touch()
+    return text
+
+
 async def idle_monitor() -> None:
     """VT_STT_IDLE_SEC(기본 600초) 동안 안 쓰면 모델을 내려 메모리를 돌려준다. 0이면 끈다."""
     try:

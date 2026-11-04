@@ -19,6 +19,7 @@ import auth
 import hashlib
 import voice_targets
 import voice_chunks
+import voice_live
 from voice_sessions import coordinator
 from deps import pty_mgr, output_watcher, notify_clients
 from i18n import tr
@@ -366,13 +367,17 @@ async def voice_chunk(request: Request):
     data = await _read_chunk_body(request)
     if isinstance(data, JSONResponse):
         return data
+    # 새 녹음이면 녹음 중 처리 설정(자동 종료·부분 결과)을 시작에 한 번 읽는다(파일 읽기라 스레드에서).
+    opts = None
+    if not final and voice_chunks.peek(owner, vid) is None:
+        opts = await asyncio.to_thread(voice_live.read_options)
     try:
         out = voice_chunks.accept(vid, owner, token, seq, data, final)
     except voice_chunks.ChunkError as e:
         return _chunk_error(e)
     rec = out.rec
     if out.kind == "ack":
-        return {"ackSeq": out.ack_seq, "complete": False}
+        return {"ackSeq": out.ack_seq, "complete": False, **_live_extras(rec, opts, request)}
     if out.kind == "done":
         return {**rec.result, "ackSeq": out.ack_seq, "complete": True, "duplicate": True}
     if out.kind == "finishing":
@@ -410,6 +415,17 @@ async def voice_chunk(request: Request):
     voice_chunks.finish(rec, result)
     fut.set_result(result)
     return {**result, "ackSeq": out.ack_seq, "complete": True}
+
+
+def _live_extras(rec, opts, request: Request) -> dict:
+    """녹음 중 처리(VAD 끝점·부분 인식)를 한 걸음 진행하고 응답에 붙일 값을 돌려준다. 실패해도 청크 수신은 계속한다."""
+    try:
+        if rec.live is None and opts is not None and rec.state == "open":
+            rec.live = voice_live.Live(opts, voice_live.stt_language(request.query_params.get("lang", "")))
+        return rec.live.advance(rec) if rec.live is not None else {}
+    except Exception as e:
+        logger.warning("voice live 처리 실패(녹음은 계속): %s", type(e).__name__)
+        return {}
 
 
 @router.post("/voice/chunk/cancel")
