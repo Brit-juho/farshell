@@ -74,9 +74,9 @@ ANON = "cloudflared tunnel --url http://localhost:7777"
 
 
 def test_records_the_single_anonymous_tunnel(tmp_path):
-    out, pid = _run(tmp_path, [(28437, ANON)])
-    assert pid == "28437"
-    assert "28437" in out
+    out, pid = _run(tmp_path, [(12345, ANON)])
+    assert pid == "12345"
+    assert "12345" in out
 
 
 def test_mail_gate_args_and_full_path_still_match(tmp_path):
@@ -98,13 +98,13 @@ def test_ignores_tunnels_that_are_not_the_main_one(tmp_path, cmd):
 
 def test_keeps_a_live_pidfile_untouched(tmp_path):
     live = str(os.getpid())  # 살아 있는 PID
-    _, pid = _run(tmp_path, [(28437, ANON)], pidfile=live)
+    _, pid = _run(tmp_path, [(12345, ANON)], pidfile=live)
     assert pid == live
 
 
 def test_replaces_a_stale_pidfile(tmp_path):
-    _, pid = _run(tmp_path, [(28437, ANON)], pidfile="999999")
-    assert pid == "28437"
+    _, pid = _run(tmp_path, [(12345, ANON)], pidfile="999999")
+    assert pid == "12345"
 
 
 def test_does_not_guess_between_several_candidates(tmp_path):
