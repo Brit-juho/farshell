@@ -40,8 +40,9 @@ async function build(o = {}) {
       const seq = Number(/seq=(\d+)/.exec(url)[1]); const final = url.includes('final=1');
       if (o.chunkFail && o.chunkFail(seq, requests.length)) throw new TypeError('network');
       chunks.push({ seq, final, bytes: opts.body.length, headers: opts.headers });
-      return final ? json({ text: '명령', injected: true, ackSeq: seq, complete: true }) : json({ ackSeq: seq, complete: false, ...(o.ackExtra ? o.ackExtra(seq) : {}) });
+      return final ? json({ ...(o.finalData || { text: '명령', injected: true }), ackSeq: seq, complete: true }) : json({ ackSeq: seq, complete: false, ...(o.ackExtra ? o.ackExtra(seq) : {}) });
     }
+    if (url.includes('/voice/inject')) return json({ injected: true, text: JSON.parse(opts.body).text, name: 'A' });
     if (url.includes('/voice/input')) return json({ text: '명령', injected: true });
     const data = url.includes('/stt/status') ? { available: true, selected_valid: true, selected_ready: true, loaded: true, model: 'm', loaded_model: 'm' }
       : url.includes('/stt/catalog') ? { models: [{ id: 'm', label: '음성 모델', model_present: true, requirements: [] }] }
@@ -171,4 +172,66 @@ test('부분 결과는 상태 패널에 흐리게 보이고, 오래된 seq는 �
   e.recording.stopRecording(); for (let i = 0; i < 5; i++) await flush();
   assert.strictEqual(el.hidden, true); assert.strictEqual(el.textContent, '');
   assert.match(e.w.document.getElementById('mic-status').textContent, /입력 완료 — A: "명령"/);
+});
+
+// 확인 후 전송 — 청크 경로도 /voice/input과 같은 확인 상자(confirm.js)를 쓴다.
+const PENDING = { text: 'ls -la', injected: false, pending_confirm: true, confirm_token: 'ctok', confirm_reason: 'shell', confirm_ttl_sec: 300, target_name: 'A' };
+
+test('PCM 경로: 모든 청크가 X-Voice-Confirm: 1을 보내고, final의 pending_confirm이면 입력 대신 확인 상자를 띄운다', async () => {
+  const e = await build({ finalData: PENDING });
+  const $ = (id) => e.w.document.getElementById(id);
+  await e.recording.startRecording();
+  e.feed(24); await flush();
+  e.recording.stopRecording(); for (let i = 0; i < 5; i++) await flush();
+  assert.ok(e.chunks.length >= 2 && e.chunks.every((c) => c.headers['X-Voice-Confirm'] === '1'));
+  assert.strictEqual(e.requests.filter((r) => r.url.includes('/voice/input')).length, 0);
+  assert.strictEqual($('voice-confirm').hidden, false);
+  assert.strictEqual($('voice-confirm-text').value, 'ls -la');
+  assert.match($('voice-confirm-reason').textContent, /A · 일반 셸에 입력하기 전에 확인/);
+  assert.ok(!/입력 완료/.test($('mic-status').textContent));
+  assert.ok(!e.requests.some((r) => r.url.includes('/voice/inject')));
+  // 고쳐서 「입력」 — 토큰·텍스트와 함께 청크 업로드에 쓴 X-Voice-Id를 보낸다(서버가 녹음 ID를 대조한다).
+  $('voice-confirm-text').value = 'ls -l';
+  $('voice-confirm-send').click(); await flush();
+  const inj = e.requests.filter((r) => r.url.includes('/voice/inject'));
+  assert.strictEqual(inj.length, 1);
+  const body = JSON.parse(inj[0].opts.body);
+  assert.deepStrictEqual([body.token, body.text, body.voice_id], ['ctok', 'ls -l', e.chunks[0].headers['X-Voice-Id']]);
+  assert.strictEqual($('voice-confirm').hidden, true);
+});
+
+test('PCM 경로: 자동 종료(endpoint) 뒤 final이 확인 대기면 확인 상자로 간다', async () => {
+  const e = await build({ finalData: PENDING, ackExtra: (seq) => (seq >= 1 ? { endpoint: true } : {}) });
+  await e.recording.startRecording();
+  e.feed(36); for (let i = 0; i < 5; i++) await flush();
+  assert.strictEqual(e.recording.isRecording, false);
+  assert.strictEqual(e.chunks.filter((c) => c.final).length, 1);
+  assert.strictEqual(e.w.document.getElementById('voice-confirm').hidden, false);
+  assert.ok(!e.requests.some((r) => r.url.includes('/voice/inject')));
+});
+
+test('PCM 경로: 부분 결과는 확인 모드에서도 입력·확인 상자와 무관하게 표시만 한다', async () => {
+  const e = await build({ finalData: PENDING, ackExtra: (seq) => ({ partial: { text: 'ls', seq, clipped: false } }) });
+  await e.recording.startRecording();
+  e.feed(12); await flush();
+  assert.strictEqual(e.w.document.getElementById('voice-partial').textContent, 'ls');
+  assert.strictEqual(e.w.document.getElementById('voice-confirm').hidden, true);
+  assert.ok(!e.requests.some((r) => r.url.includes('/voice/inject')));
+  e.recording.stopRecording(); for (let i = 0; i < 5; i++) await flush();
+  assert.strictEqual(e.w.document.getElementById('voice-partial').textContent, '');
+  assert.strictEqual(e.w.document.getElementById('voice-confirm').hidden, false);
+});
+
+test('PCM 경로: 고정한 세션이 활성 세션과 다르면 /voice/target과 청크에 고정 세션을 쓴다', async () => {
+  const e = await build();
+  e.w.localStorage.setItem('vt_voice_pin', 'B');
+  e.w.sessions = { A: { tmuxName: 'A' }, B: { tmuxName: 'B' } };
+  e.w.getSession = (id) => e.w.sessions[id];
+  await e.recording.startRecording();
+  const tr = e.requests.find((r) => r.url.includes('/voice/target'));
+  assert.strictEqual(JSON.parse(tr.opts.body).session_id, 'B');
+  e.recording.stopRecording(); for (let i = 0; i < 5; i++) await flush();
+  const chunkReqs = e.requests.filter((r) => /\/voice\/chunk\?/.test(r.url));
+  assert.ok(chunkReqs.length >= 1 && chunkReqs.every((r) => /session_id=B(&|$)/.test(r.url)));
+  assert.ok(chunkReqs.every((r) => r.opts.headers['X-Voice-Target'] === 'captured-A'));   // 서버가 B 대상으로 발급한 토큰(이 목에서는 고정값)
 });

@@ -238,8 +238,12 @@ async def _voice_input_dedup(request: Request, vid: str):
     return await _voice_dedup_run(request, vid, audio, None)
 
 
-async def _voice_dedup_run(request: Request, vid: str, audio: bytes, fmt):
-    """중복 방지 + 인식·주입. /voice/input과 /voice/chunk의 final이 같은 길을 쓴다(fmt=None이면 Content-Type으로 정한다)."""
+async def _voice_dedup_run(request: Request, vid: str, audio: bytes, fmt, confirm_ui=None):
+    """중복 방지 + 인식·주입. /voice/input과 /voice/chunk의 final이 같은 길을 쓴다(fmt=None이면 Content-Type으로 정한다).
+
+    confirm_ui: 클라이언트가 확인 화면을 그릴 수 있는가. None이면 이 요청의 `X-Voice-Confirm: 1`로 정한다
+    (청크 경로는 녹음 단위로 모은 값을 넘긴다). 확인 대기(pending_confirm) 결과도 text가 있으면 `_voice_done`에
+    남으므로, 같은 X-Voice-Id 재전송은 인식·주입을 다시 하지 않고 같은 확인 토큰을 돌려받는다."""
     owner = voice_targets.principal(request)
     token = request.headers.get("x-voice-target", "")
     sid = request.query_params.get("session_id", request.headers.get("x-session-id", ""))
@@ -267,7 +271,7 @@ async def _voice_dedup_run(request: Request, vid: str, audio: bytes, fmt):
         _voice_fingerprints[key] = fingerprint
         _voice_inflight[key] = asyncio.get_running_loop().create_future()
     try:
-        result = await _voice_input_once(request, audio, target, fmt)
+        result = await _voice_input_once(request, audio, target, fmt, confirm_ui)
     except BaseException as e:
         if vid:
             _voice_fingerprints.pop(key, None)
@@ -287,7 +291,7 @@ async def _voice_dedup_run(request: Request, vid: str, audio: bytes, fmt):
     return result
 
 
-async def _voice_input_once(request: Request, audio_bytes=None, target=None, fmt=None):
+async def _voice_input_once(request: Request, audio_bytes=None, target=None, fmt=None, confirm_ui=None):
     fmt = fmt or _audio_format(request.headers.get("content-type", ""))
     if audio_bytes is None:
         audio_bytes = await request.body()
@@ -302,40 +306,51 @@ async def _voice_input_once(request: Request, audio_bytes=None, target=None, fmt
         logger.error("STT failed: %s", e)
         return {"text": "", "error": str(e), "injected": False}
     sid = request.query_params.get("session_id", request.headers.get("x-session-id", ""))
-    injected = False
-    pending = None
-    blocked = False
-    if text and target:
-        verdict = await _confirm_verdict(request, target, text)
-        if verdict == "blocked":
-            blocked = True
-        elif verdict:
-            try:
-                pending = {
-                    "pending_confirm": True, "confirm_reason": verdict,
-                    "confirm_token": voice_confirm.issue(voice_targets.principal(request), target, _voice_id(request), target["name"]),
-                    "confirm_ttl_sec": int(voice_confirm.CONFIRM_TTL_SEC), "target_name": target["name"],
-                }
-            except ValueError as e:
-                result = {"text": text, "injected": False, "session_id": sid, "timing": timing, "error": str(e)}
-                return result
-        elif await asyncio.to_thread(voice_targets.valid, target):
-            from tmux_target import send_to_tmux
-            injected = await asyncio.to_thread(send_to_tmux, target["pane"], text)
-    elif text and sid in pty_mgr.sessions:
-        if await _confirm_verdict(request, None, text) == "blocked":
-            blocked = True
-        else:
-            pty_mgr.write(sid, (text + "\n").encode())
-            injected = True
-    result = {"text": text, "injected": injected, "session_id": sid, "timing": timing}
-    if pending:
-        result.update(pending)
-    elif blocked:
-        result["error"] = tr("위험할 수 있는 명령이라 입력하지 않았습니다. 인식 텍스트를 확인해 직접 입력해 주세요")
-    elif target and text and not injected:
-        result["error"] = tr("입력 대상이 사라졌습니다. 인식 텍스트를 복사해 주세요")
+    if confirm_ui is None:
+        confirm_ui = _confirm_ui(request)
+    result = {"text": text, "injected": False, "session_id": sid, "timing": timing}
+    result.update(await _deliver_text(voice_targets.principal(request), _voice_id(request), target, sid, text, confirm_ui))
     return result
+
+
+def _confirm_ui(request: Request) -> bool:
+    """클라이언트가 확인 화면을 그릴 수 있다고 알렸는가(`X-Voice-Confirm: 1`)."""
+    return request.headers.get("x-voice-confirm") == "1"
+
+
+async def _deliver_text(owner: str, vid: str, target, sid: str, text: str, confirm_ui: bool) -> dict:
+    """인식 결과를 확인 정책에 따라 바로 입력하거나 확인 대기로 돌린다 — /voice/input과 /voice/chunk final이 함께 쓴다.
+
+    돌려주는 값은 응답에 합칠 필드다: `injected`, 확인 대기면 `pending_confirm`·`confirm_token`·`confirm_reason`·
+    `confirm_ttl_sec`·`target_name`, 입력하지 않았으면 `error`. 확인 대기면 pane에 아무것도 쓰지 않는다."""
+    if not text:
+        return {"injected": False}
+    if target:
+        verdict = await _confirm_verdict(target, text, confirm_ui)
+        if verdict == "blocked":
+            return {"injected": False, "error": _blocked_msg()}
+        if verdict:
+            try:
+                token = voice_confirm.issue(owner, target, vid, target["name"])
+            except ValueError as e:
+                return {"injected": False, "error": str(e)}
+            return {"injected": False, "pending_confirm": True, "confirm_reason": verdict, "confirm_token": token,
+                    "confirm_ttl_sec": int(voice_confirm.CONFIRM_TTL_SEC), "target_name": target["name"]}
+        if await asyncio.to_thread(voice_targets.valid, target):
+            from tmux_target import send_to_tmux
+            if await asyncio.to_thread(send_to_tmux, target["pane"], text):
+                return {"injected": True}
+        return {"injected": False, "error": tr("입력 대상이 사라졌습니다. 인식 텍스트를 복사해 주세요")}
+    if sid in pty_mgr.sessions:                     # 구 클라이언트(대상 토큰 없음) — 확인 화면이 없으므로 위험 패턴만 막는다
+        if await _confirm_verdict(None, text, False) == "blocked":
+            return {"injected": False, "error": _blocked_msg()}
+        pty_mgr.write(sid, (text + "\n").encode())
+        return {"injected": True}
+    return {"injected": False}
+
+
+def _blocked_msg() -> str:
+    return tr("위험할 수 있는 명령이라 입력하지 않았습니다. 인식 텍스트를 확인해 직접 입력해 주세요")
 
 
 # --------------------------------------------------------------------------
@@ -367,7 +382,9 @@ async def _read_chunk_body(request: Request) -> "bytes | JSONResponse":
 
 @router.post("/voice/chunk")
 async def voice_chunk(request: Request):
-    """PCM16 LE 16kHz mono 조각 수신. `?seq=N&final=1`, 헤더 X-Voice-Id·X-Voice-Target."""
+    """PCM16 LE 16kHz mono 조각 수신. `?seq=N&final=1`, 헤더 X-Voice-Id·X-Voice-Target(·X-Voice-Confirm).
+
+    완결되면 /voice/input과 같은 `_voice_dedup_run` → `_deliver_text`를 거친다 — 확인 정책·위험 패턴·확인 토큰이 같다."""
     vid = _voice_id(request)
     if not vid:
         return JSONResponse({"error": tr("녹음 ID가 올바르지 않습니다"), "code": "bad_voice_id"}, status_code=400)
@@ -399,6 +416,8 @@ async def voice_chunk(request: Request):
     except voice_chunks.ChunkError as e:
         return _chunk_error(e)
     rec = out.rec
+    if _confirm_ui(request):
+        rec.confirm_ui = True       # 녹음의 어느 조각이든 확인 가능을 알렸으면 그 녹음은 확인 정책을 거친다(더 안전한 쪽으로만 바뀐다)
     if out.kind == "ack":
         return {"ackSeq": out.ack_seq, "complete": False, **_live_extras(rec, opts, request)}
     if out.kind == "done":
@@ -419,7 +438,7 @@ async def voice_chunk(request: Request):
     rec.future = loop.create_future()
     wav = voice_chunks.to_wav(voice_chunks.take_pcm(rec))
     try:
-        result = await _voice_dedup_run(request, vid, wav, "wav")
+        result = await _voice_dedup_run(request, vid, wav, "wav", rec.confirm_ui)
     except BaseException as e:
         fut = rec.future
         voice_chunks.reopen(rec)
@@ -468,13 +487,13 @@ async def voice_chunk_cancel(request: Request):
     return {"cancelled": outcome == "cancelled", "state": outcome}
 
 
-async def _confirm_verdict(request: Request, target, text: str):
+async def _confirm_verdict(target, text: str, confirm_ui: bool):
     """인식 결과를 바로 입력해도 되는가. None 바로 입력 · 'blocked' 입력하지 않음 · 그 밖의 문자열은 확인 사유.
 
-    확인 화면을 그릴 수 있다고 `X-Voice-Confirm: 1`로 알린 클라이언트(웹)만 확인 단계를 거친다.
+    확인 화면을 그릴 수 있다고 `X-Voice-Confirm: 1`로 알린 클라이언트(웹, confirm_ui)만 확인 단계를 거친다.
     데몬·옛 클라이언트는 확인할 방법이 없으므로 기존대로 바로 입력하되, 위험 패턴만 막는다."""
     dangerous = voice_confirm.dangerous_reason(text)
-    capable = target is not None and request.headers.get("x-voice-confirm") == "1"
+    capable = target is not None and confirm_ui
     if not capable and not dangerous:
         return None
     mode = await asyncio.to_thread(voice_confirm.read_mode)

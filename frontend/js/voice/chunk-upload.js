@@ -6,7 +6,8 @@
 // - 일시 실패(네트워크·429/502/503/504)는 retryWithBackoff로 재시도하고, 그래도 안 되면 녹음을 계속 쌓으면서
 //   GIVE_UP_MS 동안 더 기다린다. 서버는 30초 무응답이면 녹음을 폐기하므로 그 안에서 포기한다.
 // - 서버가 중간 상태를 잃었는지(응답 ackSeq가 방금 보낸 seq보다 작음)는 되돌릴 수 없는 오류로 본다.
-// - 응답에 complete:true가 오면(마지막 청크든 늦게 도착한 누락 청크든) 그것이 최종 결과다.
+// - 응답에 complete:true가 오면(마지막 청크든 늦게 도착한 누락 청크든) 그것이 최종 결과다. 확인 모드면 그 결과가
+//   pending_confirm(입력 안 함 + 확인 토큰)일 수 있다 — recording.js가 /voice/input 응답과 같은 분기로 확인 상자를 띄운다.
 // - 4xx 등 서버가 거부한 응답은 재시도하지 않고 결과로 돌려준다(recording.js가 data.error를 보여 준다).
 // - 완결 전 ack 응답은 onAck(data)로 넘긴다 — 서버가 싣는 녹음 중 값(endpoint 자동 종료 신호, partial 부분 결과)을
 //   pcm-session이 읽는다. onAck가 던져도 업로드는 계속한다.
@@ -16,13 +17,16 @@ export const GIVE_UP_MS = 25000;
 const TRANSIENT_STATUS = new Set([429, 502, 503, 504]);
 const defaultSleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** apiFetch로 POST /voice/chunk 하는 send 함수를 만든다. 일시 실패는 throw, 나머지는 {res, data}. */
+/** apiFetch로 POST /voice/chunk 하는 send 함수를 만든다. 일시 실패는 throw, 나머지는 {res, data}.
+ *  X-Voice-Confirm: 1 — 이 화면은 확인 상자(confirm.js)를 그릴 수 있다. /voice/input과 같은 뜻이며, 서버는 녹음의
+ *  어느 조각에서든 받으면 final 처리에서 확인 정책(voice.confirm)을 거쳐 pending_confirm을 돌려줄 수 있다.
+ *  모든 조각에 붙인다 — 녹음을 끝맺는 요청이 final이 아닐 수도 있다(늦게 도착한 앞 조각). */
 export function makeChunkSender({ apiFetch, base, voiceId, token, sessionId = '' }) {
   return async function send(seq, bytes, final) {
     const q = `seq=${seq}${final ? '&final=1' : ''}${sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : ''}`;
     const res = await apiFetch(`${base}/voice/chunk?${q}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream', 'X-Voice-Id': voiceId, 'X-Voice-Target': token },
+      headers: { 'Content-Type': 'application/octet-stream', 'X-Voice-Id': voiceId, 'X-Voice-Target': token, 'X-Voice-Confirm': '1' },
       body: bytes,
     });
     let data = null;
