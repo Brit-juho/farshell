@@ -62,6 +62,9 @@ export const SCHEMA = {
   // sttModel은 서버 카탈로그의 모델 id 또는 'custom:<엔진>:<owner/repo>'. 빈 값이면 서버가
   // 환경별 권장 모델로 해석한다. 형식 검증은 서버가 한다.
   'voice.sttModel':         { type: 'str',  def: '' },
+  // 확인 후 전송 — off 확인 없이 입력 · shell 일반 셸(또는 판별 불가)이면 확인, AI 에이전트 pane은 바로 입력 · on 항상 확인.
+  // 위험 명령 패턴은 off가 아니면 항상 확인한다. 서버(voice_confirm.py)가 같은 키를 workspace.json에서 읽고 값을 다시 검증한다.
+  'voice.confirm':          { type: 'enum', def: 'shell', values: ['off', 'shell', 'on'] },
   'voice.notifyMode':       { type: 'enum', def: 'off', values: ['off', 'sound', 'speak'] },
   'voice.notifyMinSec':     { type: 'int',  def: 0, min: 0, max: 600 },
   'voice.notifySuccessOnly':   { type: 'bool', def: true },
