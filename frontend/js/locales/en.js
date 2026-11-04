@@ -58,6 +58,7 @@ window.__VT_I18N = {
   "프로필로 세션을 시작합니다": "Start a session with a profile",
   "이전 권한 설정을 확인하지 못해 이어서 시작하지 않았습니다. CLI에서 직접 재개해 설정을 확인하세요": "Could not verify the previous permissions, so the conversation was not resumed. Resume in the CLI to check the settings.",
   "이전 권한 설정을 이 실행 방식으로 정확히 복원할 수 없습니다. CLI에서 직접 재개하세요": "This launch method cannot restore the previous permissions exactly. Resume directly in the CLI.",
+  "업로드 모듈을 불러오지 못했습니다 — 새로고침 후 다시 시도하세요": "Could not load the upload module — refresh and try again",
   "권한 기록이 변경됐습니다. 새로고침 후 다시 시도하세요": "The permission record changed. Refresh and try again.",
   "Codex YOLO를 켠 상태로 이어서 시작했습니다": "Resumed Codex with YOLO on",
   "Codex YOLO를 끈 상태로 이어서 시작했습니다": "Resumed Codex with YOLO off",
