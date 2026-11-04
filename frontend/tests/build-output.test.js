@@ -122,6 +122,14 @@ test('세션 탭의 뷰 편집기(layout/session-order.js)는 screens 청크에 
   assert.doesNotMatch(coreJs, /vt-order-close/);
 });
 
+test('select 드롭다운 본체(ui/select.js)와 이번에 뗀 모듈들은 지연 청크에 있고 core에는 없다', () => {
+  const selectJs = fs.readFileSync(path.join(DIST, 'select.js'), 'utf8');
+  assert.match(selectJs, /function enhanceSelect/);
+  assert.doesNotMatch(coreJs, /function enhanceSelect/);
+  assert.match(coreJs, /function watchSelects/);   // 스텁은 core에 남는다
+  assert.doesNotMatch(coreJs, /function sparkPoints|function parseInput/);   // system.js·agent-profiles.js
+});
+
 test('에이전트 공유의 대화상자와 통합 승인함(모달·권한·감사)은 share 청크에 있고 core 에는 없다(core 에는 이벤트 수신·배지·import() 만)', () => {
   // vite.config.js manualChunks 의 `/frontend/js/share/` 규칙이 빠지면 포괄 규칙이 core 로 보내
   // 상시 로드가 ~18KB 늘어난다(빌드·테스트는 통과하고 상한만 조용히 줄어든다).
