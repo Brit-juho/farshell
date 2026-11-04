@@ -57,7 +57,7 @@ import './term/e2e.js';
 import './term/clipboard.js';
 import './term/resize.js';
 import './layout/panes.js';   // L3 1단계 — 분할 pane 렌더러. session.js의 switchTo()가 이걸 거친다.
-import './term/touch.js';
+// term/touch.js는 부수효과가 없는 함수 모듈이고 xterm-setup.js가 터치 기기에서만 import()한다 — 여기서 정적 import하지 않는다.
 import './term/links.js';
 import './layout/view-actions.js';  // 뷰(탭마다 pane 트리)의 window 브리지 — 탭 줄 UI는 없다
 import './layout/menubar-slots.js'; // 720px 이상: #topbar의 남은 버튼을 메뉴바로 옮긴다

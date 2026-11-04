@@ -19,9 +19,6 @@ updates:
       frontend-tooling:
         patterns: ['*']
     ignore:
-      # vite 8(Rolldown)은 esbuild를 내장하지 않아 vite.config.js(transformWithEsbuild)가 빌드에 실패한다 — 설정을 옮긴 뒤에 푼다.
-      - dependency-name: vite
-        update-types: ['version-update:semver-major']
       # jsdom 30은 click() 뒤 포커스 복원이 달라 voice-status-panel 테스트가 깨진다 — 원인을 가린 뒤에 푼다.
       - dependency-name: jsdom
         update-types: ['version-update:semver-major']

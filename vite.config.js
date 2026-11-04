@@ -17,41 +17,11 @@
 // 완전히 분리된 두 번의 Rollup 실행**으로 나눴다 — 서로의 그래프를 아예 못
 // 보므로 청크 공유가 구조적으로 불가능해진다(대가: core/*.js 코드가 두
 // 산출물에 각각 인라인돼 중복되지만, 몇 KB 수준이라 I2의 300KB 상한에 문제없다).
-import { defineConfig, transformWithEsbuild } from 'vite';
+import { defineConfig } from 'vite';
 import tailwindcss from '@tailwindcss/vite';
 import solid from 'vite-plugin-solid';
 
 const isVoice = !!process.env.VOICE_BUILD;
-
-// 2026-10-13 — lib 모드(ES 형식)에서 Vite는 공백·주석을 줄이지 않는다(트리 셰이킹용 주석 보존이 이유).
-// `minify: true`인데도 core.js에 주석 183줄과 들여쓰기가 그대로 실려, 초기 페이로드(app+core)가
-// 300KiB 상한에 0.03KiB 남은 상태였다(문서 주석 한 줄이 상한을 깼다). 산출 청크마다 esbuild를 한 번 더
-// 돌려 **공백·주석만** 걷는다.
-// - 식별자는 그대로 둔다: build-output.test.js가 모듈 스코프 이름(`sessions`·`activeId`)으로 청크 간
-//   싱글톤 복제를 잡는다(위 esbuild.minifyIdentifiers:false와 같은 이유).
-// - 문법 축약(minifySyntax)도 하지 않는다: 연속 선언을 한 줄로 합쳐 그 검사 정규식을 깰 수 있고,
-//   남는 이득에 비해 원본과의 거리가 커진다.
-// - 소스맵은 이어 붙인다(Rollup이 renderChunk가 돌려준 map을 앞 단계 map과 합친다).
-// - test 빌드는 산출물 문자열을 직접 검사하는 테스트가 있어 건드리지 않는다.
-function stripChunkWhitespace() {
-  return {
-    name: 'fsh-strip-chunk-whitespace',
-    apply: 'build',
-    // order:'post' — Vite 자신의 esbuild 단계(vite:esbuild-transpile)가 renderChunk에서 코드를 다시 예쁘게
-    // 찍어 내므로, 그보다 뒤에 돌아야 걷은 공백이 남는다(앞에 두면 효과가 0이었다, 2026-10-13 실측).
-    renderChunk: {
-      order: 'post',
-      async handler(code, chunk) {
-        const r = await transformWithEsbuild(code, chunk.fileName, {
-          loader: 'js', format: 'esm', target: 'esnext',
-          minifyWhitespace: true, minifySyntax: false, minifyIdentifiers: false,
-          legalComments: 'none', sourcemap: true,
-        });
-        return { code: r.code, map: r.map };
-      },
-    },
-  };
-}
 
 // 빌드 로그에 core 청크의 모듈별 기여도 상위를 찍는다(정보용, 빌드를 실패시키지 않는다).
 // 초기 페이로드 상한 논의 때 소스맵 추정이 틀렸던 적이 있어(청크가 이어 붙은 맵이라 파일별 수치가
@@ -107,6 +77,98 @@ function sameOriginProxy(target, extra = {}) {
 // (TS/JSX 변환 필요), 검사 대상을 모은 배럴 frontend/tests/fixtures/test-entry.ts를
 // 실제로 컴파일해 그 산출물을 jsdom에 로드한다. 별도 outDir(dist-test)라
 // app/voice 산출물과 절대 안 섞인다.
+// 모듈 -> 청크 이름. 규칙은 위에서부터 처음 걸리는 것이 이긴다(null이면 Rolldown이 알아서 나눈다).
+function chunkOf(id) {
+    const p = id.split('?')[0].replace(/\\/g, '/');
+    if (p.endsWith('/frontend/js/history/api.js')) return 'shell';
+    if (p.includes('/frontend/js/history/')) return 'history';
+    // 음성 상태 UI는 인증 후 조회할 때 로딩한다. 초기 core 크기를 늘리지 않는다.
+    if (/\/frontend\/js\/panels\/subagent-(viewer|poll)\.js$/.test(p)) return 'subagents';
+    if (p.endsWith('/frontend/js/voice/status-panel.js')) return 'voice-status';
+    // 터치 제스처는 터치 기기에만 로딩한다. 상태/키 인코더는 core 하나를 공유한다.
+    if (/\/frontend\/js\/term\/(?:touch(?:-select)?|keybar-ui)\.js$/.test(p)) return 'touch';
+    // pane 작업 정보 구독은 main.js가 지연 로딩한다. 초기 부팅에 필요하지 않다.
+    if (p.endsWith('/frontend/js/ui/session-context.js')) return 'shell';
+    if (p.endsWith('/frontend/js/term/tab-worktree.js')) return 'shell';
+    if (p.includes('/node_modules/solid-js/') || p.includes('/frontend/js/shell/')) return 'shell';
+    // 진짜로 "열 때" 받는 화면들. 여기 한 줄 추가하는 것만으로 지연
+    // 청크가 되고, 그 모듈이 무엇을 import하든 core는 따라오지 않는다.
+    if (p.includes('/frontend/js/panels/viewer/')) return 'panels';
+    if (p.endsWith('/frontend/js/lib/difflex.js')) return 'panels';  // 뷰어 전용 UMD
+    if (p.includes('/frontend/js/panels/files/')) return 'panels';
+    if (p.includes('/frontend/js/panels/ports/')) return 'panels';
+    if (p.endsWith('/frontend/js/queue.js')) return 'panels';
+    // ── `settings` 청크 ────────────────────────────────────────────
+    // dock 화면들과 **한 청크에 묶지 않는다.** 묶으면 「큐」탭 한 번
+    // 누르는 데 설정 7개 섹션·MCP·스니펫·사용량까지 같이 받는다 —
+    // 실측으로 드러난 문제다: panels.js가 79KB에서 119KB가 되자
+    // 큐 패널이 클릭 후 제때 안 떠서 실브라우저 스모크가 잡아냈다.
+    // 열리는 경로가 다르면(dock 탭 / 설정·MCP 팝업) 청크도 나눈다.
+    //
+    // `panels/settings.js`·`panels/settings/**`만 해당한다.
+    // **`core/settings.js`(설정 스토어 싱글톤)는 아니다** — 아래 포괄
+    // 규칙이 core로 보낸다.
+    if (p.endsWith('/frontend/js/panels/settings.js')) return 'settings';
+    if (p.includes('/frontend/js/panels/settings/')) return 'settings';
+    if (p.endsWith('/frontend/js/panels/mcp.js')) return 'settings';
+    if (p.endsWith('/frontend/js/panels/agent-config.js')) return 'settings';
+    // dock MCP 버튼(shell/Dock.tsx)이 지연 import하는 열기 로직 —
+    // panels/mcp.js와 항상 같이 쓰이니 같은 청크(mcp-open.js 머리말 참고).
+    if (p.endsWith('/frontend/js/panels/mcp-open.js')) return 'settings';
+    if (p.endsWith('/frontend/js/snippets.js')) return 'settings';
+    // 사용량 화면. **`panels/usage-badge.js`는 아니다** — rail 배지
+    // 폴링은 상시 동작이라 core에 남는다(endsWith라 안 걸린다).
+    if (p.endsWith('/frontend/js/panels/usage.js')) return 'settings';
+    // 설정 > 에이전트 프로필 섹션(23KB) — agent-config.js가 섹션을 열 때만 지연 import한다.
+    // 규칙이 없으면 포괄 규칙이 core로 보내 상시 로드에 실린다.
+    if (p.endsWith('/frontend/js/panels/agent-profiles.js')) return 'settings';
+    // 스니펫 순수 함수 — snippets.js(settings 청크)만 쓴다.
+    if (p.endsWith('/frontend/js/snippets-util.js')) return 'settings';
+    // 시스템 패널 — panels/system-lazy.js(core 스텁)가 열 때만 지연 import한다.
+    if (p.endsWith('/frontend/js/panels/system.js')) return 'panels';
+    // 숫자 스피너 — shell(Solid) 청크와 settings 청크만 쓴다. 둘 다 core를 거치지 않고 shell을 먼저 받는다.
+    if (p.endsWith('/frontend/js/ui/number-spinner.js')) return 'shell';
+    // 모달 뼈대(panels/panel.js)와 확인·입력·알림 대화상자 본체(core/dialog.js) — 부팅에 필요 없다.
+    // 부팅 쪽은 core/dialog-lazy.js(스텁)와 term/guide.js의 import()만 쓴다. 이 둘을 정적으로 import하는
+    // 화면 청크(panels·settings·share·history·screens)는 panel 청크를 함께 받는다(core를 거치지 않는다).
+    if (p.endsWith('/frontend/js/panels/panel.js')) return 'panel';
+    if (p.endsWith('/frontend/js/core/dialog.js')) return 'panel';
+    // 사용 가이드 본문 — term/guide.js(core 스텁)가 열 때만 import()한다.
+    if (p.endsWith('/frontend/js/term/guide-view.js')) return 'panel';
+    // 업로드 전송·대기열·취소 본체(10KB) — term/upload-lite.js(core)가 첫 업로드 때와 유휴 시간에 import()한다.
+    // 드롭 판별·창 기본 동작 차단·window 브리지 스텁은 lite에 남는다. panels/files는 브리지로만 부르므로 정적 의존이 없다.
+    if (p.endsWith('/frontend/js/term/upload.js')) return 'upload';
+    // <select> 드롭다운 본체(12KB) — ui/select-lazy.js(core 스텁)가 select가 나타날 때와 유휴 시간에 지연 import한다.
+    // screens에 합치지 않는다: select 하나 때문에 화면 모듈까지 받게 된다.
+    if (p.endsWith('/frontend/js/ui/select.js')) return 'select';
+    // 에이전트 브랜드 로고 path(18KB) — 초기 페이로드 상한 때문에 뗐다.
+    // ui/icons.js가 부팅 직후 지연 import하고, 오기 전엔 선 기호로 그린다.
+    if (p.endsWith('/frontend/js/ui/brand-icons.js')) return 'brand';
+    // 「연결된 화면」 모달 + 클라이언트 목록 — HUD 칩·레일 메뉴가 열 때만 쓴다.
+    // layout/connected-screens-lazy.js가 지연 import하고, 설정 > 음성 섹션도
+    // clients.js를 정적 import한다(settings -> screens 단방향, core는 안 따라온다).
+    if (p.endsWith('/frontend/js/layout/connected-screens.js')) return 'screens';
+    if (p.endsWith('/frontend/js/layout/clients.js')) return 'screens';
+    // 에이전트 세션 공유 — 공유 대화상자·승인 모달·권한 패널. js/share-lazy.js(core)가
+    // 이벤트 수신과 import() 만 한다. 청크 이름이 없으면 포괄 규칙이 core 로 보내 상시 로드가 늘어난다.
+    if (p.includes('/frontend/js/share/')) return 'share';
+    // 통합 승인함(모달·권한·감사)도 같은 청크 — share-lazy.js 가 이벤트 수신과 import() 만 한다.
+    if (p.includes('/frontend/js/authz/')) return 'share';
+    // 빈 칸 클릭 시 열리는 세션 선택 시트(layout/panes.js가 지연 import).
+    if (p.endsWith('/frontend/js/layout/pane-picker.js')) return 'screens';
+    // 모바일 세션 시트의 목록 렌더링 전부(picker.js가 시트를 열 때 지연 import)와 그 안의 뷰 순서 편집.
+    if (p.endsWith('/frontend/js/ui/workspace-details.js')) return 'screens';
+    if (p.endsWith('/frontend/js/layout/session-order.js')) return 'screens';
+    // 뷰 탭 우클릭 메뉴(layout/tabbar.js가 contextmenu 때 지연 import).
+    if (p.endsWith('/frontend/js/layout/tab-menu.js')) return 'screens';
+    // 포괄 규칙 — 위에 안 걸린 앱 모듈 전부. main.js(entry)는 제외해야
+    // 한다(entry를 청크에 배정하면 Rollup이 app.js를 빈 껍데기로 만든다).
+    if (p.includes('/frontend/js/') && !p.endsWith('/frontend/js/main.js')) return 'core';
+    return null;
+}
+// 설정 파일은 번들러가 따옴표를 바꿀 수 있어 두 가지 모두 받는다. 규칙을 추가하면 이름이 자동으로 그룹이 된다.
+const CHUNK_NAMES = [...new Set([...chunkOf.toString().matchAll(/return\s+['"]([a-z-]+)['"]/g)].map((m) => m[1]))];
+
 export default defineConfig(({ mode }) => {
   const isTest = mode === 'test';
 
@@ -114,10 +176,9 @@ export default defineConfig(({ mode }) => {
     // N17: solid()는 .tsx/.jsx만 변환한다(기존 9천 줄의 classic .js는 그대로 —
     // vite-plugin-solid의 기본 include가 확장자로만 걸린다). lib 모드·2회 분리
     // 빌드·해시 없는 파일명은 그대로 유지된다(ADR-26).
-    plugins: [tailwindcss(), solid(), ...(isTest ? [] : [stripChunkWhitespace(), reportCoreModules()])],
+    plugins: [tailwindcss(), solid(), ...(isTest ? [] : [reportCoreModules()])],
     // 식별자는 줄이지 않는다 — 산출물에 모듈 스코프 이름(`sessions`, `activeId`…)이
     // 남아야 build-output.test.js가 청크 간 싱글톤 복제를 잡는다.
-    esbuild: { minifyIdentifiers: false, minifyWhitespace: !isTest, minifySyntax: !isTest },
     build: {
       lib: isTest ? {
         entry: 'frontend/tests/fixtures/test-entry.ts',
@@ -142,14 +203,18 @@ export default defineConfig(({ mode }) => {
       // 2026-09-29 — minify를 켰다. 끈 채로는 초기 페이로드가 300KiB 상한에
       // 110B 남기고 닿아 기능 하나 못 넣는 상태였다. 원본은 소스맵으로 읽는다.
       // test 빌드는 산출물 문자열을 검사하는 테스트가 있어 그대로 둔다.
-      minify: !isTest,
+      // 식별자를 줄이지 않는다(mangle:false) — 산출물에 모듈 스코프 이름(`sessions`, `activeId`…)이 남아야
+      // build-output.test.js가 청크 간 싱글톤 복제를 잡는다. vite 8의 기본 minify는 이름까지 바꾼다.
+      minify: isTest ? false : { mangle: false, compress: false },
       sourcemap: !isTest,
-      rollupOptions: {
+      rolldownOptions: {
         // 벤더(xterm 등)는 아직 ES 모듈로 import하지 않는다 — index.html의 classic
         // <script>가 로드하고 sw.js가 개별 프리캐시한다(F4에서 core/vendor.js가
         // window.* 를 re-export하며 이 경계가 명시화된다). 지금은 external로 지정할
         // 대상이 없다 — main.js가 실제로 import하는 건 legacy 앱 스크립트뿐이다.
         external: [],
+        // includeDependenciesRecursively:false 의 요구 조건(Rolldown이 안내). main.js는 export가 없는 진입점이라 무해하다.
+        preserveEntrySignatures: isVoice || isTest ? 'strict' : false,
         output: {
           // N34/N35/ADR-26 — 지연 청크에도 **해시를 붙이지 않는다.** ADR-1의
           // "산출물 이름 고정" 계약이 entry뿐 아니라 청크에도 그대로 적용된다:
@@ -202,93 +267,13 @@ export default defineConfig(({ mode }) => {
           // 적용하면 voice 그래프에서도 core.js가 나와 app 빌드의 core.js를
           // **덮어쓴다**(실측: 201KB → 10KB로 clobber). voice는 예나 지금이나
           // 단일 산출물이라 청크가 필요 없다.
-          manualChunks: isVoice || isTest ? undefined : (id) => {
-            const p = id.split('?')[0].replace(/\\/g, '/');
-            if (p.endsWith('/frontend/js/history/api.js')) return 'shell';
-            if (p.includes('/frontend/js/history/')) return 'history';
-            // 음성 상태 UI는 인증 후 조회할 때 로딩한다. 초기 core 크기를 늘리지 않는다.
-            if (/\/frontend\/js\/panels\/subagent-(viewer|poll)\.js$/.test(p)) return 'subagents';
-            if (p.endsWith('/frontend/js/voice/status-panel.js')) return 'voice-status';
-            // 터치 제스처는 터치 기기에만 로딩한다. 상태/키 인코더는 core 하나를 공유한다.
-            if (/\/frontend\/js\/term\/(?:touch(?:-select)?|keybar-ui)\.js$/.test(p)) return 'touch';
-            // pane 작업 정보 구독은 main.js가 지연 로딩한다. 초기 부팅에 필요하지 않다.
-            if (p.endsWith('/frontend/js/ui/session-context.js')) return 'shell';
-            if (p.endsWith('/frontend/js/term/tab-worktree.js')) return 'shell';
-            if (p.includes('/node_modules/solid-js/') || p.includes('/frontend/js/shell/')) return 'shell';
-            // 진짜로 "열 때" 받는 화면들. 여기 한 줄 추가하는 것만으로 지연
-            // 청크가 되고, 그 모듈이 무엇을 import하든 core는 따라오지 않는다.
-            if (p.includes('/frontend/js/panels/viewer/')) return 'panels';
-            if (p.endsWith('/frontend/js/lib/difflex.js')) return 'panels';  // 뷰어 전용 UMD
-            if (p.includes('/frontend/js/panels/files/')) return 'panels';
-            if (p.includes('/frontend/js/panels/ports/')) return 'panels';
-            if (p.endsWith('/frontend/js/queue.js')) return 'panels';
-            // ── `settings` 청크 ────────────────────────────────────────────
-            // dock 화면들과 **한 청크에 묶지 않는다.** 묶으면 「큐」탭 한 번
-            // 누르는 데 설정 7개 섹션·MCP·스니펫·사용량까지 같이 받는다 —
-            // 실측으로 드러난 문제다: panels.js가 79KB에서 119KB가 되자
-            // 큐 패널이 클릭 후 제때 안 떠서 실브라우저 스모크가 잡아냈다.
-            // 열리는 경로가 다르면(dock 탭 / 설정·MCP 팝업) 청크도 나눈다.
-            //
-            // `panels/settings.js`·`panels/settings/**`만 해당한다.
-            // **`core/settings.js`(설정 스토어 싱글톤)는 아니다** — 아래 포괄
-            // 규칙이 core로 보낸다.
-            if (p.endsWith('/frontend/js/panels/settings.js')) return 'settings';
-            if (p.includes('/frontend/js/panels/settings/')) return 'settings';
-            if (p.endsWith('/frontend/js/panels/mcp.js')) return 'settings';
-            if (p.endsWith('/frontend/js/panels/agent-config.js')) return 'settings';
-            // dock MCP 버튼(shell/Dock.tsx)이 지연 import하는 열기 로직 —
-            // panels/mcp.js와 항상 같이 쓰이니 같은 청크(mcp-open.js 머리말 참고).
-            if (p.endsWith('/frontend/js/panels/mcp-open.js')) return 'settings';
-            if (p.endsWith('/frontend/js/snippets.js')) return 'settings';
-            // 사용량 화면. **`panels/usage-badge.js`는 아니다** — rail 배지
-            // 폴링은 상시 동작이라 core에 남는다(endsWith라 안 걸린다).
-            if (p.endsWith('/frontend/js/panels/usage.js')) return 'settings';
-            // 설정 > 에이전트 프로필 섹션(23KB) — agent-config.js가 섹션을 열 때만 지연 import한다.
-            // 규칙이 없으면 포괄 규칙이 core로 보내 상시 로드에 실린다.
-            if (p.endsWith('/frontend/js/panels/agent-profiles.js')) return 'settings';
-            // 스니펫 순수 함수 — snippets.js(settings 청크)만 쓴다.
-            if (p.endsWith('/frontend/js/snippets-util.js')) return 'settings';
-            // 시스템 패널 — panels/system-lazy.js(core 스텁)가 열 때만 지연 import한다.
-            if (p.endsWith('/frontend/js/panels/system.js')) return 'panels';
-            // 숫자 스피너 — shell(Solid) 청크와 settings 청크만 쓴다. 둘 다 core를 거치지 않고 shell을 먼저 받는다.
-            if (p.endsWith('/frontend/js/ui/number-spinner.js')) return 'shell';
-            // 모달 뼈대(panels/panel.js)와 확인·입력·알림 대화상자 본체(core/dialog.js) — 부팅에 필요 없다.
-            // 부팅 쪽은 core/dialog-lazy.js(스텁)와 term/guide.js의 import()만 쓴다. 이 둘을 정적으로 import하는
-            // 화면 청크(panels·settings·share·history·screens)는 panel 청크를 함께 받는다(core를 거치지 않는다).
-            if (p.endsWith('/frontend/js/panels/panel.js')) return 'panel';
-            if (p.endsWith('/frontend/js/core/dialog.js')) return 'panel';
-            // 사용 가이드 본문 — term/guide.js(core 스텁)가 열 때만 import()한다.
-            if (p.endsWith('/frontend/js/term/guide-view.js')) return 'panel';
-            // 업로드 전송·대기열·취소 본체(10KB) — term/upload-lite.js(core)가 첫 업로드 때와 유휴 시간에 import()한다.
-            // 드롭 판별·창 기본 동작 차단·window 브리지 스텁은 lite에 남는다. panels/files는 브리지로만 부르므로 정적 의존이 없다.
-            if (p.endsWith('/frontend/js/term/upload.js')) return 'upload';
-            // <select> 드롭다운 본체(12KB) — ui/select-lazy.js(core 스텁)가 select가 나타날 때와 유휴 시간에 지연 import한다.
-            // screens에 합치지 않는다: select 하나 때문에 화면 모듈까지 받게 된다.
-            if (p.endsWith('/frontend/js/ui/select.js')) return 'select';
-            // 에이전트 브랜드 로고 path(18KB) — 초기 페이로드 상한 때문에 뗐다.
-            // ui/icons.js가 부팅 직후 지연 import하고, 오기 전엔 선 기호로 그린다.
-            if (p.endsWith('/frontend/js/ui/brand-icons.js')) return 'brand';
-            // 「연결된 화면」 모달 + 클라이언트 목록 — HUD 칩·레일 메뉴가 열 때만 쓴다.
-            // layout/connected-screens-lazy.js가 지연 import하고, 설정 > 음성 섹션도
-            // clients.js를 정적 import한다(settings -> screens 단방향, core는 안 따라온다).
-            if (p.endsWith('/frontend/js/layout/connected-screens.js')) return 'screens';
-            if (p.endsWith('/frontend/js/layout/clients.js')) return 'screens';
-            // 에이전트 세션 공유 — 공유 대화상자·승인 모달·권한 패널. js/share-lazy.js(core)가
-            // 이벤트 수신과 import() 만 한다. 청크 이름이 없으면 포괄 규칙이 core 로 보내 상시 로드가 늘어난다.
-            if (p.includes('/frontend/js/share/')) return 'share';
-            // 통합 승인함(모달·권한·감사)도 같은 청크 — share-lazy.js 가 이벤트 수신과 import() 만 한다.
-            if (p.includes('/frontend/js/authz/')) return 'share';
-            // 빈 칸 클릭 시 열리는 세션 선택 시트(layout/panes.js가 지연 import).
-            if (p.endsWith('/frontend/js/layout/pane-picker.js')) return 'screens';
-            // 모바일 세션 시트의 목록 렌더링 전부(picker.js가 시트를 열 때 지연 import)와 그 안의 뷰 순서 편집.
-            if (p.endsWith('/frontend/js/ui/workspace-details.js')) return 'screens';
-            if (p.endsWith('/frontend/js/layout/session-order.js')) return 'screens';
-            // 뷰 탭 우클릭 메뉴(layout/tabbar.js가 contextmenu 때 지연 import).
-            if (p.endsWith('/frontend/js/layout/tab-menu.js')) return 'screens';
-            // 포괄 규칙 — 위에 안 걸린 앱 모듈 전부. main.js(entry)는 제외해야
-            // 한다(entry를 청크에 배정하면 Rollup이 app.js를 빈 껍데기로 만든다).
-            if (p.includes('/frontend/js/') && !p.endsWith('/frontend/js/main.js')) return 'core';
-            return null;
+          // vite 8(Rolldown)은 manualChunks를 더 이상 그대로 따르지 않는다 — 규칙이 잡은 모듈의 **의존 모듈까지**
+          // 끌고 들어가 `panel`이 `history`에 먹히는 식으로 경계가 뒤섞였다(실측). 이름마다 그룹을 두고
+          // includeDependenciesRecursively:false 로 "내가 고른 모듈만" 넣는다. 나머지는 위 chunkOf의 포괄 규칙이 core로 보낸다.
+          strictExecutionOrder: isVoice || isTest ? undefined : true,
+          codeSplitting: isVoice || isTest ? undefined : {
+            includeDependenciesRecursively: false,
+            groups: CHUNK_NAMES.map((name) => ({ name, test: (id) => chunkOf(id) === name })),
           },
         },
       },
