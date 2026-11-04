@@ -1,6 +1,6 @@
 import { t } from '../core/i18n.js';
 import { operationId } from '../core/operation-id.js';
-import { promptDialog } from '../core/dialog.js';
+import { promptDialog } from '../core/dialog-lazy.js';
 
 export function historyError(code) {
   return ({

@@ -125,6 +125,8 @@ Cause: `session_store` is in memory, so after a restart the page's WS reconnects
 
 2026-11-04 (later): 275,880 B -> **268,813 B** after `ui/select.js` moved to its own `select` chunk (stub `ui/select-lazy.js` stays in core). `npm run build` now prints the top 15 modules of `core.js` by rendered bytes (`reportCoreModules` in `vite.config.js`, information only); use it instead of source-map attribution, which is too coarse. Largest now: `layout/panes.js` 28 KB, `layout/store.js` 26 KB, `term/session.js` 19 KB, `ui/icons.js` 18 KB, `core/settings.js` 17 KB, `layout/persist.js` 15 KB, `panels/panel.js` 14 KB.
 
+2026-11-04 (third): 268,813 B -> **260,750 B** after `panels/panel.js` + `core/dialog.js` moved to a `panel` chunk. Boot-path code (terminal, rail, `history/api.js`) now imports `core/dialog-lazy.js`, whose `confirmDialog`/`promptDialog`/`alertDialog` already returned Promises; chunks that need the synchronous `openDialog`/`nextId` still import `core/dialog.js` directly and pull the `panel` chunk with them. If the chunk cannot be fetched the stub falls back to `window.confirm`/`prompt`/`alert` (a silent "cancel" would hide why nothing happens, a silent "ok" would drop the safeguard). `build-output.test.js` asserts that neither `core.js` nor `shell.js` imports `panel.js` statically.
+
 ## 5. View-tab mockups
 
 Three variants of the segment status bar on the tab: **A** flush to the bottom edge (2/5px), **B** inner pill (3/6px), **C** top edge. **B chosen**: the 2x thickness difference (unseen vs seen) is still distinguishable at four segments and it reads in both light and dark skins; the active-tab underline moved to the background tone because the bar owns that edge.

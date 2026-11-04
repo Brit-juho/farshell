@@ -252,6 +252,11 @@ export default defineConfig(({ mode }) => {
             if (p.endsWith('/frontend/js/panels/system.js')) return 'panels';
             // 숫자 스피너 — shell(Solid) 청크와 settings 청크만 쓴다. 둘 다 core를 거치지 않고 shell을 먼저 받는다.
             if (p.endsWith('/frontend/js/ui/number-spinner.js')) return 'shell';
+            // 모달 뼈대(panels/panel.js)와 확인·입력·알림 대화상자 본체(core/dialog.js) — 부팅에 필요 없다.
+            // 부팅 쪽은 core/dialog-lazy.js(스텁)와 term/guide.js의 import()만 쓴다. 이 둘을 정적으로 import하는
+            // 화면 청크(panels·settings·share·history·screens)는 panel 청크를 함께 받는다(core를 거치지 않는다).
+            if (p.endsWith('/frontend/js/panels/panel.js')) return 'panel';
+            if (p.endsWith('/frontend/js/core/dialog.js')) return 'panel';
             // <select> 드롭다운 본체(12KB) — ui/select-lazy.js(core 스텁)가 select가 나타날 때와 유휴 시간에 지연 import한다.
             // screens에 합치지 않는다: select 하나 때문에 화면 모듈까지 받게 된다.
             if (p.endsWith('/frontend/js/ui/select.js')) return 'select';

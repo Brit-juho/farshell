@@ -5,7 +5,7 @@
 // 아직 없다는 F1의 판단을 그대로 따른다).
 import { VT_TOKEN } from '../core/env.js';
 import { relayHost } from '../core/host-route.js';
-import { confirmDialog, alertDialog } from '../core/dialog.js';
+import { confirmDialog, alertDialog } from '../core/dialog-lazy.js';
 import { t } from '../core/i18n.js';
 
 const _urlParams = new URLSearchParams(location.search);
