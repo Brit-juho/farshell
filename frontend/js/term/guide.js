@@ -2,11 +2,11 @@
 // F4에서 terminal.js(구 :1761-1840)에서 분리. 온보딩(showOnboarding, boot.js)은
 // 첫 실행 시 세션 생성을 강제하는 화면이라 재사용하지 않고 별도로 둔다.
 import { registerAction } from '../core/dom.js';
-import { openPanel } from '../panels/panel.js';
 import { icon } from '../ui/icons.js';
 import { t } from '../core/i18n.js';
 
-function showGuide() {
+// 모달 뼈대(panels/panel.js)는 `panel` 청크라 열 때 받는다. 이미 받았으면 같은 틱에 열린다.
+function showGuide(openPanel) {
   // 섹션 정의 — {icon, title, rows:[{key, desc}]}. key는 왼쪽 라벨, desc는 설명(HTML).
   // icon은 이제 Lucide 웹폰트 클래스명이 아니라 ui/icons.js 맵의 키(D5).
   const kbdCtrlShiftV = '<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd>';
@@ -75,4 +75,6 @@ function showGuide() {
   });
 }
 
-registerAction('guide.show', () => showGuide());
+registerAction('guide.show', () => {
+  import('../panels/panel.js').then((m) => showGuide(m.openPanel)).catch((e) => console.error('[FarShell guide]', e));
+});

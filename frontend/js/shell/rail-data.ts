@@ -8,7 +8,7 @@
 import type { AgentState } from '../core/types.js';
 import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
 import { t } from '../core/i18n.js';
-import { alertDialog } from '../core/dialog.js';
+import { alertDialog } from '../core/dialog-lazy.js';
 
 // ── 행 모양 ────────────────────────────────────────────────────────────────
 

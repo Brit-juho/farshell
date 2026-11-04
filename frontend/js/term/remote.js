@@ -19,7 +19,7 @@ import { addSession, revealSession, removeSession } from './session.js';
 import { saveLayoutNow } from '../layout/persist.js';
 import { showToast } from '../ui/toast.js';
 import { vtFetch } from '../core/api.js';
-import { confirmDialog } from '../core/dialog.js';
+import { confirmDialog } from '../core/dialog-lazy.js';
 import { getTree, getActivePaneId, getActiveTabHostId } from '../layout/store.js';
 import { findNode } from '../layout/tree.js';
 import { LOCAL_HOST, viewHost, findRemoteSession } from './host-view.js';

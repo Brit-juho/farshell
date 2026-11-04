@@ -130,6 +130,17 @@ test('select 드롭다운 본체(ui/select.js)와 이번에 뗀 모듈들은 지
   assert.doesNotMatch(coreJs, /function sparkPoints|function parseInput/);   // system.js·agent-profiles.js
 });
 
+test('모달 뼈대(panels/panel.js)와 대화상자 본체는 panel 청크에 있고 core·shell은 정적으로 받지 않는다', () => {
+  const panelJs = fs.readFileSync(path.join(DIST, 'panel.js'), 'utf8');
+  assert.match(panelJs, /function openPanel\(/);
+  assert.match(panelJs, /vt-dialog-msg/);
+  assert.doesNotMatch(coreJs, /function openPanel\(|vt-dialog-msg/);
+  assert.match(coreJs, /prefetchDialogs/);   // 스텁은 core에 남는다
+  const shellJs = fs.readFileSync(path.join(DIST, 'shell.js'), 'utf8');
+  assert.doesNotMatch(shellJs, /from\s*["']\.\/panel\.js["']/, 'shell이 panel 청크를 정적으로 받으면 부팅 때 같이 내려온다');
+  assert.doesNotMatch(coreJs, /from\s*["']\.\/panel\.js["']/);
+});
+
 test('에이전트 공유의 대화상자와 통합 승인함(모달·권한·감사)은 share 청크에 있고 core 에는 없다(core 에는 이벤트 수신·배지·import() 만)', () => {
   // vite.config.js manualChunks 의 `/frontend/js/share/` 규칙이 빠지면 포괄 규칙이 core 로 보내
   // 상시 로드가 ~18KB 늘어난다(빌드·테스트는 통과하고 상한만 조용히 줄어든다).

@@ -1,5 +1,5 @@
 import { type JSX } from 'solid-js';
-import { promptDialog } from '../core/dialog.js';
+import { promptDialog } from '../core/dialog-lazy.js';
 import { t } from '../core/i18n.js';
 import type { SessionGroup } from './rail-data.js';
 

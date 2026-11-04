@@ -10,7 +10,7 @@
 import { createSignal, onCleanup } from 'solid-js';
 
 import { normalizeOrigin, normalizeShare, normalizeLineage, normalizeKind, normalizeBadge, type SessionRow } from './rail-data.js';
-import { confirmDialog } from '../core/dialog.js';
+import { confirmDialog } from '../core/dialog-lazy.js';
 import { t } from '../core/i18n.js';
 import { watchPath, isWatchLive } from './fs-watch.js';
 import { sessionContext, workspaceDirectory, workspaceKind } from '../ui/session-context.js';

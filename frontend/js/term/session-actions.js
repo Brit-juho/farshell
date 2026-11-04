@@ -17,7 +17,7 @@ import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
 import { getSession, allSessions, sessionDisplayName } from '../core/store.js';
 import { getStatus } from '../agent/state.js';
-import { confirmDialog } from '../core/dialog.js';
+import { confirmDialog } from '../core/dialog-lazy.js';
 import { t } from '../core/i18n.js';
 
 /** 닫기 — 웹 attach만 놓는다(tmux는 산다). 칸은 빈 칸으로 남는다. */
