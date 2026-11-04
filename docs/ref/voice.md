@@ -42,7 +42,7 @@ Claude 기록과 Codex response_item/event_msg 또는 last_assistant_message를 
 최종 응답 어댑터가 없는 도구는 TTS 미지원이다. 출력 idle 감시는 음성을 생성하지 않는다.
 
 STT는 녹음 시작에 대상 토큰을 발급받고 종료·재전송에 같은 pane을 사용한다. 대상이 사라지면
-다른 pane으로 보내지 않고 인식 텍스트 복사를 제공한다. 입력 전 확인 단계는 위 「확인 후 전송」을 본다. 첫 클릭은 모델 준비, 다음 클릭은 녹음이다.
+다른 pane으로 보내지 않고 인식 텍스트 복사를 제공한다. 입력 전 확인 단계는 아래 「확인 후 전송」을 본다(두 업로드 경로가 같다). 첫 클릭은 모델 준비, 다음 클릭은 녹음이다.
 브라우저 녹음은 최대 60초, 업로드는 4MiB다. 구 로컬 마이크 기능은 제거했으며 구 요청은 410이다.
 연속 녹음(발화마다 저절로 다시 시작)은 지원하지 않는다. 청크 경로에서만 서버 VAD 자동 종료(「자동 종료」, 기본 off)와
 녹음 중 부분 결과(「부분 결과 표시」, 기본 on)가 있다 — 아래 「녹음 중 처리」. 이어폰 미디어키는 매 접속마다 기본 off다.
@@ -83,7 +83,7 @@ local을 선택하면 외부 요청 없이 say만 사용한다. edge 선택은 �
 - **위험 패턴**은 `off`가 아니면 pane 종류와 무관하게 항상 확인한다. 목록은 `voice_confirm.DANGEROUS_PATTERNS` 한 곳에 있고
   `server/tests/test_voice_confirm.py`가 잠근다(rm -r/-f, sudo, curl/wget | sh, git push -f/--force, git reset --hard, git clean -f,
   mkfs, dd of=, `> /dev/…`(null·stdout·stderr 제외), chmod/chown -R, 포크 폭탄). NFKC 정규화 후 영문 표기로만 검사한다.
-- 확인이 필요하면 `/voice/input`은 **인식만 하고 입력하지 않는다.** 응답에 `pending_confirm: true`, `text`, `confirm_token`,
+- 확인이 필요하면 `/voice/input`과 청크 경로의 완결 요청(`/voice/chunk`)은 **인식만 하고 입력하지 않는다.** 응답에 `pending_confirm: true`, `text`, `confirm_token`,
   `confirm_reason`(`shell|unknown|always|dangerous`), `confirm_ttl_sec`, `target_name`이 든다. 웹은 패널의 편집 상자(`#voice-confirm`)에
   보이고 「입력」이 `POST /voice/inject {token, text, voice_id}`를 부른다. 「취소」는 아무것도 보내지 않는다.
 - 확인 화면을 그릴 수 있는 클라이언트만 확인 단계를 거친다 — 웹이 `X-Voice-Confirm: 1`을 보낸다. 이 헤더가 없는 호출자(Voice Daemon,
@@ -95,6 +95,18 @@ local을 선택하면 외부 요청 없이 say만 사용한다. edge 선택은 �
   연결이 끊겨 취소돼도 이미 입력됐을 수 있어 토큰을 되돌리지 않는다. 입력 도구 호출 실패(`send_failed` 502)만 같은 토큰으로 다시 시도할 수 있다.
 - 확인 토큰 TTL은 300초(사용자가 고칠 시간), 1회용, 서버 메모리에만 있다(재시작하면 사라진다). 대기 한도 256개.
 - 새 녹음을 시작하면 이전 확인 대기는 클라이언트가 버린다.
+- **두 경로가 한 함수를 쓴다**: `routes/voice.py`의 `_deliver_text(owner, vid, target, sid, text, confirm_ui)`가 판정(`_confirm_verdict`)·
+  확인 토큰 발급·pane 입력을 맡고, `/voice/input`과 `/voice/chunk` 완결이 모두 `_voice_dedup_run` → `_voice_input_once` → `_deliver_text`로
+  들어간다. `confirm_ui`는 `/voice/input`이면 그 요청의 `X-Voice-Confirm: 1`, 청크 경로면 녹음 단위 값(`Recording.confirm_ui`, 어느 조각이든
+  헤더가 오면 켜진다 — 녹음을 끝맺는 요청이 늦게 도착한 앞 조각일 수도 있어서다. 켜지는 쪽은 더 안전한 쪽뿐이다)이다. 웹의 청크 업로더
+  (`chunk-upload.js`)는 모든 조각에 헤더를 붙인다. 확인 토큰은 그 녹음의 `X-Voice-Id`에 묶인다.
+- **재전송**: 확인 대기 결과도 `text`가 있으므로 `_voice_done`(120초)과 청크 기록의 결과(`rec.result`)에 남는다. 같은 `X-Voice-Id`의
+  재전송·final 재전송은 STT·판정을 다시 하지 않고 같은 `confirm_token`을 `duplicate: true`로 돌려준다(새 토큰 없음, pane 입력 없음).
+  실제 입력은 `/voice/inject`에서 토큰당 한 번이다.
+- **클라이언트**: `recording.js`의 `uploadWithRetry`가 MediaRecorder 결과와 PCM 세션의 `result()`를 같은 분기로 받으므로, 청크 경로의
+  `pending_confirm`도 같은 확인 상자(`confirm.js`)로 간다. 자동 종료(`endpoint`)는 `stopRecording()`과 같은 길이라 그 뒤 final도 같다.
+  부분 결과(`partial`)는 확인 모드와 무관하게 표시만 하고 입력하지 않는다. 입력 대상 고정도 두 경로가 같은 `resolveInputTarget()`
+  → `/voice/target`을 쓴다.
 
 ### Clipboard Daemon (macOS clipboard sync)
 
@@ -120,7 +132,7 @@ carry over. Two paths cover this:
 
 ## STT 구조 (2026-10)
 
-- **STT는 서버 OS에서만 돈다.** 브라우저는 녹음해서 `/voice/input`으로 올리기만 한다(클라이언트 쪽 인식 없음).
+- **STT는 서버 OS에서만 돈다.** 브라우저는 녹음해서 `/voice/input`(또는 청크 경로 `/voice/chunk`)으로 올리기만 한다(클라이언트 쪽 인식 없음).
   그래서 쓸 수 있는 엔진은 서버 호스트가 정한다(`stt_engines/env.py`가 감지).
 - `server/stt_service.py`가 선택(`voice.sttModel`, 환경변수 `VT_STT_MODEL` 우선; 비면 환경별 권장)·엔진 구동·
   직렬화·카탈로그/준비/삭제 응답을 맡고, `server/stt_engines/`가 엔진(MLX Qwen3, llama.cpp Qwen3, Apple Speech)을 구현한다.
@@ -151,7 +163,7 @@ carry over. Two paths cover this:
   기다리는 `pending`, 누적 바이트, 마지막 활동 시각. 모두 await 없이 한 번에 바뀌어 락이 없다. 상한: 전체 60초(1,920,000B,
   엄격), 조각 5초, 보류 1000개/30초, seq < 4000, 동시 녹음 64건. 같은 principal의 새 녹음은 이전 열린 녹음을 폐기한다
   (STT가 직렬이라 1건). 30초 무응답 폐기와 만료 묘비는 요청마다와 10초 주기 작업(`sweep_loop`)이 치운다.
-  완결되면 16kHz mono WAV로 감싸 `/voice/input`과 **같은 중복 방지·인식·주입 경로**(`_voice_dedup_run`)로 넘긴다 —
+  완결되면 16kHz mono WAV로 감싸 `/voice/input`과 **같은 중복 방지·인식·확인·주입 경로**(`_voice_dedup_run` → `_deliver_text`)로 넘긴다 —
   `_voice_done` 캐시, 지문 충돌 409, 동시 final이 같은 인식에 합류하는 동작이 그대로다. 인식이 예외(429 등)면 조각을 남겨
   같은 final 재전송으로 다시 시도할 수 있다. 끝난 녹음은 조각 메모리를 놓고 결과만 120초 남긴다.
 - **스냅샷**: `Recording.contiguous_pcm()`은 이어 붙은 앞부분 전체, `tail_pcm(n)`은 끝 n바이트 이하(조각 경계)의 복사본이다.
@@ -196,7 +208,7 @@ carry over. Two paths cover this:
   컴퓨터 출력(`destination: server`)이나 다른 기기 재생을 멈추는 것은 "녹음하는 화면의 출력만 멈춘다"는 정책을 바꾸는 일이라
   하지 않았다. 대신 남은 틈을 클라이언트(`tts.js`)에서 막는다: 녹음 중 `/ws-voice`가 재연결되면(서버 `disconnect`가 그 화면의
   일시정지를 지운다) 일시정지를 다시 보내고, 그 틈에 온 음성은 재생하지 않고 `cancelled`로 알린다(120초 안전 해제).
-- **테스트**: `server/tests/test_voice_vad.py`(합성 사인파+잡음), `test_voice_live.py`(라우트 응답·작업 정리·락 경합, 가짜 STT),
+- **테스트**: `server/tests/test_voice_vad.py`(합성 사인파+잡음), `test_voice_live.py`(라우트 응답·작업 정리·락 경합, 가짜 STT), `test_routes_voice_chunk_confirm.py`(청크 경로 확인 후 전송),
   `frontend/tests/voice-ack-handler.test.js`·`voice-pcm-flow.test.js`·`voice-status-panel.test.js`·`voice-session-flow.test.js`.
 
 ## STT 엔진 벤치마크 (2026-10-02)

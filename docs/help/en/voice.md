@@ -109,18 +109,18 @@ The `voice.stt timing` entry in the server log shows decode, wait and recognitio
 record and uploads it in roughly 0.5-second pieces. If the network drops for a moment mid-recording, the pieces that did not get through
 are sent again, and when you stop, the collected sound is recognized in one go. If the outage lasts more than 25 seconds, or the server
 receives nothing for 30 seconds, that recording is discarded and you record again. Browsers without AudioWorklet use the single-file upload
-described above. The 60-second limit is the same. While recording, the status panel shows an input level bar, and the bar changes color when
+described above. The 60-second limit and "Confirm before sending" are the same for both. While recording, the status panel shows an input level bar, and the bar changes color when
 the sound is so loud it distorts (there is no bar with the single-file upload).
 
 ## While recording (chunked upload only)
 
 Settings → "Voice and notifications" → "Voice input" has two items. They apply to every device and are read when a recording starts, so a change made mid-recording applies from the next one.
 
-- **Auto stop** (off by default): when you stop talking and it stays quiet for 1 second, recording ends and is sent, the same as pressing "Stop recording".
+- **Auto stop** (off by default): when you stop talking and it stays quiet for 1 second, recording ends and is sent, the same as pressing "Stop recording" (if "Confirm before sending" applies, the confirm box opens).
   It never ends before you start talking (the 60-second limit still applies). The server judges by comparing loudness with the background noise, so a pause
   of more than 1 second between sentences can cut you off, and a sudden jump in background noise can keep it from ending (stop it yourself then).
 - **Show partial results** (on by default): while you record, the status panel shows a dimmed preview of the sentence being recognized. It is only a preview
-  and is never typed into the terminal; when recording ends, the whole recording is recognized again and only that final result is typed in. Past 20 seconds
+  and is never typed into the terminal; when recording ends, the whole recording is recognized again and only that final result is typed in (with "Confirm before sending", that final result goes to the confirm box). Past 20 seconds
   only the last 20 seconds are shown, prefixed with "…". The server runs extra recognition while you record, so on a slow server (llama.cpp on the CPU, say)
   the final result can come a little later — turn it off then. If the server is busy with another recognition, the preview is skipped.
 
