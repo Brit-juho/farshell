@@ -55,12 +55,13 @@ test('app.js가 지연 청크를 정적으로 import하지 않는다 — "지연
   // entry가 그 청크를 정적 import하게 되는데, **빌드는 성공하고 크기 게이트도
   // 통과한다**(app.js가 오히려 작아지니까). 실측한 사고: snippets.js 하나를
   // 지연시키자 app.js가 0.04KB 스텁이 되고 panels.js가 215KB로 부풀었다.
-  // 산출물은 공백이 걷혀 있다(vite.config.js stripChunkWhitespace) — `import{a as b}from"./core.js";`가
-  // 한 줄에 이어진다. 그래서 줄 머리(^) 대신 문장 경계로 찾고, 하나도 못 찾으면 실패시킨다
+  // 산출물은 공백이 걷혀 있다— 형식이 바뀔 수 있으니(vite 8 이전 전에는 공백이 걷혀 한 줄에 이어졌다) 줄 머리(^) 대신 문장 경계로 찾고, 하나도 못 찾으면 실패시킨다
   // (정규식이 산출 형식을 못 따라가 0건이 되면 이 검사가 아무것도 막지 못한 채 통과한다).
   const statics = [...appJs.matchAll(/(?:^|[;}\n])\s*import\s*[^;()]*?from\s*["']\.\/([\w.-]+)["']/g)].map((m) => m[1]);
   assert.ok(statics.includes('core.js'), 'app.js의 정적 import를 하나도 못 찾았다 — 검사 정규식이 산출 형식과 어긋났다');
-  for (const dep of statics) {
+  // rolldown-runtime.js: Rolldown이 모든 청크가 공유하도록 내는 0.5KB짜리 헬퍼(상태 없음, 고정 이름).
+  // 이것은 지연 청크가 아니므로 허용한다. 다른 것이 끼면 여전히 실패한다.
+  for (const dep of statics.filter((d) => d !== 'rolldown-runtime.js')) {
     assert.strictEqual(dep, 'core.js',
       `app.js가 ./${dep}를 정적 import한다 — 지연 청크가 상시 로드로 승격됐다`);
   }
@@ -71,8 +72,8 @@ test('panels.js(코드 뷰어 지연 청크)가 core/store.js의 세션 싱글�
   // 변수 선언이 panels.js 안에 그대로 나타난다(`const sessions = {}` +
   // `let activeId = null`). 복제되면 panels/viewer/tree.js의 activeSessionId()가
   // 항상 빈 사본을 보게 되어 "터미널 위치에서 열기"가 조용히 죽는다.
-  assert.doesNotMatch(panelsJs, /const sessions\s*=\s*\{\}/, 'core/store.js의 세션 저장소가 복제됐다');
-  assert.doesNotMatch(panelsJs, /let activeId\s*=\s*null/, 'core/store.js의 activeId가 복제됐다');
+  assert.doesNotMatch(panelsJs, /\bsessions\s*=\s*\{\}/, 'core/store.js의 세션 저장소가 복제됐다');
+  assert.doesNotMatch(panelsJs, /\bactiveId\s*=\s*null/, 'core/store.js의 activeId가 복제됐다');
 });
 
 test('panels.js가 core/dom.js의 액션 레지스트리를 복제하지 않는다', () => {
@@ -85,15 +86,15 @@ test('panels.js가 core/dom.js의 액션 레지스트리를 복제하지 않는�
 
 test('core.js는 실제 세션 싱글톤을 그대로 갖고 있다(위 검사가 "아예 없어져서" 통과한 게 아님을 확인)', () => {
   // 2.1.6 전에는 app.js가 상시 코드 전부였다. 지금은 core.js가 그 자리다.
-  assert.match(coreJs, /const sessions\s*=\s*\{\}/);
-  assert.match(coreJs, /let activeId\s*=\s*null/);
+  assert.match(coreJs, /\bsessions\s*=\s*\{\}/);
+  assert.match(coreJs, /\bactiveId\s*=\s*null/);
 });
 
 test('settings 청크(설정·MCP 팝업·스니펫·사용량)도 core 싱글톤을 복제하지 않는다', () => {
   // panels.js와 같은 규칙. 이 청크는 dock 화면과 **일부러 분리**돼 있다 —
   // 「큐」탭 한 번에 설정 7개 섹션까지 받게 하지 않으려고(vite.config.js).
-  assert.doesNotMatch(settingsJs, /const sessions\s*=\s*\{\}/, 'core/store.js의 세션 저장소가 복제됐다');
-  assert.doesNotMatch(settingsJs, /let activeId\s*=\s*null/, 'core/store.js의 activeId가 복제됐다');
+  assert.doesNotMatch(settingsJs, /\bsessions\s*=\s*\{\}/, 'core/store.js의 세션 저장소가 복제됐다');
+  assert.doesNotMatch(settingsJs, /\bactiveId\s*=\s*null/, 'core/store.js의 activeId가 복제됐다');
   assert.doesNotMatch(settingsJs, /const registry\s*=\s*new Map\(\)/, 'core/dom.js의 액션 레지스트리가 복제됐다');
 });
 
@@ -101,8 +102,8 @@ test('shell.js(HUD·헤더·워크트리 레일 지연 청크)도 core 싱글톤
   // N36 — Rail.tsx도 panels.js와 같은 함정 대상이다. 여긴 window 브리지로만
   // core/store.js·layout/store.js·agent/state.js를 읽으므로(직접 import 금지),
   // 복제되면 셋 중 하나라도 이 시그니처가 나타난다.
-  assert.doesNotMatch(shellJs, /const sessions\s*=\s*\{\}/, 'core/store.js의 세션 저장소가 복제됐다');
-  assert.doesNotMatch(shellJs, /let activeId\s*=\s*null/, 'core/store.js의 activeId가 복제됐다');
+  assert.doesNotMatch(shellJs, /\bsessions\s*=\s*\{\}/, 'core/store.js의 세션 저장소가 복제됐다');
+  assert.doesNotMatch(shellJs, /\bactiveId\s*=\s*null/, 'core/store.js의 activeId가 복제됐다');
   assert.doesNotMatch(shellJs, /const registry\s*=\s*new Map\(\)/, 'core/dom.js의 액션 레지스트리가 복제됐다');
   assert.doesNotMatch(shellJs, /const _byTmux\s*=\s*new Map\(\)/, 'agent/state.js의 상태 저장소가 복제됐다');
 });
@@ -168,7 +169,7 @@ test('에이전트 공유의 대화상자와 통합 승인함(모달·권한·�
   assert.match(coreJs, /agent_share_request/);
   assert.match(coreJs, /import\("\.\/share\.js"\)/);
   // share 청크도 core 싱글톤을 복제하지 않는다
-  assert.doesNotMatch(shareJs, /const sessions\s*=\s*\{\}/, 'core/store.js의 세션 저장소가 복제됐다');
+  assert.doesNotMatch(shareJs, /\bsessions\s*=\s*\{\}/, 'core/store.js의 세션 저장소가 복제됐다');
   assert.doesNotMatch(shareJs, /const registry\s*=\s*new Map\(\)/, 'core/dom.js의 액션 레지스트리가 복제됐다');
 });
 
