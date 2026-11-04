@@ -4,7 +4,7 @@ import { hasBlockingScope } from '../core/keyboard-scopes.js';
 import { getSession } from '../core/store.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
-import { uploadFiles } from './upload.js';
+import { uploadFiles } from './upload-lite.js';
 import { t } from '../core/i18n.js';
 
 // 시스템 클립보드에 쓰기. HTTPS/localhost가 아니면 clipboard API가 막히므로
