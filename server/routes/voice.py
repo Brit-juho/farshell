@@ -18,6 +18,7 @@ import voice_handler
 import auth
 import hashlib
 import voice_targets
+import voice_chunks
 from voice_sessions import coordinator
 from deps import pty_mgr, output_watcher, notify_clients
 from i18n import tr
@@ -232,6 +233,11 @@ async def _voice_input_dedup(request: Request, vid: str):
         audio = await request.body()
     if len(audio) > 4 * 1024 * 1024:
         return JSONResponse({"error": tr("녹음 파일이 너무 큽니다"), "injected": False}, status_code=413)
+    return await _voice_dedup_run(request, vid, audio, None)
+
+
+async def _voice_dedup_run(request: Request, vid: str, audio: bytes, fmt):
+    """중복 방지 + 인식·주입. /voice/input과 /voice/chunk의 final이 같은 길을 쓴다(fmt=None이면 Content-Type으로 정한다)."""
     owner = voice_targets.principal(request)
     token = request.headers.get("x-voice-target", "")
     sid = request.query_params.get("session_id", request.headers.get("x-session-id", ""))
@@ -259,7 +265,7 @@ async def _voice_input_dedup(request: Request, vid: str):
         _voice_fingerprints[key] = fingerprint
         _voice_inflight[key] = asyncio.get_running_loop().create_future()
     try:
-        result = await _voice_input_once(request, audio, target)
+        result = await _voice_input_once(request, audio, target, fmt)
     except BaseException as e:
         if vid:
             _voice_fingerprints.pop(key, None)
@@ -279,8 +285,8 @@ async def _voice_input_dedup(request: Request, vid: str):
     return result
 
 
-async def _voice_input_once(request: Request, audio_bytes=None, target=None):
-    fmt = _audio_format(request.headers.get("content-type", ""))
+async def _voice_input_once(request: Request, audio_bytes=None, target=None, fmt=None):
+    fmt = fmt or _audio_format(request.headers.get("content-type", ""))
     if audio_bytes is None:
         audio_bytes = await request.body()
     try:
@@ -306,6 +312,121 @@ async def _voice_input_once(request: Request, audio_bytes=None, target=None):
     if target and text and not injected:
         result["error"] = tr("입력 대상이 사라졌습니다. 인식 텍스트를 복사해 주세요")
     return result
+
+
+# --------------------------------------------------------------------------
+# PCM 청크 업로드 — 긴 녹음 중 네트워크가 끊겨도 이어 보낸다(수집기: voice_chunks.py)
+# --------------------------------------------------------------------------
+
+def _chunk_error(e: "voice_chunks.ChunkError") -> JSONResponse:
+    return JSONResponse({"error": e.message, "code": e.code}, status_code=e.status)
+
+
+async def _read_chunk_body(request: Request) -> "bytes | JSONResponse":
+    """청크 바디를 상한까지만 읽는다 — 상한을 넘으면 더 읽지 않고 413."""
+    limit = voice_chunks.MAX_CHUNK_BYTES
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > limit:
+        return JSONResponse({"error": tr("청크가 너무 큽니다"), "code": "chunk_too_large"}, status_code=413)
+    buf = bytearray()
+    if hasattr(request, "stream"):
+        async for part in request.stream():
+            buf.extend(part)
+            if len(buf) > limit:
+                return JSONResponse({"error": tr("청크가 너무 큽니다"), "code": "chunk_too_large"}, status_code=413)
+    else:
+        buf.extend(await request.body())
+        if len(buf) > limit:
+            return JSONResponse({"error": tr("청크가 너무 큽니다"), "code": "chunk_too_large"}, status_code=413)
+    return bytes(buf)
+
+
+@router.post("/voice/chunk")
+async def voice_chunk(request: Request):
+    """PCM16 LE 16kHz mono 조각 수신. `?seq=N&final=1`, 헤더 X-Voice-Id·X-Voice-Target."""
+    vid = _voice_id(request)
+    if not vid:
+        return JSONResponse({"error": tr("녹음 ID가 올바르지 않습니다"), "code": "bad_voice_id"}, status_code=400)
+    token = request.headers.get("x-voice-target", "")
+    if not token:
+        return JSONResponse({"error": tr("입력 대상이 없습니다"), "code": "no_target"}, status_code=400)
+    try:
+        seq = voice_chunks.parse_seq(request.query_params.get("seq", ""))
+    except voice_chunks.ChunkError as e:
+        return _chunk_error(e)
+    fv = request.query_params.get("final", "")
+    if fv not in ("", "0", "1"):
+        return JSONResponse({"error": tr("final 값이 올바르지 않습니다"), "code": "bad_final"}, status_code=400)
+    final = fv == "1"
+    owner = voice_targets.principal(request)
+    try:
+        voice_targets.get(token, owner)         # 만료·타 주체 토큰 거부(진행 중 녹음이 없어도 만들지 않는다)
+    except ValueError as e:
+        return JSONResponse({"error": str(e), "code": "target_expired"}, status_code=409)
+    data = await _read_chunk_body(request)
+    if isinstance(data, JSONResponse):
+        return data
+    try:
+        out = voice_chunks.accept(vid, owner, token, seq, data, final)
+    except voice_chunks.ChunkError as e:
+        return _chunk_error(e)
+    rec = out.rec
+    if out.kind == "ack":
+        return {"ackSeq": out.ack_seq, "complete": False}
+    if out.kind == "done":
+        return {**rec.result, "ackSeq": out.ack_seq, "complete": True, "duplicate": True}
+    if out.kind == "finishing":
+        # 첫 final이 아직 인식 중이다 — 같은 결과를 기다린다(클라이언트가 응답을 못 받고 다시 보낸 경우).
+        fut = rec.future
+        if fut is None:
+            return JSONResponse({"error": tr("처리 중입니다"), "code": "busy"}, status_code=409)
+        try:
+            res = await asyncio.shield(fut)
+        except stt_service.Busy as e:
+            return JSONResponse({"text": "", "error": str(e), "injected": False}, status_code=429)
+        return {**res, "ackSeq": out.ack_seq, "complete": True, "duplicate": True}
+
+    # complete: 이 요청이 인식을 맡는다.
+    loop = asyncio.get_running_loop()
+    rec.future = loop.create_future()
+    wav = voice_chunks.to_wav(voice_chunks.take_pcm(rec))
+    try:
+        result = await _voice_dedup_run(request, vid, wav, "wav")
+    except BaseException as e:
+        fut = rec.future
+        voice_chunks.reopen(rec)
+        if not fut.done():
+            fut.set_exception(e)
+            fut.exception()
+        if isinstance(e, stt_service.Busy):
+            return JSONResponse({"text": "", "error": str(e), "injected": False}, status_code=429)
+        raise
+    if isinstance(result, JSONResponse):          # 중복 방지 충돌(409) 등
+        fut = rec.future
+        voice_chunks.reopen(rec)
+        fut.set_result({"error": tr("녹음 ID가 다른 입력에 사용됐습니다"), "injected": False})
+        return result
+    fut = rec.future
+    voice_chunks.finish(rec, result)
+    fut.set_result(result)
+    return {**result, "ackSeq": out.ack_seq, "complete": True}
+
+
+@router.post("/voice/chunk/cancel")
+async def voice_chunk_cancel(request: Request):
+    """진행 중인 청크 녹음을 폐기한다(멱등). 헤더 X-Voice-Id 또는 JSON {voice_id}."""
+    vid = _voice_id(request)
+    if not vid:
+        try:
+            body = await request.json()
+            raw = str(body.get("voice_id", "")) if isinstance(body, dict) else ""
+        except Exception:
+            raw = ""
+        vid = raw[:64] if raw and raw.isascii() and all(c.isalnum() or c in "-_" for c in raw) else ""
+    if not vid:
+        return JSONResponse({"error": tr("녹음 ID가 올바르지 않습니다"), "code": "bad_voice_id"}, status_code=400)
+    outcome = voice_chunks.cancel(vid, voice_targets.principal(request))
+    return {"cancelled": outcome == "cancelled", "state": outcome}
 
 
 @router.post("/voice/output")

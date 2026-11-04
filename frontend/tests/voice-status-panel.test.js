@@ -116,3 +116,37 @@ test('우클릭과 길게 누르기는 패널을 열고, 길게 누른 뒤의 cl
   mic.dispatchEvent(new w.MouseEvent('click', { bubbles: true, cancelable: true }));
   assert.equal(clicks, 2);
 });
+
+test('녹음 중에만 음량 미터가 보이고, 값·클리핑을 그린다', async () => {
+  const { w } = await build();
+  const meter = w.document.getElementById('voice-meter');
+  const lv = () => meter.style.getPropertyValue('--lv');
+  assert.equal(meter.hidden, true);
+  const stage = (phase, target) => w.dispatchEvent(new w.CustomEvent('vt:voice-stage', { detail: { phase, target } }));
+  const level = (detail) => w.dispatchEvent(new w.CustomEvent('vt:voice-level', { detail }));
+  level({ level: 0.9, clip: false });                         // 녹음 중이 아니면 무시
+  assert.notEqual(lv(), '0.90');
+  stage('recording', '작업'); await flush();
+  assert.equal(meter.hidden, false);
+  level({ level: 0.5, clip: false });
+  assert.equal(lv(), '0.50'); assert.equal(meter.dataset.clip, undefined);
+  assert.equal(meter.getAttribute('aria-valuenow'), '50');
+  level({ level: 3, clip: true });                            // 범위 밖 값은 자른다
+  assert.equal(lv(), '1.00'); assert.equal(meter.dataset.clip, '1');
+  level({ level: NaN });
+  assert.equal(lv(), '0.00'); assert.equal(meter.dataset.clip, undefined);
+  stage('processing'); await flush();
+  assert.equal(meter.hidden, true);
+});
+
+test('prefers-reduced-motion이면 미터를 5단계로 끊고 초당 4번만 갱신한다', async () => {
+  const { w } = await build();
+  w.matchMedia = (q) => ({ matches: q.includes('reduced-motion') });
+  const meter = w.document.getElementById('voice-meter');
+  w.dispatchEvent(new w.CustomEvent('vt:voice-stage', { detail: { phase: 'recording', target: 'x' } })); await flush();
+  const level = (v) => w.dispatchEvent(new w.CustomEvent('vt:voice-level', { detail: { level: v, clip: false } }));
+  level(0.47);
+  assert.equal(meter.style.getPropertyValue('--lv'), '0.4');
+  level(0.9);                                                 // 250ms 안의 두 번째 값은 건너뛴다
+  assert.equal(meter.style.getPropertyValue('--lv'), '0.4');
+});

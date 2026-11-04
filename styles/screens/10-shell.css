@@ -612,6 +612,16 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
 #mic-status:empty { display:none; }
 .vt-voice-meta { margin:8px 0; color:var(--color-sub); overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
 .vt-voice-meta:empty { display:none; }
+/* 녹음 중 음량 미터: 가는 막대. 값(--lv 0~1)은 status-panel.js가 넣는다. 색은 토큰만. */
+.vt-voice-meter { height:4px; margin:8px 0; border-radius:2px; overflow:hidden; background:var(--color-line); }
+.vt-voice-meter[hidden] { display:none; }
+.vt-voice-meter-bar {
+  display:block; height:100%; width:100%; background:var(--acc); transform-origin:left center;
+  transform:scaleX(var(--lv,0)); transition:background-color .12s linear;
+}
+.vt-voice-meter[data-clip] .vt-voice-meter-bar { background:var(--err); }
+@media (pointer:coarse) { .vt-voice-meter { height:6px; } }
+@media (prefers-reduced-motion:reduce) { .vt-voice-meter-bar { transition:none; } }
 .vt-voice-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
 .vt-voice-help { margin:10px 0 0; color:var(--color-sub); font-size:var(--fs-xs); }
 #mic-status .vt-btn { margin:8px 8px 0 0; }

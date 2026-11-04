@@ -24,6 +24,9 @@ import {
   micErrorMessage, retryWithBackoff, newVoiceId,
 } from './capture.js';
 import { t } from '../core/i18n.js';
+// PCM 청크 경로(AudioWorklet → 16kHz PCM16 → POST /voice/chunk). 지원하지 않거나 시작에 실패하면 아래 MediaRecorder 경로를 쓴다.
+import { primeAudioContext } from './pcm-capture.js';
+import { startPcmSession } from './pcm-session.js';
 
 const API = `${location.protocol}//${location.host}`;
 
@@ -31,6 +34,7 @@ const micBtn = document.getElementById('mic-btn-wrap');
 export const micStatus = document.getElementById('mic-status');
 
 let mediaRecorder = null;
+let pcmSession = null;  // PCM 청크 경로의 진행 중 녹음(없으면 MediaRecorder 경로)
 let audioChunks = [];
 let target = null;
 let busy = false;
@@ -121,9 +125,13 @@ export async function startRecording() {
   stage('starting', '');
   let stream = null;
   let paused = false;
+  let pcm = null;
+  // iOS Safari는 AudioContext를 사용자 제스처 안에서 만들고 resume해야 한다 — 아래 await들보다 먼저 만든다.
+  let pcmCtx = primeAudioContext();
+  const dropCtx = () => { if (pcmCtx) { try { pcmCtx.close().catch(() => {}); } catch {} pcmCtx = null; } };
   try {
     const prep = await prepareStt();
-    if (prep !== 'ready') { busy = false; return; }
+    if (prep !== 'ready') { dropCtx(); busy = false; return; }
     // 마이크부터 연다 — 없거나 거부되면 서버에 입력 대상 토큰 같은 상태를 만들기 전에 끝난다.
     stream = await navigator.mediaDevices.getUserMedia({ audio: buildAudioConstraints() });
     const sid = window.activeId || '';
@@ -133,22 +141,38 @@ export async function startRecording() {
     });
     const captured = await tr.json();
     if (!tr.ok) throw new Error(captured.error || t('입력 대상 준비 실패'));
-    const mime = pickRecorderMime((t) => MediaRecorder.isTypeSupported(t));
-    const recorder = new MediaRecorder(stream, buildRecorderOptions(mime));
+    // PCM 청크 경로를 먼저 시도한다. 실패하면(워클릿 미지원·컨텍스트 거부 등) 같은 스트림으로 MediaRecorder 경로를 쓴다.
+    const voiceId = newVoiceId();
+    if (pcmCtx) {
+      try {
+        pcm = await startPcmSession({
+          ctx: pcmCtx, stream, apiFetch, base: API, voiceId, token: captured.token, sessionId: sid,
+          onLimit: () => stopRecording(),
+        });
+        console.debug('[voice] 캡처 경로: pcm-chunk (입력 %dHz → 16kHz)', pcm.sampleRate);
+      } catch (e) {
+        console.debug('[voice] PCM 청크 시작 실패 — MediaRecorder로 폴백:', e && e.message);
+      }
+      pcmCtx = null;  // 성공하면 세션이, 실패하면 startPcmCapture가 닫는다
+    }
+    const mime = pcm ? '' : pickRecorderMime((t) => MediaRecorder.isTypeSupported(t));
+    const recorder = pcm ? null : new MediaRecorder(stream, buildRecorderOptions(mime));
+    if (!pcm) console.debug('[voice] 캡처 경로: MediaRecorder (%s)', mime || '기본');
     // 여기까지 오면 녹음이 시작된다 — 이전 실패분·버튼·TTS 일시정지는 이때서야 정리한다.
     target = { ...captured, sessionId: sid };
     stage('starting', target.name);
     pauseVoice(true); paused = true;
     dropFailedUpload();
+    if (pcm) { pcmSession = pcm; pcmVoiceId = voiceId; stream = null; }  // 트랙은 세션이 닫는다
     mediaRecorder = recorder;
     audioChunks = [];
     const liveStream = stream;
 
-    recorder.ondataavailable = (e) => {
+    if (recorder) recorder.ondataavailable = (e) => {
       if (e.data.size > 0) audioChunks.push(e.data);
     };
 
-    recorder.onstop = async () => {
+    if (recorder) recorder.onstop = async () => {
       liveStream.getTracks().forEach(t => t.stop());
       // 실제 녹음 형식은 recorder가 알려주는 값이 가장 정확하다(mime ''이면 브라우저 기본).
       const contentType = contentTypeOf(recorder.mimeType || mime);
@@ -158,7 +182,7 @@ export async function startRecording() {
       finally { busy = false; pauseVoice(false); }
     };
 
-    recorder.start();
+    if (recorder) recorder.start();
     stream = null;  // 이제 onstop이 닫는다
     busy = false;
     recordTimer = setTimeout(() => stopRecording(), 60000);
@@ -169,6 +193,8 @@ export async function startRecording() {
     stage('recording', target.name);
   } catch (err) {
     console.error('마이크 접근 실패:', err);
+    dropCtx();
+    if (pcm) { pcmSession = null; pcm.cancel(); }
     if (stream) stream.getTracks().forEach(t => t.stop());
     micStatus.textContent = err.name === 'Error' ? err.message : micErrorMessage(err);
     busy = false;
@@ -180,7 +206,10 @@ export async function startRecording() {
 export function stopRecording() {
   if (!isRecording) return;
   clearTimeout(recordTimer); busy = true;
-  if (mediaRecorder && mediaRecorder.state === 'recording') {
+  if (pcmSession) {
+    const s = pcmSession; pcmSession = null;
+    finishPcm(s);
+  } else if (mediaRecorder && mediaRecorder.state === 'recording') {
     mediaRecorder.stop();
   }
   isRecording = false;
@@ -191,6 +220,17 @@ export function stopRecording() {
 }
 
 let _stopAt = 0;
+let pcmVoiceId = '';
+
+// PCM 청크 경로의 녹음 종료: 남은 조각을 final로 보내고, 결과는 MediaRecorder 경로와 같은 표시 코드가 받는다.
+async function finishPcm(session) {
+  _stopAt = performance.now();
+  try {
+    await session.stop();
+    _failedUpload = { session, voiceId: pcmVoiceId, captured: target, attempts: 0, failedAt: 0 };
+    await uploadWithRetry();
+  } finally { busy = false; pauseVoice(false); }
+}
 
 function hideRetry() {
   clearTimeout(_retryTimer); _retryTimer = null;
@@ -198,7 +238,10 @@ function hideRetry() {
 }
 
 // 보관한 녹음과 버튼을 함께 버린다 — 둘이 따로 남으면 눌러도 안 되는 버튼이 생긴다.
-function dropFailedUpload() { _failedUpload = null; hideRetry(); }
+function dropFailedUpload() {
+  if (_failedUpload && _failedUpload.session) _failedUpload.session.cancel();  // 서버에 쌓인 조각도 버린다
+  _failedUpload = null; hideRetry();
+}
 
 // 세션을 옮기면 이전 세션에 보낼 재전송 버튼은 더 붙잡지 않는다.
 document.addEventListener('vt:session-switch', () => { if (!busy) dropFailedUpload(); });
@@ -259,9 +302,10 @@ async function resendFailed() {
 }
 
 async function uploadWithRetry() {
-  const { blob, contentType, voiceId, captured } = _failedUpload;
+  const { blob, contentType, voiceId, captured, session } = _failedUpload;
   try {
-    const { res, data } = await retryWithBackoff(() => postOnce(blob, contentType, voiceId, captured), RETRY_DELAYS);
+    // PCM 청크 경로는 업로더가 재전송·ack를 이미 맡고 있다(실패 후 다시 부르면 남은 조각으로 재시도).
+    const { res, data } = session ? await session.result() : await retryWithBackoff(() => postOnce(blob, contentType, voiceId, captured), RETRY_DELAYS);
     _failedUpload = null;
     console.debug('[voice] 왕복 %dms, 서버 timing:', Math.round(performance.now() - _stopAt), data && data.timing);
     if (!res.ok) {

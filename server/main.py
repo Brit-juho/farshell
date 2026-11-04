@@ -431,6 +431,8 @@ async def lifespan(_app: FastAPI):
     output_watcher.start()
     import voice_handler
     stt_idle_task = asyncio.create_task(voice_handler.stt_idle_monitor())
+    import voice_chunks
+    voice_chunks_task = asyncio.create_task(voice_chunks.sweep_loop())   # 30초 무응답 청크 녹음 정리
 
     # N19 — 레거시 업로드(/tmp/vt-uploads)를 ~/.vt/files/로 편입 + 고아 정리 +
     # TTL/용량 정리를 기동 시 1회, 그 뒤 6시간마다 반복. 블로킹 I/O라 to_thread.
@@ -565,9 +567,12 @@ async def lifespan(_app: FastAPI):
         from voice_sessions import coordinator
         await coordinator.close()
         stt_idle_task.cancel()
+        voice_chunks_task.cancel()
         files_cleanup_task.cancel()
         with suppress(asyncio.CancelledError):
             await stt_idle_task
+        with suppress(asyncio.CancelledError):
+            await voice_chunks_task
         with suppress(asyncio.CancelledError):
             await files_cleanup_task
         output_watcher.stop()
