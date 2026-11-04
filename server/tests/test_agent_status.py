@@ -243,3 +243,55 @@ def test_report_takes_over_screen_placeholder():
     agent_status.on_waiting("pane:sh", True, session="sh")
     agent_status.report("pane:sh", "working", session="sh")
     assert agent_status.drop_shell_placeholders({"sh"}) == 0
+
+
+# ── agent_cwd_for: 셸이 아니라 에이전트 CLI 기준 위치 ─────────────────────────
+def _seed(sid, cwd, tmux="dev", **extra):
+    ent = agent_status._entry(sid, cwd)
+    ent["tmux_session"] = tmux
+    ent.update(extra)
+    return ent
+
+
+def test_agent_cwd_for_returns_cli_cwd_for_the_session():
+    _seed("s1", "/trees/task")
+    assert agent_status.agent_cwd_for("dev") == "/trees/task"
+
+
+def test_agent_cwd_for_follows_latest_hook_cwd():
+    # Claude가 내부에서 워크트리로 옮기면 다음 훅의 cwd가 바뀐다.
+    _seed("s1", "/repo")
+    agent_status._entry("s1", "/trees/task")
+    assert agent_status.agent_cwd_for("dev") == "/trees/task"
+
+
+@pytest.mark.parametrize("bad", [None, "", "relative/path", "/x\0y"])
+def test_agent_cwd_for_rejects_unusable_values(bad):
+    _seed("s1", bad)
+    assert agent_status.agent_cwd_for("dev") is None
+
+
+def test_agent_cwd_for_none_without_entry_or_name():
+    assert agent_status.agent_cwd_for("dev") is None
+    assert agent_status.agent_cwd_for("") is None
+
+
+def test_agent_cwd_for_ambiguous_entries_fall_back():
+    # 소유자 없이 서로 다른 cwd의 엔트리가 둘이면 어느 쪽인지 모른다 — 추측하지 않는다.
+    _seed("s1", "/a")
+    _seed("s2", "/b")
+    assert agent_status.agent_cwd_for("dev") is None
+
+
+def test_agent_cwd_for_ignores_released_and_other_host():
+    _seed("s1", "/trees/task", released=True)
+    assert agent_status.agent_cwd_for("dev") is None
+    _seed("s3", "/remote", host="mac2")
+    assert agent_status.agent_cwd_for("dev") is None
+
+
+def test_subagent_event_does_not_move_cli_cwd():
+    agent_status.on_event("session_start", {"session_id": "s1", "cwd": "/repo"}, session="dev")
+    agent_status.on_event("pre", {"session_id": "s1", "tool_name": "Bash", "cwd": "/repo"}, session="dev")
+    agent_status.on_event("pre", {"session_id": "s1", "agent_id": "sub-1", "tool_name": "Bash", "cwd": "/elsewhere"}, session="dev")
+    assert agent_status.agent_cwd_for("dev") == "/repo"

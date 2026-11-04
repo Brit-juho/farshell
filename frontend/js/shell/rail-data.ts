@@ -52,6 +52,8 @@ export interface SessionRow {
   cwd?: string;
   directory?: string;
   workspaceKind?: string;
+  /** 위치 툴팁 — 에이전트 기준 경로(+ 터미널과 다르면 터미널 위치). */
+  locationTip?: string;
   context?: any;
   contextStatus?: string;
   isMainWorktree?: boolean;

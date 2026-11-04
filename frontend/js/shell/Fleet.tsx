@@ -183,7 +183,7 @@ function Row(props: {
         <Show when={!props.kid && (props.row.directory || props.row.branch || diff())}>
           <div class="vt-srow-sub vt-fleet-row-sub vt-srow-line2">
             <Show when={props.row.workspaceKind}><span class="vt-srow-workspace-kind" role="img" aria-label={props.row.workspaceKind === 'WT' ? t('별도 워크트리') : props.row.workspaceKind}>{props.row.workspaceKind}</span></Show>
-            <Show when={props.row.directory}><span class="vt-srow-directory" data-tip={props.row.cwd}>{props.row.directory}</span></Show>
+            <Show when={props.row.directory}><span class="vt-srow-directory" data-tip={props.row.locationTip || props.row.cwd}>{props.row.directory}</span></Show>
             <Show when={props.row.branch}><span class="vt-srow-branch">{props.row.branch}</span></Show>
             <Show when={diff()}><span class="vt-srow-meta vt-fleet-diff">{diff()}</span></Show>
           </div>

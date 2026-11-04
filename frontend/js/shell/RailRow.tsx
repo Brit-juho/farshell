@@ -263,7 +263,7 @@ export function Row(props: {
         <Show when={!props.kid && (props.row.directory || branch() || diff() || props.row.contextStatus === 'unavailable')}>
           <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line2">
             <Show when={props.row.workspaceKind}><span class="vt-srow-workspace-kind" role="img" aria-label={props.row.workspaceKind === 'WT' ? t('별도 워크트리') : props.row.workspaceKind}>{props.row.workspaceKind}</span></Show>
-            <Show when={props.row.directory}><span class="vt-srow-directory" data-tip={props.row.cwd} data-tip-side="right">{props.row.directory}</span></Show>
+            <Show when={props.row.directory}><span class="vt-srow-directory" data-tip={props.row.locationTip || props.row.cwd} data-tip-side="right">{props.row.directory}</span></Show>
             <Show when={branch()}><span class="vt-srow-branch" data-tip={t('브랜치 · {branch}', { branch: branch() })} data-tip-side="right">{branch()}</span></Show>
             <Show when={diff()}><span class="vt-srow-meta vt-wgrail-diff">{diff()}</span></Show>
           </div>

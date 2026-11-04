@@ -13,7 +13,7 @@ import { normalizeOrigin, normalizeShare, normalizeLineage, normalizeKind, norma
 import { confirmDialog } from '../core/dialog.js';
 import { t } from '../core/i18n.js';
 import { watchPath, isWatchLive } from './fs-watch.js';
-import { sessionContext, workspaceDirectory, workspaceKind } from '../ui/session-context.js';
+import { sessionContext, workspaceDirectory, workspaceKind, locationTip } from '../ui/session-context.js';
 
 // §5 원문: "60초 캐시" — 워크트리에 안 속한(changed 요약을 서버가 안 주는)
 // 세션에만 쓴다.
@@ -365,7 +365,7 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
       tool: detail?.tool ?? null,
       kind: detail?.kind ? normalizeKind(detail.kind) : null,
       badge: normalizeBadge(detail?.badge),
-      cwd: ctx.cwd, directory: workspaceDirectory(ctx), workspaceKind: workspaceKind(ctx), context: ctx,
+      cwd: ctx.cwd, locationTip: locationTip(ctx), directory: workspaceDirectory(ctx), workspaceKind: workspaceKind(ctx), context: ctx,
       contextStatus: ctx.status === 'unavailable' || ctx.worktree?.status === 'unavailable' ? 'unavailable' : ctx.status,
       diffFiles: modern ? (ctx.changed?.files ?? null) : cwd ? (cachedDiffCount(cwd) ?? null) : null,
       changed: modern ? ctx.changed : info?.changed ?? null,
