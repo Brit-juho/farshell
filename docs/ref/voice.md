@@ -42,7 +42,7 @@ Claude 기록과 Codex response_item/event_msg 또는 last_assistant_message를 
 최종 응답 어댑터가 없는 도구는 TTS 미지원이다. 출력 idle 감시는 음성을 생성하지 않는다.
 
 STT는 녹음 시작에 대상 토큰을 발급받고 종료·재전송에 같은 pane을 사용한다. 대상이 사라지면
-다른 pane으로 보내지 않고 인식 텍스트 복사를 제공한다. 첫 클릭은 모델 준비, 다음 클릭은 녹음이다.
+다른 pane으로 보내지 않고 인식 텍스트 복사를 제공한다. 입력 전 확인 단계는 위 「확인 후 전송」을 본다. 첫 클릭은 모델 준비, 다음 클릭은 녹음이다.
 브라우저 녹음은 최대 60초, 업로드는 4MiB다. 구 로컬 마이크 기능은 제거했으며 구 요청은 410이다.
 자동 VAD·연속 녹음은 지원하지 않는다. 이어폰 미디어키는 매 접속마다 기본 off다.
 
@@ -50,6 +50,50 @@ TTS auto는 edge-tts → macOS say이며 브라우저가 재생할 수 있는 WA
 local을 선택하면 외부 요청 없이 say만 사용한다. edge 선택은 실패 시 다른 엔진으로 바꾸지 않는다.
 완료 훅의 서버 장애 시 직접 OS 낭독 폴백은 없다. 기존 전역 낭독 설정은 새 세션을 자동으로 켜지 않는다.
 프로토콜은 [API.md](../../API.md)를 본다.
+
+### 입력 대상 고정 (브라우저, 기기별)
+
+기본은 「현재 보는 세션 따라가기」 — 녹음 시작 때 `window.activeId`가 대상이다. 음성 상태 패널(`#voice-pin-select`)이나
+설정 「음성 및 알림」의 「입력 대상」에서 특정 세션을 **고정**하면 포커스와 무관하게 그 세션으로 간다.
+
+- 값은 이 브라우저의 localStorage `vt_voice_pin`(tmux 세션 **이름**)이다. 저장이 막히면 `window.__vtVoicePinMemory`로 이 화면에서만 동작한다.
+  웹 PTY id가 아니라 이름을 쓰는 이유: PTY id는 화면을 새로 열 때마다 달라져 새로고침 뒤 고정이 풀린다.
+- 녹음 시점에 그 이름을 가진 열린 세션 id를 `window.sessions`에서 찾아 `/voice/target`에 보낸다(같은 이름이 여럿이면 활성 화면 우선).
+  원격 호스트 세션과 tmux가 아닌 세션은 후보가 아니다.
+- 고정한 세션이 열려 있지 않으면 **활성 세션으로 대신하지 않고** 마이크·모델 준비·서버 요청 전에 녹음을 막는다
+  (「고정한 입력 대상이 없습니다」, 마이크 버튼 상태 점 error). 서버도 대상이 사라진 토큰을 다른 pane에 보내지 않는다.
+- 구현은 `frontend/js/voice/target-pin.js`다. voice.js 번들(`recording.js`)과 app.js 번들(`status-panel.js`·설정)이 각자 사본으로
+  가져가므로 모듈 상태를 두지 않고 `core/store.js`를 import하지 않는다(`recording.js` 상단 경고).
+- 응답 읽기(TTS) 정책은 세션별 그대로다. Voice Daemon은 이 설정을 보지 않는다.
+
+### 확인 후 전송 (`voice.confirm`)
+
+텍스트 + Enter를 바로 입력하던 계약은 다음으로 바뀌었다. 전역 설정 `voice.confirm`(`off | shell | on`, 기본 `shell`;
+`workspace.json` settings, 서버가 알 수 없는 값은 `shell`로 본다) 정책은 `server/voice_confirm.py`가 판정한다.
+
+| 값 | 동작 |
+|---|---|
+| `off` | 확인하지 않는다. 위험 패턴도 확인하지 않는다 |
+| `shell` | AI 에이전트 pane이면 바로 입력. 일반 셸이거나 **판별이 불확실하면**(vim·ssh·python, tmux 조회 실패) 확인 |
+| `on` | 항상 확인 |
+
+- pane 판별은 `agent_detector`의 판정(`KNOWN_AGENTS`, 셸 아래 자식 프로세스 스캔 포함)을 대상 pane 하나에 적용한다(`voice_confirm.pane_kind`).
+  `agent`만 바로 입력하고 `shell`·`unknown`은 확인한다.
+- **위험 패턴**은 `off`가 아니면 pane 종류와 무관하게 항상 확인한다. 목록은 `voice_confirm.DANGEROUS_PATTERNS` 한 곳에 있고
+  `server/tests/test_voice_confirm.py`가 잠근다(rm -r/-f, sudo, curl/wget | sh, git push -f/--force, git reset --hard, git clean -f,
+  mkfs, dd of=, `> /dev/…`(null·stdout·stderr 제외), chmod/chown -R, 포크 폭탄). NFKC 정규화 후 영문 표기로만 검사한다.
+- 확인이 필요하면 `/voice/input`은 **인식만 하고 입력하지 않는다.** 응답에 `pending_confirm: true`, `text`, `confirm_token`,
+  `confirm_reason`(`shell|unknown|always|dangerous`), `confirm_ttl_sec`, `target_name`이 든다. 웹은 패널의 편집 상자(`#voice-confirm`)에
+  보이고 「입력」이 `POST /voice/inject {token, text, voice_id}`를 부른다. 「취소」는 아무것도 보내지 않는다.
+- 확인 화면을 그릴 수 있는 클라이언트만 확인 단계를 거친다 — 웹이 `X-Voice-Confirm: 1`을 보낸다. 이 헤더가 없는 호출자(Voice Daemon,
+  옛 클라이언트)는 확인할 방법이 없으므로 기존대로 바로 입력하되, 위험 패턴만 입력하지 않고 `error`로 알린다(`off`가 아닐 때).
+- `/voice/inject`의 검증: 토큰 소유 주체(`voice_targets.principal`) 일치, 대상 pane `valid()` 재검증(사라졌으면 `target_gone` 409,
+  토큰 폐기, 다른 pane으로 보내지 않음), 제어문자 제거(`paste_prepare.strip_unsafe_control_chars`, 입력 경로와 같다), 길이 상한
+  4000자(413), 빈 텍스트 400, 발급 때의 `voice_id`와 일치. 같은 토큰의 동시 요청은 하나만 통과하고(429 `busy`) 입력이 끝나면
+  같은 토큰·같은 `voice_id`의 재요청은 `duplicate`로 응답한다(입력 없음). 없는·만료·남의 토큰은 모두 같은 409 `expired`다.
+  연결이 끊겨 취소돼도 이미 입력됐을 수 있어 토큰을 되돌리지 않는다. 입력 도구 호출 실패(`send_failed` 502)만 같은 토큰으로 다시 시도할 수 있다.
+- 확인 토큰 TTL은 300초(사용자가 고칠 시간), 1회용, 서버 메모리에만 있다(재시작하면 사라진다). 대기 한도 256개.
+- 새 녹음을 시작하면 이전 확인 대기는 클라이언트가 버린다.
 
 ### Clipboard Daemon (macOS clipboard sync)
 
