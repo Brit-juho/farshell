@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Fixed
+- `fsh start` reusing a running main tunnel now records its PID in `tunnel.pid` when the file is missing (only if exactly one process matches), so `fsh stop` and status no longer lose a tunnel whose pid file was dropped.
 - The first `fsh restart` after upgrading to 2.7 no longer says the access address changed when it did not (it read the tunnel log before moving it to its new folder).
 
 ---
