@@ -173,7 +173,7 @@
    * 2.1.6 이전에는 같은 것이 12벌 있었다 — .tbtn · .vt-pane-btn ·
    * .vt-rail-panel-close · .vt-rail-session-action · .vt-session-close ·
    * .vt-session-action · .vt-wgrail-collapse · .vt-rr-collapse ·
-   * .vt-dock-collapse · .vt-wtab-close · .vt-wgrail-icon · #search-bar button.
+   * .vt-dock-collapse · .vt-wgrail-icon · #search-bar button.
    * 선언은 사실상 같았고(테두리 없음 · 투명 배경 · sub 색 · radius-sm ·
    * hover에서 menu-hover + txt) 크기만 18/26/30/30/30/32/44로 제각각이었다.
    * 그 크기들이 서로 다를 이유가 있었던 게 아니라, 각자 그때 눈대중으로 정해진
@@ -1563,7 +1563,7 @@
     font-variant-numeric: tabular-nums; pointer-events: none;
   }
   .vt-authz-badge[hidden] { display: none; }
-  #vt-rail-settings, .vt-dock-settings-btn, .vt-mnav-btn[data-mnav="more"] { position: relative; }
+  #vt-rail-settings, .vt-mb-menu, .vt-mnav-btn[data-mnav="more"] { position: relative; }
 
   /* 좁은 화면: 승인 모달은 하단 내비(고정 52px) 위까지만 — 아래 끝(「나중에」)이 내비에 가려지지 않게 한다. */
   @media (max-width: 719px) {

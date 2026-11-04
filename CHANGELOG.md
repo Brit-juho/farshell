@@ -9,6 +9,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Changed
+- The settings gear at the bottom of the right-hand dock strip is gone (Settings is in the FarShell menu, and `Mod+,`); the pending-approval count badge now sits on the FarShell menu button. Rail settings and menu bar settings no longer share the gear icon: rail settings uses a sliders icon, menu bar settings a top-panel icon.
+- The view tab strip is gone: the top of the window is now just the menu bar (⌘K, the keyboard toggle and the macOS/Windows window decorations moved into it). Switching sessions and grouped views, naming a group and closing are done from the rail. Views themselves are unchanged — grouped layouts, a viewer pane attached to a session and the remembered closed groups work as before. The four key bindings for next/previous tab and moving a tab (`Mod+Shift+←/→`, `Mod+Alt+Shift+←/→`) are removed.
 - Native subagent rows in the rail no longer show the tool they are running (e.g. `Bash`) on an extra line; it appeared and vanished with every call and made the list flicker. The record viewer still lists tool calls.
 - The desktop rail's session row menu (⋯) no longer has 위로 이동 / 아래로 이동; reorder by dragging. The phone's row sheet keeps them (it cannot drag).
 - The bottom status bar moved to the top as a full-width, Mac-style **menu bar** (28px, on every skin; wide and regular screens only). The tab row sits below it, and the rail, dock and page start under it. Settings → 하단바 is now **메뉴바** and keeps your saved chip layout.

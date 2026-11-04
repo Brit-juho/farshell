@@ -334,16 +334,6 @@ function Dock(props: { deps: DockDeps }) {
           onClick={showMcp}
           innerHTML={icon('link', 16, 2)}
         />
-        <button
-          type="button"
-          class="vt-dock-tab vt-dock-action vt-dock-settings-btn"
-          aria-label={t('설정')}
-          data-tip={t('설정')}
-          data-tip-keys="Mod+,"
-          data-tip-side="left"
-          onClick={() => (props.deps.getAction('settings.show') as (() => void) | undefined)?.()}
-          innerHTML={icon('settings', 16, 2)}
-        />
         <Show when={!collapsed()}>
           {/* 2026-09-18(6차) — 손으로 쓴 SVG를 아이콘 레지스트리 호출로 바꾸고
               (DESIGN.md §아이콘: 아이콘 소스는 icons.js 하나뿐), 방향을 고친다.

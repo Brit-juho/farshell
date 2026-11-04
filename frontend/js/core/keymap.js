@@ -53,12 +53,6 @@ const ACTIONS = [
   { id: 'palette',    def: 'Mod+K',        defNonMac: 'Ctrl+Shift+K', label: t('커맨드 팔레트') },
   { id: 'viewer',     def: 'Ctrl+Shift+E', label: t('코드 뷰어') },
   { id: 'paste',      def: 'Ctrl+Shift+V', label: t('붙여넣기') },
-  { id: 'tabPrev',    def: 'Mod+Shift+ArrowLeft',  label: t('이전 탭') },
-  { id: 'tabNext',    def: 'Mod+Shift+ArrowRight', label: t('다음 탭') },
-  // 뷰 탭을 앞/뒤로 옮긴다(드래그 재정렬은 layout/tabbar.js). 이동 순서의 출처가
-  // 뷰 탭 순서이므로 모바일에서도 이 키가 곧 스와이프 순서를 바꾼다.
-  { id: 'tabMovePrev', def: 'Mod+Alt+Shift+ArrowLeft',  label: t('탭을 앞으로') },
-  { id: 'tabMoveNext', def: 'Mod+Alt+Shift+ArrowRight', label: t('탭을 뒤로') },
   { id: 'settings',   def: 'Mod+,',        label: t('설정') },
   { id: 'splitRight', def: 'Mod+D',        defNonMac: 'Ctrl+Shift+D', label: t('오른쪽 분할') },
   { id: 'splitDown',  def: 'Mod+Shift+D',  defNonMac: 'Alt+Shift+D',  label: t('아래 분할') },

@@ -242,7 +242,7 @@ enough, refresh it.
 - **Breakpoints:** `--breakpoint-regular`(720px) / `--breakpoint-wide`(1280px) /
   `--breakpoint-xwide`(1600px). The JS-side constants live in exactly **one**
   place, `frontend/js/layout/breakpoints.js` (`COMPACT_MAX`/`REGULAR_MAX`/`WIDE_MAX`).
-- **Shell dimensions:** menu bar 28px (top, full width) · tab row 44px · worktree rail default 252px (resizable
+- **Shell dimensions:** menu bar 28px (top, full width; the only header at >=720px) · worktree rail default 252px (resizable
   240~480) · dock default 392px (320~560, collapses to 36px). The
   rail's and dock's width/collapse state are **device-scoped settings**
   (`ui.rail.*`/`ui.dock.*`, §6 "Settings") — collapsing it on a phone must not
@@ -326,9 +326,7 @@ cols/rows survive).
 
 ```
 ┌ menu bar 28 (full width, fixed) ───────────────────────────────────────┐
-│ ◆FarShell ▾ [workspace chip] [agents]…        [CPU RAM NET …] [v] [clock]│
-├ tab row 44 ───────────────────────────────────────────────────────────┤
-│ [tabs…] [+]                                               [⌘K]        │
+│ ◆FarShell ▾ [workspace chip] [agents]…  [CPU RAM NET …] [v] [clock] [⌘K] │
 ├──────────┬───────────────────────────────────────────┬───────────────┤
 │ rail 252 │ pane tree                                  │ dock 392      │
 │(worktree)│ ┌ pane header 24 ┐                         │ ┌ tabs 28 ┐   │
@@ -378,28 +376,21 @@ collapsing it on a phone must not carry over to the Mac. The tier boundaries
 live in exactly one place, `layout/breakpoints.js`. Past the cap, the split
 button goes disabled **with the reason in its tooltip**.
 
-### Tab row 44px (was "Header 36px")
+### View tabs (removed 2026-11; was "Header 36px", then "Tab row 44px")
 
-Since 2026-11 the workspace chip lives in the menu bar above (§「Menu bar 28px」), and `⌘K` stays at the right of this row. Left: **view tabs** (`#vt-wtabs`, `layout/tabbar.js`). A tab is a view,
-not a session, and holds only `[label][×]` — no agent mark, no state icon, no dot
-(2026-10-04 rework). The label is the member names joined with `+`, or the name the
-user gave it. State lives in a **state bar** along the tab's bottom edge
-(`.vt-wtab-bar` > `.vt-seg`): one equal-width segment per session in pane order
-(top-left first), a one-segment bar for a single view, empty panes not counted.
-Segment colour = the four state colours (`--color-st-*`), idle a dimmed grey that is
-always visible; only `waiting` breathes (`vt-status-breathe`; under
-`prefers-reduced-motion` it becomes a striped fill, so the shape still says
-"waiting"). **Thickness carries "unseen"**: 6px = changed and not yet looked at,
-3px = seen. The focused pane is never shown by thickness (it would collide) — the
-pane's own border does that. Colour alone is not the signal: the hover tooltip lists
-`name · state[ · branch][ · 확인 안 함]` per session (the branch only when known) and the tab's `aria-label` repeats it without the branch
-(`api, 작업 중 · web, 입력 대기(확인 안 함)`). The active tab is a filled background
-(the old accent underline gave way to the bar). × is shown even when there is one
-view. Tab text is 15px (`--fs-base`, 2026-11), the pane count 12.5px, tabs at least 200px wide and 44px high. **Right-click (or the Menu key) opens a two-item menu — 이름 변경 / 뷰 닫기** (`layout/tab-menu.js`, loaded on first use); there is deliberately no ungroup item. Hidden below 720px, as before. Right:
-`⌘K` (palette). Dragging a tab
-to drop it on a pane still uses the existing `layout/dnd.js`
-(`frontend/js/shell/HeaderExtras.tsx` only draws the new workspace chip and
-connected-screens icon; it doesn't touch the tabs themselves).
+**There is no tab strip any more.** The rail already switches between sessions and grouped views (clicking a row goes to
+that view and focuses its pane), names a group (the group header's 편집) and closes, so the strip was a second copy
+of the same navigation. What is gone: the strip itself (`#vt-wtabs`, `layout/tabbar.js`), each tab's state bar and
+tooltip, the right-click menu (`layout/tab-menu.js`) and drag-to-reorder. What stays is **the view model**:
+a view is still one tab in `layout/store.js` that owns one pane tree, because grouped layouts, a viewer/panel pane that
+belongs to a session and the remembered closed groups are all stored per view (docs/ref/terminal.md「Session and view
+rules」). There are no next/previous-view or move-view keys either; view order changes only in the phone's order sheet. Think of a view as just a group (or a session with its viewer panes), not as something you navigate.
+
+At >=720px `#topbar` is `display: none` (`--topbar-h: 0`); the traffic lights (macOS skin), the keyboard toggle
+(touch devices), `⌘K` and the Windows caption buttons move into the menu bar (`#vt-mb-lead` / `#vt-mb-tools`,
+`layout/menubar-slots.js` — they are **moved**, not copied, so ids and listeners survive) and move back below 720px.
+Voice-only mode keeps `#topbar` because it turns it into the full-screen container. Dragging a rail row onto a pane
+still uses `layout/dnd.js`.
 
 ### Worktree rail 252px (`#vt-wgrail`, `shell/Rail.tsx`)
 
@@ -426,7 +417,7 @@ tmux plug icon and the `? question` line are gone — state is the icon's colour
 A session that is not open keeps full opacity but its name steps down to `--color-sub`.
 
 The ⋯ button and right-click open the same menu (`rowMenuItems`: 열기/닫기 · 이름 변경 ·
-맥에서 열기 · 연결된 화면 · 종료). The header gear is **레일 설정** (개입 필요 on/off, show
+맥에서 열기 · 연결된 화면 · 종료). The gear-less sliders icon in the rail header is **레일 설정** (개입 필요 on/off, show
 or hide sessions by origin — peer / external, and the 저장소 표시 list). Hiding an
 origin never hides a session that is open or waiting. The rail's width resizer spans
 240~480px. Collapsed (48px), only the state icon and agent mark remain; name, branch and
@@ -654,7 +645,9 @@ pre-load fallback.
 
 ## 6. Settings · palette
 
-### Settings (`Mod+,` / header ⚙)
+### Settings (`Mod+,` / FarShell menu)
+
+**Three settings, three icons (2026-11).** 설정 = gear (reached from the FarShell menu, `Mod+,`; the dock's own gear button was removed as a duplicate), 레일 설정 = `sliders-horizontal` (rail header), 메뉴바 설정 = `panel-top` (FarShell menu item). They used to share the gear.
 
 Settings are split across two scopes — `frontend/js/core/settings.js`'s
 `SCHEMA` gives each key a `scope: 'global' | 'device'` (default `global`).
@@ -815,7 +808,7 @@ kill sheet it always opened — the session tab below now has full parity with
 it, so a later pass can drop the sheet trigger and make this pure display),
 and the command-palette search icon. The workspace chip (repo name + host) is
 desktop-only now; a phone doesn't need to see the repo name on every screen.
-`#vt-wtabs`(the desktop tab strip) needed `!important` to actually stay
+`#vt-wtabs`(the desktop tab strip, removed 2026-11) needed `!important` to actually stay
 hidden here — `80-dock.css`'s unconditional `display:flex` (added for the
 strip's horizontal-scroll behavior, loads later in the same `legacy` layer)
 otherwise won whenever 2+ tabs were open; a single-tab test during step 1
@@ -1197,8 +1190,8 @@ See [session UI design](docs/ref/session-ui.md).
 
 - **Touch targets:** under a coarse pointer, the bottom nav and keybar
   buttons keep a 44px tap area. A fine pointer keeps a tighter density.
-  The small **view-tab ×** (`.vt-wtab-close`) and **pane-header ×** (`.vt-pane-close`)
-  keep their visible 18px box and 11/13px glyph and get a 44x44 hit area only under
+  The **pane-header ×** (`.vt-pane-close`; the view-tab × went with the tab strip)
+  keeps its visible 18px box and 13px glyph and get a 44x44 hit area only under
   `(pointer: coarse)`: 13px transparent padding with `background-clip: content-box`
   (hover/active still paints 18px). Padding, not a `::before`, because the tab strip is
   `overflow-x:auto` (clips a pseudo-element vertically) and padding takes layout space,

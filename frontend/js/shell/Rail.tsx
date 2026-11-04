@@ -530,7 +530,7 @@ function Rail(props: { deps: RailDeps }) {
               data-tip-sub={hiddenCount() ? t('저장소 {n}개 숨김', { n: hiddenCount() }) : t('구역 · 종료 세션 · 저장소')}
               data-tip-side="bottom"
               onClick={() => setRepoSheet(true)}
-              innerHTML={icon('settings', 13, 2)}
+              innerHTML={icon('sliders-horizontal', 13, 2)}
             />
           </Show>
           {/* 2026-09-18 — 글리프(‹ ›)를 쓰고 있었다. DESIGN.md §아이콘: icons.js의

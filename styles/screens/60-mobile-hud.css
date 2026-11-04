@@ -27,7 +27,7 @@
    칩 전체 너비가 컨테이너보다 넓어질 수 있다 — overflow:hidden이면 뒤쪽 칩
    (codex, 버전)이 스크롤도 안 되고 조용히 사라진다("값이 없으면 숨긴다"는
    규칙이지 "자리가 없으면 숨긴다"가 아니다). overflow-x:auto로 최소한
-   스크롤해서는 보이게 한다 — #vt-wtabs/#keybar-keys와 같은 패턴. */
+   스크롤해서는 보이게 한다 — #keybar-keys와 같은 패턴. */
 /* 2026-11 — 하단 상태바였던 것을 맨 위 메뉴바로 옮겼다(이름 vt-hud-*는 그대로: 토스트·테스트가 기대는 계약).
    모양은 macOS 메뉴바: 얇은 28px 한 줄, 칩 사이 구분선 없이 간격만, 글꼴은 UI 글꼴, 살짝 비치는 막.
    regular 이상에서만 켠다 — compact에서는 하단 내비가 이 자리를 쓴다. */
@@ -73,6 +73,16 @@
 #vt-workspace-chip-slot { order:-1; display:flex; align-items:center; }
 #vt-hud #vt-workspace-chip { height:22px; }
 
+/* #topbar에서 옮겨 온 것들(layout/menubar-slots.js). 왼쪽 끝: macOS 신호등, 오른쪽 끝: 키바·⌘K·윈도 캡션. */
+#vt-mb-lead { order:-4; display:flex; align-items:center; flex:none; }
+#vt-mb-tools { order:30; display:flex; align-items:center; gap:calc(var(--spacing) * .5); flex:none; margin-left:calc(var(--spacing) * 1); }
+#vt-hud .traffic { padding:0 calc(var(--spacing) * 2) 0 calc(var(--spacing) * .5); }
+#vt-hud .traffic i { width:10px; height:10px; }
+#vt-hud #palette-toggle, #vt-hud #keybar-open-btn { width:24px; height:22px; flex:none; }
+#vt-hud #palette-toggle svg, #vt-hud #keybar-open-btn svg { width:14px; height:14px; }
+#vt-hud .caption { margin-left:0; }
+#vt-hud .caption span { height:var(--hud-h); width:36px; }
+
 /* 2026-09-17 — 라벨·값·힌트 셋이 전부 11px/400이고 색만 달랐다. 24px 띠라
    크기를 키울 자리는 없지만, **줄일 자리는 있다**: 읽어야 하는 건 값이고
    라벨은 그 값이 무엇인지만 말한다. 라벨·힌트를 한 단 내리고 값에 굵기를
@@ -103,6 +113,8 @@
   color:var(--txt); font:var(--weight-semibold) var(--fs-xs) var(--font-ui);
 }
 .vt-mb-menu svg { width:14px; height:14px; color:var(--acc); flex:none; }
+/* 승인 대기 배지(components.css .vt-authz-badge)가 22px 버튼에 맞게 모서리로 나간다. */
+.vt-mb-menu .vt-authz-badge { top:-4px; right:-4px; }
 .vt-mb-menu:hover, .vt-mb-menu[aria-expanded="true"] { background:var(--menu-hover); }
 .vt-mb-menu:focus-visible { outline:2px solid var(--acc); outline-offset:-2px; }
 

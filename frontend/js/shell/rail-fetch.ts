@@ -411,4 +411,4 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
 // `@fsh_grp`/`~/.vt/groups.json` 기반)을 여기서 지웠다. 그룹은 이제 서버
 // 왕복 없이 화면(pane 트리)에서 실시간으로 도출된다(layout/store.js의
 // tabGroups) — 이름 짓기는 그 탭 자체에 라벨을 붙이는 것뿐이라
-// `window.vtRenameTab`(layout/tabbar.js) 하나로 끝난다.
+// `window.vtRenameTab`(layout/view-actions.js) 하나로 끝난다.
