@@ -17,6 +17,7 @@ import stt_service
 import voice_handler
 import auth
 import hashlib
+import voice_confirm
 import voice_targets
 from voice_sessions import coordinator
 from deps import pty_mgr, output_watcher, notify_clients
@@ -295,17 +296,113 @@ async def _voice_input_once(request: Request, audio_bytes=None, target=None):
         return {"text": "", "error": str(e), "injected": False}
     sid = request.query_params.get("session_id", request.headers.get("x-session-id", ""))
     injected = False
+    pending = None
+    blocked = False
     if text and target:
-        if await asyncio.to_thread(voice_targets.valid, target):
+        verdict = await _confirm_verdict(request, target, text)
+        if verdict == "blocked":
+            blocked = True
+        elif verdict:
+            try:
+                pending = {
+                    "pending_confirm": True, "confirm_reason": verdict,
+                    "confirm_token": voice_confirm.issue(voice_targets.principal(request), target, _voice_id(request), target["name"]),
+                    "confirm_ttl_sec": int(voice_confirm.CONFIRM_TTL_SEC), "target_name": target["name"],
+                }
+            except ValueError as e:
+                result = {"text": text, "injected": False, "session_id": sid, "timing": timing, "error": str(e)}
+                return result
+        elif await asyncio.to_thread(voice_targets.valid, target):
             from tmux_target import send_to_tmux
             injected = await asyncio.to_thread(send_to_tmux, target["pane"], text)
     elif text and sid in pty_mgr.sessions:
-        pty_mgr.write(sid, (text + "\n").encode())
-        injected = True
+        if await _confirm_verdict(request, None, text) == "blocked":
+            blocked = True
+        else:
+            pty_mgr.write(sid, (text + "\n").encode())
+            injected = True
     result = {"text": text, "injected": injected, "session_id": sid, "timing": timing}
-    if target and text and not injected:
+    if pending:
+        result.update(pending)
+    elif blocked:
+        result["error"] = tr("위험할 수 있는 명령이라 입력하지 않았습니다. 인식 텍스트를 확인해 직접 입력해 주세요")
+    elif target and text and not injected:
         result["error"] = tr("입력 대상이 사라졌습니다. 인식 텍스트를 복사해 주세요")
     return result
+
+
+async def _confirm_verdict(request: Request, target, text: str):
+    """인식 결과를 바로 입력해도 되는가. None 바로 입력 · 'blocked' 입력하지 않음 · 그 밖의 문자열은 확인 사유.
+
+    확인 화면을 그릴 수 있다고 `X-Voice-Confirm: 1`로 알린 클라이언트(웹)만 확인 단계를 거친다.
+    데몬·옛 클라이언트는 확인할 방법이 없으므로 기존대로 바로 입력하되, 위험 패턴만 막는다."""
+    dangerous = voice_confirm.dangerous_reason(text)
+    capable = target is not None and request.headers.get("x-voice-confirm") == "1"
+    if not capable and not dangerous:
+        return None
+    mode = await asyncio.to_thread(voice_confirm.read_mode)
+    if mode == "off":
+        return None
+    if not capable:
+        return "blocked"
+    kind = "unknown"
+    if mode == "shell" and not dangerous:
+        kind = await asyncio.to_thread(voice_confirm.pane_kind, target["pane"])
+    return voice_confirm.decide(mode, kind, text)
+
+
+@router.post("/voice/inject")
+async def voice_inject(request: Request):
+    """확인 단계를 거친 텍스트를 확인 토큰의 pane에 입력한다. 토큰은 1회용이며 발급받은 주체만 쓴다."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = None
+    if not isinstance(body, dict):
+        return JSONResponse({"error": tr("JSON body가 필요합니다"), "injected": False, "code": "bad_request"}, status_code=400)
+    token, raw, vid = body.get("token"), body.get("text"), body.get("voice_id", "")
+    if not isinstance(token, str) or not token or len(token) > 128 or not isinstance(raw, str) or not isinstance(vid, str):
+        return JSONResponse({"error": tr("요청 형식이 올바르지 않습니다"), "injected": False, "code": "bad_request"}, status_code=400)
+    if len(vid) > 64 or not all(c.isalnum() or c in "-_" for c in vid) or not vid.isascii():
+        vid = "\0invalid"        # 발급 때 저장된 값과 절대 맞지 않는다 → voice_id 불일치로 거절
+    if len(raw) > voice_confirm.MAX_TEXT_CHARS * 2:
+        return JSONResponse({"error": tr("텍스트가 너무 깁니다"), "injected": False, "code": "too_long"}, status_code=413)
+    import paste_prepare
+    text = paste_prepare.strip_unsafe_control_chars(raw).strip()
+    if not text:
+        return JSONResponse({"error": tr("입력할 텍스트가 비었습니다"), "injected": False, "code": "empty"}, status_code=400)
+    if len(text) > voice_confirm.MAX_TEXT_CHARS:
+        return JSONResponse({"error": tr("텍스트가 너무 깁니다"), "injected": False, "code": "too_long"}, status_code=413)
+    owner = voice_targets.principal(request)
+    try:
+        claimed = voice_confirm.claim(token, owner, vid)
+    except voice_confirm.ConfirmError as e:
+        if e.code == "done":
+            return {"injected": True, "duplicate": True}
+        status = 429 if e.code == "busy" else 409
+        return JSONResponse({"error": str(e), "injected": False, "code": e.code}, status_code=status)
+    target = claimed["target"]
+    try:
+        if not await asyncio.to_thread(voice_targets.valid, target):
+            voice_confirm.release(token, drop=True)
+            return JSONResponse({"error": tr("입력 대상이 사라졌습니다. 인식 텍스트를 복사해 주세요"), "injected": False,
+                                 "code": "target_gone"}, status_code=409)
+        from tmux_target import send_to_tmux
+        ok = await asyncio.to_thread(send_to_tmux, target["pane"], text)
+    except asyncio.CancelledError:
+        # 연결이 끊겨 취소됐다. 스레드가 이미 입력했을 수 있어 되돌리지 않는다(중복 입력보다 낫다) — 소진 처리한다.
+        voice_confirm.finish(token, owner, vid)
+        raise
+    except Exception:
+        voice_confirm.release(token)
+        raise
+    if not ok:
+        voice_confirm.release(token)
+        return JSONResponse({"error": tr("입력하지 못했습니다. 다시 시도해 주세요"), "injected": False, "code": "send_failed"},
+                            status_code=502)
+    voice_confirm.finish(token, owner, vid)
+    logger.info("voice inject: %d chars → %s", len(text), target.get("name"))
+    return {"injected": True, "text": text, "name": claimed["name"]}
 
 
 @router.post("/voice/output")
