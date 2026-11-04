@@ -7,6 +7,13 @@ let generation = '';
 let current = null;
 let reconnect = null;
 let retries = 0;
+// 녹음 중(pauseVoice(true) ~ pauseVoice(false))에는 이 화면에서 TTS를 재생하지 않는다. 서버 큐 일시정지는 웹소켓
+// 메시지라, 녹음 시작 때 연결이 끊겨 있었거나 녹음 중에 재연결되면(서버는 끊긴 화면의 일시정지를 지운다) 빠진다.
+// 그 틈을 여기서 막는다: 재연결 시 일시정지를 다시 보내고, 그 사이 도착한 음성은 재생하지 않고 취소로 알린다.
+// 해제가 빠져도 영영 막히지 않게 서버 일시정지와 같은 120초가 지나면 저절로 풀린다(녹음은 최대 60초).
+const HOLD_MAX_MS = 120000;
+let holdSince = 0;
+const holding = () => holdSince > 0 && Date.now() - holdSince < HOLD_MAX_MS;
 const keys = new Map();
 const policies = new Map();
 const lookingUp = new Set();
@@ -71,6 +78,7 @@ function play(blob, id = '') {
 export function playAudioBlob(blob) { play(blob); }
 
 export function pauseVoice(pause) {
+  holdSince = pause ? Date.now() : 0;
   if (pause) _stopCurrentTTS();
   send({ type: 'voice_barge', pause });
 }
@@ -100,6 +108,7 @@ function connect() {
       const msg = JSON.parse(event.data);
       if (msg.type === 'voice_connected') {
         generation = msg.generation; retries = 0; keys.clear(); policies.clear();
+        if (holding()) send({ type: 'voice_barge', pause: true });
         window.dispatchEvent(new CustomEvent('voice-connected'));
         visibility();
       } else if (msg.type === 'voice_policy') {
@@ -107,6 +116,9 @@ function connect() {
         window.dispatchEvent(new CustomEvent('voice-policy', { detail: msg }));
       } else if (msg.type === 'voice_cancel') {
         if (current?.id === msg.id) _stopCurrentTTS();
+      } else if (msg.type === 'voice_audio' && msg.generation === generation && holding()) {
+        send({ type: 'voice_barge', pause: true });
+        ack(msg.id, 'cancelled');
       } else if (msg.type === 'voice_audio' && msg.generation === generation) {
         const raw = atob(msg.audio);
         const bytes = Uint8Array.from(raw, (c) => c.charCodeAt(0));
