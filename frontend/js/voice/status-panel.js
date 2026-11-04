@@ -25,6 +25,7 @@ export function mountVoiceStatus() {
   const detail = document.getElementById('voice-stt-detail');
   const meta = document.getElementById('voice-record-meta');
   const record = document.getElementById('voice-panel-record');
+  const meter = document.getElementById('voice-meter');
   const close = document.getElementById('voice-status-close');
   // 별도 버튼은 두지 않는다 — 마이크 버튼이 녹음 토글이면서 상태 점(data-voice-state)을 겸하고,
   // 길게 누르기·우클릭·팔레트(voice.status)로 이 패널을 연다.
@@ -67,7 +68,26 @@ export function mountVoiceStatus() {
         ? t('입력 대상: {name} · {sec}초 / 60초', { name: targetName, sec: Math.min(60, Math.floor((Date.now() - startedAt) / 1000)) })
         : t('입력 대상: {name}', { name: targetName }))
       : '';
+    if (meter) { meter.hidden = phase !== 'recording'; if (meter.hidden) paintMeter(0, false); }
   }
+  // 음량 미터 — 값은 voice 번들(meter.js)이 계산해 'vt:voice-level'로 보낸다. 여기서는 그리기만 한다.
+  // prefers-reduced-motion이면 5단계로 끊고 초당 4번만 갱신한다.
+  const reduceMotion = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  let levelAt = -Infinity;
+  function paintMeter(level, clip) {
+    if (!meter) return;
+    const v = Math.max(0, Math.min(1, Number(level) || 0));
+    meter.style.setProperty('--lv', String(reduceMotion() ? Math.round(v * 5) / 5 : v.toFixed(2)));
+    meter.setAttribute('aria-valuenow', String(Math.round(v * 100)));
+    if (clip) meter.dataset.clip = '1'; else delete meter.dataset.clip;
+  }
+  window.addEventListener('vt:voice-level', (e) => {
+    if (phase !== 'recording') return;
+    const now = performance.now();
+    if (reduceMotion() && now - levelAt < 250) return;
+    levelAt = now;
+    paintMeter(e.detail?.level, e.detail?.clip);
+  });
   async function refresh() {
     if (pending) { refreshAgain = true; return; }
     pending = true;
