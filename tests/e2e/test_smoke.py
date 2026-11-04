@@ -724,7 +724,9 @@ def test_테마_칩이_서로_다른_색을_보인다(page):
     # 받아오게 한다(메뉴바의 FarShell 메뉴 → 설정, `_open_dock`과 같은 이유).
     page.wait_for_selector(".vt-mb-menu", timeout=10000)
     page.locator(".vt-mb-menu").click()
-    page.get_by_role("menuitem", name="설정", exact=True).click()
+    # 메뉴 항목의 접근 이름에는 단축키 글자(`Ctrl+,`)가 붙는다 — exact 일치가 아니라 앞부분으로 고른다.
+    # 「메뉴바 설정」은 `^설정`에 걸리지 않는다.
+    page.get_by_role("menuitem", name=re.compile(r"^설정")).click()
     # 설정은 섹션 하나만 그린다(기본 「터미널」) — 「모양」으로 옮겨야 칩이 생긴다.
     page.wait_for_selector("#vt-settings .vt-set-navitem", timeout=15000)
     page.locator("#vt-settings .vt-set-navitem", has_text="모양").first.click()
