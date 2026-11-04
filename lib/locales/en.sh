@@ -293,6 +293,7 @@ _t_en_lookup() {
     '등록 후 확인을 위해 6자리 코드를 입력하세요:') _T_OUT='Enter the 6-digit code to confirm:' ;;
     '등록: fsh hooks install') _T_OUT='Register: fsh hooks install' ;;
     '디폴트') _T_OUT='default' ;;
+    '떠 있던 메인 터널의 PID를 기록했습니다 (PID {pid})') _T_OUT='Recorded the PID of the already running main tunnel (PID {pid})' ;;
     '또는 ~/.vt.env에 VT_PYTHON=/path/to/python 지정') _T_OUT='Or set VT_PYTHON=/path/to/python in ~/.vt.env' ;;
     '또는:') _T_OUT='Or:' ;;
     '런타임 파일을 {old} 에서 {new} 로 옮겼습니다') _T_OUT='Moved runtime files from {old} to {new}' ;;
@@ -304,6 +305,7 @@ _t_en_lookup() {
     '맥북 시스템 클립보드 변경 감지 → 웹이 열린 기기의 클립보드로 push') _T_OUT='Watches the Mac'\''s system clipboard and pushes changes to devices with the web app open' ;;
     '먼저 비밀번호를 설정하세요:') _T_OUT='Set a password first:' ;;
     '먼저 웹 로그인 비밀번호를 설정하세요:') _T_OUT='Set a web login password first:' ;;
+    '메인 터널 후보가 여럿이라 PID를 기록하지 않습니다 (PID: {pids})') _T_OUT='Several processes look like the main tunnel, so no PID was recorded (PIDs: {pids})' ;;
     '메인 터미널') _T_OUT='Main terminal' ;;
     '메인 터미널 설정을 지웠습니다 (자동 선택)') _T_OUT='Main terminal setting cleared (auto-detect)' ;;
     '메인 터미널: {cur}') _T_OUT='Main terminal: {cur}' ;;

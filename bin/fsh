@@ -368,6 +368,39 @@ _start_tunnel_watchdog() {
   fi
 }
 
+# 재사용한 메인 터널의 PID를 tunnel.pid에 다시 기록한다(2026-11-04).
+# 재사용 분기는 떠 있는 터널을 pgrep으로 찾아 "이미 실행 중"으로 끝냈는데, pid 파일은 다시
+# 쓰지 않았다. 한 번 잃으면(2026-11-03 런타임 폴더 이전 사고) 영영 비어 있어서 _is_running tunnel이
+# 거짓이 되고 cmd_stop의 pid 파일 루프가 그 터널을 건너뛰었다. 워치독이 pid 파일을 되찾는 방식과 같다.
+# 후보가 **정확히 하나**일 때만 쓴다 — 엉뚱한 PID를 적으면 다음 stop이 그 프로세스를 죽인다.
+# 이름 없는 `tunnel run`은 다른 인스턴스 것일 수 있어 VT_TUNNEL_NAME과 이름이 맞을 때만 센다.
+_adopt_main_tunnel_pid() {
+  _is_running tunnel && return 0
+  command -v pgrep >/dev/null 2>&1 || return 0
+  local cands=""
+  if [ "$(_tunnel_provider)" = "ngrok" ]; then
+    cands="$(_main_tunnel_pids)"
+  else
+    cands="$(pgrep -f "^([^ ]*/)?cloudflared[[:space:]].*--url http://localhost:$VT_PORT\$" 2>/dev/null || true)"
+    local name="${VT_TUNNEL_NAME:-}"
+    case "$name" in
+      ''|*[!A-Za-z0-9._-]*) ;;   # 비었거나 정규식에 넣기 위험한 문자가 있으면 명명 터널은 세지 않는다
+      *)
+        cands="$cands $(pgrep -f "^([^ ]*/)?cloudflared[[:space:]].*tunnel run ${name//./\\.}\$" 2>/dev/null || true)" ;;
+    esac
+  fi
+  cands="$(echo "$cands" | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -u | tr '\n' ' ' | sed 's/ $//')"
+  [ -n "$cands" ] || return 0
+  case "$cands" in
+    *' '*)
+      echo "  ⚠ $(_t '메인 터널 후보가 여럿이라 PID를 기록하지 않습니다 (PID: {pids})' pids="$cands")" ;;
+    *)
+      echo "$cands" > "$PID_DIR/tunnel.pid"
+      echo "  ⓘ $(_t '떠 있던 메인 터널의 PID를 기록했습니다 (PID {pid})' pid="$cands")" ;;
+  esac
+  return 0
+}
+
 # ngrok 메인 터널. cloudflare 경로와 같은 계약을 지킨다:
 #   - 이미 떠 있으면 재사용하고 성공으로 친다
 #   - pid를 $PID_DIR/tunnel.pid에 남긴다 → cmd_stop이 제공자를 몰라도 죽인다
@@ -380,6 +413,7 @@ _start_tunnel_ngrok() {
   local url
   if url="$(_ngrok_public_url "$VT_PORT")"; then
     echo "✓ $(_t 'ngrok 이미 실행 중: {url}' url="$url")"
+    _adopt_main_tunnel_pid
     return 0
   fi
   local domain="${VT_NGROK_DOMAIN:-}"
@@ -441,6 +475,7 @@ _start_tunnel_impl() {
     fi
     if [ -n "$url" ]; then
       echo "✓ $(_t '터널 이미 실행 중 (PID{pids}): {url}' pids="${existing_pids:+: $existing_pids}" url="$url")"
+      _adopt_main_tunnel_pid
       return 0
     fi
   fi
