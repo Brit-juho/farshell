@@ -173,7 +173,7 @@
    * 2.1.6 이전에는 같은 것이 12벌 있었다 — .tbtn · .vt-pane-btn ·
    * .vt-rail-panel-close · .vt-rail-session-action · .vt-session-close ·
    * .vt-session-action · .vt-wgrail-collapse · .vt-rr-collapse ·
-   * .vt-dock-collapse · .vt-wtab-close · .vt-wgrail-icon · #search-bar button.
+   * .vt-dock-collapse · .vt-wgrail-icon · #search-bar button.
    * 선언은 사실상 같았고(테두리 없음 · 투명 배경 · sub 색 · radius-sm ·
    * hover에서 menu-hover + txt) 크기만 18/26/30/30/30/32/44로 제각각이었다.
    * 그 크기들이 서로 다를 이유가 있었던 게 아니라, 각자 그때 눈대중으로 정해진
@@ -375,7 +375,7 @@
    * 본문이 패널 밑으로 흘러들지 않는다. */
   .vt-sidepanel {
     position: fixed;
-    top: 0;
+    top: var(--menubar-h, 0px);   /* 맨 위 전체 폭 메뉴바(#vt-hud) 아래에서 시작한다 */
     bottom: 0;
     z-index: 70;
     display: none;
@@ -998,15 +998,15 @@
   body.vt-keyboard-open #vt-toasts {
     bottom: calc(var(--kb-overlap, 0px) + var(--kb-height, 0px) + var(--spacing) * 2);
   }
-  /* regular 이상 — HUD(24px) 바로 위 우측. 프롬프트 줄(하단 좌측)과 HUD를
-   * 둘 다 비켜난다. 우측 오프셋은 .vt-onboarding과 **같은 티어 규칙**을 쓴다:
+  /* regular 이상 — 하단 우측. 프롬프트 줄(하단 좌측)을 비켜난다. 예전엔 하단 HUD 바로 위였으나
+   * HUD가 맨 위 메뉴바로 옮겨 가서(2026-11) 바닥에서 한 칸만 띄운다. 우측 오프셋은 .vt-onboarding과 **같은 티어 규칙**을 쓴다:
    * 720~1279에서 dock은 펼쳐도 오버레이라 본문을 36px만 밀고, 1280부터는
    * --vt-dock-w(접힘 36px / 펼침 실제 폭, Dock.tsx가 갱신)만큼 민다. */
   @media (min-width: 720px) {
     #vt-toasts {
       left: auto;
       right: calc(36px + var(--spacing) * 3 + env(safe-area-inset-right, 0px));
-      bottom: calc(var(--hud-h) + var(--spacing) * 2);
+      bottom: calc(var(--spacing) * 2);
       width: min(420px, 45vw);
       align-items: flex-end;
     }
@@ -1074,7 +1074,7 @@
    * styles/screens/60-mobile-hud.css의 **unlayered** 규칙이라 layer는 무조건
    * 진다. 그래서 그쪽 파일에 있다(2.1.6의 CSS 레이어 함정과 같은 건이다). */
   #vt-hud-msg {
-    order: -1;                     /* 칩이 하나라도 남아도 메시지가 왼쪽 끝 */
+    order: -3;                     /* 칩이 하나라도 남아도 메시지가 왼쪽 끝 */
     display: flex;
     align-items: center;
     gap: calc(var(--spacing) * 2);
@@ -1563,7 +1563,7 @@
     font-variant-numeric: tabular-nums; pointer-events: none;
   }
   .vt-authz-badge[hidden] { display: none; }
-  #vt-rail-settings, .vt-dock-settings-btn, .vt-mnav-btn[data-mnav="more"] { position: relative; }
+  #vt-rail-settings, .vt-mb-menu, .vt-mnav-btn[data-mnav="more"] { position: relative; }
 
   /* 좁은 화면: 승인 모달은 하단 내비(고정 52px) 위까지만 — 아래 끝(「나중에」)이 내비에 가려지지 않게 한다. */
   @media (max-width: 719px) {
@@ -1576,7 +1576,9 @@
     .vt-authz-row .vt-btn,
     .vt-authz-host .vt-btn,
     .vt-dialog .vt-share-ok,
-    .vt-dialog .vt-share-cancel { --btn-h: 44px; }
+    .vt-dialog .vt-share-cancel,
+    .vt-dialog .vt-dialog-ok,
+    .vt-dialog .vt-dialog-cancel { --btn-h: 44px; }
     .vt-authz-later .vt-btn { --btn-h: 44px; }
     .vt-authz-in { min-height: 44px; }
     .vt-authz-tag { min-height: 32px; }
@@ -1596,7 +1598,6 @@
 .vt-native-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .vt-native-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 500; color: var(--color-txt); }
 .vt-native-time { flex: none; font-size: 11px; color: var(--color-muted); font-variant-numeric: tabular-nums; }
-.vt-native-tool { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px / 1.4 var(--font-mono); color: var(--color-muted); }
 .vt-native-meta { color: var(--color-muted); font-size: 11px; }
 .vt-native-row[data-state="done"] .vt-native-name, .vt-native-row[data-state="idle"] .vt-native-name { color: var(--color-sub); font-weight: 400; }
 .vt-native-row .status-dot[data-stale] { background: transparent; box-shadow: inset 0 0 0 1.5px var(--color-st-idle); }

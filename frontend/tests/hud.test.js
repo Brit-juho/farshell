@@ -291,11 +291,29 @@ test('parseHudLayout: 비었거나 깨졌으면 기본 배치, 모르는 종류�
     assert.deepStrictEqual(plain(parseHudLayout(bad)), plain(DEFAULT_HUD_LAYOUT), `입력: ${String(bad)}`);
   }
   assert.deepStrictEqual(
-    plain(parseHudLayout('{"left":["cpu","nope",7,"cpu"],"right":["cpu","version","version"]}')),
+    plain(parseHudLayout('{"v":2,"left":["cpu","nope",7,"cpu"],"right":["cpu","version","version"]}')),
     { left: ['cpu'], right: ['version'] },
     '먼저 나온 쪽만 남고 모르는 종류는 버려진다');
   assert.deepStrictEqual(plain(parseHudLayout('{"left":[],"right":[]}')), { left: [], right: [] },
     '전부 끈 배치는 그대로 존중한다 (기본으로 되돌리지 않는다)');
+  assert.deepStrictEqual(plain(parseHudLayout('{"v":2,"left":[],"right":[]}')), { left: [], right: [] });
+});
+
+test('parseHudLayout: 메뉴바 이전(세대 표시 없음)에 저장된 배치는 새 종류를 기본 자리에 한 번 얹는다', async () => {
+  const { parseHudLayout, serializeHudLayout } = await mod();
+  const plain = (l) => JSON.parse(JSON.stringify(l));
+  const legacy = '{"left":["screens"],"right":["cpu","version"]}';
+  assert.deepStrictEqual(plain(parseHudLayout(legacy)),
+    { left: ['agents', 'screens'], right: ['cpu', 'version', 'push', 'clock'] },
+    'agents는 왼쪽 맨 앞, push·clock은 오른쪽 끝');
+  // 이미 직접 배치해 둔 새 종류는 건드리지 않는다.
+  assert.deepStrictEqual(plain(parseHudLayout('{"left":["screens"],"right":["clock","cpu"]}')),
+    { left: ['agents', 'screens'], right: ['clock', 'cpu', 'push'] });
+  // 한 번 저장하면 세대가 적혀서 다시 얹지 않는다 — 사용자가 새 칩을 끈 선택이 되살아나지 않는다.
+  const saved = serializeHudLayout(parseHudLayout(legacy));
+  assert.ok(JSON.parse(saved).v >= 2);
+  const off = serializeHudLayout({ left: ['screens'], right: ['cpu'] });
+  assert.deepStrictEqual(plain(parseHudLayout(off)), { left: ['screens'], right: ['cpu'] });
 });
 
 test('parseHudLayout 은 기본 배치 객체를 공유하지 않는다 (호출자가 바꿔도 기본이 안 변한다)', async () => {
@@ -353,4 +371,64 @@ test('buildHudChips 가 만드는 모든 칩의 kind 는 HUD_KINDS 안에 있다
   }, everything);
   assert.strictEqual(chips.length, 10, '종류 10개가 전부 한 번씩');
   for (const c of chips) assert.ok(Array.from(HUD_KINDS).includes(c.kind), c.id);
+});
+
+
+test('에이전트 칩: 개입이 있으면 주의 색에 클릭하면 이동하고, 없으면 클릭할 곳이 없다', async () => {
+  const { buildHudChips } = await mod();
+  const lay = { left: ['agents'], right: [] };
+  const hot = buildHudChips({ agents: { waiting: 2, working: 1, done: 1 } }, lay)[0];
+  assert.strictEqual(hot.label, '개입');
+  assert.strictEqual(hot.value, '2');
+  assert.strictEqual(hot.hint, '· 작업 1 · 완료 1', '0인 항목은 적지 않는다');
+  assert.strictEqual(hot.tone, 'warn');
+  assert.strictEqual(hot.action, 'agents.jump');
+  assert.strictEqual(hot.priority, 1, '개입이 필요하면 끝까지 남는다');
+
+  const calm = buildHudChips({ agents: { waiting: 0, working: 3, done: 0 } }, lay)[0];
+  assert.strictEqual(calm.label, '작업');
+  assert.strictEqual(calm.tone, 'plain');
+  assert.strictEqual(calm.action, undefined);
+  assert.strictEqual(calm.hint, undefined);
+});
+
+test('에이전트 칩: 셋 다 0이거나 정보가 없으면 칩이 없다', async () => {
+  const { buildHudChips } = await mod();
+  const lay = { left: ['agents'], right: [] };
+  assert.deepStrictEqual(ids(buildHudChips({ agents: { waiting: 0, working: 0, done: 0 } }, lay)), []);
+  assert.deepStrictEqual(ids(buildHudChips({ agents: null }, lay)), []);
+  assert.deepStrictEqual(ids(buildHudChips({}, lay)), []);
+});
+
+test('푸시 칩: 켜짐·꺼짐만 그리고, 못 쓰는 브라우저면 칩이 없다', async () => {
+  const { buildHudChips } = await mod();
+  const lay = { left: [], right: ['push'] };
+  const on = buildHudChips({ push: 'on' }, lay)[0];
+  assert.strictEqual(on.value, '켜짐');
+  assert.strictEqual(on.tone, 'ok');
+  assert.strictEqual(on.action, 'push.toggle');
+  assert.strictEqual(buildHudChips({ push: 'off' }, lay)[0].tone, 'plain');
+  assert.deepStrictEqual(ids(buildHudChips({ push: 'unavailable' }, lay)), []);
+  assert.deepStrictEqual(ids(buildHudChips({ push: null }, lay)), []);
+});
+
+test('시계 칩: now가 있을 때만, 24시간제로 그린다', async () => {
+  const { buildHudChips, formatClock } = await mod();
+  const lay = { left: [], right: ['clock'] };
+  assert.deepStrictEqual(ids(buildHudChips({}, lay)), []);
+  const d = new Date(2026, 10, 3, 14, 5);   // 로컬 시각 기준 — 시간대에 상관없이 14:05
+  const chip = buildHudChips({ now: d.getTime(), locale: 'en-US' }, lay)[0];
+  assert.ok(/14:05$/.test(chip.value), chip.value);
+  assert.ok(/Nov/.test(chip.value) && /3/.test(chip.value), chip.value);
+  assert.strictEqual(formatClock(NaN), '');
+  assert.ok(/오후|PM/.test(formatClock(d.getTime(), 'ko-KR')) === false, '12시간제(오후/PM)로 새지 않는다');
+});
+
+test('새 칩은 모두 순위를 갖는다 (agents·push·clock)', async () => {
+  const { buildHudChips } = await mod();
+  const chips = buildHudChips({
+    agents: { waiting: 1, working: 0, done: 0 }, push: 'on', now: Date.now(),
+  }, { left: ['agents'], right: ['push', 'clock'] });
+  assert.strictEqual(chips.length, 3);
+  for (const c of chips) assert.ok(Number.isInteger(c.priority) && c.priority > 0, `${c.id} 순위`);
 });

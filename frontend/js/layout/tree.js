@@ -84,7 +84,7 @@ export function countLeaves(tree) {
 // 트리 안의 모든 leaf가 물고 있는 세션 id(중복 제거, 발견 순서 유지). 2026-09-18
 // 후속(그룹 재정의) — "그룹"이 태그가 아니라 **한 탭에 같이 떠 있는 세션들**로
 // 바뀌면서, 탭의 실시간 구성원을 아는 게 여러 모듈의 공통 요구가 됐다
-// (layout/tabbar.js의 탭 소속 판정, layout/store.js의 그룹 계산, term/
+// (옛 layout/tabbar.js의 탭 소속 판정, layout/store.js의 그룹 계산, term/
 // session-actions.js의 sleepTab). 순수 함수라 여기(tree.js)가 자리다.
 export function collectSessions(tree) {
   const out = [];

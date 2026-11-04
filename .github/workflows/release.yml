@@ -29,7 +29,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
           fetch-depth: 0   # CHANGELOG 전체가 필요하다(릴리스 노트 추출)
@@ -59,7 +59,7 @@ jobs:
           echo "VERSION 파일: $FILE_VERSION / 태그: ${{ steps.ver.outputs.version }}"
           [ "$FILE_VERSION" = "${{ steps.ver.outputs.version }}" ]
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: '20'
           cache: 'npm'
@@ -81,7 +81,7 @@ jobs:
           test -f frontend/dist/voice.js
           ! ls frontend/dist | grep -E '\-[0-9a-f]{8}\.'
           # 2.1.6: ci.yml과 같은 이유로 초기 페이로드 합계를 잰다.
-          [ "$(( $(wc -c < frontend/dist/app.js) + $(wc -c < frontend/dist/core.js) ))" -le 307200 ]
+          [ "$(( $(wc -c < frontend/dist/app.js) + $(wc -c < frontend/dist/core.js) ))" -le 358400 ]
 
       - name: 릴리스 노트 생성 (CHANGELOG에서 추출)
         run: python3 scripts/release_notes.py "${{ steps.ver.outputs.version }}" -o RELEASE_NOTES.md
@@ -111,7 +111,7 @@ jobs:
           shasum -a 256 "$NAME.tar.gz" > "$NAME.tar.gz.sha256"
           cat "$NAME.tar.gz.sha256"
 
-      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3.0.3
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
           files: |

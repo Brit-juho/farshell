@@ -10,10 +10,10 @@
 import { createSignal, onCleanup } from 'solid-js';
 
 import { normalizeOrigin, normalizeShare, normalizeLineage, normalizeKind, normalizeBadge, type SessionRow } from './rail-data.js';
-import { confirmDialog } from '../core/dialog.js';
+import { confirmDialog } from '../core/dialog-lazy.js';
 import { t } from '../core/i18n.js';
 import { watchPath, isWatchLive } from './fs-watch.js';
-import { sessionContext, workspaceDirectory, workspaceKind } from '../ui/session-context.js';
+import { sessionContext, workspaceDirectory, workspaceKind, locationTip } from '../ui/session-context.js';
 
 // §5 원문: "60초 캐시" — 워크트리에 안 속한(changed 요약을 서버가 안 주는)
 // 세션에만 쓴다.
@@ -35,7 +35,7 @@ export function safeFetch<T>(deps: Pick<RailDeps, 'vtFetch'>, path: string): Pro
   return deps.vtFetch(path).then((v) => v as T).catch(() => null);
 }
 
-// ---- window 브리지 시그널 어댑터 (core/signals.ts의 지연-청크 안전 버전) ----
+// ---- window 브리지 시그널 어댑터 (지연-청크에서도 안전한 window 브리지) ----
 
 export function useSessionsVersion() {
   const [v, setV] = createSignal(0);
@@ -365,7 +365,7 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
       tool: detail?.tool ?? null,
       kind: detail?.kind ? normalizeKind(detail.kind) : null,
       badge: normalizeBadge(detail?.badge),
-      cwd: ctx.cwd, directory: workspaceDirectory(ctx), workspaceKind: workspaceKind(ctx), context: ctx,
+      cwd: ctx.cwd, locationTip: locationTip(ctx), directory: workspaceDirectory(ctx), workspaceKind: workspaceKind(ctx), context: ctx,
       contextStatus: ctx.status === 'unavailable' || ctx.worktree?.status === 'unavailable' ? 'unavailable' : ctx.status,
       diffFiles: modern ? (ctx.changed?.files ?? null) : cwd ? (cachedDiffCount(cwd) ?? null) : null,
       changed: modern ? ctx.changed : info?.changed ?? null,
@@ -411,4 +411,4 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
 // `@fsh_grp`/`~/.vt/groups.json` 기반)을 여기서 지웠다. 그룹은 이제 서버
 // 왕복 없이 화면(pane 트리)에서 실시간으로 도출된다(layout/store.js의
 // tabGroups) — 이름 짓기는 그 탭 자체에 라벨을 붙이는 것뿐이라
-// `window.vtRenameTab`(layout/tabbar.js) 하나로 끝난다.
+// `window.vtRenameTab`(layout/view-actions.js) 하나로 끝난다.

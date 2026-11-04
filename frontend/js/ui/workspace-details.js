@@ -13,6 +13,7 @@ export function showWorkspaceDetails(session) {
     [t('저장소'), wt?.repositoryRoot ? directoryLabel(wt.repositoryRoot) : t('미확인')],
     [t('작업 공간 경로'), ctx.root || t('없음')],
     [t('현재 디렉터리'), ctx.cwd || t('미확인')],
+    ...(ctx.terminalCwd ? [[t('터미널 위치'), ctx.terminalCwd]] : []),
     [t('브랜치'), ctx.branch || (ctx.root ? t('분리된 HEAD') : t('없음'))],
   ];
   if (ctx.changed) fields.push([t('변경량'), t('{n}개 파일 · +{add} −{del}', { n: ctx.changed.files, add: ctx.changed.add, del: ctx.changed.del })]);

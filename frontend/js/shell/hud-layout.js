@@ -1,4 +1,4 @@
-// 하단바(HUD) 배치 규칙 — 어떤 칩을 어느 쪽에 어떤 순서로 둘지(2026-10-23).
+// 메뉴바(옛 하단바, HUD) 배치 규칙 — 어떤 칩을 어느 쪽에 어떤 순서로 둘지(2026-10-23, 2026-11 맨 위로 이동).
 //
 // 순수 함수만 있다(DOM·fetch·Solid 없음). 일반 JS인 이유: HUD(hud-data.ts)와 설정 화면
 // (panels/settings/sections/hud.js)이 같은 규칙을 써야 하고, 설정 화면의 단위 테스트 하네스는
@@ -12,25 +12,38 @@
 // 없으면 숨긴다는 기존 규칙은 그 위에 그대로 있다 — 배치는 「보여도 되는 것」을 정할 뿐
 // 값이 없는 칩을 억지로 그리지 않는다.
 
-/** @typedef {'server'|'screens'|'e2e'|'safe-mode'|'cpu'|'gpu'|'ram'|'net'|'usage'|'version'} HudKind */
+/** @typedef {'server'|'screens'|'e2e'|'safe-mode'|'cpu'|'gpu'|'ram'|'net'|'usage'|'version'|'agents'|'push'|'clock'} HudKind */
 /** @typedef {{ left: HudKind[], right: HudKind[] }} HudLayout */
 /** @typedef {'left'|'right'|'off'} HudZone */
 
 /** @type {readonly HudKind[]} */
 export const HUD_KINDS = [
   'server', 'screens', 'e2e', 'safe-mode', 'cpu', 'gpu', 'ram', 'net', 'usage', 'version',
+  'agents', 'push', 'clock',
 ];
 
 /**
  * 기본 배치. 「서버 :7777」은 뺐다(사용자 요청, 2026-10-23) — 지금 이 화면을 보고 있다는
  * 것 자체가 서버가 떠 있다는 증거라 맨 왼쪽 자리를 차지할 값어치가 없다. 필요하면 설정
- * → 하단바에서 다시 켠다.
+ * → 메뉴바에서 다시 켠다.
  * @type {HudLayout}
  */
 export const DEFAULT_HUD_LAYOUT = {
-  left: ['screens', 'e2e', 'safe-mode'],
-  right: ['cpu', 'gpu', 'ram', 'net', 'usage', 'version'],
+  left: ['agents', 'screens', 'e2e', 'safe-mode'],
+  right: ['cpu', 'gpu', 'ram', 'net', 'usage', 'push', 'version', 'clock'],
 };
+
+// 저장 형식의 세대. 2026-11 메뉴바 이전(세대 표시 없음)에 저장된 배치는 새 종류(agents·push·clock)가
+// 「꺼져 있는 것」이 아니라 「그때는 없던 것」이다 — 그대로 두면 이전에 한 번이라도 배치를 만진 사람은
+// 새 칩을 영영 못 본다(배치에 없는 종류는 안 보인다는 규칙). 그래서 세대 표시가 없는 배치를 읽을 때
+// 새 종류를 기본 자리에 **한 번** 얹고, 저장할 때 세대를 적는다. 전부 끈 배치는 사용자의 선택이라 건드리지 않는다.
+export const HUD_LAYOUT_VERSION = 2;
+/** @type {ReadonlyArray<{kind: HudKind, zone: 'left'|'right', front?: boolean}>} */
+const ADDED_IN_V2 = [
+  { kind: 'agents', zone: 'left', front: true },
+  { kind: 'push', zone: 'right' },
+  { kind: 'clock', zone: 'right' },
+];
 
 const KIND_SET = new Set(HUD_KINDS);
 
@@ -41,7 +54,7 @@ function defaultLayout() {
 
 /**
  * 저장된 값(JSON 문자열) → 배치. **어떤 입력에도 쓸 수 있는 배치를 돌려준다** — 저장값이
- * 비었거나 깨졌거나 낡았다고 하단바가 사라지면 사용자는 왜인지 알 길이 없다.
+ * 비었거나 깨졌거나 낡았다고 메뉴바가 사라지면 사용자는 왜인지 알 길이 없다.
  * 모르는 종류는 버리고(예전 버전이 쓴 값), 같은 종류가 두 번 나오면 먼저 나온 쪽만 남긴다.
  * 전부 끈 배치(`{"left":[],"right":[]}`)는 사용자의 선택이므로 그대로 존중한다.
  * @param {unknown} raw
@@ -67,12 +80,20 @@ export function parseHudLayout(raw) {
     return out;
   };
   const left = pick(v.left);
-  return { left, right: pick(v.right) };
+  const out = { left, right: pick(v.right) };
+  const legacy = !(Number(v.v) >= HUD_LAYOUT_VERSION);
+  if (legacy && (out.left.length || out.right.length)) {
+    for (const { kind, zone, front } of ADDED_IN_V2) {
+      if (seen.has(kind)) continue;
+      if (front) out[zone].unshift(kind); else out[zone].push(kind);
+    }
+  }
+  return out;
 }
 
 /** @param {HudLayout} layout */
 export function serializeHudLayout(layout) {
-  return JSON.stringify({ left: layout.left, right: layout.right });
+  return JSON.stringify({ v: HUD_LAYOUT_VERSION, left: layout.left, right: layout.right });
 }
 
 /** @param {HudLayout} a @param {HudLayout} b */

@@ -723,8 +723,7 @@ request that the server refuses with `choice_unavailable` keeps the window open 
 focus starts on deny, buttons are ignored for 400 ms after the window appears, Esc/backdrop/X mean "later" (nothing is sent). A request with
 `elevated` reasons is marked and allowing it re-asks for the password (the existing elevate prompt) when the server answers `elevation_required`.
 Events carry only ids and kinds, so the screen re-reads `GET /api/authz/approvals`; the old `agent_share_request*` events are used only until a
-new `authz_*` event has been seen, and a burst of both causes one re-read. The pending count is a badge on the settings buttons (rail, dock,
-phone nav).
+new `authz_*` event has been seen, and a burst of both causes one re-read. The pending count is a badge on the settings entry points (the FarShell menu button in the menu bar, phone nav).
 
 Settings > Permissions hosts the pending list, the grants list (filters go to the server; revoke asks for confirmation; built-in defaults are listed
 separately and cannot be revoked), the audit timeline (reverse chronological, filters, optional denials, a chain badge that is neutral when `ok` and a

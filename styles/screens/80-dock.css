@@ -330,8 +330,6 @@
   background:var(--win); border:1px solid var(--line);
 }
 .vt-pane-body.vt-pane-viewer .vt-pane-share { right:calc(var(--spacing) * 3 + 32px); }
-/* 파일 탭에서 연 공유 다이얼로그의 스냅샷 안내 — 필드 안쪽 들여쓰기(20px)가 아닌 맨 위 줄이다. */
-.vt-fl-share-card .vt-vw-body > .vt-fl-hint { margin:0 0 calc(var(--spacing) * 3); }
 /* 뷰어 페인이 열려 있으면 온보딩(세션 0개 안내)은 나오지 않는다 — 볼 것이 있다. */
 body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 
@@ -458,23 +456,18 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 .vt-fl-gauge-fill.warn{ background:var(--err); }
 .vt-fl-footer-text{ margin-top:calc(var(--spacing) * 1.5); font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
 
-/* 링크 발급 다이얼로그(§3 화면 3b). dock 안이 아니라 항상 모달이다 — 발급은
-   되돌리기 전에 한 번 더 보게 해야 하는 조작이라 화면을 덮는 게 맞다. */
-.vt-fl-share-card{ max-width:420px; }
-.vt-fl-field{ margin-bottom:calc(var(--spacing) * 3); }
-.vt-fl-field-label{
-  margin-bottom:calc(var(--spacing) * 1.5);
-}
-.vt-fl-radio{ display:block; font:400 var(--fs-sm) var(--ui); color:var(--txt); margin-bottom:calc(var(--spacing) * 1.5); cursor:pointer; }
-.vt-fl-radio.disabled{ opacity:.5; cursor:not-allowed; }
-.vt-fl-hint{ display:block; font:400 var(--fs-2xs) var(--mono); color:var(--sub); margin-left:20px; }
-.vt-fl-input{
-  width:100%;
-  /* 16px — iOS 확대 방지(.vt-q-compose와 같은 이유) */;
-}
-.vt-fl-check{ display:block; font:400 var(--fs-sm) var(--ui); color:var(--txt); margin-bottom:calc(var(--spacing) * 3); cursor:pointer; }
-.vt-fl-share-actions{ display:flex; justify-content:flex-end; margin-bottom:calc(var(--spacing) * 3); }
-.vt-fl-share-list{ border-top:1px solid var(--line); padding-top:calc(var(--spacing) * 2); }
+/* 링크 발급 다이얼로그(§3 화면 3b). 뼈대는 core/dialog.js의 openDialog, 필드·라디오 카드·버튼줄은
+   세션 공유 다이얼로그와 같은 .vt-share-* / .vt-dialog-actions 를 쓴다(components.css). 여기는 이
+   화면에만 있는 것 — 만료 select 폭, 1회용 행, 발급된 링크 목록 — 만 남긴다. 발급은 되돌리기 전에 한 번
+   더 보게 해야 하는 조작이라 dock 안이 아니라 항상 모달이다. */
+.vt-fl-input{ width:100%; box-sizing:border-box; }
+.vt-share-mode-disabled{ opacity:.5; cursor:not-allowed; }
+.vt-fl-once{ margin:0 0 calc(var(--spacing) * 4); }
+.vt-fl-once input{ margin:0; accent-color:var(--acc); }
+.vt-fl-issued{ margin-top:calc(var(--spacing) * 5); padding-top:calc(var(--spacing) * 3); border-top:1px solid var(--line); }
+.vt-fl-issued .vt-share-label{ margin:0 0 calc(var(--spacing) * 1); }
+.vt-fl-hint{ display:block; font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
+.vt-fl-share-list{ min-height:0; }
 .vt-fl-share-row{ display:flex; align-items:center; gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 1.5) 0; }
 .vt-fl-share-label{ flex:1 1 auto; min-width:0; font:400 var(--fs-xs) var(--mono); color:var(--txt); }
 .vt-fl-share-row .vt-fl-act{ font:500 var(--fs-2xs) var(--mono); padding:0 calc(var(--spacing) * 1.5); min-width:auto; }
@@ -498,104 +491,6 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
   font:400 var(--fs-2xs) var(--mono); color:var(--sub);
 }
 
-/* 10-shell-layout.md §4 — 워크트리 탭 바. 3단계에서 세션 탭 줄이 사라져
-   이제 상단 바의 탭은 이것 하나뿐이다: 활성 탭만 강조색 밑줄.
-   2026-09-23 — `flex:0 0 auto; max-width:40%`는 아래 세션 탭 줄(#tabs)과
-   헤더를 나눠 쓰던 시절 값이었다(그 줄은 3단계에서 사라졌다, 위 주석).
-   지운 뒤에도 이 값만 남아서, 탭이 적을 땐 헤더 오른쪽 40%가 빈 채로
-   .spacer에 먹혔고 탭이 많을 땐 진작 스크롤이 필요한데도 숨겨진
-   스크롤바(아래)라 만질 방법이 없었다(사용자 리포트). flex:1로 열어
-   오른쪽 버튼들 앞까지 채우고, 그래도 넘치면 스크롤한다 — 넘침 여부는
-   tabbar.js가 data-fade로 알린다(아래 마스크). */
-#vt-wtabs{
-  display:flex; align-items:stretch; align-self:stretch; gap:0; flex:1 1 auto; min-width:0;
-  overflow-x:auto; scrollbar-width:none;
-}
-#vt-wtabs[hidden]{ display:none; }
-#vt-wtabs::-webkit-scrollbar{ display:none; }
-/* 스크롤바를 숨겼으니(위) 잘린 쪽 가장자리를 흐리게 해서 "더 있다"를
-   알린다 — tabbar.js가 스크롤 위치를 볼 때마다 data-fade를 갱신한다. */
-#vt-wtabs[data-fade="left"]{
-  -webkit-mask-image:linear-gradient(to right, transparent, #000 20px);
-  mask-image:linear-gradient(to right, transparent, #000 20px);
-}
-#vt-wtabs[data-fade="right"]{
-  -webkit-mask-image:linear-gradient(to left, transparent, #000 20px);
-  mask-image:linear-gradient(to left, transparent, #000 20px);
-}
-#vt-wtabs[data-fade="both"]{
-  -webkit-mask-image:linear-gradient(to right, transparent, #000 20px, #000 calc(100% - 20px), transparent);
-  mask-image:linear-gradient(to right, transparent, #000 20px, #000 calc(100% - 20px), transparent);
-}
-.vt-wtab{
-  position:relative; display:flex; align-items:center; gap:calc(var(--spacing) * 3);
-  flex:0 0 auto; min-width:200px; height:44px;
-  padding:0 calc(var(--spacing) * 3.5) 3px; cursor:pointer; white-space:nowrap;
-  color:var(--color-sub); border-right:1px solid var(--color-line);
-  font:var(--weight-medium) var(--fs-base) var(--font-ui);
-}
-.vt-wtab:hover{ background:var(--menu-hover); color:var(--txt); }
-.vt-wtab.active{ color:var(--color-acc); background:var(--tab-active); box-shadow:inset 0 2px var(--color-acc); }
-.vt-wtab:focus-visible{ outline:2px solid var(--color-acc); outline-offset:-2px; }
-/* 2026-09-23 — 탭 드래그 재정렬(데스크톱, layout/tabbar.js) 중 놓일 자리 표시.
-   border-bottom과 자리가 겹치지 않게 좌/우 세로선으로 그린다. */
-.vt-wtab{ position:relative; }
-.vt-wtab-drop-before::before, .vt-wtab-drop-after::after{
-  content:''; position:absolute; top:2px; bottom:2px; width:2px; background:var(--acc);
-}
-.vt-wtab-drop-before::before{ left:-1px; }
-.vt-wtab-drop-after::after{ right:-1px; }
-.vt-wtab-name{ overflow:hidden; text-overflow:ellipsis; max-width:28ch; }
-.vt-wtab-count{ flex:none; font:var(--weight-normal) var(--fs-xs) var(--font-mono); color:var(--color-sub); }
-/* 탭 우클릭 메뉴(layout/tabbar.js). `.vt-menu`가 이 레이어 밖(20-overlay.css)에 position:absolute·right:8px로
-   있어서 fixed·좌표 지정은 여기서 되돌려야 이긴다. 드롭다운(.vt-dd-list)과 같은 층(1100)이다. */
-.vt-wtab-menu{ position:fixed; right:auto; z-index:1100; min-width:180px; padding:calc(var(--spacing) * 1); }
-/* 뷰 탭 = [라벨][×] + 아래 가장자리 상태 바(2026-10-04, 시안 B — /tmp/fsh-tab-mockups).
-   바는 칸(세션)마다 같은 폭 세그먼트 하나. 색 = 상태, 굵기 = 읽지 않음
-   (굵음 6px = 아직 확인 안 함 / 얇음 3px = 확인함). 포커스 칸은 굵기를 쓰지 않는다.
-   idle은 흐린 회색으로 항상 보이고, waiting만 숨쉰다(components.css의 같은 keyframes).
-   활성 탭은 위쪽 강조선과 바탕색으로 구분한다 — 아래 가장자리는 상태 바의 자리다. */
-.vt-wtab-bar{
-  position:absolute; left:calc(var(--spacing) * 3); right:calc(var(--spacing) * 3); bottom:3px; height:6px;
-  display:flex; align-items:flex-end; gap:3px; pointer-events:none;
-}
-.vt-seg{
-  flex:1 1 0; min-width:0; height:3px; border-radius:3px;
-  background:var(--color-st-idle); opacity:.55;
-}
-.vt-seg.thick{ height:6px; }
-.vt-seg[data-state="idle"].thick{ opacity:1; }
-.vt-seg[data-state="working"]{ background:var(--color-st-working); opacity:1; }
-.vt-seg[data-state="waiting"]{
-  background:var(--color-st-waiting); opacity:1;
-  animation:vt-status-breathe 1.8s var(--ease-out-quint) infinite;
-}
-.vt-seg[data-state="done"]{ background:var(--color-st-done); opacity:1; }
-/* 모션을 줄이면 깜빡임 대신 줄무늬 — 색 말고 모양으로 「입력 대기」를 잇는다. */
-@media (prefers-reduced-motion: reduce){
-  .vt-seg[data-state="waiting"]{
-    animation:none;
-    background:repeating-linear-gradient(90deg, var(--color-st-waiting) 0 4px, transparent 4px 7px);
-  }
-}
-/* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다. 탭에 마우스를 올려야 드러나는 규칙은 아래 그대로 */
-.vt-wtab-close{ opacity:.6; margin-left:auto; }
-.vt-wtab:hover .vt-wtab-close{ opacity:1; }
-.vt-wtab-close:hover{ background:var(--tab); color:var(--err); }
-/* 터치(2026-10-06) — 뷰 ×는 18px 상자에 11px 글리프라 손가락으로 못 누른다(폰 실측 대상). **보이는 크기는
-   그대로**, 누르는 영역만 44x44로 넓힌다: 상자 둘레에 투명 padding 13px(18+26=44)를 얹고 배경은 content-box에만
-   칠한다(hover/active 면이 18px 그대로). ::before 의사 요소 대신 padding 으로 한 이유 — #vt-wtabs 가
-   overflow-x:auto 라 overflow-y 도 잘려 의사 요소가 탭 높이 밖으로 못 나가고, 이웃 탭·라벨과 겹치면 안 되기
-   때문이다. padding 은 **레이아웃 자리를 차지하므로** 이웃과 겹칠 수 없다. 탭이 44px 높이(= 터치 상단 바 높이,
-   10-shell.css)가 되도록 위아래 padding 은 0 으로 풀어, 라벨은 가운데 정렬로 남는다. */
-@media (pointer:coarse){
-  .vt-wtab{ padding-block:0; }
-  .vt-wtab-close{
-    box-sizing:content-box;
-    padding:13px;
-    background-clip:content-box;
-  }
-}
 /* 다른 워크트리 탭에 속한 세션 탭은 숨긴다 — 탭 안의 세션 줄이라는 뜻이 된다. */
 
 .vt-wtd-warn-ico{ flex:none; margin-top:2px; }

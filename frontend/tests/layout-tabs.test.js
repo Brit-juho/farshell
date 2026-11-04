@@ -122,7 +122,7 @@ test('활성 탭을 닫으면 남은 탭으로 활성이 옮겨간다', async ()
   assert.strictEqual(S.getTabs().length, 1);
 });
 
-// 2026-09-23 — 헤더 탭 드래그 재정렬(layout/tabbar.js)의 순수 로직.
+// 2026-09-23 — 뷰 순서 재정렬(moveLayoutTab)의 순수 로직. 데스크톱 탭 드래그 UI는 2026-11에 없어졌다.
 test('moveLayoutTab — 순서를 옮기고, 활성 탭은 그대로 유지된다(id로 다시 찾는다)', async () => {
   const { S } = await load();
   const a = S.getActiveTabId();

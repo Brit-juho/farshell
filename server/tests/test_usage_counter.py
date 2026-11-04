@@ -79,10 +79,14 @@ def test_snapshot_aggregates_per_model(state):
 
 def test_snapshot_since_filters_totals_but_not_sparkline(state, monkeypatch):
     p = _provider(state)
-    old_ts = time.time() - 3600
+    # 일 버킷은 UTC 기준이다. 실제 시계로 "1시간 전"을 쓰면 UTC 0시~1시에 도는 CI에서 어제 버킷으로 넘어가
+    # 실패한다(2026-11-04 00:47 UTC 실측). 그날 정오로 시계를 고정한다.
+    noon = (time.time() // 86400) * 86400 + 43200
+    monkeypatch.setattr(time, "time", lambda: noon)
+    old_ts = noon - 3600
     p.add("m", 100, 10, ts=old_ts)
     p.add("m", 50, 5)
-    cutoff = time.time() - 60
+    cutoff = noon - 60
     snap = p.snapshot(since=cutoff)
     c = snap["counters"][0]
     assert c["tokens"] == 50, "since 이후 이벤트만 누적에 들어간다"

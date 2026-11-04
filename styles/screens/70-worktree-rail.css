@@ -267,15 +267,7 @@
   display:flex; justify-content:flex-end; gap:calc(var(--spacing) * 1.5);
   padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3); border-top:1px solid var(--line); flex:none;
 }
-.vt-wtd-cancel, .vt-wtd-submit {
-  padding:calc(var(--spacing) * 1.25) calc(var(--spacing) * 2.5); border-radius:var(--radius-sm);
-  font:500 var(--fs-xs) var(--mono); cursor:pointer;
-}
-.vt-wtd-cancel { background:transparent; border:1px solid var(--line); color:var(--sub); }
-.vt-wtd-cancel:hover { background:var(--menu-hover); color:var(--txt); }
-.vt-wtd-submit { background:var(--acc); border:1px solid var(--acc); color:var(--win); }
-.vt-wtd-submit:hover { filter:brightness(1.08); }
-.vt-wtd-submit:disabled { opacity:.5; cursor:not-allowed; filter:none; }
+/* 하단 버튼의 모양·상태·터치 타깃은 공용 `.vt-btn.lg`(취소) / `.vt-btn.lg.solid`(주 동작)가 맡는다. */
 
 /* ── 98 §3 → ADR-29 C — 「저장소 관리」 시트(저장소→워크트리→세션) ─────
    틀(백드롭·카드·머리·본문)은 워크트리 만들기 다이얼로그를 그대로 쓴다

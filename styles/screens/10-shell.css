@@ -20,9 +20,17 @@
   background:var(--bar); flex-shrink:0; position:relative; z-index:60;
   border-bottom:1px solid var(--line);
 }
+/* --menubar-h: 맨 위 메뉴바(#vt-hud)가 차지하는 높이. compact에는 메뉴바가 없어 0이다.
+   #topbar 아래로 떨어지는 팝업·오버레이의 top은 이 값을 더한다. */
+:root { --menubar-h:0px; }
 @media (min-width:720px) {
-  :root, html[data-skin] { --topbar-h:44px; --topbar-popup-y:50px; }
-  #topbar { border-bottom:0; box-shadow:inset 0 -1px var(--color-line); }
+  /* 2026-11 — 뷰 탭 줄이 없어져 #topbar는 넓은 화면에서 남는 게 없다. 상단은 메뉴바(#vt-hud) 하나이고 신호등·
+     키바·⌘K·캡션은 거기로 옮겨 앉는다(layout/menubar-slots.js). 그래서 --topbar-h가 0이고 팝업은 메뉴바 아래에서
+     뜬다. 음성 전용 모드만 #topbar를 전체 화면 컨테이너로 쓰므로 그때는 남긴다. */
+  :root, html[data-skin] { --topbar-h:0px; --menubar-h:var(--hud-h); --topbar-popup-y:calc(var(--hud-h) + 6px); }
+  body:not(.voice-only-mode) #topbar { display:none; }
+  /* 메뉴바(#vt-hud)는 fixed라 흐름에서 빠진다 — 본문이 그 밑으로 흘러들지 않게 그만큼 민다. */
+  body { padding-top:calc(env(safe-area-inset-top) + var(--menubar-h)); }
 }
 html[data-skin="macos"] #topbar { -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px); }
 
@@ -69,7 +77,7 @@ html[data-skin="windows"] #topbar {
 
 
 /* 좁은 화면 상단 바 정리 — 390px에서 요소 9개가 경쟁하면서 탭 이름이 두 글자
-   ("tm…")로 잘렸다. 회수한 ~190px는 워크트리 탭 바(#vt-wtabs)로 간다.
+   ("tm…")로 잘렸다. 회수한 ~190px는 세션 이름 쪽으로 간다.
      · 신호등(42px): macOS 창 장식이라 터치 환경에서 아무 기능이 없다.
      · 코드뷰어: 팔레트(L6)의 "코드 뷰어 열기" 명령이 이 진입점을 대신한다.
    L1(실버그 수정): 세션 피커(#voice-session-picker)는 여기서 숨기지 않는다 —
@@ -88,14 +96,8 @@ html[data-skin="windows"] #topbar {
      보여줬다(작업 홈=워크스페이스 칩, 그 외=세션 피커+검색) — 세션 탭이
      세션 이동·관리를 전부 떠맡으면서(작업/70-mobile.md) 헤더가 그 역할을
      또 가질 이유가 없어졌다. 워크스페이스 칩(저장소/호스트)은 모바일에서
-     통째로 뺀다 — 기기 정체는 세션 버튼 아랫줄이 말한다(2026-09-29 H1).
-     #vt-wtabs만 !important다 — 80-dock.css의 무조건 `#vt-wtabs{display:flex}`
-     (탭 가로 스크롤, 같은 파일 legacy 레이어의 더 뒤쪽이라 이 규칙을 소스
-     순서로 이긴다)가 탭 1개일 때만 자기 `[hidden]` 속성으로 숨는다 — 탭이
-     2개 이상이면 실브라우저에서 그대로 새어 보였다(2026-09-23 발견: 세션이
-     하나뿐이던 첫 검증에서는 우연히 안 보였다). #keybar가 `@media(pointer:
-     fine)`에서 같은 파일을 상대로 쓰는 것과 같은 관용구(20-overlay.css:394). */
-  #vt-wtabs, #vt-workspace-chip-slot { display:none !important; }
+     통째로 뺀다 — 기기 정체는 세션 버튼 아랫줄이 말한다(2026-09-29 H1). */
+  #vt-workspace-chip-slot { display:none !important; }
 }
 
 /* 모바일 세션 관리 시트. 좁은 화면에서 세션의 모든 기본 조작을 제공한다. */
@@ -278,7 +280,7 @@ html[data-skin="windows"] .caption { display:flex; }
 
 /* ---- ⋯ 팝업 메뉴 ------------------------------------------------------- */
 #more-menu {
-  position:absolute; top:calc(var(--topbar-h) + 2px); right:8px; z-index:520; width:250px;
+  position:absolute; top:calc(var(--menubar-h) + var(--topbar-h) + 2px); right:8px; z-index:520; width:250px;
   max-height:calc(100vh - var(--topbar-popup-y) - env(safe-area-inset-bottom,0px) - 12px);
   overflow-y:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none;
   background:var(--menu); color:var(--txt); border-radius:var(--radius-lg); padding:calc(var(--spacing) * 1.5);

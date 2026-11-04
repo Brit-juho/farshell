@@ -22,7 +22,7 @@ import { vtFetch, vtEsc, vtUrl } from '../../core/api.js';
 import { showToast } from '../../ui/toast.js';
 import { icon } from '../../ui/icons.js';
 import { okFlash } from '../../ui/okflash.js';
-import { confirmDialog, promptDialog } from '../../core/dialog.js';
+import { confirmDialog, promptDialog, openDialog, nextId } from '../../core/dialog.js';
 import { t } from '../../core/i18n.js';
 
 // ⚠ ADR-26 — 이 파일은 지연 청크(panels.js)에 들어가므로 core/store.js를
@@ -633,57 +633,85 @@ async function deleteFile(item) {
 // ── 링크 발급 다이얼로그 (§3 화면 3b) ────────────────────────────────────────
 
 function openShareDialog(item, { snapshot = false } = {}) {
-  const existing = document.getElementById('vt-fl-share');
-  if (existing) existing.remove();
-
-  const wrap = document.createElement('div');
-  wrap.id = 'vt-fl-share';
-  wrap.className = 'vt-viewer-backdrop vt-fl-share-backdrop';
-  wrap.innerHTML = `
-    <div class="vt-viewer-card vt-fl-share-card" role="dialog" aria-modal="true" aria-label="${t('공유 링크 발급')}">
-      <div class="vt-viewer-head">
-        <div class="vt-vw-title">${vtEsc(t('링크 발급 — {name}', { name: item.name }))}</div>
-        <button class="vt-icon-btn vt-vw-x" aria-label="${t('닫기')}">${icon('x', 16)}</button>
+  // 한 번에 하나만 — 열려 있으면 닫고 새로 연다(스냅샷 안내가 다른 파일 것일 수 있다).
+  if (_shareDialogId) closePanel(_shareDialogId);
+  const id = nextId();
+  const { body } = openDialog({
+    id,
+    title: t('링크 발급 — {name}', { name: item.name }),
+    onClose: () => { if (_shareDialogId === id) _shareDialogId = null; },
+    bodyHTML: `
+      ${snapshot ? `<p class="vt-share-note">${t('지금 시점의 복사본(스냅샷)을 공유합니다. 원본이 바뀌어도 링크의 내용은 그대로입니다.')}</p>` : ''}
+      <div class="vt-share-field" role="radiogroup" aria-label="${t('누가 열 수 있나')}">
+        <div class="vt-share-label">${t('누가 열 수 있나')}</div>
+        ${shareModeRadio('device', t('내 기기만'), t('등록된 기기에서 로그인 상태로만 열립니다'), { checked: true })}
+        ${shareModeRadio('pin', t('PIN 보호'), t('코드를 아는 사람이면 누구나 (5회 틀리면 링크 소멸)'))}
+        ${shareModeRadio('public', t('누구나 열기'), t('제공하지 않습니다'), { disabled: true })}
       </div>
-      <div class="vt-vw-body">
-        ${snapshot ? `<div class="vt-fl-hint">${t('지금 시점의 복사본(스냅샷)을 공유합니다. 원본이 바뀌어도 링크의 내용은 그대로입니다.')}</div>` : ''}
-        <div class="vt-fl-field">
-          <div class="vt-fl-field-label">${t('누가 열 수 있나')}</div>
-          <label class="vt-fl-radio"><input type="radio" name="vt-fl-mode" value="device" checked> ${t('내 기기만')} <span class="vt-fl-hint">${t('등록된 기기에서 로그인 상태로만 열립니다')}</span></label>
-          <label class="vt-fl-radio"><input type="radio" name="vt-fl-mode" value="pin"> ${t('PIN 보호')} <span class="vt-fl-hint">${t('코드를 아는 사람이면 누구나 (5회 틀리면 링크 소멸)')}</span></label>
-          <label class="vt-fl-radio disabled"><input type="radio" name="vt-fl-mode" value="public" disabled> ${t('누구나 열기')} <span class="vt-fl-hint">${t('제공하지 않습니다')}</span></label>
-        </div>
-        <div class="vt-fl-field" id="vt-fl-pin-field" hidden>
-          <div class="vt-fl-field-label">${t('PIN · 6~20자')}</div>
-          <input type="text" id="vt-fl-pin" class="vt-input lg vt-fl-input" autocomplete="off" inputmode="numeric" placeholder="${t('예: 482193')}" />
-        </div>
-        <div class="vt-fl-field">
-          <div class="vt-fl-field-label">${t('만료 · 필수')}</div>
-          <select id="vt-fl-ttl" class="vt-input lg vt-fl-input">
-            ${TTLS.map((o) => `<option value="${o.v}"${o.v === 86400 ? ' selected' : ''}>${o.label}</option>`).join('')}
-          </select>
-        </div>
-        <label class="vt-fl-check"><input type="checkbox" id="vt-fl-once"> ${t('다운로드 1회 후 자동 취소')}</label>
-        <div class="vt-fl-share-actions">
-          <button class="vt-btn" id="vt-fl-issue">${t('발급')}</button>
-        </div>
+      <div class="vt-share-field" id="vt-fl-pin-field" hidden>
+        <label class="vt-share-label" for="vt-fl-pin">${t('PIN · 6~20자')}</label>
+        <input type="text" id="vt-fl-pin" class="vt-input lg vt-share-nick" autocomplete="off" autocapitalize="off"
+          spellcheck="false" inputmode="numeric" maxlength="20" placeholder="${t('예: 482193')}" aria-describedby="vt-fl-pin-msg">
+        <div id="vt-fl-pin-msg" class="vt-share-msg error" aria-live="polite" hidden></div>
+      </div>
+      <div class="vt-share-field">
+        <label class="vt-share-label" for="vt-fl-ttl">${t('만료 · 필수')}</label>
+        <select id="vt-fl-ttl" class="vt-input lg vt-fl-input">
+          ${TTLS.map((o) => `<option value="${o.v}"${o.v === 86400 ? ' selected' : ''}>${o.label}</option>`).join('')}
+        </select>
+      </div>
+      <label class="vt-share-mode vt-fl-once"><input type="checkbox" id="vt-fl-once">
+        <span class="vt-share-mode-text"><span class="vt-share-mode-name">${t('다운로드 1회 후 자동 취소')}</span></span>
+      </label>
+      <div class="vt-dialog-actions">
+        <button type="button" class="vt-btn lg vt-share-cancel">${t('닫기')}</button>
+        <button type="button" class="vt-btn lg solid vt-share-ok" id="vt-fl-issue">${t('발급')}</button>
+      </div>
+      <section class="vt-fl-issued" aria-label="${t('발급된 링크')}">
+        <h3 class="vt-share-label">${t('발급된 링크')}</h3>
         <div class="vt-fl-share-list" id="vt-fl-share-list"></div>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(wrap);
+      </section>`,
+  });
+  if (!body) return;
+  _shareDialogId = id;
 
-  const close = () => wrap.remove();
-  wrap.querySelector('.vt-vw-x').addEventListener('click', close);
-  wrap.addEventListener('click', (ev) => { if (ev.target === wrap) close(); });
-
-  const pinField = wrap.querySelector('#vt-fl-pin-field');
-  for (const r of wrap.querySelectorAll('input[name="vt-fl-mode"]')) {
-    r.addEventListener('change', () => { pinField.hidden = r.value !== 'pin' || !r.checked; });
+  const pinField = body.querySelector('#vt-fl-pin-field');
+  const pinInput = body.querySelector('#vt-fl-pin');
+  for (const r of body.querySelectorAll('input[name="vt-fl-mode"]')) {
+    r.addEventListener('change', () => {
+      pinField.hidden = selectedMode(body) !== 'pin';
+      if (!pinField.hidden) pinInput.focus();
+    });
   }
-  wrap.querySelector('#vt-fl-issue').addEventListener('click', () => issueShare(item, wrap));
+  pinInput.addEventListener('input', () => setPinError(body, ''));
+  pinInput.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' && !ev.isComposing && ev.keyCode !== 229) { ev.preventDefault(); issueShare(item, body); }
+  });
+  body.querySelector('.vt-share-cancel').addEventListener('click', () => closePanel(id));
+  body.querySelector('#vt-fl-issue').addEventListener('click', () => issueShare(item, body));
 
-  renderShareList(item, wrap);
+  renderShareList(item, body);
+}
+
+let _shareDialogId = null;
+
+function shareModeRadio(value, name, help, { checked = false, disabled = false } = {}) {
+  return `
+    <label class="vt-share-mode${disabled ? ' vt-share-mode-disabled' : ''}">
+      <input type="radio" name="vt-fl-mode" value="${value}"${checked ? ' checked' : ''}${disabled ? ' disabled' : ''}>
+      <span class="vt-share-mode-text">
+        <span class="vt-share-mode-name">${vtEsc(name)}</span>
+        <span class="vt-share-mode-help">${vtEsc(help)}</span>
+      </span>
+    </label>`;
+}
+
+function setPinError(wrap, text) {
+  const msg = wrap.querySelector('#vt-fl-pin-msg');
+  const input = wrap.querySelector('#vt-fl-pin');
+  msg.textContent = text;
+  msg.hidden = !text;
+  if (text) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid');
 }
 
 function selectedMode(wrap) {
@@ -692,12 +720,20 @@ function selectedMode(wrap) {
 }
 
 async function issueShare(item, wrap) {
+  const btn = wrap.querySelector('#vt-fl-issue');
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  try { await issueShareOnce(item, wrap); } finally { btn.disabled = false; }
+}
+
+async function issueShareOnce(item, wrap) {
   const mode = selectedMode(wrap);
   const ttl = Number(wrap.querySelector('#vt-fl-ttl').value);
   const once = wrap.querySelector('#vt-fl-once').checked;
   const pin = wrap.querySelector('#vt-fl-pin').value.trim();
   if (mode === 'pin' && (pin.length < 6 || pin.length > 20)) {
-    showToast(t('PIN은 6~20자여야 합니다'), 'error');
+    setPinError(wrap, t('PIN은 6~20자여야 합니다'));
+    wrap.querySelector('#vt-fl-pin').focus();
     return;
   }
   const body = { mode, ttl, once };

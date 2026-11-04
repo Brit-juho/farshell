@@ -11,7 +11,6 @@ function captureTarget(target) {
   return null;
 }
 let handler = null, wired = false;
-export function getKeyDecision(e) { return decisions.get(e); }
 export function decideKey(e) {
   if (decisions.has(e)) return decisions.get(e);
   const stroke = snapshotKey(e);

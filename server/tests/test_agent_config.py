@@ -485,8 +485,68 @@ int main(int argc, char **argv) {
             if result["state"] not in ("waiting", "restarting"):
                 break
             time.sleep(.1)
-        assert result["state"] == "resumed", result
+        # 실패하면 pytest 가 dict 를 `...` 로 줄여 원인(error 필드)이 안 보인다 — 전체를 메시지에 싣는다.
+        import json
+        assert result["state"] == "resumed", json.dumps(result, ensure_ascii=False, default=str)[:4000]
         assert out.read_text().splitlines() == [sid, "sample-value"]
         assert not list((state / "agent-launch").glob("*.json"))
     finally:
         tmux_runner.run(["kill-server"])
+
+
+# --- 좀비: 끝난 CLI 를 부모(tmux)가 수거하지 않아도 「끝났다」로 본다 ---------------------------------------
+# CI(Ubuntu 24.04, tmux 3.4)에서 /exit 로 정상 종료된 가짜 CLI 가 21초 넘게 `[codex] <defunct>` 로 남아, 표에서 사라지길
+# 기다리던 코드가 「정상 종료되지 않아」로 중단했다(3.13·3.14 에서 번갈아). 3.3a 는 바로 수거해 재현되지 않았다.
+
+
+def _spawn_zombie():
+    import subprocess
+    import sys
+    import time
+    child = subprocess.Popen([sys.executable, "-c", "pass"])
+    for _ in range(100):                     # 끝날 때까지 기다리되 wait() 은 하지 않는다 — 수거 전 상태가 좀비다
+        import hook_identity
+        if child.pid in hook_identity._ps_zombies():
+            return child
+        time.sleep(.05)
+    child.kill()
+    child.wait()
+    pytest.fail("좀비를 만들지 못했다")
+
+
+def test_ps_zombies_lists_an_exited_but_unreaped_child_only():
+    import hook_identity
+    child = _spawn_zombie()
+    try:
+        assert child.pid in hook_identity._ps_zombies()
+    finally:
+        child.wait()
+    assert child.pid not in hook_identity._ps_zombies()
+
+
+def test_wait_exited_counts_a_zombie_as_exited_but_not_a_live_process():
+    import subprocess
+    import sys
+    import agent_config_restart as restart_mod
+    zombie = _spawn_zombie()
+    live = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        assert restart_mod._wait_exited(zombie.pid, tries=3, delay=.01) is True
+        assert restart_mod._wait_exited(live.pid, tries=3, delay=.01) is False
+    finally:
+        live.kill()
+        live.wait()
+        zombie.wait()
+    assert restart_mod._wait_exited(zombie.pid, tries=3, delay=.01) is True      # 표에서 사라진 뒤에도
+
+
+def test_wait_exited_fails_safe_when_ps_cannot_list_zombies(monkeypatch):
+    import hook_identity
+    import agent_config_restart as restart_mod
+    zombie = _spawn_zombie()                  # 먼저 만든다 — 만드는 쪽도 _ps_zombies 로 확인한다
+    monkeypatch.setattr(hook_identity, "_ps_zombies", lambda: set())
+    try:
+        # 좀비 목록을 못 읽으면 예전처럼 표에서 사라질 때까지 기다린다 — 끝났다고 짐작하지 않는다
+        assert restart_mod._wait_exited(zombie.pid, tries=2, delay=.01) is False
+    finally:
+        zombie.wait()

@@ -8,7 +8,7 @@
 import type { AgentState } from '../core/types.js';
 import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
 import { t } from '../core/i18n.js';
-import { alertDialog } from '../core/dialog.js';
+import { alertDialog } from '../core/dialog-lazy.js';
 
 // ── 행 모양 ────────────────────────────────────────────────────────────────
 
@@ -52,6 +52,8 @@ export interface SessionRow {
   cwd?: string;
   directory?: string;
   workspaceKind?: string;
+  /** 위치 툴팁 — 에이전트 기준 경로(+ 터미널과 다르면 터미널 위치). */
+  locationTip?: string;
   context?: any;
   contextStatus?: string;
   isMainWorktree?: boolean;

@@ -1021,6 +1021,28 @@ def _entries_for(tmux_name: str, host: str = LOCAL_HOST) -> list[dict]:
             if e.get("tmux_session") == tmux_name and e.get("host", LOCAL_HOST) == host]
 
 
+def agent_cwd_for(tmux_name: str, host: str = LOCAL_HOST) -> Optional[str]:
+    """그 tmux 세션에서 도는 에이전트 CLI(Claude/Codex)가 마지막 훅으로 알린 작업 디렉터리.
+
+    셸이 아니라 CLI 기준의 위치를 보여 주려는 것이다 — CLI가 내부에서 워크트리로 들어가도
+    pane의 cwd(셸)는 그대로라 브랜치가 원래 저장소 것으로 보였다. 서브에이전트 이벤트는
+    cwd를 덮어쓰지 않으므로(`_entry`는 부모만 부른다) 이 값은 CLI 본체의 위치다.
+
+    **확실할 때만** 값을 준다: 반납된 엔트리·cwd 없음·절대경로 아님·서로 다른 cwd를 든 엔트리가
+    여럿이면 None — 호출자는 pane cwd로 되돌아간다. 훅 값은 클라이언트가 보낸 문자열이라
+    경계 검사(fsguard)는 이 값을 쓰는 Git 조회 쪽이 한다.
+    """
+    cwds = {e.get("cwd") for e in _entries_for(tmux_name, host) if not e.get("released")}
+    cwds.discard(None)
+    cwds.discard("")
+    if len(cwds) != 1:
+        return None
+    cwd = next(iter(cwds))
+    if not isinstance(cwd, str) or not cwd.startswith("/") or "\0" in cwd:
+        return None
+    return cwd
+
+
 _last_uid_of: dict[str, dict[str, str]] = {}
 
 

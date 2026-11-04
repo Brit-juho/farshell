@@ -69,7 +69,7 @@ test('열기 — 섹션 목록과 첫 섹션이 그려진다', async () => {
   assert.ok(document.getElementById('vt-settings'), '패널이 열려야 한다');
   assert.deepEqual(
     Array.from(document.querySelectorAll('.vt-set-navitem')).map((b) => b.textContent),
-    ['터미널', '음성 및 알림', '에이전트', '키맵', '모양', '하단바', '권한', '계정 및 보안', '정보 및 진단'],
+    ['터미널', '음성 및 알림', '에이전트', '키맵', '모양', '메뉴바', '권한', '계정 및 보안', '정보 및 진단'],
   );
   assert.ok(rowByLabel(document, '글자 크기'), '첫 섹션(터미널)이 그려져야 한다');
 });
@@ -176,7 +176,7 @@ test('검색은 사용자가 흔히 쓰는 동의어도 찾고 해당 행으로 
   assert.strictEqual(document.activeElement, rowByLabel(document, '글자 크기').querySelector('.vt-set-label'));
 });
 
-test('compact — 더보기 첫 화면에 도구와 설정 진입점이 나온다 (하단바는 HUD가 없어 뺀다)', async () => {
+test('compact — 더보기 첫 화면에 도구와 설정 진입점이 나온다 (메뉴바는 HUD가 없어 뺀다)', async () => {
   const { document, P } = await build({ compact: true });
   P.showSettings();
   const links = Array.from(document.querySelectorAll('.vt-set-mobile-link strong')).map((e) => e.textContent);
@@ -745,7 +745,7 @@ test('전용 숫자 스피너는 저장·슬라이더·기본값 복원과 동�
   assert.ok(!spinner.querySelector('.up').disabled);
 });
 
-// ── 하단바(HUD) 구성 — 2026-10-23 ───────────────────────────────────────────
+// ── 메뉴바(HUD) 구성 — 2026-10-23 ───────────────────────────────────────────
 // 규칙(parse/move/step)은 hud.test.js가 잠근다. 여기서는 화면이 그 규칙을 부르고 저장하는지만 본다.
 
 const hudItem = (document, kind) => document.querySelector(`.vt-hudcfg-item[data-kind="${kind}"]`);
@@ -753,69 +753,71 @@ const hudZone = (document, zone) => Array.from(document.querySelectorAll(`.vt-hu
   .map((li) => li.dataset.kind);
 const layoutOf = (S) => JSON.parse(S.get('ui.hud.layout'));
 
-test('하단바 — 기본 배치가 구역별 목록과 미리보기로 그려진다 (서버는 사용 안 함)', async () => {
+test('메뉴바 — 기본 배치가 구역별 목록과 미리보기로 그려진다 (서버는 사용 안 함)', async () => {
   const { document, P } = await build();
   P.showSettings();
-  sectionButton(document, '하단바').click();
-  assert.deepEqual(hudZone(document, 'left'), ['screens', 'e2e', 'safe-mode']);
-  assert.deepEqual(hudZone(document, 'right'), ['cpu', 'gpu', 'ram', 'net', 'usage', 'version']);
+  sectionButton(document, '메뉴바').click();
+  assert.deepEqual(hudZone(document, 'left'), ['agents', 'screens', 'e2e', 'safe-mode']);
+  assert.deepEqual(hudZone(document, 'right'), ['cpu', 'gpu', 'ram', 'net', 'usage', 'push', 'version', 'clock']);
   assert.deepEqual(hudZone(document, 'off'), ['server']);
-  assert.strictEqual(document.querySelectorAll('.vt-hudcfg-preview .vt-hud-chip').length, 9, '미리보기는 켜진 칩만 그린다');
+  assert.strictEqual(document.querySelectorAll('.vt-hudcfg-preview .vt-hud-chip').length, 12, '미리보기는 켜진 칩만 그린다');
   assert.strictEqual(document.querySelector('.vt-hudcfg-foot .vt-btn').disabled, true, '기본이면 되돌릴 게 없다');
 });
 
-test('하단바 — 구역 선택을 바꾸면 저장되고 목록·미리보기가 즉시 바뀐다', async () => {
+test('메뉴바 — 구역 선택을 바꾸면 저장되고 목록·미리보기가 즉시 바뀐다', async () => {
   const { document, P, S } = await build();
   P.showSettings();
-  sectionButton(document, '하단바').click();
+  sectionButton(document, '메뉴바').click();
   const sel = hudItem(document, 'server').querySelector('select');
   sel.value = 'left';
   sel.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
-  assert.deepEqual(hudZone(document, 'left'), ['screens', 'e2e', 'safe-mode', 'server']);
-  assert.deepEqual(layoutOf(S).left, ['screens', 'e2e', 'safe-mode', 'server']);
-  assert.strictEqual(document.querySelectorAll('.vt-hudcfg-preview .vt-hud-chip').length, 10);
+  assert.deepEqual(hudZone(document, 'left'), ['agents', 'screens', 'e2e', 'safe-mode', 'server']);
+  assert.deepEqual(layoutOf(S).left, ['agents', 'screens', 'e2e', 'safe-mode', 'server']);
+  assert.strictEqual(document.querySelectorAll('.vt-hudcfg-preview .vt-hud-chip').length, 13);
 });
 
-test('하단바 — 위/아래 버튼은 같은 구역 안에서 한 칸 옮기고 끝에서는 눌리지 않는다', async () => {
+test('메뉴바 — 위/아래 버튼은 같은 구역 안에서 한 칸 옮기고 끝에서는 눌리지 않는다', async () => {
   const { document, P, S } = await build();
   P.showSettings();
-  sectionButton(document, '하단바').click();
+  sectionButton(document, '메뉴바').click();
   const [up, down] = hudItem(document, 'e2e').querySelectorAll('.vt-icon-btn');
   assert.strictEqual(up.disabled, false);
   up.click();
-  assert.deepEqual(hudZone(document, 'left'), ['e2e', 'screens', 'safe-mode']);
-  assert.deepEqual(layoutOf(S).left, ['e2e', 'screens', 'safe-mode']);
+  assert.deepEqual(hudZone(document, 'left'), ['agents', 'e2e', 'screens', 'safe-mode']);
+  assert.deepEqual(layoutOf(S).left, ['agents', 'e2e', 'screens', 'safe-mode']);
+  hudItem(document, 'e2e').querySelectorAll('.vt-icon-btn')[0].click();
+  assert.deepEqual(hudZone(document, 'left'), ['e2e', 'agents', 'screens', 'safe-mode']);
   const [firstUp] = hudItem(document, 'e2e').querySelectorAll('.vt-icon-btn');
   assert.strictEqual(firstUp.disabled, true, '맨 위 칩의 위로 버튼은 비활성');
   assert.ok(down);
   assert.strictEqual(hudItem(document, 'server').querySelectorAll('.vt-icon-btn').length, 0, '사용 안 함 칩에는 순서 버튼이 없다');
 });
 
-test('하단바 — 기본값으로 버튼은 저장값을 비우고 기본 배치로 돌린다', async () => {
+test('메뉴바 — 기본값으로 버튼은 저장값을 비우고 기본 배치로 돌린다', async () => {
   const { document, P, S } = await build();
   P.showSettings();
-  sectionButton(document, '하단바').click();
+  sectionButton(document, '메뉴바').click();
   hudItem(document, 'cpu').querySelectorAll('.vt-icon-btn')[1].click();
   assert.notStrictEqual(S.get('ui.hud.layout'), '');
   const reset = document.querySelector('.vt-hudcfg-foot .vt-btn');
   assert.strictEqual(reset.disabled, false);
   reset.click();
   assert.strictEqual(S.get('ui.hud.layout'), '');
-  assert.deepEqual(hudZone(document, 'right'), ['cpu', 'gpu', 'ram', 'net', 'usage', 'version']);
+  assert.deepEqual(hudZone(document, 'right'), ['cpu', 'gpu', 'ram', 'net', 'usage', 'push', 'version', 'clock']);
 });
 
-test('하단바 — 모든 칩을 꺼도 화면이 죽지 않고 빈 상태를 알린다', async () => {
+test('메뉴바 — 모든 칩을 꺼도 화면이 죽지 않고 빈 상태를 알린다', async () => {
   const { document, P, S } = await build();
   P.showSettings();
-  sectionButton(document, '하단바').click();
+  sectionButton(document, '메뉴바').click();
   S.set('ui.hud.layout', JSON.stringify({ left: [], right: [] }));
   sectionButton(document, '모양').click();
-  sectionButton(document, '하단바').click();
+  sectionButton(document, '메뉴바').click();
   assert.ok(document.querySelector('.vt-hudcfg-empty-bar'));
-  assert.strictEqual(hudZone(document, 'off').length, 10);
+  assert.strictEqual(hudZone(document, 'off').length, 13);
 });
 
-test('하단바 — 배치는 이 기기에만 저장된다(device 스코프)', async () => {
+test('메뉴바 — 배치는 이 기기에만 저장된다(device 스코프)', async () => {
   const { S } = await build();
   assert.strictEqual(S.scopeOf('ui.hud.layout'), 'device');
 });
