@@ -27,6 +27,9 @@ import { t } from '../core/i18n.js';
 // PCM 청크 경로(AudioWorklet → 16kHz PCM16 → POST /voice/chunk). 지원하지 않거나 시작에 실패하면 아래 MediaRecorder 경로를 쓴다.
 import { primeAudioContext } from './pcm-capture.js';
 import { startPcmSession } from './pcm-session.js';
+// 입력 대상 고정·확인 후 전송은 별도 모듈에 둔다(둘 다 store.js를 import하지 않는 안전한 모듈).
+import { resolveInputTarget, pinMissingMessage } from './target-pin.js';
+import { showConfirm, clearConfirm } from './confirm.js';
 
 const API = `${location.protocol}//${location.host}`;
 
@@ -120,6 +123,8 @@ export async function startRecording() {
   if (window.vtRelayHost?.() && window.vtRelayHost() !== 'local') {
     micStatus.textContent = t('원격 호스트에 직접 접속해 음성을 사용하세요'); return;
   }
+  // 고정한 입력 대상이 사라졌으면 모델 준비·마이크 요청 전에 막는다(활성 세션으로 대신하지 않는다).
+  if (resolveInputTarget().missing) { micStatus.textContent = pinMissingMessage(); stage('error'); return; }
   busy = true;
   micStatus.textContent = t('입력 대상과 마이크 확인 중…');
   stage('starting', '');
@@ -134,7 +139,9 @@ export async function startRecording() {
     if (prep !== 'ready') { dropCtx(); busy = false; return; }
     // 마이크부터 연다 — 없거나 거부되면 서버에 입력 대상 토큰 같은 상태를 만들기 전에 끝난다.
     stream = await navigator.mediaDevices.getUserMedia({ audio: buildAudioConstraints() });
-    const sid = window.activeId || '';
+    const pick = resolveInputTarget();  // 고정 세션 || 활성 세션
+    if (pick.missing) throw new Error(pinMissingMessage());
+    const sid = pick.sid;
     const tr = await apiFetch(`${API}/voice/target`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: sid }),
@@ -163,6 +170,7 @@ export async function startRecording() {
     stage('starting', target.name);
     pauseVoice(true); paused = true;
     dropFailedUpload();
+    clearConfirm();  // 이전 인식 결과의 확인 대기는 새 녹음이 시작되면 버린다
     if (pcm) { pcmSession = pcm; pcmVoiceId = voiceId; stream = null; }  // 트랙은 세션이 닫는다
     mediaRecorder = recorder;
     audioChunks = [];
@@ -269,7 +277,7 @@ async function postOnce(blob, contentType, voiceId, captured) {
   const res = await apiFetch(`${API}/voice/input?session_id=${encodeURIComponent(sid)}`, {
     method: 'POST',
     // 같은 녹음의 재전송이 터미널에 두 번 입력되지 않게 서버가 이 id로 중복을 건너뛴다.
-    headers: { 'Content-Type': contentType, 'X-Voice-Id': voiceId, 'X-Voice-Target': captured.token },
+    headers: { 'Content-Type': contentType, 'X-Voice-Id': voiceId, 'X-Voice-Target': captured.token, 'X-Voice-Confirm': '1' },
     body: blob,
   });
   // C5: 4xx/5xx면 body가 JSON이 아닐 수 있어 파싱 실패를 허용한다.
@@ -308,9 +316,18 @@ async function uploadWithRetry() {
     const { res, data } = session ? await session.result() : await retryWithBackoff(() => postOnce(blob, contentType, voiceId, captured), RETRY_DELAYS);
     _failedUpload = null;
     console.debug('[voice] 왕복 %dms, 서버 timing:', Math.round(performance.now() - _stopAt), data && data.timing);
+    // 확인 모드 — 서버는 인식만 했고 입력하지 않았다. 패널의 확인 영역에서 고쳐 입력한다.
+    // 확인 영역을 그릴 수 없으면 false → 아래 「입력되지 않음 + 복사」 분기로 간다.
+    const confirmShown = !!(res.ok && data && data.pending_confirm && showConfirm({
+      text: data.text, token: data.confirm_token, voiceId, name: data.target_name || captured.name,
+      reason: data.confirm_reason, ttlSec: data.confirm_ttl_sec }));
     if (!res.ok) {
       // 4xx(인증·형식 거부)는 재시도하지 않는다 — 서버가 준 메시지를 그대로 보여준다.
       micStatus.textContent = (data && data.error) || t('전송 실패 ({status})', { status: res.status });
+    } else if (confirmShown) {
+      micStatus.textContent = t('확인 후 입력합니다 — {name}', { name: data.target_name || captured.name });
+      stage('confirm', data.target_name || captured.name);
+      return;
     } else if (data && data.text) {
       micStatus.textContent = data.injected ? t('입력 완료 — {name}: "{text}"', { name: captured.name, text: data.text }) : t('입력되지 않음 — {text}', { text: data.text });
       if (!data.injected && navigator.clipboard) {

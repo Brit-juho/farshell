@@ -9,7 +9,7 @@ Voice input has two paths: the browser microphone and the Voice Daemon. Voice-on
 - Runs in the background and works while you're in Notion or a browser
 - Default hotkey: `Ctrl+Shift+M` (changeable, see `fsh help hotkeys`)
 - Your earphones' Play/Pause button toggles it too (macOS media key)
-- After STT, it types the text + Enter straight into the active tmux pane, so it runs immediately
+- After STT, it types the text + Enter straight into the active tmux pane, so it runs immediately (no confirm screen, so "Confirm before sending" doesn't apply; only risky commands are refused)
 - Stop it with `fsh stop`
 
 By default the voice target is tmux's most-recent active pane,
@@ -26,7 +26,24 @@ The mic button in the web UI's voice bar, or Settings → "Voice and notificatio
 - The first tap prepares the model. When it's ready, tap again to record
 - STT → typed into the session/pane that was pinned when recording started. The target stays put even if you switch tabs mid-recording
 - 60 seconds at most. If the target disappears, you get the recognized text to copy
-- On mobile the tab you're viewing is the target, so no lock is needed
+- By default the target follows the session you are viewing when recording starts
+- **Pin the input target**: in the voice panel (long-press or right-click the mic) or Settings → "Voice and notifications" → "Input target", pick a session and voice goes there even while you view another one. While pinned, the mic button gets a hollow dot and the target name shows "(pinned)" during recording. It is stored in this browser only
+- If the pinned session closes, FarShell does not quietly switch to the active session; it blocks recording with "The pinned input target no longer exists". Pick a target again or go back to "Follow the session I'm viewing"
+
+### Confirm before sending
+
+Settings → "Voice and notifications" → "Confirm before sending" (default "Confirm for plain shells"):
+
+| Value | Behavior |
+|---|---|
+| Send without confirming | Types the transcript immediately (risky commands too) |
+| Confirm for plain shells (default) | Straight in for AI agent screens such as Claude or Codex; confirm first for plain shells and for screens it can't identify (vim, ssh, ...) |
+| Always confirm | Always confirm |
+
+- In the confirm step the transcript is **not typed**; the panel shows it in an editable box. Edit it and press "Send" to type it, or "Cancel" to send nothing. A pending confirmation lasts 5 minutes and works once.
+- If the transcript contains a risky command such as `rm -rf`, `sudo`, `curl ... | sh`, `git push --force`, `git reset --hard`, `mkfs`, `dd of=` or `> /dev/sdX`, it is always confirmed, even on AI agent screens, unless the setting is "Send without confirming". Only English spellings are matched (a Korean transcription of "sudo" is not).
+- If the target session disappears while you confirm, nothing is sent elsewhere; only "Copy transcript" remains.
+- The Voice Daemon (`fsh voice`) has no confirm screen, so it types straight in as before. It does refuse risky commands and tells you with a notification.
 
 ## 3. Voice-only mode
 
@@ -110,7 +127,7 @@ Settings → "Voice and notifications" → "Voice input" has two items. They app
 ## FAQ
 
 - **Q. Does STT type only the text, or Enter too?**
-  - A. Text + Enter. It runs immediately. Be careful about speaking dangerous commands into a shell.
+  - A. Text + Enter. In the browser, with the default setting ("Confirm for plain shells"), a plain shell or a risky command shows a confirm step first. AI agent screens get the text straight away and it runs immediately.
 
 - **Q. Does it work when claude isn't running?**
   - A. Yes. If the active tmux pane is a shell, the input goes to the shell.
