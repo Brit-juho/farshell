@@ -9,7 +9,7 @@
 // 아무 일도 안 일어난다 — vite.config.js 상단이 app.js/voice.js에 대해 설명한
 // 중복 문제와 정확히 같은 함정이다. 그래서 필요한 것들을 main.js가 인자로
 // 넘겨준다(HudDeps).
-import { createSignal, createEffect, onCleanup, For, Show } from 'solid-js';
+import { createSignal, createEffect, onCleanup, onMount, For, Show } from 'solid-js';
 import { render, Portal } from 'solid-js/web';
 import { t } from '../core/i18n.js';
 import { icon } from '../ui/icons.js';
@@ -192,6 +192,13 @@ function MenuButton(props: { deps: HudDeps; getCaps: () => unknown }) {
   let btn: HTMLButtonElement | undefined;
   let pop: HTMLDivElement | undefined;
 
+  // 승인 대기 배지(share-lazy.js의 vtAuthzBadge)는 이 버튼에 붙는다. 이 버튼은 지연 청크라 배지 호출이
+  // 먼저 왔을 수 있으니, 그려진 직후 마지막 건수를 한 번 다시 적용한다.
+  onMount(() => {
+    const w = window as unknown as { vtAuthzBadge?: (n: number) => void; vtAuthzPending?: number };
+    if ((w.vtAuthzPending ?? 0) > 0) w.vtAuthzBadge?.(w.vtAuthzPending as number);
+  });
+
   const act = (name: string, ...args: unknown[]) => {
     const fn = props.deps.getAction(name);
     if (typeof fn === 'function') (fn as (...a: unknown[]) => void)(...args);
@@ -211,7 +218,7 @@ function MenuButton(props: { deps: HudDeps; getCaps: () => unknown }) {
       },
     },
     { id: 'settings', iconName: 'settings', label: t('설정'), keys: `${mod},`, sepBefore: true, run: () => act('settings.show') },
-    { id: 'menubar-settings', iconName: 'settings', label: t('메뉴바 설정'), run: () => act('settings.section', 'hud') },
+    { id: 'menubar-settings', iconName: 'panel-top', label: t('메뉴바 설정'), run: () => act('settings.section', 'hud') },
   ];
 
   const close = (restoreFocus = false) => {

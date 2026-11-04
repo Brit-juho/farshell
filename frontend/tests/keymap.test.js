@@ -97,7 +97,7 @@ test('모든 기본 키맵은 mac과 비-mac에서 충돌 없이 자신의 액�
   for (const platform of ['MacIntel', 'Linux x86_64']) {
     const { K, window } = await load({ platform });
     const bindings = K.list();
-    assert.strictEqual(bindings.length, 16);
+    assert.strictEqual(bindings.length, 12);
     assert.deepEqual(K.conflicts(), {});
     for (const b of bindings) {
       assert.strictEqual(b.unavailable, false, `${platform}: ${b.id}가 브라우저 예약키면 안 된다`);
@@ -140,28 +140,28 @@ test('비-mac Ctrl+V는 터미널 키이므로 네이티브 붙여넣기로 분�
   assert.strictEqual(K.isNativePasteBinding(K.getBinding('paste')), false);
 });
 
-test('탭 이동 조합은 입력창의 텍스트 선택을 막지 않는다', async () => {
+test('입력창에서는 단축키가 실행되지도 기본 동작을 막지도 않는다', async () => {
   const { K, window } = await load({ platform: 'Linux x86_64' });
   let runs = 0;
-  K.register('tabPrev', () => { runs += 1; });
+  K.register('splitRight', () => { runs += 1; });
   const input = window.document.createElement('input');
   window.document.body.appendChild(input);
-  const e = kd(window, { key: 'ArrowLeft', ctrlKey: true, shiftKey: true });
+  const e = kd(window, { key: 'd', ctrlKey: true, shiftKey: true });
   input.dispatchEvent(e);
   assert.strictEqual(runs, 0);
   assert.strictEqual(e.defaultPrevented, false);
 });
 
-test('탭 이동 조합은 xterm의 숨은 textarea에서는 실행된다', async () => {
+test('xterm의 숨은 textarea에서는 단축키가 실행된다', async () => {
   const { K, window } = await load({ platform: 'Linux x86_64' });
   let runs = 0;
-  K.register('tabPrev', () => { runs += 1; });
+  K.register('splitRight', () => { runs += 1; });
   const wrapper = window.document.createElement('div');
   wrapper.className = 'xterm';
   const textarea = window.document.createElement('textarea');
   wrapper.appendChild(textarea);
   window.document.body.appendChild(wrapper);
-  const e = kd(window, { key: 'ArrowLeft', ctrlKey: true, shiftKey: true });
+  const e = kd(window, { key: 'd', ctrlKey: true, shiftKey: true });
   textarea.dispatchEvent(e);
   assert.strictEqual(runs, 1);
   assert.strictEqual(e.defaultPrevented, true);

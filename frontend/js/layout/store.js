@@ -32,13 +32,13 @@ function _genId(prefix) {
 // (`@fsh_grp` 태그)를 탭의 정체성으로 삼았었다. **2026-09-18 후속(그룹
 // 재정의, 사용자 요청)이 그 필드 자체를 없앤다** — "그룹"은 더 이상 탭에
 // 붙는 태그가 아니라 **그 탭의 pane 트리에 지금 떠 있는 세션이 몇 개인가**로
-// 매 순간 계산된다(2개 이상이면 그룹, 1개면 개인 — layout/tabbar.js의
+// 매 순간 계산된다(2개 이상이면 그룹, 1개면 개인 — 옛 layout/tabbar.js의
 // `tabMemberSessionIds`, `tabGroups()` 아래). 탭은 그저 세션들이 같은
 // 화면(pane 트리)을 공유하는 자리일 뿐, 별도 id를 가질 이유가 없다.
 // `worktreeId`는 여전히 "이 탭에서 지금 보고 있는 워크트리"라는 부가
 // 정보로 내려간다(pane 헤더 옆 브랜치 칩이 이 값을 읽는다).
 // `label`은 사용자가 직접 지은 이름만 담는다(없으면 null — layout/
-// tabbar.js의 `tabDisplayLabel`이 그 자리에 현재 구성원 이름을 계산해
+// `tabDisplayLabel`이 그 자리에 현재 구성원 이름을 계산해
 // 채운다. "작업 공간" 같은 무의미한 기본값을 붙이지 않는다).
 // `hostId`는 2.2 원격 호스트 기반이다(지금은 항상 'local').
 // 새 탭은 빈 칸 하나로 시작한다(활성 세션을 담으면 두 탭에 중복된다).
@@ -309,7 +309,7 @@ function _firstLeafId(node) {
 }
 
 // ── 탭(작업 공간) API — 10 §4 2단계 ────────────────────────────────────────
-// 탭을 아는 코드는 탭 바(layout/tabbar.js)와 영속화(layout/persist.js) 둘뿐이다.
+// 탭을 아는 코드는 view-actions.js·세션 액션·영속화(layout/persist.js)다.
 
 /** 읽기 전용 사본 — 바깥에서 tree를 직접 바꾸지 못하게 얕은 복사로 준다. */
 export function getTabs() {
@@ -563,7 +563,7 @@ export function pruneBlankViews() {
   return n;
 }
 
-/** 탭 순서를 바꾼다(헤더 탭 바 드래그 재정렬, 데스크톱 전용 — layout/tabbar.js).
+/** 뷰 순서를 바꾼다(폰의 세션 순서 시트. 데스크톱의 탭 드래그 재정렬은 탭 줄과 함께 없어졌다).
  * toIndex는 **이동 후** 그 탭이 있어야 할 위치. 활성 탭은 id로 다시 찾으므로
  * 순서가 바뀌어도 활성 탭 자체는 안 바뀐다. 탭이 하나거나 범위 밖이면 false. */
 export function moveLayoutTab(tabId, toIndex) {
@@ -752,7 +752,7 @@ export function getTabsWithTrees() {
 /** 표시용 탭 이름 — 사용자가 직접 지었으면(`tab.label`) 그대로, 아니면
  * 지금 그 탭에 떠 있는 세션(들)의 이름으로 계산한다. "작업 공간" 같은
  * 무의미한 기본값을 없앤다(사용자 요청 — 헤더는 항상 실제 개인/그룹
- * 이름을 보여줘야 한다). layout/tabbar.js와 아래 window 브리지(Rail.tsx가
+ * 이름을 보여줘야 한다). layout/view-actions.js와 아래 window 브리지(Rail.tsx가
  * 그룹 섹션 라벨로 쓴다)가 같은 답을 내도록 여기 한 곳에만 둔다. */
 export function tabDisplayLabel(tab) {
   if (tab.label) return tab.label;

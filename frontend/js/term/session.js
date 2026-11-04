@@ -4,7 +4,7 @@ import { cancelPasteTransactions } from './clipboard.js';
 // 세션 생성 진입점 + 세션 전환/이름변경/좌우이동 단축키 + 세션 제거.
 // N37 3단계 6/n에서 세션 탭 줄(#tabs)이 사라졌다 — 이 파일은 더 이상 탭 DOM을
 // 만들지도, 읽지도 않는다. 화면에 세션을 보여주는 곳은 워크트리 탭(layout/
-// tabbar.js) · pane 헤더 · 레일 세션 목록 · 피커 넷이다.
+// 옛 뷰 탭 줄) · pane 헤더 · 레일 세션 목록 · 피커 넷이다.
 // F4에서 terminal.js에서 분리 — addSession(구 :567-1018, 약 350줄)이 가장
 // 위험한 분할 대상이었다. 계획서는 tab DOM/xterm-setup/ws 3분할을 제안했지만,
 // 그 세 부분이 로컬 변수(id·tab·term·wrapper 등)를 촘촘히 공유해 함수 자체를
@@ -14,7 +14,6 @@ import { cancelPasteTransactions } from './clipboard.js';
 // 부품들을 순서대로 호출하는 오케스트레이터로 남겼다. 계획서 자신도 이 경로를
 // 명시적으로 허용했다("깊은 수술 없이 안전한 3분할이 아니면 하나의 오케스트레이터로
 // 남겨도 된다").
-import { register as registerKey } from '../core/keymap.js';
 import { getSession, registerSession, removeSessionRecord,
   sessionDisplayName, setSessionDisplayName, setSessionTmuxName } from '../core/store.js';
 import { apiFetch } from '../core/api.js';
@@ -27,11 +26,8 @@ import { registerAction } from '../core/dom.js';
 import { get as setting } from '../core/settings.js';
 // F5: picker.js와 순환 import 관계 — picker.js 상단 주석 참고.
 import { updateSessionPicker } from '../picker.js';
-import { setPaneSession, revealSessionPane, openLayoutTab, clearSessionFromLayout, replaceSessionId,
-  getTabsWithTrees, getActiveTabId, switchLayoutTab, moveLayoutTab } from '../layout/store.js';
+import { setPaneSession, revealSessionPane, openLayoutTab, clearSessionFromLayout, replaceSessionId } from '../layout/store.js';
 import { saveLayoutNow } from '../layout/persist.js';
-import { COMPACT_MAX } from '../layout/breakpoints.js';
-import { stepSession } from '../layout/compact.js';
 import { t } from '../core/i18n.js';
 
 // opts.place — 새 세션을 어디에 놓나(addSession 주석). 기본은 새 단독 뷰.
@@ -323,61 +319,6 @@ export async function renameSession(id, rawName, previousNameOverride) {
   }
 }
 
-// 2026-09-23(사용자 확정) — 데스크톱은 드래그로 헤더 탭을 직접 재정렬할 수 있어서
-// (layout/tabbar.js) "다음/이전 탭" 키가 헤더 탭(뷰)을 돈다. 모바일(<720px)은 헤더
-// 탭 바가 숨겨져 있어(80-dock.css) 스와이프와 같은 함수(layout/compact.js
-// stepSession)로 **다음/이전 세션**을 간다 — 순서는 뷰 탭 순서 → 칸 순서, 즉
-// 저장되는 레이아웃 하나다. 이동만 하고 트리는 건드리지 않는다.
-function _desktopTabs() {
-  return window.innerWidth >= COMPACT_MAX;
-}
-
-function _switchHeaderTabByOffset(delta) {
-  const tabs = getTabsWithTrees();
-  if (tabs.length < 2) return;
-  const activeId = getActiveTabId();
-  let idx = tabs.findIndex((t) => t.id === activeId);
-  if (idx === -1) idx = 0;
-  const nid = tabs[(idx + delta + tabs.length) % tabs.length].id;
-  if (nid !== activeId) { switchLayoutTab(nid); saveLayoutNow(); }
-}
-
-export function switchTabByOffset(delta) {
-  if (_desktopTabs()) _switchHeaderTabByOffset(delta);
-  else stepSession(delta);
-}
-
-// 뷰 탭 자체를 앞/뒤로 옮긴다(순서가 바뀌는 유일한 키보드 경로 — 드래그는
-// layout/tabbar.js). 폭과 무관하게 같다: 모바일에서도 이동 순서의 출처가 뷰 탭
-// 순서이므로 이 키가 곧 모바일 이동 순서를 바꾼다. 끝에서는 멈춘다(순환하면
-// "끝까지 밀었다"는 걸 알 수 없다).
-export function moveTabByOffset(delta) {
-  const tabs = getTabsWithTrees();
-  const activeId = getActiveTabId();
-  const idx = tabs.findIndex((t) => t.id === activeId);
-  if (idx === -1) return;
-  const to = idx + delta;
-  if (to < 0 || to >= tabs.length) return;
-  if (moveLayoutTab(activeId, to)) saveLayoutNow();
-}
-
-// S3: 탭 좌우 이동도 키맵 레지스트리 경유. 레지스트리가 document capture 단계에서
-// 한 번만 듣고 preventDefault/stopPropagation까지 처리하므로(PTY로 새지 않는다),
-// 여기서는 "무엇을 할지"만 남는다.
-// 검색창·탭 이름 편집 중에는 텍스트 선택(Shift+화살표)을 방해하지 않는다 —
-// 레지스트리가 기본 키 동작까지 살리고, 이 핸들러도 같은 조건을 확인한다.
-// xterm의 숨은 textarea는 편집창이 아니라 터미널 입력이므로 제외한다.
-function _inTextField() {
-  const ae = document.activeElement;
-  if (ae?.closest?.('.xterm')) return false;
-  return !!(ae && (ae.id === 'search-input' || ae.isContentEditable
-    || ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA'));
-}
-registerKey('tabPrev', () => { if (!_inTextField()) switchTabByOffset(-1); });
-registerKey('tabNext', () => { if (!_inTextField()) switchTabByOffset(1); });
-registerKey('tabMovePrev', () => { if (!_inTextField()) moveTabByOffset(-1); });
-registerKey('tabMoveNext', () => { if (!_inTextField()) moveTabByOffset(1); });
-
 export async function removeSession(id) {
   const s = getSession(id);
   if (!s) return;
@@ -473,9 +414,3 @@ window.showAddMenu = showAddMenu;
 // showOnboarding()의 onclick="...createSession()" 인라인 문자열이 모듈 경계와
 // 무관하게 window를 거쳐야 하므로 함께 브리지.
 window.createSession = createSession;
-// switchTabByOffset은 프로덕션에서 이 파일 안의 keydown 리스너만 쓰지만(외부
-// 소비처 없음, 전수 grep 확인), 예전엔 classic script 최상위 함수 선언이라
-// "부수적으로" 항상 window에 걸려 있었다 — 테스트가 그 사실에 기대 키보드
-// 이벤트 없이 직접 호출한다(frontend/tests/terminal-lifecycle.test.js). 동작
-// 동등성을 위해 그대로 브리지.
-window.switchTabByOffset = switchTabByOffset;

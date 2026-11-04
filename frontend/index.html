@@ -343,23 +343,16 @@
        "값이 없는 항목은 숨긴다"가 규칙이라 빈 상태에서는 아무 칩도 안 나온다.
        id·클래스가 vt-hud-*인 것은 이름만 옛것이다(토스트·테스트가 기대는 계약이라 그대로 둔다). -->
   <div id="vt-hud" role="region" aria-label="상태" data-i18n-attr="aria-label">
+    <!-- 720px 이상에서는 #topbar를 통째로 감추고(뷰 탭 줄이 사라져 남는 게 없다) 거기 있던 신호등·키바 버튼·
+         ⌘K 버튼·윈도 캡션을 이 두 자리로 옮긴다(layout/menubar-slots.js). compact에서는 제자리로 돌려 놓는다. -->
+    <div id="vt-mb-lead"></div>
     <div id="vt-workspace-chip-slot"></div>
+    <div id="vt-mb-tools"></div>
   </div>
 
-  <!-- 상단 통합 바 -->
+  <!-- 상단 통합 바 — 720px 이상에서는 숨는다(메뉴바가 상단의 전부). compact의 세션 진입점·키바·스니펫·⌘K가 산다. -->
   <header id="topbar">
     <div class="traffic" aria-hidden="true"><i class="c1"></i><i class="c2"></i><i class="c3"></i></div>
-
-    <!-- 10-shell-layout.md §4 3단계 — **탭 = 열려 있는 워크트리**. 탭마다 자기
-         pane 트리를 가진다(layout/store.js의 탭 집합). 세션 탭 줄(#tabs)은
-         3단계에서 사라졌다 — 세션 목록·닫기·이름 변경·드래그는 레일(세션)로,
-         이름·순서는 세션 레코드(core/store.js)로 옮겼다.
-         2026-09-18 후속(사용자 요청) — 이 옆에 있던 #add-btn("새 세션")을
-         지웠다. 진입점을 레일 하단 "+ 새 세션" 하나로 합친다 — 좁은 화면에서
-         레일도 같이 접히는 문제는 모바일 레이아웃을 다시 만들 때 같이 본다
-         (지금 모바일 레이아웃은 어차피 갈아엎을 예정이라 여기서 대비하지
-         않는다). -->
-    <div id="vt-wtabs" role="tablist" aria-label="뷰" data-i18n-attr="aria-label"></div>
 
     <!-- 좁은 화면의 세션 진입점 — 누르면 하단 「세션」 탭과 터미널을 오간다(팝업 없음).
          2026-09-29(H1) — 모바일 헤더의 주인공. 윗줄 세션 이름 ▾, 아랫줄 "기기 · 3/5"

@@ -59,7 +59,8 @@ import './term/resize.js';
 import './layout/panes.js';   // L3 1단계 — 분할 pane 렌더러. session.js의 switchTo()가 이걸 거친다.
 import './term/touch.js';
 import './term/links.js';
-import './layout/tabbar.js';      // 10 §4 2단계 — 워크트리 탭 바(탭마다 pane 트리)
+import './layout/view-actions.js';  // 뷰(탭마다 pane 트리)의 window 브리지 — 탭 줄 UI는 없다
+import './layout/menubar-slots.js'; // 720px 이상: #topbar의 남은 버튼을 메뉴바로 옮긴다
 import('./term/tab-worktree.js');  // 현재 작업 정보 조회는 셸 UI와 함께 지연 로딩
 import './term/remote.js';   // N7/N39 3단계 — 원격 세션 attach(window 브리지 등록)
 import './term/selection.js';

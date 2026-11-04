@@ -16,7 +16,7 @@
 // 지운 뒤 classic <script>로 하나의 전역 렉시컬 환경에 주입) 대신
 // vm.SourceTextModule로 term/session.js를 엔트리 삼아 실제 모듈 그래프(picker.js
 // 와의 순환 import 포함)를 그대로 링크·평가한다 — 소스가 실제로 export하지 않는
-// 이름(switchTabByOffset 등)은 이제 그 이름이 정말 window 브리지로 존재할 때만
+// 이름은 이제 그 이름이 정말 window 브리지로 존재할 때만
 // window.foo(...)로 부르고, 그렇지 않은 것(openSessionManager)은 실제 소비
 // 경로와 같은 core/dom.js의 getAction()으로 부른다.
 const { test, after } = require('node:test');
@@ -119,7 +119,7 @@ async function buildTerminalWindow({ fetchImpl = fakeFetch } = {}) {
   // 노출된다(data-action="session.manager") — 실제 소비 경로와 같은 방식으로 호출.
   const { getAction } = await importFresh(DOM_JS, env.context, cache);
   // 2026-09-23 — 데스크톱 탭 순서 테스트가 헤더 탭(화면)을 직접 열어야 한다
-  // (openLayoutTab은 window 브리지가 없다 — layout/tabbar.js의 openGroupTab만
+  // (openLayoutTab은 window 브리지가 없다 — layout/view-actions.js의 openGroupTab만
   // 있고 그건 이 테스트 그래프에 없다). cache를 공유하므로 session.js가 보는
   // 것과 같은 싱글톤이다(layout-dnd.test.js의 loadDnd()와 같은 이유).
   const layoutStore = await importFresh(LAYOUT_STORE_JS, env.context, cache);
@@ -170,53 +170,6 @@ test('switchTo: 이전 세션은 숨고, 새 세션이 활성/표시로 전환�
   assert.strictEqual(window.activeId, 'a');
   assert.strictEqual(where('a').className, 'vt-pane-body');
   assert.strictEqual(where('b').id, 'vt-term-stage');
-});
-
-// 2026-09-23 — 데스크톱은 이 단축키의 대상이 헤더 탭(화면)이다. 모바일은 헤더 탭
-// 바가 숨겨져 있어(80-dock.css) 스와이프와 같은 함수(compact.js stepSession)로
-// 다음/이전 **세션**을 간다 — 순서는 뷰 탭 → 칸 순서(레이아웃 하나). 아래 두
-// 테스트로 갈라 검증한다.
-test('switchTabByOffset: 모바일(<720)에서는 화면 순서 끝에서 순환하고 세션을 옮기지 않는다', async () => {
-  const { window, addSession, layoutStore } = await buildTerminalWindow();
-  Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true });
-  addSession('a', 'A');                                   // 뷰 1
-  addSession('b', 'B');                                   // 같은 칸을 덮는다(배정)
-  layoutStore.openLayoutTab({ sessionId: 'a' });          // a를 자기 뷰로
-  addSession('c', 'C', { place: 'view' });                // 뷰 3 — 활성 = c
-  const shape = JSON.stringify(layoutStore.getTabsWithTrees().map((t) => t.tree));
-  const order = () => layoutStore.getTabsWithTrees().flatMap((t) => (t.tree.session ? [t.tree.session] : []));
-  assert.strictEqual(window.activeId, 'c');
-  const want = order();
-  assert.strictEqual(want.length, 3);
-
-  window.switchTabByOffset(1);                            // 끝 → 처음(순환)
-  assert.strictEqual(window.activeId, want[0]);
-  window.switchTabByOffset(-1);                           // 처음 → 끝(역순환)
-  assert.strictEqual(window.activeId, 'c');
-  assert.strictEqual(JSON.stringify(layoutStore.getTabsWithTrees().map((t) => t.tree)), shape, '이동은 배치를 바꾸지 않는다');
-});
-
-test('switchTabByOffset: 데스크톱(≥720)에서는 헤더 탭 순서로 돈다', async () => {
-  const { window, addSession, layoutStore } = await buildTerminalWindow();
-  // 세 세션을 만들지만 addSession은 활성 pane에 그대로 배정할 뿐이라
-  // (setPaneSession) 여기까진 전부 같은 탭 하나에 있다 — 마지막(c)만 남는다.
-  addSession('a', 'A');
-  addSession('b', 'B');
-  addSession('c', 'C');
-  const tabC = layoutStore.getActiveTabId();
-  // a/b는 지금 그 탭에서 밀려나 있으므로(같은 leaf를 덮어씀) openLayoutTab이
-  // 각자의 새 탭을 만든다 — 이제 세 탭: [tabC, tabA, tabB](tabB가 활성).
-  const tabA = layoutStore.openLayoutTab({ sessionId: 'a' });
-  const tabB = layoutStore.openLayoutTab({ sessionId: 'b' });
-  assert.strictEqual(layoutStore.getActiveTabId(), tabB);
-
-  Object.defineProperty(window, 'innerWidth', { value: 1024, configurable: true });
-  window.switchTabByOffset(1); // tabB → 순환 → tabC(맨 앞)
-  assert.strictEqual(layoutStore.getActiveTabId(), tabC);
-
-  window.switchTabByOffset(-1); // tabC → 역순환 → tabB(맨 뒤)
-  assert.strictEqual(layoutStore.getActiveTabId(), tabB);
-  void tabA;
 });
 
 // 2026-10-03(세션·뷰 규칙 "닫기") — 닫은 세션의 칸은 빈 칸으로 남는다. 다른
