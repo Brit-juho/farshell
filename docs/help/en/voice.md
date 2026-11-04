@@ -9,7 +9,7 @@ Voice input has two paths: the browser microphone and the Voice Daemon. Voice-on
 - Runs in the background and works while you're in Notion or a browser
 - Default hotkey: `Ctrl+Shift+M` (changeable, see `fsh help hotkeys`)
 - Your earphones' Play/Pause button toggles it too (macOS media key)
-- After STT, it types the text + Enter straight into the active tmux pane, so it runs immediately
+- After STT, it types the text + Enter straight into the active tmux pane, so it runs immediately (no confirm screen, so "Confirm before sending" doesn't apply; only risky commands are refused)
 - Stop it with `fsh stop`
 
 By default the voice target is tmux's most-recent active pane,
@@ -26,7 +26,24 @@ The mic button in the web UI's voice bar, or Settings → "Voice and notificatio
 - The first tap prepares the model. When it's ready, tap again to record
 - STT → typed into the session/pane that was pinned when recording started. The target stays put even if you switch tabs mid-recording
 - 60 seconds at most. If the target disappears, you get the recognized text to copy
-- On mobile the tab you're viewing is the target, so no lock is needed
+- By default the target follows the session you are viewing when recording starts
+- **Pin the input target**: in the voice panel (long-press or right-click the mic) or Settings → "Voice and notifications" → "Input target", pick a session and voice goes there even while you view another one. While pinned, the mic button gets a hollow dot and the target name shows "(pinned)" during recording. It is stored in this browser only
+- If the pinned session closes, FarShell does not quietly switch to the active session; it blocks recording with "The pinned input target no longer exists". Pick a target again or go back to "Follow the session I'm viewing"
+
+### Confirm before sending
+
+Settings → "Voice and notifications" → "Confirm before sending" (default "Confirm for plain shells"):
+
+| Value | Behavior |
+|---|---|
+| Send without confirming | Types the transcript immediately (risky commands too) |
+| Confirm for plain shells (default) | Straight in for AI agent screens such as Claude or Codex; confirm first for plain shells and for screens it can't identify (vim, ssh, ...) |
+| Always confirm | Always confirm |
+
+- In the confirm step the transcript is **not typed**; the panel shows it in an editable box. Edit it and press "Send" to type it, or "Cancel" to send nothing. A pending confirmation lasts 5 minutes and works once.
+- If the transcript contains a risky command such as `rm -rf`, `sudo`, `curl ... | sh`, `git push --force`, `git reset --hard`, `mkfs`, `dd of=` or `> /dev/sdX`, it is always confirmed, even on AI agent screens, unless the setting is "Send without confirming". Only English spellings are matched (a Korean transcription of "sudo" is not).
+- If the target session disappears while you confirm, nothing is sent elsewhere; only "Copy transcript" remains.
+- The Voice Daemon (`fsh voice`) has no confirm screen, so it types straight in as before. It does refuse risky commands and tells you with a notification.
 
 ## 3. Voice-only mode
 
@@ -92,25 +109,25 @@ The `voice.stt timing` entry in the server log shows decode, wait and recognitio
 record and uploads it in roughly 0.5-second pieces. If the network drops for a moment mid-recording, the pieces that did not get through
 are sent again, and when you stop, the collected sound is recognized in one go. If the outage lasts more than 25 seconds, or the server
 receives nothing for 30 seconds, that recording is discarded and you record again. Browsers without AudioWorklet use the single-file upload
-described above. The 60-second limit is the same. While recording, the status panel shows an input level bar, and the bar changes color when
+described above. The 60-second limit and "Confirm before sending" are the same for both. While recording, the status panel shows an input level bar, and the bar changes color when
 the sound is so loud it distorts (there is no bar with the single-file upload).
 
 ## While recording (chunked upload only)
 
 Settings → "Voice and notifications" → "Voice input" has two items. They apply to every device and are read when a recording starts, so a change made mid-recording applies from the next one.
 
-- **Auto stop** (off by default): when you stop talking and it stays quiet for 1 second, recording ends and is sent, the same as pressing "Stop recording".
+- **Auto stop** (off by default): when you stop talking and it stays quiet for 1 second, recording ends and is sent, the same as pressing "Stop recording" (if "Confirm before sending" applies, the confirm box opens).
   It never ends before you start talking (the 60-second limit still applies). The server judges by comparing loudness with the background noise, so a pause
   of more than 1 second between sentences can cut you off, and a sudden jump in background noise can keep it from ending (stop it yourself then).
 - **Show partial results** (on by default): while you record, the status panel shows a dimmed preview of the sentence being recognized. It is only a preview
-  and is never typed into the terminal; when recording ends, the whole recording is recognized again and only that final result is typed in. Past 20 seconds
+  and is never typed into the terminal; when recording ends, the whole recording is recognized again and only that final result is typed in (with "Confirm before sending", that final result goes to the confirm box). Past 20 seconds
   only the last 20 seconds are shown, prefixed with "…". The server runs extra recognition while you record, so on a slow server (llama.cpp on the CPU, say)
   the final result can come a little later — turn it off then. If the server is busy with another recognition, the preview is skipped.
 
 ## FAQ
 
 - **Q. Does STT type only the text, or Enter too?**
-  - A. Text + Enter. It runs immediately. Be careful about speaking dangerous commands into a shell.
+  - A. Text + Enter. In the browser, with the default setting ("Confirm for plain shells"), a plain shell or a risky command shows a confirm step first. AI agent screens get the text straight away and it runs immediately.
 
 - **Q. Does it work when claude isn't running?**
   - A. Yes. If the active tmux pane is a shell, the input goes to the shell.

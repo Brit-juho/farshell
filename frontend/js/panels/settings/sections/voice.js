@@ -2,8 +2,9 @@ import { renderSessionVoice, renderVoiceDefaults } from './voice-session.js';
 import { vtFetch } from '../../../core/api.js';
 import { activeSessionId, getSession } from '../../../core/store.js';
 import { mountClients } from '../../../layout/clients.js';
-import { row, statusLine, toast, renderItems, group, boolControl } from '../controls.js';
+import { row, statusLine, toast, renderItems, group, boolControl, selectControl } from '../controls.js';
 import { scopeOf } from '../../../core/settings.js';
+import { bindPinSelect } from '../../../voice/target-pin.js';
 import { renderVoiceInput, cleanupVoiceModels } from './voice-models.js';
 import { togglePush, refreshPushLabel } from '../../../pushui.js';
 import { getAction } from '../../../core/dom.js';
@@ -13,12 +14,14 @@ import { t } from '../../../core/i18n.js';
 // (다른 탭 클릭 · 패널 닫기) 반드시 cleanup을 불러야 폴링 타이머가 안 샌다.
 let _voiceClientsCleanup = null;
 let _voiceSessionCleanup = null;
+let _voicePinCleanup = null;
 
 /** 이 섹션을 떠날 때(다른 탭·패널 닫기) 반드시 불러야 폴링 타이머가 안 샌다.
  *  settings.js의 rerender/onClose가 부른다. */
 export function cleanupVoiceClients() {
   if (_voiceClientsCleanup) { _voiceClientsCleanup(); _voiceClientsCleanup = null; }
   _voiceSessionCleanup?.(); _voiceSessionCleanup = null;
+  _voicePinCleanup?.(); _voicePinCleanup = null;
   cleanupVoiceModels();  // 모델 받기 진행 폴링
 }
 
@@ -75,7 +78,21 @@ export function renderVoiceSection() {
   statusBtn.type = 'button'; statusBtn.className = 'vt-btn sm quiet';
   statusBtn.textContent = t('음성 상태 열기');
   statusBtn.addEventListener('click', () => getAction('voice.status')?.());
-  vm.input.prepend(row(t('입력 현황'), statusBtn));
+  // 입력 대상 고정(이 기기만) + 확인 후 전송(서버 전체). 모바일에서는 dock이 없으니 설정에서도 고를 수 있다.
+  const pinSel = document.createElement('select');
+  pinSel.className = 'vt-select'; pinSel.setAttribute('aria-label', t('입력 대상'));
+  const pinWrap = document.createElement('div');
+  pinWrap.className = 'vt-select-wrap'; pinWrap.appendChild(pinSel);
+  _voicePinCleanup?.();
+  _voicePinCleanup = bindPinSelect(pinSel);
+  const confirmRow = row(t('확인 후 전송'), selectControl('voice.confirm', {
+    off: t('확인 없이 바로 입력'), shell: t('일반 셸이면 확인'), on: t('항상 확인'),
+  }), t('확인하면 인식 결과를 고쳐서 입력할 수 있습니다. 「일반 셸이면 확인」은 Claude·Codex 같은 AI 에이전트 화면에는 바로 입력하고, 일반 셸이나 알 수 없는 화면에는 먼저 확인합니다. rm -rf, sudo, curl | sh, git push --force 같은 위험한 명령은 「확인 없이 바로 입력」이 아니면 항상 확인합니다.'),
+    { scope: scopeOf('voice.confirm'), key: 'voice.confirm' });
+  vm.input.prepend(
+    row(t('입력 현황'), statusBtn),
+    row(t('입력 대상'), pinWrap, t('이 기기에서 음성이 들어갈 세션입니다. 고정하면 다른 세션을 보고 있어도 그 세션으로 입력하고, 세션이 없어지면 다른 곳으로 보내지 않고 녹음을 막습니다.')),
+    confirmRow);
   // 녹음 중 처리 — 서버가 녹음 시작에 읽는다(녹음 중에 바꾸면 다음 녹음부터). 파일 한 번 전송(폴백) 경로에는 없다.
   vm.input.append(
     row(t('자동 종료'), boolControl('voice.autoStop'),

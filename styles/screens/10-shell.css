@@ -589,6 +589,12 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
   0%,100% { box-shadow:0 0 0 0 color-mix(in srgb, var(--err) 45%, transparent); }
   50%     { box-shadow:0 0 0 5px color-mix(in srgb, var(--err) 0%, transparent); }
 }
+/* 입력 대상을 고정해 두면 마이크 아래 모서리에 속 빈 점이 붙는다(우상단 점은 상태 표시). */
+#mic-btn-wrap[data-voice-pin] { position:relative; }
+#mic-btn-wrap[data-voice-pin]::before {
+  content:''; position:absolute; right:5px; bottom:5px; width:7px; height:7px; box-sizing:border-box;
+  border:1.5px solid currentColor; border-radius:50%; pointer-events:none;
+}
 /* rail 설정 패널 컨텍스트 — 폭은 #vt-rail-settings-tpl .mi가 이미 주는 100%를
    그대로 쓰고, 여긴 아이콘 크기·라벨 굵기만. */
 #vt-rail-mic-slot #mic-btn-wrap svg { width:16px; height:16px; }
@@ -626,10 +632,22 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
 @media (pointer:coarse) { .vt-voice-meter { height:6px; } }
 @media (prefers-reduced-motion:reduce) { .vt-voice-meter-bar { transition:none; } }
 .vt-voice-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.vt-voice-pin { display:flex; flex-direction:column; align-items:stretch; gap:4px; margin-top:12px; }
+.vt-voice-pin label { color:var(--color-sub); font-size:var(--fs-xs); }
+.vt-voice-pin .vt-select, .vt-voice-pin .vt-dd { width:100%; box-sizing:border-box; }
+.vt-voice-pin .vt-voice-meta { margin:2px 0 0; }
+/* 확인 후 전송: 인식 결과를 고쳐서 입력한다. 상태 줄(#mic-status) 바로 아래. */
+#voice-confirm { display:flex; flex-direction:column; gap:6px; margin-top:12px; padding-top:12px; border-top:1px solid var(--color-line); }
+#voice-confirm[hidden] { display:none; }
+#voice-confirm label { color:var(--color-sub); font-size:var(--fs-xs); }
+#voice-confirm textarea { width:100%; box-sizing:border-box; min-height:72px; max-height:200px; resize:vertical; line-height:1.5; }
+#voice-confirm .vt-voice-meta { margin:0; }
+#voice-confirm .vt-voice-actions { margin-top:4px; }
 .vt-voice-help { margin:10px 0 0; color:var(--color-sub); font-size:var(--fs-xs); }
 #mic-status .vt-btn { margin:8px 8px 0 0; }
 @media (pointer:coarse) {
   #voice-status-panel .vt-btn { min-height:44px; }
+  .vt-voice-pin .vt-select, .vt-voice-pin .vt-dd { min-height:44px; }
 }
 
 /* ---- 연결 상태 pill ---------------------------------------------------- */

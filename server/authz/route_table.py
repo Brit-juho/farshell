@@ -154,6 +154,7 @@ _ROWS: tuple = (
     ("POST", "/voice/input", sock_()),
     ("POST", "/voice/chunk", auth()),
     ("POST", "/voice/chunk/cancel", auth()),
+    ("POST", "/voice/inject", auth()),
     ("POST", "/voice/output", auth()),
     ("GET", "/voice/notify/clients", auth()),
     ("GET", "/voice/stt/status", auth()),

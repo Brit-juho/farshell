@@ -45,7 +45,7 @@ class ChunkError(Exception):
 
 class Recording:
     __slots__ = ("voice_id", "owner", "token", "parts", "pending", "pending_bytes", "total_bytes",
-                 "final_seq", "state", "result", "created", "last", "future", "live")
+                 "final_seq", "state", "result", "created", "last", "future", "live", "confirm_ui")
 
     def __init__(self, voice_id: str, owner: str, token: str, now: float):
         self.voice_id, self.owner, self.token = voice_id, owner, token
@@ -59,6 +59,7 @@ class Recording:
         self.created = self.last = now
         self.future = None                      # finishing 동안 결과를 기다리는 asyncio.Future(routes가 만든다)
         self.live = None                        # voice_live.Live — 녹음 중 VAD·부분 인식(routes가 붙인다)
+        self.confirm_ui = False                 # 클라이언트가 X-Voice-Confirm: 1을 보냈는가(routes가 켠다 — 확인 후 전송)
 
     @property
     def next_seq(self) -> int:
