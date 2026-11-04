@@ -141,6 +141,17 @@ test('모달 뼈대(panels/panel.js)와 대화상자 본체는 panel 청크에 �
   assert.doesNotMatch(coreJs, /from\s*["']\.\/panel\.js["']/);
 });
 
+test('업로드 본체(term/upload.js)와 사용 가이드 본문은 지연 청크에 있고 core에는 스텁만 남는다', () => {
+  const uploadJs = fs.readFileSync(path.join(DIST, 'upload.js'), 'utf8');
+  assert.match(uploadJs, /\/api\/upload/);
+  assert.doesNotMatch(coreJs, /\/api\/upload/);
+  assert.match(coreJs, /vtUploadFiles/);          // 브리지 스텁
+  assert.match(coreJs, /vtCancelUpload/);   // 취소 브리지 스텁도 core에 남는다(창 기본 동작 차단과 같은 블록)
+  const panelJs = fs.readFileSync(path.join(DIST, 'panel.js'), 'utf8');
+  assert.match(panelJs, /vt-guide-scroll/);
+  assert.doesNotMatch(coreJs, /vt-guide-scroll/);
+});
+
 test('에이전트 공유의 대화상자와 통합 승인함(모달·권한·감사)은 share 청크에 있고 core 에는 없다(core 에는 이벤트 수신·배지·import() 만)', () => {
   // vite.config.js manualChunks 의 `/frontend/js/share/` 규칙이 빠지면 포괄 규칙이 core 로 보내
   // 상시 로드가 ~18KB 늘어난다(빌드·테스트는 통과하고 상한만 조용히 줄어든다).

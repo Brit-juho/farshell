@@ -257,6 +257,11 @@ export default defineConfig(({ mode }) => {
             // 화면 청크(panels·settings·share·history·screens)는 panel 청크를 함께 받는다(core를 거치지 않는다).
             if (p.endsWith('/frontend/js/panels/panel.js')) return 'panel';
             if (p.endsWith('/frontend/js/core/dialog.js')) return 'panel';
+            // 사용 가이드 본문 — term/guide.js(core 스텁)가 열 때만 import()한다.
+            if (p.endsWith('/frontend/js/term/guide-view.js')) return 'panel';
+            // 업로드 전송·대기열·취소 본체(10KB) — term/upload-lite.js(core)가 첫 업로드 때와 유휴 시간에 import()한다.
+            // 드롭 판별·창 기본 동작 차단·window 브리지 스텁은 lite에 남는다. panels/files는 브리지로만 부르므로 정적 의존이 없다.
+            if (p.endsWith('/frontend/js/term/upload.js')) return 'upload';
             // <select> 드롭다운 본체(12KB) — ui/select-lazy.js(core 스텁)가 select가 나타날 때와 유휴 시간에 지연 import한다.
             // screens에 합치지 않는다: select 하나 때문에 화면 모듈까지 받게 된다.
             if (p.endsWith('/frontend/js/ui/select.js')) return 'select';

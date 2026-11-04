@@ -36,6 +36,7 @@ import { get as settingGet, subscribe as settingSubscribe } from './core/setting
 import './core/keymap.js';    // S3 — 키맵 레지스트리(각 모듈이 register()로 액션을 붙인다)
 import './core/dom.js';
 import { showToast } from './ui/toast.js';   // F5 — showToast/dismissToast. 다른 모듈이 참조하므로 먼저.
+import { prefetchUpload } from './term/upload-lite.js';  // 업로드 본체는 upload 청크 — 유휴 시간에 미리 받는다
 import { prefetchDialogs } from './core/dialog-lazy.js';  // 확인·입력·알림 대화상자 본체는 panel 청크
 import { watchSelects } from './ui/select-lazy.js';  // 기본 <select> 팝업 대신 FarShell 드롭다운(모든 select에 자동) — 본체는 select 청크
 import { initTooltips } from './ui/tooltip.js';  // 2026-09-18 — 네이티브 title 대체(data-tip)
@@ -126,6 +127,7 @@ try {
   initTooltips();
   watchSelects();
   prefetchDialogs();
+  prefetchUpload();
   // `appBooted`(아래)는 "배선 끝"이고 이건 "부팅 끝"이다(성공·실패 무관). 부팅 도중에
   // 새로고침하는 테스트가 진행 중인 부팅을 끊지 않도록 e2e가 이걸 기다린다(ADR-45).
   bootApp().finally(() => { document.documentElement.dataset.appReady = 'true'; });

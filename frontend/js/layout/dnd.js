@@ -19,7 +19,7 @@ import { REGULAR_MAX, WIDE_MAX, isMobileLayout } from './breakpoints.js';
 // import가 없어 이 방향(core → registry)은 청크를 오염시키지 않는다.
 import { PANEL_MIME, PANEL_KINDS } from '../panels/registry.js';
 // R6 — OS 파일 드롭. 업로드 구현은 한 곳(term/upload.js)이고 여기는 부르기만 한다.
-import { hasFiles, filesFromDataTransfer, uploadFiles } from '../term/upload.js';
+import { hasFiles, filesFromDataTransfer, uploadFiles } from '../term/upload-lite.js';
 
 export const SESSION_MIME = 'text/vt-tab-id';
 export { PANEL_MIME };

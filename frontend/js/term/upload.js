@@ -1,4 +1,5 @@
-// R6 — 파일 업로드의 **유일한 구현**. 진입점은 셋이다:
+// R6 — 파일 업로드의 **유일한 구현**(전송·대기열·취소는 이 파일, 드롭 판별·창 기본 동작 차단·브리지 스텁은 upload-lite.js).
+// 이 파일은 `upload` 청크라 첫 업로드 때 받는다. 진입점은 셋이다:
 //   1. `#file-input`  — 키바 📎 · 팔레트 · 파일 패널 「올리기」가 공유하는 그 input
 //      (picker.js의 `uploadFile()`이 인라인 onchange로 받아 여기로 넘긴다)
 //   2. 터미널 칸에 OS 파일 드롭   — layout/dnd.js
@@ -20,40 +21,8 @@ import { noteNetworkError, noteResponse } from '../core/reachability.js';
 import { sendPaste } from './clipboard.js';
 import { shellQuotePath } from '../lib/shell-quote.js';
 import { showToast } from '../ui/toast.js';
+import { hasFiles, filesFromDataTransfer } from './upload-lite.js';
 import { t } from '../core/i18n.js';
-
-/** DataTransfer에 OS 파일이 실려 있는가. 앱 내부 드래그(세션·dock 탭)와
- *  구분하는 유일한 기준이다 — 그쪽은 자기 mime을 싣고 'Files'는 안 싣는다. */
-export function hasFiles(dataTransfer) {
-  const types = dataTransfer && dataTransfer.types;
-  return !!types && Array.prototype.includes.call(types, 'Files');
-}
-
-/** 드롭된 항목에서 **파일만** 고른다.
- *
- * 폴더를 끌어다 놓으면 `dataTransfer.files`에 크기 0짜리 항목으로 들어오는데,
- * 그대로 올리면 서버에 빈 파일이 생긴다(이름만 폴더명). `webkitGetAsEntry()`는
- * 세 엔진 모두 지원하므로 그걸로 걸러내고, 없는 환경에서는 그냥 통과시킨다 —
- * 못 거르는 것보다 낫고, 그 경우에도 업로드 자체는 실패하지 않는다. */
-export function filesFromDataTransfer(dataTransfer) {
-  if (!dataTransfer) return [];
-  const items = dataTransfer.items;
-  if (items && items.length && typeof items[0].webkitGetAsEntry === 'function') {
-    const out = [];
-    let sawDir = false;
-    for (const item of items) {
-      if (item.kind !== 'file') continue;
-      let entry = null;
-      try { entry = item.webkitGetAsEntry(); } catch (_) { entry = null; }
-      if (entry && entry.isDirectory) { sawDir = true; continue; }
-      const f = item.getAsFile();
-      if (f) out.push(f);
-    }
-    if (sawDir) showToast(t('폴더는 올릴 수 없습니다 — 파일만 골라 놓으세요'), 'error');
-    return out;
-  }
-  return Array.from(dataTransfer.files || []);
-}
 
 function _uploadClientId() {
   return (typeof crypto !== 'undefined' && crypto.randomUUID)
@@ -79,6 +48,9 @@ const _jobs = new Map();   // clientId → job
 function _emitProgress() {
   document.dispatchEvent(new CustomEvent('vt:upload-progress'));
 }
+
+// DataTransfer 판별·폴더 거르기는 드롭 이벤트 안에서 **동기로** 해야 해서 core의 upload-lite.js에 있다. 여기서도 같은 이름으로 내보낸다.
+export { hasFiles, filesFromDataTransfer };
 
 /** 지금 떠 있는 업로드 작업들 — 첨부 패널(panels/files/files.js)이 그릴
  * 때마다 부른다. 살아있는 상태(찍힌 클라이언트가 아직 못 본 done/error도
@@ -262,20 +234,4 @@ if (typeof window !== 'undefined') {
   window.vtUploadFiles = uploadFiles;
   window.vtUploadJobs = uploadJobs;
   window.vtCancelUpload = cancelUpload;
-
-  // ── 창 전체 기본 동작 차단 ────────────────────────────────────────────
-  // 이게 없으면 드롭 대상 **밖에** 파일을 떨어뜨렸을 때 브라우저가 그 파일로
-  // 이동해 버린다 — 터미널 화면이 통째로 날아가고 뒤로 가기로 돌아와도
-  // 세션은 다시 붙어야 한다. R6 이전부터 있던 구멍이라 여기서 같이 막는다.
-  //
-  // drop이 발생하려면 직전 dragover에서 기본 동작이 막혀 있어야 하므로 둘 다
-  // 건다. 실제로 받아 처리하는 곳(터미널 칸·파일 패널)은 자기 핸들러에서
-  // stopPropagation()을 불러 여기까지 올라오지 않게 한다 — 그래서 아래
-  // 안내는 "아무도 안 받은 드롭"에만 뜬다.
-  window.addEventListener('dragover', (e) => { if (hasFiles(e.dataTransfer)) e.preventDefault(); });
-  window.addEventListener('drop', (e) => {
-    if (!hasFiles(e.dataTransfer)) return;
-    e.preventDefault();
-    showToast(t('터미널 칸이나 파일 패널에 놓으면 올라갑니다'), 'info');
-  });
 }
