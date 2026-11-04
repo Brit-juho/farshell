@@ -6,7 +6,7 @@
 import { createMemo, createSignal, For, Show, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { t } from '../core/i18n.js';
-import { confirmDialog } from '../core/dialog.js';
+import { confirmDialog } from '../core/dialog-lazy.js';
 import { icon } from '../ui/icons.js';
 import { Menu, type MenuItem } from './RailRow.js';
 import { pickRecentEnded, lastActiveOf, type SessionRow } from './rail-data.js';

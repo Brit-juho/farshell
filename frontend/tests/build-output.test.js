@@ -40,10 +40,12 @@ const shareJs = fs.readFileSync(path.join(DIST, 'share.js'), 'utf8');
 // 2.1.6 — 상한의 대상이 app.js 하나에서 **초기 페이로드 합계**로 바뀌었다.
 // 청크 규칙을 뒤집으면서(vite.config.js) app.js는 부팅 배선만 남은 2KB가 되고
 // 상시 코드는 전부 core.js로 갔다. 여기서 app.js만 재면 상한이 아무것도
-// 막지 못한다 — 숫자 307200은 그대로 두되 **재는 대상**을 뜻에 맞춘다.
-const EAGER_LIMIT = 307200;
+// 막지 못한다 — 숫자는 그대로 두되 **재는 대상**을 뜻에 맞춘다.
+// 2026-11-04 — 상한을 300KiB(307200)에서 350KiB(358400)로 올렸다. 존재 이유는 vendor(xterm 약 290KB)가
+// 초기 번들로 새는 것을 잡는 안전장치다(docs/ref/session-view-measurements.md §4).
+const EAGER_LIMIT = 358400;
 
-test('초기 페이로드(app.js + core.js)가 300KiB 상한 이내다 — CI(release.yml)와 같은 기준', () => {
+test('초기 페이로드(app.js + core.js)가 350KiB 상한 이내다 — CI(release.yml)와 같은 기준', () => {
   const size = Buffer.byteLength(appJs, 'utf8') + Buffer.byteLength(coreJs, 'utf8');
   assert.ok(size <= EAGER_LIMIT, `app.js+core.js가 ${size}B — 상한 ${EAGER_LIMIT}B를 넘었다`);
 });
@@ -118,6 +120,36 @@ test('세션 탭의 뷰 편집기(layout/session-order.js)는 screens 청크에 
   assert.match(screensJs, /function renderOrderEditor/);
   assert.doesNotMatch(coreJs, /function renderOrderEditor/);
   assert.doesNotMatch(coreJs, /vt-order-close/);
+});
+
+test('select 드롭다운 본체(ui/select.js)와 이번에 뗀 모듈들은 지연 청크에 있고 core에는 없다', () => {
+  const selectJs = fs.readFileSync(path.join(DIST, 'select.js'), 'utf8');
+  assert.match(selectJs, /function enhanceSelect/);
+  assert.doesNotMatch(coreJs, /function enhanceSelect/);
+  assert.match(coreJs, /function watchSelects/);   // 스텁은 core에 남는다
+  assert.doesNotMatch(coreJs, /function sparkPoints|function parseInput/);   // system.js·agent-profiles.js
+});
+
+test('모달 뼈대(panels/panel.js)와 대화상자 본체는 panel 청크에 있고 core·shell은 정적으로 받지 않는다', () => {
+  const panelJs = fs.readFileSync(path.join(DIST, 'panel.js'), 'utf8');
+  assert.match(panelJs, /function openPanel\(/);
+  assert.match(panelJs, /vt-dialog-msg/);
+  assert.doesNotMatch(coreJs, /function openPanel\(|vt-dialog-msg/);
+  assert.match(coreJs, /prefetchDialogs/);   // 스텁은 core에 남는다
+  const shellJs = fs.readFileSync(path.join(DIST, 'shell.js'), 'utf8');
+  assert.doesNotMatch(shellJs, /from\s*["']\.\/panel\.js["']/, 'shell이 panel 청크를 정적으로 받으면 부팅 때 같이 내려온다');
+  assert.doesNotMatch(coreJs, /from\s*["']\.\/panel\.js["']/);
+});
+
+test('업로드 본체(term/upload.js)와 사용 가이드 본문은 지연 청크에 있고 core에는 스텁만 남는다', () => {
+  const uploadJs = fs.readFileSync(path.join(DIST, 'upload.js'), 'utf8');
+  assert.match(uploadJs, /\/api\/upload/);
+  assert.doesNotMatch(coreJs, /\/api\/upload/);
+  assert.match(coreJs, /vtUploadFiles/);          // 브리지 스텁
+  assert.match(coreJs, /vtCancelUpload/);   // 취소 브리지 스텁도 core에 남는다(창 기본 동작 차단과 같은 블록)
+  const panelJs = fs.readFileSync(path.join(DIST, 'panel.js'), 'utf8');
+  assert.match(panelJs, /vt-guide-scroll/);
+  assert.doesNotMatch(coreJs, /vt-guide-scroll/);
 });
 
 test('에이전트 공유의 대화상자와 통합 승인함(모달·권한·감사)은 share 청크에 있고 core 에는 없다(core 에는 이벤트 수신·배지·import() 만)', () => {

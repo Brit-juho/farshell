@@ -9,7 +9,7 @@ import { onLayoutChange } from './layout/store.js';
 import { apiFetch } from './core/api.js';
 import { API_BASE } from './core/env.js';
 import { registerAction } from './core/dom.js';
-import { uploadFiles } from './term/upload.js';
+import { uploadFiles } from './term/upload-lite.js';
 import { t } from './core/i18n.js';
 
 export function updateSessionPicker() {

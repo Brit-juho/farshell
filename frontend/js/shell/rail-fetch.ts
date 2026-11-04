@@ -10,7 +10,7 @@
 import { createSignal, onCleanup } from 'solid-js';
 
 import { normalizeOrigin, normalizeShare, normalizeLineage, normalizeKind, normalizeBadge, type SessionRow } from './rail-data.js';
-import { confirmDialog } from '../core/dialog.js';
+import { confirmDialog } from '../core/dialog-lazy.js';
 import { t } from '../core/i18n.js';
 import { watchPath, isWatchLive } from './fs-watch.js';
 import { sessionContext, workspaceDirectory, workspaceKind, locationTip } from '../ui/session-context.js';
@@ -35,7 +35,7 @@ export function safeFetch<T>(deps: Pick<RailDeps, 'vtFetch'>, path: string): Pro
   return deps.vtFetch(path).then((v) => v as T).catch(() => null);
 }
 
-// ---- window 브리지 시그널 어댑터 (core/signals.ts의 지연-청크 안전 버전) ----
+// ---- window 브리지 시그널 어댑터 (지연-청크에서도 안전한 window 브리지) ----
 
 export function useSessionsVersion() {
   const [v, setV] = createSignal(0);
