@@ -150,3 +150,25 @@ test('prefers-reduced-motion이면 미터를 5단계로 끊고 초당 4번만 �
   level(0.9);                                                 // 250ms 안의 두 번째 값은 건너뛴다
   assert.equal(meter.style.getPropertyValue('--lv'), '0.4');
 });
+
+test('부분 결과는 녹음·인식 중에만 흐리게 보이고, 끝나면 지운다', async () => {
+  const { w } = await build();
+  const el = w.document.getElementById('voice-partial');
+  const stage = (phase, target) => w.dispatchEvent(new w.CustomEvent('vt:voice-stage', { detail: { phase, target } }));
+  const partial = (detail) => w.dispatchEvent(new w.CustomEvent('vt:voice-partial', { detail }));
+  partial({ text: '무시', clipped: false });                       // 녹음 중이 아니면 무시
+  assert.equal(el.hidden, true);
+  stage('recording', '작업'); await flush();
+  partial({ text: '  ls 목록  ', clipped: false });
+  assert.equal(el.hidden, false); assert.equal(el.textContent, 'ls 목록');
+  assert.equal(el.getAttribute('aria-live'), null);
+  partial({ text: '긴 문장 끝', clipped: true });
+  assert.equal(el.textContent, '… 긴 문장 끝');
+  partial({ text: '' });
+  assert.equal(el.hidden, true);
+  partial({ text: '다시' });
+  stage('processing'); await flush();
+  assert.equal(el.hidden, false);                                  // 인식 중에도 유지
+  stage('done'); await flush();
+  assert.equal(el.hidden, true); assert.equal(el.textContent, '');
+});

@@ -145,3 +145,15 @@ test('makeChunkSender: URL·헤더, 429는 던지고 4xx는 반환', async () =>
   status = 409;
   assert.strictEqual((await send(4, bytes(1), false)).res.status, 409);
 });
+
+test('완결 전 ack 응답은 onAck로 넘기고, onAck가 던져도 업로드는 계속한다', async () => {
+  const { createChunkUploader } = await load();
+  const seen = [];
+  const send = async (seq, b, final) => (final ? ok({ ackSeq: seq, complete: true, text: 'done' })
+    : ok({ ackSeq: seq, complete: false, partial: { text: 'p' + seq, seq, clipped: false } }));
+  const up = createChunkUploader({ send, sleep: noSleep, onAck: (d) => { seen.push(d.partial.text); if (d.ackSeq === 0) throw new Error('ui bug'); } });
+  up.push(bytes(1)); up.push(bytes(2)); up.finish();
+  const r = await up.result();
+  assert.strictEqual(r.data.text, 'done');
+  assert.deepStrictEqual(seen, ['p0', 'p1']);                       // final(complete) 응답은 onAck로 가지 않는다
+});

@@ -40,7 +40,7 @@ async function build(o = {}) {
       const seq = Number(/seq=(\d+)/.exec(url)[1]); const final = url.includes('final=1');
       if (o.chunkFail && o.chunkFail(seq, requests.length)) throw new TypeError('network');
       chunks.push({ seq, final, bytes: opts.body.length, headers: opts.headers });
-      return final ? json({ text: '명령', injected: true, ackSeq: seq, complete: true }) : json({ ackSeq: seq, complete: false });
+      return final ? json({ text: '명령', injected: true, ackSeq: seq, complete: true }) : json({ ackSeq: seq, complete: false, ...(o.ackExtra ? o.ackExtra(seq) : {}) });
     }
     if (url.includes('/voice/input')) return json({ text: '명령', injected: true });
     const data = url.includes('/stt/status') ? { available: true, selected_valid: true, selected_ready: true, loaded: true, model: 'm', loaded_model: 'm' }
@@ -140,4 +140,35 @@ test('모델 미준비로 시작이 막히면 미리 만든 AudioContext를 닫�
   await e.recording.startRecording();
   assert.strictEqual(e.recording.isRecording, false);
   assert.ok(e.state.ctxClosed >= 1);
+});
+
+test('서버 끝점(endpoint)을 받으면 「녹음 종료」와 같이 final을 보낸다(한 번만)', async () => {
+  const e = await build({ ackExtra: (seq) => (seq >= 1 ? { endpoint: true } : {}) });
+  await e.recording.startRecording();
+  e.feed(12); await flush();                                       // 청크 0: 아직
+  assert.strictEqual(e.recording.isRecording, true);
+  e.feed(24); await flush();                                       // 청크 1의 응답에 endpoint
+  assert.strictEqual(e.recording.isRecording, false);
+  for (let i = 0; i < 5; i++) await flush();
+  const finals = e.chunks.filter((c) => c.final);
+  assert.strictEqual(finals.length, 1);
+  assert.match(e.w.document.getElementById('mic-status').textContent, /입력 완료 — A: "명령"/);
+});
+
+test('부분 결과는 상태 패널에 흐리게 보이고, 오래된 seq는 무시하며, 최종 결과가 오면 지운다', async () => {
+  const partials = { 0: { text: '안녕', seq: 0, clipped: false }, 1: { text: '안녕하세요 목록', seq: 1, clipped: true }, 2: { text: '뒤늦은 옛 결과', seq: 0, clipped: false } };
+  const e = await build({ ackExtra: (seq) => (partials[seq] ? { partial: partials[seq] } : {}) });
+  await e.recording.startRecording();
+  const el = e.w.document.getElementById('voice-partial');
+  assert.strictEqual(el.hidden, true);
+  e.feed(12); await flush();
+  assert.strictEqual(el.hidden, false); assert.strictEqual(el.textContent, '안녕');
+  e.feed(12); await flush();
+  assert.strictEqual(el.textContent, '… 안녕하세요 목록');
+  e.feed(12); await flush();
+  assert.strictEqual(el.textContent, '… 안녕하세요 목록');          // seq가 더 오래된 결과로 되돌아가지 않는다
+  assert.ok(!e.w.document.getElementById('mic-status').textContent.includes('안녕'));   // 입력·결과 줄과 섞이지 않는다
+  e.recording.stopRecording(); for (let i = 0; i < 5; i++) await flush();
+  assert.strictEqual(el.hidden, true); assert.strictEqual(el.textContent, '');
+  assert.match(e.w.document.getElementById('mic-status').textContent, /입력 완료 — A: "명령"/);
 });

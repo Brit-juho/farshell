@@ -8,6 +8,8 @@
 // - 서버가 중간 상태를 잃었는지(응답 ackSeq가 방금 보낸 seq보다 작음)는 되돌릴 수 없는 오류로 본다.
 // - 응답에 complete:true가 오면(마지막 청크든 늦게 도착한 누락 청크든) 그것이 최종 결과다.
 // - 4xx 등 서버가 거부한 응답은 재시도하지 않고 결과로 돌려준다(recording.js가 data.error를 보여 준다).
+// - 완결 전 ack 응답은 onAck(data)로 넘긴다 — 서버가 싣는 녹음 중 값(endpoint 자동 종료 신호, partial 부분 결과)을
+//   pcm-session이 읽는다. onAck가 던져도 업로드는 계속한다.
 import { retryWithBackoff } from './capture.js';
 
 export const GIVE_UP_MS = 25000;
@@ -48,7 +50,7 @@ function fatal(message, status = 0) {
 
 export function createChunkUploader({
   send, cancel = null, retryDelays = [500, 1000, 2000], giveUpMs = GIVE_UP_MS,
-  sleep = defaultSleep, now = () => Date.now(), onFatal = null,
+  sleep = defaultSleep, now = () => Date.now(), onFatal = null, onAck = null,
 } = {}) {
   const queue = [];           // 미ack 청크 { seq, bytes, final } — seq 오름차순
   let nextSeq = 0;
@@ -94,6 +96,7 @@ export function createChunkUploader({
         }
         ackHigh = ack;
         while (queue.length && queue[0].seq <= ack) queue.shift();
+        if (onAck) { try { onAck(data); } catch { /* 표시·자동 종료 처리 실패가 업로드를 막지 않는다 */ } }
         if (item.final && !queue.length) { failure = fatal('final acked without result', res.status); break; }
       }
     } finally {

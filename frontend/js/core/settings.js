@@ -66,6 +66,11 @@ export const SCHEMA = {
   'voice.notifyMinSec':     { type: 'int',  def: 0, min: 0, max: 600 },
   'voice.notifySuccessOnly':   { type: 'bool', def: true },
   'voice.notifyOnlyUnfocused': { type: 'bool', def: false },
+  // 녹음 중 처리(청크 업로드 경로만). 서버 voice_live.py가 녹음 시작에 같은 키를 workspace.json에서 읽는다.
+  // autoStop: 말이 끝나고 1초 조용하면 자동 종료 — 말하는 중 끊길 수 있어 기본 off.
+  // partialResults: 녹음 중 미리 보기 — 입력하지 않고 표시만 한다. 서버 STT를 더 쓴다(docs/ref/voice.md).
+  'voice.autoStop':         { type: 'bool', def: false },
+  'voice.partialResults':   { type: 'bool', def: true },
   'a11y.screenReader':      { type: 'enum', def: 'auto', values: ['auto', 'on', 'off'], migrate: 'vt-a11y',
                               parse: (v) => (v === '1' ? 'on' : v === '0' ? 'off' : 'auto') },
   'theme.skin':             { type: 'str',  def: 'farshell', migrate: 'vt-skin' },
