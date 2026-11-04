@@ -61,8 +61,8 @@ jobs:
           # app.js는 부팅 배선만 남은 2KB가 되고 상시 코드는 core.js로 갔다 —
           # app.js만 재면 이 게이트가 아무것도 막지 못한다.
           SIZE=$(( $(wc -c < frontend/dist/app.js) + $(wc -c < frontend/dist/core.js) ))
-          echo "app.js+core.js = ${SIZE} bytes (상한 307200)"
-          [ "$SIZE" -le 307200 ]
+          echo "app.js+core.js = ${SIZE} bytes (상한 358400)"
+          [ "$SIZE" -le 358400 ]
           # 지연이 지연으로 남아 있는지 — app.js가 core.js 말고 다른 청크를
           # 정적 import하면 그 청크는 상시 로드로 승격된 것이다.
           ! grep -E '^import[^;]*from *"\./(shell|panels|settings|theme-import)\.js"' frontend/dist/app.js

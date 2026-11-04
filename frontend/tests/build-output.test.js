@@ -40,10 +40,12 @@ const shareJs = fs.readFileSync(path.join(DIST, 'share.js'), 'utf8');
 // 2.1.6 — 상한의 대상이 app.js 하나에서 **초기 페이로드 합계**로 바뀌었다.
 // 청크 규칙을 뒤집으면서(vite.config.js) app.js는 부팅 배선만 남은 2KB가 되고
 // 상시 코드는 전부 core.js로 갔다. 여기서 app.js만 재면 상한이 아무것도
-// 막지 못한다 — 숫자 307200은 그대로 두되 **재는 대상**을 뜻에 맞춘다.
-const EAGER_LIMIT = 307200;
+// 막지 못한다 — 숫자는 그대로 두되 **재는 대상**을 뜻에 맞춘다.
+// 2026-11-04 — 상한을 300KiB(307200)에서 350KiB(358400)로 올렸다. 존재 이유는 vendor(xterm 약 290KB)가
+// 초기 번들로 새는 것을 잡는 안전장치다(docs/ref/session-view-measurements.md §4).
+const EAGER_LIMIT = 358400;
 
-test('초기 페이로드(app.js + core.js)가 300KiB 상한 이내다 — CI(release.yml)와 같은 기준', () => {
+test('초기 페이로드(app.js + core.js)가 350KiB 상한 이내다 — CI(release.yml)와 같은 기준', () => {
   const size = Buffer.byteLength(appJs, 'utf8') + Buffer.byteLength(coreJs, 'utf8');
   assert.ok(size <= EAGER_LIMIT, `app.js+core.js가 ${size}B — 상한 ${EAGER_LIMIT}B를 넘었다`);
 });

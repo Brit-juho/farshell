@@ -1229,7 +1229,6 @@ design.
 | `styles/layers/legacy.css` | Every existing component + `.vt-*` overlays + the rail/dock/HUD frame's CSS (unlayered) |
 | `frontend/index.html` | Boot theme script (anti-FOUC), login gate, `#vt-chrome` mount point, mobile bottom nav, keybar |
 | `frontend/js/layout/surface.js` | Terminal placement (which pane holds which session) · refit gate · `#vt-term-stage` waiting room |
-| `frontend/js/core/signals.ts` | Bridge from `core/store.js`/`layout/store.js` to Solid signals |
 | `frontend/js/core/types.ts` | Shared TS types |
 | `frontend/js/shell/Rail.tsx` | Worktree rail, 252px (N36) |
 | `frontend/js/shell/Dock.tsx` | Dock frame, 392px (N35) |

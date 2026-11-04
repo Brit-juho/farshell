@@ -107,10 +107,6 @@ export function setTab(tab) {
   settingsSet('ui.mobile.home', tab);
 }
 
-export function currentTab() {
-  return _tab;
-}
-
 function _refreshWaitingCount() {
   const el = document.getElementById('vt-mnav-badge-waiting');
   if (!el) return;
