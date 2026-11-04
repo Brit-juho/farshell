@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Changed
+- The initial-bundle ceiling (`app.js` + `core.js`) went from 300 KiB to 350 KiB in CI, the release workflow and the build-output test; it exists to catch a vendor library leaking into the eager bundle. At the same time four boot-irrelevant modules (agent profiles, snippet helpers, the system panel, the number spinner) moved into lazy chunks, taking the payload from 307,191 B to 275,880 B. Removed dead code: `core/signals.ts`, `getKeyDecision`, `currentTab`.
 - The bottom status bar moved to the top as a full-width, Mac-style **menu bar** (28px, on every skin; wide and regular screens only). The tab row sits below it, and the rail, dock and page start under it. Settings → 하단바 is now **메뉴바** and keeps your saved chip layout.
 - GitHub Actions in CI and the release workflow moved to their current majors (checkout 7, setup-node 7, setup-python 7, upload-artifact 7, action-gh-release 3), still pinned to commit SHAs. The majors only move the actions to the Node 24 runtime; verified with a full CI run on `dev`.
 - Frontend tooling: `vite-plugin-solid` 2.11.14 → 2.11.15 (patch). vite 8 and jsdom 30 were deliberately not taken: vite 8 no longer bundles esbuild, so `vite.config.js` (which calls `transformWithEsbuild`) fails to build, and jsdom 30 changes focus restoration after `click()` and breaks one voice-panel test.

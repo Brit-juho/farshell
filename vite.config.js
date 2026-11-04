@@ -175,7 +175,7 @@ export default defineConfig(({ mode }) => {
           //
           // ⚠ 그래서 크기 게이트는 app.js 하나가 아니라 **app.js + core.js 합계**를
           // 본다(frontend/tests/build-output.test.js). 상한의 뜻은 원래부터
-          // "초기 페이로드 300KiB"였고, 청크를 쪼갰다고 그 뜻이 느슨해지면 안 된다.
+          // "초기 페이로드 상한"(300KiB, 2026-11-04부터 350KiB)이었고, 청크를 쪼갰다고 그 뜻이 느슨해지면 안 된다.
           //
           // ⚠ voice 빌드(별도 Rollup 실행, 같은 outDir)에는 적용하지 않는다 —
           // 적용하면 voice 그래프에서도 core.js가 나와 app 빌드의 core.js를
@@ -222,6 +222,15 @@ export default defineConfig(({ mode }) => {
             // 사용량 화면. **`panels/usage-badge.js`는 아니다** — rail 배지
             // 폴링은 상시 동작이라 core에 남는다(endsWith라 안 걸린다).
             if (p.endsWith('/frontend/js/panels/usage.js')) return 'settings';
+            // 설정 > 에이전트 프로필 섹션(23KB) — agent-config.js가 섹션을 열 때만 지연 import한다.
+            // 규칙이 없으면 포괄 규칙이 core로 보내 상시 로드에 실린다.
+            if (p.endsWith('/frontend/js/panels/agent-profiles.js')) return 'settings';
+            // 스니펫 순수 함수 — snippets.js(settings 청크)만 쓴다.
+            if (p.endsWith('/frontend/js/snippets-util.js')) return 'settings';
+            // 시스템 패널 — panels/system-lazy.js(core 스텁)가 열 때만 지연 import한다.
+            if (p.endsWith('/frontend/js/panels/system.js')) return 'panels';
+            // 숫자 스피너 — shell(Solid) 청크와 settings 청크만 쓴다. 둘 다 core를 거치지 않고 shell을 먼저 받는다.
+            if (p.endsWith('/frontend/js/ui/number-spinner.js')) return 'shell';
             // 에이전트 브랜드 로고 path(18KB) — 초기 페이로드 상한 때문에 뗐다.
             // ui/icons.js가 부팅 직후 지연 import하고, 오기 전엔 선 기호로 그린다.
             if (p.endsWith('/frontend/js/ui/brand-icons.js')) return 'brand';
