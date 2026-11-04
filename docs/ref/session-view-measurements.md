@@ -123,6 +123,8 @@ Cause: `session_store` is in memory, so after a restart the page's WS reconnects
 
 2026-11-04: 307,191 B (9 B of headroom) -> **275,880 B** after moving four modules out of `core.js` (`panels/agent-profiles.js` and `snippets-util.js` -> `settings`, `panels/system.js` -> `panels`, `ui/number-spinner.js` -> `shell`; none is needed at boot). The ceiling was raised 300 -> 350 KiB (358,400 B) in `ci.yml`, `release.yml` and `build-output.test.js`. The check exists to catch a vendor (xterm, about 290 KB) leaking into the eager bundle, not as a UX budget; 350 KiB still catches that. `voice.js` keeps its own 307,200 B check. Source grew about 77 KB in `core.js` between 10/13 and 11/04, so the 54 KB headroom from whitespace stripping lasted about three weeks.
 
+2026-11-04 (later): 275,880 B -> **268,813 B** after `ui/select.js` moved to its own `select` chunk (stub `ui/select-lazy.js` stays in core). `npm run build` now prints the top 15 modules of `core.js` by rendered bytes (`reportCoreModules` in `vite.config.js`, information only); use it instead of source-map attribution, which is too coarse. Largest now: `layout/panes.js` 28 KB, `layout/store.js` 26 KB, `term/session.js` 19 KB, `ui/icons.js` 18 KB, `core/settings.js` 17 KB, `layout/persist.js` 15 KB, `panels/panel.js` 14 KB.
+
 ## 5. View-tab mockups
 
 Three variants of the segment status bar on the tab: **A** flush to the bottom edge (2/5px), **B** inner pill (3/6px), **C** top edge. **B chosen**: the 2x thickness difference (unseen vs seen) is still distinguishable at four segments and it reads in both light and dark skins; the active-tab underline moved to the background tone because the bar owns that edge.

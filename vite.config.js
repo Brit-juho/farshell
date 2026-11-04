@@ -53,6 +53,27 @@ function stripChunkWhitespace() {
   };
 }
 
+// 빌드 로그에 core 청크의 모듈별 기여도 상위를 찍는다(정보용, 빌드를 실패시키지 않는다).
+// 초기 페이로드 상한 논의 때 소스맵 추정이 틀렸던 적이 있어(청크가 이어 붙은 맵이라 파일별 수치가
+// 거칠다) Rollup이 직접 주는 `chunk.modules[id].renderedLength`(공백 제거 전, 트리 셰이킹 뒤)를 쓴다.
+// 새 큰 모듈이 core로 조용히 들어오면 여기서 먼저 눈에 띈다.
+function reportCoreModules(top = 15) {
+  return {
+    name: 'fsh-report-core-modules',
+    apply: 'build',
+    generateBundle(_o, bundle) {
+      const core = bundle['core.js'];
+      if (!core || core.type !== 'chunk') return;
+      const rows = Object.entries(core.modules)
+        .map(([id, m]) => [m.renderedLength, id.split('?')[0].replace(/\\/g, '/').replace(/^.*\/(?=frontend\/|node_modules\/)/, '')])
+        .sort((a, b) => b[0] - a[0]);
+      const total = rows.reduce((s, r) => s + r[0], 0);
+      console.log(`\ncore.js 모듈별 기여도(렌더 바이트, 공백 제거 전) — 합계 ${total.toLocaleString()} B, 모듈 ${rows.length}개`);
+      for (const [n, id] of rows.slice(0, top)) console.log(`  ${String(n).padStart(8)}  ${id}`);
+    },
+  };
+}
+
 // F4에서 Codex가 지적한 잔여 버그 수정: vite dev 서버가 /api·/ws만 프록시해서
 // index.html이 참조하는 /static/*(서버가 frontend/ 를 마운트하는 경로 — vendor
 // 스크립트·아이콘·manifest·frontend/dist/의 빌드 산출물)가 vite 자체에서는 404였다
@@ -93,7 +114,7 @@ export default defineConfig(({ mode }) => {
     // N17: solid()는 .tsx/.jsx만 변환한다(기존 9천 줄의 classic .js는 그대로 —
     // vite-plugin-solid의 기본 include가 확장자로만 걸린다). lib 모드·2회 분리
     // 빌드·해시 없는 파일명은 그대로 유지된다(ADR-26).
-    plugins: [tailwindcss(), solid(), ...(isTest ? [] : [stripChunkWhitespace()])],
+    plugins: [tailwindcss(), solid(), ...(isTest ? [] : [stripChunkWhitespace(), reportCoreModules()])],
     // 식별자는 줄이지 않는다 — 산출물에 모듈 스코프 이름(`sessions`, `activeId`…)이
     // 남아야 build-output.test.js가 청크 간 싱글톤 복제를 잡는다.
     esbuild: { minifyIdentifiers: false, minifyWhitespace: !isTest, minifySyntax: !isTest },
@@ -231,6 +252,9 @@ export default defineConfig(({ mode }) => {
             if (p.endsWith('/frontend/js/panels/system.js')) return 'panels';
             // 숫자 스피너 — shell(Solid) 청크와 settings 청크만 쓴다. 둘 다 core를 거치지 않고 shell을 먼저 받는다.
             if (p.endsWith('/frontend/js/ui/number-spinner.js')) return 'shell';
+            // <select> 드롭다운 본체(12KB) — ui/select-lazy.js(core 스텁)가 select가 나타날 때와 유휴 시간에 지연 import한다.
+            // screens에 합치지 않는다: select 하나 때문에 화면 모듈까지 받게 된다.
+            if (p.endsWith('/frontend/js/ui/select.js')) return 'select';
             // 에이전트 브랜드 로고 path(18KB) — 초기 페이로드 상한 때문에 뗐다.
             // ui/icons.js가 부팅 직후 지연 import하고, 오기 전엔 선 기호로 그린다.
             if (p.endsWith('/frontend/js/ui/brand-icons.js')) return 'brand';
