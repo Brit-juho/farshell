@@ -47,7 +47,7 @@ The settings next to the mic set the current session to Off / Sound only / Read 
 
 "Voice only on the Mac" has been removed. For a global Mac shortcut, use `fsh voice`.
 The daemon also shares the server's STT. For standalone use, set `VT_VOICE_STANDALONE=on` explicitly; reading input back aloud is off by default.
-There is no automatic continuous recording. You start and stop every utterance with an explicit toggle.
+There is no automatic continuous recording. You start every utterance with an explicit toggle and end it with the toggle or with "Auto stop" (see "While recording" below).
 
 ## STT engines and models
 
@@ -95,6 +95,18 @@ receives nothing for 30 seconds, that recording is discarded and you record agai
 described above. The 60-second limit is the same. While recording, the status panel shows an input level bar, and the bar changes color when
 the sound is so loud it distorts (there is no bar with the single-file upload).
 
+## While recording (chunked upload only)
+
+Settings → "Voice and notifications" → "Voice input" has two items. They apply to every device and are read when a recording starts, so a change made mid-recording applies from the next one.
+
+- **Auto stop** (off by default): when you stop talking and it stays quiet for 1 second, recording ends and is sent, the same as pressing "Stop recording".
+  It never ends before you start talking (the 60-second limit still applies). The server judges by comparing loudness with the background noise, so a pause
+  of more than 1 second between sentences can cut you off, and a sudden jump in background noise can keep it from ending (stop it yourself then).
+- **Show partial results** (on by default): while you record, the status panel shows a dimmed preview of the sentence being recognized. It is only a preview
+  and is never typed into the terminal; when recording ends, the whole recording is recognized again and only that final result is typed in. Past 20 seconds
+  only the last 20 seconds are shown, prefixed with "…". The server runs extra recognition while you record, so on a slow server (llama.cpp on the CPU, say)
+  the final result can come a little later — turn it off then. If the server is busy with another recognition, the preview is skipped.
+
 ## FAQ
 
 - **Q. Does STT type only the text, or Enter too?**
@@ -107,4 +119,4 @@ the sound is so loud it distorts (there is no bar with the single-file upload).
   - A. Yes. It sends to the active pane without telling claude and codex apart.
 
 - **Q. Does background noise get typed automatically?**
-  - A. No. You start and stop explicitly with the hotkey/button toggle.
+  - A. No. Recording always starts with the hotkey/button. With "Auto stop" on, only the end is automatic.
