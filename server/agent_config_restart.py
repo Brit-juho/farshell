@@ -37,6 +37,46 @@ def _wait_exited(pid: int, tries: int = 100, delay: float = .2) -> bool:
         time.sleep(delay)
     return False
 
+def _pane_state(pane: str) -> tuple[bool, int | None]:
+    """pane 의 (종료 여부, 첫 프로세스 pid). tmux 한 번 호출로 읽는다.
+
+    종료된 pane(`remain-on-exit` 로 남은 칸 — CLI 가 pane 의 첫 프로세스일 때 `/exit` 뒤 상태)은 tmux 3.8 에서
+    `#{pane_pid}` 가 빈 줄이다(살아 있으면 pid). 그래서 「pid 를 모름」을 두 경우로 가른다 — 종료된 pane 은
+    점유할 프로세스가 없으니 확인할 것이 없고, 살아 있는데 pid 를 못 읽었으면 확인을 못 한 것이다.
+    pid 는 양의 정수일 때만 돌려주고 나머지(빈 값·`\\n`·숫자 아님)는 None. tmux 호출 자체가 실패하면 ValueError.
+    """
+    text = tmux_runner.run_text(["display-message", "-p", "-t", pane, "#{pane_dead}\t#{pane_pid}"])
+    if text is None:
+        raise ValueError(tr("터미널 프로세스를 확인하지 못했습니다"))
+    parts = text.rstrip("\r\n").split("\t")
+    dead = parts[0].strip() == "1"
+    raw = parts[1].strip() if len(parts) > 1 else ""
+    pid = int(raw) if raw.isascii() and raw.isdigit() and int(raw) > 0 else None
+    return dead, pid
+
+
+def _ensure_pane_free(pane: str) -> None:
+    """CLI 가 끝난 자리에 다른 프로세스가 앉았으면 ValueError — 그 위에 새 CLI 를 덮어쓰지 않는다.
+
+    종료된 pane 에는 점유할 프로세스가 없다(tmux 가 pty 를 닫아 자식도 남지 못한다 — 3.8 에서 실측).
+    살아 있는데 pid 를 못 읽었으면 확인을 못 한 것이니 덮어쓰지 않고 중단한다."""
+    dead, pane_pid = _pane_state(pane)
+    if dead:
+        return
+    if pane_pid is None:
+        raise ValueError(tr("터미널 프로세스를 확인하지 못했습니다"))
+    table = hook_identity._ps_table()
+    if table is None:
+        raise ValueError(tr("터미널 프로세스를 확인하지 못했습니다"))
+    zombies = hook_identity._ps_zombies()
+    from share_identity import chain_reaches
+    for pid, (_parent, pgid, tpgid, comm) in table.items():
+        if pid in zombies:
+            continue   # 이미 끝난 프로세스다 — 수거가 늦을 뿐 터미널을 쓰고 있지 않다
+        if pgid == tpgid and not hook_identity.is_shell(comm) and chain_reaches(pid, pane_pid):
+            raise ValueError(tr("다른 프로세스가 터미널을 사용해 재시작을 중단했습니다"))
+
+
 def _owner(ctx):
     entries = [e for e in agent_status.visible_state().values() if e.get("host", "local") == "local"
                and e.get("tmux_session") == ctx["session"] and e.get("agent") == ctx["tool"]]
@@ -191,18 +231,7 @@ def _run(job_id, plan):
                     raise ValueError(tr("CLI가 정상 종료되지 않아 재시작을 중단했습니다"))
                 # A surviving non-shell foreground process means somebody else
                 # took over the pane. Never respawn over that process.
-                table = hook_identity._ps_table()
-                if table is None:
-                    raise ValueError(tr("터미널 프로세스를 확인하지 못했습니다"))
-                zombies = hook_identity._ps_zombies()
-                for pid, (parent, pgid, tpgid, comm) in table.items():
-                    if pid in zombies:
-                        continue   # 이미 끝난 프로세스다 — 수거가 늦을 뿐 터미널을 쓰고 있지 않다
-                    if pgid == tpgid and not hook_identity.is_shell(comm):
-                        from share_identity import chain_reaches
-                        pane_pid = int((tmux_runner.run_text(["display-message", "-p", "-t", pane, "#{pane_pid}"]) or "0").strip())
-                        if pane_pid and chain_reaches(pid, pane_pid):
-                            raise ValueError(tr("다른 프로세스가 터미널을 사용해 재시작을 중단했습니다"))
+                _ensure_pane_free(pane)
                 command = shlex.join([sys.executable, str(Path(__file__).with_name("agent_config_launch.py")), str(launch_file)])
                 if tmux_runner.run(["respawn-pane", "-k", "-t", pane, "-c", ctx["cwd"], command])[0]:
                     raise ValueError(tr("CLI 재시작에 실패했습니다 — 터미널에서 직접 이어가세요"))

@@ -31,6 +31,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 - TTS could play on the recording device during a recording if its voice WebSocket reconnected mid-recording (the server clears a disconnected screen's pause). The browser now re-sends the pause on reconnect and declines audio that arrives in that gap.
+- Restarting a CLI after a settings change no longer fails with `invalid literal for int() with base 10: ''` when the CLI was the first process of its tmux pane. tmux 3.8 reports an empty `#{pane_pid}` for the exited pane that `remain-on-exit` keeps, and the check that nobody else took over the pane crashed on it. An exited pane now counts as free; a live pane whose process id cannot be read stops the restart instead of being skipped.
+- `fsh start` reusing a running main tunnel now records its PID in `tunnel.pid` when the file is missing (only if exactly one process matches), so `fsh stop` and status no longer lose a tunnel whose pid file was dropped.
 - Restarting a CLI after a settings change (the agent-config restart) gave up with "the CLI did not exit normally" even though it had exited, when tmux was slow to reap the finished process (it stayed as a `<defunct>` zombie for 20+ seconds with tmux 3.4 on Ubuntu 24.04). An exited-but-unreaped process now counts as exited, both when waiting for the CLI to quit and when checking that nothing else took over the pane.
 - The first `fsh restart` after upgrading to 2.7 no longer says the access address changed when it did not (it read the tunnel log before moving it to its new folder).
 
