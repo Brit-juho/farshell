@@ -20,6 +20,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Dependabot: vite and jsdom major updates are ignored until the vite 8 build config and one jsdom 30 test are sorted out, and pip version-update PRs are off (they only raised `>=` floors, which would break the voice install on Python 3.11; security updates still arrive).
 
 ### Added
+- **Chunked voice upload.** Browsers with AudioWorklet (https or localhost) now send a recording as 16kHz PCM16 chunks of about 0.5 s to the new `POST /voice/chunk` while you record, so a network drop in a long recording no longer loses it: unacknowledged chunks are re-sent and the server joins them in order (out-of-order, repeated and late chunks are handled; 60 s total, 5 s per chunk, one open recording per caller, discarded after 30 s without a request). On stop it runs through the same dedup, recognition and injection path as `/voice/input`. `POST /voice/chunk/cancel` discards a recording. Browsers without AudioWorklet, or where it fails to start, fall back to the existing MediaRecorder + `/voice/input` upload unchanged.
+- **Input level meter** in the voice status panel while recording (RMS with an adaptive noise floor, fast rise and slow fall, a different color when the sound clips; coarser steps with `prefers-reduced-motion`). Only the chunked path has it.
 - **FarShell menu** at the left of the menu bar: new session, quick open, copy the access address, settings and menu bar settings.
 - Three menu bar chips: **agents** (`개입 N · 작업 N · 완료 N`; click to jump to the session that has waited longest), **알림** (this browser's push notifications on/off, click to toggle) and a **clock**. If you had customised the layout before, they are added once at their default places.
 

@@ -88,6 +88,13 @@ converts any format to 16kHz mono before handing it to the engine. If the upload
 the "Resend" button lets you send the same recording again. If the same recording arrives twice, the terminal receives it only once.
 The `voice.stt timing` entry in the server log shows decode, wait and recognition times.
 
+**Chunked upload.** When the browser can use AudioWorklet (it needs https or localhost), it converts the sound to 16kHz PCM while you
+record and uploads it in roughly 0.5-second pieces. If the network drops for a moment mid-recording, the pieces that did not get through
+are sent again, and when you stop, the collected sound is recognized in one go. If the outage lasts more than 25 seconds, or the server
+receives nothing for 30 seconds, that recording is discarded and you record again. Browsers without AudioWorklet use the single-file upload
+described above. The 60-second limit is the same. While recording, the status panel shows an input level bar, and the bar changes color when
+the sound is so loud it distorts (there is no bar with the single-file upload).
+
 ## FAQ
 
 - **Q. Does STT type only the text, or Enter too?**

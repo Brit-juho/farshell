@@ -252,9 +252,10 @@ Ctrl+Shift+M (pynput, server/voice/daemon.py)
 ### 3.2 Mobile/desktop voice input (PWA)
 ```
 🎤 button (frontend/js/voice/recording.js, separate bundle)
-  → MediaRecorder (webm/opus)
-  → apiFetch POST /voice/input?session_id=...
-  → server/routes/voice.py → voice_handler.transcribe (ffmpeg conversion included)
+  → AudioWorklet → 16kHz PCM16 chunks (~0.5s) → POST /voice/chunk (acked, resent on drop;
+    server/voice_chunks.py joins them in seq order) — falls back to:
+  → MediaRecorder (webm/opus) → apiFetch POST /voice/input?session_id=...
+  → server/routes/voice.py → voice_handler.transcribe (ffmpeg conversion included; chunks arrive as WAV)
   → pty_manager.write(session_id, text) → PTY → tmux
 ```
 

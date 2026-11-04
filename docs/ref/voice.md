@@ -86,6 +86,36 @@ carry over. Two paths cover this:
 - 폴더 밖 공유 캐시(`hub/blobs/`)까지 지우고(`hfcache.py`), 용량은 링크 중복 없이 센다.
 - `/voice/input`은 `X-Voice-Id`로 재전송 중복을 건너뛴다(최근 120초). 단계별 시간은 응답 `timing`과 서버 로그.
 
+## 청크 업로드 (PCM)
+
+긴 녹음 중 터널이 끊기면 통째로 잃던 문제를 줄이려고, AudioWorklet이 되는 브라우저는 녹음 중에 조각을 올린다.
+엔드포인트 스키마와 오류 코드는 [API.md](../../API.md)의 `/voice/chunk`. 여기는 구조와 이유만 적는다.
+
+- **클라이언트**(`frontend/js/voice/`, 모두 voice 번들): `pcm-capture.js`(AudioContext + 워클릿, 입력 샘플레이트가
+  16kHz가 아니면 `pcm.js`의 면적 평균 리샘플) → `pcm.js`(PCM16 LE, 16000바이트=500ms 청크) → `chunk-upload.js`
+  (한 번에 한 요청, 누적 `ackSeq`로 정리, 실패는 같은 seq 재전송) → `pcm-session.js`가 묶는다. `recording.js`는
+  분기만 한다. 워클릿 소스는 문자열 상수(`pcm-worklet-src.js`)를 Blob URL로 올린다 — 별도 asset을 두면 고정
+  산출물 목록(`voice.js`)과 `sw.js` precache가 늘고, `?raw` import는 테스트용 `vm-esm` 로더가 못 읽는다. 서버 CSP는
+  `frame-ancestors`뿐이라 blob 모듈이 막히지 않는다. 워클릿 미지원·보안 컨텍스트 아님·`addModule` 실패 시
+  MediaRecorder + `/voice/input` 경로로 같은 스트림을 넘겨 폴백한다(콘솔 `[voice] 캡처 경로:` debug 로그에 어느 쪽인지 남는다).
+  iOS Safari는 AudioContext를 제스처 안에서 만들어야 해서 `startRecording` 맨 앞(await 전)에서 만든다.
+- **재전송 한계**: 일시 실패(네트워크·429/502/503/504)는 backoff 3회 뒤에도 녹음을 쌓으며 25초까지 같은 seq를 다시 보낸다
+  (서버가 30초 무응답이면 폐기하므로 그 안). 서버가 상태를 잃었으면(응답 ackSeq < 보낸 seq) 재시도하지 않고 실패한다.
+  실패하면 「다시 보내기」가 남은 조각으로 재시도한다(15초 TTL 안).
+- **서버**(`server/voice_chunks.py`): 녹음마다 `(principal, voice_id)` 상태 — 이어 붙은 조각 `parts[seq]`, 앞 seq가 빈 채
+  기다리는 `pending`, 누적 바이트, 마지막 활동 시각. 모두 await 없이 한 번에 바뀌어 락이 없다. 상한: 전체 60초(1,920,000B,
+  엄격), 조각 5초, 보류 1000개/30초, seq < 4000, 동시 녹음 64건. 같은 principal의 새 녹음은 이전 열린 녹음을 폐기한다
+  (STT가 직렬이라 1건). 30초 무응답 폐기와 만료 묘비는 요청마다와 10초 주기 작업(`sweep_loop`)이 치운다.
+  완결되면 16kHz mono WAV로 감싸 `/voice/input`과 **같은 중복 방지·인식·주입 경로**(`_voice_dedup_run`)로 넘긴다 —
+  `_voice_done` 캐시, 지문 충돌 409, 동시 final이 같은 인식에 합류하는 동작이 그대로다. 인식이 예외(429 등)면 조각을 남겨
+  같은 final 재전송으로 다시 시도할 수 있다. 끝난 녹음은 조각 메모리를 놓고 결과만 120초 남긴다.
+- **후속 단계용 자리**: `Recording.contiguous_pcm()`이 이어 붙은 앞부분의 복사본을 준다. 부분 인식·서버 VAD가 올 때
+  중간 스냅샷은 이걸로 뽑는다(지금은 쓰지 않는다).
+- **음량 미터**: `meter.js`(순수 함수)가 RMS와 적응식 노이즈 플로어로 0~1 레벨과 클리핑 표시를 계산한다(상승 40ms, 하강 450ms
+  시정수; 플로어는 빠르게 내려가고 15초에 걸쳐서만 올라가며 -26dBFS를 넘지 않는다). voice 번들이 `vt:voice-level` 이벤트를
+  보내고 app 번들의 `status-panel.js`가 `#voice-meter` 막대만 그린다(두 번들은 이벤트로만 만난다). `prefers-reduced-motion`이면
+  5단계·초당 4회로 줄인다. MediaRecorder 폴백 경로에는 미터가 없다. 경과 시간은 기존 「N초 / 60초」 줄이다.
+
 ## STT 엔진 벤치마크 (2026-10-02)
 
 `scripts/stt_bench.py`로 같은 한국어 샘플에서 모델별 CER·속도·메모리를 잰다. **앱이 쓰는 모델은 어댑터 없이
