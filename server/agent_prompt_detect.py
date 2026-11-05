@@ -43,6 +43,15 @@ except ModuleNotFoundError:  # pragma: no cover - 3.10 이하
 
 logger = logging.getLogger(__name__)
 
+
+def _on_event_loop() -> bool:
+    import asyncio
+    try:
+        asyncio.get_running_loop()
+        return True
+    except RuntimeError:
+        return False
+
 DETECT_DIR = Path(os.environ.get("VT_DETECT_DIR", Path(__file__).parent / "detect"))
 
 # Codex ratatui는 승인 overlay를 그릴 때 전체 화면을 다시 그린다. 144×38 실측에서
@@ -403,6 +412,11 @@ class PromptDetector:
         hit = self._agent_cache.get(session_id)
         if hit is not None and now - hit[1] < AGENT_CACHE_SEC:
             return hit[0]
+        # PTY 출력 콜백은 이벤트 루프 위에서 돈다. 판별은 tmux list-panes + ps(최대 3초)라 여기서 직접 부르면
+        # 그동안 서버 전체가 멈춘다 — 직전 값(없으면 None = 전 spec 폴백)으로 답하고 `proc` 풀에서 갱신한다.
+        if _on_event_loop():
+            self._refresh_async(session_id)
+            return hit[0] if hit is not None else None
         try:
             agent = self._agent_for(session_id)
         except Exception as e:  # noqa: BLE001
@@ -410,6 +424,29 @@ class PromptDetector:
             agent = None
         self._agent_cache[session_id] = (agent, now)
         return agent
+
+    def _refresh_async(self, session_id: str) -> None:
+        pending = self.__dict__.setdefault("_agent_pending", set())
+        if session_id in pending:
+            return
+        import asyncio
+        from resilience import pools
+
+        async def _run():
+            try:
+                agent = await pools.run("proc", self._agent_for, session_id, op="agent_for_pty",
+                                        key=session_id, timeout=5)
+            except Exception as e:  # noqa: BLE001 — 판별 실패는 None(전 spec 폴백)
+                logger.debug(f"[waiting] CLI 판별 실패: {e}")
+                agent = None
+            finally:
+                pending.discard(session_id)
+            self._agent_cache[session_id] = (agent, time.monotonic())
+        try:
+            asyncio.get_running_loop().create_task(_run())
+            pending.add(session_id)
+        except RuntimeError:
+            pass
 
     def _scoped(self, session_id: str, pats: dict) -> dict:
         if self._agent_for is None:

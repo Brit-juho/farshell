@@ -23,26 +23,31 @@ import os
 import threading
 import time
 from contextlib import contextmanager
+from resilience.locks import TimedLock
 
-_locks: dict[str, threading.Lock] = {}
+_locks: dict[str, TimedLock] = {}
 _locks_guard = threading.Lock()
+# 쥔 쪽은 tmux 명령 몇 개(각 2초 기한)와 짧은 대기뿐이다. 기다리는 쪽은 이만큼만 기다리고 LockTimeout —
+# 호출부(큐·음성·위임·공유)는 실패로 처리하고 다음 기회에 다시 보낸다.
+LOCK_WAIT = 30.0
 
 _human_input_at: dict[str, float] = {}
 
 
-def _lock_for(pane_id: str) -> threading.Lock:
+def _lock_for(pane_id: str) -> TimedLock:
     with _locks_guard:
         lk = _locks.get(pane_id)
         if lk is None:
-            lk = _locks[pane_id] = threading.Lock()
+            lk = _locks[pane_id] = TimedLock(f"pane_input:{pane_id}")
         return lk
 
 
 @contextmanager
-def lock(pane_id: str):
-    """한 pane에 대한 자동 입력을 직렬화한다. 같은 스레드에서 중첩하지 말 것."""
+def lock(pane_id: str, timeout: float | None = None):
+    """한 pane에 대한 자동 입력을 직렬화한다. 같은 스레드에서 중첩하지 말 것.
+    `timeout`(기본 `LOCK_WAIT`)을 넘기면 `resilience.locks.LockTimeout`."""
     lk = _lock_for(pane_id)
-    with lk:
+    with lk.hold(LOCK_WAIT if timeout is None else timeout, op="pane_input"):
         yield
 
 

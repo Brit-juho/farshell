@@ -17,6 +17,7 @@ import auth
 import hook_identity
 import pane_resolve
 import report_seen
+from resilience import pools as res_pools, wsutil
 
 # Phase 9 #5: heartbeat (pty.py와 동일 정책)
 _HB_INTERVAL = float(os.environ.get("VT_WS_HEARTBEAT_INTERVAL", "15.0"))
@@ -51,13 +52,8 @@ def _public_active(active: list) -> list:
 
 
 async def _broadcast_agent(msg: dict) -> None:
-    dead = set()
-    for ws in list(_agent_event_clients):
-        try:
-            await ws.send_json(msg)
-        except Exception:
-            dead.add(ws)
-    _agent_event_clients.difference_update(dead)
+    # 동시에 보내고 2초 안에 못 받는 클라이언트는 끊는다(resilience/wsutil.py).
+    await wsutil.broadcast(_agent_event_clients, msg)
 
 
 # 2026-10-13 — 훅 요청 밖에서 일어난 전이(화면 감지·중단 문구·입력
@@ -191,8 +187,10 @@ async def _agents_loop(kick: asyncio.Event) -> None:
             continue
         try:
             # 서버가 모르는 세션이 질문을 띄우고 있으면 대기로 되살린다(재시작·훅 유실 복구).
-            agent_status.recover_from_screens(
-                {n: (v or {}).get("agent") if isinstance(v, dict) else None for n, v in cur.items()})
+            # 화면 읽기(tmux capture-pane)를 하므로 루프가 아니라 `proc` 풀에서 기한을 두고 한다.
+            await res_pools.run("proc", agent_status.recover_from_screens,
+                                {n: (v or {}).get("agent") if isinstance(v, dict) else None for n, v in cur.items()},
+                                op="recover_from_screens", timeout=15)
         except Exception as e:  # noqa: BLE001
             logger.debug(f"화면 복구 실패: {e}")
         try:
@@ -205,11 +203,7 @@ async def _agents_loop(kick: asyncio.Event) -> None:
             continue
         _agents_last = cur
         msg = {"type": "agents_change", "agents": cur}
-        for ws in list(_agent_event_clients):
-            try:
-                await ws.send_json(msg)
-            except Exception:  # noqa: BLE001 — 끊긴 연결은 ws_agent의 finally가 치운다
-                pass
+        await _broadcast_agent(msg)
 
 
 # N9/N45(80-multihost-agents.md §2) — CLI마다 waiting을 실제로 얼마나 정확히
@@ -444,6 +438,21 @@ async def get_agent(tmux_name: str):
     return info or {"agent": None}
 
 
+PANE_RESOLVE_TIMEOUT = 5.0
+
+
+async def _resolve_pane(*clues, **kw) -> tuple:
+    """pane id/cwd → tmux 세션. tmux 를 부르므로(2초 기한 서브프로세스) 이벤트 루프가 아니라 `proc` 풀에서
+    한다. 예전엔 루프 위에서 불러, 모든 훅 호출마다 서버 전체가 tmux 응답을 기다렸다. 기한·포화면
+    세션을 특정하지 못한 것으로 둔다("모호하면 아무것도 강조하지 않는다"와 같은 결과)."""
+    try:
+        return await res_pools.run("proc", pane_resolve.resolve, *clues, op="pane_resolve",
+                                   key=str(clues[0] or clues[-1] or ""), timeout=PANE_RESOLVE_TIMEOUT, **kw)
+    except (res_pools.OpTimeout, res_pools.Busy) as e:
+        logger.warning(f"pane 해석을 건너뜀({type(e).__name__}) — 세션 미특정으로 처리")
+        return None, "unavailable"
+
+
 @router.post("/api/agent/event")
 async def agent_event(request: Request):
     # `request` 에 타입 annotation이 없으면 FastAPI가 이걸 '필수 쿼리 파라미터'로 읽어
@@ -476,7 +485,7 @@ async def agent_event(request: Request):
             logger.debug(f"훅 프로세스 대조 실패: {e}")
     if verdict == hook_identity.FOREIGN:
         clues = (None, None, payload.get("cwd"))   # pane 주장이 거짓 — pane 단서를 버린다
-    session, how = pane_resolve.resolve(
+    session, how = await _resolve_pane(
         *clues, agent=agent_name,
         pane_verified=verdict == hook_identity.OK,
         # Claude 훅은 pane 셸의 자식이다. pane이 없으면 tmux 밖의 Claude라 cwd로 붙이지 않는다.
@@ -497,7 +506,7 @@ async def agent_event(request: Request):
     if event in agent_status.subagents.LIFECYCLE:
         return {"ok": True, "state": agent_status.public_entry(state) if state else None,
                 "queue_scheduled": False, "resolved_by": how, "identity": verdict}
-    report_seen.mark(body.get("agent"))
+    await asyncio.to_thread(report_seen.mark, body.get("agent"))
     # None = 그 세션의 소유자가 아니거나 은퇴한 세션의 이벤트(agent_status 「세션 소유자」).
     # 같은 pane을 물려받은 자식 프로세스의 Stop이 큐를 흘리거나 완료를 낭독하면 안 된다.
     ignored = state is None and event in agent_status._HOOK_EVENTS
@@ -564,7 +573,9 @@ async def agent_event(request: Request):
             target = session or (state or {}).get("tmux_session")
             if not target:
                 cwd = (state or {}).get("cwd")
-                target = tmux_target.session_for_cwd(cwd) if cwd else None
+                target = (await res_pools.run("proc", tmux_target.session_for_cwd, cwd,
+                                              op="session_for_cwd", key=cwd, timeout=PANE_RESOLVE_TIMEOUT)
+                          if cwd else None)
             # Codex처럼 pane을 신뢰할 수 없고 cwd도 모호한 경우, 미지정 큐
             # 항목을 현재 포커스 pane으로 보내면 다른 에이전트가 받는다.
             if target:
@@ -621,9 +632,7 @@ async def agent_report(request: Request):
     except Exception:
         body = {}
     state = str(body.get("state", "working"))
-    session, how = pane_resolve.resolve(
-        body.get("pane"), body.get("tmux"), body.get("cwd")
-    )
+    session, how = await _resolve_pane(body.get("pane"), body.get("tmux"), body.get("cwd"))
     # 키는 세션 이름이 가장 안정적이다 — 같은 pane에서 여러 번 보고해도 한
     # 엔트리로 모이고, 훅 기반 엔트리(session_id 키)와도 섞이지 않는다.
     sid = body.get("session_id") or (f"pane:{session}" if session else f"pane:{body.get('pane') or 'unknown'}")
@@ -637,17 +646,11 @@ async def agent_report(request: Request):
     # N9 — 이 CLI가 자기보고 경로를 쓴다는 사실을 남긴다. 커버리지 표가
     # 그걸 읽어 path="report"(→ trust:high)를 준다. 보고한 agent 이름이
     # 없으면 어느 CLI인지 알 수 없으므로 기록하지 않는다(추측 금지).
-    report_seen.mark(body.get("agent"))
+    await asyncio.to_thread(report_seen.mark, body.get("agent"))
 
     public_ent = agent_status.public_entry(ent)
     msg = {"type": "agent_event", "event": "report", "state": public_ent, "resolved_by": how}
-    dead = set()
-    for ws in list(_agent_event_clients):
-        try:
-            await ws.send_json(msg)
-        except Exception:
-            dead.add(ws)
-    _agent_event_clients.difference_update(dead)
+    await _broadcast_agent(msg)
     _kick_agents()
     return {"ok": True, "session": session, "resolved_by": how, "state": public_ent}
 

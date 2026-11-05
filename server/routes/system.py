@@ -461,13 +461,8 @@ async def broadcast_workspace_event(msg: dict) -> None:
     """`/ws-workspace`에 붙은 모든 클라이언트로 push. workspace_put과 N8(워크트리
     변경) 양쪽이 공유하는 단일 브로드캐스트 경로 — 각자 클라이언트 집합을 순회하는
     코드를 복제하지 않는다."""
-    dead = set()
-    for ws in list(_workspace_clients):
-        try:
-            await ws.send_json(msg)
-        except Exception:
-            dead.add(ws)
-    _workspace_clients.difference_update(dead)
+    from resilience import wsutil
+    await wsutil.broadcast(_workspace_clients, msg)
 
 
 @router.get("/api/workspace")
@@ -618,6 +613,8 @@ async def ws_workspace(websocket: WebSocket):
     _workspace_clients.add(websocket)
     _ensure_sessions_loop()
     session_watchdog = auth.spawn_session_watchdog(websocket, token)
+    from resilience import wsutil
+    pinger = wsutil.start_pinger(websocket)
     try:
         await websocket.send_json({"type": "workspace_snapshot", "data": workspace.load()})
         # 재연결이면 끊긴 동안의 변경을 놓쳤을 수 있다 — 지금 목록을 이 연결에만 준다.
@@ -632,6 +629,7 @@ async def ws_workspace(websocket: WebSocket):
         pass
     finally:
         session_watchdog.cancel()
+        pinger.cancel()
         _workspace_hidden.discard(websocket)
         _workspace_clients.discard(websocket)
 

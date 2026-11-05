@@ -163,7 +163,7 @@ async def _watch_loop() -> None:
             _last_hash[name] = h
             for cb in list(_subscribers.get(name, ())):
                 try:
-                    await cb(text)
+                    await asyncio.wait_for(cb(text), 2.0)     # 응답 없는 구독자가 다른 세션 미리보기를 붙잡지 않게
                 except Exception:
                     _subscribers.get(name, set()).discard(cb)
         await asyncio.sleep(WATCH_INTERVAL)

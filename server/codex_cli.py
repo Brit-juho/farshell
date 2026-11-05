@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 from typing import Optional
 from i18n import tr
+from resilience.locks import LockTimeout, TimedLock
 
 MAX_JSON_BYTES = 5 * 1024 * 1024
 
@@ -81,7 +82,9 @@ def run_json(args: list[str], *, timeout: float = 10.0) -> tuple[object | None, 
 # config.toml에서 매번 읽는다(파일이 진실).
 PLUGIN_LIST_TTL_SEC = 600.0
 PLUGIN_LIST_TIMEOUT_SEC = 30.0
-_plugin_lock = threading.Lock()
+# `codex plugin list`(최대 30초)를 쥔 채 실행한다 — 쥔 쪽이 /api/health/ready 에 보이고, 기다리는 쪽은
+# `with` 의 기본 기한(PLUGIN_LIST_TIMEOUT_SEC + 여유)만 기다린다.
+_plugin_lock = TimedLock("codex.plugin_list", default_timeout=45.0)
 _plugin_cache: dict = {"at": 0.0, "data": None}
 _plugin_caches: dict[str, dict] = {}
 
@@ -94,7 +97,15 @@ def reset_plugin_cache() -> None:
 
 def plugin_list(*, refresh: bool = False) -> tuple[object | None, str | None]:
     """캐시된 `codex plugin list --json`. 동시 호출은 실행 한 번으로 합친다(락).
-    새로 받다 실패하면 옛 결과가 있으면 그걸 준다 — 설치 목록은 거의 안 변한다."""
+    새로 받다 실패하면 옛 결과가 있으면 그걸 준다 — 설치 목록은 거의 안 변한다.
+    다른 호출의 실행이 기한을 넘겨 락이 안 풀리면 기다리지 않고 직전 결과(또는 "busy")를 준다."""
+    try:
+        return _plugin_list_locked(refresh)
+    except LockTimeout:
+        return _plugin_cache.get("data"), (None if _plugin_cache.get("data") is not None else "busy")
+
+
+def _plugin_list_locked(refresh: bool) -> tuple[object | None, str | None]:
     with _plugin_lock:
         key = str(codex_home().resolve())
         cache = _plugin_caches.setdefault(key, {"at": 0.0, "data": None})

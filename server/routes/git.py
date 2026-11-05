@@ -54,10 +54,11 @@ def _git(repo: Path, *args: str, hooks: bool = False, readable_paths: bool = Fal
     저장소 설정이 프로그램을 띄우지 못하게 `git_safe`를 거친다 — 레일 배지는 pane cwd 마다 이 함수로
     `status`를 부르므로, 안 그러면 악성 저장소에 `cd`만 해도 fsmonitor가 실행된다. `hooks=True`는
     사용자가 누른 git 동작(commit)에만 쓴다."""
+    from resilience import proc as res_proc
     try:
-        proc = subprocess.run(
+        proc = res_proc.run(
             git_safe.argv(*args, cwd=repo, hooks=hooks, readable_paths=readable_paths),
-            capture_output=True, timeout=GIT_TIMEOUT, env=git_safe.env(),
+            timeout=GIT_TIMEOUT, env=git_safe.env(),
         )
     except subprocess.TimeoutExpired:
         return 124, ""
@@ -177,14 +178,31 @@ def _collect_status(repo: Path, *, top: Path | None = None) -> dict:
     return {"repo": True, "root": str(top), "files": files, **branch_info, **_diff_stat(top)}
 
 
-@router.get("/api/git/status")
-async def git_status(repo: str = Query(...)):
+def _repo_dir_sync(repo: str):
+    p = fsguard.resolve_under_roots(repo)
+    return p if p.is_dir() else None
+
+
+async def _repo_dir(repo: str):
+    """경로 검증(resolve)·is_dir 를 `fs` 풀에서 기한을 두고 한다. 예전엔 이벤트 루프 위에서 불러, 원격
+    마운트 경로 하나가 서버 전체를 멈출 수 있었다. 성공하면 Path, 아니면 그대로 돌려줄 응답."""
+    from resilience import fsops
     try:
-        p = fsguard.resolve_under_roots(repo)
+        p = await fsops.call(_repo_dir_sync, repo, path=repo, op="git.repo_dir")
     except fsguard.FsDenied as e:
         return _denied(e.reason)
-    if not p.is_dir():
+    except fsops.UNAVAILABLE as e:
+        return fsops.unavailable_response(e)
+    if p is None:
         return JSONResponse({"error": "not a directory"}, status_code=404)
+    return p
+
+
+@router.get("/api/git/status")
+async def git_status(repo: str = Query(...)):
+    p = await _repo_dir(repo)
+    if not isinstance(p, Path):
+        return p
     return await asyncio.to_thread(_collect_status, p)
 
 
@@ -393,12 +411,9 @@ async def git_diff(
     file: str = Query(""),
     staged: bool = Query(False),
 ):
-    try:
-        p = fsguard.resolve_under_roots(repo)
-    except fsguard.FsDenied as e:
-        return _denied(e.reason)
-    if not p.is_dir():
-        return JSONResponse({"error": "not a directory"}, status_code=404)
+    p = await _repo_dir(repo)
+    if not isinstance(p, Path):
+        return p
     # file 은 저장소 기준 상대경로다. 절대경로/상위 탈출을 여기서 잘라낸다.
     if file and _bad_repo_relpath(file):
         return _denied(tr("잘못된 파일 경로입니다"))
@@ -474,12 +489,9 @@ async def git_log(
     skip: int = Query(0, ge=0),
     limit: int = Query(DEFAULT_LOG_LIMIT, ge=1, le=MAX_LOG_LIMIT),
 ):
-    try:
-        p = fsguard.resolve_under_roots(repo)
-    except fsguard.FsDenied as e:
-        return _denied(e.reason)
-    if not p.is_dir():
-        return JSONResponse({"error": "not a directory"}, status_code=404)
+    p = await _repo_dir(repo)
+    if not isinstance(p, Path):
+        return p
     if file and _bad_repo_relpath(file):
         return _denied(tr("잘못된 파일 경로입니다"))
     return await asyncio.to_thread(_collect_log, p, file, skip, limit, ref)
@@ -494,12 +506,9 @@ def _collect_branches(repo: Path) -> dict:
 
 @router.get("/api/git/branches")
 async def git_branches(repo: str = Query(...)):
-    try:
-        p = fsguard.resolve_under_roots(repo)
-    except fsguard.FsDenied as e:
-        return _denied(e.reason)
-    if not p.is_dir():
-        return JSONResponse({"error": "not a directory"}, status_code=404)
+    p = await _repo_dir(repo)
+    if not isinstance(p, Path):
+        return p
     return await asyncio.to_thread(_collect_branches, p)
 
 
@@ -558,12 +567,9 @@ async def git_show(
     sha: str = Query(...),
     file: str = Query(""),
 ):
-    try:
-        p = fsguard.resolve_under_roots(repo)
-    except fsguard.FsDenied as e:
-        return _denied(e.reason)
-    if not p.is_dir():
-        return JSONResponse({"error": "not a directory"}, status_code=404)
+    p = await _repo_dir(repo)
+    if not isinstance(p, Path):
+        return p
     if not _SHA_RE.match(sha):
         return _denied(tr("잘못된 커밋 해시입니다"))
     if file and _bad_repo_relpath(file):

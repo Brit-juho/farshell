@@ -58,14 +58,11 @@ def run(args: list[str], timeout: float = 2.0, input: Optional[bytes] = None) ->
     필요한 명령용(N25 3/n) — 그 외엔 안 써도 된다.
     """
     cmd = base_args() + args
+    # resilience.proc — 기한이 지나면 프로세스 그룹을 죽이고 짧게만 기다린다. subprocess.run 은 죽인 뒤
+    # 무기한 기다려, 끝나지 않는 자식이면 부른 스레드(기본 풀의 작업자)까지 같이 갇힌다.
+    from resilience import proc as res_proc
     try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            timeout=timeout,
-            check=False,
-            input=input,
-        )
+        proc = res_proc.run(cmd, timeout=timeout, input=input)
         return proc.returncode, proc.stdout, proc.stderr
     except FileNotFoundError:
         logger.warning("tmux 미설치")

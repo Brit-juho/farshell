@@ -400,7 +400,7 @@ async def peer_input(request: Request, grant: dict):
 
     import tmux_target
 
-    pane = tmux_target.session_pane(session)
+    pane = await asyncio.to_thread(tmux_target.session_pane, session)   # tmux 조회(2초) — 루프 밖에서
     if not pane:
         return JSONResponse({"error": "session_not_found"}, status_code=404), f"세션 없음: {session}"
     send = tmux_target.send_to_tmux if enter else tmux_target.type_to_tmux
@@ -850,7 +850,7 @@ async def peer_file(request: Request, grant: dict, data: bytes):
     path = str(file_store.real_path_for(item["id"]))
     typed = False
     if session:
-        pane = tmux_target.session_pane(session)
+        pane = await asyncio.to_thread(tmux_target.session_pane, session)   # tmux 조회(2초) — 루프 밖에서
         if pane:
             # 파일 경로는 **Enter 없이** 타이핑한다 — 로컬 파일 삽입과 같은 계약.
             typed = await asyncio.to_thread(tmux_target.type_to_tmux, pane, path)

@@ -222,10 +222,53 @@ def set_screen_probe(fn: Optional[Callable[[str, Optional[str]], Optional[dict]]
     _screen_probe = fn
 
 
+class _ProbeDeferred(Exception):
+    """이벤트 루프 위에서는 화면을 읽지 않는다 — 그 엔트리의 만료 판정을 스레드 sweep 으로 미룬다."""
+
+
+_bg_sweep_pending = False
+
+
+def _on_event_loop() -> bool:
+    import asyncio
+    try:
+        asyncio.get_running_loop()
+        return True
+    except RuntimeError:
+        return False
+
+
+def _schedule_thread_sweep() -> None:
+    """루프 위 sweep 이 미룬 화면 확인을 `proc` 풀에서 한 번 돌린다(한 번에 하나만)."""
+    global _bg_sweep_pending
+    if _bg_sweep_pending:
+        return
+    import asyncio
+    from resilience import pools
+
+    async def _run():
+        global _bg_sweep_pending
+        try:
+            await pools.run("proc", sweep, op="agent_status.sweep", timeout=30)
+        except Exception as e:  # noqa: BLE001 — 다음 sweep 이 다시 시도한다
+            logger.debug(f"스레드 sweep 실패: {e}")
+        finally:
+            _bg_sweep_pending = False
+    try:
+        asyncio.get_running_loop().create_task(_run())
+        _bg_sweep_pending = True
+    except RuntimeError:
+        pass
+
+
 def _probe(ent: dict) -> Optional[dict]:
     name, agent = ent.get("tmux_session"), ent.get("agent")
     if _screen_probe is None or not name or ent.get("host", LOCAL_HOST) != LOCAL_HOST:
         return None
+    # 화면 읽기는 tmux capture-pane(1초 기한)이다. 이벤트 루프 위에서(GET /api/agent/status·ws-agent 하트비트가
+    # sweep 을 태운다) 부르면 그동안 서버 전체가 멈춘다 — 판정을 미루고 스레드에서 다시 한다.
+    if _on_event_loop():
+        raise _ProbeDeferred()
     try:
         return _screen_probe(name, agent)
     except Exception as e:  # noqa: BLE001 — 확인이 실패해도 예전처럼 만료시킬 뿐이다
@@ -307,7 +350,20 @@ def sweep(now: Optional[float] = None) -> int:
     ttls = _ttls()
     changed = 0
     _prune_retired(now)
+    deferred = False
     for sid, ent in list(_state.items()):
+        try:
+            changed += _sweep_one(sid, ent, now, ttls)
+        except _ProbeDeferred:
+            deferred = True
+    if deferred:
+        _schedule_thread_sweep()
+    return changed
+
+
+def _sweep_one(sid: str, ent: dict, now: float, ttls: dict) -> int:
+    changed = 0
+    if True:
         if subagents.sweep(ent, now):
             _emit(ent, "subagents")
         status = ent.get("status", IDLE)
