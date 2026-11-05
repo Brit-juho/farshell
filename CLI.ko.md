@@ -63,6 +63,10 @@ fsh tunnel list                   # 전체 터널, 접근 모드와 PIN 실패 �
 fsh tunnel hook                   # URL 변경 훅 확인 + 즉시 실행 (fsh help tunnel-hook)
 fsh tunnel restart                # 좀비 재연결(응답 없음) 상태여도 강제로 새 터널 기동 + 훅 재실행
 fsh tunnel watchdog               # 좀비 재연결 자동 감지 데몬 상태 확인/시작 (평소엔 fsh start/voice/mobile가 자동 기동)
+fsh watchdog status               # 서버 워치독: ready 판정, 막힌 작업·잠금, 탐색 격리, 최근 장애 기록
+fsh watchdog check                # /api/health/ready 를 한 번 읽어 출력(JSON)
+fsh watchdog unquarantine         # 응답이 없어 탐색에서 뺀 디렉터리를 다시 넣는다
+fsh watchdog agent install        # macOS: launchd 가 워치독 자체를 감독하게 한다(해제는 uninstall)
 fsh ssh [session]      # Tailscale + SSH로 tmux 세션 직접 접속 명령 안내
 fsh doctor             # 설치/환경 진단 (Linux 항목 포함)
 fsh terminal           # fsh가 창을 열 때 쓰는 메인 터미널 확인/선택

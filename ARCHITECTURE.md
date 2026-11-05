@@ -128,6 +128,8 @@ the WebSocket endpoints (`/ws/{id}` and `/ws-notify` in `routes/pty.py`,
 |---|---|
 | `tunnel.py` | Cloudflare Tunnel status detection |
 | `tunnel_watchdog.py` | Detects cloudflared's zombie-reconnect state (process alive, QUIC control stream dead) → auto-restarts the tunnel |
+| `server_watchdog.py` | Reads `/api/health/ready`; after repeated failures saves an incident bundle and runs `fsh restart` ([reliability](./docs/ref/reliability.md)) |
+| `resilience/` | Named thread pools with deadlines, `TimedLock`, `proc.run`, mount detection, path breaker, scan worker + quarantine, watch thread, health verdicts ([reliability](./docs/ref/reliability.md)) |
 | `tunnel_registry.py` | Registry of extra-port tunnels opened via `fsh tunnel expose` |
 | `tailscale.py` | Tailscale status detection (`tailscale status --json`) — same pattern as `tunnel.py` |
 | `clipboard_daemon.py` | Polls macOS `NSPasteboard.changeCount` → pushes changes to the web clipboard |
