@@ -14,6 +14,7 @@ import { applySnapshot, applyEvent, applyAgentNames } from './state.js';
 import { showToast } from '../ui/toast.js';
 import { t } from '../core/i18n.js';
 import { createPoll } from '../core/poll.js';
+import { watchSocketLiveness } from '../core/ws-watchdog.js';
 
 // 로그인 게이트가 실제로 걷히기 전까지 기다린다 — index.html의 hideGate()가
 // window.__vtAuthed=true + 'vt:authed' 이벤트로 신호를 준다. 이게 없으면 이
@@ -169,9 +170,14 @@ function connectAgentWs() {
   try {
     wsAgent = new WebSocket(`${WS_BASE}${relayWsPath(`/ws-agent${_tokenQuery}`)}`);
   } catch (e) { return scheduleAgentReconnect(); }
+  // 생존 감시(core/ws-watchdog.js) — 서버 ping(15초)이 45초 동안 안 오면 닫아 재연결을 돌린다.
+  let liveness = null;
+  const opened = wsAgent;
   // [회귀 fb827a6와 동일 패턴] 3초 이상 안정적으로 열린 뒤에만 백오프 리셋 —
   // accept 직후 닫히는 flap에서 지수가 자라지 못하고 빠르게 재연결하는 것을 방지.
   wsAgent.onopen = () => {
+    liveness?.stop();
+    liveness = watchSocketLiveness(opened);
     _sendAgentVisibility();
     clearTimeout(_wsAgentStableTimer);
     _wsAgentStableTimer = setTimeout(() => { _wsAgentRetries = 0; }, 3000);
@@ -180,6 +186,7 @@ function connectAgentWs() {
     _refreshTmuxCwdMap().catch(() => { /* 폴러가 다음 주기에 다시 본다 */ });
   };
   wsAgent.onmessage = (e) => {
+    liveness?.alive();
     let msg;
     try { msg = JSON.parse(e.data); } catch (_) { return; }
     if (msg.type === 'ping') {
@@ -231,6 +238,8 @@ function connectAgentWs() {
   // 이미 다른 소켓으로 갈아탔으면 옛 소켓의 close가 재연결을 하나 더 만들지 않게 한다.
   const sock = wsAgent;
   sock.onclose = () => {
+    liveness?.stop();
+    liveness = null;
     if (sock !== wsAgent) return;
     clearTimeout(_wsAgentStableTimer);
     scheduleAgentReconnect();
