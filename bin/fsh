@@ -270,6 +270,7 @@ _port_in_use() {
 _start_server() {
   if _port_in_use $VT_PORT; then
     echo "✓ $(_t '서버 이미 실행 중 (port {port})' port="$VT_PORT")"
+    _start_server_watchdog
     return 0
   fi
   # 어느 경로로 띄우든(start·voice·clip·restart) 인증 없이는 뜨지 않는다(lib/auth_bootstrap.sh).
@@ -300,6 +301,30 @@ _start_server() {
     waited=$((waited + 100))
   done
   echo "✓ $(_t '서버 시작 완료 ({url})' url="http://localhost:$VT_PORT")"
+  _start_server_watchdog
+}
+
+# 서버 워치독(server/server_watchdog.py) — /api/health/ready 가 연속으로 실패하면(포트는 열려 있어도 일을
+# 못 받는 상태, 2026-11-05) 진단 묶음을 남기고 `fsh restart`로 다시 띄운다. 끄기: VT_SERVER_WATCHDOG=0.
+# 워치독 스스로 한 인스턴스만 돌게 잠금을 잡으므로(launchd 감독판이 떠 있으면 이건 바로 끝난다) 여기서는
+# 이 트리의 fsh 판이 이미 떠 있는지만 본다.
+_start_server_watchdog() {
+  case "${VT_SERVER_WATCHDOG:-1}" in 0|false|no|off) return 0 ;; esac
+  _is_running server-watchdog && return 0
+  local _existing
+  _existing="$(pgrep -f "$VT_DIR/server/server_watchdog.py --mode fsh" 2>/dev/null | head -1)"
+  if [ -n "$_existing" ] && kill -0 "$_existing" 2>/dev/null; then
+    echo "$_existing" > "$PID_DIR/server-watchdog.pid"
+    return 0
+  fi
+  nohup "$VT_PYTHON" "$VT_DIR/server/server_watchdog.py" --mode fsh > "$VT_RUN_DIR/vt-server-watchdog.log" 2>&1 &
+  echo $! > "$PID_DIR/server-watchdog.pid"
+}
+
+# `server_watchdog.py --summary` 를 돌려 서버 판정을 읽는다(첫 줄 `READY <상태>`). 응답 없는 서버 앞에서도
+# 오래 붙잡히지 않게 기한을 짧게 둔다.
+_server_health_summary() {
+  VT_WATCHDOG_PROBE_TIMEOUT="${1:-3}" "$VT_PYTHON" "$VT_DIR/server/server_watchdog.py" --summary 2>/dev/null
 }
 
 # 메인 터널 시작. 성공 시 URL 변경 훅 실행 + 좀비 재연결 감시 데몬 기동 (설정된 경우에만).
@@ -3189,8 +3214,9 @@ cmd_stop() {
   local had_tunnel
   had_tunnel="$(_main_tunnel_pids)"
 
-  local _svcs="voice clip tunnel-hook-retry tunnel-watchdog tunnel server"
-  [ "$keep_tunnel" -eq 1 ] && _svcs="voice clip server"
+  # server-watchdog 을 server 보다 먼저 내린다 — 서버가 내려간 사이를 "죽음"으로 보고 다시 띄우지 않게.
+  local _svcs="voice clip tunnel-hook-retry tunnel-watchdog server-watchdog tunnel server"
+  [ "$keep_tunnel" -eq 1 ] && _svcs="voice clip server-watchdog server"
   for svc in $_svcs; do
     local pidfile="$PID_DIR/$svc.pid"
     if [ -f "$pidfile" ]; then
@@ -3251,6 +3277,8 @@ cmd_stop() {
   for d in $_daemons; do
     pkill -f "$VT_DIR/server/$d.py" 2>/dev/null || true
   done
+  # fsh 가 띄운 서버 워치독만 — launchd 감독판(--mode launchd)은 서버 pid 파일이 없으면 스스로 쉰다.
+  pkill -f "$VT_DIR/server/server_watchdog.py --mode fsh" 2>/dev/null || true
   # cloudflared는 **포트가 명시된 익명 터널만** 정리한다. 명명 터널
   # (`cloudflared tunnel run <name>`)은 명령줄에 포트가 없어서 내 것인지
   # 남의 것인지 구별할 방법이 없다 — 정리 경로에서 확신 없이 죽이느니
@@ -3312,6 +3340,71 @@ cmd_stop() {
     fi
     echo ""
   fi
+}
+
+# fsh watchdog — 서버 워치독 상태·점검·launchd 감독.
+cmd_watchdog() {
+  local sub="${1:-status}"; shift 2>/dev/null || true
+  case "$sub" in
+    status)
+      _server_health_summary 5
+      [ -f "$VT_RUN_DIR/server-watchdog.json" ] && { echo ""; cat "$VT_RUN_DIR/server-watchdog.json"; echo ""; }
+      "$VT_PYTHON" "$VT_DIR/server/server_watchdog.py" --quarantine 2>/dev/null
+      ls -1d "$VT_RUN_DIR"/incidents/*/ 2>/dev/null | tail -5
+      ;;
+    check)
+      "$VT_PYTHON" "$VT_DIR/server/server_watchdog.py" --once
+      ;;
+    unquarantine)
+      local _n
+      _n="$("$VT_PYTHON" "$VT_DIR/server/server_watchdog.py" --unquarantine 2>/dev/null)"
+      echo "✓ $(_t '탐색 격리 {n}건을 풀었습니다 (서버의 경로 차단은 5분 안에 저절로 풀립니다)' n="${_n:-0}")"
+      ;;
+    agent)
+      _watchdog_agent "$@"
+      ;;
+    *)
+      echo "$(_t '사용법: fsh watchdog [status|check|unquarantine|agent install|agent uninstall]')"
+      return 1
+      ;;
+  esac
+}
+
+# macOS launchd 가 워치독 자체를 감독하게 한다(워치독이 죽어도 다시 뜬다). 워치독은 서버 pid 파일이 없으면
+# (사람이 fsh stop 으로 내린 상태) 아무것도 하지 않으므로 stop 과 부딪히지 않는다.
+_watchdog_agent() {
+  local action="${1:-}"
+  if [ "$(uname)" != "Darwin" ]; then
+    echo "✗ $(_t 'launchd 감독은 macOS 전용입니다')"
+    return 1
+  fi
+  local label="com.farshell.server-watchdog"
+  local plist="$HOME/Library/LaunchAgents/$label.plist"
+  local domain
+  domain="gui/$(id -u)"
+  case "$action" in
+    install)
+      mkdir -p "$HOME/Library/LaunchAgents"
+      "$VT_PYTHON" "$VT_DIR/server/server_watchdog.py" --write-plist "$plist" || return 1
+      chmod 600 "$plist"
+      launchctl bootout "$domain/$label" 2>/dev/null || true
+      if launchctl bootstrap "$domain" "$plist"; then
+        echo "✓ $(_t 'launchd 감독 등록: {label}' label="$label")"
+      else
+        echo "✗ $(_t 'launchd 등록 실패 — {plist}' plist="$plist")"
+        return 1
+      fi
+      ;;
+    uninstall)
+      launchctl bootout "$domain/$label" 2>/dev/null || true
+      rm -f "$plist"
+      echo "✓ $(_t 'launchd 감독 해제: {label}' label="$label")"
+      ;;
+    *)
+      echo "$(_t '사용법: fsh watchdog agent install|uninstall')"
+      return 1
+      ;;
+  esac
 }
 
 cmd_restart() {
@@ -3489,6 +3582,35 @@ print(('ok|' if sel and sel['ready'] else 'warn|') + (sel['label'] + ('|ready' i
   else
     _check "$(_t '경계값')" ok "$(_t '환경변수와 설정 파일이 일치')"
   fi
+  # 서버가 실제로 일을 받는가(포트가 아니라 /api/health/ready). 2026-11-05: 포트는 열려 있는데 기본
+  # 스레드 풀이 막혀 인증된 API 가 몇 시간 응답하지 않았고, 아무 점검도 그걸 몰랐다.
+  if _port_in_use "$VT_PORT"; then
+    local _dh _dready _dwhat
+    _dh="$(_server_health_summary 5)"
+    _dready="$(printf '%s\n' "$_dh" | sed -n 's/^READY //p' | head -1)"
+    _dwhat="$(printf '%s\n' "$_dh" | grep -E '^(PROBLEM|SLOW|LOCK|WHY) ' | head -3 | tr '\n' ' ')"
+    case "$_dready" in
+      ok)       _check "$(_t '서버 응답')" ok "$(_t '일을 받고 있음 (/api/health/ready)')" ;;
+      degraded) _check "$(_t '서버 응답')" warn "$(_t '응답은 하지만 일부 작업이 막혀 있음: {what}' what="$_dwhat")" ;;
+      stopped|"") ;;
+      *)        _check "$(_t '서버 응답')" fail "$(_t '포트는 열려 있지만 일을 못 받음({state}) → fsh restart. 원인: {what}' state="$_dready" what="$_dwhat")" ;;
+    esac
+    case "$(printf '%s\n' "$_dh" | sed -n 's/^WATCHDOG //p' | head -1)" in
+      on*) _check "$(_t '서버 워치독')" ok "$(_t '실행 중 — 응답이 없으면 진단을 남기고 자동 재시작')" ;;
+      *)   case "${VT_SERVER_WATCHDOG:-1}" in
+             0|false|no|off) _check "$(_t '서버 워치독')" ok "$(_t '꺼 둠 (VT_SERVER_WATCHDOG=0)')" ;;
+             *) _check "$(_t '서버 워치독')" warn "$(_t '실행 중이 아님 → fsh restart 로 다시 띄우세요')" ;;
+           esac ;;
+    esac
+    local _dq
+    _dq="$(printf '%s\n' "$_dh" | grep -c '^QUARANTINE ' || true)"
+    if [ "${_dq:-0}" -gt 0 ]; then
+      _check "$(_t '탐색 격리')" warn "$(_t '응답이 없어 탐색에서 뺀 디렉터리 {n}개 — fsh watchdog status 로 보기, fsh watchdog unquarantine 으로 풀기' n="$_dq")"
+    fi
+  fi
+  local _dinc
+  _dinc="$(_server_health_summary 1 | sed -n 's/^INCIDENTS //p' | head -1)"
+  [ -n "$_dinc" ] && _check "$(_t '장애 기록')" warn "$(_t '워치독이 남긴 진단 {n}건 — 최근: {path}' n="${_dinc%% *}" path="${_dinc#* }")"
   # 돌고 있는 서버가 옛 **설정**으로 떴는지. N28은 옛 *코드*만 본다 —
   # 2026-09-17에 값이 안 바뀐 채 서버가 떠 있는 걸 몇 시간 못 알아챘다.
   local _srv_pid _srv_stale
@@ -5292,8 +5414,18 @@ cmd_status() {
   local watchdog_status; watchdog_status="✗ $(_t '중지')"
   local tmux_status; tmux_status="✗ $(_t '없음')"
 
+  local _health="" _ready=""
   if _port_in_use $VT_PORT; then
     server_status="✓ $(_t '실행 중 (port {port})' port="$VT_PORT")"
+    # 포트가 열려 있다는 것만으로는 부족하다 — 실제로 일을 받는지(/api/health/ready) 본다.
+    _health="$(_server_health_summary 3)"
+    _ready="$(printf '%s\n' "$_health" | sed -n 's/^READY //p' | head -1)"
+    case "$_ready" in
+      ok|"") ;;
+      degraded) server_status="⚠ $(_t '실행 중이지만 일부 작업이 막혀 있음 (port {port})' port="$VT_PORT")" ;;
+      stopped) ;;
+      *) server_status="✗ $(_t '포트는 열려 있지만 응답하지 않음 ({state}) — fsh restart' state="$_ready")" ;;
+    esac
   fi
   local stale_warn
   stale_warn="$(_stale_server_warning)"
@@ -5342,6 +5474,19 @@ cmd_status() {
 
   echo "  $(_t '서버:        ')$server_status"
   [ -n "$stale_warn" ] && echo "               ⚠ $stale_warn"
+  printf '%s\n' "$_health" | grep -E '^(PROBLEM|SLOW|LOCK|QUARANTINE|WHY) ' | head -8 | while IFS= read -r _l; do
+    echo "               · $_l"
+  done
+  local _wd
+  _wd="$(printf '%s\n' "$_health" | sed -n 's/^WATCHDOG //p' | head -1)"
+  [ -z "$_health" ] && _wd="$(_server_health_summary 1 | sed -n 's/^WATCHDOG //p' | head -1)"
+  case "$_wd" in
+    on*) echo "  $(_t '서버 워치독: ')✓ $(_t '실행 중 — 응답이 없으면 진단을 남기고 자동 재시작') (${_wd#on })" ;;
+    *)   echo "  $(_t '서버 워치독: ')✗ $(_t '중지') (VT_SERVER_WATCHDOG)" ;;
+  esac
+  local _inc
+  _inc="$(printf '%s\n' "$_health" | sed -n 's/^INCIDENTS //p' | head -1)"
+  [ -n "$_inc" ] && echo "               $(_t '최근 장애 기록: ')${_inc#* } ($(_t '{n}건' n="${_inc%% *}"))"
   # 제공자가 cloudflare가 아니면, cloudflared가 실제로 떠 있을 때만 보여준다.
   # 안 쓰는 제공자의 "✗ 중지"를 계속 띄우면 화면이 문제처럼 읽힌다.
   if [ "$(_tunnel_provider)" = "cloudflare" ] || [ -n "$tunnel_pids" ]; then
@@ -5402,6 +5547,7 @@ case "${1:-help}" in
   install-profiles) shift; cmd_install_profiles "$@" ;;
   setup-keybind) shift; cmd_setup_keybind "$@" ;;
   tunnel) shift; cmd_tunnel "$@" ;;
+  watchdog) shift; cmd_watchdog "$@" ;;
   template) shift; cmd_template "$@" ;;
   popup)    shift; cmd_popup "$@" ;;
   run)      shift; cmd_run "$@" ;;

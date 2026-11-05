@@ -133,6 +133,10 @@ _t_en_lookup() {
     'iTerm2 재시작 후 Profiles 메뉴에서 '\''fsh (FarShell)'\'' 선택') _T_OUT='Restart iTerm2, then pick '\''fsh (FarShell)'\'' in the Profiles menu' ;;
     'install-profiles 실패 — '\''fsh install-profiles'\'' 수동 실행 가능') _T_OUT='install-profiles failed - you can run '\''fsh install-profiles'\'' manually' ;;
     'lan 범위: 같은 네트워크에서만 접속 가능 (터널 없음)') _T_OUT='lan scope: reachable from the same network only (no tunnel)' ;;
+    'launchd 감독 등록: {label}') _T_OUT='Registered launchd supervision: {label}' ;;
+    'launchd 감독 해제: {label}') _T_OUT='Removed launchd supervision: {label}' ;;
+    'launchd 감독은 macOS 전용입니다') _T_OUT='launchd supervision is macOS-only' ;;
+    'launchd 등록 실패 — {plist}') _T_OUT='launchd registration failed — {plist}' ;;
     'lease guard') _T_OUT='lease guard' ;;
     'localhost 범위: 이 맥에서만 접속 가능 (터널 없음)') _T_OUT='localhost scope: reachable from this Mac only (no tunnel)' ;;
     'localhost:{port} 에 응답하는 서비스가 없습니다 — 터널은 띄우지만 앱을 먼저 켜세요') _T_OUT='Nothing is responding on localhost:{port}. The tunnel will start anyway, but start your app first' ;;
@@ -204,6 +208,7 @@ _t_en_lookup() {
     '{n}개 건너뜀') _T_OUT='{n} skipped' ;;
     '{n}개 노출 중 (위험 포트 없음)') _T_OUT='{n} exposed (no risky ports)' ;;
     '{n}개 자동 등록') _T_OUT='{n} registered automatically' ;;
+    '{n}건') _T_OUT='{n}' ;;
     '{n}회') _T_OUT='{n}x' ;;
     '{opts} 는 이제 '\''fsh start'\'' 옵션입니다. '\''fsh start {opts}'\''를 실행한 뒤 QR을 보여드립니다.') _T_OUT='{opts} is now an '\''fsh start'\'' option. Running '\''fsh start {opts}'\'', then showing the QR code.' ;;
     '{path} 에 FarShell 훅 {n}개가 중복 등록돼 있습니다 — Codex 세션 이벤트가 두 번(claude 태그 포함) 들어옵니다.') _T_OUT='{path} has {n} duplicate FarShell hook(s) — Codex session events arrive twice (including the claude-tagged ones).' ;;
@@ -263,6 +268,7 @@ _t_en_lookup() {
     '기존 CLAUDE.md → CLAUDE.md.bak으로 백업') _T_OUT='Backed up existing CLAUDE.md → CLAUDE.md.bak' ;;
     '기존 레포 사용: {dir}') _T_OUT='Using existing repo: {dir}' ;;
     '기존 설정 유지 → ~/.vt.env') _T_OUT='Keeping existing config → ~/.vt.env' ;;
+    '꺼 둠 (VT_SERVER_WATCHDOG=0)') _T_OUT='Off (VT_SERVER_WATCHDOG=0)' ;;
     '꺼져 있는데 저장된 pair {n}개가 남아 있습니다 — 권한은 효력이 없습니다') _T_OUT='The feature is off but {n} stored pair(s) remain - their permissions have no effect' ;;
     '꺼져 있음 — 켜기: git config core.hooksPath scripts/githooks') _T_OUT='Off — turn on with: git config core.hooksPath scripts/githooks' ;;
     '꺼짐 (VT_AUTHZ_ENFORCE 에 browser 를 더하면 켜짐)') _T_OUT='off (add browser to VT_AUTHZ_ENFORCE to turn it on)' ;;
@@ -396,6 +402,8 @@ _t_en_lookup() {
     '사용법: fsh tunnel pin <port>') _T_OUT='Usage: fsh tunnel pin <port>' ;;
     '사용법: fsh tunnel switch <anon|named>') _T_OUT='Usage: fsh tunnel switch <anon|named>' ;;
     '사용법: fsh usage [list|add --model <이름> --tokens <N> --seconds <N>]') _T_OUT='Usage: fsh usage [list|add --model <name> --tokens <N> --seconds <N>]' ;;
+    '사용법: fsh watchdog [status|check|unquarantine|agent install|agent uninstall]') _T_OUT='Usage: fsh watchdog [status|check|unquarantine|agent install|agent uninstall]' ;;
+    '사용법: fsh watchdog agent install|uninstall') _T_OUT='Usage: fsh watchdog agent install|uninstall' ;;
     '사용법: fsh worktree [list|add <name> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <name> [--force]|open <name>]') _T_OUT='Usage: fsh worktree [list|add <name> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <name> [--force]|open <name>]' ;;
     '사용법: 해당 tmux pane에서 fsh voice-bind <claude|codex> <대화 ID>') _T_OUT='Usage: run in the target tmux pane: fsh voice-bind <claude|codex> <conversation ID>' ;;
     '상대가 나를 부르는 방향의 secret 은 상대 맥에서 같은 명령으로 바꿉니다.') _T_OUT='The secret for the opposite direction (the other Mac calling this one) is rotated on that Mac with the same command.' ;;
@@ -411,6 +419,9 @@ _t_en_lookup() {
     '서버 시작 실패(10초 타임아웃). 로그: {log}') _T_OUT='Server failed to start (timed out after 10s). Log: {log}' ;;
     '서버 시작 완료 ({url})') _T_OUT='Server started ({url})' ;;
     '서버 시작 중...') _T_OUT='Starting server...' ;;
+    '서버 워치독') _T_OUT='Server watchdog' ;;
+    '서버 워치독: ') _T_OUT='Server watchdog: ' ;;
+    '서버 응답') _T_OUT='Server response' ;;
     '서버 응답을 해석할 수 없습니다: {out}') _T_OUT='Couldn'\''t parse the server response: {out}' ;;
     '서버 이미 실행 중 (port {port})') _T_OUT='Server already running (port {port})' ;;
     '서버 재시작 필요: fsh restart') _T_OUT='Restart the server: fsh restart' ;;
@@ -463,6 +474,9 @@ _t_en_lookup() {
     '실행 중 (URL 확인 불가 — ngrok 에이전트 API 무응답)') _T_OUT='running (URL unavailable — the ngrok agent API isn'\''t responding)' ;;
     '실행 중 (port {port})') _T_OUT='running (port {port})' ;;
     '실행 중 (좀비 재연결 자동 감지)') _T_OUT='running (auto-detects zombie reconnects)' ;;
+    '실행 중 — 응답이 없으면 진단을 남기고 자동 재시작') _T_OUT='Running — saves diagnostics and restarts automatically if the server stops responding' ;;
+    '실행 중이 아님 → fsh restart 로 다시 띄우세요') _T_OUT='Not running → start it again with fsh restart' ;;
+    '실행 중이지만 일부 작업이 막혀 있음 (port {port})') _T_OUT='Running, but some work is stuck (port {port})' ;;
     '실행 중인 서버가 현재 코드로 떠 있습니다') _T_OUT='running server is on the current code' ;;
     '실행 중인 서버에 리스너 시작을 알리지 못했습니다(비밀번호/토큰을 확인하세요).') _T_OUT='Couldn'\''t tell the running server to start the listener (check your password/token).' ;;
     '실행:    ') _T_OUT='Running:  ' ;;
@@ -500,6 +514,7 @@ _t_en_lookup() {
     '외부 주소:  ') _T_OUT='Address:     ' ;;
     '외부 환경 사용:') _T_OUT='Using an external environment:' ;;
     '요구사항:') _T_OUT='Requirements:' ;;
+    '워치독이 남긴 진단 {n}건 — 최근: {path}') _T_OUT='{n} diagnostic bundle(s) saved by the watchdog — latest: {path}' ;;
     '원격 접속 시 필요. brew install cloudflared') _T_OUT='needed for remote access. brew install cloudflared' ;;
     '원격 접속(fsh start)용 cloudflared 미설치.') _T_OUT='cloudflared (for remote access via fsh start) isn'\''t installed.' ;;
     '원인: {err}') _T_OUT='Cause: {err}' ;;
@@ -518,6 +533,8 @@ _t_en_lookup() {
     '음성 타깃 → {name} (lock)') _T_OUT='Voice target → {name} (lock)' ;;
     '음성 토글') _T_OUT='voice toggle' ;;
     '음성은 기본으로 안 켭니다 — 필요하면 '\''fsh start --voice'\'' 또는 '\''fsh voice'\''') _T_OUT='Voice is off by default — use '\''fsh start --voice'\'' or '\''fsh voice'\'' if you need it' ;;
+    '응답은 하지만 일부 작업이 막혀 있음: {what}') _T_OUT='Responding, but some work is stuck: {what}' ;;
+    '응답이 없어 탐색에서 뺀 디렉터리 {n}개 — fsh watchdog status 로 보기, fsh watchdog unquarantine 으로 풀기') _T_OUT='{n} unresponsive folder(s) left out of scans — see fsh watchdog status, clear with fsh watchdog unquarantine' ;;
     '이 맥에 SSH로 붙는 명령 안내: fsh ssh') _T_OUT='how to SSH into this Mac: fsh ssh' ;;
     '이 맥에서만') _T_OUT='this Mac only' ;;
     '이 머신의 tailnet 주소: {addr}') _T_OUT='This machine'\''s tailnet address: {addr}' ;;
@@ -550,6 +567,7 @@ _t_en_lookup() {
     '인증:    ') _T_OUT='Auth:     ' ;;
     '인증:       ') _T_OUT='Auth:        ' ;;
     '인터넷 어디서나 도달 가능 (인증으로 보호)') _T_OUT='reachable from anywhere on the internet (protected by authentication)' ;;
+    '일을 받고 있음 (/api/health/ready)') _T_OUT='Accepting work (/api/health/ready)' ;;
     '임시 파일 생성 실패: {path}') _T_OUT='Couldn'\''t create temp file: {path}' ;;
     '자가 시험 실패 — 소켓을 서비스하지 않습니다(토큰으로만 동작): {reason}') _T_OUT='Self-test failed — the socket is not served (token only): {reason}' ;;
     '자동') _T_OUT='auto' ;;
@@ -559,6 +577,7 @@ _t_en_lookup() {
     '자동 재노출: 켜짐 — 만료되면 {ttl}씩 연장하고, 터널이 사라지면 서버가 다시 엽니다(주소는 바뀔 수 있음). 끄기: fsh tunnel auto {port} off') _T_OUT='Auto re-expose: on — extends by {ttl} at expiry, and the server re-opens the tunnel if it goes away (the address may change). Turn off: fsh tunnel auto {port} off' ;;
     '잘못된 키 이름: '\''{key}'\''') _T_OUT='Invalid key name: '\''{key}'\''' ;;
     '잘못된 핫키 형식: '\''{s}'\'' (예: ctrl+shift+m)') _T_OUT='Invalid hotkey format: '\''{s}'\'' (e.g. ctrl+shift+m)' ;;
+    '장애 기록') _T_OUT='Incidents' ;;
     '재시작 실패') _T_OUT='Restart failed' ;;
     '재시작 완료') _T_OUT='Restarted' ;;
     '저장 위치:') _T_OUT='Stored in:' ;;
@@ -598,6 +617,7 @@ _t_en_lookup() {
     '처음 열기: {url}') _T_OUT='First visit: {url}' ;;
     '첫 실행 안내') _T_OUT='First run' ;;
     '최근 24h 토큰 사용 {n}건') _T_OUT='{n} machine-token requests in the last 24h' ;;
+    '최근 장애 기록: ') _T_OUT='Latest incident: ' ;;
     '추가 포트:') _T_OUT='Extra ports:' ;;
     '추가 포트는 임시 주소입니다(고정 도메인은 메인 터널이 씁니다)') _T_OUT='Extra ports get temporary URLs (the fixed domain belongs to the main tunnel)' ;;
     '치명적 문제 있음. ✗ 항목부터 해결하세요.') _T_OUT='Critical problems found. Fix the ✗ items first.' ;;
@@ -612,6 +632,8 @@ _t_en_lookup() {
     '클라이언트 접속/해제 알림: 활성화됨 (VT_NOTIFY_CLIENT_EVENTS=1)') _T_OUT='Client connect/disconnect alerts: enabled (VT_NOTIFY_CLIENT_EVENTS=1)' ;;
     '클립보드 동기화') _T_OUT='Clipboard sync' ;;
     '타임아웃: {sec}초') _T_OUT='Timeout: {sec}s' ;;
+    '탐색 격리') _T_OUT='Scan quarantine' ;;
+    '탐색 격리 {n}건을 풀었습니다 (서버의 경로 차단은 5분 안에 저절로 풀립니다)') _T_OUT='Cleared {n} quarantined folder(s) (the server'\''s path block clears itself within 5 minutes)' ;;
     '터널 URL 대기 시간 초과. 로그: {log}') _T_OUT='Timed out waiting for the tunnel URL. Log: {log}' ;;
     '터널 생성: {name}') _T_OUT='Creating tunnel: {name}' ;;
     '터널 수: ') _T_OUT='Tunnels:  ' ;;
@@ -646,6 +668,8 @@ _t_en_lookup() {
     '포트 {port}: {reason}') _T_OUT='Port {port}: {reason}' ;;
     '포트 범위(1-65535)를 벗어났습니다: {port}') _T_OUT='Port out of range (1-65535): {port}' ;;
     '포트는 숫자여야 합니다: '\''{port}'\''') _T_OUT='Port must be a number: '\''{port}'\''' ;;
+    '포트는 열려 있지만 응답하지 않음 ({state}) — fsh restart') _T_OUT='Port is open but the server isn'\''t responding ({state}) — fsh restart' ;;
+    '포트는 열려 있지만 일을 못 받음({state}) → fsh restart. 원인: {what}') _T_OUT='Port is open but the server can'\''t take work ({state}) → fsh restart. Cause: {what}' ;;
     '폰 접속') _T_OUT='Phone access' ;;
     '폴더 lease') _T_OUT='folder lease' ;;
     '프런트엔드 빌드 완료 → frontend/dist/') _T_OUT='Frontend built → frontend/dist/' ;;
