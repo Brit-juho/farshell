@@ -80,6 +80,8 @@ from routes.delegation import router as delegation_router, human_router as deleg
 from routes.leases import router as leases_router
 from routes.pairs import router as pairs_router
 from routes.browser import router as browser_router
+from routes.health import router as health_router
+from resilience import pools as _res_pools, watch as _res_watch
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -136,6 +138,7 @@ AUTH_EXEMPT_PATHS = (
     "/", "/sw.js", "/manifest.json", "/favicon.ico",
     "/api/auth", "/api/auth/status", "/api/auth/logout",
     "/api/tmux/kick", "/p/authorize",
+    "/api/health/live",
 )
 AUTH_EXEMPT_PREFIXES = ("/static", "/s/", "/api/peer/")
 
@@ -395,6 +398,11 @@ async def lifespan(_app: FastAPI):
     # 런타임 폴더(pid·터널 로그·레지스트리)가 남의 것이면 기동하지 않는다 — 터널 주소와 노출 포트 티켓의
     # 목적지를 그 파일에서 읽기 때문이다(vt_paths.check_private_dir). bin/fsh 도 같은 검사를 먼저 한다.
     vt_paths.check_private_dir(vt_paths.run_dir())
+    # 멈춤 내성(resilience/) — 기본 실행기를 계측판으로 바꾸고(이름 없는 to_thread 도 장부에 남는다),
+    # 감시 스레드와 SIGUSR1 스택 덤프를 켠다. 무엇보다 먼저 해야 이후 기동 작업도 장부에 잡힌다.
+    _loop = asyncio.get_running_loop()
+    _res_pools.install_default_executor(_loop)
+    _res_watch.start(_loop)
     # A5: 기본 자세가 open이면(인증 없음 + IP 필터 없음) 명시적으로 경고. LAN 노출 시
     # 인증 없는 터미널 = 원격 코드 실행이므로 사용자가 인지하도록 한다.
     spec = network_access.get_current_spec()
@@ -578,6 +586,7 @@ async def lifespan(_app: FastAPI):
             await files_cleanup_task
         output_watcher.stop()
         pty_mgr.destroy_all()
+        _res_watch.stop()
 
 
 async def _file_store_cleanup_loop() -> None:
@@ -697,6 +706,7 @@ app.include_router(authz_router)
 app.include_router(leases_router)
 app.include_router(pairs_router)
 app.include_router(browser_router)
+app.include_router(health_router)
 app.include_router(share_elevated_router)
 app.include_router(share_public_router)
 app.include_router(peer_router)

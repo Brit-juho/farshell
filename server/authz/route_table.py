@@ -180,6 +180,8 @@ _ROWS: tuple = (
     ("POST", "/api/agent/ack", human()),
 # --- routes/system.py
     ("GET", "/api/capabilities", sock_()),
+    ("GET", "/api/health/ready", sock_()),
+    ("GET", "/api/health/live", public("returns only ok/pid/uptime — the liveness probe must answer before login")),
     ("GET", "/api/usage", auth()),
     ("GET POST", "/api/usage/counter", auth()),
     ("GET", "/api/tailscale/status", auth()),
