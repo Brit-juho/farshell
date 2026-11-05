@@ -507,6 +507,12 @@ async def open_tmux_on_mac(request: Request):
         _mac_open_locks.discard(tmux_name)
 
 
+def _catalog_host_id():
+    from session_catalog.db import database, host_id
+    with database() as db:
+        return host_id(db)
+
+
 @router.post("/api/tmux/attach")
 async def attach_tmux_session(request: Request):
     body = await request.json()
@@ -527,8 +533,8 @@ async def attach_tmux_session(request: Request):
         try:
             catalog_id = identifier(body.get('catalog_session_id'))
             expected_runtime = identifier(body.get('runtime_id'))
-            with database() as db:
-                catalog_host = host_id(db)
+            # sqlite + flock(합쳐 최대 약 4초) — 루프 밖에서.
+            catalog_host = await asyncio.to_thread(_catalog_host_id)
             if body.get('catalog_host') is not None and identifier(body['catalog_host']) != catalog_host:
                 raise Refused('host_changed')
             runtime, physical = await asyncio.to_thread(catalog_inventory.resolve_runtime, catalog_id)

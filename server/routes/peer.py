@@ -587,9 +587,11 @@ async def peer_ws(ws: WebSocket, tmux_name: str, catalog_host: str | None = None
         from session_catalog.inventory import resolve_runtime
         try:
             identifier(catalog_host); identifier(catalog_session_id); identifier(runtime_id)
-            with database() as db:
-                if host_id(db) != catalog_host:
-                    raise Refused('host_changed')
+            def _same_host():
+                with database() as db:
+                    return host_id(db) == catalog_host
+            if not await asyncio.to_thread(_same_host):     # sqlite + flock — 루프 밖에서
+                raise Refused('host_changed')
             runtime, physical = await asyncio.to_thread(resolve_runtime, catalog_session_id)
             if runtime['id'] != runtime_id:
                 raise Refused('runtime_changed')

@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from typing import Iterable
 
@@ -17,9 +16,10 @@ logger = logging.getLogger(__name__)
 SEND_TIMEOUT = 2.0
 
 
-async def _send_one(ws, text: str, timeout: float) -> bool:
+async def _send_one(ws, msg, timeout: float) -> bool:
     try:
-        await asyncio.wait_for(ws.send_text(text), timeout)
+        send = ws.send_text(msg) if isinstance(msg, str) else ws.send_json(msg)
+        await asyncio.wait_for(send, timeout)
         return True
     except asyncio.TimeoutError:
         logger.info("[ws] 송신이 %.0fs 넘게 막힌 클라이언트를 끊음", timeout)
@@ -37,8 +37,7 @@ async def broadcast(clients: set, msg, timeout: float = SEND_TIMEOUT) -> int:
     targets: Iterable = list(clients)
     if not targets:
         return 0
-    text = msg if isinstance(msg, str) else json.dumps(msg, ensure_ascii=False)
-    results = await asyncio.gather(*(_send_one(ws, text, timeout) for ws in targets))
+    results = await asyncio.gather(*(_send_one(ws, msg, timeout) for ws in targets))
     sent = 0
     for ws, ok in zip(targets, results):
         if ok:

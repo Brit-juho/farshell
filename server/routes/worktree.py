@@ -12,6 +12,7 @@ import fsguard
 import repo_store
 import worktree
 from i18n import tr
+from resilience import fsops
 
 logger = logging.getLogger(__name__)
 
@@ -84,9 +85,11 @@ async def set_worktree_hidden(request: Request):
     if not isinstance(raw_path, str) or not raw_path.strip():
         return JSONResponse({"error": tr("path가 필요합니다")}, status_code=400)
     try:
-        path = fsguard.resolve_under_roots(raw_path)
+        path = await fsops.call(fsguard.resolve_under_roots, raw_path, path=raw_path, op="worktree.hidden.resolve")
     except fsguard.FsDenied as e:
         return JSONResponse({"error": e.reason}, status_code=403)
+    except fsops.UNAVAILABLE as e:
+        return fsops.unavailable_response(e)
     hidden = bool(body.get("hidden", True))
     result = await asyncio.to_thread(repo_store.set_hidden, str(path), hidden)
     if not result.get("ok"):
@@ -97,10 +100,13 @@ async def set_worktree_hidden(request: Request):
 
 @router.get("/api/worktrees/precheck")
 async def precheck_worktree(repo: str, base: str):
+    # lockfile 비교(git show ×2, 각 10초 기한)와 경로 resolve — 루프 밖에서 기한을 둔다.
     try:
-        return worktree.precheck(repo, base)
+        return await fsops.call(worktree.precheck, repo, base, path=repo, op="worktree.precheck", timeout=30)
     except fsguard.FsDenied as e:
         return JSONResponse({"error": e.reason}, status_code=403)
+    except fsops.UNAVAILABLE as e:
+        return fsops.unavailable_response(e)
 
 
 @router.post("/api/worktrees")

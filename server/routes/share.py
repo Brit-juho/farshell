@@ -36,6 +36,7 @@ from authz import preauth as authz_preauth
 import file_store
 import fsguard
 from routes.files import _file_public
+from resilience import fsops
 
 logger = logging.getLogger(__name__)
 
@@ -129,9 +130,11 @@ async def share_import(request: Request):
     if not isinstance(path, str) or not path.strip():
         return JSONResponse({"error": "bad_path"}, status_code=400)
     try:
-        p = fsguard.resolve_under_roots(path)
+        p = await fsops.call(fsguard.resolve_under_roots, path, path=path, op="share.import.resolve")
     except fsguard.FsDenied as e:
         return JSONResponse({"error": "denied", "reason": e.reason}, status_code=403)
+    except fsops.UNAVAILABLE as e:
+        return fsops.unavailable_response(e)
     try:
         item = await asyncio.to_thread(_snapshot_into_store, p)
     except _ImportError as e:
