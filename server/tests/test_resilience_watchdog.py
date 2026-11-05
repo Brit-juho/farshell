@@ -96,3 +96,26 @@ def test_fs_timeout_trips_breaker(tmp_path):
     finally:
         gate.set()
         breaker._reset_for_tests()
+
+
+def test_summary_shows_watchdog_running_while_status_file_is_missing(run_dir, monkeypatch):
+    """막 뜬 워치독은 상태 파일이 아직 없다 — 잠금을 쥐고 있으면 실행 중으로 보여야 한다(2026-11-05 fsh status 표시 결함)."""
+    (run_dir / "vt-pids" / "server.pid").write_text(str(__import__("os").getpid()))
+    monkeypatch.setattr(wd, "probe", lambda: ("ok", {"status": "ok", "problems": []}, "t"))
+    assert "WATCHDOG off" in wd.summary()
+    held = wd._single_instance()          # 워치독이 잠금을 쥔 상태를 흉내 낸다
+    try:
+        # 같은 프로세스의 두 번째 flock 은 막히지 않으므로 별도 프로세스로 확인한다
+        import subprocess, sys, textwrap
+        code = textwrap.dedent(f"""
+            import sys; sys.path.insert(0, {str(__import__('pathlib').Path(wd.__file__).parent)!r})
+            import server_watchdog as w
+            from pathlib import Path
+            w._run_dir = lambda: Path({str(run_dir)!r})
+            w.probe = lambda: ("ok", {{"status": "ok", "problems": []}}, "t")
+            print(w.summary())
+        """)
+        out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=30).stdout
+    finally:
+        held.close()
+    assert "WATCHDOG on fsh starting" in out

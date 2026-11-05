@@ -268,6 +268,23 @@ def _write_status(**info) -> None:
         pass
 
 
+def _lock_held() -> bool:
+    """다른 프로세스가 워치독 잠금을 쥐고 있는가(= 워치독이 돌고 있는가). 확인하려고 잡은 잠금은 바로 놓는다."""
+    try:
+        f = open(_run_dir() / "server-watchdog.lock", "a")
+    except OSError:
+        return False
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return True
+    else:
+        fcntl.flock(f, fcntl.LOCK_UN)
+        return False
+    finally:
+        f.close()
+
+
 def _single_instance():
     """이미 다른 워치독이 돌고 있으면 None. 잠금 파일은 열린 채로 둔다(프로세스가 끝나면 풀린다)."""
     f = open(_run_dir() / "server-watchdog.lock", "a")
@@ -308,6 +325,10 @@ def summary() -> str:
         st = None
     if st and _alive(st.get("pid")):
         lines.append(f"WATCHDOG on {st.get('mode', 'fsh')} {st.get('state', '?')} restarts={st.get('restarts', 0)}")
+    elif _lock_held():
+        # 막 떠서 상태 파일을 쓰기 전이거나 파일이 지워졌다. 워치독은 단일 인스턴스 잠금을 쥐고 있으므로
+        # 잠금이 잡혀 있으면 떠 있는 것이다(예전엔 이때 "중지"로 잘못 표시했다).
+        lines.append("WATCHDOG on fsh starting restarts=0")
     else:
         lines.append("WATCHDOG off")
     inc = _run_dir() / "incidents"
@@ -378,6 +399,8 @@ def main(argv=None) -> int:
         time.sleep(30)
         lock = _single_instance()
 
+    # 첫 판정(CHECK_SEC 뒤) 전에도 `fsh status`가 떠 있는 것으로 보도록 상태를 먼저 남긴다.
+    _write_status(mode=args.mode, state="starting", checked=time.time(), fails=0, server_pid=_server_pid())
     logger.info(f"감시 시작 — {CHECK_SEC:g}s 간격, 연속 {FAILS}회 실패면 진단 저장 후 재시작"
                 f"(시간당 최대 {RESTART_MAX}회), 기동 직후 {GRACE_SEC:g}s 유예, mode={args.mode}")
     fails = 0
