@@ -12,6 +12,8 @@
 import { batch, createSignal, createMemo, createEffect, onCleanup, onMount, For, Show } from 'solid-js';
 import { icon } from '../ui/icons.js';
 import { t } from '../core/i18n.js';
+// 상태 없는 순수 모듈 — 지연 청크에 복제돼도 된다.
+import { createPoll } from '../core/poll.js';
 import { render } from 'solid-js/web';
 import { wireRatioResizer } from '../layout/resizer.js';
 import { WIDE_MAX } from '../layout/breakpoints.js';
@@ -208,22 +210,27 @@ function Dock(props: { deps: DockDeps }) {
   // ── 배지(큐 대기 수 · 포트 수) ───────────────────────────────────────────
   // rail.js의 배지 폴링과 같은 값·같은 주기다. 그 파일을 import 해서 쓸 수는
   // 없어(지연 청크 제약) 호출만 같은 모양으로 반복한다 — 응답 두 개, 15초.
+  //
+  // 폴링은 core/poll.js — 이전 조회가 안 끝났으면 건너뛰고, 둘 다 실패하면 간격을 늘린다.
+  // 실패한 쪽 배지는 직전 값을 그대로 둔다(예전과 같다).
   const refreshBadges = async () => {
-    if (document.hidden) return;
     const next: Record<string, number> = { ...badges() };
-    try { next.queue = ((await props.deps.vtFetch('/api/queue'))?.items || []).length; } catch (_) {}
+    let ok = false;
+    try { next.queue = ((await props.deps.vtFetch('/api/queue'))?.items || []).length; ok = true; } catch (_) {}
     if (caps()?.ports) {
       try {
         const p = await props.deps.vtFetch('/api/ports');
         next.ports = (p?.ports || []).filter((x: any) => !x.protected).length;
+        ok = true;
       } catch (_) {}
     }
     setBadges(next);
+    if (!ok) throw new Error('dock badges: no response');
   };
   props.deps.vtFetch('/api/capabilities').then((c) => setCaps(c || {})).catch(() => setCaps({}));
-  refreshBadges();
-  const badgeTimer = setInterval(refreshBadges, BADGE_POLL_MS);
-  onCleanup(() => clearInterval(badgeTimer));
+  const badgePoll = createPoll(refreshBadges, { interval: BADGE_POLL_MS, immediate: true });
+  badgePoll.start();
+  onCleanup(() => badgePoll.stop());
 
   const wireResizer = (el: HTMLDivElement) => {
     wireRatioResizer(el, {
