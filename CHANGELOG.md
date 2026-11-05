@@ -8,7 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+---
+
+## [2.8.1] — 2026-11-05
+
 ### Fixed
+- `fsh status` no longer shows the server watchdog as stopped in the first seconds after `fsh start` or `fsh restart`: it reports the watchdog as starting while its single-instance lock is held, even before the first state file is written.
 - **A hung directory no longer takes the whole server down.** The repository scan used to hold its lock while `os.scandir` could block forever in `open()` on a network mount (seen with `~/OrbStack` when the browse root is the home folder); requests waited on that lock with no deadline, filled the default thread pool and every threaded API stopped answering for hours while the port stayed open. The scan now runs in a child process with a deadline, never enters network/virtual mounts (`VT_SCAN_INCLUDE_MOUNTS` to opt back in), quarantines a folder that hangs, and waiters get the previous list (or 503 `discovery_busy`) after 8 s.
 - Blocking calls moved off the event loop: pane resolution on every agent hook, the status sweep's screen reads, CLI detection in the PTY output path, queue listing, tmux preview, open-on-Mac, and user-path checks in the file tab, git, snippets, share import and worktree routes. A static test forbids the known blocking calls in async handlers.
 - WebSocket broadcasts send concurrently with a 2 s deadline per client and close a client that cannot keep up; `/ws-workspace` and `/ws-fs-watch` now send a ping every 15 s.
