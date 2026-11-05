@@ -8,7 +8,17 @@ const { importFresh } = require('./helpers/vm-esm');
 const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
 const doms = [];
 after(() => doms.forEach((d) => d.window.close()));
-const flush = async () => { for (let i = 0; i < 12; i++) await new Promise((r) => setImmediate(r)); };
+// 처리 중인 가짜 fetch 수. flush 는 이 값이 0이 될 때까지 기다린다 — 고정 횟수만 기다리면
+// 부하가 걸린 러너에서 응답 처리가 끝나기 전에 단언이 돌아 간헐적으로 실패했다.
+let pendingFetches = 0;
+// 타이머 단위로 양보한다. 워클릿의 종료 신호가 setTimeout(0)으로 오므로 setImmediate 만으로는 그보다 먼저 돌아온다.
+const tick = () => new Promise((r) => setTimeout(r, 0));
+const flush = async () => {
+  for (let round = 0; round < 1000; round++) {
+    for (let i = 0; i < 12; i++) await tick();
+    if (pendingFetches === 0) break;
+  }
+};
 
 async function build(o = {}) {
   const env = createDomEnv(html); doms.push(env.dom);
@@ -33,6 +43,10 @@ async function build(o = {}) {
   const chunks = [];
   const requests = [];
   w.fetch = async (url, opts = {}) => {
+    pendingFetches++;
+    try { return await fakeFetch(url, opts); } finally { pendingFetches--; }
+  };
+  const fakeFetch = async (url, opts = {}) => {
     url = String(url); requests.push({ url, opts });
     const json = (data, status = 200) => ({ ok: status < 400, status, json: async () => data });
     if (url.includes('/voice/chunk/cancel')) return json({ cancelled: true });
