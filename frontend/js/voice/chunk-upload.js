@@ -14,6 +14,8 @@
 import { retryWithBackoff } from './capture.js';
 
 export const GIVE_UP_MS = 25000;
+// core/api.js의 VOICE_UPLOAD_TIMEOUT_MS와 같은 값 — final 조각은 서버가 인식까지 끝내고 답한다.
+export const VOICE_UPLOAD_TIMEOUT_MS = 120000;
 const TRANSIENT_STATUS = new Set([429, 502, 503, 504]);
 const defaultSleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -26,6 +28,8 @@ export function makeChunkSender({ apiFetch, base, voiceId, token, sessionId = ''
     const q = `seq=${seq}${final ? '&final=1' : ''}${sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : ''}`;
     const res = await apiFetch(`${base}/voice/chunk?${q}`, {
       method: 'POST',
+      // final 조각은 서버가 인식까지 끝내고 답한다(/voice/input과 같다).
+      timeout: final ? VOICE_UPLOAD_TIMEOUT_MS : undefined,
       headers: { 'Content-Type': 'application/octet-stream', 'X-Voice-Id': voiceId, 'X-Voice-Target': token, 'X-Voice-Confirm': '1' },
       body: bytes,
     });

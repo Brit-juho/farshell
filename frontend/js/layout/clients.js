@@ -12,6 +12,7 @@ import { vtFetch } from '../core/api.js';
 import { activeSessionId } from '../core/store.js';
 import { icon } from '../ui/icons.js';
 import { t } from '../core/i18n.js';
+import { createPoll } from '../core/poll.js';
 
 // 훅(`VT_NOTIFY_CLIENT_EVENTS=1`)이 꺼져 있으면 attach/detach를 알 방법이
 // 없으므로 폴링으로 폴백한다. **그 사실을 UI에 표시하지 않는다**(계획서 §3):
@@ -113,15 +114,18 @@ export function mountClients(container, tmuxName, remote = null, sessionId = act
   // 열린 채 활성 pane이 바뀌어도 '나'가 엉뚱한 PTY를 가리키면 안 된다.
   const me = () => sessionId;
 
+  // 목록 하나를 읽어 그린다. 실패하면 오류 줄(다시 시도 포함)을 그리고 false —
+  // 폴러(core/poll.js)가 간격을 늘리는 데 쓴다. 마감을 넘긴 경우도 같은 오류 줄이다
+  // (core/api.js가 「서버가 응답하지 않습니다」로 던진다) — 「확인하는 중…」이 남지 않는다.
   async function refresh() {
-    if (stopped) return;
+    if (stopped) return true;
     const current = ++requestId;
     try {
       const q = remote
         ? `?session=${encodeURIComponent(tmuxName)}&screen=${encodeURIComponent(screen)}`
         : `?session=${encodeURIComponent(tmuxName)}&me=${encodeURIComponent(me() || '')}`;
       const data = await vtFetch(`${listUrl}${q}`);
-      if (stopped || current !== requestId) return;
+      if (stopped || current !== requestId) return true;
       list.innerHTML = '';
       status.replaceChildren();
       const clients = data.clients || [];
@@ -138,8 +142,9 @@ export function mountClients(container, tmuxName, remote = null, sessionId = act
       note.hidden = !readOnly;
       for (const c of clients) list.appendChild(row(c, detach, readOnly));
       if (!clients.length) status.textContent = t('연결된 화면이 없습니다');
+      return true;
     } catch (e) {
-      if (stopped || current !== requestId) return;
+      if (stopped || current !== requestId) return true;
       list.replaceChildren();
       solo.disabled = true;
       status.replaceChildren();
@@ -149,10 +154,15 @@ export function mountClients(container, tmuxName, remote = null, sessionId = act
       retry.type = 'button';
       retry.className = 'vt-btn sm quiet';
       retry.textContent = t('다시 시도');
-      retry.addEventListener('click', refresh);
+      retry.addEventListener('click', () => poll.kick());
       status.append(message, retry);
+      return false;
     }
   }
+  // 이전 조회가 안 끝났으면 건너뛰고, 실패하면 간격을 늘린다. 숨은 탭에서는 쉰다.
+  const poll = createPoll(async () => {
+    if (!(await refresh())) throw new Error('clients: load failed');
+  }, { interval: POLL_MS, immediate: true });
 
   // 원격이 view 등급이면 끊기만 403이 온다(목록은 보인다). 그 뒤로는 버튼을
   // 감추고 이유를 적는다 — 등급은 상대 맥에서만 올릴 수 있으므로 여기서
@@ -180,7 +190,7 @@ export function mountClients(container, tmuxName, remote = null, sessionId = act
         window.showToast(e.message || t('끊기 실패'), 'error');
       }
     }
-    refresh();
+    poll.kick();
   }
 
   solo.addEventListener('click', async () => {
@@ -201,10 +211,9 @@ export function mountClients(container, tmuxName, remote = null, sessionId = act
         window.showToast(e.message || t('실패'), 'error');
       }
     }
-    refresh();
+    poll.kick();
   });
 
-  refresh();
-  const timer = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
-  return () => { stopped = true; requestId++; clearInterval(timer); wrap.remove(); };
+  poll.start();
+  return () => { stopped = true; requestId++; poll.stop(); wrap.remove(); };
 }

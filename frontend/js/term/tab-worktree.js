@@ -5,6 +5,7 @@ import { setBranchChipMap } from '../layout/panes.js';
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
 import { sessionContext } from '../ui/session-context.js';
 import { t } from '../core/i18n.js';
+import { createPoll } from '../core/poll.js';
 
 export function branchChipMap(sessions) {
   const map = new Map();
@@ -17,16 +18,20 @@ export function branchChipMap(sessions) {
 }
 
 let revision = 0;
-export async function refreshTabWorktreeLabels() {
+// 실패는 던진다 — 폴러(core/poll.js)가 간격을 늘린다. 화면은 마지막 성공 값을 유지한다.
+async function _load() {
   const request = ++revision;
-  try {
-    const sessions = await vtFetch('/api/tmux/sessions');
-    if (request === revision && Array.isArray(sessions)) setBranchChipMap(branchChipMap(sessions));
-  } catch (_) { /* 마지막 성공 값을 유지한다 */ }
+  const sessions = await vtFetch('/api/tmux/sessions');
+  if (request === revision && Array.isArray(sessions)) setBranchChipMap(branchChipMap(sessions));
 }
 
-refreshTabWorktreeLabels();
-setInterval(() => { if (!document.hidden) refreshTabWorktreeLabels(); }, 60000);
+export async function refreshTabWorktreeLabels() {
+  try { await _load(); } catch (_) { /* 마지막 성공 값을 유지한다 */ }
+}
+
+// 정본은 아래 `tmux_sessions` push다. 이 60초 조회는 그 채널이 끊긴 동안의 안전망 —
+// 이전 조회가 안 끝났으면 건너뛰고, 숨은 탭에서는 쉰다.
+createPoll(_load, { interval: 60000, immediate: true }).start();
 onWorkspaceEvent('tmux_sessions', (msg) => {
   if (!Array.isArray(msg.sessions)) return;
   revision += 1;

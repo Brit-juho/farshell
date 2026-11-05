@@ -961,6 +961,18 @@
     word-break: break-word;
   }
 
+  /* ── 갱신 지연 표식 ───────────────────────────────────────────────────
+   * 레일·플릿·HUD가 한동안(core/poll.js의 staleAfter) 새 값을 못 받았을 때만
+   * 뜬다. 오류가 아니라 "보이는 값이 낡았을 수 있다"는 사실이라 상태색을 쓰지
+   * 않고 흐린 글자 한 줄로 둔다 — 서버가 아예 안 닿으면 도달 불가 배너가 따로 말한다. */
+  .vt-stale-mark {
+    flex: none;
+    color: var(--color-muted);
+    font: var(--weight-normal) var(--fs-3xs) / var(--leading-row) var(--font-ui);
+    white-space: nowrap;
+  }
+  .vt-stale-mark[hidden] { display: none; }
+
   /* ── 토스트 ────────────────────────────────────────────────────────────
    * legacy.css에서 옮겨왔다(그쪽 규칙은 지웠다 — 남겨두면 unlayered가 이겨서
    * 여기 고친 게 화면에 안 나온다).

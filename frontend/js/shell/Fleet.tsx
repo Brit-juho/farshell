@@ -19,9 +19,11 @@ import { renameSession as renameCatalogSession } from '../history/session-action
 import { agentMark } from './agent-mark.js';
 // core 청크의 공유 인스턴스로 연결된다(shell.js가 core.js에서 import — 복제되지 않는다).
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
+// 상태 없는 순수 모듈 — 지연 청크에 복제돼도 된다.
+import { createPoll, isStale } from '../core/poll.js';
 // git 배지 캐시·변경 알림 구독·행 조립은 레일과 **같은 것**을 쓴다(같은 shell 청크).
 import {
-  safeFetch, collectSessionRows, syncAgentsFromServer, createDiffWatcher, useLayoutVersion, type RailDeps,
+  collectSessionRows, syncAgentsFromServer, createDiffWatcher, useLayoutVersion, pollFetch, isNoResponse, type RailDeps,
 } from './rail-fetch.js';
 import {
   buildRailLists, splitRunning, groupSessionRows, rowMenuItems, rowSummaryDetails, runRowMenu, diffLabel, type SessionRow,
@@ -42,6 +44,8 @@ const SESSIONS_SAFETY_POLL_MS = 60000;
 // 에이전트 정보의 정본은 /ws-agent push다. 이건 끊긴 동안의 안전망(예전 4초).
 const AGENT_SAFETY_POLL_MS = 60000;
 const HOSTS_POLL_MS = 15000;
+// 보관 세션 카탈로그(로컬·폰 폭에서만). 가장 짧은 주기라 갱신 지연 판정의 기준이다.
+const CATALOG_POLL_MS = 5000;
 
 // C1 — Rail.tsx와 **같은 설정 키**를 읽고 쓴다. 폰과 데스크톱이 각자 다른
 // 호스트를 기억하면 창 폭을 바꿨을 때 목록이 이유 없이 바뀐 것처럼 보인다.
@@ -262,53 +266,85 @@ function Fleet(props: { deps: FleetDeps }) {
       const value = await historyApi('/api/session-catalog?' + params);
       if (request !== catalogRequest) return;
       setCatalog(more && catalog() ? { ...value, sessions: [...catalog()!.sessions, ...value.sessions] } : value);
-    } catch (_) { /* Old host retains its live list. */ }
+    } catch (e) {
+      // 옛 호스트는 지금의 라이브 목록을 그대로 쓴다. 답 자체가 없던 실패만 폴러에 알린다.
+      if (isNoResponse(e)) throw e;
+    }
   };
-  const catalogTimer = setInterval(() => { if (!document.hidden && window.innerWidth < 720) void refreshCatalog(); }, 5000);
-  const catalogChanged = () => { void refreshCatalog(); };
+  // 갱신 지연 표식 — Rail.tsx와 같은 규칙(폴링·push로 마지막으로 새 값을 받은 시각).
+  const mountedAt = Date.now();
+  let lastOkAt = 0;
+  const [stale, setStale] = createSignal(false);
+  const checkStale = () => setStale(isStale(lastOkAt, CATALOG_POLL_MS, Date.now(), mountedAt));
+  const markOk = () => { lastOkAt = Date.now(); checkStale(); };
+  const onSettled = (ok: boolean) => { if (ok) markOk(); else checkStale(); };
+  const staleTimer = setInterval(checkStale, 15000);
+  onCleanup(() => clearInterval(staleTimer));
+
+  // 첫 조회는 폭과 무관하게 한 번(예전과 같다), 그 뒤 주기 조회는 폰 폭에서만.
+  let catalogFirst = true;
+  const catalogPoll = createPoll(() => {
+    if (!catalogFirst && window.innerWidth >= 720) return undefined;
+    catalogFirst = false;
+    return refreshCatalog();
+  }, { interval: CATALOG_POLL_MS, immediate: true, onSettled });
+  catalogPoll.start();
+  const catalogChanged = () => { void refreshCatalog().catch(() => {}); };
   window.addEventListener('vt:catalog-changed', catalogChanged);
-  onCleanup(() => { clearInterval(catalogTimer); window.removeEventListener('vt:catalog-changed', catalogChanged); });
-  void refreshCatalog();
+  onCleanup(() => { catalogPoll.stop(); window.removeEventListener('vt:catalog-changed', catalogChanged); });
 
 
   let tmuxRevision = 0;
+  // 아래 refresh*는 폴러(core/poll.js)를 통해서만 불린다 — 실패를 던져 간격을 늘리게
+  // 하고, 진행 중이면 겹쳐 쏘지 않는다. 플릿 탭이 아닐 때는 아무것도 안 하고 끝난다.
+  const isFleetActive = () => document.documentElement.dataset.mobileTab === 'fleet';
   const refreshSessions = async () => {
+    if (!isFleetActive()) return;
     const request = ++tmuxRevision;
-    const list = await safeFetch<any[]>(props.deps, '/api/tmux/sessions');
+    const list = await pollFetch<any[]>(props.deps, '/api/tmux/sessions');
     if (request === tmuxRevision && Array.isArray(list)) setTmuxSessions(list);
   };
-  const refreshAgent = () => syncAgentsFromServer(props.deps as RailDeps);
+  const refreshAgent = async () => {
+    if (!isFleetActive()) return;
+    if (!(await syncAgentsFromServer(props.deps as RailDeps))) throw new Error('agent: no response');
+  };
   // 브랜치·변경량(레일과 같은 행)의 출처.
   const refreshRepos = async () => {
-    const data = await safeFetch<{ repos?: any[] }>(props.deps, '/api/repos');
+    if (!isFleetActive()) return;
+    const data = await pollFetch<{ repos?: any[] } | null>(props.deps, '/api/repos');
     if (data?.repos) setRepos(data.repos);
   };
   const refreshHosts = async () => {
-    const data = await safeFetch<{ hosts?: HostEntry[] }>(props.deps, '/api/hosts');
-    if (data?.hosts) setHosts(data.hosts);
+    if (!isFleetActive()) return;
+    try {
+      const data = await pollFetch<{ hosts?: HostEntry[] } | null>(props.deps, '/api/hosts');
+      if (data?.hosts) setHosts(data.hosts);
+    } catch (e) {
+      if (isNoResponse(e)) throw e;   // 옛 서버(404)는 실패가 아니다
+    }
   };
 
-  const isFleetActive = () => document.documentElement.dataset.mobileTab === 'fleet';
+  const sessionsPoll = createPoll(refreshSessions, { interval: SESSIONS_SAFETY_POLL_MS, onSettled });
+  const agentPoll = createPoll(refreshAgent, { interval: AGENT_SAFETY_POLL_MS, onSettled });
+  const hostsPoll = createPoll(refreshHosts, { interval: HOSTS_POLL_MS, onSettled });
+  // 저장소 목록은 주기 조회가 없다(예전과 같다) — 탭을 열 때만. 그래도 겹쳐 쏘지 않게 폴러에 싣는다.
+  const reposPoll = createPoll(refreshRepos, { interval: 24 * 60 * 60 * 1000, onSettled });
+  const fleetPolls = [sessionsPoll, agentPoll, hostsPoll, reposPoll];
+  for (const p of fleetPolls) p.start();
   const refreshAll = () => {
     if (document.hidden || !isFleetActive()) return;
-    void refreshSessions();
-    void refreshAgent();
-    void refreshRepos();
-    void refreshHosts();
+    for (const p of fleetPolls) p.kick();
   };
   refreshAll();
-  const t1 = setInterval(() => { if (!document.hidden && isFleetActive()) void refreshSessions(); }, SESSIONS_SAFETY_POLL_MS);
-  const t2 = setInterval(() => { if (!document.hidden && isFleetActive()) void refreshAgent(); }, AGENT_SAFETY_POLL_MS);
-  const t3 = setInterval(() => { if (!document.hidden && isFleetActive()) void refreshHosts(); }, HOSTS_POLL_MS);
   const onMobileTab = (e: Event) => {
     if ((e as CustomEvent).detail?.tab === 'fleet') refreshAll();
   };
   document.addEventListener('vt:mobile-tab', onMobileTab);
   const offSessions = onWorkspaceEvent('tmux_sessions', (msg: any) => {
-    if (Array.isArray(msg?.sessions)) { tmuxRevision += 1; setTmuxSessions(msg.sessions); }
+    if (Array.isArray(msg?.sessions)) { tmuxRevision += 1; setTmuxSessions(msg.sessions); markOk(); }
   });
   onCleanup(() => {
-    clearInterval(t1); clearInterval(t2); clearInterval(t3);
+    for (const p of fleetPolls) p.stop();
     document.removeEventListener('vt:mobile-tab', onMobileTab);
     offSessions();
   });
@@ -341,7 +377,7 @@ function Fleet(props: { deps: FleetDeps }) {
     catalog()?.sessions.find((x) => x.ended == null && x.runtime_id && x.tmux_name === row.tmuxName && x.physical_key === row.physicalKey);
   const openRecordOf = async (session: any) => {
     const { openSessionRecord } = await import('../history/session-record.js');
-    openSessionRecord(session.id, () => { void refreshCatalog(); });
+    openSessionRecord(session.id, () => { catalogPoll.kick(); });
   };
   const viewGroups = createMemo(() => { layoutVersion(); return groupSessionRows(running(),
     (window as any).getSessionViewGroups?.() || (window as any).getTabGroups?.() || []); });
@@ -434,6 +470,9 @@ function Fleet(props: { deps: FleetDeps }) {
   return (
     <div id="vt-fleet" aria-label={t('플릿')}>
       <button type="button" class="vt-btn" onClick={() => { void import('../history/panel.js').then(m => m.openHistory()); }}>{t('대화 보관함')}</button>
+      <Show when={stale()}>
+        <span class="vt-stale-mark vt-fleet-stale" role="status" title={t('서버에서 새 값을 한동안 받지 못했습니다. 보이는 값은 마지막으로 받은 것입니다.')}>{t('갱신 지연')}</span>
+      </Show>
       {/* C1 — 폰의 호스트 스위처. compact에서는 레일이 통째로 숨으므로 여기가
           유일한 진입점이다. 레일과 같은 규칙으로 호스트가 하나뿐이면 아예 안
           그린다. 좌표 팝업 대신 목록 위로 펼치는 시트 — 손가락으로 여는
@@ -581,16 +620,16 @@ function Fleet(props: { deps: FleetDeps }) {
           <Show when={prefs().view.byRepo} fallback={
             <RecentEnded data={data()} live={lists().sessions} count={prefs().view.recent} collapsed={prefs().view.recentCollapsed}
               onToggle={() => setPref(VIEW_KEY, encodeRailView({ ...prefs().view, recentCollapsed: !prefs().view.recentCollapsed }))}
-              onChanged={() => { void refreshCatalog(); }} />}>
+              onChanged={() => { catalogPoll.kick(); }} />}>
             <CatalogTree data={data()} live={lists().sessions}
               renderLive={row => <Row row={row} onOpen={() => { void openRow(row); }} onLongPress={() => openMenu(row)}
                 onAnswer={() => Promise.resolve()} onSeen={() => seenRow(row)} />}
-              onChanged={() => { void refreshCatalog(); }} onMore={() => { void refreshCatalog(true); }} />
+              onChanged={() => { catalogPoll.kick(); }} onMore={() => { void refreshCatalog(true).catch(() => {}); }} />
           </Show>
-          <ArchiveEntry count={data().archived_count ?? 0} onOpen={() => { setArchiveOpen(true); void refreshCatalog(); }} />
+          <ArchiveEntry count={data().archived_count ?? 0} onOpen={() => { setArchiveOpen(true); catalogPoll.kick(); }} />
         </>}>
-          <ArchiveList data={data()} onBack={() => { setArchiveOpen(false); void refreshCatalog(); }}
-            onChanged={() => { void refreshCatalog(); }} onMore={() => { void refreshCatalog(true); }} />
+          <ArchiveList data={data()} onBack={() => { setArchiveOpen(false); catalogPoll.kick(); }}
+            onChanged={() => { catalogPoll.kick(); }} onMore={() => { void refreshCatalog(true).catch(() => {}); }} />
         </Show>}
       </Show>
       {/* Rail.tsx 하단의 "+ 새 세션"과 같은 액션(session.add-menu) — 목록이
@@ -655,7 +694,7 @@ function Fleet(props: { deps: FleetDeps }) {
                           classList={{ danger: !!it.danger }}
                           onClick={() => {
                             if (it.id === 'record') { const linked = catalogOf(row); if (linked) runMenuAction(() => { void openRecordOf(linked); }); return; }
-                            if (it.id === 'rename') { if (row.sessionId) startRename(); else { const linked = catalogOf(row); if (linked) runMenuAction(() => { void renameCatalogSession(linked).then(() => refreshCatalog()); }); } return; }
+                            if (it.id === 'rename') { if (row.sessionId) startRename(); else { const linked = catalogOf(row); if (linked) runMenuAction(() => { void renameCatalogSession(linked).then(() => catalogPoll.kick()); }); } return; }
                             runMenuAction(() => runRowMenu(it.id, row, window, () => {}, (d) => fleetMove(row, d)));
                           }}
                         >

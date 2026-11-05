@@ -9,6 +9,7 @@ import type { AgentState } from '../core/types.js';
 import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
 import { t } from '../core/i18n.js';
 import { alertDialog } from '../core/dialog-lazy.js';
+import { timedFetch } from '../core/api.js';
 
 // ── 행 모양 ────────────────────────────────────────────────────────────────
 
@@ -616,7 +617,8 @@ export function runRowMenu(
 
 async function closeDelegation(id: string, w: any): Promise<void> {
   try {
-    const res = await fetch(`/api/delegations/${encodeURIComponent(id)}/close-by-user`, { method: 'POST', credentials: 'same-origin' });
+    // 쿠키만 싣는 요청이라 vtFetch를 못 쓴다 — 주소·헤더는 그대로, 마감만 붙인다.
+    const res = await timedFetch(`/api/delegations/${encodeURIComponent(id)}/close-by-user`, { method: 'POST', credentials: 'same-origin' });
     if (!res.ok) throw new Error(String(res.status));
     w.showToast?.(t('위임을 닫았습니다. 세션은 남아 있습니다.'));
   } catch {
