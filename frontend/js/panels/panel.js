@@ -12,6 +12,9 @@ import { icon } from '../ui/icons.js';
 // 상수뿐이라 안전하다(Rail.tsx의 같은 예외 주석 참고).
 import { COMPACT_MAX } from '../layout/breakpoints.js';
 import { t } from '../core/i18n.js';
+import { createPoll } from '../core/poll.js';
+import { GET_TIMEOUT_MS } from '../core/api.js';
+import { errorState } from '../ui/empty.js';
 
 // 모달형 패널(코드 뷰어/포트/큐)의 공용 뼈대. 구 js/panel.js (F2에서 이관).
 // 세 패널이 토글 진입 · backdrop 클릭 닫기 · Esc 닫기 · 닫을 때 fitAndResize ·
@@ -187,7 +190,7 @@ export function openPanel(opts) {
         <div class="vt-viewer-card" role="dialog" aria-modal="${modal}" aria-label="${opts.ariaLabel}">
           <div class="vt-viewer-head">${opts.headHTML}<button class="vt-icon-btn vt-vw-x" aria-label="${t('닫기')}">${icon('x', 14)}</button></div>
           ${opts.extraHTML || ''}
-          <div class="vt-vw-body" id="${opts.bodyId}">${opts.bodyHTML || `<div class="vt-vw-loading">${t('불러오는 중…')}</div>`}</div>
+          <div class="vt-vw-body" id="${opts.bodyId}">${opts.bodyHTML || `<div class="vt-vw-loading" data-vt-initial>${t('불러오는 중…')}</div>`}</div>
         </div>
       `;
       // 안쪽 id도 인스턴스별로 옮긴다. 순서가 중요하다 — innerHTML을 채운
@@ -273,10 +276,10 @@ export function closePanel(idOrEl, options = {}) {
       if (el._vtMobileHistory && options.history === 'replace') {
         try { history.replaceState(_withoutPanelState(history.state), '', location.href); } catch (_) {}
       }
-      if (el._vtTimer) clearInterval(el._vtTimer);
-      // 폴링과 짝인 visibilitychange 리스너 — 같이 떼지 않으면 닫힌 패널의
-      // 핸들러가 document에 남는다(탭을 오갈 때마다 쌓인다).
-      if (el._vtOnVisible) document.removeEventListener('visibilitychange', el._vtOnVisible);
+      // 폴링을 멈춘다 — visibilitychange 리스너도 같이 뗀다(core/poll.js). 안 떼면 닫힌
+      // 패널의 핸들러가 document에 남는다(탭을 오갈 때마다 쌓인다).
+      if (el._vtPoll) { el._vtPoll.stop(); el._vtPoll = null; }
+      if (el._vtLoadWatch) { clearTimeout(el._vtLoadWatch); el._vtLoadWatch = null; }
       el._vtDisposeKeys?.();
       el.remove();
       if (el._vtOnClose) el._vtOnClose();
@@ -304,21 +307,63 @@ window.addEventListener('popstate', () => {
     //
     // 돌아왔을 때는 다음 tick을 기다리지 않고 한 번 즉시 따라잡는다 — 안
     // 그러면 포트 패널이 최대 2초, 파일 패널이 10초 동안 낡은 값을 보여준다.
+//
+    // 폴링 자체는 core/poll.js가 한다 — 이전 실행이 안 끝났으면 건너뛰고(서버가 답을
+    // 안 하던 사고에서 tick마다 요청이 쌓였다), 실패하면 간격을 늘린다. 실패를 알리려면
+    // fn이 거부된 Promise를 돌려줘야 한다(안에서 삼키면 늘 성공으로 본다).
+    //
+    // 첫 「불러오는 중…」이 마감을 넘겨도 남아 있으면 다시 시도할 수 있는 오류로 바꾼다
+    // — 링만 영원히 남는 화면을 만들지 않는다. 각 패널의 refresh가 오류를 직접 그리면
+    // 자리표시가 이미 사라져 이 경로는 쓰이지 않는다.
+export const INITIAL_LOAD_TIMEOUT_MS = GET_TIMEOUT_MS + 5000;
+
+function _initialPlaceholder(el) {
+  return el.querySelector('.vt-vw-loading[data-vt-initial]');
+}
+
+function _showInitialError(el, err, retry) {
+  const ph = _initialPlaceholder(el);
+  if (!ph) return;
+  const box = errorState(t('불러오지 못했습니다'), err || t('서버가 응답하지 않습니다'), () => {
+    // 다시 자리표시로 돌려 두고 한 번 더 — 그 사이 또 막히면 같은 경로로 돌아온다.
+    const again = document.createElement('div');
+    again.className = 'vt-vw-loading';
+    again.setAttribute('data-vt-initial', '');
+    again.textContent = t('불러오는 중…');
+    box.replaceWith(again);
+    retry();
+  });
+  box.setAttribute('data-vt-initial-error', '');
+  ph.replaceWith(box);
+}
+
 export function setPanelPoll(idOrEl, ms, fn) {
       const el = typeof idOrEl === 'string' ? document.getElementById(idOrEl) : idOrEl;
       if (!el) return;
+      if (el._vtPoll) el._vtPoll.stop();
       // 살아있는지는 **그 엘리먼트 자체**로 본다(id 재조회가 아니라) — pane
       // 인스턴스가 여럿이면 id 조회는 남의 것을 찾아와 "아직 열려 있다"고
       // 오판한다. isConnected는 DOM에서 떨어진 순간 false가 된다.
-      const tick = () => {
-        if (!el.isConnected) { closePanel(el); return false; }
-        if (document.hidden) return true;
-        fn();
-        return true;
+      const poll = createPoll(() => {
+        if (!el.isConnected) { closePanel(el); return undefined; }
+        return fn();
+      }, {
+        interval: ms,
+        onSettled: (ok, err) => {
+          if (!ok && el.isConnected) _showInitialError(el, err, () => { armWatch(); poll.kick(); });
+        },
+      });
+      el._vtPoll = poll;
+      poll.start();
+      const armWatch = () => {
+        if (el._vtLoadWatch) clearTimeout(el._vtLoadWatch);
+        el._vtLoadWatch = setTimeout(() => {
+          el._vtLoadWatch = null;
+          if (!el.isConnected || !_initialPlaceholder(el)) return;
+          _showInitialError(el, null, () => { armWatch(); poll.kick(); });
+        }, INITIAL_LOAD_TIMEOUT_MS);
       };
-      el._vtTimer = setInterval(tick, ms);
-      el._vtOnVisible = () => { if (!document.hidden) tick(); };
-      document.addEventListener('visibilitychange', el._vtOnVisible);
+      if (_initialPlaceholder(el)) armWatch();
     }
 
 

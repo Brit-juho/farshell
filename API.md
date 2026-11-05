@@ -394,6 +394,7 @@ header, cookie or `?token=` (400 `ambiguous_principal` otherwise). Only these me
 | POST | `/api/clipboard/push` | clipboard daemon |
 | POST | `/voice/cancel`, `/voice/input`, `/voice/target`, `/voice/bind`, `/voice/stt/preload` | voice daemon, `voice_bind.py` |
 | GET | `/api/capabilities`, `/api/tmux/sessions` | `fsh manage` |
+| GET | `/api/health/ready` | `fsh status`, `fsh doctor`, `server_watchdog.py` |
 | DELETE | `/api/tmux/kill/{tmux_name}` | `fsh manage` |
 | PATCH | `/api/sessions/{session_id}` | `fsh manage` |
 | POST | `/api/notify/client-event` | `tmux_client_notify.sh` |
@@ -570,6 +571,8 @@ With `VT_AUTHZ_ENFORCE=peer` the routes in this table that act on another Mac (t
 | Method | Path | Description |
 |--------|------|------|
 | GET | `/api/capabilities` | Server capability info (TTS/STT/tunnel/version, etc.) |
+| GET | `/api/health/live` | Liveness: the event loop answered. **Open before login**; returns only `{ok, pid, uptime}` |
+| GET | `/api/health/ready` | Readiness: whether the server can actually take work. Probes every thread pool (`default`, `fs`, `git`, `proc`, `net`, `slow`) with a no-op under a 1.5 s deadline, and reports `status` (`ok`/`degraded`/`unready`), `problems`, per-pool counters, thread work running > 5 s (`slow_ops`), held/contended locks, loop lag, abandoned child processes, risky mounts, blocked paths, scan quarantine and last scans. 503 when `unready`. Authenticated callers only (cookie, machine token, unix socket) — it names paths and operations |
 | GET | `/api/workspace` | Fetch workspace sync state (tabs/UI state) |
 | PUT | `/api/workspace` | Save workspace state |
 | GET | `/api/device-settings` | Fetch persistent settings for `?profile=mobile|mac|windows|linux`; omitted: legacy `vt_device` cookie scope (`local` without it) |

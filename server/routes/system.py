@@ -418,7 +418,7 @@ async def device_settings_get(request: Request):
             return JSONResponse({"error": "unknown device profile"}, status_code=400)
         settings = device_settings.load_profile(profile, did)
         return {"device_id": device_settings.profile_id(profile), "profile": profile, "settings": settings}
-    return {"device_id": did, "settings": device_settings.load(did)}
+    return {"device_id": did, "settings": await asyncio.to_thread(device_settings.load, did)}
 
 
 @router.put("/api/device-settings")
@@ -434,7 +434,7 @@ async def device_settings_put(request: Request):
             return JSONResponse({"error": "unknown device profile"}, status_code=400)
         device_settings.load_profile(profile, did)
         did = device_settings.profile_id(profile)
-    merged = device_settings.save(did, values)
+    merged = await asyncio.to_thread(device_settings.save, did, values)   # flock(최대 5초 대기) — 루프 밖에서
     return {"ok": True, "device_id": did, "settings": merged}
 
 
@@ -461,18 +461,13 @@ async def broadcast_workspace_event(msg: dict) -> None:
     """`/ws-workspace`에 붙은 모든 클라이언트로 push. workspace_put과 N8(워크트리
     변경) 양쪽이 공유하는 단일 브로드캐스트 경로 — 각자 클라이언트 집합을 순회하는
     코드를 복제하지 않는다."""
-    dead = set()
-    for ws in list(_workspace_clients):
-        try:
-            await ws.send_json(msg)
-        except Exception:
-            dead.add(ws)
-    _workspace_clients.difference_update(dead)
+    from resilience import wsutil
+    await wsutil.broadcast(_workspace_clients, msg)
 
 
 @router.get("/api/workspace")
 async def workspace_get():
-    return workspace.load()
+    return await asyncio.to_thread(workspace.load)
 
 
 @router.put("/api/workspace")
@@ -618,8 +613,10 @@ async def ws_workspace(websocket: WebSocket):
     _workspace_clients.add(websocket)
     _ensure_sessions_loop()
     session_watchdog = auth.spawn_session_watchdog(websocket, token)
+    from resilience import wsutil
+    pinger = wsutil.start_pinger(websocket)
     try:
-        await websocket.send_json({"type": "workspace_snapshot", "data": workspace.load()})
+        await websocket.send_json({"type": "workspace_snapshot", "data": await asyncio.to_thread(workspace.load)})
         # 재연결이면 끊긴 동안의 변경을 놓쳤을 수 있다 — 지금 목록을 이 연결에만 준다.
         # (_sessions_last는 건드리지 않는다: 다른 연결들은 마지막 브로드캐스트 값을 들고 있다.)
         from routes.tmux import collect_tmux_sessions
@@ -632,6 +629,7 @@ async def ws_workspace(websocket: WebSocket):
         pass
     finally:
         session_watchdog.cancel()
+        pinger.cancel()
         _workspace_hidden.discard(websocket)
         _workspace_clients.discard(websocket)
 

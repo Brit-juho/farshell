@@ -16,6 +16,7 @@ import tmux_runner
 from deps import pty_mgr, session_store, output_watcher
 from session_store import new_session_id
 from i18n import tr
+from resilience import pools as res_pools
 
 logger = logging.getLogger(__name__)
 
@@ -360,7 +361,13 @@ async def create_tmux_session(request: Request):
     # 있게 해준다고 새로운 권한이 생기는 게 아니다. 존재하는 절대경로인지만 본다.
     requested_cwd = str(body.get("cwd") or "").strip()
     if requested_cwd:
-        if not os.path.isabs(requested_cwd) or not os.path.isdir(requested_cwd):
+        # isdir 도 그 경로에 닿는다 — 원격 마운트일 수 있으니 `fs` 풀에서 기한을 둔다.
+        try:
+            is_dir = os.path.isabs(requested_cwd) and await res_pools.run(
+                "fs", os.path.isdir, requested_cwd, op="tmux.create.cwd", key=requested_cwd, timeout=5)
+        except (res_pools.OpTimeout, res_pools.Busy):
+            is_dir = False
+        if not is_dir:
             return JSONResponse({"error": tr("cwd가 존재하는 절대경로가 아닙니다")}, status_code=400)
         start_dir = requested_cwd
     else:
@@ -419,7 +426,9 @@ async def create_tmux_session(request: Request):
     if auto_open and platform_utils.IS_MACOS and re.fullmatch(r"[A-Za-z0-9_\-]+", tmux_name):
         attach_cmd = f"tmux -L {TMUX_SOCKET} attach -t {tmux_name}"
         try:
-            ok = platform_utils.spawn_mac_terminal(attach_cmd)
+            # osascript(최대 8초)라 루프 위에서 부르지 않는다.
+            ok = await res_pools.run("proc", platform_utils.spawn_mac_terminal, attach_cmd,
+                                     op="spawn_mac_terminal", timeout=15)
             if not ok:
                 logger.info("맥 터미널 자동 오픈 — 지원 앱 없음")
         except Exception as e:
@@ -488,13 +497,20 @@ async def open_tmux_on_mac(request: Request):
 
         attach_cmd = f"tmux -L {TMUX_SOCKET} attach -t {tmux_name}"
         try:
-            ok = platform_utils.spawn_mac_terminal(attach_cmd)
+            ok = await res_pools.run("proc", platform_utils.spawn_mac_terminal, attach_cmd,
+                                     op="spawn_mac_terminal", timeout=15)
             return {"ok": bool(ok), "skipped": False, "error": None if ok else tr("지원하는 터미널 앱이 없음")}
         except Exception as e:
             logger.warning(f"open-on-mac 실패: {e}")
             return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
     finally:
         _mac_open_locks.discard(tmux_name)
+
+
+def _catalog_host_id():
+    from session_catalog.db import database, host_id
+    with database() as db:
+        return host_id(db)
 
 
 @router.post("/api/tmux/attach")
@@ -517,8 +533,8 @@ async def attach_tmux_session(request: Request):
         try:
             catalog_id = identifier(body.get('catalog_session_id'))
             expected_runtime = identifier(body.get('runtime_id'))
-            with database() as db:
-                catalog_host = host_id(db)
+            # sqlite + flock(합쳐 최대 약 4초) — 루프 밖에서.
+            catalog_host = await asyncio.to_thread(_catalog_host_id)
             if body.get('catalog_host') is not None and identifier(body['catalog_host']) != catalog_host:
                 raise Refused('host_changed')
             runtime, physical = await asyncio.to_thread(catalog_inventory.resolve_runtime, catalog_id)
@@ -564,7 +580,11 @@ async def kill_tmux_session(tmux_name: str):
 @router.get("/api/tmux/preview/{tmux_name}")
 async def get_tmux_preview(tmux_name: str, lines: int = 20, ansi: int = 1):
     import preview
-    content = preview.capture_pane(tmux_name, lines=lines, ansi=bool(ansi))
+    try:
+        content = await res_pools.run("proc", preview.capture_pane, tmux_name, lines=lines, ansi=bool(ansi),
+                                      op="tmux.preview", key=tmux_name, timeout=5)
+    except (res_pools.OpTimeout, res_pools.Busy):
+        content = None
     if content is None:
         return {"name": tmux_name, "content": "", "available": False}
     return {"name": tmux_name, "content": content, "available": True, "lines": lines}

@@ -25,6 +25,7 @@ from stt_engines.base import NotReady
 from stt_engines.catalog import ModelSpec
 from stt_engines.env import HostEnv, detect
 from i18n import tr
+from resilience.locks import TimedLock
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,10 @@ _CUSTOM_RE = re.compile(
     r"^custom:(mlx_qwen3|llamacpp_qwen3):([A-Za-z0-9][A-Za-z0-9._-]{0,95}/[A-Za-z0-9][A-Za-z0-9._-]{0,95})$")
 
 _setup = setup_jobs.SetupManager()
-_run_lock = threading.Lock()          # 엔진 load/unload/transcribe 직렬화
+# 엔진 load/unload/transcribe 직렬화. 모델 로드는 최대 180초까지 쥔다 — 쥔 쪽이 /api/health/ready 에 보이고,
+# 기다리기만 하는 쪽(unload)은 기한을 둔다.
+_run_lock = TimedLock("stt.run")
+UNLOAD_WAIT = 5.0
 _state_lock = threading.Lock()        # 아래 카운터·타임스탬프 보호
 _waiting = 0
 _last_use = 0.0
@@ -154,11 +158,18 @@ def _warm_decoder() -> None:
 
 
 def unload() -> bool:
-    with _run_lock:
+    """엔진을 내린다. 엔진이 쓰이는 중이면 `UNLOAD_WAIT`초만 기다리고 포기한다(False) — 유휴 감시가 다음
+    주기에 다시 시도한다. 예전엔 무기한이라, 전사(최대 90초)·로드(180초) 동안 부른 스레드가 묶였다."""
+    if not _run_lock.acquire(True, UNLOAD_WAIT, op="stt.unload"):
+        logger.info("STT 엔진 사용 중 — 내리기를 다음으로 미룸")
+        return False
+    try:
         was = _loaded_engine() is not None
         for inst in list(stt_engines._instances.values()):
             inst.unload()
         return was
+    finally:
+        _run_lock.release()
 
 
 def loaded() -> bool:

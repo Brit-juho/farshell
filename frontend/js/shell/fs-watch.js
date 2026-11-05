@@ -17,6 +17,7 @@
 
 import { WS_BASE, _tokenQuery } from '../core/env.js';
 import { relayWsPath } from '../core/host-route.js';
+import { watchSocketLiveness } from '../core/ws-watchdog.js';
 
 const _subs = new Map();   // `${kind}\n${path}` -> Set<fn>
 let _ws = null;
@@ -108,7 +109,11 @@ function _connect() {
     return;
   }
   _ws = ws;
+  // 생존 감시(core/ws-watchdog.js) — 서버 ping(15초)이 45초 동안 안 오면 닫아 재연결을 돌린다.
+  let liveness = null;
   ws.onopen = () => {
+    liveness?.stop();
+    liveness = watchSocketLiveness(ws);
     _open = true;
     clearTimeout(_stableTimer);
     _stableTimer = setTimeout(() => { _retries = 0; }, 3000);
@@ -119,8 +124,13 @@ function _connect() {
     if (reconnected) for (const k of Array.from(_subs.keys())) _emit(k);
   };
   ws.onmessage = (e) => {
+    liveness?.alive();
     let msg;
     try { msg = JSON.parse(e.data); } catch (_) { return; }
+    if (msg && msg.type === 'ping') {
+      try { ws.send(JSON.stringify({ type: 'pong' })); } catch (_) { /* 답하지 않아도 된다 */ }
+      return;
+    }
     if (msg && msg.type === 'watching') {
       _failed = false;
       _rejected = new Set((Array.isArray(msg.rejected) ? msg.rejected : [])
@@ -135,8 +145,12 @@ function _connect() {
     }
   };
   ws.onclose = () => {
+    liveness?.stop();
+    liveness = null;
     clearTimeout(_stableTimer);
-    if (_ws === ws) { _ws = null; _open = false; _rejected = new Set(); }
+    // 이미 다른 소켓으로 갈아탔거나(_close 뒤 새 연결) 닫힌 뒤면 재연결을 또 걸지 않는다.
+    if (_ws !== ws) return;
+    _ws = null; _open = false; _rejected = new Set();
     _scheduleReconnect();
   };
   // onerror 뒤에는 항상 onclose가 온다 — 여기서 재연결을 걸면 두 번 건다.

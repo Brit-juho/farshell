@@ -53,10 +53,22 @@ BLOCKING = {
     # tmux list-panes + 프로세스 조회. `/api/agents`·`/ws-agent` 스냅샷이 이벤트
     # 루프에서 바로 불렀다 — 레일이 4초마다 부르던 경로다(2026-09-30).
     "agent_detector.detect_all", "agent_detector.detect",
+    # 2026-11-05 M5 사고 후속 — 한 겹 아래에서 tmux·osascript·사용자 경로를 만지는 것들. 훅 수신
+    # (/api/agent/event)이 pane 해석을 루프 위에서 했고, 파일 탭·git 화면은 사용자 경로의 resolve()
+    # (원격 마운트면 멈출 수 있다)를 루프 위에서 했다.
+    "pane_resolve.resolve", "tmux_target.session_for_cwd", "tmux_target.session_pane",
+    "tmux_target.resolve_voice_target_pane", "tmux_target.pane_label",
+    "preview.capture_pane", "platform_utils.spawn_mac_terminal",
+    "agent_status.recover_from_screens",
+    "fsguard.resolve_under_roots", "worktree.precheck", "snippet_store.resolve_project_key",
+    # flock(최대 5초 바쁜 대기)·sqlite(약 4초) — CLI 가 잠금을 쥐고 있으면 그동안 루프가 멈춘다.
+    "database", "workspace.load", "device_settings.load", "device_settings.save",
 }
 
 # 스레드로 넘겨주는 것들 — 여기 첫 인자로 들어간 함수는 안전하다.
 DISPATCHERS = {"to_thread", "run_in_executor"}
+# resilience 의 이름 있는 풀(기한 포함). 이름이 흔해서(`run`) 전체 이름으로만 인정한다.
+QUALIFIED_DISPATCHERS = {"res_pools.run", "pools.run", "fsops.call"}
 
 MAX_DEPTH = 3   # 동기 헬퍼를 몇 겹까지 따라 들어갈지
 
@@ -98,7 +110,8 @@ def _threaded_names(fn: ast.AST) -> set:
     """to_thread/run_in_executor에 넘겨진 함수 이름들(중첩 정의 안쪽까지 본다)."""
     names = set()
     for node in ast.walk(fn):
-        if isinstance(node, ast.Call) and _qual(node.func).split(".")[-1] in DISPATCHERS:
+        if isinstance(node, ast.Call) and (_qual(node.func).split(".")[-1] in DISPATCHERS
+                                           or _qual(node.func) in QUALIFIED_DISPATCHERS):
             for arg in node.args:
                 q = _qual(arg)
                 if q:

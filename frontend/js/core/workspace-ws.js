@@ -15,6 +15,7 @@
 
 import { WS_BASE, _tokenQuery } from './env.js';
 import { relayWsPath } from './host-route.js';
+import { watchSocketLiveness } from './ws-watchdog.js';
 
 const _subs = new Map();   // type -> Set<fn>
 let _ws = null;
@@ -58,8 +59,13 @@ function connect() {
   } catch (_) {
     return _scheduleReconnect();
   }
+  const ws = _ws;
+  // 생존 감시(core/ws-watchdog.js) — 서버 ping(15초)이 45초 동안 안 오면 닫아 재연결을 돌린다.
+  let liveness = null;
 
   _ws.onopen = () => {
+    liveness?.stop();
+    liveness = watchSocketLiveness(ws);
     _sendVisibility();
     _emit('ws_open', {});   // 재연결 때 놓친 것을 맞추려는 구독자용(share-lazy.js)
     // [회귀 fb827a6와 같은 이유] accept 직후 닫히는 half-open flap에서 지수가
@@ -69,12 +75,17 @@ function connect() {
   };
 
   _ws.onmessage = (e) => {
+    liveness?.alive();
     let msg;
     try { msg = JSON.parse(e.data); } catch (_) { return; }
     if (msg && msg.type) _emit(msg.type, msg);
   };
 
   _ws.onclose = () => {
+    liveness?.stop();
+    liveness = null;
+    // 이미 다른 소켓으로 갈아탔으면 옛 소켓의 close가 재연결을 하나 더 만들지 않게 한다.
+    if (_ws !== ws) return;
     clearTimeout(_stableTimer);
     _ws = null;
     _scheduleReconnect();

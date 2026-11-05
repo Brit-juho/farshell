@@ -23,6 +23,9 @@
 //   2. 502 / 503 / 504 — 입구(터널)는 살아 있는데 뒤의 서버가 없다.
 //      `fsh restart` 중 잠깐, 또는 서버만 죽은 상태가 여기 해당한다(실측:
 //      cloudflared를 살려 둔 채 백엔드를 죽이면 정확히 502가 나온다).
+//   3. 마감 초과(`core/api.js`의 요청 시간 제한) — 연결은 받는데 답이 없다.
+//      서버 스레드 풀이 막혔던 사고에서 1·2 어느 쪽도 일어나지 않아 배너가 끝내
+//      안 떴다. 'hung'으로 따로 띄운다.
 //
 // **401/403은 도달 불가가 아니다.** 서버가 멀쩡히 답한 것이고, 그건 로그인
 // 게이트(`gate.js`)가 처리할 일이다. 쿠키 만료(24h)로 401이 쏟아질 때 이 배너가
@@ -56,10 +59,16 @@ const MESSAGES = {
     title: t('서버가 응답하지 않습니다'),
     sub: t('입구는 살아 있지만 서버가 내려가 있습니다. 재시작 중이라면 곧 자동으로 복구됩니다.'),
   },
+  // 연결은 받는데 답이 없음 — 요청이 마감(core/api.js)까지 안 끝났다. 서버 프로세스는
+  // 떠 있지만 일을 못 하는 상태라 저절로 낫지 않을 수 있다.
+  hung: {
+    title: t('서버가 응답하지 않습니다'),
+    sub: t('요청이 제시간에 끝나지 않습니다. 계속되면 맥에서 fsh restart를 실행하세요.'),
+  },
 };
 
 let _fails = 0;
-let _reason = null;   // 'offline' | 'gateway' | null
+let _reason = null;   // 'offline' | 'gateway' | 'hung' | null
 
 /** 현재 도달 불가로 판정된 상태인가. */
 export function isUnreachable() {
@@ -133,6 +142,16 @@ export function noteResponse(status) {
 export function noteNetworkError() {
   _fails += 1;
   if (_fails >= FAIL_THRESHOLD) { _reason = 'offline'; _render(); }
+}
+
+/**
+ * 요청이 마감 안에 안 끝났다(core/api.js의 시간 제한). 연결이 매달린 채 응답이
+ * 없는 서버는 거부도 오류 코드도 주지 않아서, 이걸 따로 세지 않으면 배너가 끝내
+ * 안 뜬다 — 실제로 그랬다.
+ */
+export function noteTimeout() {
+  _fails += 1;
+  if (_fails >= FAIL_THRESHOLD) { _reason = 'hung'; _render(); }
 }
 
 /** 정상 응답 — 카운터를 리셋하고 배너를 내린다. */

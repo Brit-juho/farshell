@@ -19,6 +19,7 @@ import { E2E_ENABLED, wrapE2E, _wsQuery } from './e2e.js';
 import { fitAndResize } from './resize.js';
 import { updateConnStatus, _setConnOverlayDetail } from './conn-overlay.js';
 import { t } from '../core/i18n.js';
+import { watchSocketLiveness } from '../core/ws-watchdog.js';
 
 const TERMINAL_CLOSE_CODES = new Set([4001, 4004, 4005]);
 
@@ -78,8 +79,13 @@ export function startSessionSocket(id, term) {
     const sock = new WebSocket(`${WS_BASE}${_wsPath()}`);
     sock.binaryType = 'arraybuffer';
     getSession(id).ws = sock;
+    // 생존 감시(core/ws-watchdog.js) — 서버 ping이 15초마다 오므로, 45초 동안 아무것도
+    // 안 오면 죽은 연결로 보고 닫는다. 그러면 아래 onclose의 재연결 백오프와 오버레이가 돈다.
+    let _liveness = null;
 
     sock.onopen = () => {
+      _liveness?.stop();
+      _liveness = watchSocketLiveness(sock);
       updateConnStatus(id, true);
       // 연결(첫 연결 포함) 직후엔 서버가 scrollback을 먼저 재생한다 — 그 안에
       // vim/tmux copy-mode 등에서 나온 과거 OSC52 시퀀스가 섞여 있을 수 있으므로,
@@ -111,6 +117,7 @@ export function startSessionSocket(id, term) {
 
     // Phase 8 G2: 서버 ping 응답 (heartbeat pong) + scrollback 재생 종료 신호
     sock.addEventListener('message', (e) => {
+      _liveness?.alive();   // 바이너리 출력도 살아 있다는 뜻이다
       if (typeof e.data !== 'string') return;
       try {
         const msg = JSON.parse(e.data);
@@ -175,6 +182,8 @@ export function startSessionSocket(id, term) {
     );
 
     sock.onclose = (ev) => {
+      _liveness?.stop();
+      _liveness = null;
       clearTimeout(_stableTimer);
       // ⚠ 탭을 사용자가 직접 닫은 경우(removeSession이 세션을 이미 제거)에도
       // 이 close 이벤트가 큐잉돼 나중에 실행된다. 예전엔 이 체크보다 먼저

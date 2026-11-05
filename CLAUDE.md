@@ -61,6 +61,7 @@ Read the relevant area document before making changes.
 | Multi-host peering | Server-to-server pairing, remote panes, offline host layout | [`docs/ref/multihost.md`](./docs/ref/multihost.md) |
 | Voice, clipboard, push | Voice daemon, hands-free and voice-only modes, clipboard daemon, Web Push | [`docs/ref/voice.md`](./docs/ref/voice.md) |
 | Measurements: session/view rules, `waiting` release, phone | Per-CLI `waiting` kind results, release-path table, terminal-reply root cause, real-device (touch) findings, bundle-size trend, reproduction | [`docs/ref/session-view-measurements.md`](./docs/ref/session-view-measurements.md) |
+| Reliability: hangs, health, watchdog | Named thread pools with deadlines, `TimedLock`, `proc.run`, remote-mount detection, scan quarantine, `/api/health/*`, the server watchdog and incident bundles, frontend request deadlines and the WS silence watchdog | [`docs/ref/reliability.md`](./docs/ref/reliability.md) |
 | Display language | `VT_LANG`, how the server picks ko/en, `t('한국어 원문')` keys, the English dictionary, glossary | [`docs/ref/i18n.md`](./docs/ref/i18n.md) |
 | Running, testing, install | Running the server, mobile testing over adb, the E2E procedure, manual install | [`docs/ref/dev.md`](./docs/ref/dev.md) |
 

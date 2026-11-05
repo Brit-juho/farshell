@@ -22,6 +22,7 @@ import git_account_store as store
 import snippet_store
 from auth import require_elevated
 from i18n import tr
+from resilience import fsops
 
 logger = logging.getLogger(__name__)
 
@@ -94,10 +95,13 @@ async def delete_account(account_id: str):
 @router.get("/api/git/binding")
 async def get_binding(repo: str = Query(...)):
     try:
-        top = fsguard.resolve_under_roots(repo)
+        # 사용자 경로의 resolve·git rev-parse 는 원격 마운트에서 멈출 수 있다 — fs 풀에서 기한을 둔다.
+        top = await fsops.call(fsguard.resolve_under_roots, repo, path=repo, op="git_binding.resolve")
+        repo_top = await fsops.call(_repo_top, str(top), path=repo, op="git_binding.top")
     except fsguard.FsDenied as e:
         return JSONResponse({"error": "denied", "reason": e.reason}, status_code=403)
-    repo_top = _repo_top(str(top))
+    except fsops.UNAVAILABLE as e:
+        return fsops.unavailable_response(e)
     remote_url = await asyncio.to_thread(store.git_remote_url, repo_top) if repo_top else None
     account_id = store.resolve_account_id(
         repo_top, remote_url, store.get_bindings(), store.list_accounts()
@@ -116,10 +120,13 @@ async def put_binding(request: Request):
     if not repo or not account_id:
         return JSONResponse({"error": "missing_fields"}, status_code=400)
     try:
-        top = fsguard.resolve_under_roots(repo)
+        # 사용자 경로의 resolve·git rev-parse 는 원격 마운트에서 멈출 수 있다 — fs 풀에서 기한을 둔다.
+        top = await fsops.call(fsguard.resolve_under_roots, repo, path=repo, op="git_binding.resolve")
+        repo_top = await fsops.call(_repo_top, str(top), path=repo, op="git_binding.top")
     except fsguard.FsDenied as e:
         return JSONResponse({"error": "denied", "reason": e.reason}, status_code=403)
-    repo_top = _repo_top(str(top))
+    except fsops.UNAVAILABLE as e:
+        return fsops.unavailable_response(e)
     if not repo_top:
         return JSONResponse({"error": "not_a_repo"}, status_code=400)
     result = store.set_repo_binding(repo_top, account_id)

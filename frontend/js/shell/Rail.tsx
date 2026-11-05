@@ -23,7 +23,7 @@ import {
   type HostEntry,
 } from './host-data.js';
 import {
-  actionSessionId, safeFetch, collectSessionRows,
+  actionSessionId, collectSessionRows, pollFetch, isNoResponse,
   useAgentVersion, useSessionsVersion, useLayoutVersion, syncAgentsFromServer,
   type RailDeps,
   createDiffWatcher,
@@ -43,6 +43,8 @@ import { RepoVisibility } from './RepoVisibility.js';
 import { RailSettingsLead } from './RailSettings.js';
 import { ViewGroup } from './ViewGroup.js';
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
+// 상태 없는 순수 모듈이라 지연 청크에 복제돼도 된다(위 ⚠의 예외).
+import { createPoll, isStale } from '../core/poll.js';
 
 // tmux 목록(attached·cwd)의 정본은 `/ws-workspace`의 `tmux_sessions` push다
 // (서버가 바뀌었을 때만 보낸다). 이 폴링은 그 채널이 끊긴 동안의 안전망(예전 5초).
@@ -59,6 +61,8 @@ const WORKTREES_POLL_MS = 60000;
 // 짧게 불러도 네트워크 왕복이 늘지 않는다. 15초면 "호스트가 꺼졌다"를 반 캐시
 // 주기 안에 알아챈다.
 const HOSTS_POLL_MS = 15000;
+// 보관 세션 카탈로그(로컬에서만). 레일의 가장 짧은 주기라 갱신 지연 판정의 기준이다.
+const CATALOG_POLL_MS = 5000;
 const MIN_W = 240, MAX_W = 480, DEFAULT_W = 252;
 // N3(60-settings-palette.md §1)가 생겨 device-settings 정식 스토어로
 // 옮겼다 — 이전엔 여기 주석이 "N3 전이라 임시로 localStorage"였다. core/
@@ -117,6 +121,17 @@ function Rail(props: { deps: RailDeps }) {
   const [catalog, setCatalog] = createSignal<CatalogSnapshot | null>(null);
   // 보관함을 열면 같은 자리의 목록이 보관된 세션으로 바뀐다(탭은 없다).
   const [archiveOpen, setArchiveOpen] = createSignal(false);
+  // 갱신 지연 표식 — 폴링이든 push든 서버에서 새 값을 마지막으로 받은 시각.
+  // 가장 짧은 폴링(카탈로그 5초)을 기준으로 두 주기(최소 90초, core/poll.js)를 넘기면 띄운다.
+  const mountedAt = Date.now();
+  let lastOkAt = 0;
+  const [stale, setStale] = createSignal(false);
+  const checkStale = () => setStale(isStale(lastOkAt, CATALOG_POLL_MS, Date.now(), mountedAt));
+  const markOk = () => { lastOkAt = Date.now(); checkStale(); };
+  const onSettled = (ok: boolean) => { if (ok) markOk(); else checkStale(); };
+  const staleTimer = setInterval(checkStale, 15000);
+  onCleanup(() => clearInterval(staleTimer));
+
   let catalogRequest = 0;
   const refreshCatalog = async (more = false) => {
     if (viewHostId !== LOCAL_HOST) return;
@@ -127,13 +142,19 @@ function Rail(props: { deps: RailDeps }) {
       const data = await historyApi('/api/session-catalog?' + params);
       if (request !== catalogRequest) return;
       setCatalog(more && catalog() ? { ...data, sessions: [...catalog()!.sessions, ...data.sessions] } : data);
-    } catch (_) { /* Older hosts keep their existing live rail. */ }
+    } catch (e) {
+      // 옛 호스트(카탈로그 없음)는 지금의 라이브 레일을 그대로 쓴다. 답 자체가 없던
+      // 실패(마감·네트워크)만 폴러에 알려 간격을 늘린다.
+      if (isNoResponse(e)) throw e;
+    }
   };
-  const catalogTimer = setInterval(() => { if (!document.hidden) void refreshCatalog(); }, 5000);
-  const catalogChanged = () => { void refreshCatalog(); };
+  // 카탈로그 폴링 — 이전 조회가 안 끝났으면 건너뛰고 실패하면 간격을 늘린다(core/poll.js).
+  // 「더 보기」(more)는 사용자가 누른 일이라 폴러를 거치지 않는다.
+  const catalogPoll = createPoll(() => refreshCatalog(), { interval: CATALOG_POLL_MS, immediate: true, onSettled });
+  catalogPoll.start();
+  const catalogChanged = () => { catalogPoll.kick(); };
   window.addEventListener('vt:catalog-changed', catalogChanged);
-  onCleanup(() => { clearInterval(catalogTimer); window.removeEventListener('vt:catalog-changed', catalogChanged); });
-  void refreshCatalog();
+  onCleanup(() => { catalogPoll.stop(); window.removeEventListener('vt:catalog-changed', catalogChanged); });
 
 
   // compact(<720px)에서는 이 데스크톱 Rail이 CSS로 숨고 mobile-nav가 Fleet을
@@ -146,20 +167,22 @@ function Rail(props: { deps: RailDeps }) {
   const railPollingActive = () => desktopMq ? desktopMq.matches : window.innerWidth >= 720;
 
   let tmuxRevision = 0;
+  // 아래 refresh*는 폴러(core/poll.js)를 통해서만 불린다 — 실패를 던져 간격을 늘리게
+  // 하고, 진행 중이면 겹쳐 쏘지 않는다. 즉시 다시 읽어야 할 때는 kick()을 부른다.
   const refreshSessions = async () => {
     if (!railPollingActive()) return;
     const request = ++tmuxRevision;
-    const list = await safeFetch<any[]>(props.deps, '/api/tmux/sessions');
+    const list = await pollFetch<any[]>(props.deps, '/api/tmux/sessions');
     if (request === tmuxRevision && Array.isArray(list)) setTmuxSessions(list);
   };
   const refreshAgent = async () => {
     if (!railPollingActive()) return;
-    await syncAgentsFromServer(props.deps);
+    if (!(await syncAgentsFromServer(props.deps))) throw new Error('agent: no response');
   };
   // ADR-29 B — /api/worktrees(평면) 대신 /api/repos(저장소별로 이미 묶임).
   const refreshRepos = async () => {
     if (!railPollingActive()) return;
-    const data = await safeFetch<{ repos?: any[]; truncated?: boolean; hiddenCount?: number }>(
+    const data = await pollFetch<{ repos?: any[]; truncated?: boolean; hiddenCount?: number } | null>(
       props.deps, '/api/repos',
     );
     if (!data) return;
@@ -171,39 +194,40 @@ function Rail(props: { deps: RailDeps }) {
   // 남아 스위처가 아예 안 그려진다 — 멀티호스트를 안 쓰는 사람에게는 그게 맞다.
   const refreshHosts = async () => {
     if (!railPollingActive()) return;
-    const data = await safeFetch<{ hosts?: HostEntry[] }>(props.deps, '/api/hosts');
-    if (data?.hosts) setHosts(data.hosts);
+    try {
+      const data = await pollFetch<{ hosts?: HostEntry[] } | null>(props.deps, '/api/hosts');
+      if (data?.hosts) setHosts(data.hosts);
+    } catch (e) {
+      if (isNoResponse(e)) throw e;   // 옛 서버(404)는 실패가 아니다 — 간격을 늘리지 않는다
+    }
   };
 
-  const refreshAll = () => {
-    refreshSessions();
-    refreshAgent();
-    refreshRepos();
-    refreshHosts();
-  };
+  const sessionsPoll = createPoll(refreshSessions, { interval: SESSIONS_SAFETY_POLL_MS, onSettled });
+  const agentPoll = createPoll(refreshAgent, { interval: AGENT_SAFETY_POLL_MS, onSettled });
+  const reposPoll = createPoll(refreshRepos, { interval: WORKTREES_POLL_MS, onSettled });
+  const hostsPoll = createPoll(refreshHosts, { interval: HOSTS_POLL_MS, onSettled });
+  const railPolls = [sessionsPoll, agentPoll, reposPoll, hostsPoll];
+  for (const p of railPolls) p.start();
+  const refreshAll = () => { for (const p of railPolls) p.kick(); };
   refreshAll();
   const onViewportChange = (e: MediaQueryListEvent) => {
     // compact에서 쉴 동안 놓친 상태를 데스크톱으로 돌아오는 즉시 한 번 맞춘다.
     if (e.matches) refreshAll();
   };
   desktopMq?.addEventListener('change', onViewportChange);
-  const t1 = setInterval(() => { if (!document.hidden) refreshSessions(); }, SESSIONS_SAFETY_POLL_MS);
-  const t2 = setInterval(() => { if (!document.hidden) refreshAgent(); }, AGENT_SAFETY_POLL_MS);
-  const t3 = setInterval(() => { if (!document.hidden) refreshRepos(); }, WORKTREES_POLL_MS);
-  const t4 = setInterval(() => { if (!document.hidden) refreshHosts(); }, HOSTS_POLL_MS);
   // 서버가 워크트리 생성·삭제·열기 때 쏘는 push. 폴링(60초)보다 훨씬 빠르게
   // 반영되고, 평시에는 요청이 아예 나가지 않는다.
-  const offWt = onWorkspaceEvent('worktrees_changed', () => { refreshRepos(); });
+  const offWt = onWorkspaceEvent('worktrees_changed', () => { reposPoll.kick(); });
   const offSessions = onWorkspaceEvent('tmux_sessions', (msg: any) => {
-    if (Array.isArray(msg?.sessions)) { tmuxRevision += 1; setTmuxSessions(msg.sessions); }
+    if (Array.isArray(msg?.sessions)) { tmuxRevision += 1; setTmuxSessions(msg.sessions); markOk(); }
   });
   // 2026-09-28 — 원격 세션 생성·종료·이름 변경 직후(term/remote.js). 15초 주기를
   // 기다리면 방금 만든 세션이 목록에 없어 "안 됐나?" 하고 또 누른다.
-  const onHostsChanged = () => { refreshHosts(); };
+  const onHostsChanged = () => { hostsPoll.kick(); };
   window.addEventListener('vt:hosts-changed', onHostsChanged);
   onCleanup(() => window.removeEventListener('vt:hosts-changed', onHostsChanged));
   onCleanup(() => {
-    clearInterval(t1); clearInterval(t2); clearInterval(t3); clearInterval(t4);
+    for (const p of railPolls) p.stop();
     desktopMq?.removeEventListener('change', onViewportChange);
     offWt();
     offSessions();
@@ -351,7 +375,7 @@ function Rail(props: { deps: RailDeps }) {
     const row = rows().find((r) => r.sessionId === sessionId);
     const linked = row && catalogOf(row);
     if (linked && linked.title !== trimmed) {
-      try { await historyApi(`/api/session-catalog/sessions/${linked.id}`, { body: { title: trimmed, revision: linked.revision } }); void refreshCatalog(); } catch (_) { /* 웹 세션 이름은 이미 바뀌었다 */ }
+      try { await historyApi(`/api/session-catalog/sessions/${linked.id}`, { body: { title: trimmed, revision: linked.revision } }); catalogPoll.kick(); } catch (_) { /* 웹 세션 이름은 이미 바뀌었다 */ }
     }
   };
 
@@ -360,7 +384,7 @@ function Rail(props: { deps: RailDeps }) {
     catalog()?.sessions.find((s) => s.ended == null && s.runtime_id && s.tmux_name === row.tmuxName && s.physical_key === row.physicalKey);
   const openRecordOf = async (session: any) => {
     const { openSessionRecord } = await import('../history/session-record.js');
-    openSessionRecord(session.id, () => { void refreshCatalog(); });
+    openSessionRecord(session.id, () => { catalogPoll.kick(); });
   };
   const recentCollapsedToggle = () => setPref(VIEW_KEY, encodeRailView({ ...prefs().view, recentCollapsed: !prefs().view.recentCollapsed }));
 
@@ -377,7 +401,7 @@ function Rail(props: { deps: RailDeps }) {
       run: () => {
         if (it.id === 'record' && linked) { void openRecordOf(linked); return; }
         // 열려 있지 않은 행은 웹 세션이 없어 제자리 편집이 안 된다 — 카탈로그 제목만 바꾼다.
-        if (it.id === 'rename' && linked && !row.sessionId) { void renameCatalogSession(linked).then(() => refreshCatalog()); return; }
+        if (it.id === 'rename' && linked && !row.sessionId) { void renameCatalogSession(linked).then(() => catalogPoll.kick()); return; }
         runRowMenu(it.id, row, window, () => startRenameSession(row.sessionId, row.name));
       },
     }));
@@ -391,7 +415,7 @@ function Rail(props: { deps: RailDeps }) {
   // C1 — 호스트 스위처.
   const openHostMenu = (e: MouseEvent) => {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    refreshHosts(); // 열 때 한 번 더 — 목록이 15초 지나 있을 수 있다.
+    hostsPoll.kick(); // 열 때 한 번 더 — 목록이 15초 지나 있을 수 있다.
     setHostMenu({ x: r.left, y: r.bottom + 4 });
   };
   // 2026-09-28(사용자 요청) — 고르면 화면 **전체**가 그 맥으로 간다: 세션·탭·
@@ -513,6 +537,10 @@ function Rail(props: { deps: RailDeps }) {
           </Show>
         </Show>
         <div class="vt-wgrail-head-actions">
+          {/* 갱신 지연 — 폴링·push 어느 쪽으로도 한동안 새 값을 못 받았을 때만. */}
+          <Show when={!collapsed() && stale()}>
+            <span class="vt-stale-mark" role="status" title={t('서버에서 새 값을 한동안 받지 못했습니다. 보이는 값은 마지막으로 받은 것입니다.')}>{t('갱신 지연')}</span>
+          </Show>
           {/* 접힌 레일은 여닫기 버튼만 둔다 — 대화 기록·설정은 펼쳤을 때만. */}
           <Show when={!collapsed()}>
             <button type="button" class="vt-icon-btn sm" aria-label={t('대화 기록')} data-tip={t('대화 기록')} data-tip-sub={t('보관된 대화 검색 · 복구')}
@@ -601,12 +629,12 @@ function Rail(props: { deps: RailDeps }) {
           </Show>
           {/* 보관함 — 탭이 아니라 같은 자리의 목록 전환이다. 위의 「최근 종료」 아래 한 줄이 여기로 온다. */}
           <Show when={!collapsed() && archiveOpen() && catalog()}>
-            {data => <ArchiveList data={data()} onBack={() => { setArchiveOpen(false); void refreshCatalog(); }}
-              onChanged={() => { void refreshCatalog(); }} onMore={() => { void refreshCatalog(true); }} />}
+            {data => <ArchiveList data={data()} onBack={() => { setArchiveOpen(false); catalogPoll.kick(); }}
+              onChanged={() => { catalogPoll.kick(); }} onMore={() => { void refreshCatalog(true).catch(() => {}); }} />}
           </Show>
           {/* 「저장소별로 묶기」(레일 설정) — 저장소 → 작업 공간 보기. 정렬·위임 트리는 이 보기에서 쓰지 않는다. */}
           <Show when={!collapsed() && !archiveOpen() && prefs().view.byRepo && catalog()}>
-            {data => <CatalogTree data={data()} live={lists().sessions} renderLive={renderRow} onChanged={() => { void refreshCatalog(); }} onMore={() => { void refreshCatalog(true); }} />}
+            {data => <CatalogTree data={data()} live={lists().sessions} renderLive={renderRow} onChanged={() => { catalogPoll.kick(); }} onMore={() => { void refreshCatalog(true).catch(() => {}); }} />}
           </Show>
           <Show when={!collapsed() && !archiveOpen() && !(prefs().view.byRepo && catalog()) && running().length > 0}>
             <Show when={!collapsed()}>
@@ -693,9 +721,9 @@ function Rail(props: { deps: RailDeps }) {
             {data => <>
               <Show when={!prefs().view.byRepo}>
                 <RecentEnded data={data()} live={lists().sessions} count={prefs().view.recent} collapsed={prefs().view.recentCollapsed}
-                  onToggle={recentCollapsedToggle} onChanged={() => { void refreshCatalog(); }} />
+                  onToggle={recentCollapsedToggle} onChanged={() => { catalogPoll.kick(); }} />
               </Show>
-              <ArchiveEntry count={data().archived_count ?? 0} onOpen={() => { setArchiveOpen(true); void refreshCatalog(); }} />
+              <ArchiveEntry count={data().archived_count ?? 0} onOpen={() => { setArchiveOpen(true); catalogPoll.kick(); }} />
             </>}
           </Show>
           <Show when={rows().length > lists().sessions.length && !collapsed()}>
@@ -775,7 +803,7 @@ function Rail(props: { deps: RailDeps }) {
             title={t('레일 설정')}
             lead={<RailSettingsLead />}
             onClose={() => setRepoSheet(false)}
-            onChanged={() => refreshRepos()}
+            onChanged={() => reposPoll.kick()}
           />
         </Portal>
       </Show>

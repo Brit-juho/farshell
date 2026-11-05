@@ -28,6 +28,8 @@ import fs_watch
 import fsguard
 import tmux_target
 from i18n import tr
+from resilience import fsops, scan as res_scan
+from resilience.scan_worker import fuzzy_score as _fuzzy_score
 
 logger = logging.getLogger(__name__)
 
@@ -95,75 +97,57 @@ MAX_SEARCH_SCANNED_DIRS = 4000
 MAX_SEARCH_RESULTS = 50
 
 
-def _fuzzy_score(query: str, name: str) -> Optional[int]:
-    """subsequence 매치 — quickopen.js의 프런트 fuzzy(_fuzzyMatch)와 같은 규칙을
-    서버에도 둔다(다른 데이터소스라 코드 공유는 못 하지만 "질의 문자가 이름에서
-    같은 순서로 다 나오면 매치"라는 규칙은 동일하게 유지). 점수가 낮을수록(문자가
-    이름 안에서 더 붙어 있고 더 앞쪽일수록) 좋은 매치 — 정렬 키로 그대로 쓴다."""
-    if not query:
-        return 0
-    q = query.lower()
-    n = name.lower()
-    qi = 0
-    first = -1
-    last = 0
-    for i, ch in enumerate(n):
-        if qi < len(q) and ch == q[qi]:
-            if first < 0:
-                first = i
-            last = i
-            qi += 1
-    if qi < len(q):
-        return None
-    return (last - first) + first  # 붙어 있을수록·앞쪽일수록 작은 값
+SEARCH_TIMEOUT = 10.0
+
+
+def _managed_skip_prefixes() -> list[str]:
+    """관리자 백업·카탈로그(`fsguard.is_managed_profile_path`)는 순회에서도 들어가지 않는다."""
+    import vt_paths
+    out = []
+    for name in ("agent-profiles", "session-catalog"):
+        try:
+            out.append(str((vt_paths.state_dir() / name).resolve()))
+        except (OSError, RuntimeError):
+            pass
+    return out
 
 
 def _search_files(root: Path, query: str) -> tuple[list[dict], bool]:
-    results = []
-    scanned_dirs = 0
-    truncated = False
-    stack = [root]
-    while stack:
-        d = stack.pop()
-        if scanned_dirs >= MAX_SEARCH_SCANNED_DIRS:
-            truncated = True
-            break
-        scanned_dirs += 1
-        try:
-            with os.scandir(d) as it:
-                subdirs = []
-                for de in it:
-                    name = de.name
-                    if fsguard.is_managed_profile_path(Path(de.path)):
-                        continue
-                    try:
-                        is_dir = de.is_dir(follow_symlinks=False)
-                    except OSError:
-                        continue
-                    if is_dir:
-                        if (name in fsguard.EXCLUDE_DIRS
-                                or fsguard.is_hidden_state_dir_name(name)):
-                            continue
-                        subdirs.append(de.path)
-                        continue
-                    if fsguard._is_denied_name(name):
-                        continue
-                    score = _fuzzy_score(query, name)
-                    if score is None:
-                        continue
-                    try:
-                        size = de.stat(follow_symlinks=False).st_size
-                    except OSError:
-                        size = 0
-                    results.append({"path": de.path, "name": name, "size": size, "_score": score})
-                # 얕은 디렉토리부터 보되(체감상 가까운 결과가 먼저), 순서는 크게
-                # 중요하지 않다 — 최종 정렬은 스코어 기준으로 한 번 더 한다.
-                stack.extend(subdirs)
-        except (PermissionError, OSError):
-            continue
+    """파일명 퍼지 검색. 순회는 자식 프로세스(`resilience/scan_worker.py` `search`)에서 기한을 두고
+    한다 — 원격·가상 마운트·격리 목록은 들어가지 않고, 멈추면 그 디렉터리를 격리한다. 결과는 여기서
+    거부 목록·관리 경로로 한 번 더 거른다(심층 방어). **동기** — `fs` 풀에서 부른다."""
+    req = {
+        "mode": "search", "root": str(root), "query": query,
+        "max_dirs": MAX_SEARCH_SCANNED_DIRS, "max_results": MAX_SEARCH_RESULTS,
+        "exclude_dirs": sorted(fsguard.EXCLUDE_DIRS),
+        "allowed_dot_dirs": sorted(fsguard.ALLOWED_DOT_DIRS),
+        "deny_names": sorted(fsguard.DENY_NAMES),
+        "deny_prefixes": list(fsguard.DENY_PREFIXES),
+        "deny_suffixes": list(fsguard.DENY_SUFFIXES),
+        "skip_prefixes": res_scan.skip_prefixes(_managed_skip_prefixes()),
+    }
+    out = res_scan.run(req, SEARCH_TIMEOUT)
+    results = [r for r in out.get("results", [])
+               if not fsguard._is_denied_name(r["name"])
+               and not fsguard.is_managed_profile_path(Path(r["path"]))]
     results.sort(key=lambda r: (r["_score"], len(r["path"])))
     trimmed = results[:MAX_SEARCH_RESULTS]
-    return trimmed, truncated or len(results) > MAX_SEARCH_RESULTS
+    return trimmed, bool(out.get("truncated")) or len(results) > MAX_SEARCH_RESULTS
+
+
+def _search_all(path: str, q: str) -> dict:
+    roots = [fsguard.resolve_under_roots(path)] if path else fsguard.get_start_roots()
+    all_results: list[dict] = []
+    truncated = False
+    for root in roots:
+        r, t = _search_files(root, q)
+        all_results.extend(r)
+        truncated = truncated or t
+    all_results.sort(key=lambda r: (r["_score"], len(r["path"])))
+    final = all_results[:MAX_SEARCH_RESULTS]
+    for r in final:
+        del r["_score"]
+    return {"results": final, "truncated": truncated or len(all_results) > MAX_SEARCH_RESULTS}
 
 
 @router.get("/api/fs/search")
@@ -177,25 +161,15 @@ async def fs_search(q: str = Query(...), path: str = Query("")):
     q = q.strip()
     if not q:
         return {"results": [], "truncated": False}
-    if path:
-        try:
-            roots = [fsguard.resolve_under_roots(path)]
-        except fsguard.FsDenied as e:
-            return _denied(e.reason)
-    else:
-        roots = fsguard.get_start_roots()
-
-    all_results: list[dict] = []
-    truncated = False
-    for root in roots:
-        r, t = await asyncio.to_thread(_search_files, root, q)
-        all_results.extend(r)
-        truncated = truncated or t
-    all_results.sort(key=lambda r: (r["_score"], len(r["path"])))
-    final = all_results[:MAX_SEARCH_RESULTS]
-    for r in final:
-        del r["_score"]
-    return {"results": final, "truncated": truncated or len(all_results) > MAX_SEARCH_RESULTS}
+    try:
+        return await fsops.call(_search_all, path, q, path=path or str(Path.home()), op="fs.search",
+                                timeout=SEARCH_TIMEOUT * 2)
+    except fsguard.FsDenied as e:
+        return _denied(e.reason)
+    except res_scan.ScanTimeout:
+        return {"results": [], "truncated": True, "timeout": True}
+    except fsops.UNAVAILABLE as e:
+        return fsops.unavailable_response(e)
 
 
 # 미리 펼쳐 두는 하위 목록의 상한 — 큰 저장소에서 첫 응답이 커지지 않게 자른다.
@@ -233,20 +207,26 @@ def _list_dir_deep(p: Path, depth: int) -> dict:
     return root
 
 
+def _tree(path: str, depth: int):
+    p = fsguard.resolve_under_roots(path)
+    if not p.is_dir():
+        return None
+    return _list_dir_deep(p, depth) if depth else _list_dir(p)
+
+
 @router.get("/api/fs/tree")
 async def fs_tree(path: str = Query(...), depth: int = Query(0, ge=0, le=MAX_PREFETCH_DEPTH)):
+    # 경로 검증(resolve)부터 목록까지 전부 `fs` 풀에서 기한을 두고 한다 — 예전엔 resolve·is_dir 를
+    # 이벤트 루프 위에서 불러, NFS 경로 하나가 서버 전체를 멈출 수 있었다.
     try:
-        p = fsguard.resolve_under_roots(path)
+        out = await fsops.call(_tree, path, depth, path=path, op="fs.tree")
     except fsguard.FsDenied as e:
         return _denied(e.reason)
-    if not p.is_dir():
+    except fsops.UNAVAILABLE as e:
+        return fsops.unavailable_response(e)
+    if out is None:
         return JSONResponse({"error": "not a directory"}, status_code=404)
-    try:
-        if depth:
-            return await asyncio.to_thread(_list_dir_deep, p, depth)
-        return await asyncio.to_thread(_list_dir, p)
-    except fsguard.FsDenied as e:
-        return _denied(e.reason)
+    return out
 
 
 # --- 파일 --------------------------------------------------------------------
@@ -277,21 +257,44 @@ def _read_file(p: Path) -> dict:
             "truncated": truncated, "content": text}
 
 
+def _file(path: str):
+    p = fsguard.resolve_under_roots(path)
+    if not p.is_file():
+        return None
+    return _read_file(p)
+
+
 @router.get("/api/fs/file")
 async def fs_file(path: str = Query(...)):
     try:
-        p = fsguard.resolve_under_roots(path)
+        out = await fsops.call(_file, path, path=path, op="fs.file")
+        if out is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        return out
     except fsguard.FsDenied as e:
         return _denied(e.reason)
-    if not p.is_file():
-        return JSONResponse({"error": "not found"}, status_code=404)
-    try:
-        return await asyncio.to_thread(_read_file, p)
+    except fsops.UNAVAILABLE as e:
+        return fsops.unavailable_response(e)
     except PermissionError:
         return _denied(tr("읽기 권한이 없습니다"))
     except OSError as e:
         logger.warning(f"fs_file 실패: {e}")
         return JSONResponse({"error": "read failed"}, status_code=500)
+
+
+def _raw_image(path: str):
+    p = fsguard.resolve_under_roots(path)
+    if not p.is_file():
+        return ("missing",)
+    size = p.stat().st_size
+    with open(p, "rb") as f:
+        head = f.read(fsguard.SNIFF_BYTES)
+        mime = fsguard.image_type(p, head)
+        if not mime:
+            return ("not_image",)
+        if size > fsguard.MAX_IMAGE_BYTES:
+            return ("too_large",)
+        return ("ok", head + f.read(), mime)
 
 
 @router.get("/api/fs/raw")
@@ -307,30 +310,28 @@ async def fs_raw(path: str = Query(...)):
     이 타입이고 다른 걸로 스니핑하지 말라"를 못 박는다.
     """
     try:
-        p = fsguard.resolve_under_roots(path)
+        out = await fsops.call(_raw_image, path, path=path, op="fs.raw")
     except fsguard.FsDenied as e:
         return _denied(e.reason)
-    if not p.is_file():
-        return JSONResponse({"error": "not found"}, status_code=404)
-    try:
-        size = p.stat().st_size
-        with open(p, "rb") as f:
-            head = f.read(fsguard.SNIFF_BYTES)
-            mime = fsguard.image_type(p, head)
-            if not mime:
-                return _denied(tr("이미지 파일이 아닙니다"))
-            if size > fsguard.MAX_IMAGE_BYTES:
-                return JSONResponse(
-                    {"error": "too_large",
-                     "reason": tr("이미지가 너무 큽니다 (최대 {max}MB)", max=fsguard.MAX_IMAGE_BYTES // (1024*1024))},
-                    status_code=413,
-                )
-            data = head + f.read()
+    except fsops.UNAVAILABLE as e:
+        return fsops.unavailable_response(e)
     except PermissionError:
         return _denied(tr("읽기 권한이 없습니다"))
     except OSError as e:
         logger.warning(f"fs_raw 실패: {e}")
         return JSONResponse({"error": "read failed"}, status_code=500)
+    kind = out[0]
+    if kind == "missing":
+        return JSONResponse({"error": "not found"}, status_code=404)
+    if kind == "not_image":
+        return _denied(tr("이미지 파일이 아닙니다"))
+    if kind == "too_large":
+        return JSONResponse(
+            {"error": "too_large",
+             "reason": tr("이미지가 너무 큽니다 (최대 {max}MB)", max=fsguard.MAX_IMAGE_BYTES // (1024*1024))},
+            status_code=413,
+        )
+    _, data, mime = out
     return Response(content=data, media_type=mime, headers={
         "Content-Disposition": "inline",
         "X-Content-Type-Options": "nosniff",
@@ -367,6 +368,8 @@ async def ws_fs_watch(websocket: WebSocket):
         return
     await websocket.accept()
     session_watchdog = auth.spawn_session_watchdog(websocket, token)
+    from resilience import wsutil
+    pinger = wsutil.start_pinger(websocket)
     client_id = id(websocket)
     try:
         while True:
@@ -387,6 +390,7 @@ async def ws_fs_watch(websocket: WebSocket):
         logger.info(f"ws-fs-watch 종료: {e}")
     finally:
         session_watchdog.cancel()
+        pinger.cancel()
         await fs_watch.hub.remove(client_id)
 
 
@@ -573,7 +577,7 @@ async def insert_file(file_id: str, request: Request):
     fp = await asyncio.to_thread(file_store.real_path_for, file_id)
     if fp is None:
         return JSONResponse({"error": "not_found"}, status_code=404)
-    pane = tmux_target.session_pane(session)
+    pane = await asyncio.to_thread(tmux_target.session_pane, session)   # tmux 조회(2초) — 루프 밖에서
     if not pane:
         return JSONResponse({"error": "session_not_found"}, status_code=404)
     if authz_leases.enforced():

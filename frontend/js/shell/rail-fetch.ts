@@ -95,7 +95,8 @@ export function readAgentNames(): Record<string, string> {
 
 /** 안전망 — `/ws-agent`가 끊긴 동안(재시도를 포기한 뒤 포함)에도 목록이 멎지
  * 않게 가끔 직접 받아 **같은 저장소에** 넣는다. 화면은 저장소만 본다. */
-export async function syncAgentsFromServer(deps: RailDeps): Promise<void> {
+/** 서버에서 한 번 맞춘다. 둘 다 실패했으면 false — 폴러가 간격을 늘리는 데 쓴다. */
+export async function syncAgentsFromServer(deps: RailDeps): Promise<boolean> {
   const w = window as any;
   const [st, names] = await Promise.all([
     safeFetch<{ all?: Record<string, any> }>(deps, '/api/agent/status'),
@@ -103,6 +104,21 @@ export async function syncAgentsFromServer(deps: RailDeps): Promise<void> {
   ]);
   if (st && st.all) w.vtApplyAgentSnapshot?.(st.all);
   if (names) w.vtApplyAgentNames?.(names);
+  return st !== null || names !== null;
+}
+
+/**
+ * 폴링용 조회 — safeFetch와 달리 실패를 던진다(core/poll.js가 간격을 늘리도록).
+ * 레일·플릿의 refresh 함수는 폴러를 통해서만 불리므로 거부가 밖으로 새지 않는다.
+ */
+export async function pollFetch<T>(deps: Pick<RailDeps, 'vtFetch'>, path: string): Promise<T> {
+  return (await deps.vtFetch(path)) as T;
+}
+
+/** 서버 응답이 아예 없었던 실패인가(옛 서버의 404 같은 "답은 왔다"와 구분). */
+export function isNoResponse(e: unknown): boolean {
+  const st = (e as { status?: number } | null)?.status;
+  return !st;
 }
 
 interface GitCacheEntry {

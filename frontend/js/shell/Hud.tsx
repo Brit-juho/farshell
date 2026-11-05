@@ -14,11 +14,23 @@ import { render, Portal } from 'solid-js/web';
 import { t } from '../core/i18n.js';
 import { icon } from '../ui/icons.js';
 import { buildHudChips, parseHudLayout, type AgentCounts, type HudChip, type HudInput, type HudLayout } from './hud-data.js';
+// core/poll.js는 상태를 갖지 않는 순수 모듈이라 이 지연 청크에 복제돼도 문제없다(위 ⚠의 예외).
+import { createPoll, isStale } from '../core/poll.js';
 
 const POLL_MS = 30000;
 const SCREEN_POLL_MS = 5000;
 // CPU·네트워크는 초 단위로 변하는 값이라 다른 HUD 데이터(30초)와 따로 3초마다 갱신한다.
 const STATS_POLL_MS = 3000;
+// 푸시 구독 상태는 서비스 워커에 묻는다 — 워커가 멎어 있으면 끝나지 않을 수 있어
+// 따로 마감을 둔다(서버 호출은 core/api.js가 마감을 건다).
+const PUSH_STATE_TIMEOUT_MS = 5000;
+
+function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), ms);
+    p.then((v) => { clearTimeout(timer); resolve(v); }, () => { clearTimeout(timer); resolve(fallback); });
+  });
+}
 
 export interface HudDeps {
   vtFetch: (path: string) => Promise<unknown>;
@@ -62,7 +74,9 @@ async function collect(deps: HudDeps): Promise<HudInput> {
   const clientsPath = deps.activeClientsPath?.() ||
     (tmuxName ? `/api/tmux/clients?session=${encodeURIComponent(tmuxName)}` : '');
 
-  const [caps, safeMode, usage, clients, stats, push] = await Promise.all([
+  // allSettled — 한 항목이 거부돼도 나머지로 스냅샷을 만든다. 각 서버 호출은 마감이
+  // 있고(core/api.js) 푸시 상태도 마감을 둬서, 어느 하나가 매달려도 HUD 전체가 멈추지 않는다.
+  const settled = await Promise.allSettled([
     safeFetch<HudInput['caps']>(deps, '/api/capabilities'),
     safeFetch<HudInput['safeMode']>(deps, '/api/safe-mode'),
     safeFetch<HudInput['usage']>(deps, '/api/usage'),
@@ -70,8 +84,17 @@ async function collect(deps: HudDeps): Promise<HudInput> {
       ? safeFetch<{ clients?: unknown[] }>(deps, clientsPath)
       : Promise.resolve(null),
     safeFetch<HudInput['stats']>(deps, '/api/system/stats'),
-    deps.pushState ? deps.pushState().catch(() => 'unavailable' as const) : Promise.resolve(null),
-  ]);
+    deps.pushState
+      ? withTimeout(deps.pushState(), PUSH_STATE_TIMEOUT_MS, 'unavailable' as const)
+      : Promise.resolve(null),
+  ] as const);
+  const val = <T,>(r: PromiseSettledResult<T>): T | null => (r.status === 'fulfilled' ? r.value : null);
+  const caps = val(settled[0]);
+  const safeMode = val(settled[1]);
+  const usage = val(settled[2]);
+  const clients = val(settled[3]);
+  const stats = val(settled[4]);
+  const push = val(settled[5]);
 
   return {
     push,
@@ -328,6 +351,26 @@ function Hud(props: { deps: HudDeps; root: HTMLElement }) {
   let agents: AgentCounts | null = props.deps.agentCounts?.() ?? null;
   let now = Date.now();
   let push: HudInput['push'] = null;
+  // 갱신 지연 — 서버 호출이 하나라도 성공한 마지막 시각. 오래되면 표식을 띄운다.
+  const mountedAt = Date.now();
+  let lastOkAt = 0;
+  const [stale, setStale] = createSignal(false);
+  const checkStale = () => setStale(isStale(lastOkAt, POLL_MS, Date.now(), mountedAt));
+  // 이 HUD가 부르는 서버 호출을 한 곳에서 센다. ok는 "이번 실행에서 하나라도 답을 받았나".
+  const tracked = (): { deps: HudDeps; ok: () => boolean } => {
+    let ok = false;
+    return {
+      deps: {
+        ...props.deps,
+        vtFetch: async (path: string) => {
+          const v = await props.deps.vtFetch(path);
+          ok = true; lastOkAt = Date.now(); checkStale();
+          return v;
+        },
+      },
+      ok: () => ok,
+    };
+  };
   const publish = () => {
     if (!snapshot) return;
     setChips(buildHudChips({
@@ -347,10 +390,14 @@ function Hud(props: { deps: HudDeps; root: HTMLElement }) {
   // 갱신: 30초 폴링(§7). 간격이 긴 이유는 여기 실리는 값이 전부 "천천히 바뀌는
   // 것"(터널 모드·세이프모드·사용량)이기 때문이다 — 빠르게 바뀌는 에이전트
   // 상태는 탭·레일이 이미 실시간으로 보여준다. 백그라운드 탭에서는 쉰다.
+  // 응답이 하나도 없었으면 거부해서 폴러가 간격을 늘리게 한다(core/poll.js). 그래도
+  // 스냅샷은 갱신한다 — 예전처럼 "값 없음"으로 떨어진 칩을 보여 준다.
   const refresh = async () => {
-    snapshot = await collect(props.deps);
+    const tr = tracked();
+    snapshot = await collect(tr.deps);
     push = null;   // 방금 조회한 값이 최신이다
     publish();
+    if (!tr.ok()) throw new Error('hud: no response');
   };
 
   // 에이전트 상태는 이벤트로 오고 짧은 시간에 여러 번 바뀐다 — 한 프레임에 한 번만 다시 만든다.
@@ -370,6 +417,7 @@ function Hud(props: { deps: HudDeps; root: HTMLElement }) {
   const clockTimer = setInterval(() => {
     now = Date.now();
     const m = Math.floor(now / 60000);
+    checkStale();
     if (m === lastMinute) return;
     lastMinute = m;
     publish();
@@ -397,23 +445,34 @@ function Hud(props: { deps: HudDeps; root: HTMLElement }) {
     const tmuxName = props.deps.activeTmuxName();
     const path = props.deps.activeClientsPath?.() ||
       (tmuxName ? `/api/tmux/clients?session=${encodeURIComponent(tmuxName)}` : '');
-    const data = path ? await safeFetch<{ clients?: unknown[] }>(props.deps, path) : null;
+    if (!path) { snapshot = { ...snapshot, screens: null }; publish(); return; }
+    const tr = tracked();
+    const data = await safeFetch<{ clients?: unknown[] }>(tr.deps, path);
+    if (!snapshot) return;
     snapshot = { ...snapshot, screens: data?.clients?.length ?? null };
     publish();
+    if (!tr.ok()) throw new Error('hud: no response');
   };
 
   const refreshStats = async () => {
     if (!snapshot) return;
-    const stats = await safeFetch<HudInput['stats']>(props.deps, '/api/system/stats');
+    const tr = tracked();
+    const stats = await safeFetch<HudInput['stats']>(tr.deps, '/api/system/stats');
+    if (!snapshot) return;
     snapshot = { ...snapshot, stats };
     publish();
+    if (!tr.ok()) throw new Error('hud: no response');
   };
 
-  refresh();
-  const statsTimer = setInterval(() => { if (!document.hidden) refreshStats(); }, STATS_POLL_MS);
-  const timer = setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
-  const screenTimer = setInterval(() => { if (!document.hidden) refreshScreens(); }, SCREEN_POLL_MS);
-  onCleanup(() => { clearInterval(timer); clearInterval(screenTimer); clearInterval(statsTimer); });
+  // 세 폴러 모두 core/poll.js — 이전 조회가 안 끝났으면 건너뛰고, 실패하면 간격을 늘리고,
+  // 숨은 탭에서는 쉰다. 첫 조회(refresh)만 즉시 한다(예전과 같다).
+  const polls = [
+    createPoll(refresh, { interval: POLL_MS, immediate: true }),
+    createPoll(refreshStats, { interval: STATS_POLL_MS }),
+    createPoll(refreshScreens, { interval: SCREEN_POLL_MS }),
+  ];
+  for (const p of polls) p.start();
+  onCleanup(() => { for (const p of polls) p.stop(); });
 
   const publishedCaps = () => snapshot?.caps ?? null;
   const side = (s: 'left' | 'right') => chips().filter((c) => c.side === s);
@@ -449,6 +508,9 @@ function Hud(props: { deps: HudDeps; root: HTMLElement }) {
       <MenuButton deps={props.deps} getCaps={() => (publishedCaps())} />
       <For each={side('left')}>{(c) => <Chip chip={c} deps={props.deps} />}</For>
       <div class="vt-hud-spacer" />
+      <Show when={stale()}>
+        <span class="vt-stale-mark vt-hud-stale" role="status" title={t('서버에서 새 값을 한동안 받지 못했습니다. 보이는 값은 마지막으로 받은 것입니다.')}>{t('갱신 지연')}</span>
+      </Show>
       <For each={side('right')}>{(c) => <Chip chip={c} deps={props.deps} />}</For>
     </>
   );

@@ -77,6 +77,7 @@ question — it is not a universal bypass. Two things follow directly:
 | `/`, `/sw.js`, `/manifest.json`, `/favicon.ico` | 3, 4 (HTTP) | 1 | Nothing — this is the login gate itself, it has to render unauthenticated |
 | `/static/*` | 3, 4 (HTTP) | 1 | Nothing — static assets |
 | `/api/auth`, `/api/auth/status`, `/api/auth/logout` | 3 | 1, 4 | These routes **are** the authentication mechanism |
+| `/api/health/live` | 3 | 1, 4 | Nothing — it returns only `ok`/`pid`/`uptime`. The detailed `/api/health/ready` stays behind auth (it names paths and operations) |
 | `/s/{token}` | 3 | 1, 4 | `routes/share.py` verifies the share token's signature, expiry and mode (device/pin) directly |
 | `/p/authorize` | 3 | 1, 4 | `routes/system.py` checks session + device directly. On failure it redirects to `/?next=` rather than a JSON 401 — this is a top-level navigation, not an API call |
 | `/api/peer/*` | 3 | 1, 4 | `routes/peer.py` verifies HMAC signature, time window and nonce replay directly. **A peer can only ever reach routes in that one file** |

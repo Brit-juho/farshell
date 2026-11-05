@@ -19,6 +19,7 @@
 // (ADR-26 — solid-js 런타임을 app.js에 정적으로 넣으면 300KiB 상한을 넘는다).
 import { get as settingsGet, set as settingsSet } from '../core/settings.js';
 import { vtFetch } from '../core/api.js';
+import { createPoll } from '../core/poll.js';
 import { getAction } from '../core/dom.js';
 import { getSession, activeSessionId } from '../core/store.js';
 import { allStatuses, onStatusChange } from '../agent/state.js';
@@ -152,13 +153,18 @@ async function _refreshChangesBadge() {
     const n = data && data.repo ? (data.files || []).length : 0;
     if (n > 0) { badge.hidden = false; badge.textContent = n > 99 ? '99+' : String(n); }
     else badge.hidden = true;
-  } catch (_) { badge.hidden = true; }
+  } catch (e) {
+    badge.hidden = true;
+    throw e;   // 폴러(core/poll.js)가 간격을 늘린다
+  }
 }
 
+// 폴러를 통해서만 불린다 — 이전 조회가 안 끝났으면 건너뛰고, 실패하면 간격을 늘린다.
+// 숨은 탭에서는 쉰다(core/poll.js).
 function _refreshBadges() {
-  if (!_mq.matches || document.hidden) return;
+  if (!_mq.matches) return undefined;
   _refreshFilesBadge();
-  _refreshChangesBadge();
+  return _refreshChangesBadge();
 }
 
 // 상단 세션 이름 — 세션 탭과 터미널을 오간다(탭 전환). 다른 탭(변경·첨부·설정)이 떠 있으면 세션 탭으로.
@@ -213,8 +219,7 @@ function _init() {
   document.addEventListener('vt:upload-progress', _refreshFilesBadge);
   _refreshFilesBadge();
 
-  _refreshBadges();
-  setInterval(_refreshBadges, BADGE_POLL_MS);
+  createPoll(_refreshBadges, { interval: BADGE_POLL_MS, immediate: true }).start();
 }
 
 _init();

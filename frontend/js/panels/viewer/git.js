@@ -123,6 +123,8 @@ async function _doCommit(repo, wrap, reload) {
   try {
     await vtFetch('/api/git/commit', {
       method: 'POST',
+      // 커밋 훅(pre-commit 등)이 돌 수 있어 기본 30초로는 모자랄 수 있다.
+      timeout: 120000,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ repo, message }),
     });

@@ -63,6 +63,7 @@ _XUCRED_LEN = 76          # u_int version, uid_t uid, short ngroups(+pad), gid_t
 MAX_PATH_BYTES = 100      # macOS sun_path 104, Linux 108 — 여유를 둔다
 SELFTEST_PATH = "/api/authz/sock/selftest"
 WHOAMI_PATH = "/api/authz/whoami"
+RESOLVE_TIMEOUT = 5.0
 
 # --- 허용표 ----------------------------------------------------------------------------------
 # (메서드, 경로 정규식 fullmatch, 부르는 곳). 저장소 안 클라이언트가 소켓으로 부르는 것만이다.
@@ -72,6 +73,7 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     ("POST", r"/api/clipboard/push", "clipboard_daemon (svc:clipboard)"),
     ("POST", r"/voice/(cancel|input|target|bind|stt/preload)", "voice daemon · voice_bind (svc:voice)"),
     ("GET", r"/api/capabilities", "fsh manage (svc:tui)"),
+    ("GET", r"/api/health/ready", "fsh status|doctor · server_watchdog (svc:watchdog)"),
     ("GET", r"/api/tmux/sessions", "fsh manage (svc:tui)"),
     ("DELETE", r"/api/tmux/kill/[^/]+", "fsh manage (svc:tui)"),
     ("PATCH", r"/api/sessions/[^/]+", "fsh manage (svc:tui)"),
@@ -301,6 +303,17 @@ class Gate:
         except Reject as r:
             await _respond(send, r.status, {"error": r.error, "reason": r.reason})
 
+    async def _resolve(self, peer, headers):
+        """호출자 판정(프로세스 표를 읽는다)은 `proc` 풀에서 기한을 두고 한다. 예전엔 기본 실행기를 썼는데,
+        그 풀이 고갈되면(2026-11-05) 소켓 요청까지 전부 멈춰 `fsh status`의 소켓 검사도 실패했다."""
+        from resilience import pools
+        try:
+            return await pools.run("proc", self.resolver.resolve_sync, peer,
+                                   headers.get("x-fsh-svc", "").strip().lower(),
+                                   op="authz.sock.resolve", timeout=RESOLVE_TIMEOUT)
+        except (pools.Busy, pools.OpTimeout):
+            raise Reject(503, "principal_unavailable", "호출자를 지금 확인하지 못했습니다 — 잠시 뒤 다시 시도하세요")
+
     async def _handle(self, scope, receive, send):
         peer = scope.get("fsh_peer")
         if not isinstance(peer, dict) or peer.get("uid") is None:
@@ -318,7 +331,7 @@ class Gate:
         if amb:
             raise Reject(400, "ambiguous_principal", f"소켓 요청에 {amb} 자격이 함께 실렸습니다")
         if path == WHOAMI_PATH and method == "GET":
-            p = await asyncio.to_thread(self.resolver.resolve_sync, peer, headers.get("x-fsh-svc", "").strip().lower())
+            p = await self._resolve(peer, headers)
             try:
                 from . import inbox
                 body = await asyncio.to_thread(inbox.whoami, p)      # 주체 + 유효 scope·조건 요약 + 맞는 프리셋
@@ -329,7 +342,7 @@ class Gate:
             return
         if not route_allowed(method, path):
             raise Reject(403, "socket_route_not_allowed", f"{method} {path} 는 소켓으로 열려 있지 않습니다")
-        p = await asyncio.to_thread(self.resolver.resolve_sync, peer, headers.get("x-fsh-svc", "").strip().lower())
+        p = await self._resolve(peer, headers)
         state = dict(scope.get("state") or {})
         state["fsh_principal"] = p
         state["auth_kind"] = "socket"

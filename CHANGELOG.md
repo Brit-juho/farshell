@@ -8,6 +8,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+- **A hung directory no longer takes the whole server down.** The repository scan used to hold its lock while `os.scandir` could block forever in `open()` on a network mount (seen with `~/OrbStack` when the browse root is the home folder); requests waited on that lock with no deadline, filled the default thread pool and every threaded API stopped answering for hours while the port stayed open. The scan now runs in a child process with a deadline, never enters network/virtual mounts (`VT_SCAN_INCLUDE_MOUNTS` to opt back in), quarantines a folder that hangs, and waiters get the previous list (or 503 `discovery_busy`) after 8 s.
+- Blocking calls moved off the event loop: pane resolution on every agent hook, the status sweep's screen reads, CLI detection in the PTY output path, queue listing, tmux preview, open-on-Mac, and user-path checks in the file tab, git, snippets, share import and worktree routes. A static test forbids the known blocking calls in async handlers.
+- WebSocket broadcasts send concurrently with a 2 s deadline per client and close a client that cannot keep up; `/ws-workspace` and `/ws-fs-watch` now send a ping every 15 s.
+- The frontend puts deadlines on every request (the login gate shows a retry instead of spinning), polls without overlapping and backs off on failure, marks stale lists 「갱신 지연」, and reconnects a WebSocket that has been silent for 45 s.
+
+### Added
+- `server/resilience/`: named thread pools with admission caps and deadlines, `TimedLock`, a subprocess runner that never waits forever, mount detection, a path breaker, `SIGUSR1` stack dumps (`$VT_RUN_DIR/stacks.log`) and stack traces for work or locks that run too long.
+- `GET /api/health/live` (open) and `GET /api/health/ready` (pools, stuck work, locks, mounts, quarantine). `fsh status` and `fsh doctor` use it instead of only checking the port.
+- Server watchdog (`server_watchdog.py`, started by `fsh start`, `VT_SERVER_WATCHDOG=0` to disable): after 3 failed readiness checks it saves an incident bundle under `$VT_RUN_DIR/incidents/` and runs `fsh restart` (at most 3 times per hour). `fsh watchdog status|check|unquarantine|agent install`.
+
 ---
 
 ## [2.8.0] — 2026-11-05

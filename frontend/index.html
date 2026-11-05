@@ -203,15 +203,15 @@
        필터로 만들지 않고 --color-acc-dim 토큰으로 내린다 — filter는 스킨마다
        결과가 제각각이고, macos처럼 액센트 위 잉크 대비를 따로 맞춘 스킨에서
        그 계산을 무너뜨린다. */
-    #login-submit{width:100%;margin-top:18px;min-height:42px;
+    #login-submit,#login-retry{width:100%;margin-top:18px;min-height:42px;
       font-family:inherit;font-size:var(--fs-base,15px);font-weight:var(--weight-semibold,600);
       letter-spacing:var(--tracking-wide,0.04em);cursor:pointer;
       background:var(--color-acc-surface,var(--color-acc,#f0a860));color:var(--color-acc-ink,#17140f);
       border:1px solid transparent;border-radius:var(--radius-sm,5px);
       transition:background-color var(--dur-fast,120ms) ease;}
-    #login-submit:hover:not(:disabled){background:var(--color-acc-dim,#b3803f);}
-    #login-submit:active:not(:disabled){background:var(--color-acc-dim,#b3803f);}
-    #login-submit:focus-visible{outline:2px solid var(--color-acc,#f0a860);outline-offset:2px;}
+    #login-submit:hover:not(:disabled),#login-retry:hover{background:var(--color-acc-dim,#b3803f);}
+    #login-submit:active:not(:disabled),#login-retry:active{background:var(--color-acc-dim,#b3803f);}
+    #login-submit:focus-visible,#login-retry:focus-visible{outline:2px solid var(--color-acc,#f0a860);outline-offset:2px;}
     /* 제출 중에도 버튼은 disabled다. 투명도만 낮추면 "눌렀는데 아무 일도 없는"
        화면이 되므로, 라벨을 gate.js가 갈아끼우고 여기서 링을 붙인다. */
     #login-submit:disabled{background:none;color:var(--color-muted,#73787c);
@@ -233,6 +233,13 @@
     #login-err-msg{color:var(--color-txt,#e8e9ea);}
     #login-err-detail{margin-top:3px;color:var(--color-sub,#8e9296);font-size:var(--fs-xs,12.5px);}
     #login-err-detail[hidden]{display:none;}
+    /* 확인 자체가 막힌 경우(서버가 연결은 받는데 답이 없음). 비밀번호 칸을 보여 주면
+       "비밀번호를 넣으면 된다"로 읽히므로 폼과 따로 두고, 다시 확인하는 버튼만 단다. */
+    #login-probe{width:min(380px,100%);box-sizing:border-box;}
+    #login-probe[hidden]{display:none;}
+    #login-probe .login-err{margin-top:0;}
+    #login-probe-msg{color:var(--color-txt,#e8e9ea);}
+    #login-probe-detail{margin-top:3px;color:var(--color-sub,#8e9296);font-size:var(--fs-xs,12.5px);}
 
     /* ?next= 로 들어온 경우(N21 공유 링크의 device 모드). 로그인 뒤 원래 열려던
        다운로드로 돌아간다는 사실을 말해 두지 않으면, 파일을 누른 사람 눈에는
@@ -257,6 +264,17 @@
     <div id="login-spinner" role="status" aria-live="polite">
       <span class="login-spin-ring" aria-hidden="true"></span>
       <p id="login-spin-label" data-i18n>연결을 확인하는 중</p>
+    </div>
+    <!-- 확인이 마감(8초) 안에 안 끝났을 때 — gate.js가 문구를 채우고, 버튼은 같은 확인을 다시 한다 -->
+    <div id="login-probe" hidden>
+      <div class="login-err" role="alert">
+        <!-- 경고 아이콘은 gate.js가 아래 #login-err의 것을 복제해 넣는다(인라인 svg 사본을 늘리지 않는다 — icons.test.js) -->
+        <div>
+          <div id="login-probe-msg"></div>
+          <div id="login-probe-detail"></div>
+        </div>
+      </div>
+      <button type="button" id="login-retry"><span data-i18n>다시 시도</span></button>
     </div>
     <form id="login-form" hidden autocomplete="off">
       <!-- D5: ui/icons.js와 같은 path(Lucide 'square-terminal') — 번들 로드 전에도

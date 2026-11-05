@@ -16,7 +16,7 @@
 // 덮어쓰는 모듈은 여기서 import하면 안 된다 — 대신 그 값이 필요하면 실제
 // 공유 인스턴스인 `window.activeId`/`window.registerAction`을 bare로 읽는다
 // (F4 이전 voice.js가 classic script로 하던 방식 그대로).
-import { apiFetch } from '../core/api.js';
+import { apiFetch, VOICE_UPLOAD_TIMEOUT_MS, STT_PRELOAD_TIMEOUT_MS } from '../core/api.js';
 import { pauseVoice } from './tts.js';
 // 순수 함수 모듈(상태·DOM 없음) — 번들에 인라인돼도 안전하다.
 import {
@@ -91,7 +91,7 @@ async function prepareStt() {
   micBtn.querySelector('.label').textContent = t('준비 중...');
   micStatus.textContent = t('선택한 음성 모델 준비 중…');
   try {
-    const r = await apiFetch(`${API}/voice/stt/preload`, { method: 'POST' });
+    const r = await apiFetch(`${API}/voice/stt/preload`, { method: 'POST', timeout: STT_PRELOAD_TIMEOUT_MS });
     const d = await r.json();
     if (r.ok && d.loaded) {
       micStatus.textContent = t('준비 완료 — 마이크를 눌러 녹음');
@@ -276,6 +276,8 @@ async function postOnce(blob, contentType, voiceId, captured) {
   const sid = captured.sessionId;
   const res = await apiFetch(`${API}/voice/input?session_id=${encodeURIComponent(sid)}`, {
     method: 'POST',
+    // 서버가 받은 자리에서 인식까지 끝내고 답한다 — 긴 녹음은 30초를 넘긴다.
+    timeout: VOICE_UPLOAD_TIMEOUT_MS,
     // 같은 녹음의 재전송이 터미널에 두 번 입력되지 않게 서버가 이 id로 중복을 건너뛴다.
     headers: { 'Content-Type': contentType, 'X-Voice-Id': voiceId, 'X-Voice-Target': captured.token, 'X-Voice-Confirm': '1' },
     body: blob,

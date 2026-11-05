@@ -12,10 +12,11 @@
 import { vtFetch } from '../core/api.js';
 import { registerAction } from '../core/dom.js';
 import { t } from '../core/i18n.js';
+import { createPoll } from '../core/poll.js';
 
 const BADGE_POLL_MS = 60000;   // 피드가 90초 주기라 60초면 충분하다
 
-let _bgTimer = null;
+let _bgPoll = null;
 
 // rail 버튼의 활성 프로필 표시. 화면 쪽(usage.js의 refresh)도 이걸 그대로
 // 쓰므로 여기가 단일 구현이다 — 새 청크 규칙(vite.config.js) 아래에서는 지연
@@ -47,9 +48,10 @@ export function paintRailBadge(data) {
 // 패널이 닫혀 있어도 rail 배지는 최신이어야 한다(그게 "상시 노출"의 의미다).
 // 배지는 한도형(%) 전용이라(rail 버튼 하나에 %를 하나만 실을 수 있다) 누적형은
 // 요청하지 않는다 — 자세한 값은 패널/우측 레일에서 본다.
+// 사용량 조회가 실패하면 던진다 — 폴러(core/poll.js)가 간격을 늘린다.
 async function refreshBadgeOnly() {
+  const data = await vtFetch('/api/usage');
   try {
-    const data = await vtFetch('/api/usage');
     paintRailBadge(data);
     // L8/U2: 우측 레일은 **패널이 닫혀 있어도** 최신이어야 한다. 화면에
     // 없으면(compact/regular) 아무 일도 안 한다 — 렌더러도 안 받는다.
@@ -60,7 +62,7 @@ async function refreshBadgeOnly() {
       const { renderBody } = await import('./usage.js');
       renderBody(data, counterData, rr);
     }
-  } catch (_) { /* 조용히 무시 */ }
+  } catch (_) { /* 그리기 실패는 조용히 무시 */ }
 }
 
 // 재진입 가드 — ports-lazy.js의 _opening과 같은 이유(청크 도착 전 두 번째
@@ -82,7 +84,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!btn) return;
   setTimeout(() => {
     if (getComputedStyle(btn).display === 'none') return;   // capability 게이팅에 걸린 환경
-    refreshBadgeOnly();
-    _bgTimer = setInterval(() => { if (!document.hidden) refreshBadgeOnly(); }, BADGE_POLL_MS);
+    // 이전 조회가 안 끝났으면 건너뛰고, 실패하면 간격을 늘린다. 숨은 탭에서는 쉰다.
+    _bgPoll = createPoll(refreshBadgeOnly, { interval: BADGE_POLL_MS, immediate: true });
+    _bgPoll.start();
   }, 1500);
 });

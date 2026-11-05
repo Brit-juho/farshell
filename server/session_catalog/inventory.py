@@ -177,7 +177,7 @@ def reconcile(snapshot=None):
 def discover_projects():
     """Retain discovered workspaces even when no terminal is running there."""
     import worktree
-    items = worktree.list_worktrees()
+    items = worktree.list_worktrees_or_empty()
     placements = []
     deadline = time.monotonic() + 5
     for item in items[:500]:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 
+import asyncio
+
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
@@ -11,12 +13,14 @@ import snippet_store
 
 logger = logging.getLogger(__name__)
 
+from resilience import fsops  # noqa: E402
+
 router = APIRouter()
 
 
 @router.get("/api/snippets")
 async def get_snippets():
-    return {"items": snippet_store.list_items(), "max": snippet_store.MAX_ITEMS}
+    return {"items": await asyncio.to_thread(snippet_store.list_items), "max": snippet_store.MAX_ITEMS}
 
 
 # N6(60 §4) — 「프로젝트」탭이 지금 보고 있는 스니펫이 어느 project 키에
@@ -26,7 +30,11 @@ async def get_snippets():
 # 그래서 snippet_store.resolve_project_key 하나를 공유한다.
 @router.get("/api/snippets/project")
 async def get_project_key(cwd: str = Query(...)):
-    return {"project": snippet_store.resolve_project_key(cwd)}
+    # fsguard 검증 + git rev-parse(3초) — 사용자 경로라 원격 마운트일 수 있다. fs 풀에서 기한을 둔다.
+    try:
+        return {"project": await fsops.call(snippet_store.resolve_project_key, cwd, path=cwd, op="snippets.project")}
+    except fsops.UNAVAILABLE:
+        return {"project": None}
 
 
 @router.post("/api/snippets")
@@ -35,7 +43,8 @@ async def add_snippet(request: Request):
         body = await request.json()
     except Exception:
         body = {}
-    r = snippet_store.add(
+    r = await asyncio.to_thread(
+        snippet_store.add,
         body.get("text", ""),
         body.get("label"),
         scope=body.get("scope") or snippet_store.SCOPE_GLOBAL,
@@ -50,7 +59,7 @@ async def add_snippet(request: Request):
 
 @router.delete("/api/snippets/{item_id}")
 async def delete_snippet(item_id: str):
-    r = snippet_store.remove(item_id)
+    r = await asyncio.to_thread(snippet_store.remove, item_id)
     if not r.get("ok"):
         return JSONResponse(r, status_code=404)
     return r
@@ -65,7 +74,8 @@ async def update_snippet(item_id: str, request: Request):
         body = {}
     if not any(k in body for k in ("text", "label", "scope")):
         return JSONResponse({"error": "nothing_to_update"}, status_code=400)
-    r = snippet_store.update(
+    r = await asyncio.to_thread(
+        snippet_store.update,
         item_id,
         text=body.get("text"),
         label=body.get("label"),

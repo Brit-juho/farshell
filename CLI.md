@@ -79,6 +79,10 @@ fsh tunnel list                   # list all open tunnels (main + extra ports), 
 fsh tunnel hook                   # check + immediately run the URL-change hook (fsh help tunnel-hook)
 fsh tunnel restart                # force a new tunnel even in a zombie-reconnect (unresponsive) state + rerun the hook
 fsh tunnel watchdog               # check/start the zombie-reconnect auto-detection daemon (normally auto-started by fsh start/voice/mobile)
+fsh watchdog status               # server watchdog: ready verdict, stuck work/locks, scan quarantine, recent incident bundles
+fsh watchdog check                # read /api/health/ready once and print it (JSON)
+fsh watchdog unquarantine         # clear the folders left out of scans because they stopped responding
+fsh watchdog agent install        # macOS: let launchd supervise the watchdog itself (uninstall to remove)
 fsh ssh [session]      # guidance for connecting directly to a tmux session via Tailscale + SSH
 fsh doctor             # installation/environment diagnostics (includes Linux checks)
 fsh terminal           # show / choose the main terminal app fsh uses when it opens a window

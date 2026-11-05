@@ -233,19 +233,21 @@ class Hub:
             await self._broadcast({"type": "error", "reason": "watch failed"})
 
     async def _dispatch(self, changed: list[str]) -> None:
+        sends = []
         for send, subs in list(self._clients.values()):
             hit = match(subs, changed)
             if hit:
-                await _safe_send(send, {"type": "changed", "subs": [s.key() for s in hit]})
+                sends.append(_safe_send(send, {"type": "changed", "subs": [s.key() for s in hit]}))
+        await asyncio.gather(*sends)
 
     async def _broadcast(self, msg: dict) -> None:
-        for send, _ in list(self._clients.values()):
-            await _safe_send(send, msg)
+        await asyncio.gather(*(_safe_send(send, msg) for send, _ in list(self._clients.values())))
 
 
 async def _safe_send(send: Send, msg: dict) -> None:
+    # 2초 기한 — 응답 없는 클라이언트 하나가 다른 구독자에게 갈 변경 알림을 붙잡지 않게(resilience/wsutil.py 와 같은 규칙).
     try:
-        await send(msg)
+        await asyncio.wait_for(send(msg), 2.0)
     except Exception:  # noqa: BLE001 — 끊긴 연결은 수신 루프가 정리한다
         pass
 

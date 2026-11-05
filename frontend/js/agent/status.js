@@ -13,6 +13,8 @@ import { applyAgentBadges } from './badges.js';
 import { applySnapshot, applyEvent, applyAgentNames } from './state.js';
 import { showToast } from '../ui/toast.js';
 import { t } from '../core/i18n.js';
+import { createPoll } from '../core/poll.js';
+import { watchSocketLiveness } from '../core/ws-watchdog.js';
 
 // 로그인 게이트가 실제로 걷히기 전까지 기다린다 — index.html의 hideGate()가
 // window.__vtAuthed=true + 'vt:authed' 이벤트로 신호를 준다. 이게 없으면 이
@@ -141,11 +143,11 @@ function _setTmuxCwdMap(list) {
   _tmuxCwdByName = map;
 }
 
+// 실패는 던진다 — 폴러(core/poll.js)가 간격을 늘리고 다음 주기에 다시 본다.
 async function _refreshTmuxCwdMap() {
-  try {
-    const res = await apiFetch(`${API_BASE}/api/tmux/sessions`);
-    _setTmuxCwdMap(await res.json());
-  } catch (_) { /* 다음 주기에 재시도 */ }
+  const res = await apiFetch(`${API_BASE}/api/tmux/sessions`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  _setTmuxCwdMap(await res.json());
 }
 
 // /ws-agent 스냅샷(agent_snapshot)의 active 목록을 카드/탭 강조에 반영.
@@ -168,17 +170,23 @@ function connectAgentWs() {
   try {
     wsAgent = new WebSocket(`${WS_BASE}${relayWsPath(`/ws-agent${_tokenQuery}`)}`);
   } catch (e) { return scheduleAgentReconnect(); }
+  // 생존 감시(core/ws-watchdog.js) — 서버 ping(15초)이 45초 동안 안 오면 닫아 재연결을 돌린다.
+  let liveness = null;
+  const opened = wsAgent;
   // [회귀 fb827a6와 동일 패턴] 3초 이상 안정적으로 열린 뒤에만 백오프 리셋 —
   // accept 직후 닫히는 flap에서 지수가 자라지 못하고 빠르게 재연결하는 것을 방지.
   wsAgent.onopen = () => {
+    liveness?.stop();
+    liveness = watchSocketLiveness(opened);
     _sendAgentVisibility();
     clearTimeout(_wsAgentStableTimer);
     _wsAgentStableTimer = setTimeout(() => { _wsAgentRetries = 0; }, 3000);
     // T6: 탭 뱃지의 cwd 매핑을 연결 시점에 한 번 채워둔다 — 그리드를 열기 전에도
     // agent_event가 도착하는 즉시 탭에 매칭될 수 있도록.
-    _refreshTmuxCwdMap();
+    _refreshTmuxCwdMap().catch(() => { /* 폴러가 다음 주기에 다시 본다 */ });
   };
   wsAgent.onmessage = (e) => {
+    liveness?.alive();
     let msg;
     try { msg = JSON.parse(e.data); } catch (_) { return; }
     if (msg.type === 'ping') {
@@ -230,6 +238,8 @@ function connectAgentWs() {
   // 이미 다른 소켓으로 갈아탔으면 옛 소켓의 close가 재연결을 하나 더 만들지 않게 한다.
   const sock = wsAgent;
   sock.onclose = () => {
+    liveness?.stop();
+    liveness = null;
     if (sock !== wsAgent) return;
     clearTimeout(_wsAgentStableTimer);
     scheduleAgentReconnect();
@@ -273,5 +283,6 @@ whenAuthed(connectAgentWs);
 // 20초 폴링은 그 채널이 끊긴 동안을 위한 60초 안전망으로 줄였다.
 whenAuthed(() => {
   onWorkspaceEvent('tmux_sessions', (msg) => _setTmuxCwdMap(msg.sessions));
-  setInterval(() => { if (!document.hidden) _refreshTmuxCwdMap(); }, 60000);
+  // 이전 조회가 안 끝났으면 건너뛰고, 실패하면 간격을 늘린다. 숨은 탭에서는 쉰다.
+  createPoll(_refreshTmuxCwdMap, { interval: 60000 }).start();
 });

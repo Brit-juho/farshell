@@ -67,7 +67,7 @@ SAMPLES = [
     ("POST", "/api/agent/event"), ("POST", "/api/agent/report"), ("POST", "/api/clipboard/push"),
     ("POST", "/voice/cancel"), ("POST", "/voice/input"), ("POST", "/voice/target"), ("POST", "/voice/bind"),
     ("POST", "/voice/stt/preload"),
-    ("GET", "/api/capabilities"), ("GET", "/api/tmux/sessions"), ("DELETE", "/api/tmux/kill/work"),
+    ("GET", "/api/capabilities"), ("GET", "/api/health/ready"), ("GET", "/api/tmux/sessions"), ("DELETE", "/api/tmux/kill/work"),
     ("PATCH", "/api/sessions/s1"), ("POST", "/api/notify/client-event"), ("POST", "/api/agent/message"),
     ("GET", "/api/agent/messages"), ("GET", "/api/agent/directory"), ("GET", "/api/agent/shared"),
     ("POST", "/api/agent/shared/read"), ("POST", "/api/agent/shared/send"),

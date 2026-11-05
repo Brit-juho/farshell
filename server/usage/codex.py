@@ -38,6 +38,7 @@ from typing import Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request as _UrlRequest
 from urllib.request import urlopen
+from resilience.locks import LockTimeout, TimedLock
 
 USAGE_URL = "https://chatgpt.com/backend-api/wham/usage"
 # Codex 서버 쪽 정책을 우리가 통제 못 하므로 이 User-Agent를 실측대로 유지한다
@@ -142,11 +143,16 @@ class CodexProvider:
         self._auth_mtime: Optional[float] = None
         # 여러 스레드(to_thread로 넘긴 라우트들)가 동시에 캐시가 비었다고 보고
         # 각자 외부 요청을 치지 않게 한 번에 하나만 조회한다.
-        self._lock = threading.Lock()
+        # HTTPS(10초 기한)를 쥔 채 부른다 — 기다리는 쪽은 기본 기한만 기다린다(TimedLock).
+        self._lock = TimedLock("usage.codex", default_timeout=20.0)
 
     def _fetch(self) -> tuple[Optional[dict], Optional[str]]:
-        with self._lock:
-            return self._fetch_locked()
+        try:
+            with self._lock:
+                return self._fetch_locked()
+        except LockTimeout:
+            # 다른 스레드의 조회가 기한을 넘겨 붙잡혀 있다 — 기다리지 않고 직전 값(있으면)으로 답한다.
+            return self._cache, self._cache_error or "busy"
 
     def _fetch_locked(self) -> tuple[Optional[dict], Optional[str]]:
         now = time.time()
