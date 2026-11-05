@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+---
+
+## [2.8.0] — 2026-11-05
+
 ### Changed
 - CI and the release workflow now run the frontend on Node 22 (jsdom 30 needs Node 22.22 or newer); `package.json` `engines` says the same. Running the frontend tests needs Node 22+.
 - Test tooling: `jsdom` 29 → 30. The one voice-panel test that broke put the mic button inside a hidden template, and jsdom 30 (like browsers) refuses `focus()` on an element that is not rendered; the test now un-hides the template. The vite 8 / jsdom 30 note in the Dependabot config is gone.
@@ -19,8 +23,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - The initial-bundle ceiling (`app.js` + `core.js`) went from 300 KiB to 350 KiB in CI, the release workflow and the build-output test; it exists to catch a vendor library leaking into the eager bundle. At the same time four boot-irrelevant modules (agent profiles, snippet helpers, the system panel, the number spinner) moved into lazy chunks, taking the payload from 307,191 B to 275,880 B. The `<select>` dropdown layer (`ui/select.js`) is now a lazy `select` chunk behind a small stub (`ui/select-lazy.js`) that loads it when a `<select>` first appears and during idle time after boot (payload 275,880 B -> 268,813 B); if the chunk fails to load, native selects keep working. The modal scaffold (`panels/panel.js`) and the confirm/prompt/alert dialogs (`core/dialog.js`) are a lazy `panel` chunk behind `core/dialog-lazy.js`; if that chunk cannot be fetched, the browser's own confirm/prompt/alert is used instead (payload 268,813 B -> 260,750 B). The upload engine (`term/upload.js`) and the usage-guide body are lazy chunks (`upload`, `panel`) behind small core stubs (`term/upload-lite.js` keeps drop detection, the window-level drop guard and the `window.vtUpload*` bridges; payload 260,750 B -> 252,058 B). The build log now lists the top modules in `core.js`. Removed dead code: `core/signals.ts`, `getKeyDecision`, `currentTab`.
 - The bottom status bar moved to the top as a full-width, Mac-style **menu bar** (28px, on every skin; wide and regular screens only). The tab row sits below it, and the rail, dock and page start under it. Settings → 하단바 is now **메뉴바** and keeps your saved chip layout.
 - GitHub Actions in CI and the release workflow moved to their current majors (checkout 7, setup-node 7, setup-python 7, upload-artifact 7, action-gh-release 3), still pinned to commit SHAs. The majors only move the actions to the Node 24 runtime; verified with a full CI run on `dev`.
-- Frontend tooling: `vite-plugin-solid` 2.11.14 → 2.11.15 (patch). vite 8 and jsdom 30 were deliberately not taken: vite 8 no longer bundles esbuild, so `vite.config.js` (which calls `transformWithEsbuild`) fails to build, and jsdom 30 changes focus restoration after `click()` and breaks one voice-panel test.
-- Dependabot: vite and jsdom major updates are ignored until the vite 8 build config and one jsdom 30 test are sorted out, and pip version-update PRs are off (they only raised `>=` floors, which would break the voice install on Python 3.11; security updates still arrive).
+- Frontend tooling: `vite-plugin-solid` 2.11.14 → 2.11.15 (patch).
+- Dependabot: pip version-update PRs are off (they only raised `>=` floors, which would break the voice install on Python 3.11); security updates still open PRs.
 
 ### Added
 - **Chunked voice upload.** Browsers with AudioWorklet (https or localhost) now send a recording as 16kHz PCM16 chunks of about 0.5 s to the new `POST /voice/chunk` while you record, so a network drop in a long recording no longer loses it: unacknowledged chunks are re-sent and the server joins them in order (out-of-order, repeated and late chunks are handled; 60 s total, 5 s per chunk, one open recording per caller, discarded after 30 s without a request). On stop it runs through the same dedup, recognition and injection path as `/voice/input`. `POST /voice/chunk/cancel` discards a recording. Browsers without AudioWorklet, or where it fails to start, fall back to the existing MediaRecorder + `/voice/input` upload unchanged.
