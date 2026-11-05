@@ -42,10 +42,13 @@ async def list_worktrees(include_hidden: int = 0):
     # 원본이고 mcp_scan 같은 다른 소비자도 쓰는데, 거기서 걸러버리면 "레일에서
     # 숨겼다"가 "MCP 탐색에서도 사라졌다"가 된다 — 숨김은 표시 설정이지
     # 경계 설정이 아니다(경계는 VT_BROWSE_ROOTS다).
-    items, hidden = await asyncio.gather(
-        asyncio.to_thread(worktree.list_worktrees),
-        asyncio.to_thread(repo_store.hidden_set),
-    )
+    try:
+        items, hidden = await asyncio.gather(
+            asyncio.to_thread(worktree.list_worktrees),
+            asyncio.to_thread(repo_store.hidden_set),
+        )
+    except worktree.WorktreeError as e:          # 탐색이 막혔고 직전 목록도 없다 → 503 discovery_busy
+        return JSONResponse(e.payload, status_code=e.status)
     if include_hidden:
         out = [
             {**w, "hidden": repo_store.is_hidden(w, hidden)}

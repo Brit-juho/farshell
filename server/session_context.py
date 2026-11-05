@@ -13,6 +13,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 import fsguard
+from resilience import mounts as res_mounts, pools as res_pools
 from routes.git import _collect_status, _git
 
 TTL = 10.0
@@ -25,6 +26,17 @@ _repo_cache: OrderedDict[str, tuple[float, str | None]] = OrderedDict()
 _workspace_reading = tuple(threading.Lock() for _ in range(64))
 _repo_reading = tuple(threading.Lock() for _ in range(64))
 _reading = tuple(threading.Lock() for _ in range(64))
+# 2026-11-05 — 같은 줄의 잠금을 쥔 스레드가 NFS 위 cwd 에서 멈추면, 해시가 같은 다른 cwd 들까지
+# `/api/tmux/sessions`가 같이 멈췄다. 잠금은 이 시간만 기다리고, 한 cwd 조회 전체에도 기한을 둔다.
+STRIPE_WAIT = 3.0
+CONTEXT_TIMEOUT = 8.0
+# 스냅샷 하나가 아니라 서버 전체에서 동시에 도는 cwd 조회 수(예전엔 호출마다 새 Semaphore(4)였다).
+_GLOBAL_LIMIT: tuple | None = None
+
+
+def _unavailable(cwd: str, reason: str) -> dict:
+    return {"status": "unavailable", "cwd": cwd, "root": None, "branch": None,
+            "changed": None, "worktree": None, "reason": reason}
 
 
 class ContextChanged(OSError):
@@ -147,8 +159,22 @@ def _context(cwd: str) -> dict:
     if not cwd:
         return {"status": "unavailable", "cwd": "", "root": None,
                 "branch": None, "changed": None, "worktree": None}
+    # 원격·가상 마운트(NFS 등) 위의 cwd 는 git·resolve 를 하지 않는다 — 그 한 번이 멈출 수 있다.
+    if res_mounts.skip_for_scan(cwd):
+        return _unavailable(cwd, "remote_mount")
     reading = _reading[hash(cwd) % len(_reading)]
-    with reading:
+    if not reading.acquire(True, STRIPE_WAIT):
+        with _lock:
+            hit = _cache.get(cwd)
+        return {**hit[1], "status": "unavailable", "reason": "busy"} if hit else _unavailable(cwd, "busy")
+    try:
+        return _context_locked(cwd)
+    finally:
+        reading.release()
+
+
+def _context_locked(cwd: str) -> dict:
+    if True:
         now = time.monotonic()
         with _lock:
             hit = _cache.get(cwd)
@@ -186,12 +212,23 @@ def _context(cwd: str) -> dict:
 
 
 async def contexts_for(cwds: list[str]) -> dict[str, dict]:
-    """스냅샷당 Git 동시 조회를 제한하고 같은 cwd는 한 번만 읽는다."""
-    gate = asyncio.Semaphore(4)
+    """서버 전체에서 Git 동시 조회를 제한하고 같은 cwd는 한 번만 읽는다. cwd 하나가 기한을 넘기면
+    그 cwd 만 unavailable 이고 나머지는 그대로 답한다(`git` 풀, `CONTEXT_TIMEOUT`)."""
+    global _GLOBAL_LIMIT
+    loop = asyncio.get_running_loop()
+    if _GLOBAL_LIMIT is None or _GLOBAL_LIMIT[0] is not loop:
+        _GLOBAL_LIMIT = (loop, asyncio.Semaphore(4))     # 세마포어는 루프에 묶인다(테스트는 루프를 여럿 쓴다)
+    gate = _GLOBAL_LIMIT[1]
 
     async def one(cwd):
         async with gate:
-            return cwd, await asyncio.to_thread(_context, cwd)
+            try:
+                return cwd, await res_pools.run("git", _context, cwd, op="session_context", key=cwd,
+                                                timeout=CONTEXT_TIMEOUT)
+            except res_pools.OpTimeout:
+                return cwd, _unavailable(cwd, "timeout")
+            except res_pools.Busy:
+                return cwd, _unavailable(cwd, "busy")
 
     result = dict(await asyncio.gather(*(one(c) for c in dict.fromkeys(cwds))))
     roots = list(dict.fromkeys(d["root"] for d in result.values() if d.get("root")))

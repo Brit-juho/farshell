@@ -29,6 +29,8 @@ import fsguard
 import git_safe
 import mcp_env
 import tmux_runner
+from resilience import mounts as res_mounts, proc as res_proc, scan as res_scan
+from resilience.locks import TimedLock
 # 순수 파서는 worktree_parse.py로 옮겼다. **이름은 여기 그대로 남긴다** —
 # server/tests/test_worktree.py와 create_worktree가 `worktree.parse_*`로 쓰고 있고,
 # 상태를 안 읽는 순수 함수라 재수출해도 monkeypatch와 어긋날 여지가 없다.
@@ -64,6 +66,14 @@ CACHE_TTL_SEC = 75.0
 CACHE_STALE_SEC = 120.0
 GIT_TIMEOUT = 10.0
 MAX_SCAN_DEPTH = 3
+# 디렉터리 순회(자식 프로세스)의 기한. 정상 순회는 수 ms 다(실측 0.003초). 이 시간을 넘기면 마지막으로
+# 들어가던 디렉터리를 격리 목록에 올리고 직전 목록을 계속 쓴다(resilience/scan.py).
+SCAN_TIMEOUT = float(os.environ.get("VT_SCAN_TIMEOUT", "8"))
+# 요청이 다른 호출자의 탐색이 끝나기를 기다리는 최대 시간. 넘기면 낡은 목록을 그대로 돌려준다
+# (목록이 아예 없으면 503 discovery_busy). 2026-11-05 사고: 이 대기가 무기한이라 탐색 스레드 하나가
+# NFS 에서 멈추자 기다리던 요청들이 기본 스레드 풀 19개를 전부 묶었다.
+DISCOVER_WAIT_SEC = float(os.environ.get("VT_DISCOVER_WAIT_SEC", "8"))
+BACKGROUND_WAIT_SEC = 60.0
 
 # 98-rail-repos-2.1.6.md §1 — 탐색 경계가 `$HOME`이면 깊이 3으로는 진짜 프로젝트가
 # 밀려난다(`~/GitHub/work/proj`이 깊이 4라 통째로 빠졌다).
@@ -107,10 +117,11 @@ class WorktreeError(Exception):
 def _git(args: list[str], cwd: Path, timeout: float = GIT_TIMEOUT, *, hooks: bool = False) -> tuple[int, bytes, bytes]:
     """`git_safe`로 저장소 설정이 프로그램을 띄우지 못하게 한다. `hooks=True`는 사용자가 요청한
     worktree 만들기·지우기에만(git CLI와 같이 post-checkout 등 저장소 훅이 돈다)."""
+    # resilience.proc: 기한이 지나면 프로세스 그룹을 죽이고 짧게만 기다린다(subprocess.run 은 죽인 뒤
+    # 무기한 기다려서, NFS 위 저장소에서 멈춘 git 이면 이 스레드까지 같이 갇힌다).
     try:
-        proc = subprocess.run(
-            git_safe.argv(*args, hooks=hooks), cwd=str(cwd), capture_output=True, timeout=timeout,
-            check=False, env=git_safe.env(),
+        proc = res_proc.run(
+            git_safe.argv(*args, hooks=hooks), cwd=str(cwd), timeout=timeout, env=git_safe.env(),
         )
         return proc.returncode, proc.stdout, proc.stderr
     except FileNotFoundError:
@@ -185,6 +196,9 @@ def _sessions_for_path(path: Path, all_panes, wt_id: str | None = None) -> list[
             continue
         if not pane.path:
             continue
+        # 원격·가상 마운트 위의 cwd 는 resolve() 하지 않는다 — 그 한 번이 NFS 에서 멈출 수 있다.
+        if res_mounts.skip_for_scan(pane.path):
+            continue
         try:
             pane_path = Path(pane.path).resolve()
         except OSError:
@@ -218,46 +232,25 @@ def _find_git_entrypoints(
     만난 디렉터리 이름이 컨테이너면 그 아래로 다시 +1을 준다 — 경계가
     `$HOME`이어도 `GitHub/work/proj`(깊이 4)이 들어오고,
     `~/Library` 쪽은 보너스를 못 받아 예전 깊이 그대로다.
+
+    순회는 자식 프로세스에서 한다(`resilience/scan_worker.py`의 `git_entrypoints`, 규칙은 같다).
+    원격·가상 마운트(`~/OrbStack` 같은 NFS)·격리 목록·차단된 경로는 처음부터 들어가지 않고,
+    `SCAN_TIMEOUT`을 넘기면 마지막 디렉터리를 격리하고 `ScanTimeout`을 던진다.
     """
-    found: list[Path] = []
-    truncated = False
-
-    def walk(d: Path, depth_left: int) -> None:
-        nonlocal truncated
-        if truncated or len(found) >= limit:
-            truncated = truncated or len(found) >= limit
-            return
-        try:
-            # `with`로 닫는다 — routes/files.py와 같은 규칙. 예외 경로에서
-            # 디렉터리 fd가 GC까지 남지 않도록.
-            with os.scandir(d) as it:
-                entries = list(it)
-        except OSError:
-            return
-        if any(e.name == ".git" for e in entries):
-            found.append(d)
-            if len(found) >= limit:
-                truncated = True
-            return
-        if depth_left <= 0:
-            return
-        for e in entries:
-            if truncated:
-                return
-            if not e.is_dir(follow_symlinks=False):
-                continue
-            if e.name in fsguard.EXCLUDE_DIRS or e.name in SCAN_EXCLUDE_DIRS:
-                continue
-            if e.name.startswith(".") and e.name != ".worktrees":
-                continue
-            bonus = SCAN_DEPTH_BONUS if e.name.lower() in SCAN_CONTAINER_NAMES else 0
-            walk(Path(e.path), depth_left - 1 + bonus)
-
-    for root in roots:
-        if truncated:
-            break
-        walk(root, _root_depth(root, max_depth))
-    return found, truncated
+    req = {
+        "mode": "git_entrypoints",
+        "roots": [str(r) for r in roots],
+        "max_depth": max_depth,
+        "limit": limit,
+        "exclude_names": sorted(set(fsguard.EXCLUDE_DIRS) | SCAN_EXCLUDE_DIRS),
+        "container_names": sorted(SCAN_CONTAINER_NAMES),
+        "bonus": SCAN_DEPTH_BONUS,
+        "skip_prefixes": res_scan.skip_prefixes(),
+    }
+    result = res_scan.run(req, SCAN_TIMEOUT)
+    if result.get("skipped"):
+        logger.debug("저장소 탐색에서 건너뜀: %s", result["skipped"])
+    return [Path(p) for p in result.get("found", [])], bool(result.get("truncated"))
 
 
 def _read_origin_remote(repo_top: Path) -> dict | None:
@@ -400,27 +393,58 @@ def last_scan_truncated() -> bool:
 # ⚠ 잠금 순서는 항상 _discover_lock → _cache_lock 이다. 반대로 잡지 말 것.
 _cache: dict = {"at": 0.0, "data": None}
 _cache_lock = threading.Lock()
-_discover_lock = threading.Lock()
+# 잠금을 쥔 쪽·보유 시간이 /api/health/ready 와 감시 스레드(resilience/watch.py)에 보인다.
+_discover_lock = TimedLock("worktree.discover")
 _refresh_thread: threading.Thread | None = None
 
 
-def _refresh_locked(accept_age: float) -> list[dict]:
+def _refresh_locked(accept_age: float, wait: float | None = None) -> list[dict]:
     """탐색을 한 번만 돌린다. 잠금을 기다리는 사이 다른 호출자가 `accept_age`
     이내로 갱신해 뒀으면 그 결과를 그대로 반환한다(중복 탐색 제거).
 
     `accept_age=0.0`이면 어떤 값도 받아들이지 않으므로 항상 새로 탐색한다 —
     `force=True`가 이 경로다.
+
+    잠금은 `wait`초(기본 `DISCOVER_WAIT_SEC`)만 기다린다. 넘기면 낡은 값이라도 돌려주고, 값이 아예
+    없으면 `WorktreeError(503, discovery_busy)`. 순회가 기한을 넘기면(`ScanTimeout`) 같은 규칙이다.
     """
-    with _discover_lock:
+    if wait is None:
+        wait = DISCOVER_WAIT_SEC
+    if not _discover_lock.acquire(True, wait, op="worktree.discover"):
+        return _stale_or_busy(f"탐색 잠금 {wait:g}s 대기 초과 — {_discover_lock.holder()}")
+    try:
         with _cache_lock:
             data, at = _cache["data"], _cache["at"]
         if data is not None and time.time() - at < accept_age:
             return data
-        data = _discover_all()
+        try:
+            data = _discover_all()
+        except res_scan.ScanTimeout as e:
+            return _stale_or_busy(str(e))
         with _cache_lock:
             _cache["at"] = time.time()
             _cache["data"] = data
         return data
+    finally:
+        _discover_lock.release()
+
+
+def _stale_or_busy(why: str) -> list[dict]:
+    with _cache_lock:
+        data = _cache["data"]
+    if data is not None:
+        logger.warning(f"워크트리 목록을 새로 만들지 못해 직전 목록을 돌려줌: {why}")
+        return data
+    raise WorktreeError(503, {"error": "discovery_busy",
+                              "detail": tr("저장소 목록을 만드는 중입니다 — 잠시 뒤 다시 시도하세요")})
+
+
+def list_worktrees_or_empty(force: bool = False) -> list[dict]:
+    """화면이 아닌 소비자(MCP 탐색·세션 카탈로그·설정 관리자)용 — 목록을 못 만들면 빈 목록."""
+    try:
+        return list_worktrees(force=True) if force else list_worktrees()
+    except WorktreeError:
+        return []
 
 
 def _schedule_background_refresh() -> None:
@@ -440,7 +464,7 @@ def _schedule_background_refresh() -> None:
 
 def _background_refresh() -> None:
     try:
-        _refresh_locked(CACHE_TTL_SEC)
+        _refresh_locked(CACHE_TTL_SEC, wait=BACKGROUND_WAIT_SEC)
     except Exception:
         # 갱신 실패는 조용히 넘긴다 — 캐시에는 직전 값이 그대로 남아 있고,
         # 다음 요청이 같은 경로를 다시 밟는다. 여기서 예외가 새면 스레드만 죽는다.

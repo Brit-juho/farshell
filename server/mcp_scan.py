@@ -141,7 +141,7 @@ def _session_context(session: str) -> Optional[dict]:
     if not safe.is_dir():
         return None
     # 이미 아는 워크트리면 그 항목을 그대로 쓴다 — 라벨·id가 워크트리 화면과 일치한다.
-    for wt in worktree.list_worktrees():
+    for wt in worktree.list_worktrees_or_empty():
         try:
             if Path(wt.get("path") or "").resolve() == safe:
                 return {**wt, "session": name, "cwd": str(safe_cwd), "id": wt["id"]}
@@ -177,7 +177,7 @@ def find_worktree(worktree_id: Optional[str]) -> Optional[dict]:
         return {"id": worktree_id, "path": str(path), "cwd": str(path), "repoName": path.name}
     if worktree_id.startswith(SESSION_PREFIX):
         return _session_context(worktree_id[len(SESSION_PREFIX):])
-    for wt in worktree.list_worktrees():
+    for wt in worktree.list_worktrees_or_empty():
         if wt.get("id") == worktree_id:
             return wt
     return None

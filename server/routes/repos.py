@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 import fsguard
 import repo_store
@@ -62,10 +63,13 @@ def _group_by_repo(items: list[dict]) -> list[dict]:
 
 @router.get("/api/repos")
 async def list_repos(include_hidden: int = 0):
-    items, hidden = await asyncio.gather(
-        asyncio.to_thread(worktree.list_worktrees),
-        asyncio.to_thread(repo_store.hidden_set),
-    )
+    try:
+        items, hidden = await asyncio.gather(
+            asyncio.to_thread(worktree.list_worktrees),
+            asyncio.to_thread(repo_store.hidden_set),
+        )
+    except worktree.WorktreeError as e:          # 탐색이 막혔고 직전 목록도 없다 → 503 discovery_busy
+        return JSONResponse(e.payload, status_code=e.status)
     grouped = _group_by_repo(items)
     for r in grouped:
         r["hidden"] = repo_store.is_hidden({"path": r["path"]}, hidden)

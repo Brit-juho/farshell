@@ -220,7 +220,7 @@ def _context_list(session: str | None, view: str) -> tuple[list[dict], dict | No
                 result.append({**default_context(saved["tool"]), "root": str(root)})
         except (OSError, ValueError, KeyError):
             continue
-    trees = worktree.list_worktrees()
+    trees = worktree.list_worktrees_or_empty()
     for tree in trees:
         for tool in ("claude", "codex", "opencode"):
             result.append({**default_context(tool, tree["path"]), "worktree": tree["id"]})
