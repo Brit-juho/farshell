@@ -1,4 +1,4 @@
-import { vtFetch } from '../../../core/api.js';
+import { vtFetch, STT_PRELOAD_TIMEOUT_MS } from '../../../core/api.js';
 import { get as setting, set as setSetting } from '../../../core/settings.js';
 import { confirmDialog } from '../../../core/dialog.js';
 import { row, statusLine, toast, group, fmtBytes } from '../controls.js';
@@ -100,7 +100,7 @@ export function renderVoiceInput() {
   }
   preloadBtn.addEventListener('click', async () => {
     try {
-      const r = await vtFetch('/voice/stt/preload', { method: 'POST' });
+      const r = await vtFetch('/voice/stt/preload', { method: 'POST', timeout: STT_PRELOAD_TIMEOUT_MS });
       toast(r.loaded ? t('메모리에 올렸습니다') : (r.error || t('올리지 못했습니다')), r.loaded ? undefined : 'error');
     } catch (e) { toast(e.message || t('올리지 못했습니다'), 'error'); }
     refreshStatus();
@@ -347,7 +347,7 @@ export function renderVoiceInput() {
       try {
         // 이미 메모리에 올라가 있으면 새 모델로 바로 교체한다(없으면 다음 녹음 때 적재).
         const st = await vtFetch('/voice/stt/status');
-        if (st && st.loaded) await vtFetch('/voice/stt/preload', { method: 'POST' });
+        if (st && st.loaded) await vtFetch('/voice/stt/preload', { method: 'POST', timeout: STT_PRELOAD_TIMEOUT_MS });
       } catch (_) { /* 적용은 끝났다 — 적재는 다음 녹음 때 다시 시도된다 */ }
       toast(t('음성 인식 모델: {model}', { model: labelOf(id) }));
     } catch (e) { toast(e.message || t('적용하지 못했습니다'), 'error'); }

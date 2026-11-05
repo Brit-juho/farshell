@@ -11,7 +11,7 @@ import { createSignal, createEffect, onCleanup, For, Show } from 'solid-js';
 import { t } from '../core/i18n.js';
 
 export interface WorktreeDialogDeps {
-  vtFetch: (path: string, opts?: RequestInit) => Promise<unknown>;
+  vtFetch: (path: string, opts?: RequestInit & { timeout?: number }) => Promise<unknown>;
 }
 
 interface Props {
@@ -102,6 +102,8 @@ export function WorktreeDialog(props: Props) {
     try {
       const res = await props.deps.vtFetch('/api/worktrees', {
         method: 'POST',
+        // 워크트리 생성은 git checkout까지 해서 큰 저장소면 30초를 넘길 수 있다.
+        timeout: 120000,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });

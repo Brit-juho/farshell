@@ -2,6 +2,7 @@ import { vtSkins, vtSkinLabel, getVtSkin } from '../../../theme.js';
 import { renderItems, group, row, toast } from '../controls.js';
 import { icon } from '../../../ui/icons.js';
 import { t, lang } from '../../../core/i18n.js';
+import { timedFetch } from '../../../core/api.js';
 
 // 화면 언어 — 서버 전역 값(VT_LANG, server/i18n.py)이라 설정 스토어 스키마가 아니다.
 // 서버가 index.html을 내줄 때 언어를 박으므로 바꾼 뒤에는 새로고침해야 적용된다.
@@ -28,7 +29,8 @@ function renderLangControl() {
       // vtFetch를 쓰지 않는다: 호스트 전환 중이면 다른 맥으로 중계되는데, 화면을 내주는
       // 것은 이 서버라 이 서버의 언어를 바꿔야 한다.
       const tq = (window._tokenQuery || '').replace(/^[?&]/, '');
-      const r = await fetch(`${window.API_BASE}/api/lang${tq ? `?${tq}` : ''}`, {
+      // timedFetch는 주소를 바꾸지 않는다(중계 없음) — 마감과 도달 판정만 붙는다.
+      const r = await timedFetch(`${window.API_BASE}/api/lang${tq ? `?${tq}` : ''}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

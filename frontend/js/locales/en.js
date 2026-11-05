@@ -4551,5 +4551,6 @@ window.__VT_I18N = {
   "확인 없이 바로 입력": "Send without confirming",
   "확인 후 입력합니다 — {name}": "Confirm before sending — {name}",
   "확인 후 전송": "Confirm before sending",
-  "확인하면 인식 결과를 고쳐서 입력할 수 있습니다. 「일반 셸이면 확인」은 Claude·Codex 같은 AI 에이전트 화면에는 바로 입력하고, 일반 셸이나 알 수 없는 화면에는 먼저 확인합니다. rm -rf, sudo, curl | sh, git push --force 같은 위험한 명령은 「확인 없이 바로 입력」이 아니면 항상 확인합니다.": "Confirming lets you edit the transcript before it's sent. \"Confirm for plain shells\" sends straight to AI agents such as Claude or Codex and confirms first for plain shells and screens it can't identify. Risky commands (rm -rf, sudo, curl | sh, git push --force) are always confirmed unless you choose \"Send without confirming\"."
+  "확인하면 인식 결과를 고쳐서 입력할 수 있습니다. 「일반 셸이면 확인」은 Claude·Codex 같은 AI 에이전트 화면에는 바로 입력하고, 일반 셸이나 알 수 없는 화면에는 먼저 확인합니다. rm -rf, sudo, curl | sh, git push --force 같은 위험한 명령은 「확인 없이 바로 입력」이 아니면 항상 확인합니다.": "Confirming lets you edit the transcript before it's sent. \"Confirm for plain shells\" sends straight to AI agents such as Claude or Codex and confirms first for plain shells and screens it can't identify. Risky commands (rm -rf, sudo, curl | sh, git push --force) are always confirmed unless you choose \"Send without confirming\".",
+  "요청이 제시간에 끝나지 않습니다. 계속되면 맥에서 fsh restart를 실행하세요.": "Requests aren't finishing in time. If this keeps happening, run fsh restart on your Mac."
 };

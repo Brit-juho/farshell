@@ -1,6 +1,7 @@
 import { t } from '../core/i18n.js';
 import { operationId } from '../core/operation-id.js';
 import { promptDialog } from '../core/dialog-lazy.js';
+import { timedFetch } from '../core/api.js';
 
 export function historyError(code) {
   return ({
@@ -41,7 +42,8 @@ export function historyError(code) {
 /** @param {string} path @param {{ body?: any, signal?: AbortSignal, elevated?: boolean, method?: string }} [options] @returns {Promise<any>} */
 export async function historyApi(path, { body, signal, elevated = true, method } = {}) {
   const run = async () => {
-    const response = await fetch(path, { method: method || (body === undefined ? 'GET' : 'POST'), credentials: 'same-origin',
+    // 주소는 그대로(중계·토큰 없음) — 마감과 도달 판정만 붙인다(core/api.js timedFetch).
+    const response = await timedFetch(path, { method: method || (body === undefined ? 'GET' : 'POST'), credentials: 'same-origin',
       headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body), signal });
     const value = await response.json();

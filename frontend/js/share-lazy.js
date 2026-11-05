@@ -4,6 +4,7 @@
 import { onWorkspaceEvent } from './core/workspace-ws.js';
 import { isRelayed } from './core/host-route.js';
 import { getAction } from './core/dom.js';
+import { timedFetch } from './core/api.js';
 
 let shareMod = null;
 let authzMod = null;
@@ -37,7 +38,8 @@ window.vtAuthzBadge = (n) => {
 
 // 대기 요청을 쿠키만으로 받는다(토큰·Authorization 이 실리면 서버가 사람 요청으로 치지 않는다 — share/share-api.js).
 function sync() {
-  fetch(`${window.API_BASE || ''}/api/authz/approvals`, { credentials: 'same-origin' })
+  // 쿠키만 — 주소·헤더는 그대로 두고 마감과 도달 판정만 붙인다(core/api.js timedFetch).
+  timedFetch(`${window.API_BASE || ''}/api/authz/approvals`, { credentials: 'same-origin' })
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => {
       const list = d && Array.isArray(d.approvals) ? d.approvals : null;
