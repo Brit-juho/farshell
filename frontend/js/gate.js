@@ -35,6 +35,11 @@
   var probeMsg=document.getElementById('login-probe-msg');
   var probeDetail=document.getElementById('login-probe-detail');
   var retryBtn=document.getElementById('login-retry');
+  // 경고 아이콘은 비밀번호 오류 줄(#login-err)의 것을 그대로 쓴다 — 정적 사본을 하나 더 두지 않는다.
+  (function(){
+    var ic=err.querySelector('svg'), box=probe.querySelector('.login-err');
+    if(ic && box) box.insertBefore(ic.cloneNode(true), box.firstChild);
+  })();
   var params=new URLSearchParams(location.search);
 
   // 게이트의 모든 요청에 마감을 건다. 서버가 연결은 받는데 답을 안 하던 사고에서

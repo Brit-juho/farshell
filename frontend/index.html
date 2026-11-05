@@ -268,8 +268,7 @@
     <!-- 확인이 마감(8초) 안에 안 끝났을 때 — gate.js가 문구를 채우고, 버튼은 같은 확인을 다시 한다 -->
     <div id="login-probe" hidden>
       <div class="login-err" role="alert">
-        <!-- ui/icons.js의 'alert-triangle'과 같은 path -->
-        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        <!-- 경고 아이콘은 gate.js가 아래 #login-err의 것을 복제해 넣는다(인라인 svg 사본을 늘리지 않는다 — icons.test.js) -->
         <div>
           <div id="login-probe-msg"></div>
           <div id="login-probe-detail"></div>
