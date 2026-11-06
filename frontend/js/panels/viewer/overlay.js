@@ -1,7 +1,7 @@
 // ADR-44 — 파일 뷰어 오버레이. pane 트리 밖에 있어서
 // 열고 닫아도 터미널 cols×rows가 바뀌지 않는다(fit도 SIGWINCH도 안 일어난다).
 import { openPanel, closePanel } from '../panel.js';
-import { renderFile, refreshFile, jumpToLine } from './file.js';
+import { renderFile, refreshFile, refreshGap, jumpToLine, disposeViewer } from './file.js';
 import { isCrossHost } from './file-load.js';
 import { watchPath, coalesce } from '../../shell/fs-watch.js';
 import { _viewerState, _shareFile } from './state.js';
@@ -82,7 +82,10 @@ function _refresh(el) {
 function _watch(el, path) {
   if (el._vtUnwatch) { el._vtUnwatch(); el._vtUnwatch = null; }
   if (isCrossHost(el._vtHost)) return;
-  el._vtUnwatch = watchPath('file', path, coalesce(() => _refresh(el)));
+  // 큰 파일은 최소 간격을 두고 묶는다(refreshGap) — 자라는 로그를 볼 때 변경마다 다시 읽지 않게.
+  el._vtUnwatch = watchPath('file', path, coalesce(() => _refresh(el), {
+    minGap: () => refreshGap(el.querySelector('.vt-vw-body')),
+  }));
 }
 
 function _setHead(el, path) {
@@ -157,6 +160,7 @@ function _setFile(el, path, opts = {}) {
   // 요청마다 새 호스트에 그린다. 늦게 도착한 이전 파일은 떨어져 나간 호스트에 그려져 무해하다.
   const host = document.createElement('div');
   host.className = 'vt-vw-code-pane';
+  disposeViewer(body);   // 앞 파일의 편집기(창 수신기)를 지금 거둔다
   body.replaceChildren(host);
   body.scrollTop = 0;
   renderFile(host, path, { host: fileHost, line: opts.line, col: opts.col })
@@ -296,6 +300,7 @@ export function openFileOverlay(path, opts = {}) {
       if (tick) { clearInterval(tick); tick = null; }
       if (ro) ro.disconnect();
       if (panel && panel.el._vtUnwatch) { panel.el._vtUnwatch(); panel.el._vtUnwatch = null; }
+      if (panel) disposeViewer(panel.el);
     },
   });
   if (!panel) return;

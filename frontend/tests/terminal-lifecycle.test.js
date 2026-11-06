@@ -726,3 +726,20 @@ test('세션 종료 — 뷰어 칸이 있는 뷰는 닫지 않는다', async () 
 
   assert.strictEqual(layoutStore.getTabs().length, tabs, '파일을 보던 뷰는 세션이 끝나도 유지된다');
 });
+
+test('뷰어 칸을 닫으면 그 칸의 편집기를 destroy한다(창 수신기가 다음 편집기 때까지 남지 않게)', async () => {
+  const { window, addSession, layoutStore } = await buildTerminalWindow();
+  addSession('a', 'A');
+  layoutStore.openViewerPane('/tmp/x.md');
+  await _flush();
+  const pane = window.document.querySelector('.vt-pane-viewer .vt-vw-code-pane');
+  assert.ok(pane, '뷰어 칸이 그려진다');
+  let destroyed = 0;
+  pane._vtEditor = { view: { dom: pane }, destroy: () => { destroyed += 1; } };
+  const leaf = layoutStore.getTree().t === 'split' ? layoutStore.getTree().b : null;
+  assert.ok(leaf && leaf.kind === 'viewer');
+  layoutStore.closePane(leaf.id);
+  await _flush();
+  assert.strictEqual(window.document.querySelector('.vt-pane-viewer'), null);
+  assert.strictEqual(destroyed, 1);
+});

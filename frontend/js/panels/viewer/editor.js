@@ -160,6 +160,7 @@ function _coarse() {
  * container 안에 읽기 전용 편집기를 붙인다. 돌려주는 핸들:
  * - `setText(text)` — 바뀐 부분만 교체한다(스크롤·선택 유지). 같으면 아무것도 하지 않는다.
  * - `append(text)` — 끝에 붙인다(구간을 이어 받을 때, 「더 보기」).
+ * - `replaceEnd(n, text)` — 끝의 n글자를 text로 바꾼다(커진 파일의 끝 이어 받기). 바꿨으면 true.
  * - `jumpTo(line, col)` — 그 줄로 옮기고 표시한다. 받은 범위를 넘으면 false.
  * - `atBottom()` — 스크롤이 끝에 있는가(끝부분 보기에서 새 내용을 따라갈지 정한다).
  * - `destroy()`
@@ -201,6 +202,13 @@ export async function mountEditor(container, text, path, hljsName, opts = {}) {
       if (!more) return;
       const end = view.state.doc.length;
       view.dispatch({ changes: { from: end, to: end, insert: more } });
+    },
+    replaceEnd(n, more) {
+      const end = view.state.doc.length;
+      const from = Math.max(0, end - Math.max(0, n | 0));
+      if (from === end && !more) return false;
+      view.dispatch({ changes: { from, to: end, insert: more || '' } });
+      return true;
     },
     lines() { return view.state.doc.lines; },
     jumpTo(line, col) {

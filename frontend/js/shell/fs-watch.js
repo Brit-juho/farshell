@@ -170,16 +170,40 @@ export function isWatchLive(kind, path) {
 
 /**
  * 콜백을 묶는다: 실행 중에 또 불리면 끝난 뒤 한 번만 더 돈다. 저장 한 번이
- * 이벤트 여러 개로 오거나 git status가 느릴 때 요청이 쌓이지 않게.
+ * 이벤트 여러 개로 오거나 상태 조회가 느릴 때 요청이 쌓이지 않게.
+ * `opts.minGap`(ms, 또는 그 값을 돌려주는 함수)을 주면 한 번 돈 뒤 그만큼은 다시 돌지 않고 그 사이 온 부름을
+ * 한 번으로 모은다 — 큰 파일을 보는 뷰어가 계속 바뀌는 파일에 끌려 쉬지 않고 다시 받지 않게(file.js refreshGap).
+ * 첫 부름은 기다리지 않는다.
  */
-export function coalesce(fn) {
+export function coalesce(fn, opts = {}) {
   let running = false;
   let again = false;
+  let timer = null;
+  let last = -Infinity;
+  const gap = () => {
+    let g = 0;
+    try { g = Number(typeof opts.minGap === 'function' ? opts.minGap() : opts.minGap) || 0; } catch (_) { g = 0; }
+    return g > 0 ? g : 0;
+  };
+  const wait = () => last + gap() - Date.now();
   const run = async () => {
     if (running) { again = true; return; }
+    const w = wait();
+    if (w > 0) {
+      if (!timer) timer = setTimeout(() => { timer = null; run(); }, w);
+      return;
+    }
     running = true;
     try {
-      do { again = false; await fn(); } while (again);
+      do {
+        again = false;
+        last = Date.now();
+        await fn();
+        if (again) {
+          const w2 = wait();
+          if (w2 > 0) await new Promise((r) => { setTimeout(r, w2); });
+        }
+      } while (again);
     } catch (_) { /* 다음 변경 때 다시 시도한다 */ } finally {
       running = false;
     }

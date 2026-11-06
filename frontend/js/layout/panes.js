@@ -477,6 +477,7 @@ function _renderViewerBody(bodyEl, file) {
   if (bodyEl.dataset.viewerFile === file) return;
   _clearViewerFile(bodyEl);
   bodyEl.dataset.viewerFile = file;
+  _viewerBodies.add(bodyEl);
   bodyEl.replaceChildren();
   // 새로고침 버튼은 헤더가 아니라 본문 위에 띄운다 — 페인이 하나뿐이면 헤더가
   // 통째로 숨는다(isRootOnly). 높이 0인 sticky 줄에 붙여 코드를 밀어내지 않는다.
@@ -510,20 +511,34 @@ function _renderViewerBody(bodyEl, file) {
       if (bodyEl.dataset.viewerFile === file) {
         // 디스크에서 바뀌면 다시 그린다. 칸이 DOM에서 빠졌으면(pane을 닫았다)
         // 여기서 구독을 푼다 — 닫는 경로가 여럿이라 이쪽에서 거두는 게 확실하다.
+        // 큰 파일은 최소 간격을 두고 묶는다(refreshGap) — 자라는 로그를 볼 때 변경마다 다시 읽지 않게.
         bodyEl._vtUnwatch = v.watchPath('file', file, v.coalesce(() => {
           if (!bodyEl.isConnected) { _clearViewerFile(bodyEl); return undefined; }
           return _refreshViewerBody(bodyEl);
-        }));
+        }, { minGap: () => v.refreshGap(bodyEl) }));
       }
       return v.renderFile(host, file);
     })
     .catch((e) => { host.textContent = String(e && e.message ? e.message : e); });
 }
 
-// 뷰어 칸이 다른 것(세션·패널·빈 칸·다른 파일)으로 바뀔 때 — 표시 경로와 감시를 함께 거둔다.
+// 뷰어 칸이 다른 것(세션·패널·빈 칸·다른 파일)으로 바뀔 때 — 표시 경로와 감시, 편집기를 함께 거둔다.
+// 편집기(CodeMirror)는 창에 수신기를 걸어 두므로 칸을 떼어 내기만 하면 남는다 — 지금 destroy한다.
+// 뷰어 청크는 칸에 편집기가 있었다면 이미 받아 둔 것이라 loadViewer는 새로 받지 않는다.
+const _viewerBodies = new Set();
 function _clearViewerFile(bodyEl) {
   delete bodyEl.dataset.viewerFile;
   if (bodyEl._vtUnwatch) { bodyEl._vtUnwatch(); bodyEl._vtUnwatch = null; }
+  _viewerBodies.delete(bodyEl);
+  const hosts = [...bodyEl.querySelectorAll(':scope > .vt-vw-code-pane')];
+  if (hosts.length) {
+    loadViewer().then((v) => { for (const h of hosts) v.disposeViewer(h); }).catch(() => {});
+  }
+}
+
+// 트리에서 빠진 뷰어 칸(칸 닫기, compact에서 다른 칸으로 넘김 — 다시 오면 칸을 새로 만든다)을 렌더 끝에 거둔다.
+function _sweepViewerBodies() {
+  for (const b of _viewerBodies) if (!b.isConnected) _clearViewerFile(b);
 }
 
 // 새로고침 버튼·자동 갱신 공용. 스크롤 위치를 지킨 채 같은 파일을 다시 그린다.
@@ -645,6 +660,7 @@ function _renderFull() {
     ? _renderCompactActive(leaves, activePaneId, placement)
     : _renderNode(tree, activePaneId, leaves.length === 1, placement);
   if (_rootEl.children[0] !== rootEl) _rootEl.replaceChildren(rootEl);
+  _sweepViewerBodies();
 
   // N35 §6 — 세션이 아닌 칸이 하나라도 있으면 화면이 비어 있는 게 아니다.
   // 온보딩은 position:fixed + z-index:500이라 페인 위를 덮으므로 CSS로 눌러둔다.
