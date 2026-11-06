@@ -19,6 +19,14 @@
 
 `ua`·`client`·`ip_*`·`via`는 목록에서 기기를 알아보기 위한 표시용이다. 인증에
 쓰지 않는다(auth/client_info.py 머리말).
+
+동시 수정(2026-11): devices.json을 **읽고-고치고-쓰는** 모든 경로는 락 하나(`_locked`, 락 전용 파일
+`devices.json.lock`에 `store_lock.exclusive`)를 잡고 그 안에서 다시 읽는다. `verify_device`의 `last_seen`
+갱신이 스레드에서(공유 링크 라우트의 `asyncio.to_thread`) 돌면서 루프의 `revoke_device`/`register_device`와
+겹치면, 락 없이는 먼저 읽어 둔 목록을 그대로 저장해 **폐기한 기기를 되살리거나 막 등록한 기기를 지웠다.**
+flock은 열린 파일 단위라 같은 프로세스의 스레드끼리도, `fsh device` CLI와도 서로 막는다. 재진입하지 않으므로
+락은 공개 함수에서만 잡고 `_save_devices`는 잡지 않는다. 읽기만 하는 경로(검증·목록)는 락 없이 읽는다 —
+쓰기는 원자적 교체(`fileio._write_json_secure`)라 반쯤 쓴 파일을 볼 일이 없다.
 """
 
 from __future__ import annotations
@@ -28,7 +36,10 @@ import hmac
 import re
 import secrets
 import time
+from contextlib import contextmanager
 from typing import Optional
+
+import store_lock
 
 # ⚠ 경로·설정은 **호출 시점에** `auth.X`로 읽는다. 모듈 상단에서
 # `from auth import DEVICES_PATH`로 당겨오면 그 순간 값이 굳어서, 테스트가
@@ -99,6 +110,15 @@ def _split_stale(devices: list, now: int, grace: int) -> tuple[list, list]:
     for d in devices:
         (stale if now >= _expires_at(d) + grace else keep).append(d)
     return keep, stale
+
+
+@contextmanager
+def _locked():
+    """devices.json 읽고-고치고-쓰기 구간. 락 파일은 데이터 파일 옆(`devices.json.lock`)에 두고 지우지 않는다
+    (store_lock 머리말). 기한(`store_lock.DEFAULT_DEADLINE`)을 넘기면 `store_lock.LockTimeout`."""
+    path = auth.DEVICES_PATH
+    with store_lock.exclusive(path.with_name(path.name + ".lock")):
+        yield
 
 
 def _load_devices() -> list:
@@ -175,9 +195,10 @@ def register_device(
         "ip_seen_at": now,
         "via": str(m.get("via") or ""),
     }
-    devices = [d for d in _load_devices() if d.get("id") != device_id]
-    devices.append(rec)
-    _save_devices(devices)
+    with _locked():
+        devices = [d for d in _load_devices() if d.get("id") != device_id]
+        devices.append(rec)
+        _save_devices(devices)
     return secret, device_id
 
 
@@ -191,27 +212,37 @@ def verify_device(secret: str, meta: dict | None = None) -> Optional[dict]:
         return None
     digest = hashlib.sha256(secret.encode("utf-8")).hexdigest()
     now = int(time.time())
-    devices = _load_devices()
+    d = _match(_load_devices(), digest)   # 대부분의 요청은 여기서 끝난다 — 락 없이 읽기만
+    if d is None or not _alive(d, now):
+        return None
+    updates = {}
+    if now - int(d.get("last_seen", 0) or 0) > _SEEN_INTERVAL:
+        updates["last_seen"] = now
+    ip = str((meta or {}).get("ip") or "")
+    if ip and now - int(d.get("ip_seen_at", 0) or 0) > _SEEN_INTERVAL:
+        updates.update(ip_last=ip, via=str((meta or {}).get("via") or ""), ip_seen_at=now)
+    if not updates:
+        return d
+    try:
+        # 위에서 읽은 목록을 그대로 저장하면 그 사이의 폐기·등록을 덮어쓴다 — 락 안에서 다시 읽고 이 기기만 고친다.
+        with _locked():
+            devices = _load_devices()
+            cur = _match(devices, digest)
+            if cur is None:
+                return None   # 그 사이에 폐기됐다 — 되살리지 않는다
+            cur.update(updates)
+            _save_devices(devices)
+            return cur
+    except (OSError, store_lock.LockTimeout):
+        # 표시용 메타 갱신일 뿐이다 — 저장을 못 해도 인증 판정은 위에서 읽은 그대로다.
+        d.update(updates)
+        return d
+
+
+def _match(devices: list, digest: str) -> Optional[dict]:
     for d in devices:
         stored = d.get("hash", "")
         if stored and hmac.compare_digest(stored, digest):
-            if not _alive(d, now):
-                return None
-            dirty = False
-            if now - int(d.get("last_seen", 0) or 0) > _SEEN_INTERVAL:
-                d["last_seen"] = now
-                dirty = True
-            ip = str((meta or {}).get("ip") or "")
-            if ip and now - int(d.get("ip_seen_at", 0) or 0) > _SEEN_INTERVAL:
-                d["ip_last"] = ip
-                d["via"] = str((meta or {}).get("via") or "")
-                d["ip_seen_at"] = now
-                dirty = True
-            if dirty:
-                try:
-                    _save_devices(devices)
-                except OSError:
-                    pass
             return d
     return None
 
@@ -226,11 +257,13 @@ def list_devices() -> list:
 def prune_devices() -> list:
     """만료된 기기를 보관 기간과 무관하게 지금 정리한다(`fsh device prune`). 지운 목록 반환."""
     now = int(time.time())
-    devices = _load_devices()
-    keep = [d for d in devices if _alive(d, now)]
-    removed = [d for d in devices if not _alive(d, now)]
+    with _locked():
+        devices = _load_devices()
+        keep = [d for d in devices if _alive(d, now)]
+        removed = [d for d in devices if not _alive(d, now)]
+        if removed:
+            fileio._write_json_secure(auth.DEVICES_PATH, {"version": 1, "devices": keep})
     if removed:
-        fileio._write_json_secure(auth.DEVICES_PATH, {"version": 1, "devices": keep})
         _drop_device_settings([d.get("id", "") for d in removed])
     return [_public(d, now) for d in removed]
 
@@ -249,12 +282,13 @@ def rename_device(prefix: str, label: str) -> Optional[dict]:
     prefix = (prefix or "").strip().lower()
     if not prefix:
         return None
-    devices = _load_devices()
-    hits = [d for d in devices if d.get("id", "").startswith(prefix)]
-    if len(hits) != 1:
-        return None
-    hits[0]["label"] = (label or "").strip()[:60] or hits[0].get("label", "기기")
-    _save_devices(devices)
+    with _locked():
+        devices = _load_devices()
+        hits = [d for d in devices if d.get("id", "").startswith(prefix)]
+        if len(hits) != 1:
+            return None
+        hits[0]["label"] = (label or "").strip()[:60] or hits[0].get("label", "기기")
+        _save_devices(devices)
     return _public(hits[0], int(time.time()))
 
 
@@ -263,9 +297,10 @@ def revoke_device(prefix: str) -> list:
     prefix = (prefix or "").strip().lower()
     if not prefix:
         return []
-    devices = _load_devices()
-    removed = [d for d in devices if d.get("id", "").startswith(prefix)]
-    if removed:
-        _save_devices([d for d in devices if d not in removed])
+    with _locked():
+        devices = _load_devices()
+        removed = [d for d in devices if d.get("id", "").startswith(prefix)]
+        if removed:
+            _save_devices([d for d in devices if d not in removed])
     now = int(time.time())
     return [_public(d, now) for d in removed]
