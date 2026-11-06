@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Changed
+- On macOS, `fsh start` launches the server (and a tmux server it creates) through a small `FarShell.app` launcher, so macOS permission prompts say **FarShell** instead of `python3.14`, and an answer is remembered across restarts, releases and Python upgrades. The app is built once under `~/.vt/app` and rebuilt only when its source changes. `VT_MACOS_APP=0` keeps the old behaviour. An already running tmux server keeps its old permission owner until it is restarted.
 - On macOS, automatic scans no longer walk into the locations macOS guards with a permission prompt (Desktop, Documents, Downloads, Pictures, Movies, Music, `~/Library`, `/Volumes`), so restarting the server no longer raises a burst of prompts. `VT_SCAN_INCLUDE_PROTECTED=1` puts them back; opening such a folder in the file tab still works.
 - **Releases finish in minutes.** `python3 scripts/release.py X.Y.Z` releases the tip of `origin/dev` only when its CI already passed, builds the release commit in a temporary worktree (VERSION, README badges, CHANGELOG — nothing else), signs and verifies the tag, pushes `dev`, `master`, `release/X.Y` and the tag in one atomic push, and waits for the Release workflow. It no longer waits for a second full CI run on `master`.
 - CI runs the server tests in parallel across the runner's cores (`pytest-xdist`, one file per worker). A tmux test that read a freshly created pane's path before tmux reported it now waits for the path first.

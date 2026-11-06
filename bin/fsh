@@ -133,6 +133,8 @@ _resolve_disallowed_tools() {
 _VT_LEGACY_RUN="${_VT_LEGACY_RUN:-/tmp}"   # 시험이 가짜 옛 폴더를 가리킬 수 있게 환경으로 덮는다
 # shellcheck source=../lib/run_dir.sh
 . "$VT_DIR/lib/run_dir.sh"
+# macOS 권한 책임자를 FarShell 로 고정하는 실행 껍데기(lib/macos_app.sh, macos/farshell-launcher.c).
+[ -f "$VT_DIR/lib/macos_app.sh" ] && . "$VT_DIR/lib/macos_app.sh"
 
 # 2.7 전 bin/fsh 는 VT_RUN_DIR=/tmp 를 **늘** export 했다 — 그때 띄운 tmux 세션·데몬·워치독의 환경에 그 값이
 # 남아 있다(설정 파일보다 낡은 export 가 이기는 같은 함정). 사용자가 고른 값이 아니라 옛 기본값이므로 미지정으로
@@ -285,8 +287,26 @@ _start_server() {
   bind_host="$("$VT_PYTHON" -c 'import network_access as n; print(n.resolve_bind_host(n.get_current_spec()))' 2>/dev/null || echo 0.0.0.0)"
   # 지금 디스크의 코드 지문을 남긴다 — 나중에 "옛 코드로 돌고 있나"를 주석 수정과 구분하는 기준.
   "$VT_PYTHON" -m code_fingerprint "$VT_DIR/server" > "$PID_DIR/server.codehash" 2>/dev/null || rm -f "$PID_DIR/server.codehash"
-  nohup "$VT_PYTHON" -m uvicorn main:app --host "$bind_host" --port $VT_PORT > "$SERVER_LOG" 2>&1 &
-  echo $! > "$PID_DIR/server.pid"
+  # macOS 는 FarShell.app 껍데기를 거쳐 띄운다 — 권한 창이 "python3.14" 가 아니라 "FarShell" 로 뜨고 허용이
+  # 재시작·업그레이드 뒤에도 유지되게(lib/macos_app.sh). server.pid 에는 껍데기가 아니라 실제 Python 서버 pid 를
+  # 넣는다(워치독·fsh stop·SIGUSR1 스택 덤프가 서버를 직접 가리키게). 껍데기를 못 쓰면 예전처럼 직접 띄운다.
+  local _app=""
+  command -v _vt_app_prefix >/dev/null 2>&1 && _app="$(_vt_app_prefix)"
+  if [ -n "$_app" ]; then
+    rm -f "$PID_DIR/server.child.pid"
+    FSH_APP_PIDFILE="$PID_DIR/server.child.pid" nohup "$_app" "$VT_PYTHON" -m uvicorn main:app --host "$bind_host" --port $VT_PORT > "$SERVER_LOG" 2>&1 &
+    local _launcher=$! _w=0
+    while [ ! -s "$PID_DIR/server.child.pid" ] && [ $_w -lt 50 ]; do sleep 0.1; _w=$((_w + 1)); done
+    if [ -s "$PID_DIR/server.child.pid" ]; then
+      cat "$PID_DIR/server.child.pid" > "$PID_DIR/server.pid"
+    else
+      echo "$_launcher" > "$PID_DIR/server.pid"
+    fi
+    rm -f "$PID_DIR/server.child.pid"
+  else
+    nohup "$VT_PYTHON" -m uvicorn main:app --host "$bind_host" --port $VT_PORT > "$SERVER_LOG" 2>&1 &
+    echo $! > "$PID_DIR/server.pid"
+  fi
   # 고정 sleep 대신 서버가 실제로 응답할 때까지 폴링한다. uvicorn 기동 시간은
   # 패키지 로딩량 등에 따라 달라져서, 고정 대기 중에 브라우저가 자동으로 열리거나
   # 사용자가 새로고침하면 아직 안 뜬 서버에 요청이 가서 프론트가 "세션 없음"으로
@@ -1292,7 +1312,15 @@ _ensure_tmux_session() {
     _tmux_apply_title_options
     return 0
   fi
-  "${TMUX_BASE[@]}" new-session -d -s "$name" -x 200 -y 50 2>/dev/null || return 1
+  # tmux 서버가 이 호출로 처음 뜨면, 그 서버와 그 안의 모든 프로그램이 이 프로세스의 권한 책임을 물려받는다.
+  # FarShell.app 을 거쳐 띄워 책임자를 FarShell 로 고정한다(이미 떠 있는 tmux 서버에는 영향 없음).
+  local _app=""
+  command -v _vt_app_prefix >/dev/null 2>&1 && _app="$(_vt_app_prefix)"
+  if [ -n "$_app" ]; then
+    "$_app" "${TMUX_BASE[@]}" new-session -d -s "$name" -x 200 -y 50 2>/dev/null || return 1
+  else
+    "${TMUX_BASE[@]}" new-session -d -s "$name" -x 200 -y 50 2>/dev/null || return 1
+  fi
   _tmux_apply_title_options
 }
 
@@ -3607,6 +3635,23 @@ print(('ok|' if sel and sel['ready'] else 'warn|') + (sel['label'] + ('|ready' i
     if [ "${_dq:-0}" -gt 0 ]; then
       _check "$(_t '탐색 격리')" warn "$(_t '응답이 없어 탐색에서 뺀 디렉터리 {n}개 — fsh watchdog status 로 보기, fsh watchdog unquarantine 으로 풀기' n="$_dq")"
     fi
+  fi
+  # macOS 권한 창에 어떤 이름으로 뜨는가 — FarShell.app 껍데기(lib/macos_app.sh)를 거쳐 떴으면 FarShell.
+  if command -v _vt_app_state >/dev/null 2>&1 && [ "$(uname -s)" = "Darwin" ]; then
+    local _ast _srvp _parent=""
+    _ast="$(_vt_app_state)"
+    _srvp="$(cat "$PID_DIR/server.pid" 2>/dev/null || true)"
+    [ -n "$_srvp" ] && _parent="$(ps -o comm= -p "$(ps -o ppid= -p "$_srvp" 2>/dev/null | tr -d ' ')" 2>/dev/null || true)"
+    case "$_ast" in
+      off)         _check "$(_t 'macOS 권한 이름')" ok "$(_t '꺼 둠 (VT_MACOS_APP=0) — 권한 창에 Python 이름으로 뜹니다')" ;;
+      unavailable) _check "$(_t 'macOS 권한 이름')" warn "$(_t 'FarShell.app 을 만들 수 없습니다(cc·codesign 필요) — 권한 창에 Python 이름으로 뜹니다')" ;;
+      missing|stale) _check "$(_t 'macOS 권한 이름')" warn "$(_t 'FarShell.app 이 없거나 낡았습니다 — fsh restart 가 다시 만듭니다')" ;;
+      ready)
+        case "$_parent" in
+          *FarShell) _check "$(_t 'macOS 권한 이름')" ok "$(_t '서버가 FarShell.app 으로 떠 있습니다 — 권한 창에 FarShell 로 뜹니다')" ;;
+          *)         _check "$(_t 'macOS 권한 이름')" warn "$(_t '지금 서버는 예전 방식(Python 직접)으로 떠 있습니다 — fsh restart 후 적용됩니다')" ;;
+        esac ;;
+    esac
   fi
   local _dinc
   _dinc="$(_server_health_summary 1 | sed -n 's/^INCIDENTS //p' | head -1)"

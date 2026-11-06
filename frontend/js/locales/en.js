@@ -4583,5 +4583,11 @@ window.__VT_I18N = {
   "탐색 격리 {n}건을 풀었습니다 (서버의 경로 차단은 5분 안에 저절로 풀립니다)": "Cleared {n} quarantined folder(s) (the server's path block clears itself within 5 minutes)",
   "파일 작업이 밀려 있습니다 — 잠시 뒤 다시 시도하세요": "File operations are backed up — try again in a moment",
   "포트는 열려 있지만 응답하지 않음 ({state}) — fsh restart": "Port is open but the server isn't responding ({state}) — fsh restart",
-  "포트는 열려 있지만 일을 못 받음({state}) → fsh restart. 원인: {what}": "Port is open but the server can't take work ({state}) → fsh restart. Cause: {what}"
+  "포트는 열려 있지만 일을 못 받음({state}) → fsh restart. 원인: {what}": "Port is open but the server can't take work ({state}) → fsh restart. Cause: {what}",
+  "macOS 권한 이름": "macOS permission name",
+  "꺼 둠 (VT_MACOS_APP=0) — 권한 창에 Python 이름으로 뜹니다": "Off (VT_MACOS_APP=0) — permission prompts show the Python name",
+  "FarShell.app 을 만들 수 없습니다(cc·codesign 필요) — 권한 창에 Python 이름으로 뜹니다": "Cannot build FarShell.app (needs cc and codesign) — permission prompts show the Python name",
+  "FarShell.app 이 없거나 낡았습니다 — fsh restart 가 다시 만듭니다": "FarShell.app is missing or out of date — fsh restart rebuilds it",
+  "서버가 FarShell.app 으로 떠 있습니다 — 권한 창에 FarShell 로 뜹니다": "The server runs under FarShell.app — permission prompts say FarShell",
+  "지금 서버는 예전 방식(Python 직접)으로 떠 있습니다 — fsh restart 후 적용됩니다": "The server was started the old way (Python directly) — it applies after fsh restart"
 };
