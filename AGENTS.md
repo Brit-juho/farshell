@@ -81,14 +81,20 @@ Verify affected behavior with actual responses, operations and logs.
 - `release/X.Y` preserves the X.Y line at its release tag (`release/2.3` is exactly `v2.3.0`).
   It exists for urgent fixes to that version: commit the fix there, tag `vX.Y.(Z+1)`, then
   merge it into `dev` (also with `--no-ff`) so it is not lost.
-- To release: on `dev`, run the release commit (`VERSION`, the two README badges, move
-  `[Unreleased]` to `[X.Y.Z] — date`, `chore(release): vX.Y.Z`), then fast-forward `master` to it.
-  This one stays a fast-forward: `master`'s tip must be the release commit the tag points at (the
-  feature merge commits come along in the history). Tag `vX.Y.Z` on `master` as a **signed annotated
-  tag** (`git -c gpg.format=ssh -c user.signingkey=<key> tag -s vX.Y.Z`) — `fsh update --channel stable`
-  refuses unsigned tags (`docs/ref/dev.md`) — and push the tag (the
-  `Release` workflow publishes it; it fails if `VERSION` and the tag differ), and point
-  `release/X.Y` at the tag. Pushing a tag publishes a public release — confirm with the user first.
+- To release: run **`python3 scripts/release.py X.Y.Z`** (`--dry-run` first if unsure). It releases
+  the tip of `origin/dev` **only if that commit's CI (`ci.yml`) already succeeded** — it never waits
+  for a new CI run, and it stops at once if CI is running or red (fix CI first; that is not release
+  time). It builds the release commit (`VERSION`, the two README badges, `[Unreleased]` →
+  `[X.Y.Z] — date`, `chore(release): vX.Y.Z`) in a temporary worktree and checks it changed only those
+  four files, signs the annotated tag `FarShell vX.Y.Z` with SSH and verifies it against
+  `~/.vt/update-signers` (`fsh update --channel stable` refuses unsigned tags, `docs/ref/dev.md`),
+  pushes `dev`, `master` (fast-forward), `release/X.Y` and the tag in **one atomic push**, then waits for
+  the `Release` workflow and checks the GitHub Release assets. Target: under 5 minutes end to end; it
+  prints per-step times. If the tip of `origin/dev` is already the `chore(release): vX.Y.Z` commit (an
+  earlier run stopped before tagging), it resumes without a new commit. `ci.yml` skips pushes whose
+  head commit is a release commit, and `release.yml` refuses a tag unless the tagged commit — or, for a
+  metadata-only release commit, its parent — has a successful `ci.yml` run. Pushing a tag publishes a
+  public release — confirm with the user first.
 - Never force-push `master`, `dev` or a `release/*` branch; a push must only move the tip forward.
   One exception was made on 2026-10-23, before the repository was made public: history was rewritten
   once to drop a personal file, and every branch and tag was force-pushed. Clones made before that

@@ -21,6 +21,7 @@ on:
         required: true
 
 permissions:
+  actions: read         # CI 통과 확인(아래 「CI 통과 확인」) — 워크플로 실행 기록 읽기만.
   contents: write       # 릴리스 생성에 필요.
   id-token: write       # 빌드 출처 증명(attest-build-provenance) — 서명용 단기 토큰.
   attestations: write   # 증명을 저장소에 기록한다. 그 외 권한은 주지 않는다.
@@ -58,6 +59,29 @@ jobs:
           FILE_VERSION="$(cat VERSION)"
           echo "VERSION 파일: $FILE_VERSION / 태그: ${{ steps.ver.outputs.version }}"
           [ "$FILE_VERSION" = "${{ steps.ver.outputs.version }}" ]
+
+      # 2026-11-06 — 검증 안 된 코드가 나가지 않게 한다. 릴리스는 새 CI 를 기다리지 않으므로(scripts/release.py),
+      # 태그 커밋이나 — 그 커밋이 메타 파일(VERSION·README 배지·CHANGELOG)만 바꾼 릴리스 커밋이면 — 부모 커밋의
+      # ci.yml 실행이 성공했어야 한다. 손으로 태그를 찍어도 같은 규칙이 걸린다. 과거 태그를 수동 실행으로 다시
+      # 릴리스하는 경우(workflow_dispatch)는 그때 CI 가 없었을 수 있어 건너뛴다.
+      - name: CI 통과 확인
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          SHA="$(git rev-parse HEAD)"
+          ok() { gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$1&per_page=30" \
+                   --jq '[.workflow_runs[] | select(.status=="completed" and .conclusion=="success")] | length'; }
+          if [ "$(ok "$SHA")" -gt 0 ]; then echo "CI 성공: $SHA"; exit 0; fi
+          PARENT="$(git rev-parse HEAD^)"
+          CHANGED="$(git diff --name-only "$PARENT" "$SHA" | grep -vxE 'VERSION|README\.md|README\.ko\.md|CHANGELOG\.md' || true)"
+          if [ -n "$CHANGED" ]; then
+            echo "태그 커밋에 CI 성공 기록이 없고, 메타 파일 밖도 바꿨다: $CHANGED" >&2; exit 1
+          fi
+          if [ "$(ok "$PARENT")" -gt 0 ]; then echo "릴리스 커밋 — 부모 $PARENT 의 CI 성공"; exit 0; fi
+          echo "태그 커밋($SHA)과 부모($PARENT) 모두 CI 성공 기록이 없다 — dev 에서 CI 를 먼저 통과시켜라" >&2
+          exit 1
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
