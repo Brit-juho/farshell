@@ -12,12 +12,12 @@
 
 from __future__ import annotations
 
-import importlib
 import time
 
 import pytest
 from starlette.exceptions import HTTPException
 from starlette.testclient import TestClient
+from shared_testkit import auth_mod  # noqa: F401  (pytest 가 이름으로 쓰는 fixture/헬퍼)
 
 
 # ---------------------------------------------------------------------------
@@ -25,19 +25,6 @@ from starlette.testclient import TestClient
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def auth_mod(tmp_path, monkeypatch):
-    import auth as _auth
-
-    importlib.reload(_auth)  # conftest가 비운 env 기준으로 깨끗하게 재로딩
-
-    state_dir = tmp_path / "vt"
-    monkeypatch.setattr(_auth, "STATE_DIR", state_dir)
-    monkeypatch.setattr(_auth, "DEVICES_PATH", state_dir / "devices.json")
-    monkeypatch.setattr(_auth, "TOTP_PATH", state_dir / "totp.json")
-    monkeypatch.setattr(_auth, "TICKETS_PATH", state_dir / "tickets.json")
-    monkeypatch.setattr(_auth, "VT_AUTH_SESSION_KEY", "test-session-signing-key")
-    yield _auth
 
 
 class _FakeRequest:

@@ -14,6 +14,7 @@ import voice_chunks as vc
 import voice_handler
 import voice_targets
 from routes import voice
+from shared_testkit import Req  # noqa: F401  (pytest 가 이름으로 쓰는 fixture/헬퍼)
 
 TIMING = {"decode_ms": 1, "wait_ms": 0, "load_ms": 0, "stt_ms": 5, "total_ms": 7}
 CH = b"\x01\x00" * 100          # 200바이트(짝수) 조각
@@ -238,18 +239,6 @@ def test_to_wav_header():
 
 # ── 라우트 ──────────────────────────────────────────────────────
 
-class Req:
-    def __init__(self, body=b"", headers=None, query=None):
-        self._body = body
-        self.headers = {"authorization": "Bearer tok-a", **(headers or {})}
-        self.query_params = query or {}
-        self.cookies = {}
-
-    async def body(self):
-        return self._body
-
-    async def json(self):
-        return json.loads(self._body)
 
 
 def issue(owner_headers=None):

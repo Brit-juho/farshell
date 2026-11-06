@@ -12,17 +12,9 @@ from starlette.testclient import TestClient
 
 from authz import principals as P
 from authz import store
+from shared_testkit import _Sock  # noqa: F401  (pytest 가 이름으로 쓰는 fixture/헬퍼)
 
 
-class _Sock:
-    def __init__(self, app, principal):
-        self.app, self.p = app, principal
-
-    async def __call__(self, scope, receive, send):
-        if scope["type"] == "http":
-            scope["fsh_sock"] = True
-            scope["state"] = {**(scope.get("state") or {}), "fsh_principal": self.p}
-        await self.app(scope, receive, send)
 
 
 def key(s):
