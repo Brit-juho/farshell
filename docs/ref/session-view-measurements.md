@@ -159,3 +159,32 @@ The file body now renders with CodeMirror 6, read-only (`viewer/editor.js`, [fil
 | concurrent-3 | 1775 → 72 | 1047 → 0 | 8168 → 312 | 5122 → 143 | 209,007 → 3,086 |
 
 Medians of 10 runs. `live-10s` (a change every 200 ms for 10 s): the refresh now replaces only the changed range in the open editor. Desktop: 19 → 49 refreshes, frame interval p95 517 → 17 ms, long tasks 9.9 s → 50 ms. Phone: 5 → 49 refreshes, frame interval p95 2183 → 17 ms (max 83 ms), long tasks 11.3 s → 184 ms. The phone `open-512k` long-task sum (169 ms median) is just above the 150 ms that was set as a provisional target; the largest single task is about 100 ms (initial parse and layout of the visible range).
+
+
+### 7.2 Range reads, large files, continuous change (2026-11-07)
+
+The viewer now reads `/api/fs/file` in 1 MB ranges (up to 4 MB at once, 「더 보기」 for more, conditional refresh — [files.md](./files.md)). The fake server in `run.mjs` follows the range contract (line-end cuts, `line_truncated`, `tail`, rev/ETag/304, `expected_rev` → 409). New scenarios: `open-12m` (first 4 MB + 「더 보기」 note), `live-same-10s` (change notices every 200 ms, file unchanged), `live-4m-10s` (4 MB file whose rev changes every 200 ms, so a refresh that reads several ranges can hit 409). `open-4m` and `long-line-1m` now load the whole file (they were cut to 512 KiB before). New columns: refresh calls vs. refreshes that changed content, KB in the editor, 304 and 409 counts. Same machine and tool as §7.1, 10 runs, median / p95.
+
+| Scenario | Desktop paint ms | Desktop long tasks ms | Phone (4x CPU) paint ms | Phone long tasks ms | Loaded |
+|---|---|---|---|---|---|
+| open-512k | 45 / 53 | 0 / 0 | 193 / 202 | 145 / 172 | 512 KB, 1 request |
+| open-4m | 98 / 119 | 0 / 0 | 476 / 485 | 254 / 278 | 4 MB, 5 requests |
+| open-12m | 107 / 123 | 0 / 0 | 515 / 531 | 246 / 298 | first 4 MB (5 requests) + note |
+| long-line-1m (one 1 MB+ line) | 75 / 84 | 0 / 0 | 229 / 311 | 206 / 215 | whole line, 2 requests (first `line_truncated`) |
+| concurrent-3 | 73 / 80 | 0 / 0 | 312 / 319 | 176 / 190 | 3 × 512 KB |
+
+Continuous change (10 s, a notice every 200 ms, coalesced like auto-refresh):
+
+| Scenario | Frame interval p95 / max ms (desktop) | (phone) | Refreshes / content changed (phone) | 304 / 409 (phone) | Long tasks ms (phone) |
+|---|---|---|---|---|---|
+| live-10s (512 KB, changes every request) | 17 / 33 | 17 / 83 | 49 / 49 | 0 / 0 | 397 (p95 539) |
+| live-same-10s (unchanged) | 17 / 33 | 17 / 83 | 49 / 0 | 50 / 0 | 168 |
+| live-4m-10s (4 MB, rev every 200 ms) | 17 / 33 | 33 (p95 run 50) / 83 | 49 / 25 | 24 / 26 | 1701 (p95 3100) |
+
+Against the targets in the plan: phone `open-512k` long tasks 145 ms (target ≤ 150 ms; 169 ms in §7.1 — the range reply is smaller than the old full reply). An unchanged file draws nothing (`live-same`: every refresh is a 304, zero content changes). Frame interval p95 under continuous change stays ≤ 50 ms in every run, including the 4 MB file on the phone profile (median 33 ms, worst run 50 ms). The cost there is the re-read: each change re-reads the loaded 4 MB (5 ranges); on the phone profile about half the refreshes hit a 409 mid-read and restart, long tasks add up to 1.7 s over 10 s and the JS heap peaks at about 200 MB in the worst run (71 MB median) before GC. Desktop never hit a 409. Not measured: real devices, a real server (the fake answers in well under a millisecond, so network and server read time are not in these numbers), and the 「더 보기」 click itself (covered by the browser smoke test).
+
+Initial payload (app.js + core.js): 325,488 → 327,335 B (cap 358,400; `vtFetchConditional`, the link `:line:col` split and the host-aware `openFile`).
+
+### 7.3 Terminal under the file overlay (300 ms repaint tick)
+
+`overlay.js` keeps two workarounds for a report that the terminal below the overlay's horizontal range stopped updating (left black or with missing glyphs): on open/move/resize/close it clears every session's glyph atlas and redraws all rows, and while the overlay is open it redraws the active session's rows every 300 ms. The plan was to find the cause (compositing with the WebGL canvas) and remove both. Probe (2026-11-07, isolated server, Playwright Chromium headless, xterm WebGL renderer): both workarounds disabled, a float overlay and a sheet over the terminal, 40 bursts of coloured lines and box-drawing frames written under it, then the region below the overlay captured before and after a forced full redraw and after an atlas clear. With SwiftShader and with ANGLE on Metal (Apple M1 Pro), 3 trials per surface: the captures were identical every time — **not reproduced**, so the cause is not known and both workarounds stay. The tick's own cost is small: one full `renderRows` of a 144 × 48 terminal took 0.2–0.3 ms. A reproduction probably needs the headed browser and the GPU compositor of the machine that showed it.

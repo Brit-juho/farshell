@@ -38,10 +38,11 @@ const ONLY = opt('only', '').split(',').filter(Boolean);
 const OUT = opt('out', '');
 const CHROME = opt('chrome', process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
 
-const SCENARIOS = ['open-512k', 'open-4m', 'long-line-1m', 'concurrent-3', 'diff-5000', 'tree', 'live-10s'];
+const SCENARIOS = ['open-512k', 'open-4m', 'open-12m', 'long-line-1m', 'concurrent-3', 'diff-5000', 'tree',
+  'live-10s', 'live-same-10s', 'live-4m-10s'];
 
 // 시나리오별 측정 시간 제한(ms) — live 는 10초를 돈다.
-const TIMEOUT = { 'live-10s': 60000 };
+const TIMEOUT = { 'live-10s': 60000, 'live-same-10s': 60000, 'live-4m-10s': 60000, 'open-12m': 60000 };
 
 const PROFILE_DEF = {
   desktop: { width: 1280, height: 800, scale: 1, mobile: false, cpu: 1 },
@@ -59,24 +60,85 @@ const TREE_ROOT = '/bench/tree';
 const FILES = new Map([
   ['/bench/code-512k.js', genCode(512 * 1024, 11)],
   ['/bench/code-4m.js', genCode(4 * 1024 * 1024, 12)],
+  ['/bench/code-12m.js', genCode(12 * 1024 * 1024, 16)],
   ['/bench/long-1m.min.js', genLongLine(1024 * 1024, 13)],
   ['/bench/live.js', genCode(512 * 1024 - 64, 14)],
+  ['/bench/live-same.js', genCode(512 * 1024 - 64, 17)],
+  ['/bench/live-4m.js', genCode(4 * 1024 * 1024 - 64, 18)],
 ]);
+const BYTES = new Map([...FILES].map(([k, v]) => [k, Buffer.from(v, 'utf8')]));
 const DIFF = genDiff(5000, 15);
 const TREE = genTree(TREE_ROOT);
 let liveTick = 0;
 
-function fileResponse(path) {
-  let text = FILES.get(path);
-  if (text == null) return null;
-  // 연속 변경 시나리오: 요청마다 마지막 줄이 바뀐다(서버가 매번 새 내용을 준다).
-  if (path === '/bench/live.js') text += `// tick ${liveTick++}\n`;
-  const buf = Buffer.from(text, 'utf8');
-  const cut = buf.subarray(0, MAX_BYTES);
-  return {
-    path, size: buf.length, binary: false, image: false,
-    truncated: buf.length > cut.length, content: cut.toString('utf8'),
-  };
+// `/api/fs/file` 흉내. 범위 인자가 없으면 옛 모양(앞 512KB, truncated), 있으면 2판(API.md): 1MB 구간을 창 안의
+// 마지막 `\n`에서 자르고(없으면 문자 경계에서 자르고 line_truncated), tail, rev·ETag·304, expected_rev → 409.
+// 판(rev): 보통 파일은 고정. live.js 는 요청마다 마지막 줄이 바뀐다(옛 측정과 같다). live-4m.js 는 200ms 마다
+// 바뀐다(구간을 이어 받는 사이에 바뀌면 409). live-same.js 는 바뀌지 않는다(알림만 오고 내용은 같음 → 304).
+const RANGE_MAX = 1024 * 1024;
+let liveBigBase = 0;
+
+function fileVersion(path) {
+  const base = BYTES.get(path);
+  if (!base) return null;
+  if (path === '/bench/live.js') {
+    const n = liveTick++;
+    return { rev: `live:${n}`, bytes: Buffer.concat([base, Buffer.from(`// tick ${n}\n`)]) };
+  }
+  if (path === '/bench/live-4m.js') {
+    const n = Math.floor((Date.now() - liveBigBase) / 200);
+    return { rev: `big:${n}`, bytes: Buffer.concat([base, Buffer.from(`// tick ${n}\n`)]) };
+  }
+  return { rev: `static:${path}`, bytes: base };
+}
+
+// UTF-8 문자 경계로 물린다(이어지는 바이트 0b10xxxxxx 앞에서 자르지 않는다).
+function charBoundary(buf, end) {
+  let e = end;
+  while (e > 0 && e < buf.length && (buf[e] & 0xc0) === 0x80) e -= 1;
+  return e;
+}
+
+function fileResponse(path, q, ifNoneMatch) {
+  const v = fileVersion(path);
+  if (!v) return null;
+  const { rev, bytes } = v;
+  const size = bytes.length;
+  const enc = q.get('encoding') || 'auto';
+  const head = { path, size, rev, binary: false, image: false, encoding: 'utf-8', encoding_confident: true, bom: false };
+  const hasRange = q.has('offset') || q.has('length');
+  const tail = q.has('tail') ? Number(q.get('tail')) : null;
+  if (!hasRange && tail == null) {
+    const cut = bytes.subarray(0, MAX_BYTES);
+    return { status: 200, body: { ...head, truncated: size > cut.length, content: cut.toString('utf8') } };
+  }
+  const offset = Number(q.get('offset') || 0);
+  const length = Number(q.get('length') || RANGE_MAX);
+  const etag = `W/"${rev}|${enc}|${tail != null ? `t${tail}` : `${offset}+${length}`}"`;
+  const expected = q.get('expected_rev');
+  if (expected && expected !== rev) return { status: 409, body: { error: 'changed', rev, reason: 'changed' } };
+  if (ifNoneMatch && ifNoneMatch === etag) return { status: 304, etag };
+  if (tail != null) {
+    let start = Math.max(0, size - tail);
+    let lineTruncated = false;
+    if (start > 0) {
+      const i = bytes.indexOf(0x0a, start - 1);
+      if (i >= 0 && i + 1 < size) start = i + 1;
+      else { lineTruncated = true; start = charBoundary(bytes, start); }
+    }
+    return { status: 200, etag, body: { ...head, content: bytes.subarray(start).toString('utf8'), offset: start, length: size - start,
+      next_offset: null, eof: true, line_truncated: lineTruncated, truncated: false, tail: true } };
+  }
+  let end = Math.min(size, offset + length);
+  let lineTruncated = false;
+  if (end < size) {
+    const i = bytes.lastIndexOf(0x0a, end - 1);
+    if (i >= offset) end = i + 1;
+    else { lineTruncated = true; end = charBoundary(bytes, end); }
+  }
+  const eof = end >= size;
+  return { status: 200, etag, body: { ...head, content: bytes.subarray(offset, end).toString('utf8'), offset, length: end - offset,
+    next_offset: eof ? null : end, eof, line_truncated: lineTruncated, truncated: !eof } };
 }
 
 function listDir(path) {
@@ -149,9 +211,9 @@ function count(key) { counts.set(key, (counts.get(key) || 0) + 1); }
 
 const MIME = { '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.json': 'application/json' };
 
-function sendJson(res, code, body) {
+function sendJson(res, code, body, extra = {}) {
   const data = Buffer.from(JSON.stringify(body));
-  res.writeHead(code, { 'content-type': 'application/json', 'content-length': data.length, 'cache-control': 'no-store' });
+  res.writeHead(code, { 'content-type': 'application/json', 'content-length': data.length, 'cache-control': 'no-store', ...extra });
   res.end(data);
 }
 
@@ -170,9 +232,13 @@ const server = createServer((req, res) => {
   const p = url.pathname;
   if (p === '/api/fs/file') {
     count('file');
-    const out = fileResponse(url.searchParams.get('path') || '');
-    return out ? sendJson(res, 200, out) : sendJson(res, 404, { error: 'not found' });
+    const out = fileResponse(url.searchParams.get('path') || '', url.searchParams, req.headers['if-none-match']);
+    if (!out) return sendJson(res, 404, { error: 'not found' });
+    if (out.status === 304) { count('file304'); res.writeHead(304, { etag: out.etag, 'cache-control': 'private, no-cache' }); res.end(); return; }
+    if (out.status === 409) count('file409');
+    return sendJson(res, out.status, out.body, out.etag ? { etag: out.etag } : {});
   }
+  if (p === '/__live-big-reset') { liveBigBase = Date.now(); return sendJson(res, 200, {}); }
   if (p === '/api/fs/tree') {
     count('tree');
     const out = listDeep(url.searchParams.get('path') || '', parseInt(url.searchParams.get('depth') || '0', 10));
@@ -274,7 +340,9 @@ async function runOnce(cdp, base, profile, scenario) {
     }, sessionId);
     if (exceptionDetails) throw new Error(exceptionDetails.exception?.description || exceptionDetails.text);
     const reqs = await (await fetch(`${base}/__counts`)).json();
-    return { ...result.value, requests: Object.values(reqs).reduce((a, b) => a + b, 0) };
+    // 304·409 는 요청 수에 이미 들어 있다(따로 보이기만 한다).
+    const { file304 = 0, file409 = 0, ...rest } = reqs;
+    return { ...result.value, requests: Object.values(rest).reduce((a, b) => a + b, 0), notModified: file304, changed409: file409 };
   } finally {
     await cdp.send('Target.closeTarget', { targetId }).catch(() => {});
   }
@@ -302,11 +370,15 @@ const COLS = [
   ['longTaskMax', 'long task 최대(ms)'],
   ['frameP95', '프레임 간격 p95(ms)'],
   ['frameMax', '프레임 간격 최대(ms)'],
-  ['refreshes', '다시 그리기(회)'],
+  ['refreshes', '다시 읽기(회)'],
+  ['redraws', '내용 바뀜(회)'],
   ['expandMs', '폴더 100개 펼치기(ms)'],
   ['reloadMs', '변경 1회 다시 그리기(ms)'],
   ['reloadLongTaskSum', '다시 그리기 long task(ms)'],
   ['reloadRequests', '다시 그리기 요청(회)'],
+  ['loadedKB', '받은 본문(KB)'],
+  ['notModified', '304(회)'],
+  ['changed409', '409(회)'],
   ['domNodes', 'DOM 노드'],
   ['heapMB', 'JS 힙(MB)'],
   ['requests', '요청(회)'],

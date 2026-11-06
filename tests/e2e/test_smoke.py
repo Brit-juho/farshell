@@ -149,7 +149,8 @@ def _isolated_env(port: int, token: str, tmp: Path) -> dict:
         # dock 소스컨트롤 탭이 볼 저장소를 이 저장소 자신으로 고정한다. 기본값
         # (~/GitHub)은 CI에 없고 로컬에선 사람마다 달라 결과가 흔들린다. 열람은
         # 읽기 전용이고 경계도 여기로 좁아진다.
-        VT_BROWSE_ROOTS=str(ROOT),
+        # 둘째 경계는 뷰어 시험 파일(큰 파일·CP949·긴 한 줄 — `_make_viewer_files`)을 두는 임시 폴더다.
+        VT_BROWSE_ROOTS=f"{ROOT}:{tmp / 'browse'}",
         PYTHONUNBUFFERED="1",
     )
     return env
@@ -179,6 +180,8 @@ def server(tmp_path_factory):
     global _LOCAL_STATE_DIR
     tmp = tmp_path_factory.mktemp("e2e")
     _LOCAL_STATE_DIR = tmp / "state"
+    global _BROWSE_DIR
+    _BROWSE_DIR = _make_viewer_files(tmp / "browse")
     port = _free_port()
     token = "e2e-smoke-token"
     # ⚠ 서버 로그는 **파일로** 받는다. 예전엔 stdout=PIPE였는데 그 파이프를 읽는
@@ -308,6 +311,28 @@ def browser(_pw):
 # 만들었는데 pane이 3개였다). 모듈 최상위로 뽑아 두 픽스처가 함께 쓴다.
 # 이 스위트가 직접 띄운 격리 서버의 상태 폴더(`VT_STATE_DIR`). 외부 서버(VT_E2E_URL)를 쓰면 None — 거기는 파일을 못 건드린다.
 _LOCAL_STATE_DIR: Path | None = None
+# 뷰어 시험 파일 폴더(격리 서버의 둘째 열람 경계). 외부 서버면 None — 그 시험들은 건너뛴다.
+_BROWSE_DIR: Path | None = None
+
+
+def _make_viewer_files(d: Path) -> Path:
+    """파일 개편 단계 3·4의 뷰어 시험 파일. 내용은 합성이다(계약 7 — 실제 코드·경로를 쓰지 않는다)."""
+    d.mkdir(parents=True, exist_ok=True)
+    # 6MB, 64바이트 줄 — 앞 4MB만 열리고 「더 보기」가 붙는다.
+    row = "{:08d} " + "x" * 54 + "\n"
+    (d / "big.log").write_text("".join(row.format(i) for i in range(6 * 16384)))
+    (d / "rows.txt").write_text("".join(f"row {i:04d}\n" for i in range(1, 1001)))
+    (d / "k949.txt").write_bytes(("안녕하세요 뷰어 시험\n" * 20).encode("cp949"))
+    (d / "mixed.txt").write_bytes(b"a\r\nb\nc\r\n")
+    # 1.5MB 한 줄(minified 모양) — 첫 구간이 line_truncated, 다음 구간이 같은 줄을 잇는다.
+    (d / "long.min.js").write_text("".join(f"var a{i}=function(b){{return b+{i % 97}}};" for i in range(60000))[: 1536 * 1024])
+    return d
+
+
+def _viewer_file(name: str) -> str:
+    if _BROWSE_DIR is None:
+        pytest.skip("외부 서버(VT_E2E_URL)에서는 뷰어 시험 파일을 만들 수 없다")
+    return str(_BROWSE_DIR / name)
 
 
 def _api(base: str, token: str, method: str, path: str, payload=None):
@@ -1001,6 +1026,166 @@ def test_이미지가_페인_안에_인라인으로_그려진다(page):
     )
     assert fit["w"] == 192, fit
     assert fit["overflowRight"] <= 1, f"이미지가 페인 밖으로 나갔다: {fit}"
+
+
+def _open_overlay(page, path, opts=None):
+    page.evaluate("([p, o]) => window.openFile(p, o || {})", [path, opts])
+    page.wait_for_selector("#vt-file .cm-line", timeout=15000)
+
+
+def _close_overlay(page):
+    page.evaluate("() => { const el = document.getElementById('vt-file'); if (el) window.closePanel(el); }")
+
+
+_DOC = "document.querySelector('#vt-file .vt-vw-code-pane')._vtEditor.view.state.doc"
+
+
+def test_큰_파일은_앞_4MB를_열고_더_보기로_이어_받는다(page):
+    """파일 개편 단계 3·4 — 4MB를 넘는 파일은 1MB 구간을 이어 받아 앞 4MB까지 열고, 「더 보기」로 나머지를
+    붙인다. 받은 범위에서만 찾기·줄 이동이 된다는 안내가 함께 보인다."""
+    target = _viewer_file("big.log")
+    size = os.path.getsize(target)
+    try:
+        _open_overlay(page, target)
+        page.wait_for_selector("#vt-file .vt-vw-trunc", timeout=15000)
+        note = page.locator("#vt-file .vt-vw-trunc").inner_text()
+        assert "앞 4.0MB만 불러왔습니다" in note and "6.0MB" in note, note
+        first = page.evaluate(f"() => {_DOC}.length")
+        assert 4 * 1024 * 1024 <= first < size, first
+        page.locator("#vt-file .vt-vw-trunc button", has_text="더 보기").click()
+        page.wait_for_selector("#vt-file .vt-vw-trunc", state="detached", timeout=15000)
+        assert page.evaluate(f"() => {_DOC}.length") == size
+        assert page.evaluate(f"() => {_DOC}.lines") == 6 * 16384 + 1
+    finally:
+        _close_overlay(page)
+
+
+def test_끝부분_보기는_끝에서_센_줄_번호를_보인다(page):
+    target = _viewer_file("big.log")
+    try:
+        _open_overlay(page, target)
+        page.wait_for_selector("#vt-file .vt-vw-trunc", timeout=15000)
+        page.locator("#vt-file .vt-vw-trunc button", has_text="끝부분 보기").click()
+        page.wait_for_selector("#vt-file .vt-vw-bar", timeout=15000)
+        assert "끝부분만 보는 중" in page.locator("#vt-file .vt-vw-bar").inner_text()
+        page.wait_for_function(
+            "() => [...document.querySelectorAll('#vt-file .cm-lineNumbers .cm-gutterElement')]"
+            ".some((e) => e.textContent === '-1')",
+            timeout=10000,
+        )
+        last = page.evaluate(f"() => {{ const d = {_DOC}; return d.line(d.lines - 1).text; }}")
+        assert last.startswith(f"{6 * 16384 - 1:08d} "), last
+        page.locator("#vt-file .vt-vw-bar button", has_text="처음부터 보기").click()
+        page.wait_for_selector("#vt-file .vt-vw-trunc", timeout=15000)
+    finally:
+        _close_overlay(page)
+
+
+def test_인코딩을_모르면_이유를_띄우고_고르면_다시_연다(page):
+    """D9 — 인코딩을 모르는 파일은 읽기 전용 이유를 보이고, 인코딩을 골라 다시 열 수 있다."""
+    target = _viewer_file("k949.txt")
+    try:
+        _open_overlay(page, target)
+        bar = page.locator("#vt-file .vt-vw-bar")
+        bar.wait_for(timeout=10000)
+        assert "읽기 전용" in bar.inner_text() and "UTF-8이 아닌" in bar.inner_text(), bar.inner_text()
+        # 앱이 <select>를 자체 드롭다운으로 감싸 원본은 숨어 있다(ui/select) — 원본 값을 바꾸고 change를 보낸다.
+        page.evaluate(
+            "() => { const s = document.querySelector('#vt-file .vt-vw-bar select'); s.value = 'cp949';"
+            " s.dispatchEvent(new Event('change', { bubbles: true })); }"
+        )
+        page.wait_for_function(
+            "() => document.querySelector('#vt-file .vt-vw-code-pane')?._vtEditor?.view.state.doc.line(1).text"
+            " === '안녕하세요 뷰어 시험'",
+            timeout=10000,
+        )
+        assert page.input_value("#vt-file .vt-vw-bar select") == "cp949"
+
+        _open_overlay(page, _viewer_file("mixed.txt"))
+        page.wait_for_selector("#vt-file .vt-vw-bar", timeout=10000)
+        assert "줄 끝(LF·CRLF)이 섞여" in page.locator("#vt-file .vt-vw-bar").inner_text()
+    finally:
+        _close_overlay(page)
+
+
+def test_줄_이동은_그_줄로_옮기고_표시한다(page):
+    target = _viewer_file("rows.txt")
+    try:
+        _open_overlay(page, target, {"line": 700, "col": 3})
+        page.wait_for_selector("#vt-file .cm-vt-target", timeout=10000)
+        assert page.locator("#vt-file .cm-vt-target").inner_text() == "row 0700"
+        # 같은 파일을 다른 줄로 다시 열면 다시 그리지 않고 옮기기만 한다.
+        page.evaluate("(p) => window.openFile(p, { line: 12 })", target)
+        page.wait_for_function(
+            "() => document.querySelector('#vt-file .cm-vt-target')?.textContent === 'row 0012'", timeout=10000,
+        )
+    finally:
+        _close_overlay(page)
+
+
+def test_새로고침은_조건부로_묻고_304면_다시_그리지_않는다(page):
+    target = _viewer_file("rows.txt")
+    statuses = []
+    page.on("response", lambda r: statuses.append(r.status) if "/api/fs/file" in r.url else None)
+    try:
+        _open_overlay(page, target)
+        page.wait_for_timeout(300)
+        before = page.evaluate("() => document.querySelector('#vt-file .cm-content').innerHTML")
+        statuses.clear()
+        page.click("#vt-file .vt-file-refresh")
+        page.wait_for_timeout(800)
+        assert statuses == [304], statuses
+        assert page.evaluate("() => document.querySelector('#vt-file .cm-content').innerHTML") == before
+    finally:
+        _close_overlay(page)
+
+
+def test_긴_한_줄은_구간을_이어_한_줄로_보인다(page):
+    target = _viewer_file("long.min.js")
+    try:
+        _open_overlay(page, target)
+        page.wait_for_function(f"() => {_DOC}.length === {1536 * 1024}", timeout=15000)
+        assert page.evaluate(f"() => {_DOC}.lines") == 1
+        assert page.locator("#vt-file .vt-vw-trunc").count() == 0
+    finally:
+        _close_overlay(page)
+
+
+def test_터미널의_경로_줄_링크는_그_줄로_연다(isolated_page):
+    """term/links.js — `path:줄:열`을 누르면 그 파일을 열고 그 줄로 간다."""
+    page = isolated_page
+    target = _viewer_file("rows.txt")
+    page.evaluate("() => window.createSession && window.createSession()")
+    page.wait_for_selector(".vt-pane .vt-pane-body .xterm", timeout=15000)
+    page.wait_for_timeout(800)
+    sid = page.evaluate("() => Object.keys(window.allSessions())[0]")
+    try:
+        link = f"{target}:321:2"
+        # 셸 출력과 섞이지 않게 화면을 비우고 첫 줄에 링크를 쓴다(xterm 버퍼에 직접 — PTY를 거치지 않는다).
+        page.evaluate(
+            "([id, s]) => new Promise((r) => window.getSession(id).term.write('\\x1b[2J\\x1b[H' + s + '\\r\\n', r))",
+            [sid, link],
+        )
+        page.wait_for_timeout(300)
+        box = page.evaluate(
+            """(id) => {
+              const t = window.getSession(id).term;
+              const screen = t.element.querySelector('.xterm-screen').getBoundingClientRect();
+              const cell = t._core._renderService.dimensions.css.cell;
+              return { x: screen.left + cell.width * 5.5, y: screen.top + cell.height * 0.5 };
+            }""",
+            sid,
+        )
+        page.mouse.move(box["x"], box["y"])
+        page.wait_for_timeout(300)
+        page.mouse.move(box["x"] + 2, box["y"])
+        page.wait_for_timeout(300)
+        page.mouse.click(box["x"] + 2, box["y"])
+        page.wait_for_selector("#vt-file .cm-vt-target", timeout=15000)
+        assert page.locator("#vt-file .cm-vt-target").inner_text() == "row 0321"
+    finally:
+        _close_overlay(page)
+        page.evaluate("(id) => window.removeSession && window.removeSession(id)", sid)
 
 
 def test_레일_파일_버튼은_사라지고_팔레트가_그_자리다(page):
