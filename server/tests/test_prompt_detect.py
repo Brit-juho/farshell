@@ -205,10 +205,13 @@ def test_remove_clears_session_state(det):
 
 def test_on_change_exception_does_not_break_feed(monkeypatch):
     """감지가 서버를 죽이지 않는다."""
+    calls = []
     def boom(sid, waiting):
+        calls.append((sid, waiting))
         raise RuntimeError("consumer exploded")
     d = D.PromptDetector(boom)
     d.feed("s1", b"Do you want to proceed?")  # 예외가 새어 나오면 실패
+    assert calls, "콜백이 한 번도 호출되지 않았다 — 이 시험이 예외 경로를 실제로 거치지 않았다"
 
 
 # ── auto_responder 상호배제 ───────────────────────────────────────────────

@@ -328,4 +328,6 @@ def test_note_view_increments(store):
 
 
 def test_note_view_on_unknown_port_is_noop(store):
+    before = store.list_shares(include_expired=True)
     store.note_view(9999)  # 예외가 나면 프록시 경로가 통째로 깨진다
+    assert store.list_shares(include_expired=True) == before   # 없는 공유를 만들거나 바꾸지 않는다

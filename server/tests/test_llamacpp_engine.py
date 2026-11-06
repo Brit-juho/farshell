@@ -397,6 +397,7 @@ def test_kill_orphan_leaves_unrelated_process(process_table, env, eng):
 def test_kill_orphan_bad_pid_file(env, eng):
     _pid_file(env).write_text("not-a-pid")
     eng._kill_orphan()                       # 예외 없이 지나감
+    assert _pid_file(env).read_text() == "not-a-pid"   # 해석 못 한 기록은 건드리지 않는다(지우지도, 죽이지도 않음)
     eng2 = LlamaCppQwen3Engine()
     (env.state / "engines" / "llama-server.pid").unlink(missing_ok=True)
     eng2._kill_orphan()
