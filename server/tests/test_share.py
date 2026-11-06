@@ -367,3 +367,53 @@ def test_new_pins_must_be_at_least_six_characters(client):
         r = client.post(f"/api/files/{fid}/share", json={"mode": "pin", "ttl": 3600, "once": False, "pin": bad})
         assert r.status_code == 400 and r.json()["error"] == "bad_pin", bad
     assert client.post(f"/api/files/{fid}/share", json={"mode": "pin", "ttl": 3600, "once": False, "pin": "123456"}).status_code == 200
+
+
+# --- share-import: 판정 뒤 부모 디렉토리를 심링크로 바꿔치기 ----------------------------
+# 예전에는 마지막 조각만 O_NOFOLLOW로 열어서, resolve 뒤에 중간 디렉토리를 경계 밖을 가리키는 심링크로 바꾸면 경계 밖
+# 파일이 저장소로 복사되고 공유 링크로 나갈 수 있었다.
+
+
+def test_share_import_refuses_parent_swapped_to_symlink_after_check(client, browse, tmp_path, monkeypatch):
+    import fsguard
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "note.txt").write_text("OUTSIDE-SECRET")
+    sub = browse / "sub"
+    sub.mkdir()
+    (sub / "note.txt").write_text("inside")
+
+    real_resolve = fsguard.resolve_under_roots
+
+    def resolve_then_swap(raw, **kw):
+        p = real_resolve(raw, **kw)
+        sub.rename(browse / "sub.real")   # 판정이 끝난 직후, 여는 사이에 바꿔치기
+        sub.symlink_to(outside)
+        return p
+
+    monkeypatch.setattr(fsguard, "resolve_under_roots", resolve_then_swap)
+    r = client.post("/api/fs/share-import", json={"path": str(sub / "note.txt")})
+    assert r.status_code == 400, r.text
+    assert r.json()["error"] == "not_a_file"
+    for x in client.get("/api/files").json()["items"]:
+        assert client.get(f"/api/files/{x['id']}/download").content != b"OUTSIDE-SECRET"
+
+
+def test_share_import_refuses_last_component_swapped_to_symlink(client, browse, tmp_path, monkeypatch):
+    import fsguard
+    outside = tmp_path / "outside.txt"
+    outside.write_text("OUTSIDE-SECRET")
+    target = browse / "note.txt"
+    target.write_text("inside")
+    real_resolve = fsguard.resolve_under_roots
+
+    def resolve_then_swap(raw, **kw):
+        p = real_resolve(raw, **kw)
+        target.unlink()
+        target.symlink_to(outside)
+        return p
+
+    monkeypatch.setattr(fsguard, "resolve_under_roots", resolve_then_swap)
+    r = client.post("/api/fs/share-import", json={"path": str(target)})
+    assert r.status_code == 400, r.text
+

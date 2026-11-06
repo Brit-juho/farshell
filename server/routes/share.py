@@ -21,7 +21,6 @@ import hmac
 import logging
 import os
 import secrets
-import stat
 import time
 import uuid
 from pathlib import Path
@@ -69,19 +68,19 @@ def _snapshot_into_store(p: Path) -> dict:
     그래서 파일 탭의 파일은 복사본을 만들어 그 id로 링크를 발급한다. 같은 원본·크기·mtime이면
     같은 스냅샷을 재사용해 디스크에 두 벌 쌓이지 않는다(내용이 바뀌면 새 스냅샷).
     """
-    # resolve() 뒤에 심링크로 바꿔치기하는 경합을 막는다 — NOFOLLOW로 열고 fd로 판정한다.
+    # resolve() 뒤의 바꿔치기를 막는다 — 마지막 조각만이 아니라 중간 디렉토리를 심링크로 바꿔도 경계 밖이 열리지
+    # 않도록 resolve된 경로를 한 조각씩 NOFOLLOW로 따라 연다(fsguard.open_resolved). 판정은 fd로 한다.
     try:
-        fd = os.open(str(p), os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0))
+        fd = fsguard.open_resolved(p)
     except FileNotFoundError:
         raise _ImportError(404, {"error": "not_found"})
     except PermissionError:
         raise _ImportError(403, {"error": "denied", "reason": tr("읽기 권한이 없습니다")})
     except OSError:
+        # NotRegularFile(디렉토리·FIFO) 또는 판정 뒤에 끼어든 심링크(ELOOP/ENOTDIR)
         raise _ImportError(400, {"error": "not_a_file", "reason": tr("일반 파일만 공유할 수 있습니다")})
     try:
         st = os.fstat(fd)
-        if not stat.S_ISREG(st.st_mode):
-            raise _ImportError(400, {"error": "not_a_file", "reason": tr("일반 파일만 공유할 수 있습니다")})
         max_mb = file_store.MAX_UPLOAD_BYTES // (1024 * 1024)
         if st.st_size > file_store.MAX_UPLOAD_BYTES:
             raise _ImportError(413, {"error": "file too large", "max_mb": max_mb})
