@@ -1,13 +1,13 @@
 // 파일 뷰어 렌더 성능 측정 — 페이지 쪽. run.mjs 가 `window.perfRun(이름)`을 부른다.
 //
 // 지금 렌더러(`viewer/file.js` renderFile·refreshFile, `viewer/diff.js` _renderDiffDOM, `viewer/tree.js`
-// showTree)를 **번들하지 않은 원본 모듈 그대로** 불러 잰다. 새 렌더러(단계 2)는 같은 시나리오 이름에
-// 렌더러를 하나 더 붙이는 식으로 더한다.
+// showTree)를 **번들하지 않은 원본 모듈 그대로** 불러 잰다. 단계 2부터 파일 본문은 CodeMirror 6이다
+// (`viewer/editor.js`). 옛 줄 단위 렌더러의 수치는 기준선 문서에 남아 있다.
 //
 // 재는 구간: 요청 시작(가짜 서버, 실제 HTTP + JSON 파싱) → DOM 생성 → 다음 페인트.
-// 빠지는 것: 지연 청크 다운로드(모듈은 측정 전에 미리 불러 둔다), hljs 스크립트 다운로드(미리 불러 둔다).
+// 빠지는 것: 지연 청크 다운로드(편집기 모듈과 JS 언어 팩, hljs 스크립트는 측정 전에 미리 불러 둔다).
 import '/static/js/core/env.js';   // window.API_BASE 등
-import { renderFile, refreshFile, ensureHljs } from '/static/js/panels/viewer/file.js';
+import { renderFile, refreshFile, ensureHljs, loadEditor } from '/static/js/panels/viewer/file.js';
 import { _renderDiffDOM } from '/static/js/panels/viewer/diff.js';
 import { showTree } from '/static/js/panels/viewer/tree.js';
 import { coalesce } from '/static/js/shell/fs-watch.js';
@@ -89,6 +89,8 @@ async function openFile(path, n = 1) {
   const t0 = performance.now();
   await Promise.all(boxes.map((b) => renderFile(b.host, path)));
   const t1 = await nextPaint();
+  // 편집기 청크를 못 받으면 file.js는 일반 텍스트로 대신 그린다 — 그 수치를 편집기 수치로 착각하지 않게 멈춘다.
+  if (boxes.some((b) => !b.host.querySelector('.cm-editor'))) throw new Error('편집기(CodeMirror)로 그려지지 않았다');
   return { paintMs: Math.round(t1 - t0), ...(await common(t0, t1)) };
 }
 
@@ -183,7 +185,9 @@ const SCENARIOS = {
 };
 
 window.perfReady = (async () => {
-  await ensureHljs();
+  await ensureHljs();   // diff 시나리오가 쓴다
+  const editor = await loadEditor();
+  await editor.loadLanguage('javascript');   // 측정 파일이 모두 .js 다
   await nextPaint();
 })();
 
