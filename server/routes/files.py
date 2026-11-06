@@ -477,6 +477,22 @@ async def delete_file(file_id: str):
     return {"ok": True}
 
 
+@router.post("/api/files/{file_id}/pin")
+async def pin_file(file_id: str, request: Request):
+    """고정 켜기/끄기 — JSON `{"pin": true|false}`. 고정된 파일은 30일 자동 삭제와 용량 정리에서 빠진다.
+
+    승격은 요구하지 않는다 — 삭제(`DELETE /api/files/{id}`)가 요구하지 않는 것과 같은 급이다(파일을 남에게 열어
+    주는 동작이 아니라 내 저장소의 보존 기간만 바꾼다)."""
+    body = await _read_json_body(request)
+    pinned = body.get("pin")
+    if not isinstance(pinned, bool):
+        return JSONResponse({"error": "bad_request", "reason": "pin must be a boolean"}, status_code=400)
+    item = await asyncio.to_thread(file_store.set_pin, file_id, pinned)
+    if item is None:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    return {"ok": True, "item": _file_public(item)}
+
+
 MAX_BULK_DELETE = 500
 
 

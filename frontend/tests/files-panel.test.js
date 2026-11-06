@@ -77,3 +77,36 @@ test('absoluteShareUrl — 공유 링크는 남에게 보내는 값이라 항상
   const url = absoluteShareUrl('/s/v1.123.abc.def.sig');
   assert.match(url, /^https?:\/\/[^/]+\/s\/v1\.123\.abc\.def\.sig$/);
 });
+
+// 고정 토글(D5) — 예전에는 `pin` 필드와 정리 제외 규칙만 있고 켜는 길이 없었다. 행의 버튼이 지금 상태를
+// aria-pressed로 보여주고, 누르면 반대 값을 서버에 보낸다.
+async function loadWithFetch() {
+  const env = createDomEnv('<!doctype html><html><body><div id="app"></div></body></html>');
+  _doms.push(env.dom);
+  const calls = [];
+  env.window.API_BASE = '';
+  env.window._tokenQuery = '';
+  env.window.fetch = (url, opts) => {
+    calls.push({ url: String(url), opts });
+    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true, items: [], quota: {} }) });
+  };
+  const mod = await importFresh(FILES_JS, env.context, new Map());
+  return { mod, calls };
+}
+
+test('renderRow — 고정 버튼이 상태를 보여주고 누르면 반대 값을 보낸다', async () => {
+  const { mod, calls } = await loadWithFetch();
+  const row = mod.renderRow({ id: 'ab12', name: 'a.txt', size: 5, pin: false, shares: [], expires_at: NOW + 86400 }, null);
+  const btn = row.querySelector('.vt-fl-act.pin');
+  assert.ok(btn, '고정 버튼이 없다');
+  assert.strictEqual(btn.getAttribute('aria-pressed'), 'false');
+  btn.click();
+  await new Promise((r) => setTimeout(r, 0));
+  const call = calls.find((c) => c.url.startsWith('/api/files/ab12/pin'));
+  assert.ok(call, `고정 요청이 없다: ${JSON.stringify(calls.map((c) => c.url))}`);
+  assert.strictEqual(call.opts.method, 'POST');
+  assert.deepStrictEqual(JSON.parse(call.opts.body), { pin: true });
+
+  const pinned = mod.renderRow({ id: 'cd34', name: 'b.txt', size: 5, pin: true, shares: [], expires_at: null }, null);
+  assert.strictEqual(pinned.querySelector('.vt-fl-act.pin').getAttribute('aria-pressed'), 'true');
+});

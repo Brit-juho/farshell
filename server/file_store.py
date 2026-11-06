@@ -241,6 +241,20 @@ def delete_many(file_ids: list[str]) -> dict:
     return {"deleted": deleted, "missing": missing}
 
 
+def set_pin(file_id: str, pinned: bool) -> dict | None:
+    """고정(pin) 켜기/끄기. 고정된 파일은 TTL·용량 정리에서 빠진다(`_is_protected`). 없으면 None.
+
+    공유 PIN(`shares[].pinHash`)과는 이름만 같고 무관하다 — 이쪽은 「자동 삭제하지 마라」는 표시다."""
+    with _locked():
+        items = _read_unlocked()
+        item = next((x for x in items if x["id"] == file_id), None)
+        if item is None:
+            return None
+        item["pin"] = bool(pinned)
+        _write_unlocked(items)
+        return dict(item)
+
+
 def _is_protected(item: dict, now: float) -> bool:
     """정리 대상에서 뺀다 — 공유 중이거나 사용자가 고정한 파일."""
     return bool(item.get("shares")) or bool(item.get("pin"))

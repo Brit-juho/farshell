@@ -179,6 +179,27 @@ def test_cleanup_excludes_pinned_files(store, tmp_path, monkeypatch):
 
 
 
+def test_set_pin_turns_protection_on_and_off(store, tmp_path, monkeypatch):
+    """고정을 켜는 길(set_pin)이 실제로 정리에서 빼고, 끄면 다시 정리 대상이 된다."""
+    monkeypatch.setattr(store, "TTL_SECONDS", 1)
+    item = _upload(store, tmp_path)
+    assert store.set_pin(item["id"], True)["pin"] is True
+    items = store._read_unlocked()
+    for x in items:
+        x["created"] = time.time() - 10
+    store._write_unlocked(items)
+    store.cleanup()
+    assert store.get_item(item["id"])["pin"] is True
+
+    assert store.set_pin(item["id"], False)["pin"] is False
+    store.cleanup()
+    assert store.get_item(item["id"]) is None
+
+
+def test_set_pin_unknown_id_returns_none(store):
+    assert store.set_pin("nope", True) is None
+
+
 # --- 공유 다운로드 판정(claim_download) ------------------------------------------
 
 

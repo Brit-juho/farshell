@@ -533,6 +533,29 @@ def test_fs_tree_and_search_hide_unknown_dot_dirs(client, repo):
     assert client.get("/api/fs/tree", params={"path": str(repo / ".sometool")}).status_code == 403
 
 
+# --- 고정(pin) 켜기/끄기 -----------------------------------------------------------
+# 예전에는 `pin` 필드와 정리 제외 규칙만 있고 켜는 길(API·UI)이 없었다.
+
+
+def test_pin_route_toggles_and_list_reflects_it(client, file_state):
+    fid = _upload_via_api(client)["id"]
+    r = client.post(f"/api/files/{fid}/pin", json={"pin": True})
+    assert r.status_code == 200, r.text
+    assert r.json()["item"]["pin"] is True and r.json()["item"]["expires_at"] is None
+    item = next(x for x in client.get("/api/files").json()["items"] if x["id"] == fid)
+    assert item["pin"] is True and item["expires_at"] is None and item["expiring_soon"] is False
+    r = client.post(f"/api/files/{fid}/pin", json={"pin": False})
+    assert r.status_code == 200 and r.json()["item"]["pin"] is False
+    assert r.json()["item"]["expires_at"] is not None
+
+
+def test_pin_route_validates_input(client, file_state):
+    fid = _upload_via_api(client)["id"]
+    for body in ({}, {"pin": "true"}, {"pin": 1}, {"pin": None}):
+        assert client.post(f"/api/files/{fid}/pin", json=body).status_code == 400, body
+    assert client.post("/api/files/nope/pin", json={"pin": True}).status_code == 404
+
+
 # --- 업로드가 저장소 잠금을 기다리는 동안 이벤트 루프가 돈다 ------------------------
 # 예전에는 업로드의 디스크 쓰기와 저장소 편입(flock, 최대 5초 대기)이 루프 위에서 돌아, CLI가 잠금을 쥐고 있는
 # 동안 서버 전체(터미널 WebSocket 포함)가 멈췄다.
