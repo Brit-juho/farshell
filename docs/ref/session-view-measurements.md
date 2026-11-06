@@ -188,3 +188,24 @@ Initial payload (app.js + core.js): 325,488 → 327,335 B (cap 358,400; `vtFetch
 ### 7.3 Terminal under the file overlay (300 ms repaint tick)
 
 `overlay.js` keeps two workarounds for a report that the terminal below the overlay's horizontal range stopped updating (left black or with missing glyphs): on open/move/resize/close it clears every session's glyph atlas and redraws all rows, and while the overlay is open it redraws the active session's rows every 300 ms. The plan was to find the cause (compositing with the WebGL canvas) and remove both. Probe (2026-11-07, isolated server, Playwright Chromium headless, xterm WebGL renderer): both workarounds disabled, a float overlay and a sheet over the terminal, 40 bursts of coloured lines and box-drawing frames written under it, then the region below the overlay captured before and after a forced full redraw and after an atlas clear. With SwiftShader and with ANGLE on Metal (Apple M1 Pro), 3 trials per surface: the captures were identical every time — **not reproduced**, so the cause is not known and both workarounds stay. The tick's own cost is small: one full `renderRows` of a 144 × 48 terminal took 0.2–0.3 ms. A reproduction probably needs the headed browser and the GPU compositor of the machine that showed it.
+
+### 7.4 Refreshing a big, changing file: grown-end reads and the 1 s gap (2026-11-07)
+
+Change ([files.md](./files.md) 「A big view refreshes only what grew」): with more than 256 KB on screen a refresh asks for the 8 KB before the loaded end first and, when the file only grew, reads just the bytes after it; auto-refresh of a view over 1 MB runs at most once a second (`coalesce` `minGap`). Same tool as §7.2 with two additions: the scenario `live-grow-4m-10s` (a 4 MB build log that gains one line every 200 ms, `rev` in the server's `dev:ino:size:mtime_ns` shape) and the column 「연속 변경 중 내려받은 본문」 (bytes of `content` the fake server sent during the 10 s of changes, the open excluded). The bench calls `coalesce` with `refreshGap` as auto-refresh does. "Before" is the `dev` viewer (`file.js`, `file-load.js`, `editor.js`, `fs-watch.js`) measured with the same bench right before the change. 5 runs, median (p95 where it differs).
+
+| Scenario | Profile | Downloaded in 10 s before → after | Refreshes | Frame interval p95 / max ms | Long tasks ms | 409 | JS heap MB |
+|---|---|---|---|---|---|---|---|
+| live-grow-4m-10s | desktop | 200.7 MB → 81 KB | 50 → 10 | 17 / 17–33 → 17 / 17 | 0 → 0 | 0 → 0 | 528 (p95 712) → 25 |
+| live-grow-4m-10s | phone (4x CPU) | 150.3 MB (p95 195.3) → 81 KB | 50 → 10 | 17 / 67 → 17 / 17 | 1366 → 0 | 26 → 1 | 333 → 17 |
+| live-4m-10s (last line rewritten) | desktop | 200.7 MB → 40.2 MB | 50 → 10 | 17 / 33 → 17 / 17–33 | 0 → 0 | 0 → 0 | 18 (p95 108) → 35 (p95 51) |
+| live-4m-10s | phone | 169.3 MB (p95 200.7) → 40.2 MB (p95 80.2) | 50 → 10 | 17 (p95 run 50) / 83–100 → 17 / 83 | 1610 (p95 3069) → 728 | 27 → 3 (p95 13) | 49 (p95 141) → 81 |
+| live-10s (512 KB, last line rewritten) | both | 25.1 → 25.5 MB | 50 → 50 | unchanged (17 / 33 desktop, 17 / 83 phone) | unchanged | 0 | — |
+| live-same-10s (unchanged) | both | 0 → 8 KB | 50 → 50 | unchanged | unchanged | 0 | — |
+
+- The growing log is the case the change targets: about 8 KB of window plus the new lines per refresh instead of the whole 4 MB, and one refresh per second instead of five. Frame interval p95 stays at 17 ms on both profiles (target ≤ 50 ms), and the phone's long tasks drop from 1.4 s to 0.
+- `live-4m-10s` rewrites the last line rather than appending, so every window differs and each refresh is a full re-read; only the 1 s gap reduces it (5x fewer reads, fewer 409s).
+- Cost on small or rewritten files: 512 KB is above the 256 KB threshold, so `live-10s` pays one 8 KB window per refresh before the full re-read (+1.6%), and `live-same` one unconditional window after opening (then 304s on the same window).
+- `open-4m` / `open-12m` were re-run with the change (open path now runs inside the viewer's queue): desktop paint 97 / 121 ms, phone 451 / 480 ms, phone long tasks 233 ms — within §7.2's range.
+- Not measured: real devices, a real server and network (the fake answers in well under a millisecond), the tail view (same path; covered by `viewer-file.test.js`).
+
+Initial payload (app.js + core.js): 327,810 B (cap 358,400; `layout/panes.js` disposes viewer editors).

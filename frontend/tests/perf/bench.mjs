@@ -7,11 +7,14 @@
 // 재는 구간: 요청 시작(가짜 서버, 실제 HTTP + JSON 파싱) → DOM 생성 → 다음 페인트.
 // 빠지는 것: 지연 청크 다운로드(편집기 모듈과 JS 언어 팩, hljs 스크립트는 측정 전에 미리 불러 둔다).
 import '/static/js/core/env.js';   // window.API_BASE 등
-import { renderFile, refreshFile, ensureHljs, loadEditor } from '/static/js/panels/viewer/file.js';
+import * as viewerFile from '/static/js/panels/viewer/file.js';
 import { _renderDiffDOM } from '/static/js/panels/viewer/diff.js';
 import { showTree } from '/static/js/panels/viewer/tree.js';
 import { coalesce } from '/static/js/shell/fs-watch.js';
 
+const { renderFile, refreshFile, ensureHljs, loadEditor } = viewerFile;
+// 자동 갱신의 최소 간격(file.js refreshGap) — 그것이 없던 판과 비교해 잴 수 있게 없으면 0.
+const refreshGap = viewerFile.refreshGap || (() => 0);
 const TREE_ROOT = '/bench/tree';
 const row = document.getElementById('bench-row');
 
@@ -153,8 +156,10 @@ async function tree() {
 // - live.js: 요청마다 마지막 줄이 바뀐다(512KB, 구간 하나).
 // - live-same.js: 알림만 오고 파일은 그대로 — 조건부 요청이 304 를 받아 다시 그리지 않아야 한다.
 // - live-4m.js: 4MB, 200ms 마다 바뀐다 — 1MB 구간을 이어 받는 사이에 바뀌면 409 로 처음부터 다시 받는다.
+// - live-grow.log: 4MB 빌드 로그, 200ms 마다 끝에 한 줄. 커진 끝만 이어 받는지(내려받은 본문 합) 본다.
+// 자동 갱신과 같이 큰 칸은 최소 간격(refreshGap)을 둔다.
 async function live(path) {
-  if (path === '/bench/live-4m.js') await fetch('/__live-big-reset');
+  if (path === '/bench/live-4m.js' || path === '/bench/live-grow.log') await fetch('/__live-big-reset');
   const { scroll, host } = box();
   await renderFile(host, path);
   await nextPaint();
@@ -164,8 +169,16 @@ async function live(path) {
   if (h) {
     const set = h.setText;
     h.setText = (t) => { const changed = set(t); if (changed) redraws += 1; return changed; };
+    if (h.replaceEnd) {
+      const rep = h.replaceEnd;
+      h.replaceEnd = (n, t) => { const changed = rep(n, t); if (changed) redraws += 1; return changed; };
+    }
   }
-  const refresh = coalesce(async () => { await refreshFile(scroll, path, () => true); refreshes += 1; });
+  // 연속 변경 10초 동안 내려받은 본문(여는 데 든 것은 뺀다). 가짜 서버가 응답 content 바이트를 센다.
+  const bytesNow = async () => ((await (await fetch('/__counts')).json()).fileBytes || 0);
+  const b0 = await bytesNow();
+  const refresh = coalesce(async () => { await refreshFile(scroll, path, () => true); refreshes += 1; },
+    { minGap: () => refreshGap(scroll) });
   const frames = [];
   let running = true;
   let prev = performance.now();
@@ -181,11 +194,13 @@ async function live(path) {
   clearInterval(timer);
   running = false;
   const t1 = performance.now();
+  await waitIdle(150, 30000).catch(() => {});
+  const liveKB = Math.round((await bytesNow() - b0) / 1024);
   const sorted = frames.slice().sort((a, b) => a - b);
   const p95 = sorted[Math.min(sorted.length - 1, Math.ceil(0.95 * sorted.length) - 1)] || 0;
   return {
     frameP95: Math.round(p95), frameMax: Math.round(sorted[sorted.length - 1] || 0),
-    refreshes, redraws, loadedKB: loadedKB(host), ...(await common(t0, t1)),
+    refreshes, redraws, loadedKB: loadedKB(host), liveKB, ...(await common(t0, t1)),
   };
 }
 
@@ -200,6 +215,7 @@ const SCENARIOS = {
   'live-10s': () => live('/bench/live.js'),
   'live-same-10s': () => live('/bench/live-same.js'),
   'live-4m-10s': () => live('/bench/live-4m.js'),
+  'live-grow-4m-10s': () => live('/bench/live-grow.log'),
 };
 
 window.perfReady = (async () => {

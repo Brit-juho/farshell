@@ -39,10 +39,10 @@ const OUT = opt('out', '');
 const CHROME = opt('chrome', process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
 
 const SCENARIOS = ['open-512k', 'open-4m', 'open-12m', 'long-line-1m', 'concurrent-3', 'diff-5000', 'tree',
-  'live-10s', 'live-same-10s', 'live-4m-10s'];
+  'live-10s', 'live-same-10s', 'live-4m-10s', 'live-grow-4m-10s'];
 
 // 시나리오별 측정 시간 제한(ms) — live 는 10초를 돈다.
-const TIMEOUT = { 'live-10s': 60000, 'live-same-10s': 60000, 'live-4m-10s': 60000, 'open-12m': 60000 };
+const TIMEOUT = { 'live-10s': 60000, 'live-same-10s': 60000, 'live-4m-10s': 60000, 'live-grow-4m-10s': 60000, 'open-12m': 60000 };
 
 const PROFILE_DEF = {
   desktop: { width: 1280, height: 800, scale: 1, mobile: false, cpu: 1 },
@@ -65,6 +65,7 @@ const FILES = new Map([
   ['/bench/live.js', genCode(512 * 1024 - 64, 14)],
   ['/bench/live-same.js', genCode(512 * 1024 - 64, 17)],
   ['/bench/live-4m.js', genCode(4 * 1024 * 1024 - 64, 18)],
+  ['/bench/live-grow.log', genCode(4 * 1024 * 1024 - 64, 19)],
 ]);
 const BYTES = new Map([...FILES].map(([k, v]) => [k, Buffer.from(v, 'utf8')]));
 const DIFF = genDiff(5000, 15);
@@ -75,6 +76,8 @@ let liveTick = 0;
 // 마지막 `\n`에서 자르고(없으면 문자 경계에서 자르고 line_truncated), tail, rev·ETag·304, expected_rev → 409.
 // 판(rev): 보통 파일은 고정. live.js 는 요청마다 마지막 줄이 바뀐다(옛 측정과 같다). live-4m.js 는 200ms 마다
 // 바뀐다(구간을 이어 받는 사이에 바뀌면 409). live-same.js 는 바뀌지 않는다(알림만 오고 내용은 같음 → 304).
+// live-grow.log 는 자라는 빌드 로그다 — 200ms 마다 끝에 한 줄이 붙고(앞은 그대로), rev 는 서버와 같은
+// `dev:ino:size:mtime_ns` 모양이다.
 const RANGE_MAX = 1024 * 1024;
 let liveBigBase = 0;
 
@@ -88,6 +91,13 @@ function fileVersion(path) {
   if (path === '/bench/live-4m.js') {
     const n = Math.floor((Date.now() - liveBigBase) / 200);
     return { rev: `big:${n}`, bytes: Buffer.concat([base, Buffer.from(`// tick ${n}\n`)]) };
+  }
+  if (path === '/bench/live-grow.log') {
+    const n = Math.floor((Date.now() - liveBigBase) / 200);
+    let tail = '';
+    for (let i = 0; i < n; i += 1) tail += `[build] step ${i} ok\n`;
+    const bytes = Buffer.concat([base, Buffer.from(tail)]);
+    return { rev: `1:42:${bytes.length}:${n}`, bytes };
   }
   return { rev: `static:${path}`, bytes: base };
 }
@@ -236,6 +246,7 @@ const server = createServer((req, res) => {
     if (!out) return sendJson(res, 404, { error: 'not found' });
     if (out.status === 304) { count('file304'); res.writeHead(304, { etag: out.etag, 'cache-control': 'private, no-cache' }); res.end(); return; }
     if (out.status === 409) count('file409');
+    if (out.body && typeof out.body.content === 'string') counts.set('fileBytes', (counts.get('fileBytes') || 0) + Buffer.byteLength(out.body.content));
     return sendJson(res, out.status, out.body, out.etag ? { etag: out.etag } : {});
   }
   if (p === '/__live-big-reset') { liveBigBase = Date.now(); return sendJson(res, 200, {}); }
@@ -341,8 +352,11 @@ async function runOnce(cdp, base, profile, scenario) {
     if (exceptionDetails) throw new Error(exceptionDetails.exception?.description || exceptionDetails.text);
     const reqs = await (await fetch(`${base}/__counts`)).json();
     // 304·409 는 요청 수에 이미 들어 있다(따로 보이기만 한다).
-    const { file304 = 0, file409 = 0, ...rest } = reqs;
-    return { ...result.value, requests: Object.values(rest).reduce((a, b) => a + b, 0), notModified: file304, changed409: file409 };
+    const { file304 = 0, file409 = 0, fileBytes = 0, ...rest } = reqs;
+    return {
+      ...result.value, requests: Object.values(rest).reduce((a, b) => a + b, 0), notModified: file304, changed409: file409,
+      fetchedKB: Math.round(fileBytes / 1024),
+    };
   } finally {
     await cdp.send('Target.closeTarget', { targetId }).catch(() => {});
   }
@@ -377,6 +391,8 @@ const COLS = [
   ['reloadLongTaskSum', '다시 그리기 long task(ms)'],
   ['reloadRequests', '다시 그리기 요청(회)'],
   ['loadedKB', '받은 본문(KB)'],
+  ['fetchedKB', '내려받은 본문 합(KB)'],
+  ['liveKB', '연속 변경 중 내려받은 본문(KB)'],
   ['notModified', '304(회)'],
   ['changed409', '409(회)'],
   ['domNodes', 'DOM 노드'],
