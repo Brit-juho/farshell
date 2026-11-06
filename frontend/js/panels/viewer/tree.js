@@ -14,6 +14,7 @@ import { _loadRecent, _pushRecent, _clearRecent } from './recent.js';
 import { _fmtSize } from './file.js';
 import { watchPath, coalesce } from '../../shell/fs-watch.js';
 import { t } from '../../core/i18n.js';
+import { shellQuotePath } from '../../lib/shell-quote.js';
 
 const PANEL_ID = 'vt-dir';
 
@@ -22,6 +23,13 @@ const PANEL_ID = 'vt-dir';
 const OS_NOISE = new Set(['.DS_Store', 'Thumbs.db', 'desktop.ini', '.localized']);
 const _denoise = (entries) => (entries || []).filter((e) => !OS_NOISE.has(e.name));
 const _isDescendant = (path, of) => path !== of && path.startsWith(of.replace(/\/$/, '') + '/');
+
+// 「경로 삽입」이 터미널에 타이핑하는 문자열. 파일 이름은 열람 경계 안의 누구나(클론한 저장소, 받은 압축 파일) 정할 수
+// 있어서 `a$(touch x).txt` 같은 이름이 그대로 들어가면 Enter를 누르는 순간 실행된다. 업로드 삽입과 같은 인용
+// 규칙(lib/shell-quote.js)을 쓴다 — 평범한 경로는 그대로 나간다.
+export function pathInsertText(path) {
+  return shellQuotePath(path) + ' ';
+}
 
 export async function showTree(opts = {}) {
   const panel = openPanel({
@@ -55,7 +63,7 @@ export async function showTree(opts = {}) {
       showToast(t('열려 있는 터미널 세션이 없습니다'));
       return;
     }
-    window.sendToPty(window.activeSessionId(), path + ' ');
+    window.sendToPty(window.activeSessionId(), pathInsertText(path));
     // 성공을 말하지 않는다 — 터미널에 경로가 실제로 타이핑된 것이 증거다.
   };
 
