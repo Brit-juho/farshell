@@ -62,3 +62,22 @@ History deletion can target this host alone or include approved replicas.
 It hides records and prevents reimport; it does not erase CLI source files or archived raw bytes on disk.
 Deletion acknowledgments from offline replica hosts complete after reconnection.
 FarShell delegation links open separate task records and remain distinct from agent-internal children.
+
+## tmux config (`fsh tmux`)
+
+FarShell's tmux always uses the repository's `config/vt-tmux.conf` as its base.
+Put your own preferences (for example `set -g mouse off`) in `~/.config/vt/tmux.local.conf`
+instead of editing that file. It is read at the very end of the base config, so it overrides the
+same options; a missing file is skipped silently.
+
+```
+fsh tmux reload    # re-read the config into the running tmux (sessions stay)
+fsh tmux status    # what is applied now
+```
+
+- An old `~/.config/vt/tmux.conf` copy left by earlier installs is moved aside by `fsh tmux reload`
+  (and `fsh sync`). An untouched copy becomes `tmux.conf.bak-<date>`, an edited one
+  `tmux.conf.legacy`; nothing is deleted. Move the lines you changed into `tmux.local.conf`.
+- Reloading does not undo values you **removed** from the config; they stay in the running tmux
+  until the tmux server restarts, which closes every session.
+- The "tmux config" line in `fsh doctor` shows the same state.

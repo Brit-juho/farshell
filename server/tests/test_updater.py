@@ -40,6 +40,12 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("VT_STATE_DIR", str(tmp_path / "state"))
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "no-claude"))
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "no-codex"))
+    # sync() 는 tmux 설정 정리(server/tmux_conf.py)도 부른다 — 진짜 홈의 ~/.config/vt 와
+    # 실제 fsh tmux 서버에 닿지 않게 홈과 소켓 이름을 임시로 바꾼다.
+    (tmp_path / "home").mkdir()
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("VT_TMUX_SOCKET", "fsh-updater-test-" + os.urandom(6).hex())
+    monkeypatch.delenv("VT_TMUX_CONF", raising=False)
     monkeypatch.setattr(updater, "post_checkout", lambda root, old, new: None)
     yield
 
@@ -297,3 +303,18 @@ def test_sync_installs_claude_hooks_idempotently(world, tmp_path, monkeypatch):
     assert "agent_hook.sh" in first
     assert updater.sync(root) == 0
     assert (cfg / "settings.json").read_text() == first
+
+
+def test_sync_moves_stale_tmux_conf_copy(tmp_path):
+    """옛 install.sh 가 복사해 둔 손대지 않은 사본은 백업 이름으로 치운다(dry-run 은 보고만)."""
+    import tmux_conf
+    root = Path(updater.ROOT)
+    stale = tmp_path / "home" / ".config" / "vt" / "tmux.conf"
+    stale.parent.mkdir(parents=True)
+    shutil.copy(root / "config" / "vt-tmux.conf", stale)
+    assert updater.sync(root, dry_run=True) == 0
+    assert stale.is_file()
+    assert updater.sync(root) == 0
+    assert not stale.exists()
+    assert len(list(stale.parent.glob("tmux.conf.bak-*"))) == 1
+    assert tmux_conf.legacy_path(tmp_path / "home") == stale

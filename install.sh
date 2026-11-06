@@ -343,12 +343,14 @@ ln -sf "$VT_DIR/bin/fsh" "$HOME/.local/bin/fsh"
 if [ -L "$HOME/.local/bin/vt" ]; then rm -f "$HOME/.local/bin/vt"; fi
 echo "✓ $(_t 'fsh CLI 등록 → ~/.local/bin/fsh')"
 
-# 4-1. tmux 격리 config 복사 (Phase 8 G3)
+# 4-1. tmux 격리 config — 복사하지 않는다. fsh 는 레포의 config/vt-tmux.conf 를 그대로 쓰고,
+#      개인 설정은 그 파일이 끝에서 읽는 ~/.config/vt/tmux.local.conf 에 둔다.
+#      예전 설치가 복사해 둔 ~/.config/vt/tmux.conf 는 레포 변경을 영영 가렸으므로 치우고
+#      (지우지 않고 이름만 바꾼다), tmux 서버가 떠 있으면 새 설정을 다시 읽힌다.
+#      실패해도 설치는 계속한다 — 'fsh tmux reload' 로 다시 할 수 있다.
 mkdir -p "$HOME/.config/vt"
-if [ -f "$VT_DIR/config/vt-tmux.conf" ] && [ ! -f "$HOME/.config/vt/tmux.conf" ]; then
-  cp "$VT_DIR/config/vt-tmux.conf" "$HOME/.config/vt/tmux.conf"
-  echo "✓ $(_t 'tmux 격리 config → ~/.config/vt/tmux.conf')"
-fi
+"$VENV/bin/python" "$VT_DIR/server/tmux_conf.py" reload \
+  || echo "  ⚠ $(_t "tmux 설정 정리 실패 — 'fsh tmux reload'로 다시 시도할 수 있습니다")"
 
 # 5. 설정 파일 생성 (없을 때만)
 if [ ! -f "$HOME/.vt.env" ]; then

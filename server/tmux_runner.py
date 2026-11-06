@@ -1,6 +1,7 @@
 """tmux 명령 공통 실행 헬퍼 (Phase 8 G3).
 
-- 단일 tmux 서버 원칙: 모든 호출이 -L fsh 격리 소켓 + -f vt-tmux.conf 사용
+- 단일 tmux 서버 원칙: 모든 호출이 -L fsh 격리 소켓 + -f config/vt-tmux.conf 사용
+  (개인 설정은 그 conf 가 끝에서 읽는 ~/.config/vt/tmux.local.conf — server/tmux_conf.py)
 - timeout 일관 적용 (기본 2초)
 - batch 패턴: list-panes -a로 한 번에 모든 세션 정보 수집
 
@@ -24,15 +25,14 @@ logger = logging.getLogger(__name__)
 
 VT_TMUX_SOCKET = os.environ.get("VT_TMUX_SOCKET", "fsh")
 
-# config 우선순위: VT_TMUX_CONF > ~/.config/vt/tmux.conf > 레포 내 config/vt-tmux.conf > 미사용
+# config 우선순위: VT_TMUX_CONF(전체 교체 — 격리 시험용) > 레포 config/vt-tmux.conf > 미사용.
+# 예전의 ~/.config/vt/tmux.conf 단계는 없앴다: install.sh 가 한 번 복사한 사본이 레포 conf 를
+# 영영 가려서 이후 변경이 반영되지 않았다. 개인 설정은 레포 conf 가 끝에서 읽는
+# ~/.config/vt/tmux.local.conf 에 둔다(옛 사본 정리는 tmux_conf.migrate_legacy).
 def _resolve_conf_path() -> Optional[str]:
     if env := os.environ.get("VT_TMUX_CONF"):
         if Path(env).is_file():
             return env
-    home_conf = Path.home() / ".config" / "vt" / "tmux.conf"
-    if home_conf.is_file():
-        return str(home_conf)
-    # 개발 모드: 레포 내 config 사용
     repo_conf = Path(__file__).parent.parent / "config" / "vt-tmux.conf"
     if repo_conf.is_file():
         return str(repo_conf)
