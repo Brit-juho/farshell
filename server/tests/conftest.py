@@ -16,6 +16,9 @@ for _k in ("VT_AUTH_TOKEN", "VT_TOKEN", "VT_AUTH_PASSWORD_HASH", "VT_PASSWORD_HA
     os.environ.pop(_k, None)
 os.environ.pop("VT_ACCESS_SPEC", None)
 os.environ.pop("VT_TRUST_PROXY", None)
+# 개발자 ~/.vt.env 가 실어 준 강제 모드(VT_AUTHZ_ENFORCE)가 있으면 peer 전용 시험이 통째로 건너뛰어진다
+# (2026-11-06: 셸에 전 모드가 들어 있어 authz_char 315개가 skip 되었다). 시험은 필요한 모드를 monkeypatch 로 직접 준다.
+os.environ.pop("VT_AUTHZ_ENFORCE", None)
 # routes/ports.py의 `_run_vt`는 VT_DIR로 **실제 bin/fsh**를 찾아 실행한다(터널 열기·
 # 내리기). 개발자 셸에는 보통 VT_DIR이 있어서, 그대로 두면 lifespan의 만료 노출
 # 정리 루프나 expose 테스트가 사용자의 진짜 cloudflared를 건드릴 수 있다. 필요한
