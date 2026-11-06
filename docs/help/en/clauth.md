@@ -17,8 +17,8 @@ On the web, use the 📊 "Usage" button in the rail. With no source, the button 
 
 ## How it reads
 
-It reads **only** `~/.clauth/status.json`. The clauth daemon refreshes that file every 90 seconds,
-and FarShell re-parses it only when the mtime changes.
+It reads **only** `~/.clauth/status.json`. FarShell assumes that file is refreshed every 90 seconds by default (`server/usage/clauth.py`)
+and re-parses it only when the mtime changes.
 
 It doesn't run `clauth status --json` because that would spawn a process on every poll, and values
 like `pending_switch` can't be observed from a one-shot run (only the daemon knows them).
@@ -55,7 +55,7 @@ vt_env_set VT_USAGE_PROVIDER none
 
 **The web doesn't offer profile switching (`clauth <profile>`).** FarShell runs many tmux sessions.
 Say you have five sessions running and switch the global profile: the existing sessions stay as
-they are and only new sessions change. You can no longer tell which session is on which account,
+they are and only new sessions change. You cannot tell which session is on which account,
 which is especially risky when you're viewing remotely from a phone. Switch in the terminal with
 clauth's own command.
 

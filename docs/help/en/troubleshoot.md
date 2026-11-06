@@ -63,9 +63,9 @@ Checks your install and environment automatically (Python, venv, tmux, cloudflar
 - If it isn't installed: `brew install tailscale` (macOS) or the official install script
 - `fsh doctor` has a Tailscale item too. Check there first
 
-### `Permission denied (publickey)` when you `ssh ...` from a work laptop
+### `Permission denied (publickey)` when you `ssh ...` from another laptop
 - That device's public key isn't in the MacBook's `~/.ssh/authorized_keys`
-- On the work laptop, copy the output of `cat ~/.ssh/id_ed25519.pub`, then on the MacBook run
+- On the other laptop, copy the output of `cat ~/.ssh/id_ed25519.pub`, then on the MacBook run
   `fsh ssh --add-key "ssh-ed25519 AAAA..."`
 - Or skip key registration and use `tailscale ssh user@host -- '...'` (your tailnet ACL must allow SSH)
 

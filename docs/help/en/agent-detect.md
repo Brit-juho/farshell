@@ -13,7 +13,7 @@ currently filled in for each CLI.
 When a CLI updates, its prompt text changes. Instead of editing server code and restarting every
 time, you change one line in these files. `load_patterns()` in `server/agent_prompt_detect.py` reads
 them at every server start (or on a `force=True` reload).
-(Measured 2026-10-06: the coverage table (`/api/agents/coverage`) re-reads files on every request,
+(The coverage table (`/api/agents/coverage`) re-reads files on every request,
 but the PTY detector caches. After editing a toml, restart the server for the change to affect
 real waiting/interrupt detection.)
 A file that fails to parse is skipped, **and only that file** (one bad regex must not kill
@@ -74,7 +74,7 @@ kind > fallback (`question`).
   detection window is text with **ANSI stripped, NBSP turned into a space, and cursor moves to the
   start of a line (`\x1b[19;1H`) turned into `\n`** (`_append_clean`), so you never need to put
   escapes in a literal or regex.
-  The reason became clear in a 2026-10-05 measurement: Claude Code draws `Interrupted · What should ...`
+  The reason: Claude Code draws `Interrupted · What should ...`
   split word by word with color codes, and agy draws the selection-screen hint line
   (`↑/↓ Navigate · enter Select · esc Skip`) the same way. When matching on raw bytes, neither one
   hit on a real screen (only synthetic-string tests passed).

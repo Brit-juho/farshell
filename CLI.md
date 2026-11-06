@@ -43,7 +43,7 @@ fsh worktree [list|add <name> [--base b] [--ports] [--copy-modules] [--agent cla
 fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git account store (stored credentials are not used for push)
 fsh hotkey [list|set|reset|disable]  # view/change hotkeys
 fsh hooks [status|install|uninstall|dedupe [--dry-run]]  # register Claude Code + Codex hooks (status badges/queue; Claude/Codex Stop drive session-specific TTS); dedupe removes FarShell hooks the Codex app copied into ~/.codex/hooks.json
-fsh update [--channel stable|dev|devmode] [--to vX.Y.Z] [--check] [--restart] [--rollback]  # update by channel (stable = signed release tag, dev = origin/dev, devmode = manual pull) then re-sync hooks + skill; `update trust [--key <pubkey>]` pins the release-signing key; `--rollback` returns to the previous commit
+fsh update [--channel stable|dev|devmode] [--to vX.Y.Z] [--check] [--restart] [--rollback]  # update by channel (stable = signed release tag, dev = origin/dev, devmode = manual pull) then re-sync hooks + skill; `update trust [--key <pubkey file>]` pins the release-signing key; `--rollback` returns to the previous commit
 fsh sync [--dry-run]  # re-sync Claude Code/Codex hooks and the fsh skill link to the current code (use after a manual pull)
 fsh pane report [--state ...] [--agent ...]  # report this pane's state (for agents without managed hooks)
 fsh clauth [status|which]  # read-only usage view (hidden when clauth isn't installed)
@@ -134,8 +134,8 @@ password, show it once in the terminal and store only its scrypt hash (change it
 `fsh password`); outside a terminal they create nothing and stop. `fsh start --force` is
 only for the case where no password could be created and you accept the risk.
 
-The options used to live on `fsh mobile`; passing `--network`/`--safe`/`--force` to it still
-works (it runs `fsh start` for you) but prints a notice. Details: `fsh help access`.
+These options belong to `fsh start`; passing `--network`/`--safe`/`--force` to `fsh mobile`
+also works (it runs `fsh start` for you) but prints a notice. Details: `fsh help access`.
 
 ## Agent-to-agent messages (`fsh msg`, `fsh mcp`)
 
@@ -147,7 +147,7 @@ Agents without hooks keep it queued until `fsh queue run` / "Run now".
 ```bash
 claude mcp add farshell -- fsh mcp      # give an agent the tools (Codex/agy: add the same command)
 fsh msg agents                          # where can I send?
-fsh msg send M5/api "run the tests"     # from a shell, e.g. for agents without MCP
+fsh msg send host-b/api "run the tests"     # from a shell, e.g. for agents without MCP
 fsh msg log                             # history with delivery status
 fsh host allow-agent <id>               # on the receiving Mac — needs allow-control too
 ```
@@ -264,7 +264,7 @@ after the agent finishes.
 fsh queue list                  # list queue
 fsh queue add "next instruction" [session]  # add to queue (max 50)
 fsh queue run                   # manual drain — feed one item
-fsh queue rm <id>                # delete an item (id=all clears everything)
+fsh queue rm <id>                # delete an item (an id prefix is enough; use `clear` to remove everything)
 fsh queue unblock <id>          # resume a blocked item (resets retries)
 fsh queue log [id]              # state-transition log (pending → sending → sent / blocked)
 fsh queue clear                 # clear everything
@@ -340,7 +340,7 @@ you were looking at at home.
 
 ```bash
 # On the Mac (Tailscale must already be connected via tailscale up)
-fsh ssh                   # Prints the command to connect to session 'dev' (copy and run it on the office laptop)
+fsh ssh                   # Prints the command to connect to session 'dev' (copy and run it on the other laptop)
 fsh ssh mysession         # Specify a different session name
 fsh ssh --user alice      # Specify the remote login account (default: current account)
 fsh ssh --add-key "ssh-ed25519 AAAA... user@laptop"   # Register a public key

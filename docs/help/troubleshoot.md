@@ -63,9 +63,9 @@
 - 미설치면 `brew install tailscale` (macOS) 또는 공식 설치 스크립트
 - `fsh doctor`에도 Tailscale 항목 포함 — 여기서 먼저 확인
 
-### 회사 노트북에서 `ssh ...` 했더니 `Permission denied (publickey)`
+### 다른 노트북에서 `ssh ...` 했더니 `Permission denied (publickey)`
 - 맥북 `~/.ssh/authorized_keys`에 그 기기 공개키가 없음
-- 회사 노트북에서 `cat ~/.ssh/id_ed25519.pub` 결과를 복사해 맥북에서
+- 다른 노트북에서 `cat ~/.ssh/id_ed25519.pub` 결과를 복사해 맥북에서
   `fsh ssh --add-key "ssh-ed25519 AAAA..."` 실행
 - 또는 키 등록 없이 `tailscale ssh user@host -- '...'` 사용 (tailnet ACL에서 SSH 허용 필요)
 

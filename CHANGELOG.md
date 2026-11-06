@@ -4,6 +4,8 @@ All notable changes to FarShell (formerly voice-terminal) are documented in this
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+> Entries for 2.6.0 and earlier are written in Korean; 2.7.0 and later are in English.
+
 ---
 
 ## [Unreleased]
@@ -455,7 +457,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [2.3.0] — 2026-10-06
 
 > 세션·뷰 모델을 정리한 릴리스다(재우기/깨우기 폐지, 새로고침은 닫은 세션을 되살리지 않음, 레이아웃은 브라우저 탭별 저장).
-> 호환성에 영향이 있어 마이너를 올렸다 — 아래 「마이그레이션 주의」를 먼저 읽는다. 스크롤백 영속화 제거(ADR-43)와 파일 뷰어 표면(ADR-44)도 이 버전이다.
+> 호환성에 영향이 있어 마이너를 올렸다 — 아래 「마이그레이션 주의」를 먼저 읽는다. 스크롤백 영속화 제거와 파일 뷰어 표면도 이 버전이다.
 
 ### 마이그레이션 주의
 
@@ -465,7 +467,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **레이아웃은 브라우저 탭마다 저장된다.** 새 탭은 가장 최근 레이아웃을 복사해 시작한다. 스냅샷은 `v5`(옛 버전은 읽힌다).
 - **모바일 세션 순서 저장(`vt-workspace-v1`)을 폐기했다.** 순서는 레이아웃(뷰 탭 순서 → 칸 순서)을 따르고, 폰에서는 세션 시트의 「뷰 편집」으로 바꾼다. 옛 값은 무시된다.
 - **옛 `rail.group.*` 설정 키는 삭제됐다.** 레일 설정은 `rail.attention.*`, `rail.origin.*`를 쓴다.
-- **스크롤백 영속화(ADR-43)가 제거됐다.** 서버가 기동할 때 남은 로그를 1회 정리하고, `fsh doctor`가 `~/.vt/scrollback`이 남았는지 알려 준다.
+- **스크롤백 영속화가 제거됐다.** 서버가 기동할 때 남은 로그를 1회 정리하고, `fsh doctor`가 `~/.vt/scrollback`이 남았는지 알려 준다.
 - **Whisper 경로가 없어졌다.** 이전에 고른 Whisper 모델은 설정에서 새 모델을 다시 골라야 한다.
 
 ### Security
@@ -637,13 +639,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   Linux/WSL2는 대응하는 표준 조회가 없어 `machine`이 빈 문자열이다 —
   프런트는 hostname/version과 같은 "값 없으면 숨긴다" 규칙으로 처리한다.
 
-- **설정 → MCP에서 서버를 검증할 수 있다** (ADR-48). 도구 항목마다 [검증] — 설정대로
+- **설정 → MCP에서 서버를 검증할 수 있다**. 도구 항목마다 [검증] — 설정대로
   한 번 실행해 연결되는지 본다(비밀번호 확인 필요, 결과는 저장하지 않고 화면을 연 동안만).
   결과는 글자로: 「연결됨 · 도구 N개」 / 「실패 — 원인」 / 「확인 불가 — 이 서버 환경에
   없음: 변수 이름」(실패가 아니다 — 에이전트 셸에는 있을 수 있다). http/sse 서버는 먼저
   「이 주소로 요청을 보냅니다: 호스트」를 묻는다. 서버 API는 2.3에 있었지만 화면이 없었다.
 
-- **파일 뷰어가 pane을 쪼개지 않고 열린다** (ADR-44). 지금까지 파일을 열면
+- **파일 뷰어가 pane을 쪼개지 않고 열린다**. 지금까지 파일을 열면
   터미널 pane이 오른쪽으로 쪼개져 xterm이 두 번 리사이즈되고 `SIGWINCH`가
   vim·tmux·less에 전달됐다 — "잠깐 열어본다"의 비용이 작업 화면의 재그리기였다.
   이제 파일은 `#terminal-container` 안의 오버레이(상단 시트 또는 떠 있는 창)로
@@ -755,7 +757,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   읽기 권한 팝업을 먼저 띄우며 선택도 하기 전에 붙여넣기부터 시도했다.
 
 - **"열려 있지 않음" 그룹 이름을 "열려 있음"으로 고쳤다** (`rail-data.ts`의
-  `GROUP_LABEL.idle`). ADR-29 이후 이 그룹은 "agent 상태가 idle인, **열려
+  `GROUP_LABEL.idle`). 세션 그룹 재설계 이후 이 그룹은 "agent 상태가 idle인, **열려
   있는** 세션"만 가리켜 왔다(잠든 세션은 별도 구역) — 이름이 정확히 반대로
   읽혔다. 모바일 세션 탭과 데스크톱 레일의 원격 호스트 보기가 같은 상수를
   써서 둘 다 고쳐졌다.
@@ -773,7 +775,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   「첨부」에 내줬다. 「더보기」는 「설정」이 됐다 — 예전 홈(파일/포트/사용량
   바로가기)은 설정 화면 자체의 첫 화면이 이미 대신하고 있었다.
 
-- **설정 → MCP를 한 서버 한 줄로 줄이고 독립 섹션으로 뗐다** (ADR-48). 서버 12개 기준
+- **설정 → MCP를 한 서버 한 줄로 줄이고 독립 섹션으로 뗐다**. 서버 12개 기준
   섹션 높이 2,961px → 약 590px. 접힌 줄은 이름 · 도구별 켬/끔 · 경고(값이 파일에 있음 ·
   로그인 필요 · 확장 안 되는 참조) · 마지막 검증 결과 · 전송 방식만 말한다. 경고와 실패는
   접혀도 보인다. 토글·검증·값 보관·복제·태그는 펼친 쪽에 있다. 「가져오기」(서버마다 칩
@@ -825,7 +827,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **빠른 열기(`shell/Palette.tsx`) 기본 화면에서 세션을 뺐다.** 세션 이동·관리는
   이제 세션 탭 하나가 맡고, 팔레트에서는 `@`로만 찾는다. 대신 명령이 훨씬 늘었다 —
   `settings.show`/`scm.show`/`clients.show`(감사해보니 빠져 있었다 — rail에 이
-  셋과 짝지을 data-action 버튼이 없어 `isPanel`은 안 붙였다, ADR-8 패리티 대상
+  셋과 짝지을 data-action 버튼이 없어 `isPanel`은 안 붙였다, 패리티 대상
   아님)와 `core/keymap.js`에 등록된 모든 명령(`:` 모드가 이미 보여주던 것과 같은
   목록)까지 합쳐 "모든 기능"이 한곳에서 검색된다. 기본 화면 순서는 **최근 사용
   기능 2개 → 최근 파일 2개 → 모든 기능**(종류별로 묶여 스크롤됨) — 최근은 레이블이
@@ -847,7 +849,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   TTS는 edge-tts → macOS `say`. 구현이 없던 `VT_STT_BACKEND`·`VT_TTS_BACKEND` 안내도 지웠다(`VT_STT_MODEL`로 대체).
 
 
-- **스크롤백 영속화(N13)를 완전히 없앴다(ADR-43).** 켜면 터미널 출력을
+- **스크롤백 영속화(N13)를 완전히 없앴다.** 켜면 터미널 출력을
   `~/.vt/scrollback/<session>.log`에 계속 쌓아 세션 종료·서버 재시작 이후에도
   검색·「더 불러오기」로 볼 수 있게 하는 옵트인 기능이었다. 2026-09-22 실측:
   이 토글이 **한 번도 켜진 적이 없었다** — 디스크에 남은 로그 하나는 실제
@@ -958,7 +960,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   실브라우저 62초): 두 엔드포인트 각 15회 → 1회, 훅 상태는 즉시, CLI가 바뀌면
   5초 안에 마크가 바뀐다. 겸해서 `/api/agents`·`/ws-agent` 스냅샷이 tmux
   서브프로세스를 이벤트 루프에서 바로 돌리던 것을 스레드로 넘겼고, 스냅샷의
-  에이전트 이름에 엔트리 우선 규칙(ADR-34)이 빠져 있던 것도 맞췄다.
+  에이전트 이름에 엔트리 우선 규칙이 빠져 있던 것도 맞췄다.
 
 - **사용량 게이지가 불릴 때마다 서버 전체가 수백 ms씩 멈추던 것.** Codex 토큰이
   만료된 기계에서는 `usage/codex.py`가 실패 결과를 캐시하지 않아 `/api/usage`·
@@ -1084,7 +1086,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   핸들러가 트리 렌더와 달리 컨테이너 준비 여부를 확인하지 않았다.
 
 - **설정 → MCP가 열 때마다 10초 멈추고, codex 플러그인이 안 보이고, codex 플러그인을
-  끌 수 없던 것** (ADR-48). `codex plugin list --json`은 원격 마켓플레이스까지 조회해
+  끌 수 없던 것**. `codex plugin list --json`은 원격 마켓플레이스까지 조회해
   단독으로 19초가 걸리는데 제한이 10초라 매번 시간 초과였다. 화면은 세 요청을 한꺼번에
   기다려 섹션 전체가 10초 멈췄고, 실패는 버려져 「설치된 플러그인이 없습니다」로 보였고,
   토글할 때마다 또 10초였다. codex 플러그인 토글은 같은 조회를 파일 락을 쥔 채 부르다
@@ -1092,19 +1094,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   캐시(제한 30초, 「새로고침」으로 즉시 갱신), 켬/끔은 매번 `config.toml`에서 읽는다.
   조회 실패는 실패로 표시한다. 서버 쪽 조작은 플러그인을 다시 읽지 않는다.
 
-- **MCP 헬스체크가 틀린 실패를 보고하던 것 셋** (ADR-46).
+- **MCP 헬스체크가 틀린 실패를 보고하던 것 셋**.
   (1) codex 설정의 리터럴 `env`를 검증 스폰에 통째로 안 넘겨, 키가 적혀 있는 서버도
   키 없이 떠서 실패로 보고됐다. (2) 값을 구하지 못한 변수가 있어도 `${…}` 글자 그대로
   띄워 "실패"라고 했다 — 이제 띄우지 않고 `unverified` + 모자란 변수 **이름**을 돌려준다
   (에이전트 셸에는 그 변수가 있을 수 있으므로 실패가 아니다). (3) codex는 서버에 자기
   환경을 통째로 주지 않는데(허용 목록 + `env_vars`만) 검증은 통째로 줘서, codex 안에서는
   실패할 서버가 검증에서는 통과할 수 있었다 — 같은 허용 목록으로 띄운다.
-- **자격증명이 있는 MCP 서버를 agy로 복제하면 조용히 안 돌던 것** (ADR-46). agy 1.2.7은
+- **자격증명이 있는 MCP 서버를 agy로 복제하면 조용히 안 돌던 것**. agy 1.2.7은
   설정의 `${VAR}`·`$VAR`를 확장하지 않는다(격리 HOME 실측). 복제는 `${FSH_MCP_…}`를
   적었으므로 서버가 그 글자를 받았다. 이제 env·headers가 있는 서버의 agy 복제는 이유와
   함께 거절한다. 설정 화면도 agy의 `${…}`를 "확장되지 않는다"로 경고한다.
 
-- **부팅 도중 오류가 나면 요청하지 않은 터미널 세션이 생기던 것** (ADR-45).
+- **부팅 도중 오류가 나면 요청하지 않은 터미널 세션이 생기던 것**.
   `bootApp()`의 예외 처리가 어떤 오류든 `createSession()`으로 받아서, 부팅 중
   새로고침·터널이 잠깐 끊김·서버 재시작 직후 접속만으로 서버에 셸 세션이 하나씩
   생겼다. 다음 접속에서는 그 세션 때문에 온보딩도 안 떴다. 이제 부팅이 실패하면
@@ -1138,7 +1140,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   못 들어온다 — 예전과 같은 공개 동작이 필요하면 `--mode public`을 명시해야 한다.
   구조: 모든 모드가 FarShell 자신의 리버스 프록시를 거친다(노출 포트마다 전용
   loopback 리스너, 라우트 3개뿐 — FarShell API는 거기 없다). 설계 근거와 폐기한
-  대안: `docs/plan-2.2/00-port-access.md`(ADR-30~32).
+  대안: `docs/plan-2.2/00-port-access.md`.
 
 ### Changed
 
@@ -1286,7 +1288,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   으로 쪼개 특정했다.
 
 - **`e2e` 잡이 추가된 이래 한 번도 실행된 적이 없었다.** 2026-09-08에 들어왔는데
-  바로 위 캐시 에러에 막혀 있었고, 그 사이 화면이 ADR-29로 크게 바뀌어 테스트만
+  바로 위 캐시 에러에 막혀 있었고, 그 사이 화면이 세션 그룹 재설계로 크게 바뀌어 테스트만
   옛 DOM에 남았다. 12건을 되살렸다 — 대부분 낡은 선택자·API였지만(`openWorktreeTab`
   → `openGroupTab`, 스킨 칩의 설정 패널 이식, 레일 행 클래스 조합, `--vt-wgrail-w`가
   `min()` 식으로 바뀐 것 등) **진짜 결함이 하나 있었다**: `.vt-onboarding`(z 500)이
@@ -1305,7 +1307,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   있었다는 뜻이다). 둘 다 tmp로 고정했다.
 
 - **`test_static_cache`의 `dist/` 경로 2건은 CI에서 통과한 적이 없다.**
-  `dist/`는 커밋하지 않고(ADR-2) Vite가 만드는데 `server` 잡은 node를 쓰지
+  `dist/`는 커밋하지 않고 Vite가 만드는데 `server` 잡은 node를 쓰지
   않는다. 산출물의 존재·형태는 `frontend` 잡이 이미 게이트로 잡으므로, 빌드가
   없으면 그 두 파라미터만 건너뛴다.
 
@@ -1345,7 +1347,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   문장 하나뿐인 `.vt-vw-body`만 `:has()`로 골라 세로 중앙 정렬한다 — 실제 목록이
   있는 body(코드 뷰어·파일 트리)는 이 선택자에 안 걸려 그대로 위에서부터 쌓인다.
 
-- **워크트리 만들기·삭제·열기가 서버 전체를 멈췄다(ADR-29 A0).** 세 라우트
+- **워크트리 만들기·삭제·열기가 서버 전체를 멈췄다.** 세 라우트
   (`POST /api/worktrees`, `DELETE /api/worktrees/{id}`, `POST
   /api/worktrees/{id}/open`)가 `asyncio.to_thread` 없이 동기 함수를 직접
   불렀다 — `GET /api/worktrees`만 2026-09-16 사고 이후 `to_thread`를 쓰고
@@ -1357,7 +1359,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   (`test_no_blocking_in_async.py`)의 `BLOCKING` 목록에 `worktree.
   list_worktrees`만 있고 이 셋이 빠져 있어서 못 잡았다 — 셋 다 추가했고,
   실제로 이벤트 루프가 멎는지 심장박동으로 재는 테스트도 추가해 옛 코드에
-  대고 재현·확인했다. 화면 변화 없음. 다음 재설계(ADR-29)의 저장소 시트가
+  대고 재현·확인했다. 화면 변화 없음. 다음 재설계의 저장소 시트가
   이 세 라우트를 그대로 타므로, 화면을 옮기기 전에 먼저 고쳤다.
 
 - **오늘(이 릴리스) 안에서만 있었던 사고: 레일 교체가 설정 메뉴 넷을 통째로
@@ -1486,7 +1488,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   일반 세션엔 아예 안 그린다)로 표시한다.
 
 - **그룹을 화면(pane 트리) 기반으로 재정의 + 세션 이름 변경 복구 + 잔여
-  UX 버그 5건(사용자 피드백, 2026-09-18 후속 — ADR-29 이후 가장 큰 변경).**
+  UX 버그 5건(사용자 피드백, 2026-09-18 후속 — 세션 그룹 재설계 이후 가장 큰 변경).**
   사용자가 "구현이 설계와 다르다"며 지적한 근본 문제: 그룹이 태그(`@fsh_grp`,
   레일에서 세션을 세션 위로 드래그)로 정의돼 있어서, 화면에 같이 떠 있지
   않아도 "그룹"으로 표시될 수 있었다. **결정**: 그룹 = 지금 한 탭(화면)의
@@ -1546,14 +1548,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
     문자열이었다).
   - **레거시 `repoId` 미러 제거**: `layout/persist.js`가 워크스페이스
     스냅샷에 `repoId: t.groupId || null`을 v3 롤백 호환용으로 계속
-    미러링하고 있었다 — ADR-29가 이미 완결된 지금 이 값을 계속 쓰는 건
+    미러링하고 있었다 — 그 재설계가 이미 완결된 지금 이 값을 계속 쓰는 건
     사용자가 정확히 지적한 "레거시가 아직 이용되고 있다"는 문제였다.
     **쓰기**는 지우고, 옛 v3/v4 스냅샷 **읽기**(값을 그대로 버린다, 더
     이상 뭔가로 승격하지 않는다)만 과도기 코드로 남겼다.
   typecheck·테스트(524개)·프로덕션 빌드 전부 통과.
 
 - **세션 행의 저장소 해시 색점(왼쪽 세로 막대) 제거 + 관련 레거시 일괄
-  정리(사용자 피드백).** 저장소가 레일의 주어에서 내려온 뒤(ADR-29)에도
+  정리(사용자 피드백).** 저장소가 레일의 주어에서 내려온 뒤에도
   각 세션 행 맨 앞에 저장소 이름/소유자 해시로 색을 매기는 점(`.vt-wgrail-
   hash`, `--color-hash-1..8`)이 남아 있던 걸 사용자가 지적했다 — 상태색
   막대(`.vt-wgrail-bar`, `tone-${status}`)만으로 충분하다(행 자체가 항상
@@ -1586,7 +1588,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   ⚙ 버튼이 항상 떠 있게 되면서 이미 사라져 있었다.
 
 - **그룹 자동 제안 제거 + 세션을 세션에 끌어 새 그룹 만들기 + 제자리 이름
-  편집(ADR-29 E 후속, 사용자 피드백 3건).** 사용자가 세 가지를 지적했다:
+  편집(후속, 사용자 피드백 3건).** 사용자가 세 가지를 지적했다:
   (1) "저장소로 자동 묶기"는 요청한 적 없다 — 제거. (2) 그룹 이름 변경에
   `window.prompt` 같은 "기본 컴포넌트"를 쓰지 말라 — 제자리 편집으로 교체.
   (3) 저장소 관리 시트가 3단(저장소→워크트리→세션)인데 2단(워크트리→세션)과
@@ -1622,7 +1624,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   관리 시트가 접기 없이 평평한 워크트리 카드 목록으로 뜨는 것(본체는
   체크박스+"+워크트리", 부가는 저장소 이름표+삭제).
 
-- **그룹 이름 짓기 UI(ADR-29 E 후속).** `PATCH /api/groups/{id}`는 A에서
+- **그룹 이름 짓기 UI(후속).** `PATCH /api/groups/{id}`는 A에서
   만들고 아무 화면도 안 부르던 라우트였다 — 그룹 헤더(저장소 자동 제안이든
   드래그로 만든 다저장소 그룹이든, 「묶지 않음」·「개입 필요」는 제외)에
   연필 아이콘을 달아 처음 연결했다. 클릭하면 `window.prompt`(세션
@@ -1634,7 +1636,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   isolated 서버 + 실브라우저로 확인: 이름을 지으면 그룹 헤더가 즉시 바뀌고
   `/api/groups`에 저장되며, 취소하면 아무 요청도 안 나간다.
 
-- **드래그로 그룹 재편성 + 옛 팝업 둘 제거(ADR-29 E, ADR-29 마무리).** 세션
+- **드래그로 그룹 재편성 + 옛 팝업 둘 제거(마무리).** 세션
   행을 끌어 그룹 헤더에 놓으면 `POST /api/tmux/{name}/group`(A에서 만들고
   아무도 안 부르던 라우트)을 불러 `@fsh_grp`를 바꾼다 — 「묶지 않음」
   헤더에 놓으면 그룹에서 뺀다. 「개입 필요」·「잠자는 중」은 드롭 타깃이
@@ -1650,8 +1652,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   (`PATCH /api/groups/{id}`, A에서 이미 있다) 정확해지지만 그걸 하는 UI는
   아직 없다 — 다음에 그룹 이름 짓기 화면을 붙일 때 같이 봐야 한다.
 
-  이 김에 ADR-29가 처음부터 목표로 했던 정리 둘도 끝냈다. **`layout/rail.js`**
-  (48px 아이콘 레일 + 사이드 플라이아웃, ADR-29 B/설정 이식으로 이미
+  이 김에 그 재설계가 처음부터 목표로 했던 정리 둘도 끝냈다. **`layout/rail.js`**
+  (48px 아이콘 레일 + 사이드 플라이아웃 B/설정 이식으로 이미
   대체돼 있었다) — 등록하는 액션 중 아직 살아 있던 건 `clients.show`
   (HUD "연결된 화면" 칩, 레일 세션 메뉴) 하나뿐이라, 그 하나만
   `layout/connected-screens.js`(새 파일, backdrop+card 모양은 다른 시트와
@@ -1672,7 +1674,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   「연결된 화면」 다이얼로그와 모바일 시트의 잠든 세션 깨우기·완전 종료를
   확인했다.
 
-- **탭의 정체성이 그룹이 됐고, 닫기가 재우기가 됐다(ADR-29 D).** B가 레일
+- **탭의 정체성이 그룹이 됐고, 닫기가 재우기가 됐다.** B가 레일
   행을 세션으로 되돌리면서 세션을 열 때 탭을 옮기는 동작이 조용히
   빠져 있었다 — `switchTo`/`attachTmux`는 항상 **지금 활성 탭**에 배정하는데
   (`addSession` 마지막 줄), B의 `openRow`는 탭을 바꾸는 호출을 아예 안 했다.
@@ -1703,7 +1705,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   레일의 「잠자는 중」에 다시 나타나며, 거기서 클릭하면 자기 탭으로 다시
   깨어난다.
 
-- **저장소→워크트리→세션 3단 관리 시트(ADR-29 C).** B가 레일 행을 세션으로
+- **저장소→워크트리→세션 3단 관리 시트.** B가 레일 행을 세션으로
   되돌리면서 워크트리 만들기·삭제·열기가 레일에서 설 자리를 잃었다 — 이
   셋을 「저장소 표시」였던 시트(`RepoVisibility.tsx`)로 옮기고 이름도
   「저장소 관리」로 바꿨다. 데이터 출처가 `/api/worktrees`(평면)에서
@@ -1721,11 +1723,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   펼치기·워크트리 안 세션 열기(신규 tmux 생성 확인)·워크트리 만들기 다이얼로그
   (저장소 사전 채움) 흐름을 확인했다.
 
-- **레일의 행이 다시 세션이 됐다(ADR-29 B, ADR-20을 뒤집는다).** 2.1.1부터
+- **레일의 행이 다시 세션이 됐다.** 2.1.1부터
   행은 워크트리였다 — 한 워크트리에 세션이 여러 개면 그중 하나만 열 수
   있는 게 그 모델의 근본 결함이었다(같은 저장소에서 세션 2개 이상 여는
   일이 흔한데도). D2가 이미 각 세션에 `@fsh_wt`를 심어 두고 있었으므로
-  (`cd`해도 행이 안 흔들린다는 ADR-20의 원래 반대 이유가 이미 해소돼
+  (`cd`해도 행이 안 흔들린다는 원래 반대 이유가 이미 해소돼
   있었다), 행을 세션으로 되돌리는 데 새 인프라가 필요 없었다. 로컬
   호스트는 이제 **깨어있음/잠듦**을 1축으로 쓴다 — 이 브라우저 탭에 열려
   있으면 깨어있음, tmux는 살아 있는데 이 탭에 없으면 잠듦(완전 종료와는
@@ -1743,7 +1745,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   브라우저에 아직 안 연 것)은 "잠자는 중"에 낱개로 뜨고 클릭하면 정상
   attach된다.
 
-- **세션 그룹 저장 뼈대(ADR-29 A) — 화면 변화 없음.** 세션 소속을 `@fsh_wt`로
+- **세션 그룹 저장 뼈대 — 화면 변화 없음.** 세션 소속을 `@fsh_wt`로
   tmux에 적었던 D2와 같은 방식으로, 세션이 어느 **그룹**에 속하는지도
   `@fsh_grp` 커스텀 옵션에 적는다. 읽기는 이미 배치 호출인 `list-panes -a`·
   `list-sessions`에 필드 하나씩 추가하는 것뿐이라 subprocess 증가는 0회다.
@@ -1835,7 +1837,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   ANSI 터미널 화면을 실시간으로 그렸다 — 두 화면이 동시에 떠 있으면 세션
   하나에 소켓이 여러 개 붙었다. 이제 그 자리엔 `/api/tmux/sessions` 응답에
   이미 있는 cwd 한 줄만 정적으로 채운다(소켓 0개). `/ws-preview` **서버
-  엔드포인트는 그대로 둔다**(ADR-7). 완전히 죽어 있던 `refreshGrid()`(컨테이너
+  엔드포인트는 그대로 둔다**. 완전히 죽어 있던 `refreshGrid()`(컨테이너
   `#grid-cards`가 이미 사라진 지 오래)와 그 전용 테스트 파일도 같이 지웠다.
   서버에 있었지만 어느 화면도 안 부르던 `DELETE /api/worktrees/{id}`를 레일
   컨텍스트 메뉴("워크트리 삭제", 메인 워크트리는 제외)에 처음 연결했다 —
@@ -2038,7 +2040,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   `20-design-system.md` §3). 조작 요소가 메타데이터 크기에 앉아 있던 자리를 고쳤다 —
   패널 머리말 버튼과 필터 칩이 pid·용량과 같은 11px이었고, 폰에서 화면을 바꾸는 유일한
   수단(하단 내비 라벨)이 화면에서 가장 작은 글씨였다. 헤더는 32px로 줄였다.
-- **`⋯ 더보기`를 없앴다**(ADR-8 "⋯ 폐지 → 레일 + 팔레트"의 마지막 조각). 그 메뉴의
+- **`⋯ 더보기`를 없앴다**("⋯ 폐지 → 레일 + 팔레트"의 마지막 조각). 그 메뉴의
   6개 항목을 추적하니 마이크 하나 빼고 전부 다른 입구가 이미 있었다 — 마이크를 레일
   바닥으로 꺼내고 메뉴를 지웠다. 설정 ⚙도 레일 바닥에 다시 꺼냈다(2.1.0에서 48px
   아이콘 레일이 대체되며 사라져, 입구가 메뉴 두 단계 안이나 `Mod+,`뿐이었다).
@@ -2169,7 +2171,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **레일 헤더가 세는 것을 사실대로 말한다.** 「워크트리 · 13」이라고 했지만 13개가
   전부 각 저장소의 **본체 체크아웃**(`isMain`)이었고 `git worktree add`로 만든 것은
   0개였다. 「저장소 N」을 기본으로 하고 부가 워크트리가 있을 때만 그 수를 덧붙인다.
-  행이 워크트리 단위라는 구조(ADR-20)는 그대로다 — 바꾼 것은 요약 문구뿐이다.
+  행이 워크트리 단위라는 구조는 그대로다 — 바꾼 것은 요약 문구뿐이다.
 
 - **워크트리 목록이 `stale-while-revalidate`로 바뀌었다.** TTL 20초(폴링 주기보다
   길게) + single-flight 잠금 + 낡은 값 즉시 반환. 프런트 폴링은 60초로 늦추고
@@ -2438,7 +2440,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   - **dock 소스컨트롤 쓰기.** 2.1.0에서 읽기 전용이던 탭의 stage/unstage/commit을
     `POST /api/git/{stage,unstage,commit}`에 연결하고, 파일 행에서 그 파일을
     pane 뷰어로 여는 버튼을 붙였다.
-  - **push·PR/MR은 만들지 않았다(ADR-27).** 빠진 게 아니라 **안 만들기로 결정한
+  - **push·PR/MR은 만들지 않았다.** 빠진 게 아니라 **안 만들기로 결정한
     것이다** — 비활성 버튼조차 렌더링하지 않으므로 버그로 오해하지 말 것.
     FarShell은 샌드박스가 아니라 사용자 자신의 맥 터미널을 그대로 돌리는 도구고,
     push·PR 생성은 이미 그 터미널에서 하고 있으며, 계정을 여럿 쓰는 사람은

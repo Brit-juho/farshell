@@ -1,7 +1,5 @@
 # 키보드 입력
 
-2026-10-12 구현.
-
 ## 처리 순서
 
 `core/platform.js`가 OS의 primary modifier와 설정 저장 프로필을 제공한다. Mac은 Command, 그 외는 Control을 `Mod`로 해석한다. 명시적인 Meta는 비Mac에서도 Control과 구분한다.
@@ -20,13 +18,13 @@
 | 앱 + 터미널 | 앱 액션 한 번, 원래 터미널 타깃에 전달용 이벤트 한 번 |
 | 터미널만 | 앱 액션 없이 원래 터미널에 전달 |
 
-기존 passthrough=true는 앱+터미널로 유지된다. 전달용 이벤트는 별도 terminal 결정을 가지므로 앱 액션을 재실행하지 않는다. 원래 세션/연결이 변경되거나 타깃이 닫히면 다른 활성 세션에 보내지 않는다.
+passthrough=true는 앱+터미널로 유지된다. 전달용 이벤트는 별도 terminal 결정을 가지므로 앱 액션을 재실행하지 않는다. 원래 세션/연결이 변경되거나 타깃이 닫히면 다른 활성 세션에 보내지 않는다.
 
-기존 global `keymap.overrides`는 읽기 호환용이다. 최초 편집 시 기존 값을 `keymap.bindingsV2`의 `{version:2, bindings:{...}}`로 복사해 device 스코프에 저장한다. 이후 reset도 V2에서 처리하므로 옛 global 값이 다시 살아나지 않는다. 원본 global은 다른 프로필과 롤백을 위해 남긴다. 저장 실패는 설정 스토어의 기존 정책에 따라 로컬 적용과 실패 안내로 구분한다.
+global `keymap.overrides`는 읽기 호환용이다. 최초 편집 시 그 값을 `keymap.bindingsV2`의 `{version:2, bindings:{...}}`로 복사해 device 스코프에 저장한다. 이후 reset도 V2에서 처리하므로 옛 global 값이 다시 살아나지 않는다. 원본 global은 다른 프로필과 롤백을 위해 남긴다. 저장 실패는 설정 스토어의 기존 정책에 따라 로컬 적용과 실패 안내로 구분한다.
 
-기기 스코프는 개별 하드웨어가 아니라 mac/windows/linux/mobile 종류별이다. 기존 클라이언트가 수정한 V1 값은 V2 편집을 시작한 프로필에 자동 합쳐지지 않는다. 여러 탭에서 같은 바인딩 JSON을 동시에 수정할 때의 서버 revision 기반 병합은 구현하지 않았다. 한 설정 키에 대한 기존 settings 저장 계약을 따른다.
+기기 스코프는 개별 하드웨어가 아니라 mac/windows/linux/mobile 종류별이다. V1 클라이언트가 수정한 값은 V2 편집을 시작한 프로필에 자동 합쳐지지 않는다. 여러 탭에서 같은 바인딩 JSON을 동시에 수정할 때의 서버 revision 기반 병합은 구현하지 않는다. 한 설정 키에 대한 settings 저장 계약을 따른다.
 
-설정 → 키맵의 Mac Option 키는 `문자 입력`과 `터미널 Meta 키`를 선택한다. 기본은 `터미널 Meta 키`(2026-10-28 이전에는 문자 입력)이며 이미 저장된 선택은 바뀌지 않는다. 문자 입력으로 바꾸면 Option+P가 `π`처럼 문자로 들어가 터미널 앱의 Meta 조합이 동작하지 않는다. 선택은 생성된 터미널과 이미 열린 터미널의 `macOptionIsMeta`에 반영된다. PWA도 OS/브라우저 예약 키를 가로챌 수 있다고 보장하지 않는다.
+설정 → 키맵의 Mac Option 키는 `문자 입력`과 `터미널 Meta 키`를 선택한다. 기본은 `터미널 Meta 키`이며 이미 저장된 선택은 기본값 변경과 무관하게 유지된다. 문자 입력으로 바꾸면 Option+P가 `π`처럼 문자로 들어가 터미널 앱의 Meta 조합이 동작하지 않는다. 선택은 생성된 터미널과 이미 열린 터미널의 `macOptionIsMeta`에 반영된다. PWA도 OS/브라우저 예약 키를 가로챌 수 있다고 보장하지 않는다.
 
 ## Scope와 가상 입력
 
@@ -48,19 +46,18 @@ fallback 완료 후 1초 이내에 native 이벤트가 늦게 오면 재전송�
 
 자동 검사는 물리 code 판별, 단일 실행, 녹화/최상위 scope, IME/AltGraph/repeat, V2 이관/reset, 전달 대상, CSI u, native/fallback/빈 paste와 키바를 검증한다. Chrome 격리 페이지에서는 실제 vendor xterm으로 Ctrl+C 바이트, 앱+터미널 CSI u 한 번, 네이티브 폴백과 지연 이벤트, 물리/소프트/응답의 sticky 분리를 확인했다.
 
-합성 Option 이벤트와 Playwright 키는 macOS가 실제 발행하는 Option 문자나 OS 예약 단축키의 증명이 아니다. 실제 맥북 물리 키, Safari 및 tmux 안의 Codex/Claude 조합은 추가 실측 대상이다. Android 실기기 검증은 아래를 참고한다. tmux extended-keys 옵션은 변경하지 않았다. 프로토콜을 제품 이름으로 추정하지 않으며 현재 지원하지 않는 키는 xterm의 레거시 전달 한계를 따른다.
+합성 Option 이벤트와 Playwright 키는 macOS가 실제 발행하는 Option 문자나 OS 예약 단축키의 증명이 아니다. 실제 맥북 물리 키, Safari 및 tmux 안의 Codex/Claude 조합은 추가 실측 대상이다. Android 실기기 검증은 아래를 참고한다. tmux extended-keys 옵션은 변경하지 않는다. 프로토콜을 제품 이름으로 추정하지 않으며 현재 지원하지 않는 키는 xterm의 레거시 전달 한계를 따른다.
 
-### Android ADB 실측 (2026-10-12)
+### Android ADB 실측
 
 Android 14 실기기, Chrome, Samsung 키보드에서 확인했다. 앱 설정 화면은 실제 실행 인스턴스로 확인했고, 문자/수식키 검증은 별도 로컬 페이지와 격리된 raw PTY로 수행해 작업 중인 tmux 세션에 테스트 키를 보내지 않았다.
 
-- 키맵 16개와 전달 대상 선택 15개가 렌더링됐고, 가로 넘침이 없었다. native paste 항목은 전달 대상 선택을 숨기는 기존 계약을 유지한다.
-- 기존 키맵의 새 select가 공통 테마를 사용하지 않는 문제를 발견해 공통 `vt-select`/`vt-select-wrap`으로 수정했다. 가로 화면(832×331 CSS px)에서 24px로 줄어드는 터치 표적도 coarse pointer에서는 최소 44px로 보완했다.
-- Samsung 키보드의 `key=Unidentified`, `keyCode=229`, `insertText`에서 sticky Ctrl+C가 `03`과 원문 `63`을 둘 다 보내는 회귀를 재현했다. xterm의 지연 textarea 검사와 커스텀 input이 각각 전송한 것이다.
-- 변환할 입력의 beforeinput 값을 기록하고, 소비한 native textarea 변경을 원복해 지연 검사에서 같은 문자를 다시 읽지 않게 수정했다. 신뢰할 beforeinput 값이 없으면 원문을 보존하고 sticky를 소비하지 않는다.
-- 수정 후 실제 ADB 터치로 Ctrl+C=`03` 한 번, Alt+C=`1b 63` 한 번, 일반 c=`63` 한 번을 확인했다. once 수식키는 해당 입력 후 off가 된다.
+- 키맵 16개와 전달 대상 선택 15개가 렌더링됐고, 가로 넘침이 없었다. native paste 항목은 전달 대상 선택을 숨긴다.
+- 키맵의 select는 공통 `vt-select`/`vt-select-wrap` 테마를 사용한다. 가로 화면(832×331 CSS px)에서도 coarse pointer의 터치 표적은 최소 44px다.
+- Samsung 키보드의 `key=Unidentified`, `keyCode=229`, `insertText`에서 sticky Ctrl+C가 `03`과 원문 `63`을 둘 다 보내면 안 된다(xterm의 지연 textarea 검사와 커스텀 input이 각각 전송할 수 있다). 변환할 입력의 beforeinput 값을 기록하고 소비한 native textarea 변경을 원복해 지연 검사가 같은 문자를 다시 읽지 않게 한다. 신뢰할 beforeinput 값이 없으면 원문을 보존하고 sticky를 소비하지 않는다.
+- 실제 ADB 터치로 Ctrl+C=`03` 한 번, Alt+C=`1b 63` 한 번, 일반 c=`63` 한 번을 확인했다. once 수식키는 해당 입력 후 off가 된다.
 - 한글 `가 ` 조합은 원문 한 번으로 전달되고 armed Ctrl을 소비하지 않았다.
 - 실제 ADB Escape로 재지정 녹화만 취소되고 설정 화면이 유지되는 것을 확인했다.
-- Android KEYCODE_PASTE로 paste 경로 한 번, 일반 키 바이트 0회를 확인했다. 검증용 clipboard를 사용한 뒤 기존 ClipboardItem을 복원했다.
+- Android KEYCODE_PASTE로 paste 경로 한 번, 일반 키 바이트 0회를 확인했다. 검증용 clipboard를 사용한 뒤 원래 ClipboardItem을 복원했다.
 
 ADB는 Android 동작을 검증하며 macOS Command/Option 물리 키의 검증을 대체하지 않는다.

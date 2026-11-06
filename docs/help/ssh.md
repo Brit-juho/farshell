@@ -22,7 +22,7 @@ fsh ssh mysession       # 다른 세션 이름 지정
 fsh ssh --user alice    # 원격 로그인 계정 지정 (기본: 현재 계정)
 ```
 
-실행하면 **이 머신에서** Tailscale 상태를 읽어 다른 기기(회사 노트북 등)
+실행하면 **이 머신에서** Tailscale 상태를 읽어 다른 기기(다른 노트북 등)
 에서 그대로 복사해 실행할 두 가지 명령을 출력합니다:
 
 1. 일반 SSH — `ssh -t user@100.x.x.x 'tmux -L fsh attach -t dev || tmux -L fsh new -A -s dev'`
@@ -32,7 +32,7 @@ fsh ssh --user alice    # 원격 로그인 계정 지정 (기본: 현재 계정)
 
 ## 공개키 등록이 안 돼 있다면
 
-접속할 기기(회사 노트북 등)에서:
+접속할 기기(다른 노트북 등)에서:
 ```bash
 cat ~/.ssh/id_ed25519.pub    # 없으면 ssh-keygen -t ed25519로 생성
 ```

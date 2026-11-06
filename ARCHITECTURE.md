@@ -28,8 +28,8 @@ structure. Instead of switching to a monorepo, it only spells out the
 ┌───────────────────────────┴─────┐   ┌─────────────┴──────────┐
 │ Voice Plane — STT/TTS          │   │ Network Plane           │
 │   server/voice_handler.py      │   │   cloudflared tunnel   │
-│   server/voice/ (daemon pkg)   │   │   Tailscale (D9)       │
-│   server/local_mic.py          │   │   token/password auth  │
+│   server/voice/ (daemon pkg)   │   │   Tailscale            │
+│   server/stt_service.py        │   │   token/password auth  │
 │   frontend/js/voice/ (own bundle)│  │   ntfy/Telegram push   │
 └────────────────────────────────┘   └─────────────────────────┘
 ```
@@ -73,8 +73,8 @@ hotkeys, device management, template management, tunnel management,
 
 ### `server/` — FastAPI backend (Work + Voice Plane)
 
-`main.py` is the FastAPI entry point; it wires middleware/auth and mounts 11
-routers from `server/routes/` (below), which own both the REST endpoints and
+`main.py` is the FastAPI entry point; it wires middleware/auth and mounts the
+routers from `server/routes/` (the main ones are listed below), which own both the REST endpoints and
 the WebSocket endpoints (`/ws/{id}` and `/ws-notify` in `routes/pty.py`,
 `/ws-preview/{tmux_name}` in `routes/tmux.py`, `/ws-agent` in
 `routes/agents.py`, `/ws-workspace` in `routes/system.py`).
@@ -108,7 +108,6 @@ the WebSocket endpoints (`/ws/{id}` and `/ws-notify` in `routes/pty.py`,
 | `stt_service.py` | Which STT model is selected (setting `voice.sttModel`), engine load/unload, serialized transcription with per-stage timing, catalog/setup/delete for the settings UI. STT runs **on the server OS only** — browsers just upload audio |
 | `stt_engines/` | Engine layer: `mlx_qwen3` (Apple Silicon), `llamacpp_qwen3` (every platform; `llama-server` child process, local-only + API key), `apple_speech` (macOS 26+, Swift helper built on first use). `catalog.py` holds models + measured numbers, `env.py` detects the host, `llama_release.py` pins + sha256-verifies the llama.cpp download |
 | `output_watcher.py` | Idle detection on PTY output → TTS + push notification |
-| `local_mic.py` | Desktop local-microphone REST API (voice profile only; imported unconditionally so a core-profile install degrades gracefully) |
 | `voice_daemon.py` | Thin shim — real implementation lives in the `server/voice/` package below |
 | `server/voice/` (package) | `daemon.py` (hotkey + media-key main loop) · `config.py` (`~/.vt.env` parsing) · `media_keys.py` (macOS earbud Play/Pause) · `recorder.py` (record → STT → tmux inject) · `stt.py` (hands recorded audio to `stt_service`) · `tmux_target.py` (compat shim over the top-level module, avoids importing `pynput` just for target resolution) |
 
@@ -168,22 +167,23 @@ the WebSocket endpoints (`/ws/{id}` and `/ws-notify` in `routes/pty.py`,
 **`server/routes/` — REST/WS route modules mounted by `main.py`**
 | File | Mounts |
 |---|---|
-| `pty.py` | `/api/sessions` CRUD, `/api/upload`, `/api/download` — PTY session lifecycle + file transfer |
+| `pty.py` | `/api/sessions` CRUD, `/api/upload`, `/ws/{id}`, `/ws-notify` — PTY session lifecycle + upload |
 | `tmux.py` | `/api/tmux/*` — session CRUD + live preview + open-on-mac |
 | `voice.py` | `/voice/*` — STT/TTS I/O, cancel, status/preload |
 | `agents.py` | `/api/agents*`, `/api/agent/event`, `/api/agent/status` — agent detection + hook state |
-| `files.py` | `/api/fs/*`, `/api/git/*` — read-only file browser + git status/diff/stage/commit (P2, D16) |
+| `files.py` | `/api/fs/*`, `/ws-fs-watch` — read-only file browser |
+| `git.py` | `/api/git/*` — git status/diff/stage/commit |
 | `ports.py` | `/api/ports*` — port dashboard (blocking calls offloaded via `asyncio.to_thread`) |
 | `queue.py` | `/api/queue*` — prompt queue |
 | `snippets.py` | `/api/snippets*` — prompt snippet library |
 | `push.py` | `/api/push/*` — Web Push subscription |
 | `clipboard.py` | `/api/clipboard/push` — clipboard daemon → `/ws-notify` broadcast |
-| `system.py` | `/api/capabilities`, `/api/tunnel/status`, `/api/tailscale/status`, `/api/safe-mode`, `/api/notify/client-event` — status/diagnostics |
+| `system.py` | `/api/capabilities`, `/api/tailscale/status`, `/api/safe-mode`, `/api/notify/client-event` — status/diagnostics |
 
 **`server/hooks/`**
 | File | Responsibility |
 |---|---|
-| `tmux_client_notify.sh` | tmux client-attached/detached hook (D9) → POSTs to `/api/notify/client-event` |
+| `tmux_client_notify.sh` | tmux client-attached/detached hook → POSTs to `/api/notify/client-event` |
 
 ### `frontend/` — xterm.js PWA, built by Vite
 
@@ -209,35 +209,35 @@ precache stays valid:
 | Directory | Owns |
 |---|---|
 | `js/core/` | `env.js` (API_BASE/token/cookie exchange), `api.js` (`apiFetch`/`vtFetch`/`vtEsc`), `store.js` (session state), `dom.js` (the `data-action` click-delegation registry that replaced 29 inline `onclick` attributes), `settings.js` (**settings store — the server's `/api/workspace.settings` is the source of truth, localStorage is only a pre-render cache**), `keymap.js` (keybinding registry with `passthrough`, so a shell key like `Mod+F` can be handed back to the terminal) |
-| `js/term/` | Everything that used to be the 2000-line `terminal.js`: `e2e.js` (client side of the E2E handshake), `session.js` (`addSession`/`switchTo`/tab lifecycle — the riskiest split, kept as one orchestrator over `tab-dom.js`/`xterm-setup.js`/`ws.js` "assembly parts" rather than force-split), `clipboard.js`, `touch.js`, `links.js`, `selection.js`, `resize.js`, `workspace.js` (tab order persistence), `conn-overlay.js`, `keybar.js`, `tmux-panel.js`, `guide.js`, `boot.js` (`bootApp()`) |
-| `js/agent/` | What used to be `grid.js`, plus the 2.0 state machine's client half: `badges.js` (which icon), `status.js` (`/ws-agent`, capability gating), `preview.js` (session preview cards), `state.js` (**the single client-side source of the four states**, keyed by tmux session name — a web session id changes on every re-attach), `paint.js` (**the single place that paints them**: tabs, pane headers, favicon, app badge) |
-| `js/panels/` | `panel.js` (shared modal-panel shell for code viewer/ports/queue/snippets) + `viewer/` (what used to be `viewer.js`: `state.js`, `shell.js`, `tree.js`, `file.js`, `diff.js`, `git.js` — `shell.js`↔`tree.js` and `shell.js`↔`git.js` have intentional circular imports, same reasoning as `picker.js`↔`term/session.js` below) |
-| `js/voice/` | What used to be the top-level `voice.js`: `recording.js`, `tts.js`, `notify.js`, `media-session.js`, `index.js` (the entry point). Built as its own bundle (see above) |
-| `js/ui/` | `toast.js` (unified toast — still window-bridged since `voice.js`'s separate bundle needs it; routes `info`/`success` into the HUD strip and only floats `warn`/`error`, DESIGN.md §10), `okflash.js` (success shown at the trigger — swaps a button's icon for a check), `favicon.js` (dynamic tab-badge canvas, UMD-style), `moreMenu.js` |
+| `js/term/` | The terminal client, split by concern: `e2e.js` (client side of the E2E handshake), `session.js` (`addSession`/`switchTo`/tab lifecycle — the riskiest split, kept as one orchestrator over `xterm-setup.js`/`ws.js` "assembly parts" rather than force-split), `clipboard.js`, `touch.js`, `links.js`, `selection.js`, `resize.js`, `workspace.js` (tab order persistence), `conn-overlay.js`, `keybar.js`, `guide.js`, `boot.js` (`bootApp()`) |
+| `js/agent/` | The session grid plus the client half of the agent state machine: `badges.js` (which icon), `status.js` (`/ws-agent`, capability gating), `preview.js` (session preview cards), `state.js` (**the single client-side source of the four states**, keyed by tmux session name — a web session id changes on every re-attach), `paint.js` (**the single place that paints them**: tabs, pane headers, favicon, app badge) |
+| `js/panels/` | `panel.js` (shared modal-panel shell for code viewer/ports/queue/snippets) + `viewer/` (the code viewer: `state.js`, `overlay.js`, `tree.js`, `file.js`, `diff.js`, `git.js`, `scm.js`, `recent.js`) |
+| `js/voice/` | The voice client: `recording.js`, `capture.js`, `pcm.js`, `notify.js`, `media-session.js`, `index.js` (the entry point). Built as its own bundle (see above) |
+| `js/ui/` | `toast.js` (unified toast — still window-bridged since `voice.js`'s separate bundle needs it; routes `info`/`success` into the HUD strip and only floats `warn`/`error`, see DESIGN.md), `okflash.js` (success shown at the trigger — swaps a button's icon for a check), `favicon.js` (dynamic tab-badge canvas, UMD-style) |
 | `js/push/` | `swreg.js` — Service Worker registration for Web Push |
-| `js/lib/` | `ansilex.js`, `difflex.js`, `keyseq.js` — pure logic, UMD-wrapped so both the browser (`window.VTAnsiLex`) and the Node test suite (`require(...)`) can use them |
-| `js/layout/` | The 2.0 shell. `store.js`/`tree.js` (split-pane tree — pure functions + the single place that holds it), `panes.js` (recursive renderer; moves existing session wrappers instead of recreating them), `dnd.js` (5-zone drop targets), `resizer.js`, `compact.js` (<720px + coarse pointer render mode), `pane-picker.js`, `rail.js` (left rail), `right-rail.js` (usage rail, ≥1280px), `clients.js` ("Connected screens"), `persist.js` (layout persistence — leaves store `{id, tmux}` so a tmux session survives a new PTY id), `breakpoints.js` |
-| `js/theme.js`, `search.js`, `picker.js`, `ports.js`, `queue.js`, `snippets.js`, `quickopen.js`, `pushui.js`, `gate.js`, `main.js` | Top-level feature modules and the app entry point. `gate.js` is the one deliberately-classic (non-module) script — it runs the login gate before any ES module (which is deferred) could paint |
+| `js/lib/` | `ansilex.js`, `difflex.js`, `keyseq.js`, `shell-quote.js` — pure logic, UMD-wrapped so both the browser (`window.VTAnsiLex`) and the Node test suite (`require(...)`) can use them |
+| `js/layout/` | The shell. `store.js`/`tree.js` (split-pane tree — pure functions + the single place that holds it), `panes.js` (recursive renderer; moves existing session wrappers instead of recreating them), `dnd.js` (5-zone drop targets), `resizer.js`, `compact.js` (<720px + coarse pointer render mode), `pane-picker.js`, `right-rail.js` (usage rail, ≥1280px), `clients.js` ("Connected screens"), `persist.js` (layout persistence — leaves store `{id, tmux}` so a tmux session survives a new PTY id), `breakpoints.js` |
+| `js/theme.js`, `picker.js`, `queue.js`, `snippets.js`, `pushui.js`, `gate.js`, `main.js` | Top-level feature modules and the app entry point. `gate.js` is the one deliberately-classic (non-module) script — it runs the login gate before any ES module (which is deferred) could paint |
 | `sw.js` | Service Worker — offline caching, precache list |
 | `manifest.json` | PWA manifest |
 
 ### Root
 | File | Responsibility |
 |---|---|
-| `vite.config.js` | Frontend build config — library mode, two independent entries (see above), no hashing, minify off |
-| `styles/` | `main.css` (Tailwind entry) + `layers/legacy.css` (the pre-Tailwind hand-written CSS, kept unlayered so it always wins the cascade) |
-| `install.sh` | Creates Python venv, installs per-profile packages, symlinks fsh, initializes ~/.vt.env, runs `npm ci && npm run build` |
+| `vite.config.js` | Frontend build config — library mode, two independent entries (see above), no hashing, whitespace-only minify (identifiers are kept) |
+| `styles/` | `main.css` (Tailwind entry), `layers/` (reset/components/patterns/history), `screens/` (the pre-Tailwind hand-written CSS, kept unlayered so it always wins the cascade), `theme/` (`tokens.css`, `skins.css`) |
+| `install.sh` | Creates Python venv, installs per-profile packages, symlinks fsh, initializes ~/.vt.env, runs `npm ci && npm run build` (skipped when a prebuilt `frontend/dist/` from a release tarball is present) |
 | `requirements-core.txt` | Terminal-only (~50MB) |
-| `requirements-voice.txt` | Additional voice dependencies (~1.5GB) |
-| `.github/workflows/ci.yml` | CI — `npm test`/`pytest` on PR/push, frontend build-artifact shape verification (no hashed filenames, size cap) |
+| `requirements-voice.txt` | Additional voice dependencies (hundreds of MB; speech models are downloaded later from Settings) |
+| `.github/workflows/ci.yml`, `release.yml` | CI — `npm test`/`pytest` on PR/push, frontend build-artifact shape verification (no hashed filenames, size cap); release workflow |
 
 ### `.claude/skills/` — Claude Code skills
 | File | Trigger |
 |---|---|
 | `fsh/SKILL.md` | Global: "voice mode", "mobile access", etc. |
-| `fsh-voice.md` | Manual Voice Daemon install/run |
-| `fsh-mobile.md` | Mobile adb testing |
-| `fsh-start.md` | Manual server startup |
+| `fsh-voice/SKILL.md` | Manual Voice Daemon install/run |
+| `fsh-mobile/SKILL.md` | Mobile adb testing |
+| `fsh-start/SKILL.md` | Manual server startup |
 
 ---
 
@@ -293,7 +293,7 @@ PTY output → output_watcher.feed_output()
   → notify.send() (ntfy/Telegram in parallel)
 ```
 
-### 3.6 E2E-encrypted WebSocket handshake (D3)
+### 3.6 E2E-encrypted WebSocket handshake
 ```
 Client (?e2e=1): frontend/js/term/e2e.js wrapE2E()
   ← server/crypto_channel.py sends e2e-hello: ephemeral pubkey signed by a
@@ -341,8 +341,7 @@ Where to make changes when adding a new feature.
 - Add one line to the help section string (and to [CLI.md](./CLI.md))
 
 ### 4.5 Adding a new AI agent (besides Claude)
-- **No separate wrapper needed** for the terminal itself — `fsh agent <name>`
-  already generalizes this, and if the user just runs `aider` / `codex` /
+- **No separate wrapper needed** for the terminal itself — if the user just runs `aider` / `codex` /
   etc. inside tmux, voice and mobile work automatically (the benefit of the
   general-purpose tmux injection design).
 - For agent-status detection (badges, working/done state), extend
@@ -382,15 +381,15 @@ Where to make changes when adding a new feature.
   bridge. Follow the pattern where `bin/fsh` registers/unregisters the hook
   via an opt-in environment variable.
 
-### 4.8 Splitting or adding a new frontend module (post-2.0)
+### 4.8 Splitting or adding a new frontend module
 - New feature modules go under a topic directory (`js/<topic>/`) if they'll
   grow past one file, or as a top-level `js/<name>.js` if they're small and
-  self-contained (see `search.js`/`ports.js` for the pattern).
+  self-contained (see `picker.js`/`pushui.js` for the pattern).
 - Import shared state/utilities from `core/*.js` — never re-derive
   `API_BASE`/token handling/session state locally.
 - If two modules need to call into each other, a circular `import` is fine
   as long as every cross-call happens inside a function body, never at
-  module-evaluation time (see `js/panels/viewer/shell.js`'s header comment
+  module-evaluation time (see `js/panels/viewer/tree.js`
   for the reasoning). Don't force an artificial one-directional split just
   to avoid the cycle.
 - **Never** import a stateful `core/*.js` module (`store.js`, `dom.js`) from
@@ -405,9 +404,9 @@ Where to make changes when adding a new feature.
 
 ```
 $ fsh start
-  ├─ uvicorn server.main:app  (port 7777)                [server]
+  ├─ uvicorn main:app  (port 7777, run from server/)     [server]
   ├─ cloudflared tunnel --url ...                        [tunnel]
-  ├─ python -m server.voice.daemon                       [voice daemon]
+  ├─ python server/voice_daemon.py   (only with --voice) [voice daemon]
   ├─ python server/tunnel_watchdog.py                    [tunnel watchdog]
   └─ tmux -L fsh server (new session: dev)                [tmux]
       └─ zsh (or claude --resume)                        [work shell]
@@ -415,7 +414,7 @@ $ fsh start
 $ fsh manage                                             [server/tui/, standalone]
 ```
 
-PIDs are stored in `~/.vt/run/vt-pids/{server,tunnel,voice}.pid`. `fsh stop`
+PIDs are stored in `~/.vt/run/vt-pids/` (`server.pid`, `tunnel.pid`, `voice.pid`, …). `fsh stop`
 cleans them all up.
 
 ---
@@ -437,8 +436,8 @@ cleans them all up.
 | Code viewer | Fixed root (`VT_BROWSE_ROOTS`) + `Path.resolve()`/`is_relative_to` (never `startswith`) + denylist, all in one place (`fsguard.py`); read-only, no write API | Exposed over the public tunnel, so this is the primary blast-radius control |
 | Ports dashboard | Can't kill the FarShell server itself or `cloudflared`/`tailscaled`/`sshd`; can't kill other users' processes (no sudo); re-checks port→pid right before killing to avoid PID-reuse mistakes | `expose` opens a port to the public internet — requires `confirm:true` and `VT_NETWORK_MODE=all` |
 | Command safety | `safe_mode.py` pre-blocks a configurable dangerous-command list | Best-effort pattern matching, not a sandbox |
-| Upload | id-based storage in `~/.vt/files/` (N19) — API takes no path, only ids | Bounded by `VT_FILES_MAX_GB`/`VT_FILES_TTL_DAYS`; shared/pinned files are excluded from cleanup |
-| Connection visibility | `VT_NOTIFY_CLIENT_EVENTS=1` → tmux client-attached/detached push (D9) | Off by default; `who`-based remote host extraction is best-effort |
+| Upload | id-based storage in `~/.vt/files/` — API takes no path, only ids | Bounded by `VT_FILES_MAX_GB`/`VT_FILES_TTL_DAYS`; shared/pinned files are excluded from cleanup |
+| Connection visibility | `VT_NOTIFY_CLIENT_EVENTS=1` → tmux client-attached/detached push | Off by default; `who`-based remote host extraction is best-effort |
 
 ---
 

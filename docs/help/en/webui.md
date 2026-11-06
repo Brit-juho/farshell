@@ -127,7 +127,7 @@ Hand that path to claude as is. (The upload files button does the same.)
 
 | Feature | How |
 |------|------|
-| **Search** | `Ctrl+F` / `Cmd+F` → search the terminal contents (move with ▲▼) |
+| **Search** | `Cmd+F` / `Ctrl+Shift+F` → scrollback search, `Cmd+Shift+F` / `Alt+Shift+F` → in-terminal search (move with ▲▼) |
 | **Upload files** | `⋯ → Upload files` → saved to `~/.vt/files/` |
 | **Grid view** | The grid icon at the top → live previews of every tmux session (pushed only on change) |
 | **Theme** | Settings (`Cmd+,`) → Appearance → switch skin (remembered) |

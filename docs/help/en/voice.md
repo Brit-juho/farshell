@@ -62,7 +62,7 @@ The settings next to the mic set the current session to Off / Sound only / Read 
 - Set a minimum work duration and whether to skip error responses per session. Only server audio can be muted depending on screen visibility.
 - It works in the browser alone, with no voice daemon. Other tools are supported only if they have a response adapter.
 
-"Voice only on the Mac" has been removed. For a global Mac shortcut, use `fsh voice`.
+There is no "Voice only on the Mac" mode. For a global Mac shortcut, use `fsh voice`.
 The daemon also shares the server's STT. For standalone use, set `VT_VOICE_STANDALONE=on` explicitly; reading input back aloud is off by default.
 There is no automatic continuous recording. You start every utterance with an explicit toggle and end it with the toggle or with "Auto stop" (see "While recording" below).
 
@@ -93,7 +93,7 @@ confirmed separately, step by step: (1) Engine — if you approve, the app downl
 - The environment variable `VT_STT_MODEL` takes priority over settings. The server and the voice daemon follow the same choice.
 - When idle, the model is unloaded to free memory (`VT_STT_IDLE_SEC`, default 600 seconds). Reloading takes 1-4 seconds on next use.
 - The llama.cpp engine runs as a separate process, listens only on 127.0.0.1, and gets a random key per run. It isn't exposed through the tunnel.
-- Whisper models chosen in earlier versions are no longer supported. Settings shows a notice and you need to pick a new model.
+- If an unsupported Whisper model is selected, Settings shows a notice and you need to pick a new model.
 
 To delete models and engines: use "Manage downloads" in Settings. It also removes weights that sit in a shared cache outside the folder (`hub/blobs/`),
 so the space really comes back. Deleting the selected model shows a warning, and voice input won't work until you download it again.
