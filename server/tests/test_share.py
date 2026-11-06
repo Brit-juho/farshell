@@ -396,6 +396,69 @@ def test_pin_download_cookie_cannot_be_replayed(client, anon):
         assert r.status_code == 200 and r.content != b"top secret" and "PIN" in r.text
 
 
+# --- 이어받기: 소비한 쿠키는 원래 기한까지 `Range` 요청에만 통한다 ----------------------------------
+# 1회용이 된 뒤로 끊긴 다운로드를 브라우저·다운로드 관리자가 `Range`로 다시 요청하면 PIN 화면을 받았다.
+
+
+def _pin_download(client, anon, *, once=False, data=b"0123456789"):
+    r = client.post("/api/upload", files={"file": ("big.bin", data)})
+    fid = r.json()["id"]
+    share = _share(client, fid, "pin", pin="123456", once=once)
+    token = share["token"]
+    name, value = _pin_cookie(client, anon, token, share["share"]["shareId"])
+    first = anon.get(f"/s/{token}")
+    assert first.status_code == 200 and first.content == data
+    return token, name, value, first
+
+
+def test_pin_download_resumes_with_range_until_the_cookie_expires(client, anon, monkeypatch):
+    token, name, value, first = _pin_download(client, anon)
+    assert anon.cookies.get(name) == value, "다운로드 응답이 이어받기에 쓸 쿠키를 지웠다"
+    r = anon.get(f"/s/{token}", headers={"Range": "bytes=4-", "If-Range": first.headers["etag"]})
+    assert r.status_code == 206 and r.content == b"456789"
+    assert r.headers["content-range"] == "bytes 4-9/10"
+    assert "no-store" in r.headers.get("cache-control", "")
+    r = anon.get(f"/s/{token}", headers={"Range": "bytes=2-3"})
+    assert r.status_code == 206 and r.content == b"23"
+    # 원래 기한(PIN 통과 후 60초)이 지나면 끝 — PIN부터 다시.
+    import file_store
+    real = time.time
+    monkeypatch.setattr(file_store.time, "time", lambda: real() + 61)
+    r = anon.get(f"/s/{token}", headers={"Range": "bytes=4-"})
+    assert r.status_code == 200 and "PIN" in r.text and r.content != b"456789"
+
+
+def test_pin_download_plain_or_whole_file_requests_are_still_refused(client, anon):
+    token, name, value, first = _pin_download(client, anon)
+    for headers in ({}, {"Range": "bytes=0-"}, {"Range": "bytes=0-9"}, {"Range": "bytes=-10"},
+                    {"Range": "bytes=1-2,4-5"}, {"Range": "bytes=10-"},
+                    {"Range": "bytes=4-", "If-Range": '"stale-etag"'}):
+        r = anon.get(f"/s/{token}", headers=headers)
+        assert r.status_code == 200 and "PIN" in r.text, headers
+        assert b"0123456789" not in r.content and r.headers.get("content-range") is None, headers
+
+
+def test_pin_download_range_without_a_claimed_cookie_is_refused(client, anon):
+    r = client.post("/api/upload", files={"file": ("big.bin", b"0123456789")})
+    share = _share(client, r.json()["id"], "pin", pin="123456")
+    token = share["token"]
+    r = anon.get(f"/s/{token}", headers={"Range": "bytes=4-"})
+    assert r.status_code == 200 and "PIN" in r.text
+    with TestClient(main.app) as other:
+        other.cookies.set(f"vt_share_dl_{share['share']['shareId']}", "made-up-value")
+        r = other.get(f"/s/{token}", headers={"Range": "bytes=4-"})
+        assert r.status_code == 200 and "PIN" in r.text
+
+
+def test_once_pin_share_resumes_but_never_serves_a_second_whole_download(client, anon):
+    token, name, value, first = _pin_download(client, anon, once=True)
+    r = anon.get(f"/s/{token}", headers={"Range": "bytes=6-"})
+    assert r.status_code == 206 and r.content == b"6789"
+    assert anon.get(f"/s/{token}").status_code == 404           # 공유는 첫 다운로드에서 소비됐다
+    assert anon.get(f"/s/{token}", headers={"Range": "bytes=0-"}).status_code == 404
+    assert anon.post(f"/s/{token}/pin", data={"pin": "123456"}, follow_redirects=False).status_code == 404
+
+
 def _widen_race_window(monkeypatch):
     """두 요청이 모두 공유 조회를 마친 뒤에 다운로드 판정으로 가게 틈을 넓힌다 — 경쟁을 결정적으로 만든다."""
     import file_store

@@ -854,8 +854,9 @@ async def peer_file(request: Request, grant: dict, data: bytes):
     if session:
         pane = await asyncio.to_thread(tmux_target.session_pane, session)   # tmux 조회(2초) — 루프 밖에서
         if pane:
-            # 파일 경로는 **Enter 없이** 타이핑한다 — 로컬 파일 삽입과 같은 계약.
-            typed = await asyncio.to_thread(tmux_target.type_to_tmux, pane, path)
+            # 파일 경로는 **Enter 없이** 타이핑한다 — 로컬 파일 삽입과 같은 계약. 이름은 보낸 쪽이 정하므로
+            # (`x-peer-file-name`) 같은 입구(type_path_to_tmux)로 셸 인용하고, 제어문자가 든 경로는 넣지 않는다.
+            typed = await asyncio.to_thread(tmux_target.type_path_to_tmux, pane, path)
     return ({"ok": True, "id": item["id"], "path": path, "reused": reused, "typed": typed},
             f"{name} {len(data)}B{' (재사용)' if reused else ''}{' → ' + session if typed else ''}")
 

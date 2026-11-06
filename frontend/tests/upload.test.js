@@ -237,3 +237,36 @@ test('cancelUpload — 알 수 없는 clientId나 이미 끝난 작업은 조용
   assert.strictEqual(U.cancelUpload('no-such-id'), 0);
   assert.strictEqual(U.cancelUpload('all'), 0);
 });
+
+// 경로 삽입이 실제로 보내는 것 — 살아 있는 WS 를 흉내 낸 세션을 store 에 등록하고 sendPaste 가 그 소켓에 쓰는
+// 프레임을 그대로 받는다(서버가 이 `text` 를 pane 에 붙여넣는다).
+function fakeOpenSession(env, S, id) {
+  const frames = [];
+  S.registerSession(id, { ws: { readyState: env.window.WebSocket.OPEN, send: (f) => frames.push(JSON.parse(f)) } });
+  return frames;
+}
+
+test('uploadFiles — 경로 삽입은 인용한 경로를 paste 프레임 하나로 보낸다', async () => {
+  const { env, U, S, calls } = await load();
+  const frames = fakeOpenSession(env, S, 'sess-1');
+  installFakeXHR(env, calls, ({ index }) => ({ status: 200, json: { ok: true, id: `id-${index}`, path: index === 1 ? '/f/a.txt' : '/f/a b.txt', size: 1 } }));
+  await U.uploadFiles(['a.txt', 'b.txt'].map((n) => mkFile(env, n)), { sessionId: 'sess-1', insertPath: true });
+  assert.strictEqual(frames.length, 1);
+  assert.strictEqual(frames[0].type, 'paste');
+  assert.strictEqual(frames[0].text, "/f/a.txt '/f/a b.txt' ");
+});
+
+test('uploadFiles — 제어문자가 든 경로는 붙여넣지 않는다(나머지만 보낸다)', async () => {
+  const { env, U, S, calls } = await load();
+  const frames = fakeOpenSession(env, S, 'sess-1');
+  const paths = { 1: '/f/ok.txt', 2: '/f/x\x15touch /tmp/pwn\r', 3: '/f/a\nb' };
+  installFakeXHR(env, calls, ({ index }) => ({ status: 200, json: { ok: true, id: `id-${index}`, path: paths[index], size: 1 } }));
+  await U.uploadFiles(['a', 'b', 'c'].map((n) => mkFile(env, n)), { sessionId: 'sess-1', insertPath: true });
+  assert.strictEqual(frames.length, 1);
+  assert.strictEqual(frames[0].text, '/f/ok.txt ');
+
+  const frames2 = fakeOpenSession(env, S, 'sess-2');
+  installFakeXHR(env, calls, () => ({ status: 200, json: { ok: true, id: 'id-x', path: '/f/a\rb', size: 1 } }));
+  await U.uploadFiles([mkFile(env, 'z')], { sessionId: 'sess-2', insertPath: true });
+  assert.strictEqual(frames2.length, 0, '안전한 경로가 하나도 없으면 아무것도 보내지 않는다');
+});

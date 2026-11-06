@@ -277,6 +277,7 @@ def cleanup() -> dict:
             live = [s for s in x.get("shares", []) if s.get("exp", 0) > now]
             if len(live) != len(x.get("shares", [])):
                 x["shares"] = live
+            _prune_resumes(x, now)
 
         kept = []
         for x in items:
@@ -481,6 +482,9 @@ def claim_download(file_id: str, share_id: str, cookie_hash: str | None = None) 
       그 자리에서 지운다. 예전에는 쿠키를 읽어 둔 공유로 검증만 하고 지우지 않아서, 60초 안에는 같은 쿠키로 몇 번이고
       (동시에 여러 개도) 받을 수 있었다. 이제 같은 쿠키로 온 요청 중 정확히 하나만 "ok"다. 전송이 그 뒤에 실패하면
       쿠키는 이미 없으니 PIN을 다시 넣어야 한다(재사용 창을 남기는 것보다 낫다).
+      소비한 쿠키는 원래 기한까지 **이어받기(Range) 전용**으로 남긴다(`item["dl_resumes"]`, `claim_resume`) — 브라우저·
+      다운로드 관리자가 끊긴 전송을 `Range`로 다시 요청하면 PIN 화면 대신 나머지를 받게 한다. `once` 공유는 레코드가 여기서
+      지워지므로 이어받기 기록을 공유가 아니라 항목에 둔다.
     - device 모드: 쿠키가 없어야 한다(기기·세션 확인은 호출자가 이미 했다). 모드가 엇갈리면 "denied".
     - 공통: 조회수·마지막 접근을 올리고, `once`면 공유를 지운다 — 같은 락 안이라 `once` 공유를 둘이 동시에 받지 못한다.
     """
@@ -502,8 +506,11 @@ def claim_download(file_id: str, share_id: str, cookie_hash: str | None = None) 
             if (not cookie_hash or not stored or share.get("dl_cookie_exp", 0) <= now
                     or not hmac.compare_digest(stored, cookie_hash)):
                 return "denied", None, None
+            resume_exp = share.pop("dl_cookie_exp", 0)
             share.pop("dl_cookie_hash", None)
-            share.pop("dl_cookie_exp", None)
+            _prune_resumes(item, now)
+            item.setdefault("dl_resumes", []).append(
+                {"shareId": share_id, "hash": stored, "exp": resume_exp, "once": bool(share.get("once"))})
         elif cookie_hash is not None:
             return "denied", None, None
         share["views"] = int(share.get("views", 0) or 0) + 1
@@ -511,6 +518,46 @@ def claim_download(file_id: str, share_id: str, cookie_hash: str | None = None) 
         if share.get("once"):
             item["shares"] = [s for s in shares if s.get("shareId") != share_id]
         _write_unlocked(items)
+        return "ok", dict(item), fp
+
+
+def _prune_resumes(item: dict, now: float) -> None:
+    """기한이 지난 이어받기 기록을 걷어낸다(제자리 수정). 비면 칸 자체를 지운다."""
+    if "dl_resumes" not in item:
+        return
+    live = [r for r in item.get("dl_resumes") or [] if isinstance(r, dict) and r.get("exp", 0) > now]
+    if live:
+        item["dl_resumes"] = live
+    else:
+        item.pop("dl_resumes", None)
+
+
+def claim_resume(file_id: str, share_id: str, cookie_hash: str) -> tuple[str, dict | None, Path | None]:
+    """PIN 다운로드를 이어받는 `Range` 요청을 판정한다. ("ok", 항목, 실경로) | ("denied"|"gone", None, None).
+
+    `claim_download`가 소비한 쿠키와 같은 값이고 그 쿠키의 **원래 기한** 안이어야 한다. 조회수를 올리지 않고 `once`도
+    다시 따지지 않는다 — 다운로드 한 번의 나머지일 뿐이다. 새 전체 다운로드를 열지 않는 것(`Range` 필수, 0번째 바이트
+    제외)은 호출자(`routes/share.py`)가 요청 모양으로 거른다. `once`가 아닌 공유는 아직 살아 있어야 한다 — 그 사이에
+    취소했으면 이어받기도 막힌다. `once` 공유는 소비 때 레코드가 지워졌으므로 기록에 남긴 `once` 표시로 갈음한다.
+    """
+    now = time.time()
+    with _locked():
+        items = _read_unlocked()
+        item = next((x for x in items if x["id"] == file_id), None)
+        if item is None:
+            return "gone", None, None
+        fp = _real_path(item)
+        if not fp.is_file():
+            return "gone", None, None
+        rec = next((r for r in item.get("dl_resumes") or []
+                    if isinstance(r, dict) and r.get("shareId") == share_id
+                    and hmac.compare_digest(str(r.get("hash") or ""), cookie_hash or "")), None)
+        if rec is None or not cookie_hash or rec.get("exp", 0) <= now:
+            return "denied", None, None
+        if not rec.get("once"):
+            share = next((s for s in item.get("shares", []) if s.get("shareId") == share_id), None)
+            if share is None or share.get("exp", 0) <= now:
+                return "denied", None, None
         return "ok", dict(item), fp
 
 
@@ -699,6 +746,9 @@ def _cli(argv: list[str]) -> int:
         pane, mode = tmux_target.resolve_voice_target_pane()
         if not pane:
             print(tr("  ✗ 대상 tmux pane을 찾지 못했습니다"), file=sys.stderr)
+            return 1
+        if tmux_target.has_control_chars(str(fp)):
+            print(tr("  ✗ 경로에 제어문자가 있어 터미널에 넣지 않았습니다 — 줄바꿈 같은 문자는 셸이 바로 실행할 수 있습니다"), file=sys.stderr)
             return 1
         if not tmux_target.type_path_to_tmux(pane, str(fp)):
             print(tr("  ✗ 삽입 실패"), file=sys.stderr)

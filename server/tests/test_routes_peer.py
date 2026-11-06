@@ -521,6 +521,43 @@ def test_file_transfer_types_the_path_into_the_named_session(env, monkeypatch):
     assert typed and typed[0][0] == "%2" and typed[0][1] == expected
 
 
+def test_file_transfer_quotes_the_sender_chosen_name_when_typing(env, monkeypatch):
+    """이름은 보내는 쪽이 정한다(`x-peer-file-name`) — 받은 경로도 로컬 삽입과 같은 입구로 인용돼야 한다."""
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    import tmux_target
+    sent = []
+    monkeypatch.setattr(tmux_target, "session_pane", lambda n: "%2")
+    monkeypatch.setattr(tmux_target.subprocess, "run", lambda argv, **kw: sent.append(list(argv)))
+    data = b"x"
+    r = client.post("/api/peer/file", content=data,
+                    headers=_file_headers(hs, "laptop", secret, data, name="a$(touch pwn).txt", session="dev"))
+    assert r.json()["typed"] is True
+    import file_store
+    path = str(file_store.real_path_for(file_store.list_items()[0]["id"]))
+    assert sent and sent[-1][-1] == "'" + path + "'"
+
+
+def test_file_transfer_never_types_a_path_with_control_chars(env, monkeypatch):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    from pathlib import Path
+    import file_store
+    import tmux_target
+    sent = []
+    monkeypatch.setattr(tmux_target, "session_pane", lambda n: "%2")
+    monkeypatch.setattr(tmux_target.subprocess, "run", lambda argv, **kw: sent.append(list(argv)))
+    real = file_store.real_path_for
+    monkeypatch.setattr(file_store, "real_path_for", lambda fid: Path(str(real(fid)) + "\x15x\r"))
+    data = b"x"
+    r = client.post("/api/peer/file", content=data,
+                    headers=_file_headers(hs, "laptop", secret, data, session="dev"))
+    assert r.status_code == 200 and r.json()["typed"] is False
+    assert sent == []
+
+
 # --- 2.1.3: 「연결된 화면」(view 목록 / control 끊기) · 스크롤백 검색 -----------------
 #
 # 2.1.2에서 이 둘은 원격에서 **꺼져 있었다**. `/api/tmux/clients`는 요청을 받은

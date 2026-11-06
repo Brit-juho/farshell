@@ -28,10 +28,10 @@ def _write_json_secure(path: Path, data) -> None:
     옮기는 내용물이 이미 오염돼 있으면 소용이 없다. 여기 쓰는 쪽은 기기 목록과
     TOTP라 깨지면 **로그인이 막힌다.**
 
-    락은 걸지 않는다. 유니크 이름 + `os.replace`면 파일이 깨지는 경로는 닫힌다.
-    남는 것은 lost update인데, 기기 등록·TOTP 설정은 `workspace.json`과 달리
-    동시 수정이 정상 경로가 아니다. 그 전제가 깨지는 증거가 나오면
-    `store_lock.exclusive`를 얹는다 — 구조가 같아 나중 비용이 작다.
+    여기서는 락을 걸지 않는다. 유니크 이름 + `os.replace`면 파일이 깨지는 경로는 닫힌다.
+    남는 것은 lost update이고, 그건 읽기부터 쓰기까지를 묶어야 막히므로 호출부 몫이다:
+    devices.json은 `last_seen` 갱신이 스레드에서 폐기·등록과 겹칠 수 있어 `devices._locked`
+    (`store_lock.exclusive`) 안에서 다시 읽고 쓴다. TOTP 설정은 동시 수정이 정상 경로가 아니다.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     with contextlib.suppress(OSError):

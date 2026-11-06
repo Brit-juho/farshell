@@ -22,7 +22,7 @@ import uuid
 
 import tmux_runner
 import vt_env
-from shell_quote import shell_quote_path  # noqa: F401 — 파일 경로 입력에 쓴다(type_path_to_tmux)
+from shell_quote import has_control_chars, shell_quote_path  # noqa: F401 — 파일 경로 입력에 쓴다(type_path_to_tmux)
 
 logger = logging.getLogger(__name__)
 
@@ -281,7 +281,16 @@ def session_of_pane(pane_id: str) -> str | None:
 
 
 def type_path_to_tmux(pane_id: str, path: str) -> bool:
-    """`type_to_tmux`로 파일 경로를 입력한다 — 셸 인용을 거친다(`shell_quote_path`)."""
+    """`type_to_tmux`로 파일 경로를 입력한다 — 셸 인용을 거친다(`shell_quote_path`).
+
+    제어문자(C0·DEL)가 든 경로는 **입력하지 않고** False를 돌려준다(`has_control_chars`). `send-keys -l`은
+    바이트를 그대로 pty에 넣으므로 `^U`·`\r` 같은 바이트는 인용과 상관없이 줄 편집기가 먼저 처리한다 —
+    사용자가 Enter를 누르기 전에 명령이 실행될 수 있다. 호출부는 이 결과를 실패로 다루고, 사용자에게 이유를
+    보여 줄 곳(라우트)은 먼저 `has_control_chars`로 따로 거른다.
+    """
+    if has_control_chars(path):
+        logger.warning(f"제어문자가 든 경로라 입력하지 않음({pane_id}): {path!r}")
+        return False
     return type_to_tmux(pane_id, shell_quote_path(path))
 
 

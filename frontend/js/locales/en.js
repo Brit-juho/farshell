@@ -2119,6 +2119,8 @@ window.__VT_I18N = {
     "other": "{n} live tmux sessions"
   },
   "삽입 실패: {msg}": "Couldn't insert: {msg}",
+  "경로에 제어문자가 있어 터미널에 넣지 않았습니다 — 줄바꿈 같은 문자는 셸이 바로 실행할 수 있습니다": "The path was not inserted: it contains control characters, and characters such as a line break can make the shell run it right away",
+  "  ✗ 경로에 제어문자가 있어 터미널에 넣지 않았습니다 — 줄바꿈 같은 문자는 셸이 바로 실행할 수 있습니다": "  ✗ The path was not inserted: it contains control characters, and characters such as a line break can make the shell run it right away",
   "상단 {mic} 탭 → 말하면 STT로 텍스트 입력": "Tap {mic} at the top and speak; transcription types the text",
   "상단 시트": "Top sheet",
   "상대 맥에도 남아 있는 항목은 그쪽에서 'fsh host rm' 하세요.": "Remove any leftover entries on the other Mac with 'fsh host rm'.",
