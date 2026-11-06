@@ -13,6 +13,7 @@ preview.py:91-93 에 같은 교훈이 있다 — 동기 호출 하나가 터미�
 from __future__ import annotations
 
 import asyncio
+import errno
 import json
 import logging
 import os
@@ -25,6 +26,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from authz import leases as authz_leases
 import file_store
 import fs_watch
+import fs_read
 import fsguard
 import tmux_target
 from i18n import tr
@@ -232,47 +234,78 @@ async def fs_tree(path: str = Query(...), depth: int = Query(0, ge=0, le=MAX_PRE
 # --- 파일 --------------------------------------------------------------------
 
 
-def _read_file(p: Path) -> dict:
-    size = p.stat().st_size
-    with open(p, "rb") as f:
-        head = f.read(fsguard.SNIFF_BYTES)
-        # [T3] 이미지는 "바이너리라 못 보여준다"로 끝내지 않는다 — 스크린샷·다이어그램은
-        # 원격에서 코드만큼 자주 열어보는 파일이다. 바이트는 /api/fs/raw가 준다.
-        mime = fsguard.image_type(p, head)
-        if mime:
-            return {"path": str(p), "size": size, "binary": True, "image": True,
-                    "mime": mime, "too_large": size > fsguard.MAX_IMAGE_BYTES,
-                    "truncated": False, "content": ""}
-        if fsguard.looks_binary(head):
-            return {"path": str(p), "size": size, "binary": True, "image": False,
-                    "truncated": False, "content": ""}
-        rest = b"" if size <= fsguard.SNIFF_BYTES else f.read(
-            max(0, fsguard.MAX_BYTES - len(head))
-        )
-    raw = head + rest
-    truncated = size > len(raw)
-    # errors="replace" — CP949 등 비UTF-8 파일도 열리게 하되 깨짐을 숨기지 않는다.
-    text = raw.decode("utf-8", errors="replace")
-    return {"path": str(p), "size": size, "binary": False, "image": False,
-            "truncated": truncated, "content": text}
-
-
-def _file(path: str):
+def _file(path: str, opts: dict):
+    """경로 판정(fsguard)부터 fd 읽기(fs_read)까지 — 전부 `fs` 풀 안에서. 없는 파일·디렉토리는 None."""
     p = fsguard.resolve_under_roots(path)
-    if not p.is_file():
+    try:
+        return fs_read.read(p, **opts)
+    except fsguard.NotRegularFile:
+        # 디렉토리·FIFO·장치 — 옛 응답(`is_file()`이 거짓 → 404)과 같다.
         return None
-    return _read_file(p)
+    except OSError as e:
+        # 없는 파일, 그리고 판정 뒤 경로의 어느 조각이 심링크로 바뀐 경우(ELOOP/ENOTDIR) — 경계 밖을 열지
+        # 않고 「없음」으로 답한다. 권한 없음 등 다른 오류는 라우트가 나눠 답한다.
+        if e.errno in (errno.ENOENT, errno.ENOTDIR, errno.ELOOP):
+            return None
+        raise
+
+
+def _int_param(raw: str | None, name: str, lo: int, hi: int | None) -> int | None:
+    if raw is None:
+        return None
+    try:
+        v = int(raw)
+    except ValueError:
+        raise fs_read.BadRange(f"{name} must be an integer") from None
+    if v < lo or (hi is not None and v > hi):
+        raise fs_read.BadRange(f"{name} must be {lo}..{hi}" if hi is not None else f"{name} must be >= {lo}")
+    return v
+
+
+def _file_headers(etag: str) -> dict:
+    # 저장은 하되 매번 서버에 검증한다 — 같은 판이면 304로 본문 없이 끝난다.
+    return {"ETag": etag, "Cache-Control": "private, no-cache"}
+
+
+def _changed(rev: str) -> JSONResponse:
+    return JSONResponse(
+        {"error": "changed", "rev": rev,
+         "reason": tr("읽는 사이 파일이 바뀌었습니다 — 처음부터 다시 받으세요")},
+        status_code=409, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/api/fs/file")
-async def fs_file(path: str = Query(...)):
+async def fs_file(request: Request, path: str = Query(...), offset: str | None = Query(None),
+                  length: str | None = Query(None), tail: str | None = Query(None),
+                  expected_rev: str | None = Query(None), encoding: str = Query("auto")):
+    """파일 내용 — 판 번호(rev)·조건부 요청(304)·구간 읽기·인코딩(API.md `/api/fs/file`, fs_read.py).
+
+    구간 값(`offset`·`length`·`tail`)이 없으면 옛 응답 모양(앞 512KB, `truncated`)이다. 옛 뷰어가 그대로 돈다."""
     try:
-        out = await fsops.call(_file, path, path=path, op="fs.file")
-        if out is None:
-            return JSONResponse({"error": "not found"}, status_code=404)
-        return out
+        opts = {
+            "offset": _int_param(offset, "offset", 0, None),
+            "length": _int_param(length, "length", 1, fs_read.MAX_RANGE_BYTES),
+            "tail": _int_param(tail, "tail", 1, fs_read.MAX_RANGE_BYTES),
+        }
+        if opts["tail"] is not None and (opts["offset"] is not None or opts["length"] is not None):
+            raise fs_read.BadRange("tail cannot be combined with offset/length")
+        if encoding not in fs_read.REQUEST_ENCODINGS:
+            return JSONResponse({"error": "bad_encoding", "reason": tr("지원하지 않는 인코딩입니다: {enc}", enc=encoding[:40]),
+                                 "supported": list(fs_read.REQUEST_ENCODINGS)}, status_code=400)
+        if expected_rev is not None and (not expected_rev or len(expected_rev) > fs_read.MAX_REV_LEN):
+            raise fs_read.BadRange("expected_rev is malformed")
+    except fs_read.BadRange as e:
+        return JSONResponse({"error": "bad_range", "reason": str(e)}, status_code=400)
+    opts.update(encoding=encoding, expected_rev=expected_rev,
+                if_none_match=request.headers.get("if-none-match"))
+    try:
+        out = await fsops.call(_file, path, opts, path=path, op="fs.file")
     except fsguard.FsDenied as e:
         return _denied(e.reason)
+    except fs_read.Changed as e:
+        return _changed(e.rev)
+    except fs_read.BadRange as e:
+        return JSONResponse({"error": "bad_range", "reason": str(e)}, status_code=400)
     except fsops.UNAVAILABLE as e:
         return fsops.unavailable_response(e)
     except PermissionError:
@@ -280,6 +313,11 @@ async def fs_file(path: str = Query(...)):
     except OSError as e:
         logger.warning(f"fs_file 실패: {e}")
         return JSONResponse({"error": "read failed"}, status_code=500)
+    if out is None:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    if out["status"] == 304:
+        return Response(status_code=304, headers=_file_headers(out["etag"]))
+    return JSONResponse(out["body"], headers=_file_headers(out["etag"]))
 
 
 def _raw_image(path: str):

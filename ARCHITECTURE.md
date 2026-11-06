@@ -97,6 +97,7 @@ the WebSocket endpoints (`/ws/{id}` and `/ws-notify` in `routes/pty.py`,
 | `fsh_client.py` | stdlib-only client used by MCP, hooks, daemons and the CLI: unix socket first, `VT_AUTH_TOKEN` over TCP as fallback (`lib/fsh_client.sh` is the curl equivalent) |
 | `crypto_channel.py` | E2E WebSocket encryption (X25519 ephemeral keys + Ed25519 identity signing + NaCl SecretBox) — server side of the handshake whose client side is `frontend/js/term/e2e.js` |
 | `fsguard.py` | Single source of truth for the code-viewer's file-browse root confinement, path resolution, and denylist |
+| `fs_read.py` | `/api/fs/file` reads: `rev` from the `open_resolved` fd, ETag/304, line-bounded byte ranges and tail, encoding detection and selection |
 | `fs_watch.py` | Code-viewer auto-refresh behind `/ws-fs-watch`: validates subscriptions through `fsguard`, runs one shared flat + one recursive `watchfiles` watcher for all connections, and reports only which subscription changed |
 | `safe_mode.py` | Pre-blocks a configurable list of dangerous shell commands |
 | `network_access.py` | `localhost`/`lan`/`tailscale`/`all` network mode → CIDR whitelist, bind host determination |

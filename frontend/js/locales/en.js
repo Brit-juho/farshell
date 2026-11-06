@@ -374,6 +374,7 @@ window.__VT_I18N = {
   "잘못된 기록 커서": "Invalid transcript cursor",
   "지시": "Instruction",
   "지원하지 않는 기록 형식": "Unsupported transcript format",
+  "지원하지 않는 인코딩입니다: {enc}": "Unsupported encoding: {enc}",
   "표시 한도에 도달함": "Display limit reached",
   "    {id}  {tag}{label} 등록 {added} / 최근 사용 {seen} / {life}": "    {id}  {tag}{label} added {added} / last used {seen} / {life}",
   "  ⓘ --dry-run: {path} 는 바꾸지 않았습니다 ({n}개)": {
@@ -2881,6 +2882,7 @@ window.__VT_I18N = {
   "일치하는 항목이 없습니다.": "No matches",
   "읽기 권한이 없습니다": "No permission to read",
   "읽기 실패: {name}": "Couldn't read: {name}",
+  "읽는 사이 파일이 바뀌었습니다 — 처음부터 다시 받으세요": "The file changed while it was being read — fetch it again from the start",
   "읽기 전용": "Read-only",
   "읽기 전용 출처": "Read-only source",
   "읽기 전용 출처는 그룹에서 변경하지 않습니다": "Read-only sources aren't changed by group actions",
