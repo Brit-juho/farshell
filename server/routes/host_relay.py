@@ -12,6 +12,8 @@ peer 서명 헤더를 못 만드므로(WebSocket은 헤더 자체를 못 단다)
 - 브라우저 쪽 인증은 평소 그대로(HTTP는 TokenAuthMiddleware, WS는 `_ws_auth_token`).
 - 쿼리의 `token`은 **떼고** 보낸다 — 이 서버의 기계 토큰이다.
 - 쿠키·Authorization을 상대에게 넘기지 않고, 상대의 Set-Cookie도 받아오지 않는다.
+- 응답 헤더는 상대 것을 믿지 않는다(`relay_policy.response_headers`): nosniff·CSP는 이
+  서버가 붙이고, Content-Type은 경로별 허용 목록 밖이면 `text/plain`으로 바꾼다.
 - 허용 목록(`relay_policy`)으로 미리 거른다. 판정의 정본은 상대(B)다.
 - 상대가 이 기능을 모르는 구버전이면 501 `peer_outdated`로 알린다(B는 중계 응답에
   `x-peer-relay` 헤더를 단다 — 그게 없으면 라우트가 없는 것).
@@ -35,11 +37,7 @@ from i18n import tr
 import peer_client
 import relay_policy
 from routes.peer_proxy import CONNECT_TIMEOUT, _ws_url
-from routes.peer_relay import (
-    _PASS_REQUEST_HEADERS,
-    _PASS_RESPONSE_HEADERS,
-    RELAY_HEADER,
-)
+from routes.peer_relay import _PASS_REQUEST_HEADERS, RELAY_HEADER
 from routes.pty import _ws_auth_token
 
 logger = logging.getLogger(__name__)
@@ -124,9 +122,12 @@ async def host_relay(host_id: str, rest: str, request: Request):
             status_code=502,
         )
 
-    out_headers = {
-        k: v for k, v in resp.headers.items() if k.lower() in _PASS_RESPONSE_HEADERS
-    }
+    # 응답 헤더는 B 것을 믿지 않고 여기서 다시 짓는다 — B의 바이트가 **이 서버의 출처**에서
+    # 열리기 때문이다(nosniff·CSP는 A 것, Content-Type은 경로별 허용 목록, relay_policy).
+    out_headers, neutralized = relay_policy.response_headers(target, resp.status_code, resp.headers)
+    if neutralized:
+        logger.warning(f"[relay] {host_id} {method} {target}: 허용 밖 Content-Type "
+                       f"{(resp.headers.get('content-type') or '')[:80]!r} → text/plain")
     # httpx가 압축을 풀어 주므로 원래 content-length는 맞지 않을 수 있다.
     if resp.headers.get("content-encoding"):
         out_headers.pop("content-length", None)
