@@ -48,6 +48,10 @@ def test_clear_releases_immediately():
 def test_clear_of_an_unknown_key_does_not_raise():
     b = FailureBackoff(delay=10.0)
     b.clear("never-failed")  # no-op, no exception
+    assert b.should_skip("never-failed") is False      # 모르는 키는 여전히 막히지 않는다
+    b.mark_failed("a")
+    b.clear("never-failed")
+    assert b.should_skip("a") is True                  # 다른 키의 실패 기록은 건드리지 않는다
 
 
 def test_keys_are_independent():
