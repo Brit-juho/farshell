@@ -12,6 +12,8 @@
   .bench-row { display: flex; height: 100%; }
   .bench-box { flex: 1 1 0; min-width: 0; height: 100%; overflow: auto; }
 </style>
+<!-- run.mjs 가 여기에 import map 을 끼운다(@codemirror/* 같은 맨 이름 import 를 node_modules 로 푼다). -->
+<!--IMPORTMAP-->
 <script>
   // 모듈보다 먼저 — long task 는 처음부터 모으고, 파일 감시 WebSocket 은 가짜로 바꾼다
   // (트리 시나리오가 "디스크가 바뀌었다" 알림을 직접 보낸다).

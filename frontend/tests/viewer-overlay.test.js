@@ -105,6 +105,19 @@ test('Esc — 포커스가 터미널에 있으면 안 닫힌다(vim이 받아야
   assert.strictEqual(document.getElementById('vt-file'), null);
 });
 
+test('Esc — 코드 본문의 찾기 창(.cm-panel)에 포커스가 있으면 뷰어를 닫지 않는다(그 창이 닫힌다)', async () => {
+  const { window, document, overlay } = await build();
+  overlay.openFileOverlay('/repo/a.js');
+  const panel = document.createElement('div');
+  panel.className = 'cm-panel cm-search';
+  const input = document.createElement('input');
+  panel.appendChild(input);
+  document.querySelector('#vt-file .vt-vw-body').appendChild(panel);
+  input.focus();
+  esc(window, input);
+  assert.ok(document.getElementById('vt-file'), '찾기 창의 Esc가 뷰어까지 닫았다');
+});
+
 test('열리면 뷰어 본문이 포커스를 받는다 — 바로 키보드로 스크롤하고 Esc로 닫을 수 있다', async () => {
   const { document, overlay } = await build();
   overlay.openFileOverlay('/repo/a.js');

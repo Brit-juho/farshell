@@ -91,6 +91,26 @@ function chunkOf(id) {
     if (p.endsWith('/frontend/js/ui/session-context.js')) return 'shell';
     if (p.endsWith('/frontend/js/term/tab-worktree.js')) return 'shell';
     if (p.includes('/node_modules/solid-js/') || p.includes('/frontend/js/shell/')) return 'shell';
+    // 코드 뷰어 본문(CodeMirror 6, 읽기 전용 — 파일 개편 단계 2). panels/viewer/file.js가 파일을 열 때 import()한다.
+    // panels 규칙보다 먼저 와야 한다(같은 폴더). 이름이 없으면 Rolldown이 해시 붙은 청크를 따로 만들어 고정 이름
+    // 계약(ADR-26)이 깨진다.
+    // 언어 팩은 언어마다 청크를 나눈다 — 한 청크로 묶으면 editor.js가 1MB(gzip 289KB)가 되고, 파이썬 파일 하나를
+    // 열어도 자바·고·마크다운 파서까지 받는다. editor.js가 언어를 import()로 부르므로 연 언어만 받는다.
+    // 다른 언어를 정적으로 끌어오는 팩(html → js·css, markdown → html)은 그 청크를 함께 받는다.
+    if (/\/node_modules\/@(?:codemirror\/lang-javascript|lezer\/javascript)\//.test(p)) return 'editor-js';
+    if (/\/node_modules\/@(?:codemirror\/lang-css|lezer\/css)\//.test(p)) return 'editor-css';
+    if (/\/node_modules\/@(?:codemirror\/lang-html|lezer\/html)\//.test(p)) return 'editor-html';
+    if (/\/node_modules\/@(?:codemirror\/lang-markdown|lezer\/markdown)\//.test(p)) return 'editor-md';
+    if (/\/node_modules\/@(?:codemirror\/lang-python|lezer\/python)\//.test(p)) return 'editor-py';
+    if (/\/node_modules\/@(?:codemirror\/lang-java|lezer\/java)\//.test(p)) return 'editor-java';
+    if (/\/node_modules\/@(?:codemirror\/lang-go|lezer\/go)\//.test(p)) return 'editor-go';
+    if (/\/node_modules\/@(?:codemirror\/lang-yaml|lezer\/yaml)\//.test(p)) return 'editor-yaml';
+    if (/\/node_modules\/@(?:codemirror\/lang-json|lezer\/json)\//.test(p)) return 'editor-json';
+    if (/\/node_modules\/@codemirror\/lang-sql\//.test(p)) return 'editor-sql';
+    if (p.includes('/node_modules/@codemirror/legacy-modes/')) return 'editor-legacy';   // shell·kotlin·swift
+    // 나머지(view·state·language·search·lezer 런타임)와 뷰어 모듈은 `editor` 하나.
+    if (/\/frontend\/js\/panels\/viewer\/editor(?:-text)?\.js$/.test(p)) return 'editor';
+    if (/\/node_modules\/(?:@codemirror|@lezer|@marijn|style-mod|w3c-keyname|crelt)\//.test(p)) return 'editor';
     // 진짜로 "열 때" 받는 화면들. 여기 한 줄 추가하는 것만으로 지연
     // 청크가 되고, 그 모듈이 무엇을 import하든 core는 따라오지 않는다.
     if (p.includes('/frontend/js/panels/viewer/')) return 'panels';

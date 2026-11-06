@@ -16,7 +16,7 @@
 // 화면 CSS 는 `frontend/dist/app.css`(npm run build 결과)를 쓴다. 없으면 경고하고 CSS 없이 잰다.
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,6 +24,7 @@ import { genCode, genDiff, genLongLine, genTree } from './gen.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FRONTEND = resolve(HERE, '..', '..');
+const NODE_MODULES = resolve(FRONTEND, '..', 'node_modules');
 
 // --- 인자 ---------------------------------------------------------------------------
 const args = process.argv.slice(2);
@@ -106,6 +107,43 @@ function listDeep(path, depth) {
   return root;
 }
 
+// --- 편집기 모듈(단계 2) --------------------------------------------------------------
+// 측정 페이지는 번들하지 않은 원본 모듈을 그대로 부른다. editor.js가 쓰는 `@codemirror/*` 같은 맨 이름 import를
+// 브라우저가 풀 수 있게 import map을 만들어 bench.html에 끼운다(`/node_modules/*`는 이 서버가 그대로 준다).
+// 대상은 CodeMirror와 그 의존 패키지뿐이다.
+function importMap() {
+  const imports = {};
+  const add = (name, dir) => {
+    let pkg;
+    try { pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')); } catch { return; }
+    let e = pkg.exports;
+    if (e && typeof e === 'object' && e['.']) e = e['.'];
+    const entry = typeof e === 'string' ? e : (e && (e.import || e.default)) || pkg.module;
+    if (entry && !String(entry).includes('*')) imports[name] = `/node_modules/${name}/${String(entry).replace(/^\.\//, '')}`;
+    // @codemirror/legacy-modes처럼 하위 경로만 내보내는 패키지(`./mode/*`).
+    const sub = pkg.exports && pkg.exports['./mode/*'];
+    if (sub) {
+      for (const f of readdirSync(join(dir, 'mode'))) {
+        if (f.endsWith('.js')) imports[`${name}/mode/${f.slice(0, -3)}`] = `/node_modules/${name}/mode/${f}`;
+      }
+    }
+  };
+  for (const scope of ['@codemirror', '@lezer', '@marijn']) {
+    const d = join(NODE_MODULES, scope);
+    if (!existsSync(d)) continue;
+    for (const n of readdirSync(d)) add(`${scope}/${n}`, join(d, n));
+  }
+  for (const n of ['crelt', 'style-mod', 'w3c-keyname']) add(n, join(NODE_MODULES, n));
+  return JSON.stringify({ imports });
+}
+
+function serveBench(res) {
+  const html = readFileSync(join(HERE, 'bench.html'), 'utf8')
+    .replace('<!--IMPORTMAP-->', `<script type="importmap">${importMap()}</script>`);
+  res.writeHead(200, { 'content-type': 'text/html', 'cache-control': 'no-store' });
+  res.end(html);
+}
+
 const counts = new Map();
 function count(key) { counts.set(key, (counts.get(key) || 0) + 1); }
 
@@ -145,7 +183,9 @@ const server = createServer((req, res) => {
   if (p === '/__counts') return sendJson(res, 200, Object.fromEntries(counts));
   if (p === '/__reset') { counts.clear(); return sendJson(res, 200, {}); }
   if (p.startsWith('/static/')) return serveStatic(res, FRONTEND, p.slice('/static/'.length));
+  if (p === '/perf/bench.html') return serveBench(res);
   if (p.startsWith('/perf/')) return serveStatic(res, HERE, p.slice('/perf/'.length));
+  if (p.startsWith('/node_modules/')) return serveStatic(res, NODE_MODULES, p.slice('/node_modules/'.length));
   return sendJson(res, 404, { error: 'not found' });
 });
 

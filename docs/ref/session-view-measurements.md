@@ -98,7 +98,7 @@ Note for synthetic tests: the default `waiting` TTL is 2 minutes, so synthetic s
 
 ## 4. Bundle size
 
-The initial payload (`app.js` + `core.js`) has a ceiling of 358,400 B (350 KiB), asserted by `frontend/tests/build-output.test.js` and set in `ci.yml` and `release.yml`. The check exists to catch a vendor (xterm, about 290 KB) leaking into the eager bundle, not as a UX budget. `voice.js` has its own 307,200 B check. The current payload is about 325,104 B (`app.js` 7,316 B + `core.js` 317,788 B); the build output keeps whitespace and module-scope names (`minify: { mangle: false, compress: false }`) because the build-output tests find module-scope names. Gzip transfer size is far smaller than the raw figure.
+The initial payload (`app.js` + `core.js`) has a ceiling of 358,400 B (350 KiB), asserted by `frontend/tests/build-output.test.js` and set in `ci.yml` and `release.yml`. The check exists to catch a vendor (xterm, about 290 KB) leaking into the eager bundle, not as a UX budget. `voice.js` has its own 307,200 B check. The current payload is about 325,488 B (`app.js` 7,316 B + `core.js` 318,172 B); the build output keeps whitespace and module-scope names (`minify: { mangle: false, compress: false }`) because the build-output tests find module-scope names. Gzip transfer size is far smaller than the raw figure.
 
 `npm run build` prints the top 15 modules of `core.js` by rendered bytes (`reportCoreModules` in `vite.config.js`, information only); use it instead of source-map attribution, which is too coarse. Largest: `layout/panes.js` 18.6 KB, `layout/store.js` 17.4 KB, `ui/icons.js` 15.3 KB, `core/settings.js` 10.9 KB, `term/session.js` 10.2 KB, `layout/persist.js` 9.8 KB, `core/keymap.js` 9.5 KB.
 
@@ -106,6 +106,7 @@ Code kept out of `core.js` as lazy chunks, which new code should follow when it 
 - `panels/agent-profiles.js` and `snippets-util.js` -> `settings`; `panels/system.js` -> `panels`; `ui/number-spinner.js` -> `shell`; `ui/select.js` -> its own `select` chunk (stub `ui/select-lazy.js` stays in core).
 - `panels/panel.js` + `core/dialog.js` + the guide body (`term/guide-view.js`) -> `panel` chunk. Boot-path code (terminal, rail, `history/api.js`) imports `core/dialog-lazy.js`, whose `confirmDialog`/`promptDialog`/`alertDialog` return Promises; chunks that need the synchronous `openDialog`/`nextId` import `core/dialog.js` directly and pull the `panel` chunk with them. If the chunk cannot be fetched the stub falls back to `window.confirm`/`prompt`/`alert` (a silent "cancel" would hide why nothing happens, a silent "ok" would drop the safeguard). `build-output.test.js` asserts that neither `core.js` nor `shell.js` imports `panel.js` statically.
 - `term/upload.js` -> `upload` chunk. `term/upload-lite.js` stays in core: `hasFiles`/`filesFromDataTransfer` must run synchronously inside the drop event (a `DataTransfer` is empty once the event ends), the window-level dragover/drop guard must exist from boot (otherwise a file dropped outside a target navigates the page away), and `window.vtUploadFiles/vtUploadJobs/vtCancelUpload` are stubs until the engine loads (no engine means no jobs: `[]` and `0` are the correct answers).
+- The file viewer body (CodeMirror 6, `panels/viewer/editor.js` + `editor-text.js` + `@codemirror/*`/`@lezer/*`) -> `editor` chunk, 586,970 B raw / 146 KB gzip, imported by `viewer/file.js` when a file opens. Each language pack is its own chunk, fetched only for that language: `editor-js` 86.6 KB (33.2 KB gzip), `-md` 64.5 KB, `-java` 50.4 KB, `-py` 49.6 KB, `-legacy` (shell, Kotlin, Swift) 46.3 KB, `-html` 37.5 KB (also pulls `-js` and `-css`), `-go` 31.4 KB, `-css` 21.7 KB, `-yaml` 19.8 KB, `-sql` 15.3 KB, `-json` 3.2 KB. One chunk with every language was 1,008,642 B (289 KB gzip). Not in `sw.js` PRECACHE (dist chunks are network-first; file contents need the server anyway). The initial payload did not change (325,488 B).
 - Deliberately kept in core (synchronous boot-path code): `term/e2e.js` (6 KB; the handshake listener must be attached before the first WebSocket message, and it is security-relevant), `layout/dnd.js`, `ui/toast.js`, `core/keymap.js` and the agent state modules.
 
 ## 5. View-tab status bar
@@ -145,3 +146,16 @@ Baseline 2026-11-07 (Chrome 156 headless, Node 22, Apple silicon Mac, 10 runs; m
 
 - `tree`: open 28 / 38 ms (phone 91 / 112). Expanding 100 folders, summed: 164 / 197 ms (phone 1422 / 1565). **One change on the root re-requests 101 listings** (root + every expanded folder, each `depth=2`) and redraws in 163 / 185 ms, 127 ms of it long tasks (phone 656 / 771 ms, 516 ms long tasks).
 - `live-10s`: every refresh redraws the whole file even when only one line changed. Desktop: 19 redraws in 10 s, frame interval p95 517 ms, long tasks 9.8 s of the 10 s. Phone: 5 redraws, frame interval p95 2183 ms, long tasks 11.2 s — the page is effectively frozen while a file under change is open.
+
+### 7.1 CodeMirror 6 file body (2026-11-07)
+
+The file body now renders with CodeMirror 6, read-only (`viewer/editor.js`, [files.md](./files.md)). Same tool, same machine, same session: the old renderer was measured again from a copy of the tree just before the change ("before"), then the new one ("after"). The page preloads the editor module and the JS language pack the way it preloads hljs, so chunk download is not in these numbers (sizes: §4). `open-*` runs fail if the body was not drawn by CodeMirror (the plain-text fallback would look fast too). `diff-5000` and `tree` are unchanged code and were not re-run.
+
+| Scenario | Desktop paint ms before → after | Desktop long tasks ms | Phone (4x CPU) paint ms | Phone long tasks ms | DOM nodes (phone) |
+|---|---|---|---|---|---|
+| open-512k | 556 → 47 | 548 → 0 | 2398 → 193 | 2346 → 169 (p95 181) | 69,677 → 1,038 |
+| open-4m (512 KiB shown) | 543 → 52 | 531 → 0 | 2350 → 196 | 2311 → 143 | 68,959 → 1,049 |
+| long-line-1m (512 KiB shown) | 530 → 42 | 525 → 0 | 2059 → 167 | 2036 → 158 | 74,585 → 906 |
+| concurrent-3 | 1775 → 72 | 1047 → 0 | 8168 → 312 | 5122 → 143 | 209,007 → 3,086 |
+
+Medians of 10 runs. `live-10s` (a change every 200 ms for 10 s): the refresh now replaces only the changed range in the open editor. Desktop: 19 → 49 refreshes, frame interval p95 517 → 17 ms, long tasks 9.9 s → 50 ms. Phone: 5 → 49 refreshes, frame interval p95 2183 → 17 ms (max 83 ms), long tasks 11.3 s → 184 ms. The phone `open-512k` long-task sum (169 ms median) is just above the 150 ms that was set as a provisional target; the largest single task is about 100 ms (initial parse and layout of the visible range).
