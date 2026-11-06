@@ -86,6 +86,8 @@ def test_check_canonical_line_limits_passes_under_the_limit():
 def test_check_canonical_line_limits_exact_boundary_passes():
     # 개행 포함해서 정확히 한계 — 실측(input_mode 1/n)상 여기까지는 통과한다.
     pp.check_canonical_line_limits("x" * 1023 + "\n", max_line=1024)
+    with pytest.raises(pp.LineTooLong):              # 한 글자 더하면 거절 — 경계가 정확히 1024 임을 함께 고정한다
+        pp.check_canonical_line_limits("x" * 1024 + "\n", max_line=1024)
 
 
 def test_check_canonical_line_limits_one_over_raises():

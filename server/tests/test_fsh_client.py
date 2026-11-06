@@ -350,11 +350,12 @@ def test_tui_returns_false_on_error_status_and_down_server(w, monkeypatch):
     assert helpers.server_request("GET", "/api/capabilities") == (False, None)
 
 
-def test_clipboard_push_swallows_failures(w, monkeypatch):
+def test_clipboard_push_swallows_failures(w, monkeypatch, caplog):
     import clipboard_daemon
     monkeypatch.setattr(clipboard_daemon, "_PORT", "1")
     monkeypatch.setattr(clipboard_daemon, "_TOKEN", "")
     clipboard_daemon._push("x")                                  # 서버 없음 — 예외 없이 경고만
+    assert "push 실패" in caplog.text                             # 실패는 조용히 사라지지 않고 로그에 남는다
 
 
 def _env_for_script(w, tmp_path, **extra):

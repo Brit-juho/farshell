@@ -103,7 +103,9 @@ def test_start_is_idempotent(mod):
 
 
 def test_stop_unknown_port_is_noop(mod):
+    assert mod._listeners == {}
     _run(mod, lambda: mod.stop(9999))
+    assert mod._listeners == {}                      # 없는 포트를 내리며 다른 리스너를 건드리지 않는다
 
 
 def test_share_without_proxy_port_is_skipped(mod):
