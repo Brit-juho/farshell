@@ -188,16 +188,9 @@ html.vt-has-keybar[data-mobile-tab]:not([data-mobile-tab="terminal"]) #keybar-op
   color:var(--sub); font:var(--weight-normal) var(--fs-3xs) var(--font-mono);
   letter-spacing:var(--tracking-wide); white-space:nowrap;
 }
-#vt-workspace-chip svg { color:var(--acc); flex:none; }
-/* 2026-09-17 — 이 줄은 화면에서 가장 오래 떠 있는 이름인데 이름과 경로가 둘 다
-   11px/mono라 "farshell/Work-MacBook"이 한 덩어리 경로로 읽혔다. 이름은
-   이름이므로 ui 글꼴로 한 단 올리고, 경로는 경로이므로 mono 그대로 한 단
-   내린다 — 크기·글꼴·색 셋이 같이 갈리면 굳이 읽지 않아도 둘이 다른 것임을 안다. */
-.vt-workspace-name {
-  color:var(--txt);
-  font:var(--weight-semibold) var(--fs-sm) var(--font-ui);
-  letter-spacing:var(--tracking-normal);
-}
+/* 2026-11-06 — 이름(farshell)·아이콘은 FarShell 메뉴 버튼이 이미 보여 줘서 칩에서 뺐다.
+   칩은 mono 호스트 경로만 말하고, 메뉴 버튼 바로 뒤에 붙도록 왼쪽 여백을 줄였다. */
+#vt-workspace-chip { padding-left:0; }
 .vt-workspace-host { color:var(--color-muted); }
 /* 2026-09-28 — 활성 칸이 원격 호스트면 칩도 그 호스트를 말한다. 원격 스위처
    (.vt-fleet-host.remote)와 같은 강조색으로 "지금 다른 맥을 보고 있다"를 표시하고,

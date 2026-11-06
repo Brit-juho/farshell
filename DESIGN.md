@@ -457,7 +457,7 @@ Compact (<720px) has no menu bar, so `--menubar-h` is 0 there.
 Left to right: the **FarShell menu** (`MenuButton`, first cell: 새 세션 · 빠른 열기 · 접속 주소 복사 ·
 설정 · 메뉴바 설정; the dropdown is a `Portal` into `body` because the bar clips overflow and its
 `backdrop-filter` would trap `position: fixed`; Esc/outside click/↑↓/Home/End work), the workspace chip
-(`#vt-workspace-chip-slot`, moved here from the tab row), then the chips below. **접속 주소 복사** copies
+(`#vt-workspace-chip-slot`, moved here from the tab row; host only — `/ <host>` — since the menu button already carries the icon and the FarShell name), then the chips below. **접속 주소 복사** copies
 the public tunnel URL if one is running, else `location.origin`; it never mints a device-registration QR/OTP
 — that stays in `fsh mobile`.
 
