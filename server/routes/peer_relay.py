@@ -51,13 +51,22 @@ RELAY_HEADER = "x-peer-relay"
 
 # 중계 응답에서 브라우저까지 넘길 헤더. 쿠키는 **절대** 넘기지 않는다 — B가
 # 발급한 쿠키가 A의 출처에 박히면 A의 세션과 섞인다.
+# 보안 헤더(`content-security-policy`, `x-content-type-options`)는 넘긴다. 라우트가 붙인
+# 응답별 정책(파일 미리보기의 `sandbox` CSP 등)이 중계에서 빠지면, A의 기본 헤더
+# (`security_headers.py`, `frame-ancestors 'none'`만)로 바뀌어 같은 바이트가 로컬보다
+# 약한 정책으로 A의 출처에서 열린다.
 _PASS_RESPONSE_HEADERS = {
     "content-type", "content-disposition", "content-length", "cache-control",
     "etag", "last-modified", "content-range", "accept-ranges",
+    "content-security-policy", "x-content-type-options",
 }
+# 같은 이름이 여러 번 오면 합쳐서 넘길 헤더. CSP 는 헤더마다 따로 강제되는 정책
+# 목록이라, 하나만 남기면 나머지 정책이 사라진다(쉼표로 이은 값은 헤더 여러 개와 같다).
+_JOIN_RESPONSE_HEADERS = {"content-security-policy"}
 # 안쪽 요청에 넘길 헤더. 인증·쿠키·peer 헤더는 뺀다.
+# `if-range`는 `range`와 짝이다 — 없으면 바뀐 파일의 뒷부분을 옛 앞부분에 이어 붙인다.
 _PASS_REQUEST_HEADERS = {
-    "content-type", "accept", "if-none-match", "if-modified-since", "range",
+    "content-type", "accept", "if-none-match", "if-modified-since", "range", "if-range",
     "x-file-name", "x-requested-with",
 }
 
@@ -184,8 +193,12 @@ async def _dispatch(request: Request, target: str, query: str, peer_id: str,
     headers = {RELAY_HEADER: "1"}
     for k, v in start.get("headers", []):
         name = k.decode("latin-1").lower()
-        if name in _PASS_RESPONSE_HEADERS:
-            headers[name] = v.decode("latin-1")
+        if name not in _PASS_RESPONSE_HEADERS:
+            continue
+        value = v.decode("latin-1")
+        if name in _JOIN_RESPONSE_HEADERS and name in headers:
+            value = headers[name] + ", " + value
+        headers[name] = value
 
     async def body():
         try:
