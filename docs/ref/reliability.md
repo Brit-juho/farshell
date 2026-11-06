@@ -79,6 +79,8 @@ Risky mounts are NFS, SMB, AFP, WebDAV, FUSE (not `fuseblk`), 9p, virtiofs, auto
 `MNT_LOCAL`, plus the macOS File Provider roots (`~/Library/CloudStorage`, `~/Library/Mobile Documents`).
 Paths are classified by string prefix only.
 
+**macOS protected locations.** On macOS the automatic scans (repository discovery, file search, session cwd lookups) also skip the locations macOS guards with a permission prompt: `~/Desktop`, `~/Documents`, `~/Downloads`, `~/Pictures`, `~/Movies`, `~/Music`, all of `~/Library` (app data, Mail, iCloud) and `/Volumes`. Walking into them raised one prompt per category, several at once (2026-11-06). `VT_SCAN_INCLUDE_PROTECTED=1` puts them back (for a machine that granted Full Disk Access). A path a person opens in the file tab is not refused; macOS asks once, which is expected. A session cwd inside one of them reports `reason: protected`.
+
 `VT_SCAN_INCLUDE_MOUNTS` puts risky mounts back into automatic scans: `1`/`all` for all of them, or a
 colon list of paths. Paths a user opens explicitly are never refused for being remote; they get the
 deadline and the breaker instead.

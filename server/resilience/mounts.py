@@ -39,6 +39,13 @@ LOCAL_FUSE = {"fuseblk"}
 # 마운트가 아닌데 열면 멈출 수 있는 곳(macOS File Provider — 원격 원본을 그 자리에서 받아 온다).
 _FILE_PROVIDER_REL = ("Library/CloudStorage", "Library/Mobile Documents")
 
+# macOS 가 접근 때 권한을 묻는(TCC) 위치. 서버가 자동 탐색 중에 여기에 들어가면 폴더 종류마다 권한 창이 뜬다
+# — 2026-11-06 「python3.14 가 데스크톱·다운로드·사진에 접근하려 함」이 한 번에 4~5개씩 떴다. 사람이 파일 탭에서
+# 직접 여는 것은 막지 않는다(그때 한 번 묻는 것은 정상). `Library` 는 App 데이터(다른 앱의 컨테이너)·Mail·iCloud 를
+# 품고 있어 통째로 뺀다. 외장·네트워크 볼륨(`/Volumes`)도 따로 묻는 항목이다.
+_PROTECTED_REL = ("Desktop", "Documents", "Downloads", "Pictures", "Movies", "Music", "Library")
+_PROTECTED_ABS = ("/Volumes",)
+
 
 @dataclass(frozen=True)
 class Mount:
@@ -195,6 +202,22 @@ def file_provider_roots() -> list[str]:
     return [os.path.join(home, rel) for rel in _FILE_PROVIDER_REL] if sys.platform == "darwin" else []
 
 
+def protected_roots() -> list[str]:
+    """macOS 권한(TCC)을 묻는 위치. macOS 가 아니면 빈 목록."""
+    if sys.platform != "darwin":
+        return []
+    home = _home()
+    return [os.path.join(home, rel) for rel in _PROTECTED_REL] + list(_PROTECTED_ABS)
+
+
+def protected_reason(path: str) -> Optional[str]:
+    p = _norm(path)
+    for root in protected_roots():
+        if _within(p, root):
+            return f"macos-protected:{root}"
+    return None
+
+
 def mount_for(path: str) -> Optional[Mount]:
     """그 경로가 속한(가장 긴 접두사) 마운트."""
     p = _norm(path)
@@ -229,8 +252,17 @@ def _includes() -> tuple[bool, list[str]]:
     return False, [_norm(x) for x in raw.split(":") if x.strip()]
 
 
+def _include_protected() -> bool:
+    return os.environ.get("VT_SCAN_INCLUDE_PROTECTED", "").strip().lower() in ("1", "all", "true", "yes")
+
+
 def skip_for_scan(path: str) -> Optional[str]:
-    """자동 탐색(저장소 찾기·검색·세션 cwd 조회)에서 건너뛸 경로면 그 이유."""
+    """자동 탐색(저장소 찾기·검색·세션 cwd 조회)에서 건너뛸 경로면 그 이유.
+    macOS 보호 위치는 `VT_SCAN_INCLUDE_PROTECTED=1` 일 때만 넣는다(전체 디스크 접근 권한을 준 경우)."""
+    if not _include_protected():
+        prot = protected_reason(path)
+        if prot is not None:
+            return prot
     reason = risky_reason(path)
     if reason is None:
         return None
@@ -246,15 +278,17 @@ def skip_for_scan(path: str) -> Optional[str]:
 def scan_skip_prefixes() -> list[str]:
     """탐색 자식 프로세스에 넘길 '들어가지 말 곳' 목록."""
     include_all, includes = _includes()
+    prot = [] if _include_protected() else protected_roots()
     if include_all:
-        return []
-    return [p for p in risky_mount_points() if not any(_within(p, inc) for inc in includes)]
+        return sorted(set(prot))
+    return sorted(set(prot + [p for p in risky_mount_points() if not any(_within(p, inc) for inc in includes)]))
 
 
 def snapshot() -> dict:
     return {
         "risky": [{"path": m.path, "fstype": m.fstype} for m in mounts() if m.risky and m.path != "/"],
         "file_provider": file_provider_roots(),
+        "protected": [] if _include_protected() else protected_roots(),
         "include": os.environ.get("VT_SCAN_INCLUDE_MOUNTS", ""),
     }
 

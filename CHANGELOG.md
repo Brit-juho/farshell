@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Changed
+- On macOS, automatic scans no longer walk into the locations macOS guards with a permission prompt (Desktop, Documents, Downloads, Pictures, Movies, Music, `~/Library`, `/Volumes`), so restarting the server no longer raises a burst of prompts. `VT_SCAN_INCLUDE_PROTECTED=1` puts them back; opening such a folder in the file tab still works.
 - **Releases finish in minutes.** `python3 scripts/release.py X.Y.Z` releases the tip of `origin/dev` only when its CI already passed, builds the release commit in a temporary worktree (VERSION, README badges, CHANGELOG — nothing else), signs and verifies the tag, pushes `dev`, `master`, `release/X.Y` and the tag in one atomic push, and waits for the Release workflow. It no longer waits for a second full CI run on `master`.
 - CI skips pushes whose head commit is a release commit (its code is the already-tested parent), and cancels a running workflow when a newer push to the same branch arrives. The Release workflow now refuses a tag whose commit (or, for a release commit, its parent) has no successful CI run.
 
