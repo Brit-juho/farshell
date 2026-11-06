@@ -94,7 +94,8 @@ function _noteFailure(dl, e) {
   else if (!dl.callerAborted()) noteNetworkError();
 }
 
-export async function vtFetch(path, opts) {
+// vtFetch·vtFetchConditional 공용. `notModifiedOk`면 304를 실패로 보지 않고 본문을 읽지 않는다.
+async function _request(path, opts, notModifiedOk) {
   // 호스트 전환 중이면 선택한 맥으로(core/host-route.js). 로컬이면 그대로.
   path = relayPath(path);
   const tokenQuery = window._tokenQuery || '';
@@ -111,6 +112,10 @@ export async function vtFetch(path, opts) {
     throw e;
   }
   noteResponse(res.status);
+  if (notModifiedOk && res.status === 304) {
+    dl.done();
+    return { res, data: null };
+  }
   let data = null;
   try {
     data = await dl.race(res.json());
@@ -125,7 +130,27 @@ export async function vtFetch(path, opts) {
     e.status = res.status; e.data = data;
     throw e;
   }
-  return data;
+  return { res, data };
+}
+
+export async function vtFetch(path, opts) {
+  return (await _request(path, opts, false)).data;
+}
+
+/**
+ * 조건부 GET(파일 개편 4.1). vtFetch는 2xx가 아니면 던지므로 304를 받을 수 없다 — 그래서 따로 둔다.
+ * - `opts.etag`가 있으면 `If-None-Match`로 보낸다(이렇게 직접 보내면 브라우저 HTTP 캐시가 끼어들지 않고
+ *   304가 그대로 온다).
+ * - 돌려주는 것: `{status, etag, data}`. 304면 `data`는 null(본문 없음), `etag`는 보낸 값 또는 응답 헤더 값.
+ * - 마감·도달 판정·호스트 중계·오류(2xx·304가 아니면 `.status`·`.data`가 붙은 Error)는 vtFetch와 같다.
+ */
+export async function vtFetchConditional(path, opts = {}) {
+  const { etag, ...rest } = opts || {};
+  const req = { ...rest };
+  if (etag) req.headers = { ...(rest.headers || {}), 'If-None-Match': etag };
+  const { res, data } = await _request(path, req, true);
+  const got = (res.headers && typeof res.headers.get === 'function' && res.headers.get('ETag')) || null;
+  return { status: res.status, etag: got || (res.status === 304 ? etag || null : null), data };
 }
 
 /**

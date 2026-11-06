@@ -83,6 +83,32 @@
   border-top:1px solid var(--line);
 }
 .vt-vw-note.warn{ color:var(--warn); }
+/* 파일 본문 위·아래 띠(viewer/file.js) — 인코딩·읽기 전용 이유·끝부분 보기 안내(위), 앞부분만 받음 + 더 보기(아래).
+   지금 뷰어 틀 안에 최소로 둔다. 자리는 리디자인 구현 설계안에서 다시 정한다(계획 D10). */
+.vt-vw-bar,
+.vt-vw-note.vt-vw-trunc{
+  display:flex; flex-wrap:wrap; align-items:center; gap:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5);
+}
+.vt-vw-bar{
+  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3); color:var(--sub); font:400 var(--fs-xs) var(--ui);
+  border-bottom:1px solid var(--line); background:var(--bar);
+}
+.vt-vw-bar-warn{ color:var(--warn); }
+.vt-vw-bar-btn{
+  font:500 var(--fs-xs) var(--ui); color:var(--txt); background:var(--crust);
+  border:1px solid var(--line); border-radius:var(--radius-sm);
+  padding:calc(var(--spacing) * 0.5) calc(var(--spacing) * 2); cursor:pointer;
+}
+.vt-vw-bar-btn:hover{ background:var(--menu-hover); }
+.vt-vw-bar-btn:disabled{ opacity:.5; cursor:default; }
+.vt-vw-enc{ display:inline-flex; align-items:center; gap:calc(var(--spacing) * 1.5); }
+.vt-vw-enc select{
+  font:inherit; color:var(--txt); background:var(--crust);
+  border:1px solid var(--line); border-radius:var(--radius-sm); padding:calc(var(--spacing) * 0.5) calc(var(--spacing) * 1);
+}
+@media (pointer: coarse){
+  .vt-vw-bar-btn, .vt-vw-enc select{ min-height:44px; }
+}
 
 /* [T3] 인라인 이미지 미리보기. 페인 안에 갇혀야 한다(밖으로 새면 표면 레이어의
    터미널 위를 덮는다 — 실브라우저 스모크가 그 규칙을 지킨다). 체커보드 배경은

@@ -1,7 +1,8 @@
 // ADR-44 — 파일 뷰어 오버레이. pane 트리 밖에 있어서
 // 열고 닫아도 터미널 cols×rows가 바뀌지 않는다(fit도 SIGWINCH도 안 일어난다).
 import { openPanel, closePanel } from '../panel.js';
-import { renderFile, refreshFile } from './file.js';
+import { renderFile, refreshFile, jumpToLine } from './file.js';
+import { isCrossHost } from './file-load.js';
 import { watchPath, coalesce } from '../../shell/fs-watch.js';
 import { _viewerState, _shareFile } from './state.js';
 import { icon } from '../../ui/icons.js';
@@ -71,13 +72,16 @@ function _refresh(el) {
   const path = el.dataset.viewerFile;
   if (!path) return Promise.resolve();
   const body = el.querySelector('.vt-vw-body');
-  return refreshFile(body, path, () => el.isConnected && el.dataset.viewerFile === path)
+  return refreshFile(body, path, () => el.isConnected && el.dataset.viewerFile === path, { host: el._vtHost || null })
     .catch(() => { /* 다음 변경·클릭 때 다시 시도한다 */ });
 }
 
 // 보고 있는 파일이 디스크에서 바뀌면 다시 그린다. 파일을 바꾸면 구독도 옮긴다.
+// 다른 호스트의 파일(원격 칸의 터미널 링크)은 감시하지 않는다 — 감시 소켓은 지금 화면의 호스트에 붙어 있어서
+// 같은 경로의 **이 호스트** 파일을 보게 된다(호스트별 감시는 트리 재작성 단계). 새로고침 버튼으로 다시 읽는다.
 function _watch(el, path) {
-  if (el._vtUnwatch) el._vtUnwatch();
+  if (el._vtUnwatch) { el._vtUnwatch(); el._vtUnwatch = null; }
+  if (isCrossHost(el._vtHost)) return;
   el._vtUnwatch = watchPath('file', path, coalesce(() => _refresh(el)));
 }
 
@@ -93,7 +97,7 @@ function _setHead(el, path) {
   if (segs.length > 2) dir = `…/${segs.slice(-2).join('/')}`;
   el.querySelector('.vt-file-name').textContent = name;
   el.querySelector('.vt-file-dir').textContent = dir;
-  el.querySelector('.vt-file-title').dataset.tip = path;
+  el.querySelector('.vt-file-title').dataset.tip = el._vtHost && isCrossHost(el._vtHost) ? `${el._vtHost}:${path}` : path;
 }
 
 // 파일 창이 터미널 위에서 열리고·움직이고·크기가 바뀌고·닫힐 때 터미널 그림을 통째로 다시 그린다.
@@ -133,18 +137,29 @@ function _startRepaintTick() {
   }, REPAINT_TICK_MS);
 }
 
-function _setFile(el, path) {
-  // 같은 파일을 다시 그리면 스크롤이 튄다 — 뷰어 페인(panes.js)과 같은 규칙.
-  if (el.dataset.viewerFile === path) return;
-  el.dataset.viewerFile = path;
-  _setHead(el, path);
+// opts: {host, line, col} — 터미널 링크가 그 세션의 호스트와 줄을 넘긴다.
+function _setFile(el, path, opts = {}) {
+  const fileHost = opts.host || null;
   const body = el.querySelector('.vt-vw-body');
+  // 같은 파일을 다시 그리면 스크롤이 튄다 — 뷰어 페인(panes.js)과 같은 규칙. 줄 이동만 한다.
+  if (el.dataset.viewerFile === path && (el._vtHost || null) === fileHost) {
+    const cur = body.querySelector(':scope > .vt-vw-code-pane');
+    if (opts.line && cur) jumpToLine(cur, opts.line, opts.col).catch(() => {});
+    return;
+  }
+  el.dataset.viewerFile = path;
+  el._vtHost = fileHost;
+  _setHead(el, path);
+  // 다른 호스트의 파일은 공유(이 호스트의 스냅샷 경로)와 페인으로 열기(페인은 호스트를 기억하지 않는다)를 막는다.
+  const cross = isCrossHost(fileHost);
+  el.querySelector('.vt-file-share').hidden = cross;
+  el.querySelector('.vt-file-topane').hidden = cross;
   // 요청마다 새 호스트에 그린다. 늦게 도착한 이전 파일은 떨어져 나간 호스트에 그려져 무해하다.
   const host = document.createElement('div');
   host.className = 'vt-vw-code-pane';
   body.replaceChildren(host);
   body.scrollTop = 0;
-  renderFile(host, path)
+  renderFile(host, path, { host: fileHost, line: opts.line, col: opts.col })
     .catch((e) => { host.textContent = String(e && e.message ? e.message : e); })
     .finally(_repaintTerminals);
   _watch(el, path);
@@ -259,10 +274,10 @@ function _escClosesOnlyWhenFocused() {
   return !(el && el.contains(active)) || !!(active && active.closest && active.closest('.cm-panel'));
 }
 
-export function openFileOverlay(path) {
+export function openFileOverlay(path, opts = {}) {
   if (!path) return;
   const existing = document.getElementById(PANEL_ID);
-  if (existing) { _setFile(existing, path); return; }
+  if (existing) { _setFile(existing, path, opts); return; }
 
   // 폰에서는 표면 설정과 무관하게 전체화면 시트 + 뒤로가기 닫기(panel.js의 mobile route).
   const compact = isCompactMode();
@@ -326,7 +341,7 @@ export function openFileOverlay(path) {
     body.focus({ preventScroll: true });
   }
 
-  _setFile(el, path);
+  _setFile(el, path, opts);
 }
 
 // 표면을 바꿔도 보고 있던 파일과 스크롤은 유지한다(§8.3).
@@ -334,7 +349,7 @@ subscribe((changed) => {
   if (!changed || !('viewer.surface' in changed)) return;
   const el = document.getElementById(PANEL_ID);
   if (!el || el.classList.contains('vt-file-compact')) return;
-  if (changed['viewer.surface'] === 'pane') {
+  if (changed['viewer.surface'] === 'pane' && !isCrossHost(el._vtHost)) {
     const file = el.dataset.viewerFile;
     closePanel(el);
     if (file) openViewerPane(file);
@@ -351,7 +366,8 @@ if (_compactMq && typeof _compactMq.addEventListener === 'function') {
     const el = document.getElementById(PANEL_ID);
     if (!el) return;
     const file = el.dataset.viewerFile;
+    const fileHost = el._vtHost || null;
     closePanel(el, { history: 'replace' });
-    if (file) openFileOverlay(file);
+    if (file) openFileOverlay(file, { host: fileHost });
   });
 }
