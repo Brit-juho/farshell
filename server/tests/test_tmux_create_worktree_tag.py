@@ -40,11 +40,12 @@ def test_create_with_worktree_id_tags_the_session(monkeypatch):
 
 def test_create_without_worktree_id_does_not_tag(monkeypatch):
     monkeypatch.setattr(tmux_runner, "run", lambda args, timeout=None: (0, b"", b""))
-    monkeypatch.setattr(tmux_runner, "set_option", lambda s, k, v: (
-        k != "@fsh_wt" or (_ for _ in ()).throw(AssertionError("worktreeId 없이 태그를 심으면 안 된다"))))
+    options = []
+    monkeypatch.setattr(tmux_runner, "set_option", lambda s, k, v: options.append(k))
 
     body = {"name": "wt-plain"}
     asyncio.run(tmux_route.create_tmux_session(_FakeRequest(body)))
+    assert "@fsh_wt" not in options, "worktreeId 없이 태그를 심었다"
 
 
 def test_create_rejects_malformed_worktree_id(monkeypatch):

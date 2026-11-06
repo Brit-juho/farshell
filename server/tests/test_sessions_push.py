@@ -54,10 +54,12 @@ def test_change_is_pushed(client, listing, monkeypatch):
     with client.websocket_connect("/ws-workspace") as ws:
         _next_of(ws, "tmux_sessions")
         listing["value"] = [{"name": "dev", "cwd": "/b"}]   # 터미널에서 cd — 서버를 안 거친다
-        while True:
-            msg = _next_of(ws, "tmux_sessions")
-            if msg["sessions"][0]["cwd"] == "/b":
+        seen = []
+        for _ in range(50):          # 주기 0.05초라 메시지가 계속 온다 — 기다릴 횟수를 정해 두고 검사한다
+            seen.append(_next_of(ws, "tmux_sessions")["sessions"][0]["cwd"])
+            if seen[-1] == "/b":
                 break
+        assert seen[-1] == "/b", f"바뀐 cwd 가 push 되지 않았다: {seen[-3:]}"
 
 
 def test_kick_checks_immediately(client, listing, monkeypatch):
@@ -67,10 +69,8 @@ def test_kick_checks_immediately(client, listing, monkeypatch):
         _next_of(ws, "tmux_sessions")
         listing["value"] = [{"name": "dev", "cwd": "/a"}, {"name": "new", "cwd": "/a"}]
         tmux_route._kick_sessions()
-        while True:
-            msg = _next_of(ws, "tmux_sessions")
-            if len(msg["sessions"]) == 2:
-                break
+        # 주기가 1시간이라 이 다음 메시지가 곧 kick 의 결과다 — 여러 번 기다리지 않는다.
+        assert len(_next_of(ws, "tmux_sessions")["sessions"]) == 2
 
 
 def test_unchanged_list_is_not_pushed_again(listing):
@@ -159,7 +159,5 @@ def test_becoming_visible_catches_up_immediately(client, listing, monkeypatch):
         ws.send_json({"type": "visibility", "hidden": True})
         listing["value"] = [{"name": "while-hidden", "cwd": "/a"}]
         ws.send_json({"type": "visibility", "hidden": False})
-        while True:
-            msg = _next_of(ws, "tmux_sessions")
-            if msg["sessions"][0]["name"] == "while-hidden":
-                break
+        # 주기가 1시간이라 보이게 된 직후의 다음 메시지가 따라잡기 결과다.
+        assert _next_of(ws, "tmux_sessions")["sessions"][0]["name"] == "while-hidden"

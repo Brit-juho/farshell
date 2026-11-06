@@ -68,6 +68,7 @@ def test_pause_nonexistent_session_no_crash():
     mgr = PTYManager()
     mgr.pause_read("ghost-session", requester_id=99)
     mgr.resume_read("ghost-session", requester_id=99)
+    assert "ghost-session" not in mgr.sessions         # 없는 세션을 만들어 내지 않는다
 
 
 def test_scrollback_returned_on_get(loop):
