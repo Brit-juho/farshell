@@ -14,7 +14,7 @@ import { _loadRecent, _pushRecent, _clearRecent } from './recent.js';
 import { _fmtSize } from './file.js';
 import { watchPath, coalesce } from '../../shell/fs-watch.js';
 import { t } from '../../core/i18n.js';
-import { shellQuotePath } from '../../lib/shell-quote.js';
+import { shellQuotePath, hasControlChars } from '../../lib/shell-quote.js';
 
 const PANEL_ID = 'vt-dir';
 
@@ -26,9 +26,27 @@ const _isDescendant = (path, of) => path !== of && path.startsWith(of.replace(/\
 
 // 「경로 삽입」이 터미널에 타이핑하는 문자열. 파일 이름은 열람 경계 안의 누구나(클론한 저장소, 받은 압축 파일) 정할 수
 // 있어서 `a$(touch x).txt` 같은 이름이 그대로 들어가면 Enter를 누르는 순간 실행된다. 업로드 삽입과 같은 인용
-// 규칙(lib/shell-quote.js)을 쓴다 — 평범한 경로는 그대로 나간다.
+// 규칙(lib/shell-quote.js)을 쓴다 — 평범한 경로는 그대로 나간다. 제어문자가 든 경로는 인용으로 못 막으므로
+// (hasControlChars 주석) null — 넣지 않는다.
 export function pathInsertText(path) {
+  if (hasControlChars(path)) return null;
   return shellQuotePath(path) + ' ';
+}
+
+// 활성 세션에 경로를 타이핑한다. 넣었으면 true. 거절한 이유는 토스트로 말한다.
+export function insertPathToTerminal(path) {
+  if (typeof window.activeSession !== 'function' || !window.activeSession()) {
+    showToast(t('열려 있는 터미널 세션이 없습니다'));
+    return false;
+  }
+  const text = pathInsertText(path);
+  if (text == null) {
+    showToast(t('경로에 제어문자가 있어 터미널에 넣지 않았습니다 — 줄바꿈 같은 문자는 셸이 바로 실행할 수 있습니다'), 'error');
+    return false;
+  }
+  window.sendToPty(window.activeSessionId(), text);
+  // 성공을 말하지 않는다 — 터미널에 경로가 실제로 타이핑된 것이 증거다.
+  return true;
 }
 
 export async function showTree(opts = {}) {
@@ -58,14 +76,7 @@ export async function showTree(opts = {}) {
     _pushRecent(path);
   };
 
-  const insertToTerminal = (path) => {
-    if (typeof window.activeSession !== 'function' || !window.activeSession()) {
-      showToast(t('열려 있는 터미널 세션이 없습니다'));
-      return;
-    }
-    window.sendToPty(window.activeSessionId(), pathInsertText(path));
-    // 성공을 말하지 않는다 — 터미널에 경로가 실제로 타이핑된 것이 증거다.
-  };
+  const insertToTerminal = (path) => { insertPathToTerminal(path); };
 
   const openAtTerminalCwd = async () => {
     const s = typeof window.activeSession === 'function' ? window.activeSession() : null;

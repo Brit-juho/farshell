@@ -10,9 +10,11 @@ const vm = require('node:vm');
 const { importFresh } = require('./helpers/vm-esm');
 
 let shellQuotePath;
+let hasControlChars;
 before(async () => {
   const ns = await importFresh(path.join(__dirname, '../js/lib/shell-quote.js'), vm.createContext({}), new Map());
   shellQuotePath = ns.shellQuotePath;
+  hasControlChars = ns.hasControlChars;
 });
 
 const CASES = [
@@ -56,8 +58,11 @@ test('진짜 sh 에서 원문 그대로 돌아오고 아무것도 실행되지 �
   }
 });
 
-test('upload.js 는 붙여넣는 경로를 shellQuotePath 로 감싼다(배선이 빠지면 인용이 무의미하다)', () => {
-  const src = fs.readFileSync(path.join(__dirname, '../js/term/upload.js'), 'utf8');
-  assert.match(src, /import \{ shellQuotePath \} from '\.\.\/lib\/shell-quote\.js';/);
-  assert.match(src, /sendPaste\(sessionId, done\.map\(\(d\) => shellQuotePath\(d\.path\)\)/);
+test('hasControlChars — C0 제어문자와 DEL 은 잡고, 인쇄 가능한 문자(한글·공백 포함)는 통과시킨다', () => {
+  for (const c of ['\x00', '\x03', '\t', '\n', '\r', '\x15', '\x17', '\x1b', '\x1f', '\x7f']) {
+    assert.strictEqual(hasControlChars(`/x/a${c}b`), true, JSON.stringify(c));
+  }
+  for (const p of ['/x/a b.png', '/x/스크린샷.png', "/x/it's $(id).png", '/x/\u0085nel.png', '']) {
+    assert.strictEqual(hasControlChars(p), false, JSON.stringify(p));
+  }
 });

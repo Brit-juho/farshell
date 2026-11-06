@@ -36,10 +36,48 @@ def test_insert_types_the_quoted_path(monkeypatch):
     assert sent == [("%3", "'/x/a$(id).png'")]
 
 
+# --- 제어문자: 인용으로는 못 막는다 ---------------------------------------------------
+#
+# `send-keys -l` 은 바이트를 그대로 pty 에 넣는다. `^U`·`\r` 같은 바이트는 셸이 따옴표를 읽기 전에 tty 줄 규칙·
+# readline·ZLE 가 먼저 처리하므로, 그런 경로는 tmux 에 한 바이트도 보내지 않아야 한다. 아래는 실제로 tmux 를
+# 부르는 자리(subprocess.run)를 잡아 무엇이 나가는지 본다.
+
+CONTROL_NAMES = ["/x/x\x15touch /tmp/pwn\r", "/x/a\nb", "/x/a\rb", "/x/a\x1b[201~b", "/x/a\x7fb",
+                 "/x/a\x00b", "/x/a\x03b", "/x/a\x17b", "/x/a\tb"]
+
+
+@pytest.fixture
+def tmux_calls(monkeypatch):
+    calls = []
+    monkeypatch.setattr(tmux_target.subprocess, "run", lambda argv, **kw: calls.append(list(argv)))
+    return calls
+
+
+@pytest.mark.parametrize("name", CONTROL_NAMES)
+def test_paths_with_control_chars_are_never_typed(tmux_calls, name):
+    assert tmux_target.has_control_chars(name)
+    assert tmux_target.type_path_to_tmux("%3", name) is False
+    assert tmux_calls == [], "제어문자가 든 경로를 tmux 로 보냈다"
+
+
+def test_safe_paths_reach_tmux_quoted_and_literal(tmux_calls):
+    assert tmux_target.type_path_to_tmux("%3", "/x/a$(id) 이름.png") is True
+    assert tmux_target.type_path_to_tmux("%3", "/x/plain.png") is True
+    assert [c[-5:] for c in tmux_calls] == [
+        ["-t", "%3", "-l", "--", "'/x/a$(id) 이름.png'"],
+        ["-t", "%3", "-l", "--", "/x/plain.png"],
+    ]
+
+
+def test_has_control_chars_leaves_printable_text_alone():
+    for p in ("/x/a b.png", "/x/스크린샷.png", "/x/it's $(id).png", "/x/\u0085nel.png", ""):
+        assert not tmux_target.has_control_chars(p), repr(p)
+
+
 def test_both_server_insert_paths_use_the_quoting_entry_point():
     import pathlib
     root = pathlib.Path(__file__).resolve().parents[1]
-    for rel in ("routes/files.py", "file_store.py"):
+    for rel in ("routes/files.py", "file_store.py", "routes/peer.py"):
         text = (root / rel).read_text()
         assert "type_path_to_tmux" in text and "tmux_target.type_to_tmux(" not in text, rel
 

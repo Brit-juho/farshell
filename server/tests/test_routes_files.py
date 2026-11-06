@@ -383,6 +383,21 @@ def test_insert_types_path_without_enter(client, file_state, monkeypatch):
     assert calls and calls[0][0] == "%3"
 
 
+def test_insert_refuses_a_path_with_control_chars(client, file_state, monkeypatch, tmp_path):
+    """`^U`·`\\r` 은 셸이 따옴표를 읽기 전에 처리된다 — 그런 경로는 pane 에 한 바이트도 가지 않고 이유가 돌아온다."""
+    body = _upload_via_api(client)
+    evil = tmp_path / "x\x15touch pwn\r"
+    evil.write_bytes(b"x")
+    monkeypatch.setattr(file_store, "real_path_for", lambda fid: evil)
+    monkeypatch.setattr(tmux_target, "session_pane", lambda name: "%3")
+    sent = []
+    monkeypatch.setattr(tmux_target.subprocess, "run", lambda argv, **kw: sent.append(argv))
+    r = client.post(f"/api/files/{body['id']}/insert", json={"session": "dev"})
+    assert r.status_code == 400
+    assert r.json()["error"] == "unsafe_path" and "제어문자" in r.json()["reason"]
+    assert sent == []
+
+
 def test_insert_unknown_session_is_404(client, file_state, monkeypatch):
     body = _upload_via_api(client)
     monkeypatch.setattr(tmux_target, "session_pane", lambda name: None)

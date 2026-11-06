@@ -14,3 +14,13 @@ export function shellQuotePath(path) {
   if (SAFE.test(s) && '=%-+~'.indexOf(s.charAt(0)) < 0) return s;
   return "'" + s.replace(/'/g, "'\"'\"'") + "'";
 }
+
+// 경로에 C0 제어문자(0x00-0x1F)나 DEL(0x7F)이 있는가. 인용은 셸이 읽을 때만 효과가 있다 — 터미널 입력은 셸에 닿기 전에
+// tty 줄 규칙·readline·ZLE를 지나고, 거기서 `^U`(줄 지우기)·`\r`(Enter)은 따옴표와 상관없이 바로 처리된다:
+// `x\x15touch /tmp/pwn\r` 이라는 이름은 `^U`가 여는 따옴표를 지우고 `\r`이 Enter 전에 `touch`를 실행한다. 이런 경로는
+// 터미널에 아예 넣지 않는다(서버 server/shell_quote.py `has_control_chars`와 같은 규칙).
+const CONTROL = /[\x00-\x1f\x7f]/;
+
+export function hasControlChars(path) {
+  return CONTROL.test(String(path));
+}

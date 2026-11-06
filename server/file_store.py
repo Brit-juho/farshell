@@ -700,6 +700,9 @@ def _cli(argv: list[str]) -> int:
         if not pane:
             print(tr("  ✗ 대상 tmux pane을 찾지 못했습니다"), file=sys.stderr)
             return 1
+        if tmux_target.has_control_chars(str(fp)):
+            print(tr("  ✗ 경로에 제어문자가 있어 터미널에 넣지 않았습니다 — 줄바꿈 같은 문자는 셸이 바로 실행할 수 있습니다"), file=sys.stderr)
+            return 1
         if not tmux_target.type_path_to_tmux(pane, str(fp)):
             print(tr("  ✗ 삽입 실패"), file=sys.stderr)
             return 1

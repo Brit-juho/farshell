@@ -266,7 +266,7 @@ download API — `/api/files/{file_id}/download` is id-only by design.
 | DELETE | `/api/files/{file_id}` | Delete a stored file |
 | POST | `/api/files/{file_id}/pin` | Pin or unpin (JSON: `{pin: true\|false}`, else 400) → `{ok, item}`. A pinned file is left out of the TTL (`VT_FILES_TTL_DAYS`) and total-size (`VT_FILES_MAX_GB`) cleanup; its list item has `pin:true` and `expires_at:null`. Not elevated (same level as delete) |
 | POST | `/api/files/delete` | Bulk delete (JSON: `{ids:[...]}`, max 500) → `{ok, deleted:[...], missing:[...]}`. Not elevated — same reason single delete isn't (repeated single calls would bypass it anyway) |
-| POST | `/api/files/{file_id}/insert` | Type the file's path into a tmux session's pane (JSON: `session`), no Enter |
+| POST | `/api/files/{file_id}/insert` | Type the file's path into a tmux session's pane (JSON: `session`), no Enter. The path is shell-quoted; a path with a control character (0x00–0x1F, 0x7F) is never typed → 400 `unsafe_path` with a `reason` |
 | POST | `/api/files/{file_id}/send` | Copy the file to a remote host (JSON: `host`, optional `session`) and, with `session`, have that host type its own path into the pane. Ordinary login auth here; the outbound leg carries the peer signature. Re-sending the same file is skipped by origin |
 | POST | `/api/files/{file_id}/share` | **Elevated.** Issue a share link (JSON: `mode:"device"\|"pin"`, `ttl`, `once`, `pin?` — 6 to 20 characters, else 400 `bad_pin`) → `{share, token, url}` |
 | DELETE | `/api/files/{file_id}/share/{share_id}` | **Elevated.** Cancel a share — the URL 404s immediately even with a still-valid signature |

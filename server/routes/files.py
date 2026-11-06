@@ -601,6 +601,9 @@ async def insert_file(file_id: str, request: Request):
         blocked = await authz_leases.enforce_write(request, [cwd] if cwd else [], op="insert")
         if blocked is not None:
             return blocked
+    if tmux_target.has_control_chars(str(fp)):
+        # 인용으로는 못 막는다 — tty·readline이 `^U`·`\r`을 셸보다 먼저 처리한다(shell_quote.has_control_chars).
+        return JSONResponse({"error": "unsafe_path", "reason": tr("경로에 제어문자가 있어 터미널에 넣지 않았습니다 — 줄바꿈 같은 문자는 셸이 바로 실행할 수 있습니다")}, status_code=400)
     ok = await asyncio.to_thread(tmux_target.type_path_to_tmux, pane, str(fp))
     if not ok:
         return JSONResponse({"error": "insert_failed"}, status_code=500)

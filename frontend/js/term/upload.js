@@ -19,7 +19,7 @@ import { API_BASE } from '../core/env.js';
 import { relayUrl } from '../core/host-route.js';
 import { noteNetworkError, noteResponse } from '../core/reachability.js';
 import { sendPaste } from './clipboard.js';
-import { shellQuotePath } from '../lib/shell-quote.js';
+import { shellQuotePath, hasControlChars } from '../lib/shell-quote.js';
 import { showToast } from '../ui/toast.js';
 import { hasFiles, filesFromDataTransfer } from './upload-lite.js';
 import { t } from '../core/i18n.js';
@@ -216,7 +216,10 @@ export async function uploadFiles(list, opts = {}) {
     // N24 — 실행되지 않고 사용자가 이어서 완성할 텍스트라 붙여넣기 경로.
     // 여러 개면 한 번에 붙인다 — 한 줄씩 보내면 셸이 중간에 실행해 버린다.
     // 경로는 셸 인용을 거친다 — 이름에 `$(…)`·백틱·`;`가 있어도 Enter에 실행되지 않는다(lib/shell-quote.js).
-    sendPaste(sessionId, done.map((d) => shellQuotePath(d.path)).join(' ') + ' ');
+    // 제어문자가 든 경로는 인용으로 못 막으니 빼고 알린다(서버가 이름에서 이미 지우지만, 경로 전체를 같은 규칙으로 본다).
+    const safe = done.filter((d) => !hasControlChars(d.path));
+    if (safe.length < done.length) showToast(t('경로에 제어문자가 있어 터미널에 넣지 않았습니다 — 줄바꿈 같은 문자는 셸이 바로 실행할 수 있습니다'), 'error');
+    if (safe.length) sendPaste(sessionId, safe.map((d) => shellQuotePath(d.path)).join(' ') + ' ');
   }
 
   const n = done.length;
