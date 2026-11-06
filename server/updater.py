@@ -11,7 +11,7 @@
    리포가 침해돼도 공격자가 신뢰 키를 바꾸지 못하게 하려는 것이다. 처음 한 번 `fsh update trust`로
    지문을 사람이 확인해 고정한다(TOFU). 서명된 태그 객체는 이름도 같이 서명하므로
    「태그 이름 == 서명된 이름」을 확인해, 옛 서명 태그를 새 이름에 붙여 되돌리는 공격을 막는다.
-3. 훅·스킬은 새 코드로 옮긴 **뒤** 맞춘다(`sync`). 등록기 쪽 원칙(백업·멱등·남의 훅 보존)은
+3. 훅·스킬·tmux 설정은 새 코드로 옮긴 **뒤** 맞춘다(`sync`). 등록기 쪽 원칙(백업·멱등·남의 훅 보존)은
    `claude_hooks.py`/`codex_hooks.py`를 그대로 부른다 — 여기서 설정 파일을 직접 쓰지 않는다.
 4. 서버는 자동으로 재시작하지 않는다(열린 세션이 끊긴다). `--restart`를 줘야 한다.
 """
@@ -363,7 +363,7 @@ def _restore(root: Path, prev: dict) -> None:
 
 # ── 훅·스킬 동기화 ─────────────────────────────────────────────────────────
 def sync(root: Path, dry_run: bool = False) -> int:
-    """Claude Code·Codex 훅을 현재 코드에 맞추고 전역 `fsh` 스킬 링크를 확인한다."""
+    """Claude Code·Codex 훅을 현재 코드에 맞추고 전역 `fsh` 스킬 링크·tmux 설정을 확인한다."""
     py = _python(root)
     rc = 0
     claude_dir = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
@@ -387,7 +387,28 @@ def sync(root: Path, dry_run: bool = False) -> int:
                 print("    " + out.replace("\n", "\n    "))
         else:
             print(f"  ✓ {label}: " + tr("훅 최신"))
-    return rc | _sync_skill(root, claude_dir, dry_run)
+    return rc | _sync_skill(root, claude_dir, dry_run) | _sync_tmux_conf(root, py, dry_run)
+
+
+def _sync_tmux_conf(root: Path, py: str, dry_run: bool) -> int:
+    """옛 ~/.config/vt/tmux.conf 사본을 치우고 떠 있는 tmux 에 레포 설정을 다시 읽힌다.
+
+    새로 받은 코드의 tmux_conf.py 를 별도 프로세스로 부른다(훅 등록기와 같은 이유 — 이 프로세스는
+    옛 코드를 들고 있다). dry_run 이면 할 일만 보고한다.
+    """
+    script = root / "server" / "tmux_conf.py"
+    if not script.is_file():
+        return 0
+    cmd = [py, str(script), "reload"] + (["--dry-run"] if dry_run else [])
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        print("  ✗ " + tr("tmux 설정 정리 실패 — 'fsh tmux reload' 로 다시 시도하세요") + f" ({e})")
+        return 1
+    out = (p.stdout + p.stderr).rstrip()
+    if out:
+        print(out)
+    return 1 if p.returncode != 0 else 0
 
 
 def _sync_skill(root: Path, claude_dir: Path, dry_run: bool) -> int:

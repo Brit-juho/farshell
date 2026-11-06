@@ -110,8 +110,8 @@ tmux는 기본으로 마우스 모드(`set -g mouse on`)라, **그냥 드래그�
 - **`Shift`(또는 mac에서 `Option`) 누른 채 드래그**하세요. → 선택되고 자동 복사됨.
 - 우클릭 붙여넣기 / 이미지 붙여넣기는 마우스 모드와 무관하게 바로 됩니다.
 
-Shift 없이 그냥 드래그로 복사하고 싶으면 `config/vt-tmux.conf`에서
-`set -g mouse off`로 끄면 됩니다. 단, tmux 스크롤휠·pane 클릭이 사라지고 iTerm 세션에도
+Shift 없이 그냥 드래그로 복사하고 싶으면 `~/.config/vt/tmux.local.conf`에
+`set -g mouse off`를 적고 `fsh tmux reload` 하면 됩니다. 단, tmux 스크롤휠·pane 클릭이 사라지고 iTerm 세션에도
 같이 적용됩니다.
 
 ### 이미지 워크플로 (Claude Code)

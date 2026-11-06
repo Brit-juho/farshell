@@ -110,7 +110,7 @@ For browser text selection (and the automatic copy) to work:
 - **Hold `Shift` (or `Option` on mac) while dragging.** → The text is selected and copied automatically.
 - Right-click paste and image paste work right away, regardless of mouse mode.
 
-If you want plain drag to copy without Shift, set `set -g mouse off` in `config/vt-tmux.conf`.
+If you want plain drag to copy without Shift, put `set -g mouse off` in `~/.config/vt/tmux.local.conf` and run `fsh tmux reload`.
 But then the tmux scroll wheel and pane clicks stop working, and it applies to iTerm sessions too.
 
 ### Image workflow (Claude Code)

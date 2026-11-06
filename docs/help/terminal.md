@@ -62,3 +62,21 @@ fsh terminal unset            # 자동 선택으로 되돌리기
 이는 열람 차단과 재수집 방지이며, CLI 원본이나 디스크의 원본 보관 바이트를 지우는 작업은 아닙니다.
 연결이 끊긴 복제 호스트의 삭제 확인은 재연결 뒤 완료됩니다.
 작업 기록의 FarShell 위임 관계는 별도 작업 기록으로 이동하며, 에이전트 내부 자식과 구분됩니다.
+
+## tmux 설정 (`fsh tmux`)
+
+FarShell 의 tmux 는 레포의 `config/vt-tmux.conf` 를 늘 기준으로 씁니다.
+내 취향(예: `set -g mouse off`)은 그 파일을 고치지 말고 `~/.config/vt/tmux.local.conf` 에 두세요.
+레포 설정 맨 끝에서 읽혀 같은 옵션을 덮어쓰고, 파일이 없으면 조용히 건너뜁니다.
+
+```
+fsh tmux reload    # 떠 있는 tmux 에 설정을 다시 읽힘 (세션은 그대로)
+fsh tmux status    # 지금 적용 상태
+```
+
+- 예전 설치가 남긴 `~/.config/vt/tmux.conf` 사본은 `fsh tmux reload`(그리고 `fsh sync`) 가 치웁니다.
+  손대지 않은 사본은 `tmux.conf.bak-날짜` 로, 직접 고친 것은 `tmux.conf.legacy` 로 이름만 바뀌고
+  지워지지 않습니다. 고친 줄은 `tmux.local.conf` 로 옮기세요.
+- 다시 읽어도 설정에서 **지운** 값은 실행 중인 tmux 에 남습니다. 완전히 새로 읽히려면
+  tmux 서버를 재시작해야 하고, 그러면 세션이 모두 닫힙니다.
+- `fsh doctor` 의 「tmux 설정」 줄이 같은 상태를 보여 줍니다.

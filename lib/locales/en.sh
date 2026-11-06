@@ -174,9 +174,10 @@ _t_en_lookup() {
     'tmux 3.2+ 필요 (현재: {ver})') _T_OUT='tmux 3.2+ required (current: {ver})' ;;
     'tmux 3.2+ 필요 (현재: {ver}). 직접 실행:') _T_OUT='Needs tmux 3.2+ (have: {ver}). Run it directly:' ;;
     'tmux pane 밖입니다 — pane id 없이 cwd로만 판정됩니다') _T_OUT='Not inside a tmux pane — matching by cwd only, without a pane id' ;;
-    'tmux 격리 config → ~/.config/vt/tmux.conf') _T_OUT='Isolated tmux config → ~/.config/vt/tmux.conf' ;;
     'tmux 리사이즈 안정화') _T_OUT='tmux resize stability' ;;
     'tmux 미설치') _T_OUT='tmux is not installed' ;;
+    'tmux 설정') _T_OUT='tmux config' ;;
+    'tmux 설정 정리 실패 — '\''fsh tmux reload'\''로 다시 시도할 수 있습니다') _T_OUT='Couldn'\''t tidy up the tmux config — you can retry with '\''fsh tmux reload'\''' ;;
     'tmux 세션 '\''{name}'\'' 생성 (소켓: {socket})') _T_OUT='Created tmux session '\''{name}'\'' (socket: {socket})' ;;
     'tmux 세션 '\''{name}'\'' 생성 실패') _T_OUT='Couldn'\''t create tmux session '\''{name}'\''' ;;
     'tmux 세션 '\''{name}'\'' 없음') _T_OUT='tmux session '\''{name}'\'' not found' ;;
@@ -400,6 +401,7 @@ _t_en_lookup() {
     '사용법: fsh run "명령어"') _T_OUT='Usage: fsh run "command"' ;;
     '사용법: fsh shell-init [zsh|bash|fish|pwsh]') _T_OUT='Usage: fsh shell-init [zsh|bash|fish|pwsh]' ;;
     '사용법: fsh terminal [show|set <{choices}>|unset]') _T_OUT='Usage: fsh terminal [show|set <{choices}>|unset]' ;;
+    '사용법: fsh tmux [status|reload [--dry-run]]') _T_OUT='Usage: fsh tmux [status|reload [--dry-run]]' ;;
     '사용법: fsh tunnel [status|list|hook|restart|watchdog|expose <port> [라벨] [--mode public|session|pin] [--ttl 1h|24h|7d|30d] [--auto-renew|--no-auto-renew]|unexpose <port>|pin <port>|mode <port> <mode>|auto <port> <on|off>|setup|teardown|switch <anon|named>]') _T_OUT='Usage: fsh tunnel [status|list|hook|restart|watchdog|expose <port> [label] [--mode public|session|pin] [--ttl 1h|24h|7d|30d] [--auto-renew|--no-auto-renew]|unexpose <port>|pin <port>|mode <port> <mode>|auto <port> <on|off>|setup|teardown|switch <anon|named>]' ;;
     '사용법: fsh tunnel auto <port> <on|off>') _T_OUT='Usage: fsh tunnel auto <port> <on|off>' ;;
     '사용법: fsh tunnel mode <port> <public|session|pin>') _T_OUT='Usage: fsh tunnel mode <port> <public|session|pin>' ;;
@@ -667,6 +669,7 @@ _t_en_lookup() {
     '템플릿 '\''{name}'\''을 찾을 수 없습니다') _T_OUT='Template '\''{name}'\'' not found' ;;
     '토큰 설정됨') _T_OUT='token set' ;;
     '토픽 목록: {names}') _T_OUT='Topics: {names}' ;;
+    '판정하지 못했습니다 — fsh tmux status') _T_OUT='Couldn'\''t check — fsh tmux status' ;;
     '패키지 설치 중...') _T_OUT='Installing packages...' ;;
     '포트 {port} 로 열린 터널이 없습니다') _T_OUT='No tunnel is open for port {port}' ;;
     '포트 {port} 에 노출 정책이 없습니다 — 먼저 fsh tunnel expose {port}') _T_OUT='Port {port} isn'\''t exposed — run fsh tunnel expose {port} first' ;;

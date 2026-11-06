@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+- **tmux config changes in the repo now actually reach tmux.** The installer used to copy `config/vt-tmux.conf` to `~/.config/vt/tmux.conf` once, and that copy took precedence forever, so later changes (for example the 2.x resize fix) never applied. fsh now always uses the repo config (`VT_TMUX_CONF` still replaces it entirely); personal settings go in `~/.config/vt/tmux.local.conf`, read at the end of it. `fsh tmux reload` (also run by `install.sh` and `fsh sync`) moves the old copy aside — an untouched copy to `tmux.conf.bak-<date>`, an edited one to `tmux.conf.legacy` with a note to move your lines — and re-reads the config into a running tmux without closing sessions. `fsh doctor` gains a "tmux config" check. Settings you removed stay in a running tmux until its server restarts.
+
 ### Changed
 - On macOS, `fsh start` launches the server (and a tmux server it creates) through a small `FarShell.app` launcher, so macOS permission prompts say **FarShell** instead of `python3.14`, and an answer is remembered across restarts, releases and Python upgrades. The app is built once under `~/.vt/app` and rebuilt only when its source changes. `VT_MACOS_APP=0` keeps the old behaviour. An already running tmux server keeps its old permission owner until it is restarted.
 - On macOS, automatic scans no longer walk into the locations macOS guards with a permission prompt (Desktop, Documents, Downloads, Pictures, Movies, Music, `~/Library`, `/Volumes`), so restarting the server no longer raises a burst of prompts. `VT_SCAN_INCLUDE_PROTECTED=1` puts them back; opening such a folder in the file tab still works.
