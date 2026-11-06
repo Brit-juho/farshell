@@ -21,6 +21,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - CI skips pushes whose head commit is a release commit (its code is the already-tested parent), and cancels a running workflow when a newer push to the same branch arrives. The Release workflow now refuses a tag whose commit (or, for a release commit, its parent) has no successful CI run.
 
 ### Added
+- `frontend/tests/perf/`: a file-viewer render benchmark (headless Chrome over the DevTools protocol, no new dependency; desktop and 4x CPU-throttled phone profiles, 10 runs each). It renders the current viewer code against generated files, diffs and trees served by a small fake server — no real code or paths, never the running server. Not part of CI. Baseline: `docs/ref/session-view-measurements.md` §7.
+- `fsguard` gains the write-side building blocks for a future editor, still closed: `open_resolved_parent` returns `(parent dir fd, name)` opened one component at a time without following links, and `resolve_for_write` adds a write-only refusal of execution-config folders (`.github`, `.gitlab`, `.husky`, `.devcontainer`, `.vscode`, `.circleci`) on top of every read rule. There is no write API; `resolve_for_write` refuses everything until one exists.
 - The 첨부 (attachments) tab has a **pin** button on each row. A pinned file is kept out of the 30-day (`VT_FILES_TTL_DAYS`) and total-size cleanup. The store already honoured a `pin` flag, but nothing could set it; `POST /api/files/{id}/pin` now does.
 
 ### Fixed
@@ -28,6 +30,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **Security:** sharing a file from the 파일 tab (`/api/fs/share-import`) could copy a file from outside the browse root if a parent directory was swapped for a symlink between the boundary check and the open (`O_NOFOLLOW` only covers the last path component). The file is now opened one component at a time without following links (`fsguard.open_resolved`); a swap is refused with 400.
 - The 파일 tab's "insert path into terminal" typed the path without shell quoting, so a file named like `a$(cmd).txt` in a cloned repository ran `cmd` when you pressed Enter. It now uses the same quoting as upload inserts.
 - Uploads, share-link downloads and PIN checks no longer stall the whole server while the file store's lock is held (for example by `fsh files`): the store calls and the upload's disk copy run off the event loop.
+- **Security:** a screen switched to another Mac (host switch) lost the security headers a route set on its response. The relay passed only content headers, so a response's own `Content-Security-Policy` (such as a preview's `sandbox` policy) and `X-Content-Type-Options` were replaced by this server's defaults (`frame-ancestors 'none'` only). Both now pass through the relay (repeated CSP headers are kept, joined), and `If-Range` now travels with `Range`.
+- **Security (internal):** `fsguard.open_resolved` refuses a path with a `..` component anywhere, not only at the end, and relative paths. Every caller already passed resolved paths, so nothing was reachable; the check makes it part of the contract.
 - `API.md`: `/api/fs/file` refuses deny-listed paths (403) rather than masking them, `/api/fs/search` documents its `timeout` field, and the `fs_unavailable` 503 is described.
 
 ---

@@ -749,7 +749,7 @@ WRITE_DENY_DIR_PARTS = frozenset({
     ".github", ".gitlab", ".husky", ".devcontainer", ".vscode", ".circleci",
 })
 
-# 쓰기 API는 아직 없다. 쓰기 경계 값(`VT_WRITE_ROOTS`)과 승격 요구를 정하는 단계에서 이 값을 연다.
+# 쓰기 API는 아직 없다. 쓰기 경계(읽기 경계와 따로 둘 설정 값)와 승격 요구를 정하는 단계에서 이 값을 연다.
 # 그 전까지 `resolve_for_write`는 판정을 다 한 뒤에도 거부한다 — 쓰기 라우트가 먼저 생겨도 열리지 않게.
 WRITES_ENABLED = False
 
