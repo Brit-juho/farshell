@@ -17,6 +17,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - CI runs the server tests in parallel across the runner's cores (`pytest-xdist`, one file per worker). A tmux test that read a freshly created pane's path before tmux reported it now waits for the path first.
 - CI skips pushes whose head commit is a release commit (its code is the already-tested parent), and cancels a running workflow when a newer push to the same branch arrives. The Release workflow now refuses a tag whose commit (or, for a release commit, its parent) has no successful CI run.
 
+### Added
+- The 첨부 (attachments) tab has a **pin** button on each row. A pinned file is kept out of the 30-day (`VT_FILES_TTL_DAYS`) and total-size cleanup. The store already honoured a `pin` flag, but nothing could set it; `POST /api/files/{id}/pin` now does.
+
+### Fixed
+- **Security:** a PIN share's one-time download cookie worked more than once. The server only checked it and asked the browser to delete it, so for 60 seconds the same value downloaded the file again, from several requests at once or from a copied cookie. The cookie is now checked and consumed in one step under the store lock; if the transfer fails the PIN is asked again. A `once` share is consumed in the same step, so concurrent requests no longer both get the file.
+- **Security:** sharing a file from the 파일 tab (`/api/fs/share-import`) could copy a file from outside the browse root if a parent directory was swapped for a symlink between the boundary check and the open (`O_NOFOLLOW` only covers the last path component). The file is now opened one component at a time without following links (`fsguard.open_resolved`); a swap is refused with 400.
+- The 파일 tab's "insert path into terminal" typed the path without shell quoting, so a file named like `a$(cmd).txt` in a cloned repository ran `cmd` when you pressed Enter. It now uses the same quoting as upload inserts.
+- Uploads, share-link downloads and PIN checks no longer stall the whole server while the file store's lock is held (for example by `fsh files`): the store calls and the upload's disk copy run off the event loop.
+- `API.md`: `/api/fs/file` refuses deny-listed paths (403) rather than masking them, `/api/fs/search` documents its `timeout` field, and the `fs_unavailable` 503 is described.
+
 ---
 
 ## [2.8.1] — 2026-11-05
