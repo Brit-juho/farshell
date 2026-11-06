@@ -852,7 +852,7 @@ def test_파일이_모달이_아니라_페인으로_열린다(page):
     터미널 위를 덮는다)."""
     target = str(ROOT / "VERSION")
     page.evaluate("(p) => window.openFileInPane(p)", target)
-    page.wait_for_selector(".vt-pane-viewer .vt-vw-cl", timeout=15000)
+    page.wait_for_selector(".vt-pane-viewer .cm-line", timeout=15000)
     got = page.evaluate(
         """() => {
           const body = document.querySelector('.vt-pane-viewer');
@@ -865,7 +865,7 @@ def test_파일이_모달이_아니라_페인으로_열린다(page):
           }).length;
           return {
             modal: !!document.getElementById('vt-viewer'),
-            lines: body.querySelectorAll('.vt-vw-cl').length,
+            lines: body.querySelectorAll('.cm-line').length,
             // 온보딩은 남아 있어도 되지만 **덮으면 안 된다** — 실제 히트 테스트로 본다.
             covered: document.elementFromPoint(pr.left + pr.width / 2, pr.top + pr.height / 2)
                        ?.closest('.vt-onboarding') != null,
@@ -898,7 +898,7 @@ def test_파일_오버레이는_터미널_칸수를_바꾸지_않는다(isolated
         before = _term_size(page, sid)
 
         page.evaluate("(p) => window.openFile(p)", target)
-        page.wait_for_selector("#vt-file .vt-vw-cl", timeout=15000)
+        page.wait_for_selector("#vt-file .cm-line", timeout=15000)
         page.wait_for_timeout(500)
         opened = _term_size(page, sid)
         geo = page.evaluate(
@@ -927,7 +927,7 @@ def test_파일_오버레이는_터미널_칸수를_바꾸지_않는다(isolated
         # 대조군 — pane 표면은 터미널 옆을 쪼개므로 칸 수가 줄어야 한다.
         page.evaluate("() => window.vtSettingsSet('viewer.surface', 'pane')")
         page.evaluate("(p) => window.openFile(p)", target)
-        page.wait_for_selector(".vt-pane-viewer .vt-vw-cl", timeout=15000)
+        page.wait_for_selector(".vt-pane-viewer .cm-line", timeout=15000)
         page.wait_for_timeout(600)
         as_pane = _term_size(page, sid)
         assert as_pane[0] < before[0], f"대조군: pane으로 열면 cols가 줄어야 한다: {before} → {as_pane}"
@@ -945,7 +945,7 @@ def test_떠_있는_창은_헤더로_옮겨지고_화면_밖으로_안_나간다
     page.wait_for_timeout(300)
     try:
         page.evaluate("(p) => window.openFile(p)", str(ROOT / "VERSION"))
-        page.wait_for_selector("#vt-file.surface-float .vt-vw-cl", timeout=15000)
+        page.wait_for_selector("#vt-file.surface-float .cm-line", timeout=15000)
         card = page.locator("#vt-file .vt-viewer-card")
         start = card.bounding_box()
         head = page.locator("#vt-file .vt-file-title").bounding_box()

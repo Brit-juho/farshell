@@ -4,7 +4,7 @@ import { vtFetch } from '../../core/api.js';
 import { isMac } from '../../core/env.js';
 import { _setMsg } from './state.js';
 import { t } from '../../core/i18n.js';
-import { _hl } from './file.js';
+import { _hl, ensureHljs } from './file.js';
 // UMD 전역 VTDiffLex — 뷰어 전용이라 panels 청크에서 평가한다(마지막 import일 것: file.js 참고).
 import '../../lib/difflex.js';
 
@@ -154,6 +154,9 @@ async function _submitDiffAnnotate(box, ta, filePath, lineNo) {
 // 파일 하나의 diff. status 목록에서 특정 파일을 눌렀을 때 쓴다.
 // N35 §6 — "어디에 그릴지"를 인자로 받는다(dock 소스컨트롤 탭이 유일한 소비처).
 export async function renderFileDiff(container, repo, file, staged, opts = {}) {
+  // 하이라이터는 diff가 직접 부른다(fire-and-forget, 아래 요청과 겹친다). 전에는 파일 보기가 불러 둔 것을
+  // 같이 썼다. 파일 보기가 CodeMirror로 바뀐 뒤(단계 2)로는 여기서 부르지 않으면 diff가 계속 흑백이다.
+  ensureHljs();
   container.innerHTML = `<div class="vt-vw-loading">${t('git diff 실행 중…')}</div>`;
 
   let d;

@@ -111,25 +111,13 @@
 }
 .vt-vw-size{ color:var(--sub); font:400 var(--fs-2xs) var(--mono); flex:0 0 auto; }
 
-/* 코드 본문 — 가로 스크롤은 이 안에서만. 페이지 전체가 밀리면 안 된다. */
-/* width:max-content — 줄이 화면 폭에 묶이면 가로로 스크롤했을 때 줄 hover 강조가 첫 화면
-   폭에서 끊긴다(diff의 .vt-vw-dfile과 같은 문제). 가장 긴 줄에 맞추고 짧을 땐 100%. */
-.vt-vw-code{ font:400 var(--fs-xs)/1.55 var(--mono); padding:calc(var(--spacing) * 1.5) 0; width:max-content; min-width:100%; box-sizing:border-box; }
-.vt-vw-cl,.vt-vw-dl{ display:flex; align-items:flex-start; white-space:pre; }
-.vt-vw-cl:hover{ background:var(--menu-hover); }
+/* 줄 단위 행(diff). 파일 본문은 아래 「코드 뷰어 본문 — CodeMirror 6」. */
+.vt-vw-dl{ display:flex; align-items:flex-start; white-space:pre; }
 .vt-vw-no{
   flex:0 0 auto; min-width:44px; padding:0 calc(var(--spacing) * 2); text-align:right;
   color:var(--sub); user-select:none;
   /* opacity 로 --sub 를 한 번 더 흐리면 --crust 배경 대비가 2:1 밑으로 떨어져 뺐다. */
 }
-/* 코드 본문(파일 보기)만 sticky — diff는 add/del 배경 틴트가 번호 칸 아래까지
-   깔리므로 불투명 sticky 배경을 주면 그 틴트를 가린다. */
-.vt-vw-code .vt-vw-no{
-  position:sticky; left:0; background:var(--crust); z-index:1;
-}
-/* --menu-hover는 반투명(흰색 9%)이다. 번호 칸 배경을 그걸로 바꾸면 sticky 칸 뒤로 지나가는
-   코드 글자가 비쳐 번호와 겹쳐 보인다 — 불투명 바닥(--crust) 위에 강조색을 한 겹 얹는다. */
-.vt-vw-cl:hover .vt-vw-no{ background:linear-gradient(var(--menu-hover), var(--menu-hover)), var(--crust); }
 .vt-vw-sign{ flex:0 0 auto; width:14px; text-align:center; user-select:none; color:var(--sub); font-weight:600; }
 .vt-vw-dl.add .vt-vw-sign{ color:var(--ok); }
 .vt-vw-dl.del .vt-vw-sign{ color:var(--err); }
@@ -198,6 +186,35 @@
 .vt-vw-tx .hljs-addition{ color:var(--ok); }
 .vt-vw-tx .hljs-emphasis{ font-style:italic; }
 .vt-vw-tx .hljs-strong{ font-weight:600; }
+
+/* 코드 뷰어 본문 — CodeMirror 6, 읽기 전용(panels/viewer/editor.js).
+   편집기 틀(줄 번호 칸·찾기 창·일치 표시)은 editor.js의 _THEME이 토큰 변수로 정한다 — CM 기본 테마는 @layer
+   밖이라 이 파일(@layer legacy)의 규칙이 명시도와 무관하게 진다. 여기는 CM이 건드리지 않는 것만 둔다:
+   글자 크기, 하이라이트 색(tok-*, 위 hljs 매핑과 같은 짝 — 파일 보기와 diff의 색이 같아야 한다), 호스트.
+   스크롤은 바깥 상자(.vt-vw-body·페인 본문)가 하고 편집기는 내용만큼 늘어난다. 호스트가 overflow:auto면
+   찾기 창(sticky)이 호스트에 묶여 화면 밖으로 밀려나므로 편집기가 든 호스트는 visible로 둔다. 가로 스크롤은
+   편집기 안(.cm-scroller)에서 하고 줄 번호 칸은 그 안에서 왼쪽에 붙어 있다. */
+.vt-vw-code-pane.vt-vw-cm{ overflow:visible; }
+.vt-vw-cm .cm-editor{ font:400 var(--fs-xs)/1.55 var(--mono); }
+.vt-vw-cm .tok-keyword,.vt-vw-cm .tok-bool,.vt-vw-cm .tok-atom,
+.vt-vw-cm .tok-literal,.vt-vw-cm .tok-typeName{ color:var(--acc); }
+.vt-vw-cm .tok-string,.vt-vw-cm .tok-string2{ color:var(--ok); }
+.vt-vw-cm .tok-number{ color:var(--warn); }
+.vt-vw-cm .tok-comment{ color:var(--sub); font-style:italic; }
+.vt-vw-cm .tok-className,.vt-vw-cm .tok-definition,.vt-vw-cm .tok-macroName,
+.vt-vw-cm .tok-labelName,.vt-vw-cm .tok-heading{ color:var(--info); }
+.vt-vw-cm .tok-propertyName,.vt-vw-cm .tok-variableName{ color:var(--txt); }
+.vt-vw-cm .tok-meta{ color:var(--sub); }
+.vt-vw-cm .tok-deleted,.vt-vw-cm .tok-invalid{ color:var(--err); }
+.vt-vw-cm .tok-inserted{ color:var(--ok); }
+.vt-vw-cm .tok-link,.vt-vw-cm .tok-url{ color:var(--info); text-decoration:underline; }
+.vt-vw-cm .tok-emphasis{ font-style:italic; }
+.vt-vw-cm .tok-strong,.vt-vw-cm .tok-heading{ font-weight:600; }
+/* 편집기 청크를 못 받았을 때의 대체 표시(일반 텍스트). */
+.vt-vw-plain{
+  margin:0; padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3);
+  font:400 var(--fs-xs)/1.55 var(--mono); color:var(--txt); white-space:pre;
+}
 
 /* git status / stage / commit — D16 */
 .vt-vw-git{ display:flex; flex-direction:column; }
@@ -298,8 +315,9 @@
     animation:vtSheetIn .18s ease-out;
     padding-bottom:env(safe-area-inset-bottom,0px);
   }
-  .vt-vw-code,.vt-vw-dl{ font-size:var(--fs-2xs); }
+  .vt-vw-dl,.vt-vw-cm .cm-editor,.vt-vw-plain{ font-size:var(--fs-2xs); }
   .vt-vw-no{ min-width:32px; padding:0 calc(var(--spacing) * 1); }
+  .vt-vw-cm{ --vt-cm-gutter-min:32px; --vt-cm-gutter-pad:calc(var(--spacing) * 1); }
 }
 
 /* -------------------------------------------------------------------------

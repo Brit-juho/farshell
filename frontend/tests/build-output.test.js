@@ -174,6 +174,28 @@ test('에이전트 공유의 대화상자와 통합 승인함(모달·권한·�
 });
 
 
+test('코드 뷰어 본문(CodeMirror 6)은 editor 지연 청크에만 있고, panels는 import()로만 받는다', () => {
+  // 파일 개편 단계 2. vite.config.js의 editor 규칙이 빠지면 CM(약 590KB)이 panels로 가거나 해시 붙은 청크가
+  // 생긴다. 언어 팩은 언어마다 고정 이름 청크다(연 언어만 받는다).
+  const editorJs = fs.readFileSync(path.join(DIST, 'editor.js'), 'utf8');
+  assert.match(editorJs, /class EditorView\b/);
+  assert.match(editorJs, /function mountEditor\(/);
+  for (const [name, src] of [['core.js', coreJs], ['app.js', appJs], ['panels.js', panelsJs]]) {
+    assert.doesNotMatch(src, /class EditorView\b/, `${name}에 CodeMirror가 들어갔다`);
+  }
+  assert.match(panelsJs, /import\("\.\/editor\.js"\)/);
+  assert.doesNotMatch(panelsJs, /from\s*["']\.\/editor\.js["']/, 'panels.js가 editor.js를 정적으로 import한다');
+  assert.doesNotMatch(coreJs, /["']\.\/editor(?:-[a-z]+)?\.js["']/, 'core.js가 편집기 청크를 참조한다');
+  for (const lang of ['js', 'css', 'html', 'md', 'py', 'java', 'go', 'yaml', 'json', 'sql', 'legacy']) {
+    assert.ok(fs.existsSync(path.join(DIST, `editor-${lang}.js`)), `editor-${lang}.js가 없다`);
+    assert.doesNotMatch(editorJs, new RegExp(`from\\s*["']\\./editor-${lang}\\.js["']`),
+      `editor.js가 editor-${lang}.js를 정적으로 import한다`);
+  }
+  // 해시 붙은 청크가 새로 생기지 않았다(ADR-26 고정 이름).
+  const hashed = fs.readdirSync(DIST).filter((f) => /-[A-Za-z0-9_]{8}\.js$/.test(f));
+  assert.deepStrictEqual(hashed, []);
+});
+
 test('core never statically imports the lazy shell or history chunks', () => {
   assert.doesNotMatch(coreJs, /from\s*["']\.\/(shell|history)\.js["']/,
     'a static back edge evaluates lazy listeners before core state initialization');

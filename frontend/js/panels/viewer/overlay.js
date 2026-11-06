@@ -252,9 +252,11 @@ function _wireFloatDrag(el, handle, mode) {
 }
 
 // Esc는 vim·less·fzf에 가야 하는 키다. 포커스가 뷰어 안에 있을 때만 닫는다.
+// 코드 본문(CodeMirror)의 찾기·줄 이동 창에 포커스가 있으면 그 창이 Esc를 받아 닫는다 — 뷰어까지 닫지 않는다.
 function _escClosesOnlyWhenFocused() {
   const el = document.getElementById(PANEL_ID);
-  return !(el && el.contains(document.activeElement));
+  const active = document.activeElement;
+  return !(el && el.contains(active)) || !!(active && active.closest && active.closest('.cm-panel'));
 }
 
 export function openFileOverlay(path) {
