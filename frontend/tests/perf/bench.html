@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Viewer Perf Bench</title>
+<!-- npm run build 결과. 없으면 404 로 넘어가고 CSS 없이 잰다(run.mjs 가 경고한다). -->
+<link rel="stylesheet" href="/static/dist/app.css">
+<style>
+  /* 뷰어 sheet 와 비슷한 크기의 스크롤 상자. 색·글꼴은 app.css 가 정한다. */
+  html, body { margin: 0; height: 100%; }
+  .bench-row { display: flex; height: 100%; }
+  .bench-box { flex: 1 1 0; min-width: 0; height: 100%; overflow: auto; }
+</style>
+<script>
+  // 모듈보다 먼저 — long task 는 처음부터 모으고, 파일 감시 WebSocket 은 가짜로 바꾼다
+  // (트리 시나리오가 "디스크가 바뀌었다" 알림을 직접 보낸다).
+  window.__longTasks = [];
+  try {
+    new PerformanceObserver((list) => {
+      for (const e of list.getEntries()) window.__longTasks.push({ start: e.startTime, dur: e.duration });
+    }).observe({ type: 'longtask', buffered: true });
+  } catch (_) { /* long task 미지원 — 값이 0 으로 나온다 */ }
+
+  window.__fakeSockets = [];
+  window.WebSocket = class FakeWebSocket {
+    constructor(url) {
+      this.url = url;
+      this.readyState = 0;
+      window.__fakeSockets.push(this);
+      setTimeout(() => { this.readyState = 1; this.onopen && this.onopen({}); }, 0);
+    }
+    send(text) {
+      const msg = JSON.parse(text);
+      if (msg.type === 'watch') {
+        setTimeout(() => this.onmessage && this.onmessage({ data: JSON.stringify({ type: 'watching', rejected: [] }) }), 0);
+      }
+    }
+    close() { this.readyState = 3; }
+  };
+  window.__fakeWsEmit = (subs) => {
+    for (const ws of window.__fakeSockets) {
+      if (ws.readyState === 1 && ws.onmessage) ws.onmessage({ data: JSON.stringify({ type: 'changed', subs }) });
+    }
+  };
+</script>
+<script type="module" src="/perf/bench.mjs"></script>
+</head>
+<body>
+<div class="bench-row" id="bench-row"></div>
+</body>
+</html>
