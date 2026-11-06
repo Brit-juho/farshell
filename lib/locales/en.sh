@@ -64,6 +64,8 @@ _t_en_lookup() {
     'FarShell 서버가 실행 중이 아닙니다 — 리스너는 서버 프로세스 안에서만 뜹니다. '\''fsh start'\'' 먼저 실행하세요.') _T_OUT='The FarShell server isn'\''t running. Listeners only start inside the server process; run '\''fsh start'\'' first.' ;;
     'FarShell 설치 — 프로필: {profile}') _T_OUT='FarShell install - profile: {profile}' ;;
     'FarShell 훅 {n}개 중복(앱 가져오기) — 이벤트가 두 번 들어옴. '\''fsh hooks dedupe'\''') _T_OUT='{n} duplicate FarShell hook(s) (imported by the app) — events arrive twice. Run '\''fsh hooks dedupe'\''' ;;
+    'FarShell.app 을 만들 수 없습니다(cc·codesign 필요) — 권한 창에 Python 이름으로 뜹니다') _T_OUT='Cannot build FarShell.app (needs cc and codesign) — permission prompts show the Python name' ;;
+    'FarShell.app 이 없거나 낡았습니다 — fsh restart 가 다시 만듭니다') _T_OUT='FarShell.app is missing or out of date — fsh restart rebuilds it' ;;
     'Ghostty config 주석 추가 → {path}') _T_OUT='Added a comment to the Ghostty config → {path}' ;;
     'Ghostty → {path} 에 다음 추가:') _T_OUT='Ghostty → add to {path}:' ;;
     'Ghostty 이미 등록됨: {path}') _T_OUT='Ghostty already registered: {path}' ;;
@@ -141,6 +143,7 @@ _t_en_lookup() {
     'localhost 범위: 이 맥에서만 접속 가능 (터널 없음)') _T_OUT='localhost scope: reachable from this Mac only (no tunnel)' ;;
     'localhost:{port} 에 응답하는 서비스가 없습니다 — 터널은 띄우지만 앱을 먼저 켜세요') _T_OUT='Nothing is responding on localhost:{port}. The tunnel will start anyway, but start your app first' ;;
     'localhost:{port} 터널 시작 중...') _T_OUT='Starting tunnel for localhost:{port}...' ;;
+    'macOS 권한 이름') _T_OUT='macOS permission name' ;;
     'macOS 기본 python3는 3.9라 그대로는 동작하지 않습니다:') _T_OUT='The macOS default python3 is 3.9, which won'\''t work as is:' ;;
     'ngrok URL 대기 시간 초과. 로그: {log}') _T_OUT='Timed out waiting for the ngrok URL. Log: {log}' ;;
     'ngrok 도메인') _T_OUT='ngrok domain' ;;
@@ -268,6 +271,7 @@ _t_en_lookup() {
     '기존 CLAUDE.md → CLAUDE.md.bak으로 백업') _T_OUT='Backed up existing CLAUDE.md → CLAUDE.md.bak' ;;
     '기존 레포 사용: {dir}') _T_OUT='Using existing repo: {dir}' ;;
     '기존 설정 유지 → ~/.vt.env') _T_OUT='Keeping existing config → ~/.vt.env' ;;
+    '꺼 둠 (VT_MACOS_APP=0) — 권한 창에 Python 이름으로 뜹니다') _T_OUT='Off (VT_MACOS_APP=0) — permission prompts show the Python name' ;;
     '꺼 둠 (VT_SERVER_WATCHDOG=0)') _T_OUT='Off (VT_SERVER_WATCHDOG=0)' ;;
     '꺼져 있는데 저장된 pair {n}개가 남아 있습니다 — 권한은 효력이 없습니다') _T_OUT='The feature is off but {n} stored pair(s) remain - their permissions have no effect' ;;
     '꺼져 있음 — 켜기: git config core.hooksPath scripts/githooks') _T_OUT='Off — turn on with: git config core.hooksPath scripts/githooks' ;;
@@ -429,6 +433,7 @@ _t_en_lookup() {
     '서버/음성 데몬 종료 (터널은 그대로 — URL 유지)') _T_OUT='Server and voice daemons stopped (tunnel kept — URL unchanged)' ;;
     '서버/터널/음성 데몬 종료') _T_OUT='Server, tunnel and voice daemons stopped' ;;
     '서버:        ') _T_OUT='Server:       ' ;;
+    '서버가 FarShell.app 으로 떠 있습니다 — 권한 창에 FarShell 로 뜹니다') _T_OUT='The server runs under FarShell.app — permission prompts say FarShell' ;;
     '서버가 VT_AUTHZ_ENFORCE=peer 로 떠 있으면 이 명령은 서버에 변경을 요청합니다 (unix socket).') _T_OUT='When the server runs with VT_AUTHZ_ENFORCE=peer, these commands ask the server to make the change (unix socket).' ;;
     '서버가 꺼져 있거나 소켓을 쓸 수 없거나 그 설정이 꺼져 있으면 예전처럼 ~/.vt/hosts.json 에 바로 씁니다.') _T_OUT='If the server is down, the socket is unusable or that setting is off, it writes ~/.vt/hosts.json directly as before.' ;;
     '서버가 떠 있지 않을 수 있습니다: fsh status') _T_OUT='The server may not be running: fsh status' ;;
@@ -607,6 +612,7 @@ _t_en_lookup() {
     '중단됨') _T_OUT='Aborted' ;;
     '중복 해제: rm {lock}') _T_OUT='To override: rm {lock}' ;;
     '중지') _T_OUT='stopped' ;;
+    '지금 서버는 예전 방식(Python 직접)으로 떠 있습니다 — fsh restart 후 적용됩니다') _T_OUT='The server was started the old way (Python directly) — it applies after fsh restart' ;;
     '지금 실행 중인 앱(iTerm/Terminal/Claude)의 '\''iTerm'\'' 항목을 켜세요.') _T_OUT='turn on '\''iTerm'\'' for the app you'\''re running now (iTerm/Terminal/Claude).' ;;
     '지원 emulator 없음 — gnome-terminal/konsole 등 설치 권장') _T_OUT='no supported emulator — install gnome-terminal, konsole or similar' ;;
     '지원되지 않는 --network 범위: {mode}') _T_OUT='Unsupported --network scope: {mode}' ;;
