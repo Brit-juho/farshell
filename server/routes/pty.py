@@ -346,37 +346,52 @@ async def upload_file(request: Request, file: UploadFile = File(...), session_id
         blocked = await authz_leases.enforce_write(request, [cwd] if cwd else [], op="upload")
         if blocked is not None:
             return blocked
+    # 디스크 쓰기와 저장소 편입(flock, 최대 5초 대기)은 스레드에서 한다. 이벤트 루프 위에서 하면 큰 파일 복사나
+    # CLI가 쥔 잠금 동안 터미널 WebSocket까지 서버 전체가 멈춘다.
+    try:
+        result = await asyncio.to_thread(_store_upload, file.file, file.filename or "", session_id or None)
+    except OSError as e:
+        logger.warning(f"upload 실패: {e}")
+        return JSONResponse({"error": "write failed"}, status_code=500)
+    if result is None:
+        return JSONResponse(
+            {"error": "file too large", "max_mb": file_store.MAX_UPLOAD_BYTES // (1024 * 1024)},
+            status_code=413,
+        )
+    item, path, size = result
+    return {"ok": True, "id": item["id"], "path": path, "size": size}
+
+
+def _store_upload(src, filename: str, session: str | None):
+    """받아 둔 업로드(`UploadFile.file`)를 저장소로 옮긴다. blocking — to_thread로 부른다.
+
+    상한을 넘으면 None, 아니면 (항목, 실경로, 크기). 청크 단위로 복사하며 상한을 건다 — 예전엔 await file.read()로
+    전체를 메모리에 올려서 큰 파일 하나로 서버(=내 맥)를 OOM으로 밀어낼 수 있었다."""
     file_store.files_dir().mkdir(parents=True, exist_ok=True)
     try:
         os.chmod(file_store.files_dir(), 0o700)
     except OSError:
         pass
     tmp = file_store.files_dir() / f".tmp-{uuid.uuid4().hex}"
-    # 청크 단위로 받으면서 상한을 건다. 예전엔 await file.read()로 전체를 메모리에
-    # 올려서 큰 파일 하나로 서버(=내 맥)를 OOM으로 밀어낼 수 있었다.
     size = 0
     try:
         fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "wb") as out:
             while True:
-                chunk = await file.read(1024 * 1024)
+                chunk = src.read(1024 * 1024)
                 if not chunk:
                     break
                 size += len(chunk)
                 if size > file_store.MAX_UPLOAD_BYTES:
                     out.close()
                     tmp.unlink(missing_ok=True)
-                    return JSONResponse(
-                        {"error": "file too large", "max_mb": file_store.MAX_UPLOAD_BYTES // (1024 * 1024)},
-                        status_code=413,
-                    )
+                    return None
                 out.write(chunk)
-    except OSError as e:
-        logger.warning(f"upload 실패: {e}")
+        item = file_store.add_from_upload(tmp, filename, size, session=session)
+    except BaseException:
         tmp.unlink(missing_ok=True)
-        return JSONResponse({"error": "write failed"}, status_code=500)
-    item = file_store.add_from_upload(tmp, file.filename or "", size, session=session_id or None)
-    return {"ok": True, "id": item["id"], "path": str(file_store.real_path_for(item["id"])), "size": size}
+        raise
+    return item, str(file_store.real_path_for(item["id"])), size
 
 
 # --------------------------------------------------------------------------

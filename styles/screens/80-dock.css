@@ -395,7 +395,7 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 .vt-fl-row-progress .vt-fl-gauge-fill{ transition:width .15s linear; }
 /* 2.1.6 — 모양·상태는 `.vt-btn.sm.quiet`가 맡는다. 여기 남은 셋만 이 버튼의
    고유한 성질이다.
-   - 44px은 못 주더라도(행 5개가 392px dock 안에 들어가야 한다) 터치 표적이
+   - 44px은 못 주더라도(행의 아이콘 6개가 392px dock 안에 들어가야 한다) 터치 표적이
      28px 아래로는 안 내려가게 한다.
    - 안쪽이 SVG 하나뿐이라 정사각이어야 한다(좌우 패딩 0).
    - `.rm`은 파괴적 동작이라 hover에서만 에러색이 된다. */

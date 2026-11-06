@@ -15,6 +15,7 @@ API가 절대경로를 그대로 받아 fsguard 없이 `is_relative_to` 하나�
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
 import mimetypes
@@ -240,6 +241,20 @@ def delete_many(file_ids: list[str]) -> dict:
     return {"deleted": deleted, "missing": missing}
 
 
+def set_pin(file_id: str, pinned: bool) -> dict | None:
+    """고정(pin) 켜기/끄기. 고정된 파일은 TTL·용량 정리에서 빠진다(`_is_protected`). 없으면 None.
+
+    공유 PIN(`shares[].pinHash`)과는 이름만 같고 무관하다 — 이쪽은 「자동 삭제하지 마라」는 표시다."""
+    with _locked():
+        items = _read_unlocked()
+        item = next((x for x in items if x["id"] == file_id), None)
+        if item is None:
+            return None
+        item["pin"] = bool(pinned)
+        _write_unlocked(items)
+        return dict(item)
+
+
 def _is_protected(item: dict, now: float) -> bool:
     """정리 대상에서 뺀다 — 공유 중이거나 사용자가 고정한 파일."""
     return bool(item.get("shares")) or bool(item.get("pin"))
@@ -459,6 +474,46 @@ def update_share(file_id: str, share_id: str, **fields) -> dict | None:
         return share
 
 
+def claim_download(file_id: str, share_id: str, cookie_hash: str | None = None) -> tuple[str, dict | None, Path | None]:
+    """공유 다운로드 한 번을 **락 안에서** 판정하고 동시에 소비 표시를 남긴다. ("ok", 항목, 실경로) | ("denied"|"gone", None, None).
+
+    - pin 모드: `cookie_hash`(PIN 통과 때 발급한 1회용 쿠키의 sha256)가 저장된 값과 같고 기한 안이어야 한다. 맞으면
+      그 자리에서 지운다. 예전에는 쿠키를 읽어 둔 공유로 검증만 하고 지우지 않아서, 60초 안에는 같은 쿠키로 몇 번이고
+      (동시에 여러 개도) 받을 수 있었다. 이제 같은 쿠키로 온 요청 중 정확히 하나만 "ok"다. 전송이 그 뒤에 실패하면
+      쿠키는 이미 없으니 PIN을 다시 넣어야 한다(재사용 창을 남기는 것보다 낫다).
+    - device 모드: 쿠키가 없어야 한다(기기·세션 확인은 호출자가 이미 했다). 모드가 엇갈리면 "denied".
+    - 공통: 조회수·마지막 접근을 올리고, `once`면 공유를 지운다 — 같은 락 안이라 `once` 공유를 둘이 동시에 받지 못한다.
+    """
+    now = time.time()
+    with _locked():
+        items = _read_unlocked()
+        item = next((x for x in items if x["id"] == file_id), None)
+        if item is None:
+            return "gone", None, None
+        shares = item.get("shares", [])
+        share = next((s for s in shares if s.get("shareId") == share_id), None)
+        if share is None or share.get("exp", 0) <= now:
+            return "gone", None, None
+        fp = _real_path(item)
+        if not fp.is_file():
+            return "gone", None, None
+        if share.get("mode") == "pin":
+            stored = share.get("dl_cookie_hash") or ""
+            if (not cookie_hash or not stored or share.get("dl_cookie_exp", 0) <= now
+                    or not hmac.compare_digest(stored, cookie_hash)):
+                return "denied", None, None
+            share.pop("dl_cookie_hash", None)
+            share.pop("dl_cookie_exp", None)
+        elif cookie_hash is not None:
+            return "denied", None, None
+        share["views"] = int(share.get("views", 0) or 0) + 1
+        share["lastAccess"] = now
+        if share.get("once"):
+            item["shares"] = [s for s in shares if s.get("shareId") != share_id]
+        _write_unlocked(items)
+        return "ok", dict(item), fp
+
+
 def build_share_token(file_id: str, share: dict) -> str:
     """공유 레코드 → URL 토큰(`v1.<exp>.<fileId>.<shareId>.<hmac>`).
 
@@ -658,3 +713,4 @@ def _cli(argv: list[str]) -> int:
 if __name__ == "__main__":
     import sys
     sys.exit(_cli(sys.argv[1:]))
+

@@ -682,6 +682,45 @@ def open_subagent_file(path: Path):
         os.close(fd)
 
 
+
+class NotRegularFile(OSError):
+    """`open_resolved`가 연 대상이 일반 파일이 아니다(디렉토리, FIFO, 장치 등)."""
+
+
+def open_resolved(path: Path) -> int:
+    """`resolve_under_roots`가 돌려준 **resolve된 절대경로**를 읽기용으로 열어 fd를 돌려준다(호출자가 닫는다).
+
+    판정(`resolve_under_roots`)과 열기 사이에는 틈이 있다. 그 사이에 마지막 조각만이 아니라 **중간 디렉토리**를
+    심링크로 바꿔도 `O_NOFOLLOW`(마지막 조각에만 걸린다)는 막지 못해 경계 밖 파일이 열린다. 그래서 `/`부터 한
+    조각씩 `O_DIRECTORY|O_NOFOLLOW`로 dir_fd 기준 열기를 이어 간다. resolve된 경로에는 심링크가 없으므로, 판정 뒤에
+    끼어든 링크는 `ELOOP`/`ENOTDIR`(OSError)로 실패한다. 루트 안의 정상 심링크는 resolve가 이미 대상으로 펼쳐 두었으니
+    지금처럼 그 대상이 열린다. 마지막 조각은 `O_NOFOLLOW|O_NONBLOCK`(FIFO에서 멈추지 않게)으로 열고 `fstat`으로
+    일반 파일인지 확인한다 — 아니면 `NotRegularFile`.
+
+    blocking — 사용자 경로라 `fsops.call`이나 스레드에서 부른다. 지금은 읽기 전용이다(쓰기용 `(dir_fd, 이름)`은
+    쓰기 기능이 생길 때 같은 걸음으로 더한다).
+    """
+    import stat
+    if not path.is_absolute() or path.name in ("", ".", ".."):
+        raise NotRegularFile(tr("일반 파일만 열 수 있습니다"))
+    cloexec = getattr(os, "O_CLOEXEC", 0)
+    fd = os.open(path.anchor, os.O_RDONLY | os.O_DIRECTORY | cloexec)
+    try:
+        for part in path.parts[1:-1]:
+            nxt = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | cloexec, dir_fd=fd)
+            os.close(fd)
+            fd = nxt
+        result = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | cloexec, dir_fd=fd)
+    finally:
+        os.close(fd)
+    try:
+        if not stat.S_ISREG(os.fstat(result).st_mode):
+            raise NotRegularFile(tr("일반 파일만 열 수 있습니다"))
+    except BaseException:
+        os.close(result)
+        raise
+    return result
+
 def history_source_root(raw: str) -> Path:
     """Explicitly approved CLI home, not a general filesystem exemption."""
     import vt_paths

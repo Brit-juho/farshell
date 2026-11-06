@@ -849,7 +849,7 @@ async def peer_file(request: Request, grant: dict, data: bytes):
     if item is None:
         item = await asyncio.to_thread(_store_peer_file, data, name, origin)
 
-    path = str(file_store.real_path_for(item["id"]))
+    path = str(await asyncio.to_thread(file_store.real_path_for, item["id"]))   # 저장소 flock — 루프 밖에서
     typed = False
     if session:
         pane = await asyncio.to_thread(tmux_target.session_pane, session)   # tmux 조회(2초) — 루프 밖에서

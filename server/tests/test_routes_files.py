@@ -531,3 +531,84 @@ def test_fs_tree_and_search_hide_unknown_dot_dirs(client, repo):
     assert any(p.endswith(".github/tokenci.yml") for p in paths)
     assert not any(".sometool" in p for p in paths)
     assert client.get("/api/fs/tree", params={"path": str(repo / ".sometool")}).status_code == 403
+
+
+# --- 고정(pin) 켜기/끄기 -----------------------------------------------------------
+# 예전에는 `pin` 필드와 정리 제외 규칙만 있고 켜는 길(API·UI)이 없었다.
+
+
+def test_pin_route_toggles_and_list_reflects_it(client, file_state):
+    fid = _upload_via_api(client)["id"]
+    r = client.post(f"/api/files/{fid}/pin", json={"pin": True})
+    assert r.status_code == 200, r.text
+    assert r.json()["item"]["pin"] is True and r.json()["item"]["expires_at"] is None
+    item = next(x for x in client.get("/api/files").json()["items"] if x["id"] == fid)
+    assert item["pin"] is True and item["expires_at"] is None and item["expiring_soon"] is False
+    r = client.post(f"/api/files/{fid}/pin", json={"pin": False})
+    assert r.status_code == 200 and r.json()["item"]["pin"] is False
+    assert r.json()["item"]["expires_at"] is not None
+
+
+def test_pin_route_validates_input(client, file_state):
+    fid = _upload_via_api(client)["id"]
+    for body in ({}, {"pin": "true"}, {"pin": 1}, {"pin": None}):
+        assert client.post(f"/api/files/{fid}/pin", json=body).status_code == 400, body
+    assert client.post("/api/files/nope/pin", json={"pin": True}).status_code == 404
+
+
+# --- 업로드가 저장소 잠금을 기다리는 동안 이벤트 루프가 돈다 ------------------------
+# 예전에는 업로드의 디스크 쓰기와 저장소 편입(flock, 최대 5초 대기)이 루프 위에서 돌아, CLI가 잠금을 쥐고 있는
+# 동안 서버 전체(터미널 WebSocket 포함)가 멈췄다.
+
+
+def _loop_gaps_during(request_coro_factory, hold_seconds=0.6):
+    """저장소 잠금을 다른 스레드가 쥔 동안 요청을 보내고, 그 사이 이벤트 루프 틱 간격을 잰다. (응답, 최대 간격)."""
+    import asyncio
+    import threading
+    import time
+    import httpx
+
+    held = threading.Event()
+    release = threading.Event()
+
+    def hold_lock():
+        with file_store._locked():
+            held.set()
+            release.wait(5)
+
+    async def scenario():
+        gaps = []
+        done = False
+
+        async def ticker():
+            last = time.monotonic()
+            while not done:
+                await asyncio.sleep(0.02)
+                now = time.monotonic()
+                gaps.append(now - last)
+                last = now
+
+        transport = httpx.ASGITransport(app=main.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as ac:
+            tick = asyncio.create_task(ticker())
+            await asyncio.sleep(0.05)   # 틱이 먼저 돌기 시작해야 요청 중의 멈춤이 간격으로 잡힌다
+            asyncio.get_running_loop().call_later(hold_seconds, release.set)   # 루프가 멈추면 이것도 못 돈다
+            r = await request_coro_factory(ac)
+            done = True
+            await tick
+        return r, max(gaps)
+
+    t = threading.Thread(target=hold_lock)
+    t.start()
+    assert held.wait(5)
+    try:
+        return asyncio.run(scenario())
+    finally:
+        release.set()
+        t.join(5)
+
+
+def test_upload_waits_for_the_store_lock_without_blocking_the_loop(client, file_state):
+    r, gap = _loop_gaps_during(lambda ac: ac.post("/api/upload", files={"file": ("a.txt", b"hello")}))
+    assert r.status_code == 200, r.text
+    assert gap < 0.3, f"이벤트 루프가 {gap:.2f}초 멈췄다"

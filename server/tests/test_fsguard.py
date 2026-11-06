@@ -423,3 +423,59 @@ def test_profile_file_reads_through_a_shared_item_that_is_itself_a_link(tmp_path
     (root / 'skills' / 'evil').symlink_to(fsguard.global_claude_dir() / 'skills' / 'evil')
     with pytest.raises(fsguard.FsDenied):
         fsguard.read_profile_bytes(root, 'skills/evil/SKILL.md')
+
+
+# --- open_resolved: 판정 뒤 바꿔치기 ------------------------------------------------
+# resolve_under_roots 판정과 실제 열기 사이에 중간 디렉토리나 마지막 조각을 심링크로 바꿔도 경계 밖이 열리면 안 된다.
+
+
+def _read_fd(fd):
+    with os.fdopen(fd, "rb") as f:
+        return f.read()
+
+
+def test_open_resolved_reads_a_normal_file(sandbox):
+    p = fsguard.resolve_under_roots(str(sandbox["root"] / "proj" / "main.py"))
+    assert _read_fd(fsguard.open_resolved(p)) == b"print('hi')\n"
+
+
+def test_open_resolved_follows_an_in_root_symlink_through_resolve(sandbox):
+    """루트 안의 정상 심링크는 resolve가 대상으로 펼쳐 두었으니 지금처럼 열린다."""
+    root = sandbox["root"]
+    (root / "alias").symlink_to(root / "proj")
+    p = fsguard.resolve_under_roots(str(root / "alias" / "main.py"))
+    assert _read_fd(fsguard.open_resolved(p)) == b"print('hi')\n"
+
+
+def test_open_resolved_refuses_parent_swapped_to_symlink(sandbox):
+    root, outside = sandbox["root"], sandbox["outside"]
+    (root / "proj" / "secret.txt").write_text("inside\n")
+    p = fsguard.resolve_under_roots(str(root / "proj" / "secret.txt"))
+    (root / "proj").rename(root / "proj.real")
+    (root / "proj").symlink_to(outside)          # 같은 이름의 secret.txt 가 밖에 있다
+    with pytest.raises(OSError):
+        fsguard.open_resolved(p)
+
+
+def test_open_resolved_refuses_last_component_swapped_to_symlink(sandbox):
+    root, outside = sandbox["root"], sandbox["outside"]
+    p = fsguard.resolve_under_roots(str(root / "proj" / "main.py"))
+    (root / "proj" / "main.py").unlink()
+    (root / "proj" / "main.py").symlink_to(outside / "secret.txt")
+    with pytest.raises(OSError):
+        fsguard.open_resolved(p)
+
+
+def test_open_resolved_refuses_fifo_and_directory_without_hanging(sandbox):
+    root = sandbox["root"]
+    os.mkfifo(root / "proj" / "pipe")
+    with pytest.raises(fsguard.NotRegularFile):
+        fsguard.open_resolved(fsguard.resolve_under_roots(str(root / "proj" / "pipe")))
+    with pytest.raises(fsguard.NotRegularFile):
+        fsguard.open_resolved(fsguard.resolve_under_roots(str(root / "proj")))
+
+
+def test_open_resolved_missing_file_is_file_not_found(sandbox):
+    p = fsguard.resolve_under_roots(str(sandbox["root"] / "proj" / "nope.txt"))
+    with pytest.raises(FileNotFoundError):
+        fsguard.open_resolved(p)

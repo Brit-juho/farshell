@@ -471,7 +471,7 @@ function iconBtn(iconName, title, cls, onClick) {
   return b;
 }
 
-function renderRow(item, inst) {
+export function renderRow(item, inst) {
   const row = document.createElement('div');
   row.className = 'vt-fl-row';
   row.dataset.id = item.id;
@@ -525,6 +525,10 @@ function renderRow(item, inst) {
     acts.appendChild(iconBtn('clipboard-copy', t('경로 복사'), 'copy', (e) => copyPath(item, e.currentTarget)));
     acts.appendChild(iconBtn('keyboard', t('터미널에 삽입'), 'ins', () => insertFile(item)));
     acts.appendChild(iconBtn('link', t('링크 발급'), 'share', () => openShareDialog(item)));
+    const pinTitle = item.pin ? t('고정 해제') : t('고정 (자동 삭제 안 함)');
+    const pinBtn = iconBtn('pin', pinTitle, 'pin', (e) => togglePin(item, e.currentTarget));
+    pinBtn.setAttribute('aria-pressed', item.pin ? 'true' : 'false');
+    acts.appendChild(pinBtn);
     acts.appendChild(iconBtn('trash-2', t('삭제'), 'rm', () => deleteFile(item)));
     row.appendChild(acts);
   }
@@ -552,7 +556,7 @@ function renderFooter(quota) {
   return foot;
 }
 
-// ── 행 동작 5개 ─────────────────────────────────────────────────────────────
+// ── 행 동작 6개 ─────────────────────────────────────────────────────────────
 
 function downloadFile(item) {
   // 서버가 attachment + nosniff로 내려주므로 같은 탭 내비게이션으로 충분하다
@@ -613,6 +617,25 @@ async function insertFile(item) {
   } catch (e) {
     showToast(t('삽입 실패: {msg}', { msg: e.message }), 'error');
   }
+}
+
+// 고정 — 켜면 보관 기간(VT_FILES_TTL_DAYS) 자동 삭제와 용량 정리에서 빠진다(file_store `_is_protected`). 서버 응답의 항목으로 판단하고
+// 목록을 다시 그려 「고정됨」/남은 기간 글자가 함께 바뀌게 한다.
+async function togglePin(item, btn) {
+  const next = !item.pin;
+  if (btn) btn.disabled = true;
+  try {
+    await vtFetch(`/api/files/${encodeURIComponent(item.id)}/pin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: next }),
+    });
+  } catch (e) {
+    showToast(t('고정 변경 실패: {msg}', { msg: e.message }), 'error');
+    if (btn) btn.disabled = false;
+    return;
+  }
+  refreshAllFiles();
 }
 
 async function deleteFile(item) {

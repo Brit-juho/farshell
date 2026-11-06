@@ -208,6 +208,7 @@ _ROWS: tuple = (
     ("GET", "/api/files/{file_id}/download", auth()),
     ("DELETE", "/api/files/{file_id}", auth()),
     ("POST", "/api/files/delete", auth()),
+    ("POST", "/api/files/{file_id}/pin", auth()),
     ("GET", "/api/files/{file_id}/path", auth()),
     ("POST", "/api/files/{file_id}/send", auth()),
     ("POST", "/api/files/{file_id}/insert", auth()),

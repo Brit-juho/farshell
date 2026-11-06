@@ -97,16 +97,20 @@ is never limited. Denied and failed attempts are written to `~/.vt/audit/denials
 |--------|------|------|
 | GET | `/api/fs/roots` | List of browsable roots (default `~/GitHub`) plus `home` (the user's home directory, used to resolve `~/` terminal links) |
 | GET | `/api/fs/tree?path=X[&depth=0-2]` | Directory listing. Excludes `.git`/`node_modules` etc. `depth` prefetches subdirectory listings into each entry's `children` (capped by dir count and entries) |
-| GET | `/api/fs/search?q=X` | Fuzzy filename search (command palette `/` mode). `path=` scopes to a subtree, max 50 results |
+| GET | `/api/fs/search?q=X` | Fuzzy filename search (command palette `/` mode). `path=` scopes to a subtree, max 50 results → `{results:[{name,path,…}], truncated}`. When the scan hits its 10s deadline the answer is still 200, with `{results:[], truncated:true, timeout:true}` |
 | GET | `/api/fs/file?path=X` | File content. Binaries return only `binary:true`; anything over 512KB is truncated. Images also carry `image:true`, `mime`, and `too_large` — the bytes come from `/api/fs/raw` below |
 | GET | `/api/fs/raw?path=X` | [T3] Raw **image** bytes for inline preview. Same browse boundary as `/api/fs/file`, plus a type allowlist: png/jpeg/gif/webp/bmp/ico only, and only when extension **and** magic bytes agree. SVG, HTML and PDF are excluded — served same-origin they are scriptable documents, i.e. XSS. Over 8MB → 413; not an image → 403. Sent with `nosniff` and `Content-Disposition: inline` |
-| POST | `/api/fs/share-import` | Requires elevation. Body `{path}`. Copies a file inside the browse boundary into the file store (snapshot) so a share link can be issued for it; returns `{ok, item}` (same shape as an `/api/files` item). 403 `denied` outside the boundary/denylist, 404 missing, 400 `bad_path`/`not_a_file`, 413 over `VT_MAX_UPLOAD_MB`. The same path+size+mtime reuses its snapshot |
+| POST | `/api/fs/share-import` | Requires elevation. Body `{path}`. Copies a file inside the browse boundary into the file store (snapshot) so a share link can be issued for it; returns `{ok, item}` (same shape as an `/api/files` item). 403 `denied` outside the boundary/denylist, 404 missing, 400 `bad_path`/`not_a_file` (also when a directory on the path was swapped for a symlink after the check — the file is opened one path component at a time without following links, `fsguard.open_resolved`), 413 over `VT_MAX_UPLOAD_MB`. The same path+size+mtime reuses its snapshot |
 | GET | `/api/git/status?repo=X` | Parsed result of `git status --porcelain` |
 | GET | `/api/git/diff?repo=X[&file=Y][&staged=1]` | Raw `git diff` output. Protected paths (`.env`/`*.pem`/`id_rsa`, etc.) have their content redacted (`[content redacted — protected path]`) |
 
 Paths that hit the deny list (`.env*`, `*.pem`, `id_rsa`, `.ssh/`, `.aws/`, etc.) are
-redacted identically in both `/api/fs/file` and `/api/git/diff` — the check lives in
-exactly one place, `server/fsguard.py`.
+**refused** by `/api/fs/file`, `/api/fs/raw` and `/api/fs/tree` (403 `{error:"denied", reason}` — no
+content, not a masked body; tree and search listings leave them out) and **redacted** in
+`/api/git/diff` (the file header stays so the change list is complete, the hunks are replaced). Both
+use the same rule, which lives in exactly one place, `server/fsguard.py`. A path that does not answer
+in time (`VT_FS_TIMEOUT`, default 10s — e.g. a hung network mount) gets 503
+`{error:"fs_unavailable", reason, retry_after}` with a `Retry-After` header.
 
 Non-read-only Git actions (for stage/commit in the code viewer):
 
@@ -260,6 +264,7 @@ download API — `/api/files/{file_id}/download` is id-only by design.
 | GET | `/api/files/{file_id}/download` | Download by id (`attachment` + `nosniff` + `no-store`) |
 | GET | `/api/files/{file_id}/path` | Disk path of a stored file (dock file tab's "copy path"; id-only input, so no traversal surface) |
 | DELETE | `/api/files/{file_id}` | Delete a stored file |
+| POST | `/api/files/{file_id}/pin` | Pin or unpin (JSON: `{pin: true\|false}`, else 400) → `{ok, item}`. A pinned file is left out of the TTL (`VT_FILES_TTL_DAYS`) and total-size (`VT_FILES_MAX_GB`) cleanup; its list item has `pin:true` and `expires_at:null`. Not elevated (same level as delete) |
 | POST | `/api/files/delete` | Bulk delete (JSON: `{ids:[...]}`, max 500) → `{ok, deleted:[...], missing:[...]}`. Not elevated — same reason single delete isn't (repeated single calls would bypass it anyway) |
 | POST | `/api/files/{file_id}/insert` | Type the file's path into a tmux session's pane (JSON: `session`), no Enter |
 | POST | `/api/files/{file_id}/send` | Copy the file to a remote host (JSON: `host`, optional `session`) and, with `session`, have that host type its own path into the pane. Ordinary login auth here; the outbound leg carries the peer signature. Re-sending the same file is skipped by origin |
@@ -271,7 +276,7 @@ Public download entry point (not under the api prefix, and not behind the usual 
 
 | Method | Path | Description |
 |--------|------|------|
-| GET | `/s/{token}` | Share download. `device` mode: serves if `vt_device`+`vt_session` are valid, else 302 to `/?next=/s/{token}`. `pin` mode: PIN entry page unless a valid one-time download cookie is present |
+| GET | `/s/{token}` | Share download. `device` mode: serves if `vt_device`+`vt_session` are valid, else 302 to `/?next=/s/{token}`. `pin` mode: PIN entry page unless a valid one-time download cookie is present. The cookie is checked and consumed in one step under the store lock, so it works exactly once, also for concurrent requests or a copied cookie value; if the transfer then fails, the PIN must be entered again. A `once` share is consumed in the same step, so only one of several concurrent downloads gets the file (the others 404) |
 | POST | `/s/{token}/pin` | Verify a PIN (form: `pin`, at most 4KB → 413) → 60s one-time download cookie + redirect. 5 failed attempts cancels the share (counted atomically, also under concurrent requests) |
 | GET | `/p/authorize?share=&next=` | Cross-origin handshake for an exposed port's `session` mode (`docs/ref/tunnel.md`). Verifies login + registered device on the **main** origin, then redirects to the exposed host's `/__fsh/cb` with a 60-second one-time ticket bound to that share and device. Takes no destination parameter from the client — the target URL is looked up from the tunnel registry by `share` id, so there is no open-redirect surface. This is **the entry point** for a `session` share: the exposed host does not redirect cookie-less visitors here (it shows a notice instead, so the main URL isn't revealed), and the ports panel / `fsh tunnel expose` link to this route |
 

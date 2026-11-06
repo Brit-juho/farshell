@@ -178,6 +178,86 @@ def test_cleanup_excludes_pinned_files(store, tmp_path, monkeypatch):
     assert store.get_item(item["id"]) is not None
 
 
+
+def test_set_pin_turns_protection_on_and_off(store, tmp_path, monkeypatch):
+    """고정을 켜는 길(set_pin)이 실제로 정리에서 빼고, 끄면 다시 정리 대상이 된다."""
+    monkeypatch.setattr(store, "TTL_SECONDS", 1)
+    item = _upload(store, tmp_path)
+    assert store.set_pin(item["id"], True)["pin"] is True
+    items = store._read_unlocked()
+    for x in items:
+        x["created"] = time.time() - 10
+    store._write_unlocked(items)
+    store.cleanup()
+    assert store.get_item(item["id"])["pin"] is True
+
+    assert store.set_pin(item["id"], False)["pin"] is False
+    store.cleanup()
+    assert store.get_item(item["id"]) is None
+
+
+def test_set_pin_unknown_id_returns_none(store):
+    assert store.set_pin("nope", True) is None
+
+
+# --- 공유 다운로드 판정(claim_download) ------------------------------------------
+
+
+def _pin_share_with_cookie(store, tmp_path, once=False):
+    import hashlib
+    item = _upload(store, tmp_path)
+    share = store.add_share(item["id"], "pin", 3600, once, pin="123456")
+    cookie_hash = hashlib.sha256(b"cookie-secret").hexdigest()
+    store.update_share(item["id"], share["shareId"], dl_cookie_hash=cookie_hash, dl_cookie_exp=time.time() + 60)
+    return item, share, cookie_hash
+
+
+def test_claim_download_consumes_the_pin_cookie(store, tmp_path):
+    item, share, cookie_hash = _pin_share_with_cookie(store, tmp_path)
+    state, got, fp = store.claim_download(item["id"], share["shareId"], cookie_hash)
+    assert state == "ok" and got["id"] == item["id"] and fp.read_bytes() == b"hello"
+    # 같은 쿠키는 두 번 통하지 않는다 — 소비 표시가 저장소에 남았다.
+    assert store.claim_download(item["id"], share["shareId"], cookie_hash)[0] == "denied"
+    _, after = store.get_item_and_share(item["id"], share["shareId"])
+    assert "dl_cookie_hash" not in after and after["views"] == 1
+
+
+def test_claim_download_rejects_wrong_expired_or_missing_cookie(store, tmp_path):
+    item, share, cookie_hash = _pin_share_with_cookie(store, tmp_path)
+    assert store.claim_download(item["id"], share["shareId"], "0" * 64)[0] == "denied"
+    assert store.claim_download(item["id"], share["shareId"], None)[0] == "denied"   # pin 공유를 device 경로로
+    store.update_share(item["id"], share["shareId"], dl_cookie_exp=time.time() - 1)
+    assert store.claim_download(item["id"], share["shareId"], cookie_hash)[0] == "denied"
+    assert store.claim_download(item["id"], "no-such-share", cookie_hash)[0] == "gone"
+
+
+def test_claim_download_device_mode_and_once(store, tmp_path):
+    item = _upload(store, tmp_path)
+    share = store.add_share(item["id"], "device", 3600, True)
+    # device 공유에 쿠키 해시를 들고 오면 모드가 엇갈린 것이다.
+    assert store.claim_download(item["id"], share["shareId"], "x" * 64)[0] == "denied"
+    assert store.claim_download(item["id"], share["shareId"])[0] == "ok"
+    # once — 첫 다운로드가 같은 락 안에서 공유를 지웠다.
+    assert store.claim_download(item["id"], share["shareId"])[0] == "gone"
+
+
+def test_claim_download_is_atomic_across_threads(store, tmp_path):
+    """같은 쿠키로 동시에 와도 정확히 하나만 통과한다."""
+    import threading
+    item, share, cookie_hash = _pin_share_with_cookie(store, tmp_path)
+    out = []
+    gate = threading.Barrier(20)
+
+    def go():
+        gate.wait()
+        out.append(store.claim_download(item["id"], share["shareId"], cookie_hash)[0])
+
+    ts = [threading.Thread(target=go) for _ in range(20)]
+    [t.start() for t in ts]
+    [t.join(timeout=60) for t in ts]
+    assert out.count("ok") == 1 and out.count("denied") == 19
+
+
 # --- 마이그레이션 / 고아 정리 ---------------------------------------------------
 
 
