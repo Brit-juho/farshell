@@ -5,7 +5,8 @@
 // hljs(`ensureHljs`·`_hl`)는 diff 화면(diff.js)만 쓴다 — diff를 옮기는 단계 9까지 남는다.
 import { vtEsc, vtUrl } from '../../core/api.js';
 import {
-  loadHead, loadMore, loadTail, canLoadMore, hostApiPath, mixedEol, ChangingError, OPEN_BUDGET, MAX_LOADED,
+  loadHead, loadMore, loadTail, loadProbe, growthFrom, canLoadMore, hostApiPath, mixedEol, ChangingError,
+  CHUNK, OPEN_BUDGET, MAX_LOADED, TAIL_BYTES, PROBE_BYTES, INCREMENTAL_MIN,
 } from './file-load.js';
 import { _setMsg } from './state.js';
 import { t } from '../../core/i18n.js';
@@ -65,14 +66,33 @@ export function loadEditor() {
 }
 
 // 붙여 둔 편집기들. CM은 창(window)과 스크롤 조상에 수신기를 걸어 두므로, 소비처가 호스트를 그냥 떼어 내면
-// (다른 파일 열기, 페인 닫기) 그 편집기가 메모리에 남는다. 새 편집기를 붙일 때 DOM에서 빠진 것을 거둔다.
+// (다른 파일 열기, 페인 닫기) 그 편집기가 메모리에 남는다. 닫는 쪽(오버레이 닫기·파일 바꾸기, 페인 닫기·바꾸기,
+// 새로고침의 호스트 교체)이 disposeViewer를 부르고, 놓친 것은 새 편집기를 붙일 때 DOM에서 빠진 것으로 거둔다.
 const _editors = new Set();
+function _destroyEditor(h) {
+  _editors.delete(h);
+  try { h.destroy(); } catch (_) { /* 이미 정리됨 */ }
+}
 function _sweepEditors() {
   for (const h of _editors) {
-    if (!h.view.dom.isConnected) {
-      _editors.delete(h);
-      try { h.destroy(); } catch (_) { /* 이미 정리됨 */ }
-    }
+    if (!h.view.dom.isConnected) _destroyEditor(h);
+  }
+}
+
+/**
+ * root(칸 하나 또는 그것을 담은 상자) 안의 뷰어 칸을 거둔다 — 편집기를 destroy하고(창 수신기 해제) 진행 중인
+ * 열기·다시 읽기가 더 그리지 않게 칸의 받기 상태를 끊는다. 닫거나 다른 것으로 바꾸는 쪽이 부른다.
+ */
+export function disposeViewer(root) {
+  if (!root) return;
+  const hosts = [];
+  if (root.classList && root.classList.contains('vt-vw-code-pane')) hosts.push(root);
+  if (root.querySelectorAll) hosts.push(...root.querySelectorAll('.vt-vw-code-pane'));
+  for (const c of hosts) {
+    c._vtDoc = null;
+    const h = c._vtEditor;
+    c._vtEditor = null;
+    if (h) _destroyEditor(h);
   }
 }
 
@@ -268,7 +288,8 @@ function _paintMedia(container, d, path, host) {
 }
 
 // 텍스트를 비어 있는 container에 그린다. 편집기 청크를 못 받으면 일반 텍스트로(_vtPlain).
-async function _paintText(container, text, path, mode) {
+// 붙이는 사이 칸이 거둬졌거나(disposeViewer) 다른 열기로 바뀌었으면 방금 만든 편집기를 바로 버린다.
+async function _paintText(container, text, path, mode, st) {
   let handle = null;
   try {
     const mod = await loadEditor();
@@ -280,9 +301,11 @@ async function _paintText(container, text, path, mode) {
   if (handle) {
     _sweepEditors();
     _editors.add(handle);
+    if (st && container._vtDoc !== st) { _destroyEditor(handle); return; }
     container._vtEditor = handle;
     return;
   }
+  if (st && container._vtDoc !== st) return;
   container._vtPlain = _plainText(container, text);
 }
 
@@ -300,12 +323,53 @@ function _appendText(container, text) {
   else if (container._vtPlain) container._vtPlain.textContent += text;
 }
 
+// 끝의 n글자를 text로 바꾼다(커진 끝 이어 받기 — 줄 끝 없이 끝났던 마지막 조각을 새것으로).
+function _replaceEnd(container, n, text) {
+  const h = container._vtEditor;
+  if (h) return h.replaceEnd(n, text);
+  const pre = container._vtPlain;
+  if (!pre) return false;
+  const s = pre.textContent;
+  pre.textContent = s.slice(0, s.length - n) + text;
+  return true;
+}
+
+// 화면 글의 끝: 줄 끝 없이 끝난 마지막 조각(partial)과 그 앞 PROBE_BYTES 글자(before).
+function _docEnd(container) {
+  let len;
+  let cut;
+  let slice;
+  const h = container._vtEditor;
+  if (h) {
+    const doc = h.view && h.view.state && h.view.state.doc;
+    if (!doc) return null;
+    len = doc.length;
+    cut = doc.line(doc.lines).from;
+    slice = (a, b) => doc.sliceString(a, b);
+  } else if (container._vtPlain) {
+    const s = container._vtPlain.textContent;
+    len = s.length;
+    cut = s.lastIndexOf('\n') + 1;
+    slice = (a, b) => s.slice(a, b);
+  } else {
+    return null;
+  }
+  const from = Math.max(0, cut - PROBE_BYTES);
+  return { partial: slice(cut, len), partialLen: len - cut, before: slice(from, cut), beforeAll: from === 0 };
+}
+
 // 칸을 처음부터 연다. opts: {host, mode('head'|'tail'), line, col}. 첫 구간이 오면 바로 그리고 나머지는 이어 붙인다.
-async function _open(container, path, opts = {}) {
+// 열기 전체(이어 받기, 줄 이동의 더 받기까지)가 그 칸의 차례(_serial) 하나로 돈다 — 첫 구간을 그린 뒤 온 다시 읽기가
+// 문서를 통째로 바꾼 다음 열기의 남은 구간이 그 뒤에 또 붙어 끝이 두 번 들어가던 경쟁을 막는다.
+function _open(container, path, opts = {}) {
   const st = _newDoc(path, opts.host, opts.mode);
   container._vtDoc = st;
   container._vtEditor = null;
   container._vtPlain = null;
+  return _serial(st, () => _openRun(container, st, path, opts));
+}
+
+async function _openRun(container, st, path, opts) {
   const mine = () => container._vtDoc === st;
   const encoding = _encOf(st);
   if (st.mode === 'tail') {
@@ -315,7 +379,7 @@ async function _open(container, path, opts = {}) {
     st.etag = r.etag;
     if (r.meta.image || r.meta.binary) { _paintMedia(container, r.meta, path, st.host); return; }
     container.replaceChildren();
-    await _paintText(container, r.text, path, 'tail');
+    await _paintText(container, r.text, path, 'tail', st);
     if (!mine()) return;
     _syncBars(container, st);
     if (container._vtEditor) container._vtEditor.jumpToEnd();
@@ -331,7 +395,7 @@ async function _open(container, path, opts = {}) {
         st.meta = meta;
         if (painted) { _setDocText(container, text); return; }
         container.replaceChildren();
-        await _paintText(container, text, path, 'head');
+        await _paintText(container, text, path, 'head', st);
         painted = true;
       },
       onAppend: (text) => { if (mine()) _appendText(container, text); },
@@ -353,19 +417,26 @@ async function _open(container, path, opts = {}) {
   if (opts.line) await _jump(container, st, opts.line, opts.col).catch(() => {});
 }
 
+// 아직 받지 않은 줄이면 「더 보기」 한 번(OPEN_BUDGET)까지만 스스로 더 받는다 — 지금까지의 줄 평균 길이로 보아
+// 그 안에 들 것 같을 때만. `foo.log:99999999` 같은 링크가 상한(32MB)까지 받아 버리지 않게. 그 밖이면 알리고
+// 「더 보기」·「끝부분 보기」는 사람이 고른다.
+function _jumpReach(st, lines, line) {
+  const loaded = (st.meta && (st.meta.loaded || st.meta.nextOffset)) || 0;
+  if (!canLoadMore(st.meta) || lines < 1 || loaded <= 0) return false;
+  return (line / lines) * loaded <= loaded + OPEN_BUDGET;
+}
+
 async function _jump(container, st, line, col) {
-  // 아직 받지 않은 줄이면 상한까지 더 받는다.
-  // 늘지 않으면(계속 바뀌는 중, 실패) 멈춘다 — 같은 요청을 끝없이 되풀이하지 않게.
-  const lines = () => (container._vtEditor ? container._vtEditor.lines() : 0);
-  let prev = -1;
-  while (container._vtEditor && lines() < line && lines() !== prev && canLoadMore(st.meta) && container._vtDoc === st) {
-    prev = lines();
-    try { await _more(container, st); } catch (_) { break; }
+  const h0 = container._vtEditor;
+  if (h0 && h0.lines() < line && _jumpReach(st, h0.lines(), line)) {
+    try { await _more(container, st); } catch (_) { /* 받은 데까지로 옮긴다 */ }
   }
   const h = container._vtEditor;
   if (!h || container._vtDoc !== st) return;
   if (!h.jumpTo(line, col) && typeof window.showToast === 'function') {
-    window.showToast(t('{line}번째 줄은 불러온 범위 밖입니다', { line }), 'warn');
+    window.showToast(canLoadMore(st.meta)
+      ? t('{line}번째 줄은 아직 불러오지 않았습니다. 아래 「더 보기」나 「끝부분 보기」로 이어 보세요.', { line })
+      : t('{line}번째 줄은 불러온 범위 밖입니다', { line }), 'warn');
   }
 }
 
@@ -421,13 +492,14 @@ async function _reloadHead(container, st, target, etag = null) {
   st.meta = r.meta;
   st.etag = r.etag;
   st.carry = r.carry || '';
+  st.probe = null;
   _setDocText(container, parts.join(''));
   _syncBars(container, st);
   return 'ok';
 }
 
-async function _reloadTail(container, st) {
-  const r = await loadTail({ path: st.path, host: st.host, encoding: _encOf(st), etag: st.etag });
+async function _reloadTail(container, st, etag = st.etag) {
+  const r = await loadTail({ path: st.path, host: st.host, encoding: _encOf(st), etag });
   if (container._vtDoc !== st) return 'stale';
   if (r.notModified) return 'same';
   if (r.meta.image || r.meta.binary) return 'kind';
@@ -436,10 +508,115 @@ async function _reloadTail(container, st) {
   const follow = !!h && h.atBottom();
   st.meta = r.meta;
   st.etag = r.etag;
+  st.probe = null;
   _setDocText(container, r.text);
   _syncBars(container, st);
   if (follow) h.jumpToEnd();
   return 'ok';
+}
+
+// 칸이 화면에 든 바이트 구간 [start, end) — 앞부분 보기는 [0, 받은 끝), 끝부분 보기는 [tail 시작, 크기).
+function _byteSpan(st) {
+  const m = st.meta;
+  if (!m) return { start: 0, end: 0 };
+  if (st.mode === 'tail') return { start: m.tailOffset || 0, end: m.size || 0 };
+  return { start: 0, end: m.loaded != null ? m.loaded : (m.nextOffset || 0) };
+}
+
+// 커지기만 했으면 받은 끝 뒤만 이어 받는다(file-load.js growthFrom). 돌려주는 것: 'same'(그대로) · 'ok'(이어 붙임) ·
+// 'stale' · 'full'(처음부터 다시 읽어야 한다 — 창이 화면과 다르다, 크기가 늘지 않았다, 다른 파일이 되었다, 그 사이 또
+// 바뀌었다(409), 창을 물을 수 없다). 창은 같은 구간이면 조건부로 묻는다 — 그대로면 304 하나로 끝난다.
+async function _grow(container, st) {
+  const meta = st.meta;
+  if (st.carry || !meta.pinned) return 'full';
+  const { start, end } = _byteSpan(st);
+  const prev = st.probe;
+  const offset = Math.max(start, end - PROBE_BYTES);
+  let p;
+  try {
+    p = await loadProbe({
+      path: st.path, host: st.host, meta, start, end,
+      etag: prev && prev.offset === offset && prev.end === end ? prev.etag : null,
+    });
+  } catch (e) {
+    if (e && typeof e.status === 'number') return 'full';   // 400(홀수 UTF-16 등)·409 — 처음부터 다시 읽기로
+    throw e;
+  }
+  if (container._vtDoc !== st) return 'stale';
+  const same = () => {
+    if (st.changing) { st.changing = false; _syncBars(container, st); }
+    return 'same';
+  };
+  if (p.notModified) return same();
+  st.probe = { offset: p.offset, end, etag: p.etag };
+  const d = p.data;
+  if (d.rev && d.rev === meta.rev) return same();
+  const tail = _docEnd(container);
+  if (!tail) return 'full';
+  const from = growthFrom(d, {
+    start, end, offset: p.offset, oldSize: meta.size, oldRev: meta.rev,
+    before: tail.before, beforeAll: tail.beforeAll, partial: tail.partial, pinned: meta.pinned, confident: meta.confident,
+  });
+  if (from == null) return 'full';
+  const next = { ...meta, eol: { ...meta.eol }, size: d.size, rev: d.rev };
+  if (st.mode === 'head' && !meta.eof) {
+    // 받은 끝 뒤가 늘었을 뿐 — 화면에 든 부분은 그대로다. 아래 띠의 전체 크기만 바뀐다.
+    st.meta = next;
+    st.changing = false;
+    _syncBars(container, st);
+    return 'ok';
+  }
+  // 끝부분 보기는 끝을 따라 붙인다. 붙인 양이 끝부분 보기 한 번의 양을 넘으면 새 끝부분으로 다시 연다(무한히 늘지 않게).
+  if (st.mode === 'tail' && d.size - start > 2 * TAIL_BYTES) return 'full';
+  const target = st.mode === 'tail' ? d.size : Math.max(OPEN_BUDGET, end);
+  next.eof = false;
+  next.nextOffset = from;
+  next.lineTruncated = false;
+  const pieces = [];
+  let carry;
+  try {
+    // 줄 끝 없이 끝났던 마지막 조각은 다시 받아 바꾼다 — 받을 것이 목표 너머여도 한 구간은 받는다.
+    carry = await loadMore({
+      path: st.path, host: st.host, meta: next, carry: '', target: Math.max(target, from + 1),
+      onAppend: (text) => { pieces.push(text); },
+    });
+  } catch (e) {
+    if (e && e.status === 409) return 'full';
+    throw e;
+  }
+  if (container._vtDoc !== st) return 'stale';
+  if (st.mode === 'tail') next.lineTruncated = meta.lineTruncated;   // 끝부분 보기에서는 "줄 시작을 못 찾음"이라는 뜻
+  const h = container._vtEditor;
+  const follow = st.mode === 'tail' && !!h && h.atBottom();
+  st.meta = next;
+  st.carry = st.mode === 'tail' ? '' : (carry || '');
+  st.changing = false;
+  st.probe = null;
+  _replaceEnd(container, tail.partialLen, pieces.join(''));
+  _syncBars(container, st);
+  if (follow) h.jumpToEnd();
+  return 'ok';
+}
+
+// 다시 읽기 한 번(그 칸의 차례 안에서 돈다). 받아 둔 양이 크면 먼저 커지기만 했는지 보고, 아니면 처음부터.
+async function _refreshDoc(container, st) {
+  const big = _byteSpan(st).end - _byteSpan(st).start > INCREMENTAL_MIN;
+  if (big) {
+    const g = await _grow(container, st);
+    if (g !== 'full') return g;
+  }
+  if (st.mode === 'tail') return _reloadTail(container, st, big ? null : st.etag);
+  return _reloadHead(container, st, Math.max(OPEN_BUDGET, st.meta.loaded || 0), st.etag);
+}
+
+/** 자동 갱신의 최소 간격(ms). 1MB 넘게 받아 둔 칸은 1초 — 연달아 오는 변경 알림을 묶어 큰 다시 읽기가 쌓이지 않게. */
+export const LARGE_REFRESH_GAP_MS = 1000;
+export function refreshGap(scrollEl) {
+  const host = scrollEl && _currentHost(scrollEl);
+  const st = host && host._vtDoc;
+  if (!st || !st.meta) return 0;
+  const { start, end } = _byteSpan(st);
+  return end - start > CHUNK ? LARGE_REFRESH_GAP_MS : 0;
 }
 
 // 칸을 그 자리에서 다시 연다(인코딩 바꾸기, 앞부분 ↔ 끝부분). 칸 요소는 그대로라 소비처의 참조가 유지된다.
@@ -459,8 +636,7 @@ function _swapHost(scrollEl, host) {
   const top = scrollEl.scrollTop;
   const left = scrollEl.scrollLeft;
   const old = _currentHost(scrollEl);
-  if (old) old.replaceWith(host);
-  else scrollEl.appendChild(host);
+  if (old) { old.replaceWith(host); disposeViewer(old); } else scrollEl.appendChild(host);
   scrollEl.scrollTop = top;
   scrollEl.scrollLeft = left;
 }
@@ -484,14 +660,16 @@ export async function refreshFile(scrollEl, path, isCurrent, opts = {}) {
   const old = _currentHost(scrollEl);
   const st = old && old._vtDoc;
   const host = opts.host !== undefined ? opts.host : (st ? st.host : null);
-  const live = !!st && st.path === path && !!st.meta && !st.meta.image && !st.meta.binary
+  // 그 칸이 하던 일(열기·더 보기·줄 이동)이 끝난 뒤에 판단한다 — 열기가 아직 구간을 붙이는 중이면 기다린다.
+  const live = () => old._vtDoc === st && !!st.meta && !st.meta.image && !st.meta.binary
     && (!!old._vtPlain || (!!old._vtEditor && old._vtEditor.view.dom.isConnected));
-  if (live) {
+  if (st && st.path === path) {
     let out;
     try {
-      out = await _serial(st, () => (st.mode === 'tail'
-        ? _reloadTail(old, st)
-        : _reloadHead(old, st, Math.max(OPEN_BUDGET, st.meta.loaded || 0), st.etag)));
+      out = await _serial(st, () => {
+        if (old._vtDoc !== st) return 'stale';
+        return live() ? _refreshDoc(old, st) : 'reopen';
+      });
     } catch (e) {
       if (stale()) return;
       // 실패도 화면에 보여 준다 — 옛 내용을 조용히 남기면 끊긴 것을 모른다.
@@ -501,7 +679,7 @@ export async function refreshFile(scrollEl, path, isCurrent, opts = {}) {
       _swapHost(scrollEl, fail);
       return;
     }
-    if (out !== 'kind') return;
+    if (out !== 'kind' && out !== 'reopen') return;
   }
   const fresh = document.createElement('div');
   fresh.className = 'vt-vw-code-pane';

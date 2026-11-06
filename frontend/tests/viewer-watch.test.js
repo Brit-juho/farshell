@@ -125,6 +125,26 @@ test('coalesce — 도는 중에 여러 번 불려도 끝난 뒤 한 번만 더 
   assert.strictEqual(runs, 2);
 });
 
+test('coalesce minGap — 첫 부름은 바로, 그 뒤 간격 안의 부름은 한 번으로 모아 간격이 지나서 돈다', async () => {
+  const { context } = await env();
+  const W = await importFresh(WATCH_JS, context, new Map());
+  const at = [];
+  let gap = 80;
+  const f = W.coalesce(async () => { at.push(Date.now()); }, { minGap: () => gap });
+  const t0 = Date.now();
+  await f();
+  assert.strictEqual(at.length, 1, '첫 부름은 기다리지 않는다');
+  f(); f(); f();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.strictEqual(at.length, 1, '간격 안에서는 돌지 않는다');
+  await new Promise((r) => setTimeout(r, 120));
+  assert.strictEqual(at.length, 2, '모은 부름은 한 번');
+  assert.ok(at[1] - t0 >= 75, `간격을 지킨다 (${at[1] - t0}ms)`);
+  gap = 0;   // 작은 파일로 바뀌면 바로 돈다
+  await f();
+  assert.strictEqual(at.length, 3);
+});
+
 // --- 파일 오버레이 --------------------------------------------------------------
 
 async function overlayEnv() {
@@ -186,9 +206,14 @@ test('오버레이 — 디스크 변경 알림이 오면 다시 그리고, 닫�
   assert.deepStrictEqual(sockets[0].sent.at(-1).subs, [{ kind: 'file', path: '/repo/other.md' }]);
 
   const body = document.querySelector('#vt-file .vt-vw-body');
+  // 닫으면 편집기(CodeMirror — 창에 수신기를 건다)를 바로 destroy한다. jsdom에는 CM이 없어 같은 모양의 핸들을 붙인다.
+  let destroyed = 0;
+  const pane = body.querySelector('.vt-vw-code-pane');
+  pane._vtEditor = { view: { dom: pane }, destroy: () => { destroyed += 1; } };
   body.focus();
   body.dispatchEvent(new document.defaultView.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   await settle();
   assert.strictEqual(document.getElementById('vt-file'), null);
   assert.strictEqual(sockets[0].closed, true, '마지막 구독이 풀려 연결을 닫는다');
+  assert.strictEqual(destroyed, 1, '닫을 때 편집기를 거둔다');
 });

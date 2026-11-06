@@ -3320,6 +3320,7 @@ window.__VT_I18N = {
   "UTF-8이 아닌 바이트가 있어 인코딩을 확신할 수 없습니다": "The file has bytes that are not UTF-8, so the encoding is uncertain",
   "{enc}로 보기": "View as {enc}",
   "{line}번째 줄은 불러온 범위 밖입니다": "Line {line} is outside the loaded part",
+  "{line}번째 줄은 아직 불러오지 않았습니다. 아래 「더 보기」나 「끝부분 보기」로 이어 보세요.": "Line {line} is not loaded yet. Use Show more or View end below to continue.",
   "고른 인코딩으로 풀 수 없는 바이트가 있어 깨진 글자로 보입니다": "Some bytes cannot be decoded with the chosen encoding and show as broken characters",
   "끝부분 보기": "View end",
   "끝부분만 보는 중 — 줄 번호는 끝에서 센 값입니다.": "Showing the end only — line numbers count from the end.",

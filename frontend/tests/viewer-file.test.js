@@ -232,11 +232,24 @@ test('끝부분 보기 — tail 구간을 받고, 다시 읽기는 조건부, �
   assert.match(host.querySelector('.vt-vw-bar').textContent, /끝부분만 보는 중/);
   assert.strictEqual(host.querySelector('.vt-vw-trunc'), null);
 
+  // 끝부분(1MB)은 크므로 다시 읽기는 끝 바로 앞의 작은 창만 묻는다. 같은 창을 다시 물을 때는 조건부.
   fetched.length = 0;
   await file.refreshFile(scroll, '/repo/big.log', () => true);
   assert.strictEqual(fetched.length, 1);
-  assert.ok(fetched[0].headers['If-None-Match']);
-  assert.strictEqual(params(fetched[0]).get('tail'), String(MB));
+  assert.strictEqual(params(fetched[0]).get('offset'), String(text.length - 8192));
+  assert.strictEqual(params(fetched[0]).get('length'), '8192');
+  await file.refreshFile(scroll, '/repo/big.log', () => true);
+  assert.strictEqual(fetched.length, 2);
+  assert.ok(fetched[1].headers['If-None-Match'], '같은 창은 조건부(304)');
+
+  // 끝에 붙은 줄만 받아 붙인다(tail -f).
+  srv.text = `${text}grown 1\ngrown 2\n`;
+  srv.rev += 1;
+  fetched.length = 0;
+  await file.refreshFile(scroll, '/repo/big.log', () => true);
+  assert.strictEqual(fetched.length, 2, '창 하나 + 이어 받기 하나');
+  assert.strictEqual(params(fetched[1]).get('offset'), String(text.length));
+  assert.strictEqual(host.querySelector('pre.vt-vw-plain').textContent, `${text.slice(text.length - MB)}grown 1\ngrown 2\n`);
 
   const back = [...host.querySelectorAll('.vt-vw-bar button')].find((b) => b.textContent === '처음부터 보기');
   back.click();
@@ -339,4 +352,202 @@ test('textChange — 같으면 null, 다르면 앞뒤 공통 부분을 뺀 한 �
   assert.strictEqual(editorLangKey('/a/b.jsx', 'javascript'), 'javascript');
   assert.strictEqual(editorLangKey('/a/b.py', 'python'), 'python');
   assert.strictEqual(editorLangKey('/a/VERSION', null), null);
+});
+
+// --- 검토 지적 수정(열기와 다시 읽기의 경쟁, 커지는 파일, 편집기 정리, 줄 이동 상한) -----------------------------
+
+// fetch 하나를 잡아 둔다 — 조건에 맞는 첫 요청이 release() 전까지 답하지 않는다.
+function gateFetch(window, match) {
+  const inner = window.fetch;
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  let held = false;
+  let reached;
+  const arrived = new Promise((r) => { reached = r; });
+  window.fetch = async (url, opts) => {
+    if (!held && match(new URL(String(url), 'http://x').searchParams)) {
+      held = true;
+      reached();
+      await gate;
+    }
+    return inner(url, opts);
+  };
+  return { release: () => release(), arrived };
+}
+
+test('열기 도중 온 다시 읽기는 열기가 끝난 뒤에 돈다 — 끝이 두 번 붙지 않는다', async () => {
+  const text = lines(32768);   // 2MB: 구간 두 개
+  const srv = fakeServer(text);
+  const { window, document, file, fetched } = await build(srv);
+  const { scroll, host } = mountHost(document);
+  const g = gateFetch(window, (q) => q.get('offset') === String(MB));   // 열기의 둘째 구간
+  const opening = file.renderFile(host, '/repo/live.log');
+  await g.arrived;
+  // 첫 구간은 이미 그려졌다(st.meta가 있다) — 예전에는 여기서 다시 읽기가 통째로 바꾼 뒤 둘째 구간이 또 붙었다.
+  assert.strictEqual(host.querySelector('pre.vt-vw-plain').textContent.length, MB);
+  const refreshing = file.refreshFile(scroll, '/repo/live.log', () => true);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.strictEqual(fetched.filter((f) => params(f).get('offset') === '0').length, 1, '열기가 끝날 때까지 다시 읽기는 기다린다');
+  g.release();
+  await Promise.all([opening, refreshing]);
+  assert.strictEqual(host.querySelector('pre.vt-vw-plain').textContent, text);
+  assert.strictEqual(scroll.querySelector('.vt-vw-code-pane'), host);
+});
+
+test('커지기만 한 큰 파일 — 끝 앞의 작은 창을 확인하고 받은 끝에서부터만 이어 받는다', async () => {
+  const text = lines(32768);   // 2MB, 끝까지 받는다
+  const srv = fakeServer(text);
+  const { document, file, fetched } = await build(srv);
+  const { scroll, host } = mountHost(document);
+  await file.renderFile(host, '/repo/build.log');
+  const pre = host.querySelector('pre.vt-vw-plain');
+
+  srv.text = `${text}step 1\nstep 2\n`;
+  srv.rev += 1;
+  fetched.length = 0;
+  await file.refreshFile(scroll, '/repo/build.log', () => true);
+  assert.strictEqual(fetched.length, 2);
+  assert.strictEqual(params(fetched[0]).get('offset'), String(text.length - 8192), '창은 받은 끝 바로 앞 8KB');
+  assert.strictEqual(params(fetched[0]).get('length'), '8192');
+  assert.strictEqual(params(fetched[1]).get('offset'), String(text.length), '받은 끝에서부터');
+  assert.strictEqual(params(fetched[1]).get('expected_rev'), `r${srv.rev}`, '창의 판으로 고정');
+  assert.strictEqual(pre.textContent, srv.text);
+
+  // 줄 끝 없이 끝난 마지막 줄 — 그 줄은 다시 받아 바꾼다.
+  srv.text += 'progress 10%';
+  srv.rev += 1;
+  await file.refreshFile(scroll, '/repo/build.log', () => true);
+  assert.strictEqual(pre.textContent, srv.text);
+  srv.text = `${srv.text.slice(0, -3)}100%\ndone\n`;
+  srv.rev += 1;
+  fetched.length = 0;
+  await file.refreshFile(scroll, '/repo/build.log', () => true);
+  assert.strictEqual(pre.textContent, srv.text);
+  assert.ok(fetched.every((f) => params(f).get('offset') !== '0'), '처음부터 다시 읽지 않는다');
+
+  // 끝 근처가 바뀌고 커지면(덮어쓰기) 처음부터 다시 읽는다.
+  srv.text = `${srv.text.slice(0, -5)}FAILED\nmore\n`;
+  srv.rev += 1;
+  fetched.length = 0;
+  await file.refreshFile(scroll, '/repo/build.log', () => true);
+  assert.strictEqual(params(fetched[1]).get('offset'), '0', '창이 화면 끝과 달라 처음부터');
+  assert.strictEqual(pre.textContent, srv.text);
+
+  // 그대로면 같은 창을 조건부로 물어 304 하나로 끝난다.
+  await file.refreshFile(scroll, '/repo/build.log', () => true);
+  fetched.length = 0;
+  await file.refreshFile(scroll, '/repo/build.log', () => true);
+  assert.strictEqual(fetched.length, 1);
+  assert.ok(fetched[0].headers['If-None-Match']);
+});
+
+test('앞 4MB만 받은 파일이 뒤로 커지면 창 하나만 묻고 아래 띠의 전체 크기만 바꾼다', async () => {
+  const text = lines(6 * 16384);
+  const srv = fakeServer(text);
+  const { document, file, fetched } = await build(srv);
+  const { scroll, host } = mountHost(document);
+  await file.renderFile(host, '/repo/big.log');
+  srv.text = text + lines(16384);   // +1MB
+  srv.rev += 1;
+  fetched.length = 0;
+  await file.refreshFile(scroll, '/repo/big.log', () => true);
+  assert.strictEqual(fetched.length, 1);
+  assert.strictEqual(params(fetched[0]).get('offset'), String(4 * MB - 8192));
+  assert.match(host.querySelector('.vt-vw-trunc').textContent, /앞 4\.0MB만 불러왔습니다 \(전체 7\.0MB\)/);
+  assert.strictEqual(host.querySelector('pre.vt-vw-plain').textContent.length, 4 * MB);
+});
+
+test('큰 파일 자동 갱신 간격 — 1MB 넘게 받아 둔 칸만 1초', async () => {
+  const srv = fakeServer(lines(32768));
+  const { document, file } = await build(srv);
+  const { scroll, host } = mountHost(document);
+  assert.strictEqual(file.refreshGap(scroll), 0, '아직 칸이 없다');
+  await file.renderFile(host, '/repo/a.log');
+  assert.strictEqual(file.refreshGap(scroll), 1000);
+  srv.text = 'small\n';
+  srv.rev += 1;
+  await file.refreshFile(scroll, '/repo/a.log', () => true);
+  assert.strictEqual(file.refreshGap(scroll), 0);
+});
+
+test('줄 이동 — 받은 범위 밖이면 「더 보기」 한 번 거리만 스스로 받고, 아주 먼 줄은 받지 않고 알린다', async () => {
+  const text = lines(12 * 16384);   // 12MB, 64바이트 줄
+  const srv = fakeServer(text);
+  const { document, file, fetched, toasts } = await build(srv);
+  const { host } = mountHost(document);
+  await file.renderFile(host, '/repo/huge.log');
+  // CM 대신 같은 모양의 핸들(대체 표시에는 줄 이동이 없다).
+  const pre = host.querySelector('pre.vt-vw-plain');
+  host._vtEditor = {
+    view: { dom: pre },
+    lines: () => pre.textContent.split('\n').length,
+    append: (t) => { pre.textContent += t; },
+    jumpTo: (line) => line <= pre.textContent.split('\n').length - 1,
+    destroy() {},
+  };
+  fetched.length = 0;
+  await file.jumpToLine(host, 99999999, 1);
+  assert.strictEqual(fetched.length, 0, '상한까지 받지 않는다');
+  assert.match(toasts.at(-1), /99999999번째 줄은 아직 불러오지 않았습니다/);
+
+  await file.jumpToLine(host, 100000, 1);   // 6.1MB 근처 — 다음 4MB 안
+  assert.strictEqual(fetched.length, 4, '「더 보기」 한 번(1MB 구간 4개)');
+  assert.strictEqual(pre.textContent.length, 8 * MB);
+  assert.strictEqual(toasts.length, 1);
+});
+
+test('편집기 정리 — 새로고침이 칸을 갈아 끼우거나 disposeViewer를 부르면 destroy하고 진행 중인 열기를 끊는다', async () => {
+  const srv = fakeServer('x\n');
+  const { document, file } = await build(srv);
+  const { scroll, host } = mountHost(document);
+  await file.renderFile(host, '/repo/a.js');
+  let destroyed = 0;
+  const dom = document.createElement('div');
+  host.appendChild(dom);
+  host._vtEditor = { view: { dom }, setText: () => true, destroy: () => { destroyed += 1; } };
+  srv.binary = true;
+  srv.rev += 1;
+  await file.refreshFile(scroll, '/repo/a.js', () => true);
+  assert.notStrictEqual(scroll.querySelector('.vt-vw-code-pane'), host);
+  assert.strictEqual(destroyed, 1, '떼어 낸 칸의 편집기');
+  assert.strictEqual(host._vtDoc, null);
+
+  const box = document.createElement('div');
+  const h2 = document.createElement('div');
+  h2.className = 'vt-vw-code-pane';
+  box.appendChild(h2);
+  srv.binary = false;
+  const opening = file.renderFile(h2, '/repo/a.js');
+  file.disposeViewer(box);
+  await opening;
+  assert.strictEqual(h2.querySelector('pre.vt-vw-plain'), null, '거둔 칸에는 더 그리지 않는다');
+});
+
+test('growthFrom — 같은 파일이 커졌고 창이 화면 끝과 같을 때만 이어 받을 위치를 준다', async () => {
+  const e = createDomEnv('<!doctype html><html><body></body></html>');
+  _doms.push(e.dom);
+  e.window.API_BASE = '';
+  const { growthFrom } = await importFresh(LOAD_JS, e.context, new Map());
+  const ctx = {
+    start: 0, end: 20000, offset: 20000 - 8192, oldSize: 20000, oldRev: '1:7:20000:5',
+    before: 'aaa\nbbb\n', beforeAll: false, partial: '', pinned: 'utf-8', confident: true,
+  };
+  const d = { size: 20100, rev: '1:7:20100:6', offset: 20000 - 8192, length: 8192, content: 'xx\naaa\nbbb\n' };
+  assert.strictEqual(growthFrom(d, ctx), 20000);
+  assert.strictEqual(growthFrom({ ...d, rev: '1:8:20100:6' }, ctx), null, '다른 inode — 이름 바꿔 저장한 새 파일');
+  assert.strictEqual(growthFrom({ ...d, size: 20000 }, ctx), null, '크기가 늘지 않았다');
+  assert.strictEqual(growthFrom({ ...d, content: 'xx\naaa\nBBB\n' }, ctx), null, '창이 다르다');
+  assert.strictEqual(growthFrom({ ...d, content: 'xx\nzz\n' }, ctx), null);
+  assert.strictEqual(growthFrom({ ...d, content: 'aaa\n' }, ctx), null, '창 첫 줄(글자 중간일 수 있다)은 비교에서 빼므로 남는 것이 없다');
+  assert.strictEqual(growthFrom({ ...d, line_truncated: true }, ctx), null);
+  assert.strictEqual(growthFrom({ ...d, content: 'xx\r\naaa\r\nbbb\r\n' }, ctx), 20000, 'CRLF는 LF로 맞춰 비교');
+  // 줄 끝 없는 마지막 조각: UTF-8 바이트 수만큼 앞에서 창이 끝나야 한다(한글 3바이트).
+  const p = { ...ctx, partial: '진행 5' };   // 3+3+1+1 = 8바이트
+  assert.strictEqual(growthFrom({ ...d, length: 8192 - 8 }, p), 20000 - 8);
+  assert.strictEqual(growthFrom({ ...d, length: 8192 - 6 }, p), null);
+  assert.strictEqual(growthFrom({ ...d, length: 8192 - 8 }, { ...p, pinned: 'cp949' }), null, '바이트 수를 셀 수 없는 인코딩');
+  // 창이 화면 처음에서 시작하면 전부 같아야 한다.
+  const whole = { ...ctx, offset: 0, end: 8, before: 'aaa\nbbb\n', beforeAll: true };
+  assert.strictEqual(growthFrom({ ...d, offset: 0, length: 8, content: 'aaa\nbbb\n' }, whole), 8);
+  assert.strictEqual(growthFrom({ ...d, offset: 0, length: 8, content: 'aaa\nbbb\n' }, { ...whole, before: 'zaaa\nbbb\n' }), null);
 });

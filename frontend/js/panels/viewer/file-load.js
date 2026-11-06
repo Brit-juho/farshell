@@ -9,6 +9,9 @@
 // - 이어 받는 구간은 `expected_rev`를 붙인다. 409(그 사이 파일이 바뀜)면 처음부터 다시 받고, 3번 연속이면
 //   「계속 바뀌는 중」으로 멈춘다(ChangingError).
 // - 다시 읽기는 첫 구간만 조건부로 묻는다(ETag는 rev+인코딩+구간). 304면 파일 전체가 그대로다.
+// - 받아 둔 양이 큰 칸(INCREMENTAL_MIN 초과)의 다시 읽기는 받은 끝 바로 앞의 작은 창(PROBE_BYTES)만 묻는다.
+//   그 창이 화면의 끝과 같고 파일이 커지기만 했으면(growthFrom) 받은 끝에서부터만 이어 받는다 — 자라는 로그를
+//   볼 때 바뀔 때마다 몇 MB를 다시 받지 않게. 아니면 처음부터 다시 읽는다.
 import { vtFetchConditional } from '../../core/api.js';
 import { relayHost } from '../../core/host-route.js';
 
@@ -17,6 +20,8 @@ export const OPEN_BUDGET = 4 * CHUNK;        // 처음 여는 양, 「더 보기
 export const MAX_LOADED = 32 * CHUNK;        // 한 뷰어가 받아 두는 상한(폰 메모리)
 export const TAIL_BYTES = CHUNK;             // 끝부분 보기의 양
 export const MAX_CHANGED = 3;                // 연속 409 허용 횟수
+export const PROBE_BYTES = 8 * 1024;         // 커지기만 했는지 볼 때 묻는 창(받은 끝 바로 앞)
+export const INCREMENTAL_MIN = 256 * 1024;   // 이보다 많이 받아 둔 칸만 창으로 묻는다(작으면 통째 다시 읽기가 싸다)
 
 /** 「파일이 계속 바뀌는 중」 — 409가 MAX_CHANGED번 연속. */
 export class ChangingError extends Error {
@@ -170,13 +175,75 @@ export async function loadHead({ path, host, encoding, target = OPEN_BUDGET, eta
 
 /**
  * 「더 보기」 — 받은 끝(meta.nextOffset)부터 OPEN_BUDGET만큼 더(상한 MAX_LOADED). 409면 Changed를 그대로 던진다
- * (호출부가 처음부터 다시 연다 — 붙여 둔 앞부분이 이미 옛 판이다).
+ * (호출부가 처음부터 다시 연다 — 붙여 둔 앞부분이 이미 옛 판이다). `target`을 주면 그 바이트까지(커진 끝 이어 받기).
  */
-export async function loadMore({ path, host, meta, carry, onAppend, fetchFn = vtFetchConditional }) {
-  const target = Math.min(MAX_LOADED, (meta.nextOffset || 0) + OPEN_BUDGET);
-  const c = await _continue(fetchFn, path, host, meta, carry, target, onAppend);
+export async function loadMore({ path, host, meta, carry, onAppend, target = null, fetchFn = vtFetchConditional }) {
+  const until = target != null ? target : Math.min(MAX_LOADED, (meta.nextOffset || 0) + OPEN_BUDGET);
+  const c = await _continue(fetchFn, path, host, meta, carry, until, onAppend);
   meta.loaded = meta.eof ? meta.size : meta.nextOffset;
   return c;
+}
+
+/**
+ * 받은 끝(`end`) 바로 앞의 작은 창을 묻는다 — 창 [max(start, end-PROBE_BYTES), end). 인코딩은 고정한 것(meta.pinned).
+ * `etag`가 같은 창의 것이면 조건부(304면 `{notModified: true}`). 돌려주는 것: `{offset, length, etag, data}`.
+ */
+export async function loadProbe({ path, host, meta, start, end, etag = null, fetchFn = vtFetchConditional }) {
+  const offset = Math.max(start, end - PROBE_BYTES);
+  const length = Math.max(1, end - offset);
+  const r = await fetchFn(_url(path, host, { offset, length, encoding: meta.pinned }), etag ? { etag } : {});
+  if (r.status === 304) return { notModified: true, offset, length, etag: r.etag };
+  return { offset, length, etag: r.etag, data: r.data || {} };
+}
+
+const _devIno = (rev) => {
+  const m = /^(\d+):(\d+):\d+:\d+$/.exec(String(rev || ''));
+  return m ? `${m[1]}:${m[2]}` : null;
+};
+
+function _utf8Len(s) {
+  return new TextEncoder().encode(s).length;
+}
+
+/**
+ * 창(`loadProbe`의 답)으로 "파일이 받은 끝 뒤로 커지기만 했다"를 확인하고, 이어 받을 바이트 위치를 돌려준다. 아니면 null.
+ * ctx: `start`·`end`(화면에 든 바이트 구간), `offset`(창 시작), `oldSize`·`oldRev`, `before`(화면 글에서 마지막 줄
+ * 조각 앞의 끝부분, PROBE_BYTES 글자면 충분하다), `beforeAll`(before가 그 앞 전부인가), `partial`(줄 끝 없이 끝난
+ * 마지막 조각, 없으면 ''), `pinned`·`confident`(인코딩).
+ *
+ * 확인하는 것
+ * - 크기가 늘었고, rev가 `dev:ino:…`이면 같은 파일(이름 바꿔 저장한 새 파일이 아님)이다.
+ * - 창은 줄 끝에서 끝난다. 그 끝(offset+length)은 화면 끝에서 마지막 조각의 바이트만큼 앞이어야 한다 — 조각의 바이트
+ *   수는 UTF-8로 확신할 때만 셀 수 있다(다른 인코딩이면 조각이 없을 때만).
+ * - 창의 첫 줄 끝 뒤(창이 화면 처음에서 시작하면 전부)가 화면 글의 같은 자리와 같다. `\n`은 이 인코딩들에서 다른
+ *   글자의 일부가 아니라서, 창이 글자 중간에서 시작해도 첫 줄 끝 뒤부터는 같은 방식으로 풀린다.
+ * 보지 못하는 것: 창 앞쪽만 바뀌고 크기도 는 편집(rev는 메타데이터라 서버도 모른다). 그런 편집은 다음 처음부터
+ * 다시 읽기(크기가 그대로인 변경, 창이 다른 변경, 새로고침 버튼으로 다시 열기) 때 맞춰진다.
+ */
+export function growthFrom(d, ctx) {
+  if (!d || d.binary || d.image || d.line_truncated) return null;
+  if (!(Number(d.size) > Number(ctx.oldSize))) return null;
+  const a = _devIno(d.rev);
+  const b = _devIno(ctx.oldRev);
+  if (a && b && a !== b) return null;
+  if (typeof d.offset !== 'number' || typeof d.length !== 'number' || d.offset !== ctx.offset) return null;
+  let partialBytes = 0;
+  if (ctx.partial) {
+    if (ctx.pinned !== 'utf-8' || !ctx.confident) return null;
+    partialBytes = _utf8Len(ctx.partial);
+  }
+  if (d.offset + d.length !== ctx.end - partialBytes) return null;
+  let raw = String(d.content == null ? '' : d.content);
+  if (ctx.offset > ctx.start) {
+    const i = raw.indexOf('\n');
+    if (i < 0) return null;
+    raw = raw.slice(i + 1);
+  }
+  if (!raw || !raw.endsWith('\n')) return null;
+  const text = raw.replace(/\r\n?/g, '\n');
+  const before = String(ctx.before || '');
+  if (ctx.offset === ctx.start ? !(ctx.beforeAll && text === before) : !before.endsWith(text)) return null;
+  return d.offset + d.length;
 }
 
 /** 끝부분 TAIL_BYTES. 다시 읽기는 `etag`로 조건부(304면 `{notModified: true}`). */
