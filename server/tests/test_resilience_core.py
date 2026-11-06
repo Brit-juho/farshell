@@ -207,6 +207,9 @@ def test_scan_include_env_opts_back_in(monkeypatch, tmp_path):
     monkeypatch.setenv("VT_SCAN_INCLUDE_MOUNTS", str(nfs))
     assert mounts.skip_for_scan(str(nfs / "repo")) is None
     monkeypatch.setenv("VT_SCAN_INCLUDE_MOUNTS", "all")
+    # 원격 마운트는 모두 다시 들어간다. macOS 보호 위치는 별도 설정(VT_SCAN_INCLUDE_PROTECTED)을 따른다.
+    assert mounts.scan_skip_prefixes() == sorted(set(mounts.protected_roots()))
+    monkeypatch.setenv("VT_SCAN_INCLUDE_PROTECTED", "1")
     assert mounts.scan_skip_prefixes() == []
 
 
@@ -259,3 +262,45 @@ def test_broadcast_drops_slow_client_without_delaying_others():
     assert sent == 1 and took < 1.0
     assert fast.sent and slow.closed
     assert clients == {fast}
+
+
+# --- macOS 보호 위치(TCC) --------------------------------------------------------------------
+
+def test_protected_locations_are_skipped_only_on_macos(monkeypatch, tmp_path):
+    """자동 탐색이 데스크톱·문서·다운로드·Library·외장 볼륨에 들어가면 폴더마다 권한 창이 뜬다(2026-11-06)."""
+    monkeypatch.setattr(mounts, "_home", lambda: str(tmp_path))
+    monkeypatch.setattr(mounts.sys, "platform", "darwin")
+    mounts._set_for_tests([mounts.Mount("/", "apfs", "/dev/disk3s1", True)])
+    for rel in ("Desktop", "Documents/proj", "Downloads", "Library/Containers/x", "Pictures"):
+        assert mounts.skip_for_scan(str(tmp_path / rel)).startswith("macos-protected:")
+    assert mounts.skip_for_scan("/Volumes/USB/repo").startswith("macos-protected:")
+    assert mounts.skip_for_scan(str(tmp_path / "GitHub" / "repo")) is None
+    assert mounts.skip_for_scan(str(tmp_path / "Documentsish")) is None       # 경로 경계로 본다
+    assert str(tmp_path / "Documents") in mounts.scan_skip_prefixes()
+    monkeypatch.setenv("VT_SCAN_INCLUDE_PROTECTED", "1")                       # 전체 디스크 접근 권한을 준 경우
+    assert mounts.skip_for_scan(str(tmp_path / "Documents" / "proj")) is None
+    monkeypatch.delenv("VT_SCAN_INCLUDE_PROTECTED")
+    monkeypatch.setattr(mounts.sys, "platform", "linux")
+    assert mounts.protected_roots() == []
+    assert mounts.skip_for_scan(str(tmp_path / "Documents" / "proj")) is None
+
+
+def test_repo_scan_does_not_enter_protected_folders(monkeypatch, tmp_path):
+    import worktree
+    (tmp_path / "GitHub" / "repo" / ".git").mkdir(parents=True)
+    (tmp_path / "Documents" / "notes" / ".git").mkdir(parents=True)
+    monkeypatch.setattr(mounts, "_home", lambda: str(tmp_path))
+    monkeypatch.setattr(mounts.sys, "platform", "darwin")
+    mounts._set_for_tests([mounts.Mount("/", "apfs", "/dev/disk3s1", True)])
+    monkeypatch.setenv("VT_STATE_DIR", str(tmp_path / "state"))
+    found, _ = worktree._find_git_entrypoints([tmp_path])
+    assert {p.name for p in found} == {"repo"}
+
+
+def test_session_context_reports_protected_cwd(monkeypatch, tmp_path):
+    import session_context
+    monkeypatch.setattr(mounts, "_home", lambda: str(tmp_path))
+    monkeypatch.setattr(mounts.sys, "platform", "darwin")
+    mounts._set_for_tests([mounts.Mount("/", "apfs", "/dev/disk3s1", True)])
+    out = session_context._context(str(tmp_path / "Downloads" / "x"))
+    assert out["status"] == "unavailable" and out["reason"] == "protected"

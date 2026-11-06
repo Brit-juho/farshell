@@ -160,8 +160,9 @@ def _context(cwd: str) -> dict:
         return {"status": "unavailable", "cwd": "", "root": None,
                 "branch": None, "changed": None, "worktree": None}
     # 원격·가상 마운트(NFS 등) 위의 cwd 는 git·resolve 를 하지 않는다 — 그 한 번이 멈출 수 있다.
-    if res_mounts.skip_for_scan(cwd):
-        return _unavailable(cwd, "remote_mount")
+    skip = res_mounts.skip_for_scan(cwd)
+    if skip:
+        return _unavailable(cwd, "protected" if skip.startswith("macos-protected") else "remote_mount")
     reading = _reading[hash(cwd) % len(_reading)]
     if not reading.acquire(True, STRIPE_WAIT):
         with _lock:
