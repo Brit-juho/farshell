@@ -468,14 +468,24 @@ int main(int argc, char **argv) {
     try:
         rc, _, error = tmux_runner.run(["new-session", "-d", "-s", "config-resume", "-c", str(repo), command])
         assert rc == 0, error
-        for _ in range(40):
+        # 식별값에는 tmux 가 보고하는 pane 경로가 들어간다. 세션을 막 만든 직후엔 그 경로가 바뀔 수 있어(Linux tmux 는
+        # foreground 프로세스의 cwd 를 읽는다) 첫 식별과 다음 식별이 달라질 수 있다 — 2026-11-06 병렬 CI 에서
+        # set_environment 가 「세션 또는 적용 범위가 바뀌었습니다」로 거절했다. 두 번 연속 같아질 때까지 기다린다.
+        prev = actual = None
+        for _ in range(100):
             try:
-                actual = contexts.identify("config-resume")
-                break
+                cur = contexts.identify("config-resume")
             except (OSError, ValueError):
+                prev = None
                 time.sleep(.05)
-        else:
-            pytest.fail("fixture process could not be identified")
+                continue
+            if prev is not None and cur["identity"] == prev["identity"]:
+                actual = cur
+                break
+            prev = cur
+            time.sleep(.05)
+        if actual is None:
+            pytest.fail("fixture process could not be identified stably")
         manager.set_environment("config-resume", "project", "SAMPLE_VALUE", "sample-value", actual["identity"])
         plan = restart.preview("config-resume")
         job = restart.start(plan["token"])

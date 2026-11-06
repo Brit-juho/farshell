@@ -268,6 +268,9 @@ class InstrumentedExecutor(ThreadPoolExecutor):
 _pools: dict[str, Pool] = {}
 _pools_lock = threading.Lock()
 _default: Optional[InstrumentedExecutor] = None
+# 계측 실행기를 설치한 루프. 그 루프가 닫히면 실행기도 종료되므로, 다른 루프에서 그 실행기를 쓰면 안 된다
+# (2026-11-06: 병렬 CI 에서 앞 테스트의 루프가 남긴 실행기로 probe 하다 "cannot schedule new futures after shutdown").
+_default_loop: Optional[asyncio.AbstractEventLoop] = None
 
 
 def get(name: str) -> Pool:
@@ -296,12 +299,13 @@ def call(pool: str, fn: Callable, *args, op: Optional[str] = None, key: str = ""
 
 def install_default_executor(loop: asyncio.AbstractEventLoop) -> InstrumentedExecutor:
     """기본 실행기를 계측판으로 바꾼다. 크기는 표준과 같은 공식(min(32, 코어 + 4))."""
-    global _default
+    global _default, _default_loop
     cpus = (os.process_cpu_count() if hasattr(os, "process_cpu_count") else os.cpu_count()) or 1
     size = _env_size("default", min(32, cpus + 4))
     ex = InstrumentedExecutor(size)
     loop.set_default_executor(ex)
     _default = ex
+    _default_loop = loop
     return ex
 
 
@@ -309,10 +313,20 @@ def default_executor() -> Optional[InstrumentedExecutor]:
     return _default
 
 
+def _current_default() -> Optional[InstrumentedExecutor]:
+    """지금 도는 루프에 설치한 계측 실행기. 다른(닫힌) 루프의 것은 돌려주지 않는다."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return _default
+    return _default if _default_loop is loop else None
+
+
 def snapshot() -> list[dict]:
     out = []
-    if _default is not None:
-        out.append(_default.snapshot())
+    cur = _current_default()
+    if cur is not None:
+        out.append(cur.snapshot())
     for name in DEFAULT_SIZES:
         p = _pools.get(name)
         out.append(p.snapshot() if p else {"name": name, "size": _env_size(name, DEFAULT_SIZES[name]),
@@ -326,7 +340,7 @@ async def probe(pool: str, timeout: float = 1.5) -> bool:
     """그 풀에서 빈 작업이 기한 안에 도는가. 입장 상한은 건너뛴다(포화 여부 자체를 재는 것이므로)."""
     loop = asyncio.get_running_loop()
     if pool == "default":
-        ex = _default
+        ex = _current_default()
         if ex is None:
             fut = loop.run_in_executor(None, _noop)
         else:
@@ -348,9 +362,10 @@ def _noop() -> float:
 
 
 def _reset_for_tests() -> None:
-    global _default
+    global _default, _default_loop
     with _pools_lock:
         for p in _pools.values():
             p.shutdown()
         _pools.clear()
     _default = None
+    _default_loop = None
