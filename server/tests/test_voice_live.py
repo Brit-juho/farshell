@@ -21,6 +21,7 @@ from routes import voice
 from stt_engines import env as env_mod
 from stt_fakes import MAC_ARM, make_engines
 from test_voice_vad import mix, noise, pcm, tone
+from shared_testkit import Req  # noqa: F401  (pytest 가 이름으로 쓰는 fixture/헬퍼)
 
 TIMING = {"decode_ms": 1, "wait_ms": 0, "load_ms": 0, "stt_ms": 5, "total_ms": 7}
 SPEECH = pcm(mix(tone(0.5), noise(0.5, seed=2)))     # 0.5초 = 16000바이트(클라이언트 청크 크기)
@@ -40,18 +41,6 @@ def clean():
     assert voice_live.pending_tasks() == 0              # 백그라운드 작업이 새지 않는다
 
 
-class Req:
-    def __init__(self, body=b"", headers=None, query=None):
-        self._body = body
-        self.headers = {"authorization": "Bearer tok-a", **(headers or {})}
-        self.query_params = query or {}
-        self.cookies = {}
-
-    async def body(self):
-        return self._body
-
-    async def json(self):
-        return json.loads(self._body)
 
 
 def issue():

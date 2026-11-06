@@ -12,6 +12,7 @@ import pytest
 
 from authz import audit, leases, store
 from authz import principals as P
+from shared_testkit import _Sock  # noqa: F401  (pytest 가 이름으로 쓰는 fixture/헬퍼)
 
 A = P.agent("$1:101", name="alpha")
 B = P.agent("$2:102", name="bravo")
@@ -354,15 +355,6 @@ def test_human_is_never_blocked_but_overrides_are_noticed(env, monkeypatch):
 # --- HTTP 라우트 -------------------------------------------------------------------------------
 
 
-class _Sock:
-    def __init__(self, app, principal):
-        self.app, self.p = app, principal
-
-    async def __call__(self, scope, receive, send):
-        if scope["type"] == "http":
-            scope["fsh_sock"] = True
-            scope["state"] = {**(scope.get("state") or {}), "fsh_principal": self.p}
-        await self.app(scope, receive, send)
 
 
 def client(monkeypatch, principal):
