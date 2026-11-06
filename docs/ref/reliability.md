@@ -180,6 +180,7 @@ After `VT_WATCHDOG_FAILS` (3) failures in a row:
 
 - **Request deadlines.** `vtFetch`/`apiFetch` time out at 15 s for GET and 30 s for writes; long calls such
   as voice, commit and worktree create get larger budgets. A timeout throws an error with `timeout: true`.
+  `vtFetchConditional` (conditional GET for the file viewer, 304 is a success) shares the same deadline code.
 - **Banner.** A timeout counts as a reachability failure and shows the `hung` banner, 「서버가 응답하지 않습니다」.
 - **Login gate.** Probes and submits time out at 8 s and show a retry block. A timeout never hides the gate;
   a real network error still does, so the offline shell can work.
