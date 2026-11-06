@@ -307,82 +307,219 @@ def test_native_transcript_relay_reads_verified_child(b_env, tmp_path, monkeypat
         A._retire("relay-parent")
 
 
-# --- 보안 헤더가 중계를 지나도 남는다 ---------------------------------------------------
-# 라우트가 붙인 응답별 정책(파일 미리보기의 sandbox CSP 등)이 중계에서 빠지면, 바깥 서버의
-# 기본 헤더(frame-ancestors 'none'만)로 바뀌어 같은 바이트가 로컬보다 약한 정책으로 열린다.
+# --- 응답 헤더는 A가 짓는다: B를 믿지 않는다 ----------------------------------------------
+# B의 바이트는 A의 출처에서 열린다. 악의적이거나 털린 B가 A의 nosniff·frame-ancestors 를 지우거나,
+# CSP 보고서를 밖으로 보내게 하거나, text/html 로 A의 출처에서 스크립트를 돌리면 안 된다.
 
-_SANDBOX_CSP = "sandbox; default-src 'none'"
-
-
-def _install_header_probe(monkeypatch, app):
-    """허용 목록 안 경로(`/api/fs/raw`)를 응답 헤더 탐침으로 바꿔 끼운다(라우터 맨 앞)."""
-    from starlette.responses import Response
-    from starlette.routing import Route
-
-    seen = {}
-
-    async def probe(request):
-        seen["if-range"] = request.headers.get("if-range")
-        seen["range"] = request.headers.get("range")
-        resp = Response(b"bytes", media_type="image/png")
-        # 같은 이름의 CSP 두 개 — 둘 다 강제되는 정책 목록이다.
-        resp.raw_headers.append((b"content-security-policy", _SANDBOX_CSP.encode()))
-        resp.raw_headers.append((b"content-security-policy", b"img-src 'self'"))
-        resp.raw_headers.append((b"x-content-type-options", b"nosniff"))
-        return resp
-
-    monkeypatch.setattr(app.router, "routes", [Route("/api/fs/raw", probe), *app.router.routes])
-    return seen
+_PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
 
 
-def test_relay_passes_route_security_headers_and_if_range(b_env, monkeypatch):
-    import main
-    client, hs, secret = b_env
-    seen = _install_header_probe(monkeypatch, main.app)
-    path = "/api/peer/relay/api/fs/raw"
-    r = client.get(path + "?path=%2Fx.png", headers={
-        **_signed(hs, secret, "GET", path + "?path=%2Fx.png"),
-        "Range": "bytes=0-1", "If-Range": '"rev-1"',
-    })
-    assert r.status_code == 200, r.text
-    csp = r.headers.get("content-security-policy", "")
-    assert _SANDBOX_CSP in csp and "img-src 'self'" in csp
-    assert "frame-ancestors" not in csp           # 바깥 기본값으로 바뀌지 않았다
-    assert r.headers.get("x-content-type-options") == "nosniff"
-    assert seen == {"if-range": '"rev-1"', "range": "bytes=0-1"}
-
-
-def test_host_relay_passes_security_headers_and_if_range(a_env, monkeypatch):
-    client, _ = a_env
+def _mock_b(monkeypatch, status=200, content=b"{}", headers=None):
+    """A의 상대(B)를 마음대로 응답하는 가짜로 바꾼다. 받은 요청 헤더를 돌려준다."""
     import routes.host_relay as hr
     seen = {}
 
     async def handler(request):
         seen["headers"] = dict(request.headers)
-        return httpx.Response(200, content=b"bytes", headers={
-            "x-peer-relay": "1", "content-type": "image/png",
-            "content-security-policy": _SANDBOX_CSP, "x-content-type-options": "nosniff",
-        })
+        return httpx.Response(status, content=content, headers={"x-peer-relay": "1", **(headers or {})})
 
     monkeypatch.setattr(hr, "_client", httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    return seen
+
+
+def _assert_a_policy(r):
+    assert r.headers.get("x-content-type-options") == "nosniff"
+    assert r.headers.get("content-security-policy") == relay_policy.RELAY_CSP
+    assert r.headers.get("x-frame-options") == "DENY"
+
+
+def test_host_relay_overrides_b_nosniff(a_env, monkeypatch):
+    client, _ = a_env
+    _mock_b(monkeypatch, headers={"content-type": "application/json", "x-content-type-options": "x"})
+    r = client.get("/api/hosts/m5/relay/api/workspace")
+    assert r.status_code == 200
+    assert r.headers.get_list("x-content-type-options") == ["nosniff"]
+
+
+def test_host_relay_drops_b_csp_frame_ancestors_and_reporting(a_env, monkeypatch):
+    client, _ = a_env
+    _mock_b(monkeypatch, headers={
+        "content-type": "application/json",
+        "content-security-policy": "frame-ancestors *; report-uri https://evil.example/r; report-to x",
+        "report-to": '{"group":"x","endpoints":[{"url":"https://evil.example/r"}]}',
+        "reporting-endpoints": 'x="https://evil.example/r"',
+    })
+    r = client.get("/api/hosts/m5/relay/api/workspace")
+    assert r.status_code == 200
+    assert r.headers.get_list("content-security-policy") == [relay_policy.RELAY_CSP]
+    assert "evil" not in str(r.headers).lower()
+    _assert_a_policy(r)
+
+
+@pytest.mark.parametrize("target,ctype", [
+    ("/api/workspace", "text/html"),
+    ("/api/workspace", "text/html; charset=utf-8"),
+    ("/api/fs/tree", "application/xhtml+xml"),
+    ("/api/fs/raw", "image/svg+xml"),
+    ("/api/fs/raw", "text/xml"),
+    ("/api/fs/raw", "text/html"),
+    ("/api/fs/raw", "application/javascript"),
+    ("/api/agents", "text/javascript"),
+    ("/api/fs/file", "application/pdf"),
+    ("/api/workspace", "text/html, application/json"),
+])
+def test_host_relay_neutralizes_active_content_types(a_env, monkeypatch, target, ctype):
+    client, _ = a_env
+    _mock_b(monkeypatch, content=b"<script>alert(1)</script>",
+            headers={"content-type": ctype, "content-disposition": "inline"})
+    r = client.get("/api/hosts/m5/relay" + target + "?path=x.png")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "text/plain; charset=utf-8"
+    assert "content-disposition" not in r.headers
+    _assert_a_policy(r)
+
+
+def test_host_relay_neutralizes_missing_content_type_with_body(a_env, monkeypatch):
+    client, _ = a_env
+    _mock_b(monkeypatch, content=b"<html><script>alert(1)</script>")
+    r = client.get("/api/hosts/m5/relay/api/workspace")
+    assert r.headers["content-type"] == "text/plain; charset=utf-8"
+    _assert_a_policy(r)
+
+
+@pytest.mark.parametrize("name,value", [
+    ("set-cookie", "vt_session=attacker; Path=/"),
+    ("location", "https://evil.example/"),
+    ("refresh", "0; url=https://evil.example/"),
+    ("link", "<https://evil.example/x.js>; rel=preload; as=script"),
+    ("access-control-allow-origin", "*"),
+    ("access-control-allow-credentials", "true"),
+    ("clear-site-data", '"cookies", "storage"'),
+    ("service-worker-allowed", "/"),
+    ("content-encoding", "identity"),
+    ("strict-transport-security", "max-age=0"),
+    ("x-frame-options", "ALLOWALL"),
+    ("cross-origin-resource-policy", "cross-origin"),
+])
+def test_host_relay_drops_dangerous_headers(a_env, monkeypatch, name, value):
+    client, _ = a_env
+    _mock_b(monkeypatch, status=302 if name == "location" else 200,
+            headers={"content-type": "application/json", name: value})
+    r = client.get("/api/hosts/m5/relay/api/workspace")
+    if name == "x-frame-options":
+        assert r.headers.get_list(name) == ["DENY"]
+    else:
+        assert name not in r.headers
+    _assert_a_policy(r)
+
+
+def test_host_relay_cache_control_stays_private(a_env, monkeypatch):
+    client, _ = a_env
+    _mock_b(monkeypatch, headers={"content-type": "application/json", "cache-control": "public, max-age=31536000"})
+    assert client.get("/api/hosts/m5/relay/api/workspace").headers["cache-control"] == "private, no-cache"
+    _mock_b(monkeypatch, headers={"content-type": "application/json", "cache-control": "private, no-store"})
+    assert client.get("/api/hosts/m5/relay/api/workspace").headers["cache-control"] == "no-store"
+
+
+def test_host_relay_download_forces_attachment(a_env, monkeypatch):
+    """첨부 내려받기는 무엇이든 받되 attachment 를 강제하고, 실행 타입은 octet-stream 으로."""
+    client, _ = a_env
+    _mock_b(monkeypatch, content=b"<script>1</script>",
+            headers={"content-type": "text/html", "content-disposition": "inline"})
+    r = client.get("/api/hosts/m5/relay/api/files/abc/download")
+    assert r.headers["content-type"] == "application/octet-stream"
+    assert r.headers["content-disposition"] == "attachment"
+    _assert_a_policy(r)
+
+
+def test_host_relay_keeps_range_and_validators(a_env, monkeypatch):
+    client, _ = a_env
+    seen = _mock_b(monkeypatch, status=206, content=b"by", headers={
+        "content-type": "image/png", "content-range": "bytes 0-1/5", "accept-ranges": "bytes",
+        "etag": '"rev-1"', "last-modified": "Sat, 07 Nov 2026 00:00:00 GMT",
+    })
     r = client.get("/api/hosts/m5/relay/api/fs/raw?path=x.png",
                    headers={"Range": "bytes=0-1", "If-Range": '"rev-1"'})
-    assert r.status_code == 200
-    assert r.headers.get("content-security-policy") == _SANDBOX_CSP
-    assert r.headers.get("x-content-type-options") == "nosniff"
+    assert r.status_code == 206
+    assert r.headers["content-type"] == "image/png"
+    assert r.headers["content-range"] == "bytes 0-1/5" and r.headers["etag"] == '"rev-1"'
+    assert r.headers["accept-ranges"] == "bytes" and r.headers["last-modified"]
     assert seen["headers"].get("if-range") == '"rev-1"'
     assert seen["headers"].get("range") == "bytes=0-1"
 
 
-def test_host_relay_round_trip_keeps_route_csp(a_env, monkeypatch):
-    """A → B 끝까지(같은 앱) — B 라우트의 CSP 가 A 응답에 그대로 남는다."""
+def test_relay_b_no_longer_sends_security_headers(b_env, monkeypatch):
+    """B(받는 쪽)는 CSP·nosniff 를 A에 넘기지 않는다 — A가 쓰지 않는 값이다. Range/If-Range 는 넘긴다."""
     import main
-    client, _ = a_env
-    _install_header_probe(monkeypatch, main.app)
-    r = client.get("/api/hosts/m5/relay/api/fs/raw?path=x.png")
+    from starlette.responses import Response
+    from starlette.routing import Route
+    client, hs, secret = b_env
+    seen = {}
+
+    async def probe(request):
+        seen["if-range"] = request.headers.get("if-range")
+        resp = Response(b"bytes", media_type="image/png")
+        resp.raw_headers.append((b"content-security-policy", b"frame-ancestors *"))
+        resp.raw_headers.append((b"set-cookie", b"a=b"))
+        return resp
+
+    monkeypatch.setattr(main.app.router, "routes", [Route("/api/fs/raw", probe), *main.app.router.routes])
+    path = "/api/peer/relay/api/fs/raw"
+    r = client.get(path + "?path=%2Fx.png", headers={
+        **_signed(hs, secret, "GET", path + "?path=%2Fx.png"), "If-Range": '"rev-1"'})
     assert r.status_code == 200, r.text
-    csp = r.headers.get("content-security-policy", "")
-    assert _SANDBOX_CSP in csp and "frame-ancestors" not in csp
+    assert "frame-ancestors *" not in r.headers.get("content-security-policy", "")
+    assert "set-cookie" not in r.headers
+    assert seen["if-range"] == '"rev-1"'
+
+
+# --- 정상 기능은 그대로: A → B(같은 앱) 끝까지 ------------------------------------------------
+
+
+def test_host_relay_json_end_to_end_keeps_json(a_env):
+    client, _ = a_env
+    r = client.get("/api/hosts/m5/relay/api/workspace")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/json"
+    assert isinstance(r.json(), dict)
+    _assert_a_policy(r)
+
+
+def test_host_relay_fs_raw_image_end_to_end(a_env, tmp_path, monkeypatch):
+    client, _ = a_env
+    root = (tmp_path / "img").resolve()
+    root.mkdir()
+    monkeypatch.setenv("VT_BROWSE_ROOTS", str(root))
+    (root / "a.png").write_bytes(_PNG)
+    r = client.get("/api/hosts/m5/relay/api/fs/raw", params={"path": str(root / "a.png")})
+    assert r.status_code == 200, r.text
+    assert r.content == _PNG
+    assert r.headers["content-type"] == "image/png"
+    assert r.headers["content-disposition"] == "inline"
+    assert r.headers["cache-control"] == "no-store"
+    _assert_a_policy(r)
+    # SVG 는 B 자신이 거절한다(JSON 오류) — 그 오류도 JSON 그대로 온다.
+    (root / "b.svg").write_bytes(b"<svg xmlns='http://www.w3.org/2000/svg'/>")
+    r = client.get("/api/hosts/m5/relay/api/fs/raw", params={"path": str(root / "b.svg")})
+    assert r.status_code == 403 and r.headers["content-type"] == "application/json"
+
+
+@pytest.mark.parametrize("name,expect_type", [
+    ("notes.txt", "text/plain"),
+    ("page.html", "application/octet-stream"),
+])
+def test_host_relay_download_end_to_end(a_env, name, expect_type):
+    client, _ = a_env
+    up = client.post("/api/hosts/m5/relay/api/upload", files={"file": (name, b"<b>hi</b>")})
+    assert up.status_code == 200, up.text
+    r = client.get(f"/api/hosts/m5/relay/api/files/{up.json()['id']}/download")
+    assert r.status_code == 200, r.text
+    assert r.content == b"<b>hi</b>"
+    assert r.headers["content-type"] == expect_type
+    assert r.headers["content-disposition"].startswith("attachment")
+    assert name in r.headers["content-disposition"]
+    assert r.headers["cache-control"] == "no-store"
+    _assert_a_policy(r)
 
 
 # --- 파일 읽기 2판이 중계를 지나도 같은 계약이다(D7: 읽기 기능은 원격에서도) ---------------------
