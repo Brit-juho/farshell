@@ -3,22 +3,21 @@
 Code: `server/resilience/`, `server/server_watchdog.py`, `server/routes/health.py`; frontend
 `frontend/js/core/{api,poll,ws-watchdog,reachability}.js`. Endpoints: [`API.md`](../../API.md) «Misc».
 
-## Why this exists (2026-11-05)
+## Why this exists
 
-The repository scan held `worktree._discover_lock` while `os.scandir` hung forever in `open()` on an NFS
-mount (`~/OrbStack`, with `VT_BROWSE_ROOTS` set to the home folder). Requests waited on that lock with no
-timeout inside `asyncio.to_thread`, and filled the default thread pool (`min(32, cores + 4)`, 19 on that
-Mac). From then on every `to_thread` call queued forever. About 450 call sites use it, among them
-`/api/capabilities` and `/api/tmux/sessions`. The event loop stayed healthy, so the following kept looking
-normal:
+The failure this layer guards against: the repository scan holds `worktree._discover_lock` while
+`os.scandir` hangs forever in `open()` on a network mount (for example an NFS-backed folder under the
+home directory when `VT_BROWSE_ROOTS` covers it). Requests wait on that lock with no timeout inside
+`asyncio.to_thread` and fill the default thread pool (`min(32, cores + 4)`). From then on every
+`to_thread` call queues forever. The event loop stays healthy, so the following keep looking normal:
 - unauthenticated 401s and `/`
 - the open port
 - `fsh status`
 
-The login gate spun on 「연결을 확인하는 중」 for hours. A 2026-09-16 freeze (`test_worktree_cache.py`)
-had the same root: scandir blocking in `open()`.
+The login gate then spins on 「연결을 확인하는 중」 indefinitely. Any scandir blocking in `open()` has the
+same root.
 
-Each link in that chain now has its own guard:
+Each link in that chain has its own guard:
 
 | Link | Guard |
 |---|---|
@@ -26,7 +25,7 @@ Each link in that chain now has its own guard:
 | Holding a lock across slow I/O, waiting with no deadline | `locks.TimedLock`; waiters use `hold(timeout)`; `worktree` serves the previous list (or 503) |
 | One shared thread pool | `pools`: named pools with admission caps and deadlines; the default executor is instrumented |
 | `subprocess.run(timeout=)` waits forever after the kill | `proc.run`: kills the process group, waits briefly, abandons |
-| Blocking on the event loop | moved to pools; `tests/test_no_blocking_in_async.py` forbids the known blocking calls |
+| Blocking on the event loop | moved to pools; `server/tests/test_no_blocking_in_async.py` forbids the known blocking calls |
 | Nobody noticing | `/api/health/ready`, `fsh status`/`doctor`, the server watchdog, stack traces |
 | The browser waiting forever | request deadlines, the poll helper, the WebSocket silence watchdog |
 
@@ -39,7 +38,7 @@ Each link in that chain now has its own guard:
    - for user paths, `fsops.call(fn, …, path=)`, which adds the path breaker
    - routes map `fsops.UNAVAILABLE` to `fsops.unavailable_response` (503 `fs_unavailable`, `Retry-After`)
 4. Nothing blocking runs on the event loop. When you find a new indirect blocker, add it to `BLOCKING` in
-   `tests/test_no_blocking_in_async.py`.
+   `server/tests/test_no_blocking_in_async.py`.
 5. Broadcast over WebSockets with `resilience.wsutil.broadcast`: concurrent sends, 2 s each, and a slow
    client is closed.
 
@@ -100,7 +99,7 @@ deadline and the breaker instead.
 
 **`watch`.**
 - `SIGUSR1` appends every thread's Python stack to `$VT_RUN_DIR/stacks.log` (faulthandler). Use
-  `kill -USR1 <server pid>`; py-spy is not needed (on macOS it needs root anyway).
+  `kill -USR1 <server pid>`.
 - A 1 s watcher thread records a stack once in `stacks.log` and logs one summary line in the server log
   when:
   - the event loop stops answering for `VT_WATCH_LOOP_STALL_SEC`: the full dump
@@ -114,14 +113,14 @@ deadline and the breaker instead.
   itself.
   - It is `unready` (503) when the default pool or the loop is stuck, or when two pools are unresponsive.
   - It is `degraded` (200) when anything else is wrong.
-- The socket gate now resolves the caller in the `proc` pool. During the incident the default pool was
-  exhausted, so the socket hung too.
+- The socket gate resolves the caller in the `proc` pool; resolving it in the default pool would hang the
+  socket too when that pool is exhausted.
 
-## Other places changed with the same rule
+## Other places that follow the same rule
 
 - **Hook intake.** `/api/agent/event` and `/api/agent/report` resolve the pane in `proc` (5 s). On
   timeout or saturation the session is left unresolved.
-- **Status sweep.** `agent_status.sweep` no longer reads a screen on the event loop. On the loop the probe
+- **Status sweep.** `agent_status.sweep` never reads a screen on the event loop. On the loop the probe
   raises `_ProbeDeferred`, that entry keeps its state, and one thread sweep runs in `proc`.
 - **PTY CLI detection.** Detection inside the PTY output callback answers with the cached value and
   refreshes in `proc`.
@@ -160,8 +159,6 @@ After `VT_WATCHDOG_FAILS` (3) failures in a row:
 3. It allows at most `VT_WATCHDOG_RESTART_MAX` restarts per hour (3). Beyond that it only logs, because a
    restart will not fix a cause that is still there.
 
-Notifications were deliberately left out: this is a personal remote-access server.
-
 **Commands.**
 - `fsh status`: shows the ready verdict next to the port, plus stuck work, locks and quarantine, the
   watchdog line and the latest incident.
@@ -194,7 +191,7 @@ Notifications were deliberately left out: this is a personal remote-access serve
 | File | What it covers |
 |---|---|
 | `test_resilience_core.py` | pools, locks, proc, mounts, breaker, broadcast |
-| `test_resilience_incident.py` | the incident: a stuck discovery lock while 30 callers return in time, the default pool stays free and the app keeps answering; scan timeout leads to quarantine; remote mounts are never entered |
+| `test_resilience_incident.py` | the failure above: a stuck discovery lock while 30 callers return in time, the default pool stays free and the app keeps answering; scan timeout leads to quarantine; remote mounts are never entered |
 | `test_resilience_watchdog.py` | verdicts, restart budget, incident bundle, health endpoints, the 503 for blocked paths |
 | `test_no_blocking_in_async.py` | the static guard |
 | `frontend/tests/{api-timeout,gate-timeout,poll-helper,poll-panel,ws-watchdog}.test.js` | the frontend pieces |

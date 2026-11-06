@@ -2,19 +2,18 @@
 
 ## Shared machine token (`VT_AUTHZ_ENFORCE=legacy`)
 
-Off by default (shipping changes nothing); combine as `share,deleg,msg,peer,legacy`. The machine token is readable by every process of your
-user (`~/.vt.env`, the environment), so with the flag on it stops being a key to the whole API. Turning the flag off restores the old
-behaviour at once. This release only *reports* token use by default; the plan is that a later release turns this on by default and the one
-after removes the token.
+Off by default; combine as `share,deleg,msg,peer,legacy`. The machine token is readable by every process of your
+user (`~/.vt.env`, the environment), so with the flag on it stops being a key to the whole API. Turning the flag off restores the default
+behaviour at once. Without the flag, token use is only *reported* (`legacy_token_use.jsonl`).
 
 **What counts as a machine-token request.** One authenticated by `Authorization: Bearer <token>`, by `?token=<token>`, or by the token
 carried as the `vt_session` cookie value. Browser login sessions (signed cookie) and the unix socket are never machine-token requests.
 
 | Rule | With the flag on |
 |---|---|
-| Scope | The token may only call the method+path pairs the unix socket already allows for in-repo clients (table in `API.md` «Unix socket»: hooks, the MCP fallback, clipboard/voice/TUI daemons, tmux notify, ports sync, agent message/shared/delegation endpoints, `queue/run`, `host-grants/*/change`). Anything else is **403 `legacy_token_scope`**, including WebSockets. Allowed requests are still counted in `legacy_token_use.jsonl`; refused ones in `legacy_token_denied.jsonl` (same shape: minute bucket, path, user agent, count; no query, no content) |
-| Transport | `?token=` is refused with 400 `token_query_unsupported` and the token as a cookie value with 401 `token_cookie_unsupported`, whether or not the value is right. Only the `Authorization` header remains. Access logs also mask any query value whose name contains `token`, `ticket`, `otp`, `secret`, `password` or `auth` |
-| Web app | `core/env.js` and the login gate no longer read `?token=`: the parameter is removed from the address bar and the normal login (or `fsh mobile` link) is used |
+| Scope | The token may only call the method+path pairs the unix socket already allows for in-repo clients (table in `API.md` «Unix socket»: hooks, the MCP fallback, clipboard/voice/TUI daemons, tmux notify, ports sync, agent message/shared/delegation endpoints, `queue/run`, `host-grants/*/change`). Anything else is **403 `legacy_token_scope`**. A WebSocket handshake with the token is refused at the handshake (no JSON body) and counted in `legacy_token_denied.jsonl`. Allowed requests are still counted in `legacy_token_use.jsonl`; refused ones in `legacy_token_denied.jsonl` (same shape: minute bucket, path, user agent, count; no query, no content) |
+| Transport | `?token=` is refused with 400 `token_query_unsupported` and the token as a cookie value with 401 `token_cookie_unsupported`, whether or not the value is right. Only the `Authorization` header remains. Access logs also mask any query value whose name contains `token`, `ticket`, `otp`, `secret`, `password`/`passwd`, `apikey`/`api_key` or `auth` |
+| Web app | `core/env.js` and the login gate do not read `?token=`: the parameter is removed from the address bar and the normal login (or `fsh mobile` link) is used |
 | No password | If only the token is set (no `fsh password`) there is nobody who can approve. Features that need an approval — sharing a session, agent messages to an unrelated session, `fsh host allow-*` — answer 403 `approval_unavailable_no_password` instead of waiting forever, and `fsh doctor` and the server start log say so once. Grants that already exist keep working. A signed cookie on such a server is not a person either (`require_human_session` refuses it). A server with neither password nor token is unchanged |
 
 The route check is made in the token middleware, before the route runs, so the answer for a person-only route changes from
@@ -30,10 +29,10 @@ needs no token); use a browser login (`fsh mobile`) for anything a person does; 
 
 Tests: `server/tests/test_authz_legacy_enforce.py` (every allowlisted route works with the token, a sample of sensitive ones is refused,
 `?token=` and cookie-token refusal, log masking, no-password gating, signed cookie on a token-only server, rollback, doctor output) and
-`server/tests/authz_char/test_char_legacy_enforced.py` (the whole characterization matrix with the flag on; only the three rules above
-change an answer).
+`server/tests/authz_char/test_char_legacy_enforced.py` (the whole characterization matrix with the flag on; only the Scope, Transport and
+No password rules change a server answer; the Web app rule is frontend-only).
 
-## Authorization order (P2-5, ADR-42)
+## Authorization order
 
 The table below shows the middleware order and the additional checks applied
 at login, in routes and during terminal input. Token-auth exemptions do not
@@ -45,8 +44,8 @@ registration order in `main.py`.
 
 | # | Layer | Transport | Decides | Implementation | On failure |
 |---:|---|---|---|---|---|
-| −1 | Security headers `SecurityHeadersMiddleware` <!-- mw --> | HTTP responses | Not a gate — adds `X-Frame-Options: DENY` + `Content-Security-Policy: frame-ancestors 'none'` (no clickjacking of a terminal), `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, and a `Permissions-Policy` that turns off camera, geolocation, payment, USB, serial, Bluetooth and HID (microphone and clipboard stay). Outermost, so 401/403 refusals carry them too; a header a route already set (the file preview's `sandbox` CSP) is kept. **`Referrer-Policy: no-referrer` is deliberately not used**: checked in Chrome 156, a form POST from a `no-referrer` page sends `Origin: null`, which `OriginGuardMiddleware` refuses — the share PIN form would 403. A full CSP (`script-src`) is not set because `index.html` has inline scripts; that is future work | `server/security_headers.py` | — |
-| 0 | Host allowlist `HostGuardMiddleware` <!-- mw --> | HTTP + WS | Is the `Host` a name an attacker cannot point at this Mac with DNS? IP literals, `localhost`/`*.localhost`, single-label names and `*.local`, `*.ts.net`, `*.trycloudflare.com`, ngrok domains, `VT_TUNNEL_HOSTNAME`, `VT_NGROK_DOMAIN`, the hosts of `VT_ALLOWED_ORIGINS`, and `VT_ALLOWED_HOSTS` (comma list, `*.example.com` allowed). No `Host` passes (non-browser). **DNS rebinding** makes `Origin` and `Host` both the attacker's name, so #1 passes it — this layer refuses the name itself (2.7; Jupyter `check_host`, Vite `allowedHosts`, MCP Inspector CVE-2025-49596) | `server/host_guard.py` | 403 `host_not_allowed` (logged once per host per hour) |
+| −1 | Security headers `SecurityHeadersMiddleware` <!-- mw --> | HTTP responses | Not a gate — adds `X-Frame-Options: DENY` + `Content-Security-Policy: frame-ancestors 'none'` (no clickjacking of a terminal), `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, and a `Permissions-Policy` that turns off camera, geolocation, payment, USB, serial, Bluetooth and HID (microphone and clipboard stay). Outermost, so 401/403 refusals carry them too; a header a route already set (the file preview's `sandbox` CSP) is kept. **`Referrer-Policy` is `same-origin`, not `no-referrer`**, so same-site form POSTs stay checkable by `OriginGuardMiddleware`. A full CSP (`script-src`) is not set because `index.html` has inline scripts; that is future work | `server/security_headers.py` | — |
+| 0 | Host allowlist `HostGuardMiddleware` <!-- mw --> | HTTP + WS | Is the `Host` a name an attacker cannot point at this Mac with DNS? IP literals, `localhost`/`*.localhost`, single-label names and `*.local`, `*.ts.net`, `*.trycloudflare.com`, ngrok domains, `VT_TUNNEL_HOSTNAME`, `VT_NGROK_DOMAIN`, the hosts of `VT_ALLOWED_ORIGINS`, and `VT_ALLOWED_HOSTS` (comma list, `*.example.com` allowed). No `Host` passes (non-browser). **DNS rebinding** makes `Origin` and `Host` both the attacker's name, so #1 passes it — this layer refuses the name itself | `server/host_guard.py` | 403 `host_not_allowed` (logged once per host per hour) |
 | 1 | Origin guard `OriginGuardMiddleware` <!-- mw --> | HTTP + WS | Is the request's origin this server itself? No `Origin` header (non-browser) passes; `""`/`"null"` (opaque origin) is rejected | `server/main.py`, `OriginGuardMiddleware` | 403 `cross_origin` |
 | 2 | CORS (opt-in) `CORSMiddleware` <!-- mw:cors --> | HTTP | Is this an explicitly allowed external origin? If `_allowed_origins()` is empty, **this layer doesn't exist at all** | `server/main.py` (conditional `add_middleware`) | Browser can't read the response body |
 | 2′ | Pre-auth failure limit `PreauthMiddleware` <!-- mw --> | HTTP | Is this source locked (10 failed credentials in 60 s → 5 minutes), or is a credential-exchange endpoint (`/api/auth`, `/api/peer/pair`) over its global 300/min? Never applied to unix-socket requests | `server/main.py`, `PreauthMiddleware` → `server/authz/preauth.py` | 429 `rate_limited` + `Retry-After` |
@@ -57,7 +56,7 @@ registration order in `main.py`.
 | 6 | Per-resource verification | The route itself | Share-link token signature/expiry/mode · port PIN · port session · peer HMAC + time window + nonce | `routes/share.py`, `routes/system.py` (`/p/authorize`), `routes/peer.py` | Per-route |
 | 7 | File boundary (`fsguard`) | The route itself | Root resolution → `resolve()` + `is_relative_to` → deny list | `server/fsguard.py` (3 layers) | 403 / 404 |
 | 8 | Dangerous command (`safe_mode`) | PTY input · queue | Does it match a dangerous pattern? Only when `VT_SAFE_MODE=1` | `server/safe_mode.py` | Input blocked / queue `blocked` |
-| 9 | Elevated session | The route itself | Git-account writes etc. require re-confirming the password (ADR-22) | `server/auth/__init__.py`, `require_elevated` | Elevation required |
+| 9 | Elevated session | The route itself | Git-account writes etc. require re-confirming the password | `server/auth/__init__.py`, `require_elevated` | Elevation required |
 
 **Every layer is an AND gate. A later layer can only make the result stricter, never
 undo what an earlier layer blocked.** Passing one layer only answers that layer's
@@ -82,30 +81,30 @@ question — it is not a universal bypass. Two things follow directly:
 | `/p/authorize` | 3 | 1, 4 | `routes/system.py` checks session + device directly. On failure it redirects to `/?next=` rather than a JSON 401 — this is a top-level navigation, not an API call |
 | `/api/peer/*` | 3 | 1, 4 | `routes/peer.py` verifies HMAC signature, time window and nonce replay directly. **A peer can only ever reach routes in that one file** |
 | Requests that arrived on the unix socket (`scope["fsh_sock"]`, only the socket Gate can set it) | 3, 4 | 1 | `authz/sock.py` `Gate`: kernel peer uid == server uid, route allowlist, principal resolved from the peer pid. See «Unix socket». Human-only routes still refuse (`request_kind` is `none`) |
-| `/api/tmux/kick` | 3 | 1, 4 | `routes/system.py` compares the `X-VT-Kick` header with a random secret made at server start (`tmux_hooks.py`) — only the server's own tmux hooks know it. The route only nudges the session-list watcher; it returns nothing (2026-09-30) |
+| `/api/tmux/kick` | 3 | 1, 4 | `routes/system.py` compares the `X-VT-Kick` header with a random secret made at server start (`tmux_hooks.py`) — only the server's own tmux hooks know it. The route only nudges the session-list watcher; it returns nothing |
 
 The single most useful line in that table: **nothing turns off layer 4 (the IP
-filter).** Right now that fact only exists as the difference between two exception
+filter).** Otherwise that fact only shows as the difference between two exception
 lists that a reader has to diff by hand.
 
-### Two things this table makes visible (observed, not fixed here)
+### Two things this table makes visible (observed, not changed)
 
-Writing the table down is the point — these two are visible now. Neither is a
-vulnerability, and neither is being changed in this pass; they're recorded as
-footnotes for whoever picks this up next.
+Writing the table down is the point — these two become visible. Neither is a
+vulnerability, and neither is changed by the table; they're recorded as
+footnotes for whoever works on this next.
 
 **The cheapest gate sits innermost.** The IP filter (#4) runs *after* token auth (#3).
 Both are AND gates so the end result is the same, but the path there differs: a
 disallowed IP with no token gets a **401**, not a 403 — that response tells the
 client "auth is turned on here" before the IP filter ever gets a say, and a
 disallowed IP's request still runs the full session/HMAC check before being rejected.
-Reordering them isn't done here without a reason — `/`/`/static`'s exception handling
+Do not reorder them without a reason — `/`/`/static`'s exception handling
 would need to move in lockstep, and that changes what the login screen does before
 anyone's looked closely at it.
 
 **#3 and #3′ implement the same check twice.** HTTP re-runs `check_request` on every
 request via the middleware; WS checks once at handshake plus a separate expiry
-re-check. The 24-hour session hole described just below came directly out of this
+re-check. The 24-hour session gap described under «A device's sessions die with the device» came directly out of this
 duplication — whoever next adds a condition to #3 has to remember #3′ exists and
 needs the same condition, because it's a replacement for #3, not a shortcut around it.
 
@@ -137,15 +136,15 @@ message prints the line to add. The table changes no behaviour: the real gates (
 |------|------|
 | Web login password | Set via `fsh password` → stores only an scrypt hash (`VT_AUTH_PASSWORD_HASH`); the plaintext is never stored. On login, issues a 24h session cookie signed with `VT_AUTH_SESSION_KEY` (not the plaintext or a token). Human-facing auth. `server/auth/` |
 | Device registration + OTP gate | Login is **always** by password. OTP is a gate required only "when registering a device seen for the first time." A registered device gets a `vt_device` long-lived cookie (90 days) and afterward passes with just the password — since it's per-device rather than per-IP, a phone switching between LTE and wifi doesn't get disconnected. **OTP stays fully disabled until `fsh otp setup`**, and device registrations quietly accumulate in the meantime, so turning it on later doesn't lock out devices already in use. Stored at `~/.vt/devices.json` (0600, sha256 hashes only). `fsh device revoke <id>` immediately invalidates that device's session cookie as well |
-| Login lockout (2.7) | Password and OTP failures lock **per source** for 10 minutes after 5 (`auth/lockout.py`). The source key is `authz_preauth.source_of` — the same as the pre-auth limit: a tunnel request arrives from loopback, so it is keyed by `CF-Connecting-IP` (rightmost `X-Forwarded-For` otherwise). It used to be the connecting IP, which made every tunnel visitor share the `127.0.0.1` key: anyone with the URL could fail 5 times every 10 minutes and keep the owner locked out. Rotating sources is bounded by a **new-device cap** across all sources (`NEW_DEVICE_FAIL_WINDOWS`: 20 per minute, 30 per hour, 429 `password_locked` with `scope: "new_device"`); a request carrying a valid `vt_device` cookie is exempt, so strangers filling the cap only delay a new device's registration. A local process forging the header only picks its own lock key. Elevation (`/api/auth/elevate`) uses the same per-source key. Tests: `test_auth_lockout_tunnel.py` |
-| No server without auth (2.7) | `lib/auth_bootstrap.sh` `_vt_ensure_auth`, called by `_start_server` (start, voice, clip, restart) and by `cmd_start` before the public-tunnel check. If `python -m auth status` reports no password and no token, it runs `python -m auth generate-password` (20 characters from a 31-letter lowercase/digit alphabet ≈ 99 bits, `xxxxx-xxxxx-xxxxx-xxxxx`), stores only the scrypt hash with `vt_env_set` (plus `VT_AUTH_SESSION_KEY` if missing) and prints the plaintext **once** to the terminal. Not a terminal (`[ -t 1 ]` false: updater, launchd, hooks) → nothing is created and the start fails, because the plaintext would land in a log. Before 2.7 only `--network all` refused to start; `fsh voice`/`fsh clip` and the lan/tailscale/localhost scopes started with no auth. A machine token is not generated because the login form refuses tokens. `--force` now only covers the case where no password could be created. `run_server.sh` (dev) is not covered — the server itself only warns, since isolated test servers run without a password. Tests: `test_auth_bootstrap.py` |
-| Device lifetime (2026-10) | Each record fixes an absolute `expires_at` at registration: 90 days by default, or `24h`/`1h` picked on the login screen (`remember`), or 1 day via `fsh mobile --temp`. Nothing can make it longer than `DEVICE_TTL`: unknown `remember` values are 400, a registered device ignores `remember`, and `register_device` clamps. Older records without the field use `added_at + DEVICE_TTL`, so their behaviour is unchanged. Expired devices stay listed as expired for 7 days (`DEVICE_EXPIRED_GRACE`), then the next write drops them along with their `device-settings/<id>.json`; `fsh device prune` drops them now |
+| Login lockout | Password and OTP failures lock **per source** for 10 minutes after 5 (`auth/lockout.py`). The source key is `authz_preauth.source_of` — the same as the pre-auth limit: a tunnel request arrives from loopback, so it is keyed by `CF-Connecting-IP` (rightmost `X-Forwarded-For` otherwise). It must not be the connecting IP: every tunnel visitor would share the `127.0.0.1` key, and anyone with the URL could fail 5 times every 10 minutes and keep the owner locked out. Rotating sources is bounded by a **new-device cap** across all sources (`NEW_DEVICE_FAIL_WINDOWS`: 20 per minute, 30 per hour, 429 `password_locked` with `scope: "new_device"`); a request carrying a valid `vt_device` cookie is exempt, so strangers filling the cap only delay a new device's registration. A local process forging the header only picks its own lock key. Elevation (`/api/auth/elevate`) uses the same per-source key. Tests: `test_auth_lockout_tunnel.py` |
+| No server without auth | `lib/auth_bootstrap.sh` `_vt_ensure_auth`, called by `_start_server` (start, voice, clip, restart) and by `cmd_start` before the public-tunnel check. If `python -m auth status` reports no password and no token, it runs `python -m auth generate-password` (20 characters from a 31-letter lowercase/digit alphabet ≈ 99 bits, `xxxxx-xxxxx-xxxxx-xxxxx`), stores only the scrypt hash with `vt_env_set` (plus `VT_AUTH_SESSION_KEY` if missing) and prints the plaintext **once** to the terminal. Not a terminal (`[ -t 1 ]` false: updater, launchd, hooks) → nothing is created and the start fails, because the plaintext would land in a log. Every start path and network scope goes through this check (`--network all`, `fsh voice`/`fsh clip`, lan/tailscale/localhost). A machine token is not generated because the login form refuses tokens. `--force` only covers the case where no password could be created. `run_server.sh` (dev) is not covered — the server itself only warns, since isolated test servers run without a password. Tests: `test_auth_bootstrap.py` |
+| Device lifetime | Each record fixes an absolute `expires_at` at registration: 90 days by default, or `24h`/`1h` picked on the login screen (`remember`), or 1 day via `fsh mobile --temp`. Nothing can make it longer than `DEVICE_TTL`: unknown `remember` values are 400, a registered device ignores `remember`, and `register_device` clamps. Older records without the field use `added_at + DEVICE_TTL`, so their behaviour is unchanged. Expired devices stay listed as expired for 7 days (`DEVICE_EXPIRED_GRACE`), then the next write drops them along with their `device-settings/<id>.json`; `fsh device prune` drops them immediately |
 | Device metadata | `ua` (≤300 chars), parsed `client` (OS + browser major), `ip_first`/`ip_last`, `via`, `method` (`password`/`password+otp`/`ticket`). **Display only — never an auth input.** Tunnel requests arrive from loopback, so the IP comes from `CF-Connecting-IP`, read only when the request comes from loopback; a local process could forge it, which is why it stays out of the IP filter (`VT_TRUST_PROXY` is a separate switch). `ip_last` updates at most once a day, like `last_seen` |
-| One-time device registration ticket | The QR/URL from `fsh mobile`/`fsh handoff` carries a 5-minute one-time ticket (`?ticket=`) instead of a persistent token. Physical access to the Mac is already proven at the moment the QR is shown, so scanning it equals approving registration. The old approach of embedding a persistent token in the URL left that value permanently sitting in logs, history, and QR images. **Tickets carry a `purpose` (2.7)**: the exposed-port `session` mode issues its 60-second tickets into the same `tickets.json`, and `/api/auth` used to accept any ticket, so a port ticket (it travels in the exposed app's `/__fsh/cb?t=` URL) registered a 90-day device and gave a shell without password or OTP. `consume_ticket(raw, purpose)` now requires the purpose (`device` / `port-share`), and a ticket of the wrong purpose is refused **without being burned**. Records from before the field are classified by their `share` binding. Tests: `test_auth_device_lifetime.py` (`test_port_share_ticket_cannot_register_a_device`), `test_port_proxy_auth.py` |
+| One-time device registration ticket | The QR/URL from `fsh mobile`/`fsh handoff` carries a 5-minute one-time ticket (`?ticket=`) instead of a persistent token. Physical access to the Mac is already proven at the moment the QR is shown, so scanning it equals approving registration. A persistent token must not be embedded in the URL: it would sit permanently in logs, history, and QR images. **Tickets carry a `purpose`**: the exposed-port `session` mode issues its 60-second tickets into the same `tickets.json`, and `/api/auth` must not accept any ticket — a port ticket (it travels in the exposed app's `/__fsh/cb?t=` URL) would register a 90-day device and give a shell without password or OTP. `consume_ticket(raw, purpose)` requires the purpose (`device` / `port-share`), and a ticket of the wrong purpose is refused **without being burned**. Records without the field are classified by their `share` binding. Tests: `test_auth_device_lifetime.py` (`test_port_share_ticket_cannot_register_a_device`), `test_port_proxy_auth.py` |
 | Cross-site blocking | `OriginGuardMiddleware` (`server/main.py`) — returns 403 for both HTTP and WS if the Origin isn't itself. The only path that auth/OTP alone can't block (if the browser already has a cookie, auth passes). Also removes the default `*` CORS — opt in via `VT_ALLOWED_ORIGINS` if needed |
-| API token auth | The `VT_AUTH_TOKEN` environment variable is a machine-facing token (daemons, hooks, the TUI). Via URL `?token=xxx` or `Authorization: Bearer xxx`. **It is not a second password — the login form rejects it (2026-09-17).** It used to be accepted there, which meant a human-usable credential that `fsh password` could never change or expire; the observed symptom was "I changed the password and the old one still logs me in". A legacy `?token=` link therefore no longer trades itself for a session cookie (it keeps working via the query parameter, unless `VT_AUTHZ_ENFORCE=legacy` is on, see «Shared machine token»); register phones with `fsh mobile`'s one-time ticket instead. The web app itself no longer reads `?token=` from the address bar: it removes it and shows the normal login. (Legacy names `VT_TOKEN`/`VT_PASSWORD_HASH`/`VT_SECRET_KEY` are still recognized as fallbacks) |
+| API token auth | The `VT_AUTH_TOKEN` environment variable is a machine-facing token (daemons, hooks, the TUI). Via URL `?token=xxx` or `Authorization: Bearer xxx`. **It is not a second password — the login form rejects it.** Accepting it there would be a human-usable credential that `fsh password` could never change or expire ("I changed the password and the old one still logs me in"). A `?token=` link therefore does not trade itself for a session cookie (it keeps working via the query parameter, unless `VT_AUTHZ_ENFORCE=legacy` is on, see «Shared machine token»); register phones with `fsh mobile`'s one-time ticket instead. The web app itself does not read `?token=` from the address bar: it removes it and shows the normal login. (Legacy names `VT_TOKEN`/`VT_PASSWORD_HASH`/`VT_SECRET_KEY` are still recognized as fallbacks) |
 
-## Who is calling: browser session, machine token or peer (2026-10-06)
+## Who is calling: browser session, machine token or peer
 
 Authenticated does not mean human. The machine token (`VT_AUTH_TOKEN`) is readable by every agent process on the Mac
 (`~/.vt.env`, environment), so anything that must be decided **by a person** cannot accept it. `auth.request_kind(request)` tells
@@ -209,7 +208,7 @@ expiry; escalations are written to the audit row.
 | Drive (운전) | Collaborate + `session.input` (`line`), `fs.write` (`write`), `browser` (all ops), `deleg.spawn` | no |
 | Control (제어) | Drive + `session.input` (`line`,`raw`), `session.manage` (all ops), `relay` (all groups) | **yes** |
 
-Defaults per principal: a human gets the whole local vocabulary except `browser.js`, `browser.sensitive`, `relay` (and
+Defaults per principal: a human gets the whole local vocabulary except `browser.js`, `browser.sensitive`, `relay` (with the `peer` flag a human also gets `relay` on other Macs' resources) (and
 `authz.admin` unless elevated); an agent gets, on **its own** session, `session.view`, `session.read`, `session.input` (`line`),
 plus `agent.report`, `authz.request`, its spawn quota and (flag-dependent) messages - `session.manage` and `raw` input need an explicit
 grant; a peer gets only the internal `ping` until a grant exists; `cli` callers may only close delegations.
@@ -221,10 +220,10 @@ principal with the attribute `via=hook`. An unauthenticated caller and a pair ar
 for member principals).
 
 **Storage and rollback.** Grants and approvals are stored with `schema: 2` (the 17 scopes + `sconds`; the document `version` is 2).
-Records stored with the earlier, finer names (67 of them) are converted **when read** by a fixed table (`scopes.LEGACY_TO_COARSE`,
+Records stored with the older, finer names (67 of them) are converted **when read** by a fixed table (`scopes.LEGACY_TO_COARSE`,
 tested for every old name) and written in the new form the next time that document is saved; merged names keep their values as a union
 (for example `fs.drop` -> `fs.write` with `ops=[drop]`), so nothing is widened beyond the merged groups (list/meta/clients.view ->
-`session.view`; read/stream -> `session.read`; admin/audit -> `authz.admin`; event/report -> `agent.report`). The audit chain's earlier
+`session.view`; read/stream -> `session.read`; admin/audit -> `authz.admin`; event/report -> `agent.report`). The audit chain's existing
 lines are never rewritten. Before the first overwrite of an old-form document the server makes a `pre-schema2` backup. `fsh migrate-auth
 --status` shows the stored schema per document, `--verify` compares the store with the old files, `--backup`/`--restore <ts>` return the
 exact old bytes. To roll back: revert the commit, then `fsh migrate-auth --restore <ts>`.
@@ -246,7 +245,7 @@ Off by default, so shipping changes nothing. `VT_AUTHZ_ENFORCE` is a comma list 
 | Audit | `~/.vt/audit/authz.jsonl` (0600, hash chain) | Changes (share, unshare, decide, revoke) are appended **before** the commit; failure -> 503 `audit_unavailable` and nothing is saved. Reads/sends/lists/requests are best effort. Successful `read`/`list`: first per (principal, resource) per 10 minutes plus `suppressedSince`. Never input, screen or message text. `GET /api/agent/share/audit` is served from it; the old `agent_access.log` is still written in full |
 | Failure | engine exception on read/send | 503 `authz_unavailable`, access denied (not "fall back to the old decision" — the engine is the authority once the flag is on). Corrupt `grants.json`/`approvals.json`/`shares.json`/`meta.json` -> agent access fails closed (`store_corrupt`) and writes to that file are refused (see «Unreadable stores») |
 
-Not covered yet (the machine-token bypass): the machine token still reaches `/api/sessions/{id}/keys`, `/api/queue`, `/api/tmux/kill/*` directly, so a
+Not covered (the machine-token bypass): the machine token still reaches `/api/sessions/{id}/keys`, `/api/queue`, `/api/tmux/kill/*` directly, so a
 process that holds the token can bypass the share grant on those routes. `server/tests/authz_char/test_char_agent_share_enforced.py`
 pins that. Tests: `server/tests/test_authz_share_enforce.py` (lifecycle + dual-write parity, rollback, lying hints, revocation,
 cooldown, limits, drift, audit), the whole `test_agent_share.py` and authz_char matrix also run with `VT_AUTHZ_ENFORCE=share`.
@@ -264,7 +263,7 @@ status codes and bodies are unchanged except the three listed under «New refusa
 | Child report | `deleg.control` (`role=child`) on `deleg:local/<id>` | Granted to the child only. A session that is not a child: 403 `not_delegated` |
 | Ownership ledger | `~/.vt/delegations.json` | Still written and still the source of truth for *who is parent/child*. Engine grants are **derived** from it by `migrate.translate_delegation` (same function as `fsh migrate-auth`): parent -> `deleg.control` (`role=parent`), child -> `deleg.control` (`role=child`), `approved_by: system:spawn`, ids `dc-<id>`/`dr-<id>`, origin `legacy:delegations:<id>:…`. Closed or orphaned delegation -> `state: ended`; deleted from the ledger -> deleted. An explicit `state: revoked` is sticky (re-deriving or `--apply` never revives it) |
 | Dual-write | `delegation._locked()` / `_write()` | Under the flag the lock order is **authz lock -> ledger lock** (same as 3a and `migrate.restore`). Every ledger write first syncs the grants in the same critical section, then writes the ledger; if the grant store or its audit line cannot be written the ledger is not changed (503). On lock entry a ledger whose sha256 differs from `meta.deleg_ledger_sig` (flag was off, or a hand edit) is **adopted** (re-derived, one `deleg.adopt` audit line). Flag off: the authz store is not touched (instant rollback) |
-| Closed delegations | `Verdict.ended` | An ended grant is denied by the engine, but if the ledger says the caller owned it the old state errors are returned (409 `delegation_closed`, `already`, 409 `already_reported`) — all of them are no-ops |
+| Closed delegations | `Verdict.ended` | An ended grant is denied by the engine, but if the ledger says the caller owned it the old state errors are returned (409 `delegation_closed`, 409 `already_reported`, or 200 `{"already": true}` on a repeated close) — all of them are no-ops |
 | Spawn directory | `deleg_svc.check_fs` | An explicit `cwd`, and the git toplevel a `worktree` is cut from, need `fs.read` on `fs:local/<realpath>`; the default rule `agent_spawn_fs_roots` only holds when `fsguard.resolve_under_roots` (VT_BROWSE_ROOTS + deny list, symlinks resolved) accepts the path. Outside -> 403 `cwd_outside_roots`. The default cwd (the parent pane's own directory) is not checked. With `lease` on, the cwd is also refused while another holder's write lease covers it (see «Folder leases») |
 | Folder-grant inheritance | ledger `item["fs"]`, derived `di-…` / `dw-…` grants | Spawned **without** a worktree: if the parent holds an active fs grant covering the folder, the child gets a *shared reference* (`inherit: true`, `inherit_from` = parent grant id, scopes/resource copied); no parent grant -> nothing is recorded. Spawned **with** a worktree: one grant `fs.write` on the new worktree path for the child only (`approved_by: system:spawn`); the parent's original-folder grant is **not** inherited. Nothing else is inherited (session read/input, messages, browser, …). The inherited record is revoked (`revoked_reason: parent_grant_ended`, audit `deleg.cascade`) at the next sync after the parent grant disappears, expires or is revoked; closing/orphaning the delegation ends all of them. The fs grants are records plus cascade; what keeps another session out of the folder is the lease issued under `lease` (see «Folder leases» — the worktree grant stays as the engine-side record, the lease is the enforced layer). |
 | `fsh delegate close` | `delegation._cli`, `POST /api/delegations/{id}/close-by-cli` | With the flag on the CLI asks the server over the unix socket. The socket peer is the principal: outside a pane = `cli`, which the engine lets **close only** (`deleg.control` with `role=parent` and `ops:[close]`; it cannot send, spawn, approve or grant - a provisional policy); inside a pane = `agent`, parent only. A server error or denial is final (no direct write afterwards). Only if the socket is unusable (server not running, `VT_AUTHZ_SOCKET=0`, an older server) does the CLI write the ledger itself, still as principal `cli` through the engine and the audit. Same-uid processes can always edit the file directly |
@@ -290,7 +289,7 @@ stay clean).
 | | |
 |---|---|
 | **Enforced** (flag `lease`) | Writes FarShell performs for a non-human caller: `POST /api/git/stage`, `/unstage`, `/commit` (every staged path, renames count both names), files delivered to a session's working folder — `POST /api/upload?session_id=`, `POST /api/files/{id}/insert`, a peer's `POST /api/peer/file` with a session (the `fs.write` op `drop`) — and the working folder of `POST /api/delegations`. Refusal: **403 `lease_conflict`** `{holder, expires, op, paths, conflicts[]}` (holder = nickname only). The file-store deletes (`DELETE /api/files/{id}`, `POST /api/files/delete`) act on FarShell's own attachment store, which sits in hidden state and can never be leased, so they are not hooked |
-| **Advisory** | Anything an agent does with its own tools (shell, editor, `git` run in its pane). The unix user's processes can ignore a lease, edit the lease file or skip the guard with `git commit --no-verify`. **A lease does not stop a program running as the same user** — same limit as the rest of the permission store (`approved_via`, «Unreadable stores refuse writes»). Do not describe it as a lock |
+| **Advisory** | Anything an agent does with its own tools (shell, editor, `git` run in its pane). The unix user's processes can ignore a lease, edit the lease file or skip the guard with `git commit --no-verify`. **A lease does not stop a program running as the same user** — same limit as the rest of the permission store: a process of the same user can edit it. Do not describe it as a lock |
 | **Optional guard** | `fsh lease guard install` — a pre-commit hook that asks the server and refuses a commit that touches another holder's leased files. Server unreachable: **warning only, the commit goes through**, and one line (time, reason, file count — no paths) is appended to `~/.vt/authz/guard-skipped.log`; `fsh doctor` shows the last 24h count |
 | **Humans** | Never blocked. A person writing inside someone else's leased path produces an `lease.override` audit line and a content-free `lease_notice` event on `/ws-workspace`; nothing is refused |
 
@@ -351,7 +350,7 @@ stay clean). Pair grants are honoured by the enforcement points whose own flag i
    sessions, folders, whether the driver gets write leases on the folders, and which *elevated* extras to ask for — and the role the creator
    takes (the joiner gets the other one). An agent gets `pair.manage` the usual way: `request_access` on `pair:*` (this scope is requestable only
    while the pair switch is on; an automatic-approval window can never cover it). A participant reference is `{local: <key>}` or a session name;
-   `{host, session}` for another Mac is `501 pair_remote_unsupported` for now.
+   `{host, session}` for another Mac is `501 pair_remote_unsupported`.
 2. **Code** (`POST /api/pairs/{id}/code`). An 8-character Crockford base32 code (`ABCD-EFGH`; `O`/`I`/`L` are read as `0`/`1`/`1`) and a
    two-word check phrase. Valid for 5 minutes, single use, at most 10 new codes per creator per hour. Asking again while a code is pending
    returns the **same** code (idempotent, not counted); creating a pair with a *different* bundle for the same creator and target
@@ -373,7 +372,7 @@ stay clean). Pair grants are honoured by the enforcement points whose own flag i
 | navigator | the «Collaborate» preset: `session.view`, `session.read`, `msg.send`, `fs.read` |
 | driver | navigator plus `session.input` (line mode), `fs.write` (write), `deleg.spawn` from the member's own quota |
 
-The preset's `browser` part is left out in this build (there is no browser broker yet). Elevated extras attach to whoever is the driver.
+The preset never includes the `browser` scope; a pair member who needs the browser broker receives a grant for it separately. Elevated extras attach to whoever is the driver.
 Grants are written per agent member on each bundle session (except the member's own), each bundle folder (`fs:local/<folder>/*`) and the
 other member's messaging resource; they carry `approved_via: manual`, expire at the pair's end and skip the share-policy ceiling (the role
 is the ceiling). A person member needs no grants — people already have the human defaults and can type whatever the role says, while
@@ -383,7 +382,7 @@ agent input keeps yielding to the existing human-typing guard.
 Accepting swaps the roles and rewrites the grants in one store transaction and increments the **generation** number; an offer older than
 2 minutes, or made at an older generation, is refused and the pair stays as it was. A person who is not the current driver (a human
 navigator, or someone watching) can take the wheel at once with the same call — that is the human override. Messaging: members of one
-**active** pair may message each other without a separate approval (`VT_AUTHZ_ENFORCE=msg` relation `pair`). Leases: with `leases` the driver
+**active** pair may message each other without a separate approval (`VT_AUTHZ_ENFORCE=msg` relation `pair`). Leases: with `lease` on, the driver
 holds a write lease on each folder, moved to the new driver on handoff; two non-exclusive write leases of members of the same active pair
 never conflict (anyone else's still do).
 
@@ -409,14 +408,14 @@ modes under `umask 022`), `test_pair_cli_mcp.py`, `authz_char/test_pairs_http.py
 
 ## Agent messages under the engine (`VT_AUTHZ_ENFORCE=msg`)
 
-Off by default (shipping changes nothing); combine as `share,deleg,msg`. With `msg` on, `authz/msg_svc.py` decides, stores and audits
+Off by default: without `msg` in `VT_AUTHZ_ENFORCE`, message handling is unchanged. Combine as `share,deleg,msg`. With `msg` on, `authz/msg_svc.py` decides, stores and audits
 agent-to-agent messages; `agent_msg.py` keeps the mechanics (queue, history, hop counting, envelope). Turning the flag off restores the old
 behaviour at once; the message permissions stay in `~/.vt/authz/` and apply again when the flag is turned back on.
 
 | Piece | Where | Rule |
 |---|---|---|
 | Sender | `routes/agent_msg._verify_sender_sync` | The sender is the authenticated caller: over the unix socket the session whose pane the peer pid belongs to, otherwise `share_identity.verify_caller` (`X-Fsh-*` + the process that owns the loopback connection). The body's `pane`/`tmux`/`cwd` never choose the sender; a mismatch is only recorded (`msg.claim`, reason `claim_mismatch`, no content). A caller that cannot be verified gets 403 `identity_unverified` (so does a person using a browser session or the bare machine token — send from a pane). Unknown host/session is 404 first |
-| Related sessions | `msg_svc.relation` | `msg.send` on `msg:local/<receiver key>` is allowed **without approval** between a delegation parent and its child and between two children of the same parent. Only open delegations (running, reported) count; closed or orphaned ones do not. Read from `delegations.json`, whether or not the delegation flag is on. A hook for sessions that were paired (`pair_related`) exists and returns False until pairing is built |
+| Related sessions | `msg_svc.relation` | `msg.send` on `msg:local/<receiver key>` is allowed **without approval** between a delegation parent and its child and between two children of the same parent. Only open delegations (running, reported) count; closed or orphaned ones do not. Read from `delegations.json`, whether or not the delegation flag is on. A hook for sessions that were paired (`pair_related`) exists and returns False unless pairing is enabled |
 | Other pairs | `msg_svc.request_access` / `decide` | No permission -> a pending request (kind `msg`, origin `authz:msg:req:`) and HTTP 202. Only a person (browser login session) decides, from the same inbox as sharing requests; an agent, the machine token, a cli process or a peer cannot. Approval creates a grant for exactly (sending session -> receiving session) (`gm-<id>`, origin `authz:msg:grant:`, no expiry); revoking it makes the next send pending again. Denial starts a 5-minute cooldown (403 `request_denied`); pending requests expire after 24 h, 20 per agent and 200 in total. Both records are removed when either session no longer exists. Sessions are identified by tmux session id + creation time, so a new session with a reused name does not inherit anything |
 | Receiving from another Mac | `routes/peer.py` | The peer principal `peer:<id>/obo:agent:<id>/-` needs `msg.send` on `msg:local/-`. The grant used is translated on the spot from `hosts.json` (`control` level + `agentMessages`), so it cannot drift from what `fsh host allow-agent` set; the level itself is still checked by the capability wrapper. The outcome equals the old `control` + `agentMessages` check for every combination. The body hash signature is untouched. Whether to accept a message is decided on the Mac that owns the receiving session; no request is created for a remote sender |
 | Limits | `msg_svc.check_rate`, `agent_msg` constants | 20 messages per minute per sending host (the engine counts, `agent_msg._rate` is the counter, 429 `rate_limited`) and 10 hops per conversation (429 `hop_limit`) — same numbers and error order as before |
@@ -431,10 +430,10 @@ with `VT_AUTHZ_ENFORCE=msg` and `share,deleg,msg`.
 
 ## Other Macs under the engine (`VT_AUTHZ_ENFORCE=peer`)
 
-Off by default (shipping changes nothing); combine as `share,deleg,msg,peer`. With `peer` on, `authz/peer_svc.py` decides what another Mac
+Off by default: without `peer` in `VT_AUTHZ_ENFORCE`, peer handling is unchanged. Combine as `share,deleg,msg,peer`. With `peer` on, `authz/peer_svc.py` decides what another Mac
 (`/api/peer/*`) may do, `authz/host_gate.py` decides who may operate another Mac from this server (`/api/hosts/*`, `/ws/hosts/*`,
 `/ws/remote/*`) and `authz/host_grant_svc.py` turns `fsh host allow-*/deny-*` into approval requests. Turning the flag off
-restores the old behaviour at once. Every level and route gives the **same answer and the same error body** as before; the only changes are
+restores the behaviour without the engine at once. Every level and route gives the **same answer and the same error body** as with `peer` off; the only differences are
 the ones listed under "Operating another Mac from this server" below.
 
 **What `control` means.** A Mac you set to `control` can type into every terminal here, create and kill sessions, receive files and use the
@@ -444,11 +443,11 @@ trust as much as yourself.
 
 | Piece | Where | Rule |
 |---|---|---|
-| Authentication | `routes/peer_protocol.py` | The HMAC signature (body hash, time window, nonce, rate limits — all unchanged) only proves **which Mac** is calling: the principal `peer:<id>`. What it may do is decided by grants. |
+| Authentication | `routes/peer_protocol.py` | The HMAC signature (body hash, time window, nonce, rate limits — all identical with `peer` off) only proves **which Mac** is calling: the principal `peer:<id>`. What it may do is decided by grants. |
 | Grants | `peer_svc._snapshot` | Translated on the spot from `hosts.json` (`view` -> `session.view` + `session.read`; `control` -> also `session.input` raw, `session.manage` (create, kill, rename, detach), `fs.write` (drop only) and `relay` for every group; `agentMessages` -> `msg.send` for the agent principal), so a `fsh host` change takes effect at once and the stored copy can never be stale. Rules in the engine store (deny rules included) apply on top. |
 | One declaration table | `peer_svc.NEEDS` | Each peer route lists the (scope, conditions) it needs in this single table; the capability wrapper reads it, and a test fails for any `/api/peer/*` route without an entry. An action missing from the table falls back to its old level, never to "allow". |
 | Open sockets | `peer_svc.GrantWatch` | Input frames on `/api/peer/ws/{name}` re-check `session.input` (raw) per frame (cached until `hosts.json`/`grants.json` change), and every 2 seconds the grant is read again: a removed Mac, or one that lost view or input, is disconnected (close 4401) within 5 seconds. The relay socket uses the same 2-second check instead of the old 30 seconds. |
-| Relay | `routes/peer_relay.py` | Each allowlist rule maps to a group (`scopes.RELAY_*_GROUPS`) and the engine is asked for `relay` with that `group`. The order and the error bodies are as before: the level gate comes first (a `view` Mac gets 403 `level_required` even for an allowlisted GET), then the allowlist (403 `relay_forbidden`). A deny rule for one group turns only that group into `relay_forbidden`. |
+| Relay | `routes/peer_relay.py` | Each allowlist rule maps to a group (`scopes.RELAY_*_GROUPS`) and the engine is asked for `relay` with that `group`. The order and the error bodies are the same as with `peer` off: the level gate comes first (a `view` Mac gets 403 `level_required` even for an allowlisted GET), then the allowlist (403 `relay_forbidden`). A deny rule for one group turns only that group into `relay_forbidden`. |
 | Failure | engine exception, corrupt `grants.json` | 503 `authz_unavailable` for a peer request (fail closed). |
 | Audit | `~/.vt/audit/authz.jsonl` | An engine denial of a peer request is recorded (`peer.<action>`, one line per Mac/action/reason per minute); no request content. `host_store` keeps its own per-peer log (`fsh host log`). |
 
@@ -472,8 +471,8 @@ with the password.
 
 ### Changing a Mac's access with `fsh host` — approval, not a file write
 
-`fsh host allow-control|deny-control|allow-agent|deny-agent` used to write `hosts.json` directly, so any process with the same user (an agent
-in a terminal) could raise a Mac's access. With the flag on the command asks the running server over the unix socket
+`fsh host allow-control|deny-control|allow-agent|deny-agent` must not write `hosts.json` directly, since any process with the same user (an agent
+in a terminal) could then raise a Mac's access. With the flag on the command asks the running server over the unix socket
 (`POST /api/host-grants/{id}/change`; the socket peer is the principal — `local` outside a pane, `agent` inside one):
 
 | Change | Result |
@@ -482,15 +481,15 @@ in a terminal) could raise a Mac's access. With the flag on the command asks the
 | `allow-control`, `allow-agent` (raise access) | A pending request (kind `peer`, origin `authz:peer:req:`) in the same inbox as sharing and message requests; nothing changes until a **person** (browser login session) approves. `allow-control` needs a re-authenticated (elevated) person because it grants raw input. Same request is merged; a denial cools down for 5 minutes; 20 pending per caller, 200 total |
 
 A `fsh` process without a pane (`local`), an agent, the machine token and a peer can never approve. After approval the engine store and
-`hosts.json` are both written (the old writers `set_grant_level`/`set_grant_agent` stay for one more release), so `fsh migrate-auth --verify`
-stays clean. Without the flag, without the socket or against an older server the command writes `hosts.json` directly as before. Someone who
+`hosts.json` are both written (through the `set_grant_level`/`set_grant_agent` writers), so `fsh migrate-auth --verify`
+stays clean. Without the flag, without the socket or against an older server the command writes `hosts.json` directly. Someone who
 can edit `~/.vt` as the same user can still change the file by hand — the audit chain and `fsh doctor` are what detect that, not this route.
-The command exits 0 when it only created a request; it says so and nothing has changed yet.
+The command exits 0 when it only created a request; it says so and nothing has changed until the request is approved.
 
 Tests: `server/tests/authz_char/test_peer_enforce.py` (declaration coverage, 2-second revocation, per-frame re-check, relay order and groups,
 host scopes per caller, request/approve/deny lifecycle, CLI fallbacks, rollback, `--verify`) and `authz_char/test_char_peer_enforced.py` (the
 matrix: peer, relay, machine-token groups identical; the listed host-operation changes). `test_char_hosts.py` and the host-switch half of
-`test_char_relay.py` pin the old behaviour with the flag removed.
+`test_char_relay.py` pin the default behaviour with the flag off.
 
 ## Other Macs, grant based (protocol v2, `VT_AUTHZ_ENFORCE=peer`)
 
@@ -504,7 +503,7 @@ byte-identical to the old one. Protocol v2 adds `proto: 2` to the ping answer (o
 
 **On behalf of (obo).** A signature proves which Mac calls (`peer:A`). To act for one of its agents the Mac adds `X-Peer-Obo: agent:<A's id>/<session key>`, which is
 **part of the signature** and **A's voucher, not an authentication**: B builds the principal `peer:A/obo:agent:A/<key>` and decides by **its own grants** for that
-principal, approved by a person on B (D12: there is no approval on the asking side). A can only vouch for agents of its own id (`agent:<A>/…`). Swapping the obo,
+principal, approved by a person on B (there is no approval on the asking side). A can only vouch for agents of its own id (`agent:<A>/…`). Swapping the obo,
 adding one to an unsigned request or stripping it all fail authentication; a body hash is required on every v2 call. Dropping the obo can only **reduce** what a call
 may do: grants for `peer:A/obo:…` do not apply to `peer:A`, while a host-level grant applies to both, and an agent route without an obo is 400. Replays are refused by
 the nonce cache as before.
@@ -512,16 +511,16 @@ the nonce cache as before.
 | Piece | Where | Rule |
 |---|---|---|
 | Gate | `routes/peer_protocol.capability_v2` | Flag off -> 404. Signature + required body hash + obo, 600 calls per minute per peer, an audit line per call (`peer_audit.log`). The handlers ask the engine; the gate never decides a permission. |
-| Shared sessions | `authz/remote.py` | `GET /v2/session/shared`, `POST /v2/session/read\|send`. A remote agent only sees **shared** sessions; the share policy is the ceiling (`ceilings.applies` covers obo principals; host-level peer grants stay exempt). Reading needs a grant from a person on B (202 pending, then retry); typing a line needs a grant approved by a **re-authenticated (elevated)** person (R4.3: for a peer everything beyond view/read is elevated). Read-only share: 403 at once. The grant is evaluated without a cache each call and again inside the pane lock before the first key. |
-| Surface ceiling (N-24) | `scopes.PEER_SURFACE_SCOPES`, `engine.decide` | An obo principal can use at most `ping`, `authz.request`, `session.view/read/input`, `msg.send`, `deleg.spawn/control` — **whatever grants exist**. Inbox/authz admin, pair management, session management, relay, browser and files are `surface_forbidden`. The relay allowlist (`relay_policy`) does not reach any v2, inbox, pair, delegation or agent-share route, and a second tunnel listener is **not** built: the ceiling is enforced in the engine. |
+| Shared sessions | `authz/remote.py` | `GET /v2/session/shared`, `POST /v2/session/read\|send`. A remote agent only sees **shared** sessions; the share policy is the ceiling (`ceilings.applies` covers obo principals; host-level peer grants stay exempt). Reading needs a grant from a person on B (202 pending, then retry); typing a line needs a grant approved by a **re-authenticated (elevated)** person (for a peer everything beyond view/read is elevated). Read-only share: 403 at once. The grant is evaluated without a cache each call and again inside the pane lock before the first key. |
+| Surface ceiling | `scopes.PEER_SURFACE_SCOPES`, `engine.decide` | An obo principal can use at most `ping`, `authz.request`, `session.view/read/input`, `msg.send`, `deleg.spawn/control` — **whatever grants exist**. Inbox/authz admin, pair management, session management, relay, browser and files are `surface_forbidden`. The relay allowlist (`relay_policy`) does not reach any v2, inbox, pair, delegation or agent-share route, and a second tunnel listener is **not** built: the ceiling is enforced in the engine. |
 | Requests | `inbox.create_remote_request` | Same limits as local agents (6/min, 20 pending per principal, 200 total, 5 minute denial cooldown); only `session.view/read/input` and `deleg.spawn` are requestable. The request shows in the normal inbox (`kind: generic`, subject `peer:A/obo:…`); the approver check treats the requester as a peer (`approving_kind`). |
 | Remote delegation | `delegation.py`, `authz/remote.py` | Parent and child ledgers on both Macs share the delegation id; the other side is recorded as `host` and a key `<host>/<key>` (a local tmux key never contains `/`). Remote spawn needs an elevated-approved `deleg.spawn` grant (`once` is consumed by the call), no cwd/worktree, this host's quota (3 open, 5/min) and `VT_AGENT_SPAWN`. Instructions and close go to `peer:<host>` through the outbox; reports travel the other way and are rebuilt by the receiver from its own ledger (`remote_seen` makes redelivery harmless). Control needs the engine's `deleg.control` for the derived obo grant **and** the ledger's key. |
 | Pair | `authz/pairs.py` | An obo agent can join a pair created on B (`POST /v2/pair/join`); member principal `peer:A/obo:…`, no local session key. A pair code that names a specific local session cannot be used from another Mac. |
-| Revocation (N-13, N-14) | `authz/remote.py` | Revoking a grant given to a Mac's agent, removing a Mac (`fsh host rm`, `revoke-all`) or an emergency stop writes a signed notice to `~/.vt/peer_outbox.json` (0600) and tries once at once; it retries with backoff (5s … 1h, 30 tries) while the server runs. The receiver **never deletes on the notice alone**: it asks the sender (`GET /v2/authz/grants`) and accepts only if the sender answers authenticated and the grant is gone («unregistered» for the host scope); unreachable or 5xx = not accepted. Accepting closes its open proxied terminals to that Mac and the delegations with it. `fsh host rm` tells the Mac before it deletes its own route back, so an unreachable Mac at that moment learns from its closed stream instead. |
-| Open terminals | `peer_svc.GrantWatch` | Unchanged: every 2 seconds the sender's grant is read again and a removed or downgraded Mac is disconnected (4401); the receiving proxy closes the browser socket with it. Total from revoke to the other side's closed stream: under 5 seconds (tested end to end). |
-| Secret rotation (D16 = b) | `host_store`, `peer_client.rotate_sync` | `fsh host rotate <id>` replaces the secret of **my outgoing connection** on both sides; no expiry. Two steps so that a failure at any point keeps the previous secret: (1) the other Mac creates a new secret and holds it pending for 10 minutes (both secrets work), (2) I swap my file in one write and confirm with a request signed by the new secret, which promotes it there. Failures: step 1 fails -> nothing changed; confirm answered 401 -> I restore the previous secret; confirm lost (network) -> `rotation: "unconfirmed"` and the next `fsh host rotate` settles it (confirmed or rolled back). The last rotation time is on both sides (`fsh host list`) and in the audit (`peer.rotate` with `rotated_at`, `previous_rotated_at`). The other direction of a mutual pairing is rotated from the other Mac. The new secret travels in the response of a signed request, the same exposure as pairing; it needs `peer` on the Mac you run it on and on the other one. |
+| Revocation | `authz/remote.py` | Revoking a grant given to a Mac's agent, removing a Mac (`fsh host rm`, `revoke-all`) or an emergency stop writes a signed notice to `~/.vt/peer_outbox.json` (0600) and tries once at once; it retries with backoff (5s … 1h, 30 tries) while the server runs. The receiver **never deletes on the notice alone**: it asks the sender (`GET /v2/authz/grants`) and accepts only if the sender answers authenticated and the grant is gone («unregistered» for the host scope); unreachable or 5xx = not accepted. Accepting closes its open proxied terminals to that Mac and the delegations with it. `fsh host rm` tells the Mac before it deletes its own route back, so an unreachable Mac at that moment learns from its closed stream instead. |
+| Open terminals | `peer_svc.GrantWatch` | Every 2 seconds the sender's grant is read again and a removed or downgraded Mac is disconnected (4401); the receiving proxy closes the browser socket with it. Total from revoke to the other side's closed stream: under 5 seconds (tested end to end). |
+| Secret rotation | `host_store`, `peer_client.rotate_sync` | `fsh host rotate <id>` replaces the secret of **my outgoing connection** on both sides; no expiry. Two steps so that a failure at any point keeps the previous secret: (1) the other Mac creates a new secret and holds it pending for 10 minutes (both secrets work), (2) I swap my file in one write and confirm with a request signed by the new secret, which promotes it there. Failures: step 1 fails -> nothing changed; confirm answered 401 -> I restore the previous secret; confirm lost (network) -> `rotation: "unconfirmed"` and the next `fsh host rotate` settles it (confirmed or rolled back). The last rotation time is on both sides (`fsh host list`) and in the audit (`peer.rotate` with `rotated_at`, `previous_rotated_at`). The other direction of a mutual pairing is rotated from the other Mac. The new secret travels in the response of a signed request, the same exposure as pairing; it needs `peer` on the Mac you run it on and on the other one. |
 
-Not built (undecided or out of scope here): a physically separate tunnel listener for the peer surface, remote `cwd`/worktree for delegation, shared-session
+Not supported: a physically separate tunnel listener for the peer surface, remote `cwd`/worktree for delegation, shared-session
 streaming for obo agents (agents poll `read`), and a direction-independent single-command rotation of both secrets of a mutual pairing.
 
 ## Browser broker (`VT_AUTHZ_ENFORCE=browser`)
@@ -529,7 +528,7 @@ streaming for obo agents (agents poll `read`), and a direction-independent singl
 Agents can open **isolated browser tabs** and drive them through the server: `server/browser/{broker,policy,tabs,config}.py`, adapters in
 `server/browser/adapters/`, routes `routes/browser.py` (API: «Browser broker» in `API.md`), CLI `fsh browser`, MCP `browser_*`, Settings > Permissions > Browser.
 
-**Master switch and consent (N-26).** Off by default. Without `browser` in `VT_AUTHZ_ENFORCE` the routes answer a plain 404, MCP tools are hidden (`whoami`
+**Master switch and consent.** Off by default. Without `browser` in `VT_AUTHZ_ENFORCE` the routes answer a plain 404, MCP tools are hidden (`whoami`
 only announces `features.browser` when it is on), no file is created and no browser process is started. When on, each adapter is still off until a person (or the
 terminal's `fsh`) turns it on in `~/.vt/authz/browser.json` (0600); the first time ever needs an explicit consent (`consent: true`, a real boolean). A broken or
 unexpected settings file is read as **off** (a string `"true"` or `1` is off too) and is never overwritten. Agents cannot turn adapters on.
@@ -540,7 +539,7 @@ itself with a throwaway profile under `~/.vt/browser/`, the DevTools port bound 
 browser) are real. The other four adapter slots (local CLI adapters) are placeholders that implement only the interface: `capabilities()` says
 `available:false` with a reason and every operation is refused. Optional packages are imported lazily; a missing one shows as unavailable and never breaks the server.
 **`profile=user` (attaching to the user's own Chrome) is not implemented**: an adapter that declares it is unavailable, `profile:"user"` and `attach` are 501
-`unsupported_profile` (the `attach` permission check still happens first). Follow-up work, together with downloads (R9.6, refused today).
+`unsupported_profile` (the `attach` permission check still happens first). Downloads are refused as well.
 
 **Permissions.** Three scopes, resource `browser:local/new` (open, lists) or `browser:local/tab/<id>`: `browser` (ops open, navigate, read, input, close — nothing by default for agents;
 a logged-in person has it), `browser.js` (`eval`; **nobody has it by default**, not people either; elevated approval), `browser.sensitive` (ops cookies, storage, network,
@@ -549,10 +548,10 @@ grant conditions: `conds.url_allowlist` (below) and `conds.values` (cookie/stora
 relay group list, presets or `*`: a grant must name it, and over a relay `eval`, cookies, storage and network are refused outright (values never cross a peer link).
 Pairs do not give `browser` in their presets (a pair's «browser_js»/«browser_sensitive» elevated items still work on `browser:local/*`).
 
-**Tab ownership (R9.2).** The agent that opens a tab owns it. Someone else needs a grant that names that tab (`browser:local/tab/<id>` or `browser:tab:<id>`) or a grant
+**Tab ownership.** The agent that opens a tab owns it. Someone else needs a grant that names that tab (`browser:local/tab/<id>` or `browser:tab:<id>`) or a grant
 from the same pair; a wildcard `browser:local/*` is not enough. People and the terminal can list and close any tab but do not operate others' tabs.
 
-**URL policy (R9.3, N-27)** — one function (`policy.check_url`) used before navigating, at every redirect hop, for subframes, and again after each click/type/eval/navigate:
+**URL policy** — one function (`policy.check_url`) used before navigating, at every redirect hop, for subframes, and again after each click/type/eval/navigate:
 the default (`url_allowlist: []`) allows only `about:blank` and `localhost`/`127.0.0.1`/`[::1]` on ports FarShell has exposed (the tunnel registry, minus dangerous ports such as
 remote debugging). Denied outright: `file:`, `chrome:`, `chrome-extension:`, `devtools:`, `view-source:`, top-level `data:`/`blob:`, `javascript:`, other `about:`, `ws:`, `ftp:`,
 credentials in the URL. RFC1918, link-local, CGNAT and metadata addresses (also written as decimal/octal/hex numbers or inside IPv6) need the **exact IP, CIDR or host:port** in the
@@ -563,23 +562,23 @@ In the browser, adapters block hops/subframes/subresources in the network layer;
 on a violation puts the tab back on `about:blank` and refuses (`url_blocked`). Sub-resources (images, scripts, XHR) are checked more loosely: public hosts pass, but loopback
 (unexposed port), private, link-local and metadata targets are blocked unless listed. Tabs are addressed only by `snapshot` refs (`e1`…), never by selectors.
 
-**Redaction (R9.5).** Cookies and storage return names/domains/paths/flags only; values need `values:true` **and** a grant with `conds.values` (checked by the engine, so a
+**Redaction.** Cookies and storage return names/domains/paths/flags only; values need `values:true` **and** a grant with `conds.values` (checked by the engine, so a
 grant without it is refused with `cond_values`). `network` always redacts `Cookie`, `Set-Cookie`, `Authorization`, `Proxy-Authorization` and bodies over 64 KB. Audit lines never
 hold values, script text, typed text, or URL query/fragment (origin + path hash only). Scripts and sensitive reads are not run if their audit line cannot be written.
 
 **Limits.** Per tab: 60 operations/min in all, 30 navigations/min, 10 `eval`/min; 4 tabs per owner and 12 in all; an idle tab is closed after 60 minutes (a tab handed to a person is not).
 
-**Failure (F7) and generations (N-28).** If an adapter goes down its open tabs become `orphaned` with the owner kept and every operation except close is refused
+**Failure and generations.** If an adapter goes down its open tabs become `orphaned` with the owner kept and every operation except close is refused
 (`tab_orphaned`, 503). The server takes a host lease at start (`~/.vt/authz/tabs.json`, dir 0700, file 0600 with explicit chmod) and bumps a generation number; a tab from an earlier
 generation, or with the lease held by another process, is refused — a restart orphans old tabs rather than adopting them. A damaged `tabs.json` refuses operations and is not overwritten.
 
-**Revocation (N-15).** Revoking a grant, pair, subject or an emergency stop (with `lease` in `VT_AUTHZ_ENFORCE`, as for the other revocation steps) runs the saga step `browser_tabs`:
+**Revocation.** Revoking a grant, pair, subject or an emergency stop (with `lease` in `VT_AUTHZ_ENFORCE`, as for the other revocation steps) runs the saga step `browser_tabs`:
 tabs are **not closed**, only their ownership is released (`state: released`; nobody can operate them, a person can close them). A tab the owner handed over with `browser_handoff`
 is marked `humanTaken` and is never touched by revocation.
 
 **Limits to state plainly.** The adapters are code in this repository driving a real browser: a page can still do what any web page can inside the allowed origins. The
 broker keeps agents inside the policy; it does not make the allowed pages trustworthy, and a process of the same user account can read `~/.vt` directly. The real adapters
-were exercised with fakes in CI and a real browser only when the `playwright` package is installed.
+drive a real browser through the `playwright` package.
 
 ## Re-check right before typing
 
@@ -612,26 +611,25 @@ item re-runs the check. Items queued while the flag was off carry no `source.aut
   itself, a sibling, another parent's child, a grandparent or any other session — whether or not `deleg` is on (with it on, the engine
   grant and the ledger's parent key must both agree). Depth is 1; if the depth limit is ever raised, control still stops at the direct
   parent. An entry whose parent equals its child is treated as not existing.
-- **Ownership keys include the session creation time** (`#{session_id}:#{session_created}`). A session recreated under the same name, or a
+- **Ownership keys include the session creation time** (`<session_id>:<session_created>`). A session recreated under the same name, or a
   new session continuing a resumed/forked conversation, has a different key and neither takes over a parent's or child's role nor receives its
   hook notices. Tests: `test_authz_recheck.py`, `test_authz_child_limits.py`, `test_authz_ownership.py`.
 
 ## How a grant was approved: `approved_via`
 
 Every grant record the engine writes carries `approved_via` next to `approved_by`: `manual` (a person decided it: session-share and
-message approvals), `window` (an auto-approval window decided it — windows are not built yet), `system` (the engine's own rules and
+message approvals), `window` (an auto-approval window decided it — reserved; windows do not exist), `system` (the engine's own rules and
 records derived from the delegation ledger) or `migrated` (copied from an older store by `fsh migrate-auth` or by adopting the
 old `agent_grants.json`). A record without the field reads as `migrated`; re-running the migration never rewrites such a record just
 to add it, and never replaces a `manual` value with `migrated`. Grant listings show it (`approvedVia`, see `API.md`).
 It is provenance only, never authority: **a grant approved via `window` can never be used to open or extend a window**
-(`engine.validate_window(..., basis=[the grants the caller relies on])` reports `window_derived_grant`), so the window phase
-inherits the rule from the engine's guard function.
+(`engine.validate_window(..., basis=[the grants the caller relies on])` reports `window_derived_grant`), so any future window inherits the rule from the engine's guard function.
 
 ## Unreadable stores refuse writes
 
 A store file that cannot be read or parsed (`~/.vt/authz/*.json`, and the old `~/.vt/agent_grants.json` that is still
-mirrored) is **never overwritten**. Reads stay fail closed (agents, peers and the CLI are denied while `grants.json`
-or `meta.json` is unreadable; a human session keeps working). A change that would write the unreadable file is refused with
+mirrored) is **never overwritten**. Reads stay fail closed (agents, peers and the CLI are denied while any of `grants.json`,
+`approvals.json`, `windows.json` or `shares.json` is unreadable; a human session keeps working). A change that would write the unreadable file is refused with
 503 `store_unreadable` and nothing else in the same transaction is saved. Writes to other, healthy files are not blocked.
 The broken file is left exactly as it was (never deleted, never repaired); a copy of its bytes is kept next to it as
 `<name>.corrupt-<id>` (0600, one copy per distinct content). Fix or restore the file by hand (`fsh migrate-auth --restore <ts>`
@@ -656,7 +654,7 @@ Origin check is not skipped for loopback. **Known trade-off:** behind a tunnel t
 shares one source key (the loopback address), so ten bad guesses can lock remote access (not the socket or the local `fsh`) for five
 minutes. The `CF-Connecting-IP` and `X-Forwarded-For` headers are used when present.
 
-## Unix socket: who is calling without a token (2026-10-15)
+## Unix socket: who is calling without a token
 
 A second uvicorn server on the same event loop listens on `<state dir>/run/fsh.sock` (default `~/.vt/run/fsh.sock`, directory
 0700, socket 0600 set **before** `listen`). The caller is whatever the kernel says: peer uid (macOS `LOCAL_PEERCRED`, Linux
@@ -672,7 +670,7 @@ A second uvicorn server on the same event loop listens on `<state dir>/run/fsh.s
 | Principal | Peer pid's parent chain reaches a `pane_pid` of **our** tmux -> `agent:local/<sid>:<created>`; with `X-Fsh-Svc: hook` -> the same agent with the attribute `via=hook`. Otherwise (outside a pane) a declared service name -> `local:svc:<name>` (attribution only), else `local:cli:uid<uid>:pid<pid>`. A process inside a pane that declares a service stays an agent. **None of them is `human`** (no elevation, `request_kind` is `none`, so `require_human_session` refuses) |
 | Fail closed | Peer already exited (pid reuse risk) -> 403 `peer_gone`; tmux unreadable -> 503 `identity_unavailable` |
 
-Authorization in this phase is "equivalent to the machine token, only for the allowlisted routes": the middleware skips layers 3 and
+Authorization on the socket is "equivalent to the machine token, only for the allowlisted routes": the middleware skips layers 3 and
 4 for requests the Gate passed, and the routes decide as before. `share_identity.verify_caller` takes the socket peer pid
 (`peer_pid=`) and never runs `lsof` for it; the TCP path still uses `lsof` and fails closed when it cannot find the owner.
 
@@ -686,13 +684,13 @@ Not opened (a warning is logged and clients use the token): `VT_AUTHZ_SOCKET=0`;
 work there — keep the state dir on the Linux filesystem); path too long; another live listener on the path (never unlinked);
 a non-socket file in the way (never deleted). Native Windows is unsupported: use the WSL wrapper.
 
-Limits worth knowing: a process an agent daemonized (re-parented to pid 1) no longer reaches its pane and looks like `cli`; the
-same-uid threat model still holds (an agent can read `~/.vt`, see risk 1 in the plan). `fsh doctor` and `fsh status` show the
+Limits worth knowing: a process an agent daemonized (re-parented to pid 1) does not reach its pane and looks like `cli`; the
+same-uid threat model still holds (an agent can read `~/.vt`). `fsh doctor` and `fsh status` show the
 socket state (listening, self-test, permissions) and **machine-token requests in the last 24h**, counted in
 `~/.vt/authz/legacy_token_use.jsonl` (minute buckets of path + user agent + count; no query string, no content; 1 MB x 2 files).
 `python -m authz sock-status [--json]` prints the same.
 
-`server/hooks/tmux_client_notify.sh` no longer puts the token in the URL. It uses the socket; without one it passes
+`server/hooks/tmux_client_notify.sh` does not put the token in the URL. It uses the socket; without one it passes
 `Authorization: Bearer` through a curl config on a `/dev/fd` pipe (`curl -K`), so the token is never in argv/`ps`.
 `server/tests/test_no_token_in_argv.py` fails on any script that runs curl with `token=` or a token variable in its arguments.
 
@@ -711,7 +709,7 @@ as through the old `/api/agent/share/*` routes, which stay as shims. API detail:
 | What a person chooses | `once` (a grant with `conds.max_uses = 1`, counted where an enforcement point consumes it), `session` (while the requester's and the resource's sessions live), or deny (5-minute cooldown). The approver can only narrow scopes and time, never widen |
 | Presets | The UI shows four bundles — 보기 (view), 협업 (collab), 운전 (drive), 제어 (control; elevated) — and the smallest bundle that covers a request or grant; scopes and conditions are on the detail view and in the audit |
 | `generic` grants | Written to `grants.json` with origin `authz:grant:<id>` (never projected to the old files), honoured by the engine wherever an enforcement point asks. With every flag off they change no response |
-| Requests by agents | `authz.request` is an agent default; 6 a minute per caller, 20 pending per caller, 200 in all, 24 h expiry, 5-minute cooldown after a refusal. `authz.*` and `pair.manage` cannot be requested. The agent's free-text `reason` is shown to the approver and never audited (length and sha8 only). A delegated child's request carries the parent delegation id |
+| Requests by agents | `authz.request` is an agent default; 6 a minute per caller, 20 pending per caller, 200 in all, 24 h expiry, 5-minute cooldown after a refusal. `authz.request` and `authz.admin` cannot be requested; `pair.manage` can be requested only on a server with `pair` enforced. The agent's free-text `reason` is shown to the approver and never audited (length and sha8 only). A delegated child's request carries the parent delegation id |
 | Events | `authz_request`, `authz_resolved`, `authz_revoked` on `/ws-workspace` with ids and kinds only; the old `agent_share_request*` events are still sent for one release |
 | Panic | Revokes non-human grants through each kind's own revoke path, clears pending requests, lowers peer grants to view (the pairing stays) and closes open delegations; human defaults, share policy and logins are untouched. Audited per item plus one `authz.panic` row |
 
@@ -756,9 +754,9 @@ leases. Event bursts are coalesced per kind.
 
 ## A device's sessions die with the device
 
-`session_device` used to check only that the bound device **still existed**. A device
-that had expired kept its already-issued sessions alive for up to `SESSION_TTL` (24h) —
-harmless at 90 days, but a 1-hour temporary device would effectively live 25 hours. Now
+`session_device` must check that the bound device is **alive**, not just that it exists: otherwise a device
+that has expired keeps its already-issued sessions alive for up to `SESSION_TTL` (24h) —
+harmless at 90 days, but a 1-hour temporary device would effectively live 25 hours. So
 both the cookie check (`verify_device`) and the session check (`session_device`,
 `session_elevated_until`) go through the same `_alive` judgement in `auth/devices.py`,
 and `/api/auth` issues the session with `min(SESSION_TTL, device remaining)`. Open
@@ -772,13 +770,13 @@ The config rule is "environment wins over `~/.vt.env`", and for ports, paths and
 instance isolation that is right. For **values that define a security boundary** it is
 dangerous: a stale copy silently widens the boundary.
 
-**It happened twice on 2026-09-17.** `VT_BROWSE_ROOTS` was narrowed to `~/GitHub` and
-the server still served the whole home directory through the public tunnel, because the
-shell that ran `fsh` still exported the old value. And a rotated `VT_AUTH_TOKEN` left
-every already-running agent session's hook returning 401 — 490 of them, silently.
+**Failure modes this prevents.** If `VT_BROWSE_ROOTS` is narrowed to `~/GitHub` but the
+shell that ran `fsh` still exports the old value, the server keeps serving the whole home
+directory through the public tunnel. And a rotated `VT_AUTH_TOKEN` leaves every
+already-running agent session's hook returning 401, silently.
 
 **How it works.** `BOUNDARY_KEYS` (`server/vt_env.py`, mirrored in `lib/vt_env.sh`) are
-read from the file first. There are 69 direct `os.environ.get("VT_…")` call sites, so
+read from the file first. There are over a hundred direct `os.environ.get("VT_…")` call sites, so
 instead of editing them the environment is normalised once at boot
 (`apply_boundary_overrides()`).
 
@@ -788,7 +786,7 @@ instead of editing them the environment is normalised once at boot
 **Absence means different things for different keys.** A key absent from the file is
 normally left alone, so one-off experiments still work. The exception is
 `FILE_CLEARED_KEYS` (currently `VT_TUNNEL_HOOK`), where absence means "switched off" and
-the value is removed from the environment — a hook deleted from the config kept running
+the value is removed from the environment — a hook deleted from the config would keep running
 from a stale export.
 
 **Credentials are deliberately not in that set.** Clearing `VT_AUTH_TOKEN` because the
@@ -799,5 +797,5 @@ lingers errs toward locked; a value that vanishes errs toward open.
 and isolated test servers depend on that.
 
 `fsh status`/`doctor` say when a window's env was corrected, and `doctor` also compares
-the **running server's** boundary values against the file — N28 only ever watched for
-stale *code*.
+the **running server's** boundary values against the file (the code-staleness check only watches
+stale *code*).

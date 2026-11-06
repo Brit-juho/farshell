@@ -81,8 +81,9 @@ Port 7777 is the default; use your configured port if different.
 channel: `stable` = newest `vX.Y.Z` tag whose SSH signature matches `~/.vt/update-signers`
 (also: tag name == signed name, commit in `origin/master` history), `dev` = fast-forward to
 `origin/dev`, `devmode` = never moves. Order: clean-tree check, fetch, resolve + verify,
-detached checkout, `post_checkout` (pip when `requirements-core.txt` changed, `npm ci`/`npm run build`
-when frontend inputs or `package-lock.json` changed or `frontend/dist` is missing), `dev` branch
+detached checkout, `post_checkout` (pip when `requirements-core.txt` changed; `npm run build`
+when frontend inputs changed or `frontend/dist` is missing, preceded by `npm ci` when
+`package-lock.json` changed or `node_modules` is missing), `dev` branch
 advance, `sync`. Any failure before the branch advance returns to the saved commit/branch
 (`~/.vt/update-prev.json`). `sync` reuses `claude_hooks.py`/`codex_hooks.py install` and links
 `~/.claude/skills/fsh` to the repo copy; it never overwrites a non-link skill. The trust file is
@@ -157,13 +158,13 @@ git config core.hooksPath scripts/githooks
 ```
 
 Without the hooks nothing stops a personal value or a local-only document from being
-committed; the guard existed for months in this repository before anyone noticed it was off.
+committed, and nothing warns you that the guard is off.
 
 The guard checks four things in what is being added (new file names and added lines):
 forbidden paths, secret-shaped strings, this machine's user and home path, and **your own
 words**. Local-only record documents are forbidden by name: everything under `docs/` except
 `help/`, `ref/` and `guide/` (the local-only folder is `docs/local/`), `research_notes/`,
-`reports/`, `docs/ref/*-plan.md`, `docs/ref/references.md`, and root `*_DESIGN.md`. Words
+`reports/`, `docs/ref/*-plan.md`, `docs/ref/references.md`, `docs/ref/*reference-logic.md`, and root `*_DESIGN.md`. Words
 that must never appear in the repository (an organization, a profile, a device model) go in `~/.vt-guard-words`, one per line, `#` for comments. The file stays
 outside the repository, matching is case-sensitive and whole-word, and the guard never
 prints the word it matched. `VT_GUARD_WORDS` changes the file's location.

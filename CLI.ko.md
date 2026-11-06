@@ -23,9 +23,10 @@ fsh mobile [--e2e] [--session <이름>] [--temp]
 fsh manage             # TUI 관리 도구 (세션/타깃/핫키/상태)
 fsh attach [name]      # 임의 tmux 세션을 새 창에 attach
 fsh voice              # 음성 모드 (백그라운드, 다른 앱 사용 중에도 사용)
+fsh voice-bind <claude|codex> <대화 ID>  # 실제 타깃 pane에서 연결
 fsh voice-target [name|--auto]  # 음성 daemon 타깃 lock/해제
 fsh clip               # 클립보드 동기화 데몬 (맥 클립보드 변경 → 웹, OSC52 보완)
-fsh queue [list|add "내용" [세션]|run|rm <id>|unblock <id>|clear]  # 프롬프트 큐
+fsh queue [list|add "내용" [세션]|run|rm <id>|unblock <id>|clear|log [id]]  # 프롬프트 큐
 fsh files [ls|add <path> [--share ttl] [--pin]|rm <id>|share <id> [--ttl] [--pin] [--once]|unshare <id>|insert <id>]  # 파일 저장소 + 공유 링크
 fsh host [list|pair|add <url> --ticket <t>|ping <id>|rm <id>|rename <id|self> <이름>|rotate <id>|allow-control <id>|deny-control <id>|allow-agent <id>|deny-agent <id>|log|revoke-all|help]  # 다른 맥의 FarShell 페어링
 fsh msg [log [대화id]|agents|send <[호스트/]세션> "내용" [--reply <id>]]  # 에이전트 간 메시지
@@ -34,18 +35,19 @@ fsh pair [start|code <id>|join <code>|status [<id>]|handoff <id>|accept <id>|end
 fsh browser [adapters|enable <이름> [--off] [--yes]|tabs|close <id>]  # 에이전트용 격리 브라우저 탭: 어댑터 켜기, 탭 목록·닫기 (아래 참고; VT_AUTHZ_ENFORCE=browser 필요)
 fsh lease [ls|acquire <glob> [--write|--read] [--exclusive] [--ttl 30m]|renew <id>|release <id>|check [--staged]|guard install|uninstall|status]  # 폴더 lease + 선택 설치 pre-commit guard (아래 참고)
 fsh mcp                         # 에이전트용 MCP 서버(stdio): list_agents / send_message / read_messages + 공유 세션(list_shared_sessions / read_session / send_to_session) + whoami / request_access / list_my_grants / lease_acquire / lease_renew / lease_release / lease_list
+fsh delegate [ls|close <id>]  # 에이전트 위임(하위 세션) 조회·닫기. 닫아도 세션은 남음
 fsh worktree [list|add <이름> [--base b] [--ports] [--copy-modules] [--agent claude]|rm <이름> [--force]|open <이름>]  # git 워크트리
 fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <id>|bind <repo> <id>]  # git 계정 저장소 (저장한 자격증명은 push에 사용되지 않음)
 fsh hotkey [list|set|reset|disable]  # 핫키 조회/변경
 fsh hooks [status|install|uninstall|dedupe [--dry-run]]  # Claude Code·Codex 훅 등록(상태 배지·큐·TTS의 전제); dedupe는 Codex 앱이 ~/.codex/hooks.json에 복제한 FarShell 훅 제거
-fsh update [--channel stable|dev|devmode] [--to vX.Y.Z] [--check] [--restart] [--rollback]  # 채널별 업데이트(stable = 서명된 릴리스 태그, dev = origin/dev, devmode = 직접 pull) 후 훅·스킬 재동기화; `update trust [--key <공개키>]` 는 릴리스 서명 키 고정; `--rollback` 은 직전 커밋으로 복귀
+fsh update [--channel stable|dev|devmode] [--to vX.Y.Z] [--check] [--restart] [--rollback]  # 채널별 업데이트(stable = 서명된 릴리스 태그, dev = origin/dev, devmode = 직접 pull) 후 훅·스킬 재동기화; `update trust [--key <공개키 파일>]` 는 릴리스 서명 키 고정; `--rollback` 은 직전 커밋으로 복귀
 fsh sync [--dry-run]  # Claude Code·Codex 훅과 fsh 스킬 링크를 현재 코드에 맞춤(직접 pull 한 뒤 사용)
 fsh pane report [--state ...] [--agent ...]  # 이 pane의 상태 보고(훅 없는 에이전트용)
 fsh clauth [status|which]  # 사용량 조회(읽기 전용, clauth 미설치면 숨김)
 fsh usage [list|add --model <이름> --tokens <N> --seconds <N>]  # 누적형 사용량 기록/조회 (로컬 LLM 등, 한도 없음)
 fsh password [clear]   # 웹 로그인 비밀번호 설정(해시 저장) / clear=해제
 fsh otp [status|setup|disable]   # 새 기기 등록 시 OTP 요구 (setup 전까지 완전 비활성)
-fsh device [list|rename <id> <별명>|revoke <id>|prune]  # 등록된 기기 조회 / 이름 변경 / 폐기(폰 분실 시 세션까지 함께 무효)
+fsh device [list|rename <id> <별명>|revoke <id>|prune]  # 등록된 기기 조회(수명·OS/브라우저·마지막 IP) / 이름 변경 / 폐기(폰 분실 시 세션까지 함께 무효) / 만료 기기 즉시 정리
 fsh help <topic>       # concepts/voice/hotkeys/target/troubleshoot
 fsh template [save|apply|list|rm] <name>  # CLAUDE.md 템플릿 저장/적용 관리
 fsh popup <action>     # tmux 3.2+ popup으로 fsh 명령 빠른 호출
@@ -96,7 +98,7 @@ fsh shell-init zsh     # 셸 init 스니펫 출력 (출력한 스니펫을 ~/.zs
 
 `fsh profile list`, `create <name> --tool claude|codex [--account <id>] [--test]`, `login <id>`, `status <id>`, `rename <id> <name>`, `archive <id>`, `restore <id>`, `sources`, `retirement`, `import-config <id> <원본> [--private] [--yes]`, `import-conversations <id> <원본> [--yes]`, `launch <id> <cwd> [--resume <대화>]`, `session <이름>`(서버가 기록한 상태), `probe <id>`, `adopt <id>`, `recover <id>`(중단된 작업 정리), `share <id>`(전역 `~/.claude`에 연결), `default [이름]`(`fsh claude`/`fsh codex`가 이름 없이 쓸 기본 프로필을 보거나 정함), `sync-settings <id> [--dry-run] [--take-global <키>]`(전역 설정을 따라감, 전역은 읽기만), `toggle <id> plugin|skill <이름> on|off`(이 프로필만), `token set|status|clear <id>`(`claude setup-token`으로 만든 장기 토큰. `set`은 입력이 보이지 않게 받고, `--stdin`이면 한 줄을 읽고, `--from-clauth <이름>`이면 clauth가 이미 가진 장기 토큰을 가져옴)로 전용 설정 루트를 관리합니다. 가져오기 명령은 요약을 보여 주고 확인을 받으며(`--yes`는 검토를 마쳤다는 뜻) 웹 흐름과 같은 검사를 거칩니다. 로그인은 해당 호스트에서 대화형으로 실행합니다. 계정 라벨은 논리적 그룹이며 신원 증명이 아닙니다. 검토 가져오기·테스트 제한·현재 대체 범위는 [실행 프로필](docs/help/profiles.md)을 참고하세요.
 
-짧게 시작하기: `fsh claude [이름] [--resume <대화>] [--bypass] [--tmux]`, `fsh codex [이름] [--bypass] [--tmux]`은 그 프로필로 지금 터미널에서 `claude`를 치듯 바로 실행합니다. tmux 세션을 만들지 않고 서버도 기록하지 않습니다(세션 상태·은퇴 판정은 이 세션을 보지 못함). `--tmux`를 주면 예전처럼 FarShell tmux 세션을 열어 붙습니다. 이름은 정확히 일치해야 하며 틀리면 짐작하지 않고 거부하면서 실제 이름을 알려 줍니다. 이름을 생략하면 `fsh profile default <이름>`으로 정한 프로필, 없으면 그 도구의 프로필이 하나일 때 그것을 쓰고, 여럿인데 기본값이 없으면 이름을 요구합니다. 터미널이 아니거나 `--tmux`일 때는 FarShell의 tmux 안에서 돌아 떼어 내도 계속 살아 있고, 터미널이 아니면 세션만 시작하고 이름을 출력합니다. `--bypass`는 그 세션 한 번만 권한 확인을 건너뜁니다(쉘 alias는 tmux 자식에 닿지 않으므로 기본값은 CLI 그대로). Codex 프로필은 `fsh profile create <이름> --tool codex`로 만들고 `fsh profile login <id>`로 한 번 로그인합니다.
+짧게 시작하기: `fsh claude [이름] [--resume <대화>] [--bypass] [--tmux]`, `fsh codex [이름] [--bypass] [--tmux]`은 그 프로필로 지금 터미널에서 `claude`를 치듯 바로 실행합니다. tmux 세션을 만들지 않고 서버도 기록하지 않습니다(세션 상태·은퇴 판정은 이 세션을 보지 못함). `--tmux`를 주면 FarShell tmux 세션을 열어 붙습니다. 이름은 정확히 일치해야 하며 틀리면 짐작하지 않고 거부하면서 실제 이름을 알려 줍니다. 이름을 생략하면 `fsh profile default <이름>`으로 정한 프로필, 없으면 그 도구의 프로필이 하나일 때 그것을 쓰고, 여럿인데 기본값이 없으면 이름을 요구합니다. 터미널이 아니거나 `--tmux`일 때는 FarShell의 tmux 안에서 돌아 떼어 내도 계속 살아 있고, 터미널이 아니면 세션만 시작하고 이름을 출력합니다. `--bypass`는 그 세션 한 번만 권한 확인을 건너뜁니다(쉘 alias는 tmux 자식에 닿지 않으므로 기본값은 CLI 그대로). Codex 프로필은 `fsh profile create <이름> --tool codex`로 만들고 `fsh profile login <id>`로 한 번 로그인합니다.
 
 ## `fsh start` / `fsh mobile` 옵션
 
@@ -117,7 +119,7 @@ fsh mobile --session <tmux세션>        # 폰이 열릴 때 이 tmux 세션을 
 저장합니다(바꾸려면 `fsh password`). 터미널이 아닌 곳에서는 아무것도 만들지 않고 멈춥니다.
 `fsh start --force`는 비밀번호를 만들 수 없을 때 위험을 알고 진행하는 경우에만 씁니다.
 
-예전엔 이 옵션들이 `fsh mobile`에 있었습니다. `mobile`에 `--network`/`--safe`/`--force`를 주면
+이 옵션들은 `fsh start`의 것입니다. `fsh mobile`에 `--network`/`--safe`/`--force`를 주면
 `fsh start`를 대신 실행하고 안내를 출력합니다. 자세히: `fsh help access`.
 
 포트 공유의 `session` 모드는 「처음 열기」 링크로 접속합니다. `public`은 인증 없이
@@ -134,7 +136,7 @@ stop 훅), 이미 쉬고 있다고 확실히 알면 바로 입력됩니다. 훅�
 ```bash
 claude mcp add farshell -- fsh mcp      # 에이전트에게 도구 주기 (Codex/agy도 같은 명령 등록)
 fsh msg agents                          # 보낼 수 있는 곳
-fsh msg send M5/api "테스트 돌려줘"       # 셸에서 보내기 (MCP 없는 에이전트도 가능)
+fsh msg send host-b/api "테스트 돌려줘"       # 셸에서 보내기 (MCP 없는 에이전트도 가능)
 fsh msg log                             # 기록과 전달 상태
 fsh host allow-agent <id>               # 받는 맥에서 — allow-control도 함께 필요
 ```
@@ -145,7 +147,7 @@ fsh host allow-agent <id>               # 받는 맥에서 — allow-control도 
 **다른 맥이 할 수 있는 일 바꾸기 (`fsh host allow-*` / `deny-*`).** 서버가 `VT_AUTHZ_ENFORCE=peer` 로 떠 있으면 이 명령들은 `~/.vt/hosts.json` 을 직접
 쓰지 않고 unix socket 으로 서버에 요청합니다. `deny-control` / `deny-agent` 는 접근을 줄이므로 바로 적용되고 감사 기록에 남습니다.
 `allow-control` / `allow-agent` 는 접근을 늘리므로 승인 요청만 만들어지고, 웹 승인함에서 사람이 승인해야 하며 이 명령으로는 승인할 수 없습니다.
-요청을 만들면 종료 코드 0 이지만 아직 아무것도 바뀌지 않았다고 알려 줍니다. 그 설정이 꺼져 있거나 소켓이 없거나 옛 서버면 예전처럼
+요청을 만들면 종료 코드 0 이지만 아직 아무것도 바뀌지 않았다고 알려 줍니다. 그 설정이 꺼져 있거나 소켓이 없거나 옛 서버면
 `hosts.json` 에 바로 씁니다. `control` 은 그 맥이 이 맥의 터미널에 명령을 칠 수 있다는 뜻입니다 — 원격 셸과 같습니다. `fsh host help` 로 볼 수 있습니다.
 
 공유 세션용 MCP 도구는 `list_shared_sessions`, `read_session`, `send_to_session`입니다.
@@ -242,8 +244,9 @@ git stage·commit, 세션으로의 파일 전달, 위임 작업 폴더)만 막�
 fsh queue list                  # 큐 목록
 fsh queue add "다음 지시" [세션]  # 큐에 추가 (상한 50개)
 fsh queue run                   # 수동 드레인 — 한 건 투입
-fsh queue rm <id>                # 항목 삭제 (id=all이면 전체 비우기)
-fsh queue unblock <id>          # safe_mode에 막힌 항목 재개
+fsh queue rm <id>                # 항목 삭제 (id 앞부분만 써도 됨. 전부 지우려면 `clear`)
+fsh queue unblock <id>          # 막힌 항목 재개 (재시도 횟수 초기화)
+fsh queue log [id]              # 상태 전이 기록 (pending → sending → sent / blocked)
 fsh queue clear                 # 전체 비우기
 ```
 
@@ -312,7 +315,7 @@ tmux 세션이 단일 진실의 원천이므로, SSH도 데스크톱 터미널·
 
 ```bash
 # 맥북에서 (Tailscale이 이미 tailscale up으로 연결돼 있어야 함)
-fsh ssh                   # 세션 'dev'로 접속하는 명령을 안내 (복사해서 회사 노트북에서 실행)
+fsh ssh                   # 세션 'dev'로 접속하는 명령을 안내 (복사해서 다른 노트북에서 실행)
 fsh ssh mysession         # 다른 세션 이름 지정
 fsh ssh --user alice      # 원격 로그인 계정 지정 (기본: 현재 계정)
 fsh ssh --add-key "ssh-ed25519 AAAA... user@laptop"   # 공개키 등록

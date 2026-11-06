@@ -23,9 +23,9 @@ fsh hooks dedupe      # ~/.codex/hooks.json 에 복제된 FarShell 훅 제거 (-
 큐 자동 투입도 동작하지 않는다. Claude Code 완료 알림(TTS)도 훅이 필요하다** — 그런데 눈에 띄게 실패하는
 게 아니라 조용히 아무 일도 안 일어나므로, 뭔가 안 뜬다면 여기부터 확인한다.
 
-Claude Code의 `~/.claude/settings.json`에는 도구 시작·종료, 완료, 세션 시작,
-알림, 승인 요청의 6종이,
-Codex의 `~/.codex/config.toml`에는 prompt/permission/tool/stop/session 6종이 등록된다.
+Claude Code의 `~/.claude/settings.json`에는 도구 시작·종료, 완료, 완료 실패, 하위 에이전트 시작·종료,
+팀원 대기, 세션 시작·종료, 알림, 승인 요청, 프롬프트 제출의 13종이,
+Codex의 `~/.codex/config.toml`에는 prompt/permission/tool/stop/subagent/session 8종이 등록된다.
 두 설정 모두 FarShell 항목만 관리하고 기존 훅은 보존한다.
 
 **Codex 앱의 「Claude 설정 가져오기」를 눌렀다면** `~/.codex/hooks.json`에 Claude의

@@ -22,7 +22,7 @@ fsh ssh --user alice    # set the remote login account (default: current account
 ```
 
 It reads the Tailscale state **on this machine** and prints two commands to copy and run as-is
-from another device (such as a work laptop):
+from another device (such as another laptop):
 
 1. Plain SSH: `ssh -t user@100.x.x.x 'tmux -L fsh attach -t dev || tmux -L fsh new -A -s dev'`
    - The connecting device's public key must be in this machine's `~/.ssh/authorized_keys`.
@@ -31,7 +31,7 @@ from another device (such as a work laptop):
 
 ## If your public key isn't registered
 
-On the connecting device (such as a work laptop):
+On the connecting device (such as another laptop):
 ```bash
 cat ~/.ssh/id_ed25519.pub    # if missing, create one with ssh-keygen -t ed25519
 ```

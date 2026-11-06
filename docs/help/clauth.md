@@ -17,8 +17,8 @@ fsh doctor            # 피드 신선도까지 함께 진단
 
 ## 어떻게 읽나
 
-`~/.clauth/status.json` **하나만** 읽는다. clauth 데몬이 90초마다 갱신하는
-파일이고, FarShell은 mtime이 바뀌었을 때만 다시 파싱한다.
+`~/.clauth/status.json` **하나만** 읽는다. FarShell은 이 파일이 기본 90초 주기로
+갱신된다고 보고(`server/usage/clauth.py`) mtime이 바뀌었을 때만 다시 파싱한다.
 
 `clauth status --json`을 실행하지 않는 이유: 폴링마다 프로세스를 띄우게 되고,
 `pending_switch` 같은 값은 단발 실행에서 관측되지 않는다(데몬만 안다).

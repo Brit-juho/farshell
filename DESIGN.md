@@ -20,8 +20,8 @@ default is always the simpler thing.
 
 ### Color — 70/20/10
 
-Four neutral background steps (`--color-bg-0..3`) are the 70%, three text
-steps are the 20%, and the accent is the 10%.
+Four neutral background steps (`--color-bg-0..3`) are the 70%, four text
+steps (txt/sub/muted/faint) are the 20%, and the accent is the 10%.
 
 - **One solid accent per screen — the primary action.** If the active rail
   item, a badge, and a primary button all fill with the accent at once, none
@@ -64,14 +64,13 @@ steps are the 20%, and the accent is the 10%.
   row you are currently on** via `--shadow-e1`. Every other boundary is a 1px
   line (`--color-line`).
 
-  `--shadow-e1` was removed in 2.1.0 and **brought back in 2.1.6**. The reason
-  is worth keeping: it was still referenced by `.vt-wgrail-row.active`, but
-  defined only inside the `notepad` skin — so in the other five skins that
-  `box-shadow` declaration was invalid and dropped, leaving the active row
+  `--shadow-e1` must be defined in every skin, not only `notepad`. The active
+  row (`.vt-wgrail-row.active`) references it; where it is undefined the
+  `box-shadow` declaration is invalid and dropped, leaving the active row
   with a background step alone (1.06:1 against the rail in `farshell` —
-  effectively the same colour). "Which row am I on" was carried by the accent
-  text colour and nothing else. e1 is deliberately much weaker than e2: e1
-  says "a row is lifted inside a list", e2 says "a panel floats over the
+  effectively the same colour), so "which row am I on" would be carried by the
+  accent text colour and nothing else. e1 is deliberately much weaker than e2:
+  e1 says "a row is lifted inside a list", e2 says "a panel floats over the
   screen".
 - The exception: a 0-blur accent ring is not a shadow, it's a **focus ring** —
   an accessibility affordance, and it stays.
@@ -87,7 +86,7 @@ steps are the 20%, and the accent is the 10%.
 
 `<select>` → `ui/select.js` (auto-applied to every select; opt out with `data-native`), numeric `<input>` →
 `ui/number-spinner.js`, `<input type=checkbox>` → the token-drawn checkbox in `components.css`. The dropdown list
-reuses the `.vt-menu` look and lives in `screens/20-overlay.css` because `.vt-menu` is unlayered — a rule for
+reuses the `.vt-menu` look and lives in `screens/20-overlay.css` because `.vt-menu` is in the `legacy` layer, which beats `components` — a rule for
 `.vt-dd-list` inside `@layer components` loses to it (position and z-index). Touch gets 44px rows.
 
 ### Motion
@@ -141,17 +140,12 @@ JS-generated overlays (palette, dock) also inherit tokens through `.vt-*` classe
 | `linear` | Linear — near-black, one flat indigo accent, almost-invisible hairline borders (`--color-line` alpha .05, half of every other dark skin) | |
 | `vercel` | Vercel/Geist — pure black/white + one blue signal color, hard edges (`--wrad`/`--trad` 2px, sharpest of all 9) | |
 
-2026-09-24 addition (2.1 D6) — the user picked these three directly from a
-comparison mockup (three real products in FarShell's own category: a
-terminal app and two dev-tool dashboards) rather than a from-scratch design
-pass; DESIGN.md's "restraint" language in § 0 was never something the user
-asked for (see the project's own decision log) — these three intentionally
-depart from it, which is the point. Every value (backgrounds, the 4-step
-text ramp, the accent, status colors) was solved algorithmically against
-`scripts/check_contrast.py`'s thresholds rather than picked by eye — same
-process the original 6 skins used, just run in the other direction (values
-first, contrast computed, adjusted until passing, rather than values
-inherited from an existing UI and reverse-checked).
+`warp`, `linear` and `vercel` are modelled on real products in FarShell's own
+category (a terminal app and two dev-tool dashboards) and intentionally depart
+from the restraint language in §0. Every value (backgrounds, the 4-step text
+ramp, the accent, status colors) is solved algorithmically against
+`scripts/check_contrast.py`'s thresholds rather than picked by eye: pick
+values, compute contrast, adjust until passing.
 
 Switched from the header's ⚙ settings, or the theme chip in the command
 palette (`Mod+K`, shows up mixed into a bare search, or under the `>`
@@ -163,27 +157,27 @@ before first paint (anti-FOUC).
 | File | Holds |
 |------|-------|
 | `styles/theme/tokens.css` | Structural tokens (spacing, fonts, sizes, radius, shadow, easing, breakpoints, shell dimensions) + the default skin `farshell`'s color tokens. Declared as Tailwind v4 `@theme static`, which compiles to real `:root` custom properties |
-| `styles/theme/skins.css` | The same color tokens remapped for the other 5 skins |
+| `styles/theme/skins.css` | The same color tokens remapped for the other 8 skins |
 | `styles/layers/components.css` | `.status-dot` — the home for new components |
-| `styles/layers/legacy.css` | Every existing component + `.vt-*` overlays + the rail/dock/HUD frame's CSS. Unlayered, so it always wins the cascade |
+| `styles/screens/*.css` | Per-screen CSS in the `legacy` cascade layer: existing components, `.vt-*` overlays and the rail/dock/HUD frame. `legacy` is declared after `components`, so these rules beat component rules regardless of selector specificity |
 
 Vite builds all four into `frontend/dist/app.css`.
 
 ### Color tokens (farshell baseline)
 
-The contract is **20 colors** (4 background + 2 divider + 3 text + 6 accent +
+The contract is **21 colors** (4 background + 2 divider + 4 text + 6 accent +
 5 status), plus 2 terminal colors handed to xterm and 1 surface-state color
-that ride alongside. In 2.1.0 the corner radius dropped to one step
-(`--radius-md` removed) and the 4-step background order changed.
+that ride alongside. The corner radius has one step (there is no
+`--radius-md`).
 
 | Token | Value | Use |
 |------|-----|------|
 | `--color-bg-0` | `#08090a` | Deepest background |
 | `--color-bg-1` | `#0e1011` | Chrome (header, rail, dock, HUD) |
-| `--color-bg-2` | `#0b0d0e` | Row headers, subbars — **darker than `bg-1`.** A subbar has to sit one notch below the chrome itself to read as a "subheading laid on a row" (a change from 2.0's monotonically increasing order) |
+| `--color-bg-2` | `#0b0d0e` | Row headers, subbars — **darker than `bg-1`.** A subbar has to sit one notch below the chrome itself to read as a "subheading laid on a row" (the order is not monotonically increasing) |
 | `--color-bg-3` | `#141719` | Hover / active row — also the raised surface an active rail row sits on |
 | `--color-line` / `--color-line-strong` | `rgb(255 255 255 / .07)` / `.14` | Two divider steps |
-| `--color-txt` / `--color-sub` / `--color-muted` | `#e8e9ea` `#8b8f93` `#666a6e` | Three text steps (`muted` was brightened from the spec draft to clear 3:1 on `bg-3`) |
+| `--color-txt` / `--color-sub` / `--color-muted` / `--color-faint` | `#e8e9ea` `#8e9296` `#73787c` `#5d6164` | Four text steps (`faint` is for disabled labels, placeholders and decorative numbers — never body text) |
 | `--color-acc` | `var(--acc-farshell)` = `#f0a860` | The accent. Kept, together with the 5 status colors, **for those two roles only** |
 | `--color-acc-dim` | `#b3803f` | Badge border, outline |
 | `--color-acc-surface` | `var(--color-acc)` (skin-overridable) | The surface under `acc-ink` text (primary buttons, active-tab underline background). Defaults to the accent itself — **only `macos` overrides it to `acc-dim`**, since white text on Apple's system blue measured 3.65:1 |
@@ -192,35 +186,42 @@ that ride alongside. In 2.1.0 the corner radius dropped to one step
 | `--color-st-{idle,working,waiting,done,error}` | `#7c7c84` `#4fd1a5` `#f0a860` `#5b8def` `#f06868` | The 5 agent states (§5) |
 | `--color-term-bg` / `--color-term-fg` | `#0a0a0b` / `#eeeef0` | xterm background / foreground |
 | `--color-surface-active` | `rgb(255 255 255 / .18)` | The "currently selected" surface (rail, fleet home rows). Twice the hover overlay's alpha — the same value would be indistinguishable from hover on a pointer device. The accessibility requirement (WCAG 1.4.11) is carried by the row's left 3px status bar, not by this |
-| `--color-st-waiting-tint` (+ `--waiting-tint-pct: 10%`) | `color-mix(--color-st-waiting 10%, transparent)` | Background of an attention-needed row (`.vt-srow.is-waiting`, Fleet). Replaced `--color-surface-active`, which read as a pressed grey "inactive" row on the light skin. On this tint the row's secondary text rises from muted to sub and the amber keyword to txt; `scripts/check_contrast.py` and `tokens-contrast.test.js` check txt/sub >= 4.5:1 on the tint over bg-0/1/2 in all 9 skins (the percentage is the ceiling — windows' yellow waiting colour leaves sub at 4.69:1) |
+| `--color-st-waiting-tint` (+ `--waiting-tint-pct: 10%`) | `color-mix(--color-st-waiting 10%, transparent)` | Background of an attention-needed row (`.vt-srow.is-waiting`, Fleet). Used instead of `--color-surface-active`, which reads as a pressed grey "inactive" row on the light skin. On this tint the row's secondary text rises from muted to sub and the amber keyword to txt; `scripts/check_contrast.py` and `tokens-contrast.test.js` check txt/sub >= 4.5:1 on the tint over bg-0/1/2 in all 9 skins (the percentage is the ceiling — windows' yellow waiting colour leaves sub at 4.69:1) |
 | `--color-on-solid` | `#ffffff` | Fixed white text over status banners, etc. |
 
 ### Contrast rules
 
-The bar differs per role. Forcing `muted` to 4.5:1 too would erase the
-distinction from `sub` and collapse the 3-step text ramp, so this follows
-what WCAG actually requires per role.
+The bar differs per role, and the four text steps must stay visibly distinct
+(adjacent steps differ by at least 1.25x in contrast against `bg-0`). The
+thresholds live in `scripts/check_contrast.py` and are enforced across all 9
+skins.
 
 | Token | Bar | Basis |
 |---|---|---|
-| `txt` | **4.5:1** | Body text (WCAG 1.4.3 AA) |
-| `sub` | **4.5:1** | Secondary but still-read text |
-| `muted` · `st-*` | **3:1** | UI components / graphical objects (WCAG 1.4.11) |
+| `txt` | **8.5:1** | Body text |
+| `sub` | **6.0:1** | Secondary but still-read text |
+| `muted` | **4.2:1** | Weak secondary text that must still be readable |
+| `faint` | **3.0:1** | Disabled labels, placeholders, decoration — never body text |
+| `acc`, `acc-dim`, `st-*` | **3:1** | Borders, dots, markers (WCAG 1.4.11) |
+| `acc-ink` on `acc-surface` | **4.5:1** | Text on a filled accent button |
 
-The bar must hold across **all four background steps** — the same color has
-actually passed on `bg-0` and failed on `bg-3` before.
+The text bars are checked on `bg-0`, `bg-1` and `bg-2` (`bg-3` is the
+hover/active row, where text is only briefly seen).
 
-**Measured (worst case across 6 skins × 4 background steps, computed the same
-way `node --test frontend/tests/tokens-contrast.test.js` computes it):**
+**Measured (worst case across 9 skins x `bg-0..2`, from
+`python3 scripts/check_contrast.py --table`):**
 
-| Skin | `txt` | `sub` | `muted` |
-|---|---|---|---|
-| farshell | 14.81 | 5.53 | 3.30 |
-| macos | 9.12 | 4.52 | 3.02 |
-| catppuccin | 6.31 | 4.52 | 3.00 |
-| windows | 9.18 | 5.24 | 3.25 |
-| vscode | 8.68 | 4.59 | 3.07 |
-| notepad | 11.53 | 4.78 | 4.28 |
+| Skin | `txt` | `sub` | `muted` | `faint` |
+|---|---|---|---|---|
+| farshell | 15.69 | 6.09 | 4.28 | 3.05 |
+| macos | 11.20 | 6.09 | 4.28 | 3.05 |
+| catppuccin | 8.69 | 6.29 | 4.29 | 3.06 |
+| windows | 10.84 | 6.11 | 4.29 | 3.08 |
+| vscode | 9.54 | 6.07 | 4.26 | 3.09 |
+| notepad | 11.53 | 6.10 | 4.30 | 3.06 |
+| warp | 16.34 | 7.07 | 4.45 | 3.33 |
+| linear | 17.27 | 6.71 | 4.45 | 3.23 |
+| vercel | 19.80 | 7.57 | 4.61 | 3.30 |
 
 This table is recomputed on every CI run by
 `frontend/tests/tokens-contrast.test.js` — you don't need to hand-update this
@@ -231,13 +232,12 @@ enough, refresh it.
 
 - **Spacing:** a single `--spacing: 4px` scale. Every margin is
   `calc(var(--spacing) * N)`.
-- **Font size:** 7 steps, `--text-2xs`(10.5) through `--text-2xl`(28).
+- **Font size:** 11 steps, `--fs-3xs`(10.5px) through `--fs-4xl`(46px); `--fs-base` is 15px.
 - **Radius:** `--radius-sm`(**5px**, every control) / `--radius-lg`(**10px**,
-  outer frames, sheets) / `--radius-full`. **`--radius-md` was removed in
-  2.1.0** — every use site was replaced with `sm`. The `windows` and `vscode`
+  outer frames, sheets) / `--radius-full`. There is no `--radius-md`; use `sm`. The `windows` and `vscode`
   skins override `--radius-sm` to 2px inside the skin for their square UI.
 - **Shadow:** `--shadow-e1` (the current row) + `--shadow-e2`/`e3` (overlays).
-  e1 was removed in 2.1.0 and restored in 2.1.6 — see §0 for why.
+  e1 must be defined in every skin — see §0 for why.
 - **Motion:** `--dur-fast`(120ms) / `--dur-base`(200ms), `--ease-out-quint`.
 - **Breakpoints:** `--breakpoint-regular`(720px) / `--breakpoint-wide`(1280px) /
   `--breakpoint-xwide`(1600px). The JS-side constants live in exactly **one**
@@ -253,8 +253,7 @@ document merely copies them. A copied value eventually drifts, so
 `check_design_md()` in `scripts/check_docs.py` diffs this table against the
 code directly in CI (I3). Why a table rather than scanning prose: a bare
 number like `7` or `720` always exists somewhere in a doc's prose, so
-scanning prose lets a wrong value slip through unnoticed (verified this by
-testing it).
+scanning prose lets a wrong value slip through unnoticed.
 
 ### Code-derived values
 
@@ -263,7 +262,7 @@ testing it).
 | `skins` | `farshell, macos, catppuccin, windows, vscode, notepad, warp, linear, vercel` | `frontend/js/theme.js` — `VT_SKINS` |
 | `breakpoints` | `720/1280` | `frontend/js/layout/breakpoints.js` — `COMPACT_MAX`/`REGULAR_MAX` |
 | `pane-cap` | `1/4/6` | `frontend/js/layout/dnd.js` — `tierCap()` (compact/regular/wide; xwide is `Infinity`, so it isn't captured in the table) |
-| `rail-items` | `8` | `frontend/index.html` — count of `.vt-rail-btn` (**the legacy 48px icon rail `#vt-rail`, hidden via CSS in 2.1.0** — see §3. The new shell's worktree rail `#vt-wgrail` is not counted here). `7`→`8` when `dir` came back alongside `files` (2026-09-22, N35 reversal) |
+| `rail-items` | `8` | `frontend/index.html` — count of `.vt-rail-btn` (**the legacy 48px icon rail `#vt-rail`, hidden via CSS** — see §3. The shell's worktree rail `#vt-wgrail` is not counted here). `dir` is counted alongside `files` |
 | `agent-states` | `5` | `server/agent_status.py` — `STATUSES` (`error` is reserved, §5) |
 | `color-bg-0` | `#08090a` | `styles/theme/tokens.css` |
 | `color-acc` | `#f0a860` | `styles/theme/tokens.css` |
@@ -272,16 +271,16 @@ testing it).
 ### Legacy aliases
 
 `--win`/`--bar`/`--acc`/`--txt`/`--sub`/`--line`/`--ok`/`--err`/`--crust`/
-`--trad` etc. in `legacy.css` are aliases pointing at the `--color-*` tokens
+`--trad` etc. in `styles/screens/00-tokens-reset.css` are aliases pointing at the `--color-*` tokens
 above. Bulk-replacing the hundreds of consumers with `var(--color-*)` is a
 separate, much larger job of moving where the value comes from — it hasn't
 been done. **New code reaches for `--color-*` directly.**
 
 ### Typography
 
-`--font-ui`: IBM Plex Sans 400/500/600 (bundled, UI chrome only). `--font-mono`:
-prefers a locally installed JetBrains Mono (terminal, kept from 2.0's ADR-9),
-falling back to the bundled IBM Plex Mono 400/600 — neither path makes a
+`--font-ui`: Wanted Sans Variable (bundled; covers Korean and Latin, UI chrome). `--font-mono`:
+JetBrains Mono (bundled Latin subset), then Wanted Sans so Korean text inside monospace
+runs does not fall back to the OS font — neither path makes a
 network request. The terminal stack ends with the bundled glyph-only fallback
 `Symbols Nerd Font Mono` (MIT, ~1.1MB, fetched lazily when a PUA glyph first
 appears) so prompt icons / Powerline separators render on any device.
@@ -296,29 +295,21 @@ Windows Terminal**.
 
 ## 3. Shell layout
 
-2.0's `⋯` overflow menu is gone entirely (ADR-8, 2.0). 2.1.0 rebuilt that
-skeleton on a surface layer (N16~N18, ADR-26): `#vt-chrome` owned the pane
-chrome while a separate absolutely-positioned `#vt-surface` owned every xterm
-wrapper, and the two were joined by coordinates only — `layout/surface.js`
-read each pane body's rect and wrote it back as a `transform`.
+There is no `⋯` overflow menu.
 
-**2026-09-18 — the surface layer is gone. A terminal now lives inside the
-pane that shows it** (`.vt-pane > .vt-pane-body > .vt-term-wrap`). The plan
-doc listed four measured problems behind N16; three were about excessive
-refits and are solved by things that survive (`panes.js` reuses split/pane
-elements by id, and the refit gate still fires only when a rect's width or
-height actually changed). The fourth — "moving an xterm wrapper in the DOM is
-dangerous" — was measured and did not hold: re-parenting a live **WebGL2**
-terminal left `isContextLost()` false, raised no `webglcontextlost`, kept the
-1128×828 buffer, and kept drawing.
-
-Keeping the two apart had a real cost, because the terminal was not a
-descendant of its pane: `overflow: hidden` and `border-radius` on the pane
-could not clip it, an accent *surface* could not be used for the active pane
-(the terminal painted over it, leaving a single 1px outline as the only
-signal), and xterm's cell quantization remainder (measured 22×8px) was
-stranded on one side with no way for the pane to treat it as padding. What
-is left of `layout/surface.js` is the refit gate — which never needed
+**A terminal lives inside the pane that shows it**
+(`.vt-pane > .vt-pane-body > .vt-term-wrap`). Do not reintroduce a separate
+absolutely-positioned terminal layer joined to the pane chrome by coordinates:
+the terminal would not be a descendant of its pane, so `overflow: hidden` and
+`border-radius` on the pane could not clip it, an accent *surface* could not be
+used for the active pane (the terminal would paint over it, leaving a single 1px
+outline as the only signal), and xterm's cell quantization remainder (measured
+22×8px) would be stranded with no way for the pane to treat it as padding.
+`panes.js` reuses split/pane elements by id, and the refit gate fires only when
+a rect's width or height actually changed. Moving an xterm wrapper in the DOM is
+safe: re-parenting a live **WebGL2** terminal leaves `isContextLost()` false,
+raises no `webglcontextlost`, keeps the buffer (1128×828 measured), and keeps
+drawing. `layout/surface.js` holds the refit gate — which needs no
 coordinates — plus `#vt-term-stage`, a hidden **waiting room** holding the
 wrappers of sessions that are not currently placed in any pane (they must
 stay in the DOM, and `visibility: hidden` keeps their box measurable so
@@ -342,10 +333,10 @@ cols/rows survive).
 | compact | < 720px | none (fleet home, §7) | a tab in the bottom nav | 2 | 1 pane fullscreen, swipe left/right |
 | regular | 720~1279px | `#vt-wgrail`, device-scoped width | collapsed to 36px by default, opens as overlay | 4 | split tree |
 | wide | 1280~1599px | `#vt-wgrail`, device-scoped width | collapsed to 36px by default, opens by pushing | 6 | split tree + rail |
-| xwide | ≥ 1600px | same | 392px, open by default | **unlimited** (N4) | same as wide + cap lifted |
+| xwide | ≥ 1600px | same | 392px, open by default | **unlimited** | same as wide + cap lifted |
 
-> **The rail is never the legacy icon rail.** Earlier drafts of this table had
-> regular fall back to the 48px `#vt-rail`; that never shipped — `#vt-rail` is
+> **The rail is never the legacy icon rail.** Regular does not fall back to the
+> 48px `#vt-rail`: `#vt-rail` is
 > `display:none` at every width (see "What's left as legacy"). The worktree rail
 > is the only rail, at every tier.
 
@@ -355,9 +346,8 @@ you chose** — `ui.rail.width`/`ui.rail.collapsed` are device-scoped settings
 
 - **Collapse default** (`defaultRailCollapsed`): on a device that has never
   stated a preference, the rail starts collapsed below wide (<1280). `Dock.tsx`
-  already made this call (`innerWidth < WIDE_MAX`) and the rail didn't, so a
-  narrow screen opened with both panels expanded and left the menu bar 472px for
-  667px of chips.
+  makes the same call (`innerWidth < WIDE_MAX`), so a narrow screen does not open
+  with both panels expanded and leave the menu bar 472px for 667px of chips.
 - **Rendered width clamp**: `--vt-wgrail-w` is `min(<stored>px, 40vw)`. The
   stored value says how wide you want it; the clamp asks whether the window can
   spare that. Shrink the window and a 480px rail draws at 40vw; widen it and it
@@ -365,10 +355,10 @@ you chose** — `ui.rail.width`/`ui.rail.collapsed` are device-scoped settings
   temporary narrow window. 40vw can't drop below the rail's own 240px minimum,
   because under 720px there is no rail at all (compact).
 
-Because the variable now holds a `min()` expression rather than a plain px
+Because the variable holds a `min()` expression rather than a plain px
 number, the resizer reads the element's measured width instead of parsing it —
-a custom property doesn't resolve to computed px, so `parseInt` returned `NaN`
-and the rail jumped on drag.
+a custom property doesn't resolve to computed px, so `parseInt` would return
+`NaN` and the rail would jump on drag.
 
 The rail's and dock's open/width state are **device-scoped settings**
 (`ui.rail.collapsed`, `ui.rail.width`, `ui.dock.collapsed`, `ui.dock.width`) —
@@ -376,12 +366,11 @@ collapsing it on a phone must not carry over to the Mac. The tier boundaries
 live in exactly one place, `layout/breakpoints.js`. Past the cap, the split
 button goes disabled **with the reason in its tooltip**.
 
-### View tabs (removed 2026-11; was "Header 36px", then "Tab row 44px")
+### View tabs
 
-**There is no tab strip any more.** The rail already switches between sessions and grouped views (clicking a row goes to
-that view and focuses its pane), names a group (the group header's 편집) and closes, so the strip was a second copy
-of the same navigation. What is gone: the strip itself (`#vt-wtabs`, `layout/tabbar.js`), each tab's state bar and
-tooltip, the right-click menu (`layout/tab-menu.js`) and drag-to-reorder. What stays is **the view model**:
+**There is no tab strip.** The rail switches between sessions and grouped views (clicking a row goes to
+that view and focuses its pane), names a group (the group header's 편집) and closes, so a strip would be a second copy
+of the same navigation. There is no `#vt-wtabs`, per-tab state bar or tooltip, right-click tab menu or drag-to-reorder. The **view model** remains:
 a view is still one tab in `layout/store.js` that owns one pane tree, because grouped layouts, a viewer/panel pane that
 belongs to a session and the remembered closed groups are all stored per view (docs/ref/terminal.md「Session and view
 rules」). There are no next/previous-view or move-view keys either; view order changes only in the phone's order sheet. Think of a view as just a group (or a session with its viewer panes), not as something you navigate.
@@ -412,8 +401,7 @@ Only when applicable, a fourth line: the grouped view's name and a 「다른 화
 (tmux clients attached beyond this browser tab's own). The state keyword is short and fixed so
 it is never truncated: 승인 요청 / 선택 요청 / 계획 확인 / 질문 for waiting (server `kind`),
 유휴 / 작업 중 (+ tool name, the one place allowed to ellipsize) / 완료 (+ 「질문 있음」 /
-「계획 있음」 from the server `badge`, which working rows show too — agy's plan badge rides a working entry). The old left 3px status bar, the repo color bar, the
-tmux plug icon and the `? question` line are gone — state is the icon's colour **and** shape.
+「계획 있음」 from the server `badge`, which working rows show too — agy's plan badge rides a working entry). There is no left 3px status bar, repo color bar, tmux plug icon or `? question` line — state is the icon's colour **and** shape.
 A session that is not open keeps full opacity but its name steps down to `--color-sub`.
 
 The ⋯ button and right-click open the same menu (`rowMenuItems`: 열기/닫기 · 이름 변경 ·
@@ -425,25 +413,24 @@ keyword move to the row tooltip.
 
 ### Dock 392px (`shell/Dock.tsx`)
 
-Fixed to the right, collapses to a 36px strip via a chevron (no bottom dock —
-ADR-21, to keep terminal vertical space). 5 tabs: **Source control · Queue ·
-Files · Ports · Usage** (later tabs — attachments, system and, since 2026-10-23, **Snippets**
+Fixed to the right, collapses to a 36px strip via a chevron (no bottom dock, to keep
+terminal vertical space). 5 tabs: **Source control · Queue ·
+Files · Ports · Usage** (later tabs — attachments, system and **Snippets**
 (`braces` icon, action `snippets.show`) — follow the same frame rules).
 
-**Collapsed, a tab is an icon — never rotated text.** The 36px strip used to
-rotate each label with `writing-mode: vertical-rl`, which works for Latin
-(glyphs lie on their side) but not for CJK: Korean syllables *stack*, so
-「소스컨트롤」 became a five-character tower, in a monospace face. Each tab now
+**Collapsed, a tab is an icon — never rotated text.** Do not rotate the
+36px strip's labels with `writing-mode: vertical-rl`: it works for Latin
+(glyphs lie on their side) but not for CJK, where Korean syllables *stack*, so
+「소스컨트롤」 becomes a five-character tower, in a monospace face. Each tab
 carries an icon from `js/ui/icons.js` (`git-branch · list · folder · plug ·
 gauge`), shown only while collapsed; the full label stays in `data-tip`. The
 expanded strip is text-only on purpose — five tabs in a row with icons as well
 is crowded. The frame owns only tab switching, collapse, the width resizer
 (320~560), and device-scoped persistence — each tab's content is drawn by the
 existing panel renderers (`queue.js`, `ports.js`, `panels/usage.js`,
-`panels/viewer/scm.js`) transplanted as-is. The 4 modal popup panels from 2.0
-are gone; the existing action ids (`queue.show`, `ports.show`, `usage.open`,
-`scm.show`) are kept and now rewired to open a dock tab instead (the palette
-and keymap still reference those same ids). The ports and usage tabs
+`panels/viewer/scm.js`). There are no modal popup panels; the action ids
+(`queue.show`, `ports.show`, `usage.open`, `scm.show`) open a dock tab (the
+palette and keymap reference those same ids). The ports and usage tabs
 disappear entirely when `/api/capabilities` reports no source for them.
 
 **The source-control tab supports status, diff, stage, unstage and commit.**
@@ -459,8 +446,8 @@ only a file path; a `panel` leaf has one registered dock panel name. Both keep
 
 ### Menu bar 28px (`shell/Hud.tsx`, element `#vt-hud`)
 
-**2026-11: the bottom status bar moved to the top and became a macOS-style menu bar.** The ids and
-classes keep their old `vt-hud-*` names (toasts and tests depend on them). It is `position: fixed`
+The menu bar is a macOS-style bar at the top of the screen. Its ids and
+classes keep the `vt-hud-*` names (toasts and tests depend on them). It is `position: fixed`
 across the full width at the very top, so the rail, dock and body start `--menubar-h` (28px) lower
 (`.vt-sidepanel { top: var(--menubar-h) }`, `body { padding-top }`); anything positioned from the top
 (`--topbar-popup-y`, onboarding, the dock viewer) adds `--menubar-h` too. Look: UI font, no chip
@@ -474,7 +461,7 @@ Left to right: the **FarShell menu** (`MenuButton`, first cell: 새 세션 · �
 the public tunnel URL if one is running, else `location.origin`; it never mints a device-registration QR/OTP
 — that stays in `fsh mobile`.
 
-New chip kinds in 2026-11: **`agents`** (`개입 N · 작업 N · 완료 N`; zeros are omitted; with `개입` it is
+More chip kinds: **`agents`** (`개입 N · 작업 N · 완료 N`; zeros are omitted; with `개입` it is
 warn-coloured, ranks 1 and jumps to the longest-waiting `waiting` session via the `agents.jump` action;
 `완료` counts only completions not yet seen on this browser), **`push`** (`알림 켜짐/꺼짐` for this browser's
 Web Push subscription, click toggles; hidden where push is unavailable) and **`clock`** (date + 24-hour
@@ -483,12 +470,12 @@ time, rebuilt only when the minute changes).
 A row of chips like `screens 3 · E2E ON · safe mode ON · CPU 17% · GPU 0% · RAM 72% ·
 NET ↓12K ↑3K · Claude 62% · 4h12m · v2.6.0`. Polled every 30s, plus
 immediate refresh on `/ws-notify` events. A chip with no value is **hidden**
-(no usage provider → no chip, the 2.0 rule kept). There is no menu bar at all in
+(no usage provider → no chip). There is no menu bar at all in
 compact — the bottom nav takes its place. Chip padding is 6px horizontally,
 with 3px internal gaps. Reset wording appears in tooltips; GPU chips show only usage.
 
 **Which chips show, on which side and in what order is the user's choice**
-(Settings → Status bar, 2026-10-23; device-scoped `ui.hud.layout`, JSON
+(Settings → Status bar; device-scoped `ui.hud.layout`, JSON
 `{"left":[…],"right":[…]}`). The unit is a *kind* (`server`, `screens`, `e2e`, `safe-mode`,
 `cpu`, `gpu`, `ram`, `net`, `usage`, `version`), not a chip id — usage profiles come and go,
 so the setting names «usage» once. A kind that is in neither list is hidden, so a new kind
@@ -500,8 +487,8 @@ chip» and the squeeze order below still hold wherever a chip is placed. The set
 edits the layout three ways — drag, a position select and up/down buttons — all through the same
 `moveHudKind`/`stepHudKind` (the select and buttons are the keyboard path, not an extra), shows a
 preview with sample values, and is hidden in compact (there is no menu bar there). The settings section is
-**메뉴바** (id `hud`). The saved layout carries a generation (`{"v":2,…}`): a layout saved before 2026-11 has
-no `v`, so the new kinds are added once at their default places when it is read (not for an all-off layout, which
+**메뉴바** (id `hud`). The saved layout carries a generation (`{"v":2,…}`): a layout without `v`
+gets the newer kinds added once at their default places when it is read (not an all-off layout, which
 is a choice); saving writes `v`.
 
 **"No value" hides a chip; "no room" drops the least important one.** These are
@@ -527,36 +514,36 @@ coalesced through `requestAnimationFrame` so dragging the rail measures once a
 frame. `overflow-x: auto` stays underneath as the floor for the degenerate case
 where even one chip doesn't fit.
 
-### Resize overlay (N43)
+### Resize overlay
 
 While dragging a divider, `142 × 38` (px) + a `cols × rows` caption appears
 centered in the active pane (`layout/resize-overlay.js`). xterm's `fit()` is
-never called every frame — the surface layer's refit gate is what defers fit
+never called every frame — the refit gate in `layout/surface.js` is what defers fit
 during a drag, and the overlay must not defeat that optimization, so it
 estimates the cell count per frame from the cell size measured once at drag
 start. The overlay fades out 200ms after the drag ends, and under
 `prefers-reduced-motion` it disappears immediately with no fade.
 
-### What's left as legacy (not yet removed)
+### What's left as legacy
 
 `#vt-rail` (the 48px icon rail — session/queue/snippets/ports/usage/settings,
 6 buttons) and `#vt-right-rail` (a right rail dedicated to usage) are **still
-in the DOM but hidden via CSS** (`legacy.css`'s
+in the DOM but hidden via CSS** (`styles/screens/70-worktree-rail.css`'s
 `#vt-rail { display:none !important; }`). The worktree rail (`#vt-wgrail`)
 and the dock's usage tab each take over that role. Only
-`#vt-rail-settings-tpl` (the desktop mic slot, theme-chip flyout) was left
-untouched — Rail.tsx's "more" overflow reopens the same button inside it.
+`#vt-rail-settings-tpl` (the desktop mic slot, theme-chip flyout) is
+kept — Rail.tsx's "more" overflow reopens the same button inside it.
 
 ## 4. Code viewer / file pane
 
 Where a file opens is the `viewer.surface` setting (Settings → 모양, per
-device; ADR-44, 2.3):
+device):
 
 - **`sheet`** (default) — a card pinned to the top of the terminal area,
   full width, height dragged from a grip at its bottom edge (20–85%).
 - **`float`** — a movable, resizable card; header drags it, the corner grip
   resizes it, and it can never be dragged somewhere it can't be grabbed back.
-- **`pane`** — the 2.2 behavior: a `layout/tree.js` leaf with
+- **`pane`** — a `layout/tree.js` leaf with
   `kind: 'viewer'` that splits the active terminal pane.
 
 `sheet` and `float` are overlays mounted **inside `#terminal-container`**, so
@@ -571,7 +558,7 @@ a side-by-side pane. On compact (< 720px) every surface becomes the
 full-screen bottom sheet that closes with the back button. The card reuses
 `.vt-viewer-card`'s tokens; its CSS lives in `styles/screens/30-viewer.css`
 (legacy layer, next to the card it styles). **Read-only**, with no write API
-(`server/fsguard.py`'s three-layer defense is unchanged from 2.0 — a fixed
+(`server/fsguard.py`'s three-layer defense: a fixed
 root `VT_BROWSE_ROOTS`, `Path.resolve()` + `is_relative_to`, and a filename
 denylist).
 
@@ -582,9 +569,9 @@ The server decides one state per session; **the frontend only draws it.**
 The contract is 5 values — `server/agent_status.py`'s `STATUSES = (IDLE,
 WORKING, WAITING, DONE, ERROR)`. Only the first 4 actually have an entry path
 — `error` is marked in the same file as *"reserved — no entry path"*. The
-color token (`--color-st-error`) and the sort priority already have a spot
+color token (`--color-st-error`) and the sort priority have a spot
 reserved. So "4 states" means **the states currently observable**, while
-the **frontend draws 4**: `error` is gone from the UI (no colour, branch, sentence or
+the **frontend draws 4**: `error` is not drawn in the UI (no colour, branch, sentence or
 group) and any unknown value folds to `idle` (`normalizeState`,
 `frontend/js/design/state-classes.js`). The `--color-st-error` token stays — it is
 the danger/failure colour for buttons and toasts.
@@ -597,8 +584,7 @@ the danger/failure colour for buttons and toasts.
   small dot**, never the whole element (`opacity`/`transform` are
   compositor-only, so there's no repaint).
 - **One definition of labels and aggregation**, `design/state-classes.js`: labels
-  are 유휴 / 작업 중 / **입력 대기** / 완료 (waiting reads 입력 대기 everywhere — the
-  rail's old 승인 대기 is gone). A tab or group is represented by one state with the
+  are 유휴 / 작업 중 / **입력 대기** / 완료 (waiting reads 입력 대기 everywhere). A tab or group is represented by one state with the
   priority `waiting > done(unseen) > working > done(seen) = idle`
   (`representativeState`, shared by the favicon and rail; the view tab does not fold — it draws one segment per session). Among entries of
   one tmux session the server's `_URGENCY` order decides.
@@ -609,16 +595,16 @@ the danger/failure colour for buttons and toasts.
 - **State icons** (`ui/icons.js` `stateIcon`, stroke 1.75, no emoji or Unicode check
   marks): idle = empty circle, working = open arc that rotates, waiting = speech bubble
   with a question mark, done = check in a circle. Shape carries the state, not just
-  colour. The rail rows and the phone Fleet draw them (2026-10-04); the tab bar uses colour segments instead.
+  colour. The rail rows and the phone Fleet draw them; the tab bar uses colour segments instead.
 - Without the Claude Code hooks (`fsh hooks install`), this value never
   arrives at all — `fsh doctor` and Settings → About surface the gap.
 
-### 5 agent marks (N33)
+### 5 agent marks
 
 Registered in `frontend/js/ui/icons.js`: a 14px square, `currentColor`, **monochrome
-always** (no brand colours — 2026-09-29 decision).
+always** (no brand colours).
 
-**Brand logos first (2026-09-29).** Where a real logo exists it wins over the drawn
+**Brand logos first.** Where a real logo exists it wins over the drawn
 mark: filled paths copied into `frontend/js/ui/brand-icons.js` from
 `@lobehub/icons-static-svg` 1.95.1 (MIT) and `simple-icons` 16.33.0 (CC0) — never loaded
 from a CDN at runtime. That file is its own lazy chunk (`brand.js`, kept out of the
@@ -633,21 +619,21 @@ pre-load fallback.
 |---|---|---|
 | `agent-claude` | Spark (4-point star) | claude |
 | `agent-codex` | Bracket `[ ]` | codex |
-| `agent-aider` | Two overlapping circles (pair programming) | aider (2026-09-22) |
-| `agent-agy` | Two overlapping diamonds ("twins") | Antigravity CLI, `agy` (2026-09-23 — Google folded its previous CLI into Antigravity on 2026-06-18; the mark kept its shape, same product lineage) |
-| `agent-qwen` | Two triangles apex-to-apex (bowtie) | qwen-code CLI, `qwen` (2026-09-23 — independent coding-agent CLI, not lumped into `agent-local`) |
-| `agent-local` | Chip (square + 4 pins) | local LLM runners detected via raw foreground command: `ollama`, `lms` (LM Studio), `llama-cli` (llama.cpp) — all three share this one mark, labels differ (2026-09-23) |
-| `agent-ssh` | Globe (circle + meridians) | remote SSH sessions (2.1.2, N39) |
-| `agent-python` | Two joined coils | plain `python`/`python3`/`Python` foreground process, not an AI CLI (2026-09-22) |
-| `agent-node` | Hexagon | plain `node` foreground process (2026-09-22) |
-| `agent-docker` | Stacked squares | plain `docker` foreground process (2026-09-22) |
+| `agent-aider` | Two overlapping circles (pair programming) | aider |
+| `agent-agy` | Two overlapping diamonds ("twins") | Antigravity CLI, `agy` |
+| `agent-qwen` | Two triangles apex-to-apex (bowtie) | qwen-code CLI, `qwen` (an independent coding-agent CLI, not lumped into `agent-local`) |
+| `agent-local` | Chip (square + 4 pins) | local LLM runners detected via raw foreground command: `ollama`, `lms` (LM Studio), `llama-cli` (llama.cpp) — all three share this one mark, labels differ |
+| `agent-ssh` | Globe (circle + meridians) | remote SSH sessions |
+| `agent-python` | Two joined coils | plain `python`/`python3`/`Python` foreground process, not an AI CLI |
+| `agent-node` | Hexagon | plain `node` foreground process |
+| `agent-docker` | Stacked squares | plain `docker` foreground process |
 | `agent-shell` | Prompt `>_` | plain shell (no agent), unknown names |
 
 ## 6. Settings · palette
 
 ### Settings (`Mod+,` / FarShell menu)
 
-**Three settings, three icons (2026-11).** 설정 = gear (reached from the FarShell menu, `Mod+,`; the dock's own gear button was removed as a duplicate), 레일 설정 = `sliders-horizontal` (rail header), 메뉴바 설정 = `panel-top` (FarShell menu item). They used to share the gear.
+**Three settings, three icons.** 설정 = gear (reached from the FarShell menu, `Mod+,`, with no gear button in the dock), 레일 설정 = `sliders-horizontal` (rail header), 메뉴바 설정 = `panel-top` (FarShell menu item).
 
 Settings are split across two scopes — `frontend/js/core/settings.js`'s
 `SCHEMA` gives each key a `scope: 'global' | 'device'` (default `global`).
@@ -661,78 +647,66 @@ Settings are split across two scopes — `frontend/js/core/settings.js`'s
   sense "on this device": rail/dock width and collapse state, terminal font
   size, whether mouse events forward to the app, the mobile home tab
   (`ui.mobile.home`). Split off because a pinch-zoom on the phone must not
-  grow the Mac terminal's font (N3).
+  grow the Mac terminal's font.
 
 Key bindings are rebindable, and **`passthrough` hands a key back to the
 terminal** — that's how you get `Mod+F` back as the shell's `forward-char`.
 Turning off "forward mouse events to the app" in the mouse section makes
 drag-select always work even under vim/tmux mouse mode.
 
-**Mobile bug pass (2026-09-24, 2.1 D6, step 6a — narrow fixes, not a visual
-redesign).** Five compact-viewport defects, each confirmed live before/after
-in an isolated server + real mobile viewport:
+**Compact-viewport rules for settings screens:**
 
-- **Registered-device table overflowed the screen.** `agents.js`'s coverage
-  table wraps itself in `.vt-set-covtable-host` (`overflow-x:auto`);
-  `security.js`'s device table never got the same wrapper, so on a phone the
-  four columns (기기/id/등록/마지막 사용) just ran off the right edge instead
-  of scrolling. Same fix, same wrapper class.
-- **ON/OFF toggles stretched to the full row width.** The compact media
-  query's `.vt-set-row { flex-direction:column; align-items:stretch }` (for
-  putting label above control on narrow screens) stretches every row child
-  to full width by default — fine for a `<select>` or a button, wrong for a
-  two-cell segmented switch, which ends up as a giant bar with no visual
-  target. `align-self:flex-start` on `.vt-toggle` only.
-- **Range slider thumb stayed 12px on touch.** The desktop affordance is
-  `:hover { transform:scale(1.15) }`, which never fires on a touch device —
-  so the knob a mouse user sees grow on approach is permanently tiny on a
-  phone. Enlarged to 20px under the same compact media query (both
-  `::-webkit-slider-thumb` and `::-moz-range-thumb`).
-- **MCP server rows' Korean explanatory text rendered in the monospace
-  font** (`.vt-mcp-meta`/`.vt-mcp-verify` — "OAuth 서버는 다른 스코프로 복제할
-  수 없습니다", "확인 불가 — 이 서버 환경에 없음: …", etc.). These classes were
-  built for a mix of prose and the occasional embedded identifier (a masked
-  secret, a version number), but ended up mono for everything — Hangul in a
-  monospace face has uneven glyph spacing and reads worse than in the UI
-  font. Switched both to `--ui`; a lone identifier inside a sentence doesn't
-  need its own font to be legible.
-- **MCP server row buttons (켬/끔, 검증) were `.vt-chip.sm` — 20px tall**,
-  sized for desktop list density (12 servers × several chips a row). 44px
-  would overlap the adjacent tag chips (only a 12px gap between them, same
-  crowding tradeoff already documented for the terminal-selection handles in
-  § 7) — 32px is the compromise, applied only to the two primary-action
-  chips, not the tag chips that are meant to stay small and packed.
+- **Wide tables scroll inside a wrapper.** Wrap them in
+  `.vt-set-covtable-host` (`overflow-x:auto`), as `agents.js`'s coverage table
+  and `security.js`'s device table (기기/id/등록/마지막 사용) do; otherwise the
+  columns run off the right edge on a phone.
+- **ON/OFF toggles do not stretch.** The compact media query's
+  `.vt-set-row { flex-direction:column; align-items:stretch }` (label above
+  control) stretches every row child to full width, which suits a `<select>`
+  or a button but turns a two-cell segmented switch into a giant bar with no
+  visual target. `.vt-toggle` sets `align-self:flex-start`.
+- **Range slider thumbs are 20px under the compact media query** (both
+  `::-webkit-slider-thumb` and `::-moz-range-thumb`). The desktop affordance
+  is `:hover { transform:scale(1.15) }`, which never fires on touch, so the
+  knob would stay a tiny 12px.
+- **MCP server rows' Korean explanatory text uses the UI font**
+  (`.vt-mcp-meta`/`.vt-mcp-verify`, `--ui`). Hangul in a monospace face has
+  uneven glyph spacing and reads worse; a lone identifier inside a sentence
+  doesn't need its own font to be legible.
+- **MCP server row buttons (켬/끔, 검증) are 32px tall** on compact, not the
+  desktop `.vt-chip.sm` 20px. 44px would overlap the adjacent tag chips (only a
+  12px gap — the same crowding tradeoff as the terminal-selection handles in
+  § 7), so 32px applies only to the two primary-action chips, not the tag
+  chips that are meant to stay small and packed.
 
 ### Command palette (`Mod+K`, `shell/Palette.tsx`)
 
-Merges 2.0's `quickopen.js` (3 prefixes: `/` file, `:` command, and no `>`)
-and the in-pane `search.js` into one (N5/N40/N46). 8 prefixes:
+One palette covers quick open, commands and in-pane search. 8 prefixes:
 
 | Prefix | Mode | Source |
 |---|---|---|
 | (none) | `default` | Recent commands (2) → recent files (2) → every command, grouped and scrollable — **no sessions** (see below) |
 | `/` | `file` | File fuzzy search (`GET /api/fs/search?q=`, debounced) |
-| `@` | `session` | Sessions (worktrees from 2.1.1) — this is now the *only* place the default screen's sessions moved to |
+| `@` | `session` | Sessions — the *only* place sessions are listed in the palette |
 | `:` | `keymap` | Commands — shows **the current key binding** next to each (read from the `core/keymap.js` registry, so a rebind shows up here too) |
 | `#` | `queue` | Prompt queue items |
 | `!` | `port` | Open ports |
-| `~` | `scrollback` | Server-side scrollback search (`GET /api/search/scrollback?q=`, N40 — greps the full session ring buffer) |
-| `>` | `settings` | Settings (theme, push, etc. — this replaces 2.0's `⋯` "Settings" group, so removing it would be a pure regression; added as an 8th prefix on top of the plan document's 7 modes — an undocumented decision, noted here) |
+| `~` | `scrollback` | Server-side scrollback search (`GET /api/search/scrollback?q=` — greps the full session ring buffer) |
+| `>` | `settings` | Settings (theme, push, etc. — the home of the settings that have no other entry point) |
 
 Two-column layout — left: result list, right: a **preview** (a file shows a
 highlighted excerpt of its start, a session shows its last lines + state, a
 scrollback result shows surrounding context). The preview hides on narrow
-widths. `⌘F` is rewired to the palette's `~` mode; the old in-pane search bar
-is demoted to `⌘⇧F` (rebindable).
+widths. `⌘F` opens the palette's `~` mode; the in-pane search bar
+is on `⌘⇧F` (rebindable).
 
-### Default screen redesign (2026-09-23, 2.1 D6)
+### Default screen
 
-Sessions moved out of the no-prefix screen entirely (session switching lives
-in the 세션 tab now, `@` is the only palette path left) and the command list
-grew to include everything: `settings.show`/`scm.show`/`clients.show` (found
-missing during the audit — no rail button pairs with these, so they're added
-to `DEFAULT_COMMANDS` **without** `isPanel: true`, which keeps
-`rail-palette-parity.test.js`'s ADR-8 check from firing on them) plus every
+The no-prefix screen lists no sessions (session switching lives in the
+세션 tab, and `@` is the only palette path) and the command list covers
+everything: `settings.show`/`scm.show`/`clients.show` (no rail button pairs with these, so they are in
+`DEFAULT_COMMANDS` **without** `isPanel: true`, which keeps
+`rail-palette-parity.test.js`'s check from firing on them) plus every
 non-`unavailable` `core/keymap.js` action, so the palette is a real "search
 every command" surface and not just files+a fixed list.
 
@@ -741,42 +715,36 @@ recent files → everything else, grouped by kind (existing
 `sectionHeadAt`/`KIND_META` machinery, no new grouping code needed). Recency
 is tracked by **action id** (`Row.key`, e.g. `cmd:settings.show`), not label —
 a `__toggle:` command's label never changes but its target does, so id is the
-only stable identity — in the new device-scoped setting
+only stable identity — in the device-scoped setting
 `palette.recentCommands` (JSON array, newest first, capped at 10, read/written
 through `window.vtSettingsGet/Set` since `shell/Palette.tsx` can't statically
-import `core/settings.js`, ADR-26). Typing a query drops the recent/files
+import `core/settings.js`). Typing a query drops the recent/files
 split and just flattens everything that matches — recency ordering only
 matters when you're browsing, not searching.
 
-**Two dead keymap shortcuts, found and fixed in the same pass**: `viewer`
-(⌃⇧E) and `paste` (⌃⇧V) were defined in `core/keymap.js`'s `ACTIONS` table
-with labels and default bindings, but **nobody had ever called
-`register()` for them** — pressing either did nothing, silently, since
-`core/keymap.js`'s dispatcher just no-ops when `_handlers.get(id)` is
-`undefined`. `viewer` now delegates to the existing `viewer.show` action
-(`panels/viewer-lazy.js`). `paste` is registered in `term/keymap-actions.js`:
+**Every `ACTIONS` entry needs a `register()` call.** `core/keymap.js`'s
+dispatcher silently no-ops when `_handlers.get(id)` is `undefined`, so an
+action defined with a label and default binding but never registered does
+nothing when pressed. `viewer` (⌃⇧E) delegates to the existing `viewer.show` action
+(`panels/viewer-lazy.js`). `paste` (⌃⇧V) is registered in `term/keymap-actions.js`:
 native paste shortcuts use the browser `paste` event when available, then a
 delayed Clipboard API fallback; palette invocation and other rebound shortcuts
 use `pasteFromClipboard(activeSessionId())` directly.
 
-**Scroll-clipping bug, root-caused live (not by reading CSS)**: the reported
-"10개인데 3개만 보인다" wasn't a missing scrollbar — nothing was clipping
-correctly *or* scrolling. The palette's results container carries the class
+**Scroll clipping:** the palette's results container carries the class
 `vt-qo-body`, which only *looks* like the code viewer's `vt-vw-body` — they
-don't share a rule. `vt-vw-body{flex:1 1 auto; overflow:auto}` never applied
-to it, so the div had no `flex-grow` (stayed at content size inside the
-column-flex card) and no `overflow:auto` (nothing to scroll internally) —
-confirmed via `getBoundingClientRect()`/`getComputedStyle()` in a real
-browser: `overflow` measured `visible`, `scrollHeight === clientHeight`. The
+don't share a rule, so `vt-vw-body{flex:1 1 auto; overflow:auto}` does not
+apply to it. Without its own rule the div has no `flex-grow` (it stays at
+content size inside the column-flex card) and no `overflow:auto`, and the
 outer `.vt-viewer-card` clips at `max-height` with `overflow:hidden`, so
-anything past that height was just gone, unreachable — a hard cut, not a
-disabled scrollbar. Fixed with `.vt-qo-body{ flex:1 1 auto; min-height:0;
-overflow:auto; }` in `styles/screens/30-viewer.css`.
+results past that height are unreachable — a hard cut, not a disabled
+scrollbar. `styles/screens/30-viewer.css` therefore sets
+`.vt-qo-body{ flex:1 1 auto; min-height:0; overflow:auto; }`.
 
-**Mobile is now a full-height bottom sheet** (`@media (max-width:719.98px)`,
-mirroring the existing file-overlay `vt-file-compact` pattern) instead of the
+**Mobile is a full-height bottom sheet** (`@media (max-width:719.98px)`,
+mirroring the existing file-overlay `vt-file-compact` pattern) rather than the
 60vh-capped card — the scroll region needs real height to be usable with a
-thumb, and 60vh was tuned for a handful of file-search rows, not a "browse
+thumb, and 60vh suits a handful of file-search rows, not a "browse
 every command" list.
 
 ## 7. Mobile (compact, < 720px)
@@ -793,57 +761,44 @@ every command" list.
 └─────────────────────────────────────────────────────────────────  ┘
 ```
 
-**2026-09-23 rework (this repo's mobile-shell-revamp branch, steps 1–4 of a
-larger pass).** The header no longer changes per tab — earlier it showed the
-workspace chip on the Fleet tab and the session picker + search elsewhere,
-which meant the same screen real estate meant different things depending on
-which bottom-nav tab you were on. Now it's three things, always: an **env
-chip** (`#vt-env-chip`, `layout/env-chip.js`) reading `machine` (falling back
-to `hostname`) off `/api/capabilities` (`"MacBook Pro M1 Pro"` — the OS prefix
-was dropped 2026-09-29 at the user's request; machine is macOS-only,
+**The header is the same on every tab** (it never changes per bottom-nav tab,
+so the same screen real estate always means the same thing). It holds three
+things: an **env chip** (`#vt-env-chip`, `layout/env-chip.js`) reading `machine` (falling back
+to `hostname`) off `/api/capabilities` (`"MacBook Pro M1 Pro"`, no OS prefix; machine is macOS-only,
 read once via `system_profiler` and cached for the process lifetime, same
 pattern as the `hostname`/`version` fields), the session picker
-(`#voice-session-picker`, kept for now as a display + the same rename/close/
-kill sheet it always opened — the session tab below now has full parity with
-it, so a later pass can drop the sheet trigger and make this pure display),
+(`#voice-session-picker`, a display that opens the rename/close/
+kill sheet; the session tab below has full parity with it),
 and the command-palette search icon. The workspace chip (repo name + host) is
-desktop-only now; a phone doesn't need to see the repo name on every screen.
-`#vt-wtabs`(the desktop tab strip, removed 2026-11) needed `!important` to actually stay
-hidden here — `80-dock.css`'s unconditional `display:flex` (added for the
-strip's horizontal-scroll behavior, loads later in the same `legacy` layer)
-otherwise won whenever 2+ tabs were open; a single-tab test during step 1
-missed this because `tabbar.js` hid a lone tab on its own (it no longer does —
-2026-09-29 — so a single view draws its tab bar like any other).
+desktop-only; a phone doesn't need to see the repo name on every screen.
+There is no desktop tab strip on a phone; the mobile tab bar shows a single
+view like any other.
 
 Bottom nav has **5 tabs** (`frontend/index.html`'s `#vt-mnav-bottom`):
-**Session · Terminal · Changes · Files · Settings**. Queue was dropped from
-the bar — usage was low enough that it wasn't worth a permanent slot — but
-the feature itself is untouched and still reachable from the command
-palette's `:` mode. Files (attachments) took the freed slot and shows a badge
+**Session · Terminal · Changes · Files · Settings**. Queue has no slot in
+the bar but is reachable from the command palette's `:` mode. Files (attachments)
+has a slot and shows a badge
 of in-flight upload jobs (`window.vtUploadJobs()`, event-driven off
-`vt:upload-progress` rather than polled). Settings replaces the old "More"
-home (which was just shortcuts to Files/Ports/Usage) — it opens straight into
-Settings now, whose own first screen already lists those as "Tools". Each
+`vt:upload-progress` rather than polled). Settings opens straight into
+Settings, whose own first screen already lists those as "Tools". Each
 full-screen panel stays inside the mobile navigation shell and Android/browser
-Back closes that panel first. There's no HUD or second status row: waiting
+Back closes that panel first. There's no menu bar or second status row: waiting
 count is a badge on the Session tab. When the software keyboard opens, the
 bottom nav hides and the keybar moves down to the keyboard edge so both bars
 do not consume the same vertical space — and `#terminal-container`'s bottom
-padding accounts for the 52px bottom nav in addition to the keybar (a gap
-that, before this pass, left the prompt line and tmux status line hidden
-behind the keybar whenever the nav was showing).
+padding accounts for the 52px bottom nav in addition to the keybar, otherwise the
+prompt line and tmux status line hide behind the keybar whenever the nav is showing.
 
-**Fleet home** (`shell/Fleet.tsx`, ADR-27, renamed "세션" on the bottom nav) is
+**Fleet home** (`shell/Fleet.tsx`, labelled "세션" on the bottom nav) is
 the first screen (`ui.mobile.home` defaults to `fleet`) — most of what you do
 on a phone in compact is "what's waiting on me right now," not typing. Its
-data source moved from "this browser's open web sessions" to the same
-`/api/tmux/sessions` + `allSessions()` join as the desktop rail's local path
-(`Rail.tsx`) — and, since the 2026-10-04 rail rules, the **same rows and zones**:
+data source is the same `/api/tmux/sessions` + `allSessions()` join as the desktop rail's local path
+(`Rail.tsx`), with the **same rows and zones**:
 `collectSessionRows` (`rail-fetch.ts`) builds them, `buildRailLists` (`rail-data.ts`) splits
 them into 개입 필요 and 세션 (name order), and the row parts (state icon + unseen ring,
 keyword line, origin icon) are `RailRow.tsx`'s own components. Only the waiting rows in the
 개입 필요 zone carry the inline approval buttons (the same session also appears below
-without them). The Fleet-only unseen badge is gone — the ring on the state icon replaced it.
+without them). Unseen is shown by the ring on the state icon, not a separate badge.
 
 **Long-press a row for a bottom-sheet menu** — the same items as the desktop ⋯ menu
 (`rowMenuItems`: open rows get 닫기 · 이름 변경 · 맥에서 열기 · 연결된 화면, closed rows get
@@ -852,169 +807,117 @@ without them). The Fleet-only unseen badge is gone — the ring on the state ico
 that opens where you pressed can walk off-screen. Detection is a plain
 pointer-event timer (500ms / 8px cancel, touch-only — mouse is left to the
 desktop's ⋯ button) since `layout/dnd.js`'s long-press is wired to actual
-drag-and-drop and isn't reusable as-is. **Two real bugs surfaced building
-this, both fixed:** the sheet's action callbacks originally read the
-render-prop's resolved value (`m()`) *after* `closeMenu()` had already torn
-down that `<Show>` block, so e.g. the close action (called 재우기 then) silently did nothing from a real tap
-while working fine when called directly from a console — fixed by capturing
-the row into a plain variable before closing. And the shared
-`.vt-session-sheet` (also used by the older `#voice-session-picker` sheet)
-padded its bottom for the safe-area only, not the 52px bottom nav, so a
-sheet's last row/button could sit behind the nav and be untappable — same
-fix as `#terminal-container` in step 1, applied once to the shared class so
-both sheets got it.
+drag-and-drop and isn't reusable as-is. **Two pitfalls:** the sheet's action callbacks must capture the row into a
+plain variable before calling `closeMenu()`; reading the render-prop's resolved
+value (`m()`) afterwards finds the `<Show>` block already torn down, so the
+action silently does nothing from a real tap while working when called from a
+console. And the shared `.vt-session-sheet` (also used by the
+`#voice-session-picker` sheet) pads its bottom for the safe-area **and** the
+52px bottom nav, otherwise a sheet's last row/button sits behind the nav and
+is untappable.
 
 A permanent **"+ 새 세션"** button sits at the bottom of the list (hidden
 only in the true empty state, where two dedicated buttons already do the
 same job) and opens the same `session.add-menu` popover as the desktop rail's
-own "+ 새 세션" — `Fleet.tsx` now takes `getAction` as a dep (from
+own "+ 새 세션" — `Fleet.tsx` takes `getAction` as a dep (from
 `core/dom.js`, passed in by `mobile-nav.js`) for this, the same way
 `Rail.tsx`/`Hud.tsx`/`Dock.tsx` already do.
 
-**Text selection (`term/touch-select.js`, 2026-09-23) does not use the
-browser's native selection at all anymore.** The step-1 investigation found
-the actual defect: xterm 5.5's accessibility layer redraws every visible row
+**Text selection (`term/touch-select.js`) does not use the
+browser's native selection at all.** The reason: xterm 5.5's accessibility layer redraws every visible row
 on each PTY render (a spinner, a tmux status-line clock — anything), and that
 redraw replaces the row's text nodes, which collapses whatever DOM `Range`
-was sitting on them. A drag-selected range surviving long enough to copy was
-close to accidental. The fix isn't a patch on that mechanism — it stops using
-it: long-pressing the terminal now selects the word under your finger through
+was sitting on them. A drag-selected range surviving long enough to copy is
+close to accidental. So long-pressing the terminal selects the word under your finger through
 **xterm's own selection model** (`term.select()`/`getSelection()`/
-`clearSelection()`, the same API a desktop mouse-drag already used), which a
+`clearSelection()`, the same API a desktop mouse-drag uses), which a
 separate renderer paints and which the accessibility layer's churn never
 touches. Two self-drawn handles (teardrops, `.vt-term-select-handles`) sit at
 the range's ends; dragging either recomputes a flat `row*cols+col` index pair
 and calls `select()` again — no live DOM `Range` is ever created, so there's
-nothing for a redraw to collapse. Verified directly (not just reasoned about):
-selecting text, then having the pane print five lines over five seconds
-(forcing the accessibility redraw repeatedly), left `term.getSelection()`
-byte-for-byte unchanged throughout.
+nothing for a redraw to collapse. Measured: selecting text, then having the pane print five lines over five seconds
+(forcing the accessibility redraw repeatedly), leaves `term.getSelection()`
+byte-for-byte unchanged.
 
-`keybar.js`'s `setTerminalSelectionMode` still owns entry/exit (blur the
+`keybar.js`'s `setTerminalSelectionMode` owns entry/exit (blur the
 hidden textarea, hide the software keyboard, toggle the
-`vt-term-select-mode` class, show/hide the 복사·모두 선택·완료 bar) — this
-file only changed *what triggers it* (a long-press on the terminal, not a
-keybar button, which is gone) and *what happens inside it* (handle-driven
-`select()` calls instead of a native range). "모두 선택" selects the visible
+`vt-term-select-mode` class, show/hide the 복사·모두 선택·완료 bar); a long-press on the terminal
+triggers it, and handle-driven `select()` calls (not a native range) run inside it. "모두 선택" selects the visible
 viewport (`rows×cols`), not `selectAll()`'s full scrollback — buffer text you
 can't see isn't what "select all" means to someone looking at a phone screen.
 
-**Auto-copy and the Android long-press-to-paste fallback are now
-touch-only-disabled** (`term/selection.js`) — `mouse.autocopyOnSelect` still
-governs desktop drag-select unchanged, but on a coarse pointer neither path
-runs at all, regardless of the setting. They were the second half of the
-original complaint: a drag that copied without being asked, and a long-press
-that sometimes fired the OS clipboard-read permission prompt and pasted
-before the user had decided to select anything. Both were built for a native-
-selection world that no longer exists on touch.
+**Auto-copy and the Android long-press-to-paste fallback are disabled on touch**
+(`term/selection.js`) — `mouse.autocopyOnSelect` governs desktop drag-select, but on a coarse
+pointer neither path runs, regardless of the setting. Otherwise a drag would copy without being
+asked and a long-press could fire the OS clipboard-read permission prompt and paste
+before the user had decided to select anything; both belong to a native-selection model that
+touch does not use.
 
-**Real-device verification (2026-09-24) found a real bug the CDP-emulated
-testing above could not — the drag handles were completely non-functional on
-actual touch hardware.** Tested via a physical Android phone (`adb`) with
-Chrome remote debugging (`chrome://inspect` over USB) driving real
-`Input.dispatchTouchEvent` calls and `elementFromPoint`/computed-style
-inspection, not just screenshots. Root cause: xterm's `AccessibilityManager`
-sets an **inline** `style="pointer-events:auto"` on `.xterm-accessibility`
-(the vendor CSS's `.xterm-accessibility:not(.debug){pointer-events:none}`
-never wins against an inline style) with `z-index:10` — one point above
-`.vt-term-select-handles`' `z-index:5`. Both sit in the same stacking context
-(`.vt-term-wrap` never establishes one), so the accessibility layer's hidden
-row `<div>`s — not the visibly-on-top handle — won every hit-test over the
-terminal text. Long-press-to-select still worked (that listener is on the
-wrapper and only needs the event to *bubble* through, indifferent to which
-descendant was the real target); handle-drag was dead (its listener is
-attached directly to `.vt-term-handle`, which was never actually in the
-bubble path of a touch aimed at it). Confirmed with an instrumented listener:
-zero `pointerdown`/`pointermove` events on the handle before the fix, the
-full sequence after. Fixed by raising `.vt-term-select-handles` to
-`z-index:11`. **Also observed, not yet root-caused:** the very first
-long-press's selection is confirmed live by `term.getSelection()`
-immediately, but the blue highlight overlay sometimes doesn't visually paint
-until a second selection-changing action (e.g. the first handle-drag
-movement) — copying and dragging both work correctly regardless, so this is
-cosmetic, not functional, but is unexplained and left as a known open item.
+**Handle dragging must be verified on real touch hardware**, not only CDP
+emulation (a physical Android phone over `adb` with Chrome remote debugging, driving real
+`Input.dispatchTouchEvent` calls and `elementFromPoint`/computed-style inspection).
+xterm's `AccessibilityManager` sets an **inline** `style="pointer-events:auto"` on
+`.xterm-accessibility` (the vendor CSS's `.xterm-accessibility:not(.debug){pointer-events:none}`
+never wins against an inline style) with `z-index:10`. `.vt-term-select-handles` therefore
+needs `z-index:11` (above it; `.vt-term-wrap` establishes no stacking context of its own);
+at `z-index:5` the accessibility layer's hidden row `<div>`s win every hit-test over the
+terminal text, so handle-drag receives no `pointerdown`/`pointermove` events (its listener is
+attached directly to `.vt-term-handle`) even though long-press-to-select still works (that
+listener is on the wrapper and only needs the event to bubble through). Known open item: the
+very first long-press's selection is confirmed by `term.getSelection()` immediately, but the
+blue highlight overlay sometimes doesn't paint until a second selection-changing action (e.g. the
+first handle-drag movement) — copying and dragging both work regardless, so this is cosmetic,
+not functional, and unexplained.
 
-**The keybar (`term/keybar.js`) is one row by default now, not two.**
-Previously `#keybar-top` (mic/queue/upload slots + collapse toggle) and
-`#keybar-keys` (Esc/Ctrl/Tab/arrows + `| / ~ - n p`, horizontally scrolling)
-were separate rows, and collapsing hid the *second* row entirely — which
-meant the keys people reach for constantly (arrows, Esc, Ctrl) vanished along
-with the ones they rarely touch. Queue and upload slots are gone too (both
-have a home now that didn't exist when the keybar was built: 첨부 on the
-bottom nav, and the command palette's `:` mode for queue) — freeing the row
-for what actually needs to always be visible: `[mic] Esc Ctrl Tab ↑ ↓ ← →
-[expand]`, nine items sharing one row (the seven text/arrow keys flex evenly,
-~38px each at 390px — a first functional pass, not the final visual polish).
-Collapsing now only hides `| / ~ - n p` (`#keybar-extra-keys`, a wrapping
-flex row instead of the old horizontal scroll — nothing to scroll to
-anymore), and the default flipped: a device that's never touched the toggle
-now starts collapsed (`keybar.collapsed` schema `def` in `core/settings.js`),
-since the row worth hiding by default changed meaning.
-
-That collapse state moved from raw `localStorage` into `core/settings.js`'s
-existing (until now unused) `keybar.collapsed` device-scoped key — one
-storage instead of two that could drift. **Verified, and worth recording
-because it was a real bug, not a hypothetical:** the first wiring read the
-settings-change subscription callback as if it always received the full
-settings snapshot. `settings.js`'s `set()` only broadcasts `{ [key]: value }`
-for the one key that changed — so switching mobile tabs (which persists
-`ui.mobile.home`) fired the keybar's listener with a payload that didn't
-mention `keybar.collapsed` at all, the listener read that absence as `false`,
-and the bar silently sprang open and **wrote that wrong value back to the
-device's stored settings** — a real cross-feature data-corruption bug caught
-only by testing tab switches after wiring the toggle, not by reasoning about
-the code. Fixed by checking the key is actually present in the notification
-before acting on it.
-
-**2026-09-29 — keybar reworked again: two left rows (Ctrl·Alt·Shift pinned
-on top, a horizontal scroll strip below) + inverted-T arrows on the right.** The user reported two failures: trying to swipe the row pressed
-whatever key the finger landed on, and there was no way to hold a modifier
-while pressing another key. Both came from keys firing on `pointerdown`. Now
-the strip (`#keybar-scroll`, `touch-action:pan-x`) fires on **release**, and
+**The keybar (`term/keybar.js`)** has two left rows (Ctrl·Alt·Shift pinned
+on top, a horizontal scroll strip below) and inverted-T arrows on the right. The strip
+(`#keybar-scroll`, `touch-action:pan-x`) fires on **release**, and
 cancels past an 8px slop or on the browser's `pointercancel` when it takes
-over the scroll; the arrow cluster (`#keybar-arrows`) does not scroll and
-still fires on press. Ctrl/Alt/Shift share one model — tap = next key only,
+over the scroll — firing on `pointerdown` would press whatever key the finger landed on
+while swiping, and would leave no way to hold a modifier while pressing another key. The arrow cluster
+(`#keybar-arrows`) does not scroll and fires on press. Ctrl/Alt/Shift share one model — tap = next key only,
 tap again = lock, held = applies while held (to keybar keys and soft-keyboard
 input alike), and a held modifier that was used in a chord does not count as
 a tap on release. The strip carries only keys the soft keyboard lacks (Esc
-Tab ⇧Tab ^C Home End PgUp PgDn Del tmux prefix F1–F12); the character keys,
-their long-press variants, the collapse toggle and `keybar.collapsed` are
-gone, and so is the keybar mic slot (the user never used it and it cost a
-column) — the mic now lives only in the dock / rail slot. Modifiers sit
-outside the strip so a chord is always in the same place and a thumb that
+Tab ⇧Tab ^C Home End PgUp PgDn Del tmux prefix F1–F12); there are no character keys, long-press
+variants, collapse toggle or mic slot (the mic lives only in the dock / rail slot).
+Modifiers sit outside the strip so a chord is always in the same place and a thumb that
 drifts while holding one does not cancel it. Modifier state reads like a
 Caps Lock light: a 5px lamp top-right — faint ring (off), accent outline +
 ring (next key), filled key + solid lamp (locked). Keycaps use `--mono`. The
 strip fades whichever edge has more keys (`.more-left`/`.more-right`) and
-maps vertical wheel to horizontal. Chosen from three candidates rendered on
-the real app (pinned row / two-row scrolling grid / slim single row).
+maps vertical wheel to horizontal.
 
-**2026-09-29 — app bar redone (H1, picked from three rendered candidates) and
-the keybar made optional.** The session name is the one focal element
+When subscribing to `core/settings.js` changes, check the key is present in the
+notification before acting: `set()` broadcasts only `{ [key]: value }` for the one
+key that changed. A listener that reads an absent key as `false` (for example when
+switching mobile tabs persists `ui.mobile.home`) would act on a wrong value and
+**write it back to the device's stored settings**.
+
+**The app bar** has the session name as the one focal element
 (600 weight, `--fs-md`, no button chrome — the ▾ says it's pressable); the
-device and position drop to a mono caption under it ("MacBook Pro M1 Pro ·
-2/5"), which absorbed the separate `#vt-env-chip` (`layout/env-chip.js` now
+device and position are a mono caption under it ("MacBook Pro M1 Pro ·
+2/5"), which absorbs the separate `#vt-env-chip` (`layout/env-chip.js`
 only publishes `html[data-vt-machine]` + a `vt:machine` event for
 `picker.js`). The bar is 52px on compact; the rule is written as
 `:root, html[data-skin]` because the farshell/macos skin blocks pin
-`--topbar-h:32px` at `html[data-skin=…]` specificity, which silently beat a
-bare `:root` (the older coarse-pointer 44px rule still loses to it on those
+`--topbar-h:32px` at `html[data-skin=…]` specificity, which silently beats a
+bare `:root` (the coarse-pointer 44px rule loses to it on those
 skins). Two 44px icon buttons on the right: `#keybar-open-btn` (keyboard) and
 search. The keybar is **closed by default** and only that button opens it —
-it never opens itself when the soft keyboard appears (user decision); the
+it never opens itself when the soft keyboard appears; the
 state is the device-scoped `keybar.open`. Closing also releases any latched
 modifier, and text-selection mode still shows its copy/done row while
-closed. Touch leaves `:hover` stuck after a tap, which made a closed toggle
+closed. Touch leaves `:hover` stuck after a tap, which would make a closed toggle
 look pressed — on `(hover:none)` only `aria-pressed` paints it.
 
-**Quick open (step 5) is now a full-height bottom sheet on compact** instead
+**Quick open is a full-height bottom sheet on compact** instead
 of the 60vh-capped card shared with the desktop layout — see § 6's "Default
-screen redesign" for the full writeup (sessions moved out of the default
-screen, recent-commands tracking, the two dead keymap shortcuts, and the
-`vt-qo-body`/`vt-vw-body` scroll-clipping bug that caused the reported
-"10개인데 3개만 보인다").
+screen" for the details (sessions kept out of the default
+screen, recent-commands tracking, the keymap registration rule, and the
+`vt-qo-body`/`vt-vw-body` scroll-clipping pitfall).
 
-**Soft keyboard (2026-10-06).** Two rules, both driven by `visualViewport` in
+**Soft keyboard.** Two rules, both driven by `visualViewport` in
 `term/keybar.js` `positionBar` (so they follow the keyboard consistently with
 `--kb-height`/`--kb-overlap`):
 - *Bottom nav hides while the keyboard is open* (`body.vt-keyboard-open
@@ -1032,7 +935,7 @@ screen, recent-commands tracking, the two dead keymap shortcuts, and the
 
 ## 8. Usage (dock "Usage" tab)
 
-Two interfaces in `server/usage/base.py` (N10/N41):
+Two interfaces in `server/usage/base.py`:
 
 ```python
 class LimitProvider:    # limit-based — remaining fraction
@@ -1042,15 +945,14 @@ class CounterProvider:  # counter-based — cumulative, no limit
 ```
 
 - **Limit-based**: `usage/clauth.py` — reads clauth's `~/.clauth/status.json`
-  (same source as 2.0). Only limit-based gauges appear on the HUD.
+  (the same source clauth uses). Only limit-based gauges appear on the HUD.
 - **Counter-based**: `usage/counter_jsonl.py` — reads
   `~/.vt/usage-counter.jsonl`. Populated by `fsh usage add --model ...
   --tokens ... --seconds ...` (CLI) or `POST /api/usage/counter` — which
   script actually makes that call is up to the user; FarShell only stores
   and displays. `usage/ollama.py` (optional) surfaces the running local
   model as a counter label whenever `localhost:11434/api/ps` responds.
-- If neither provider exists, the dock tab disappears entirely (2.0 rule
-  kept) — `VT_USAGE_PROVIDER` (`auto`/`clauth`/`none`) controls the choice.
+- If neither provider exists, the dock tab disappears entirely — `VT_USAGE_PROVIDER` (`auto`/`clauth`/`none`) controls the choice.
 
 ## 9. xterm.js terminal theme
 
@@ -1078,8 +980,8 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
   Only status badges get a status-colored border. A badge **counts** something —
   a diff count, an unread count, a port count.
   **A badge needs room of its own.** It sits in the flow, so it widens whatever
-  holds it: an 18px `min-width` badge inside a 36px collapsed dock tab made the
-  tab 38px wide and `overflow: hidden` cut the rest off. Where the container is
+  holds it: an 18px `min-width` badge inside a 36px collapsed dock tab makes the
+  tab 38px wide and `overflow: hidden` cuts the rest off. Where the container is
   a fixed strip, drop the number for a 6px `--color-acc` dot positioned
   `absolute` (contributing 0px of width) and let the tooltip say the count.
 - **Tooltips** (`.vt-tip`, `js/ui/tooltip.js`): one `position: fixed` element on
@@ -1087,7 +989,7 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
   a count, a shortcut, a reason; `--font-mono`, `tabular-nums`, `--color-sub`).
   `data-tip-side` picks `top|bottom|left|right` and flips when the side doesn't
   fit. **Never the native `title` attribute**: its ~1s delay can't be tuned, it
-  can't be themed across the 6 skins, and it does nothing under touch. 400ms to
+  can't be themed across the 9 skins, and it does nothing under touch. 400ms to
   open, instant within 300ms of the last one closing, 120ms
   opacity+scale growing from the trigger. No arrow — an arrow has to track both
   the fill and the 1px edge, and always drifts in one skin.
@@ -1101,8 +1003,7 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
   with a status color turns three stacked toasts into a block of colour.
   **Where it lands is decided by severity, because the goal is to not cover the
   terminal.** `info`/`success` take over the 28px menu bar (`#vt-hud`) for a moment — it
-  covers no terminal rows, like tmux's status line or vim's echo area (since
-  2026-11 it is at the top; the toast replaces the chips in place). Only `warn`/`error` float,
+  covers no terminal rows, like tmux's status line or vim's echo area (it is at the top; the toast replaces the chips in place). Only `warn`/`error` float,
   as a card at the bottom right, clear of the prompt line at the
   bottom left. In compact (<720px) there is no menu bar, so everything is a card,
   sitting on the **measured** height of the keybar and bottom nav
@@ -1129,8 +1030,7 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
   `Pro`/`rolling`). The tint is derived from `currentColor`
   (`color-mix(… 16%, transparent)`), so a consumer sets only `color` and the
   ratio isn't restated at each use site. Not a pill — the whole screen is one
-  5px radius step. Added in 2.1.6, when seven separate copies of that
-  `color-mix` were folded into one component.
+  5px radius step. Use this one component rather than copying the `color-mix`.
 - **Tabs (header, dock)**: active = a 2px `--color-acc` bottom underline +
   `--color-acc-surface` background. Inactive = `--color-sub` text.
 - **Panes** (`.vt-pane`): flush, like iTerm2. No border, no radius, no `gap`
@@ -1138,10 +1038,10 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
   1px `--color-line` divider and nothing else. `--term` background and
   `overflow: hidden` stay (the terminal lives inside the pane, so without the
   clip it spills over its neighbour while a pane shrinks).
-  A bordered, gutter-separated box was tried first, to make xterm's
-  cell-quantization remainder read as the pane's own padding. It did the
-  opposite — it *added* 5px of gutter to the empty strip it was meant to
-  explain. The remainder is not the kind of thing you fix by adding space.
+  Do not add a bordered, gutter-separated box to make xterm's
+  cell-quantization remainder read as the pane's own padding: it *adds* 5px of
+  gutter to the empty strip it was meant to explain. The remainder is not the kind
+  of thing you fix by adding space.
 - **Pane sizes snap to whole terminal cells** (`layout/snap.js`). A split pins
   its **first** child to a multiple of the cell (`flex: 0 0 568px`) and lets
   the second take the rest; both can't be multiples at once, because
@@ -1149,7 +1049,7 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
   leftover stops appearing at *every* boundary and collects at one outer edge
   instead. Vertical snapping measures from below the 24px head, so a pane is
   `head + rows × cellHeight`. Dragging a divider therefore moves in whole
-  columns. Before this, a half-drawn column showed up as a blank strip
+  columns. Without snapping, a half-drawn column shows up as a blank strip
   between the last glyph and the divider.
 - **The active pane says so through its head**, three ways at once: a 10%
   accent-tinted surface, a 2px accent underline, and a `--color-txt` name
@@ -1190,14 +1090,14 @@ See [session UI design](docs/ref/session-ui.md).
 
 - **Touch targets:** under a coarse pointer, the bottom nav and keybar
   buttons keep a 44px tap area. A fine pointer keeps a tighter density.
-  The **pane-header ×** (`.vt-pane-close`; the view-tab × went with the tab strip)
-  keeps its visible 18px box and 13px glyph and get a 44x44 hit area only under
+  The **pane-header ×** (`.vt-pane-close`)
+  keeps its visible 18px box and 13px glyph and gets a 44x44 hit area only under
   `(pointer: coarse)`: 13px transparent padding with `background-clip: content-box`
-  (hover/active still paints 18px). Padding, not a `::before`, because the tab strip is
-  `overflow-x:auto` (clips a pseudo-element vertically) and padding takes layout space,
-  so it cannot overlap a neighbour; the tab and the pane header grow to 44px (the
+  (hover/active still paints 18px). Padding, not a `::before`, because a scrolling
+  container (`overflow-x:auto`) clips a pseudo-element vertically and padding takes layout space,
+  so it cannot overlap a neighbour; the pane header grows to 44px (the
   header's right padding is 10px to clear the split resizer's 8px touch zone). On a
-  fine pointer both stay 18px / 24px-header.
+  fine pointer it stays 18px / 24px-header.
 - **Keyboard:** `Mod+K` palette, `Mod+,` settings, `Ctrl/Cmd+F` (palette `~`
   mode), `Ctrl/Cmd+Shift+F` (in-pane search), Esc to close,
   `:focus-visible` outline (`--color-acc`).
@@ -1217,30 +1117,30 @@ design.
 | File | Responsibility |
 |------|------|
 | `styles/theme/tokens.css` | Structural tokens + farshell color tokens + shell dimensions (`@theme static`) |
-| `styles/theme/skins.css` | Color remapping for the other 5 skins |
+| `styles/theme/skins.css` | Color remapping for the other 8 skins |
 | `styles/layers/components.css` | `.status-dot` — the home for new components |
-| `styles/layers/legacy.css` | Every existing component + `.vt-*` overlays + the rail/dock/HUD frame's CSS (unlayered) |
+| `styles/screens/*.css` | Per-screen CSS in the `legacy` layer (wins over `components`) |
 | `frontend/index.html` | Boot theme script (anti-FOUC), login gate, `#vt-chrome` mount point, mobile bottom nav, keybar |
 | `frontend/js/layout/surface.js` | Terminal placement (which pane holds which session) · refit gate · `#vt-term-stage` waiting room |
 | `frontend/js/core/types.ts` | Shared TS types |
-| `frontend/js/shell/Rail.tsx` | Worktree rail, 252px (N36) |
-| `frontend/js/shell/Dock.tsx` | Dock frame, 392px (N35) |
-| `frontend/js/shell/Hud.tsx` · `hud-data.ts` | Menu bar, 28px at the top (N34; was the bottom HUD until 2026-11) |
-| `frontend/js/shell/HeaderExtras.tsx` | Workspace chip · connected screens (N37) |
-| `frontend/js/shell/Fleet.tsx` | Mobile fleet home (N38) |
-| `frontend/js/shell/Palette.tsx` · `palette-data.ts` | Command palette, 7+1 modes (N5/N40/N46) |
-| `frontend/js/layout/resize-overlay.js` | px / cols×rows caption while dragging a divider (N43) |
-| `frontend/js/layout/tree.js` | Pane tree — leaf `kind: 'terminal'\|'viewer'\|'panel'` (N4) |
+| `frontend/js/shell/Rail.tsx` | Worktree rail, 252px |
+| `frontend/js/shell/Dock.tsx` | Dock frame, 392px |
+| `frontend/js/shell/Hud.tsx` · `hud-data.ts` | Menu bar, 28px at the top |
+| `frontend/js/shell/HeaderExtras.tsx` | Workspace chip · connected screens |
+| `frontend/js/shell/Fleet.tsx` | Mobile fleet home |
+| `frontend/js/shell/Palette.tsx` · `palette-data.ts` | Command palette, 8 modes |
+| `frontend/js/layout/resize-overlay.js` | px / cols×rows caption while dragging a divider |
+| `frontend/js/layout/tree.js` | Pane tree — leaf `kind: 'terminal'\|'viewer'\|'panel'` |
 | `frontend/js/layout/breakpoints.js` | The 4 responsive-tier boundaries (single source) |
 | `frontend/js/layout/dom-ids.js` | Tree node id → DOM element id, in one place (the maker and the finder both read it) |
 | `frontend/js/layout/snap.js` | Cell-multiple snapping for pane sizes — pure, unit-tested |
 | `frontend/js/layout/panes.js` · `compact.js` · `dnd.js` | Pane-tree rect computation · compact mode · drop zones |
-| `frontend/js/core/settings.js` | Server-backed settings store — global/device scope (N3) |
+| `frontend/js/core/settings.js` | Server-backed settings store — global/device scope |
 | `frontend/js/core/keymap.js` | Keymap registry |
 | `frontend/js/panels/viewer/scm.js` | Dock source-control tab renderer (read-only) |
 | `frontend/js/ui/icons.js` | Inline SVG icon registry (the only icon source) — includes the 5 agent marks |
 | `frontend/js/ui/tooltip.js` | The one tooltip layer — `data-tip` / `data-tip-sub` / `data-tip-side`, replaces native `title` |
 | `frontend/js/term/xterm-setup.js` | xterm instance creation, applies `getVtXtermTheme()` |
-| `server/usage/base.py` · `clauth.py` · `counter_jsonl.py` · `ollama.py` | LimitProvider/CounterProvider (N10/N41) |
-| `server/device_settings.py` | Device-scoped settings storage (N3) |
+| `server/usage/base.py` · `clauth.py` · `counter_jsonl.py` · `ollama.py` | LimitProvider/CounterProvider |
+| `server/device_settings.py` | Device-scoped settings storage |
 | `frontend/js/voice/` | Recording/STT/TTS, media keys, voice-only mode — built as its **own** lib entry (`frontend/dist/voice.js`), lazy-loaded only when the voice capability is on |

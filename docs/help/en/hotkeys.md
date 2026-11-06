@@ -17,7 +17,7 @@
 | Click the voice-only button | Switch UI mode (hides the terminal) |
 | Click the earphone button | Turn the media-key trigger on/off |
 | Earphone Play/Pause | Toggle recording (when the earphone trigger is on) |
-| `Cmd+F` / `Ctrl+F` | Search terminal |
+| `Cmd+F` / `Ctrl+Shift+F` | Scrollback search (in-terminal search is `Cmd+Shift+F` / `Alt+Shift+F`) |
 | `⋯` on a rail row, or right-click | Session menu (open/close, rename, open on Mac, connected screens, kill) |
 
 ## Change a hotkey

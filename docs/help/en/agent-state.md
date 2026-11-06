@@ -23,9 +23,9 @@ fsh hooks dedupe      # remove FarShell hooks duplicated into ~/.codex/hooks.jso
 prompt-queue dispatch don't work. Claude Code completion alerts (TTS) need the hooks too.** And it
 doesn't fail visibly; nothing just happens. If something doesn't show up, check here first.
 
-In Claude Code's `~/.claude/settings.json`, six kinds are registered: tool start/end, completion,
-session start, notification and approval request.
-In Codex's `~/.codex/config.toml`, six kinds are registered: prompt/permission/tool/stop/session.
+In Claude Code's `~/.claude/settings.json`, 13 kinds are registered: tool start/end, completion, completion failure,
+sub-agent start/end, teammate idle, session start/end, notification, approval request and prompt submit.
+In Codex's `~/.codex/config.toml`, 8 kinds are registered: prompt/permission/tool/stop/subagent/session.
 Both manage only FarShell entries and keep your existing hooks.
 
 **If you clicked "Import Claude settings" in the Codex app**, Claude's FarShell hooks

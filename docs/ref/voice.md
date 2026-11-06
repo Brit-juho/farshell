@@ -6,8 +6,8 @@
 |------|------|
 | Voice Daemon | macOS hotkey (Ctrl+Shift+M) → STT → direct input into tmux |
 | Session TTS | 세션별 끔·완료음·응답 읽기, 선택한 화면 또는 서버에서 순차 재생 |
-| Voice-only mode | 🎧 button → hides the terminal and shows only a large mic (for earbud operation) |
-| Web Push (P5) | ⋯ menu → "Push Notifications". Existing notifications (`/ws-notify` → Notification API) only work **while a PWA tab is alive**, so turning off the phone screen meant missing "waiting for approval." This fills that gap. No push is sent while at least one WS client is connected (to avoid the same notification arriving twice). **Requirements**: ① https — Service Workers don't even register over plain http ② iOS requires adding to the home screen as a PWA (16.4+; a subscription can't be created from a Safari tab — no workaround). **A subscription is bound to its origin** — if the trycloudflare URL changes, existing subscriptions all die, so each subscription stores its origin, mismatches are excluded from sending, and 404/410 responses are cleaned up on the spot. Notification bodies never contain commands, paths, or code (they'd show on the lock screen). The VAPID key is auto-generated at `~/.vt/vapid.json` (0600) — **deleting it invalidates every existing subscription**. SW registration is handled by `js/swreg.js` (it used to live inside `voice.js`, so the SW never registered at all when voice wasn't installed) |
+| Voice-only mode | Settings "음성 및 알림" → "음성 전용 모드" button → fills the screen with a single large mic (for earbud operation) |
+| Web Push | ⋯ menu → "푸시 알림". Existing notifications (`/ws-notify` → Notification API) only work **while a PWA tab is alive**, so with the phone screen off you would otherwise miss "waiting for approval"; Web Push covers that case. No push is sent while at least one WS client is connected (to avoid the same notification arriving twice). **Requirements**: (1) https — Service Workers don't even register over plain http (2) iOS requires adding to the home screen as a PWA (16.4+; a subscription can't be created from a Safari tab — no workaround). **A subscription is bound to its origin** — if the trycloudflare URL changes, existing subscriptions all die, so each subscription stores its origin, mismatches are excluded from sending, and 404/410 responses are cleaned up on the spot. Notification bodies never contain commands, paths, or code (they'd show on the lock screen). The VAPID key is auto-generated at `~/.vt/vapid.json` (0600) — **deleting it invalidates every existing subscription**. SW registration is handled by `js/push/swreg.js` (kept outside `voice.js` so the SW still registers when voice isn't installed) |
 
 ### Voice Daemon (standalone macOS voice input)
 
@@ -43,7 +43,7 @@ Claude 기록과 Codex response_item/event_msg 또는 last_assistant_message를 
 
 STT는 녹음 시작에 대상 토큰을 발급받고 종료·재전송에 같은 pane을 사용한다. 대상이 사라지면
 다른 pane으로 보내지 않고 인식 텍스트 복사를 제공한다. 입력 전 확인 단계는 아래 「확인 후 전송」을 본다(두 업로드 경로가 같다). 첫 클릭은 모델 준비, 다음 클릭은 녹음이다.
-브라우저 녹음은 최대 60초, 업로드는 4MiB다. 구 로컬 마이크 기능은 제거했으며 구 요청은 410이다.
+브라우저 녹음은 최대 60초, 업로드는 4MiB다. 구 로컬 마이크 요청은 410을 돌려준다.
 연속 녹음(발화마다 저절로 다시 시작)은 지원하지 않는다. 청크 경로에서만 서버 VAD 자동 종료(「자동 종료」, 기본 off)와
 녹음 중 부분 결과(「부분 결과 표시」, 기본 on)가 있다 — 아래 「녹음 중 처리」. 이어폰 미디어키는 매 접속마다 기본 off다.
 
@@ -69,8 +69,8 @@ local을 선택하면 외부 요청 없이 say만 사용한다. edge 선택은 �
 
 ### 확인 후 전송 (`voice.confirm`)
 
-텍스트 + Enter를 바로 입력하던 계약은 다음으로 바뀌었다. 전역 설정 `voice.confirm`(`off | shell | on`, 기본 `shell`;
-`workspace.json` settings, 서버가 알 수 없는 값은 `shell`로 본다) 정책은 `server/voice_confirm.py`가 판정한다.
+입력 전 확인 단계는 전역 설정 `voice.confirm`(`off | shell | on`, 기본 `shell`;
+`workspace.json` settings, 서버가 알 수 없는 값은 `shell`로 본다)이며 정책 판정은 `server/voice_confirm.py`가 한다.
 
 | 값 | 동작 |
 |---|---|
@@ -116,7 +116,7 @@ carry over. Two paths cover this:
 
 - **OSC52** (no separate process needed) — copies made inside terminal programs like
   `vim` or `tmux copy-mode` are already carried in the PTY output stream, so
-  `frontend/js/terminal.js` intercepts them via
+  `frontend/js/term/selection.js` intercepts them via
   `term.parser.registerOscHandler(52, ...)` and applies them to the clipboard of
   whatever device has the web page open.
 - **Polling daemon** (`fsh clip`) — copies made outside the terminal (Safari, Finder,
@@ -130,7 +130,7 @@ carry over. Two paths cover this:
 ```
 
 
-## STT 구조 (2026-10)
+## STT 구조
 
 - **STT는 서버 OS에서만 돈다.** 브라우저는 녹음해서 `/voice/input`(또는 청크 경로 `/voice/chunk`)으로 올리기만 한다(클라이언트 쪽 인식 없음).
   그래서 쓸 수 있는 엔진은 서버 호스트가 정한다(`stt_engines/env.py`가 감지).
@@ -138,14 +138,14 @@ carry over. Two paths cover this:
   직렬화·카탈로그/준비/삭제 응답을 맡고, `server/stt_engines/`가 엔진(MLX Qwen3, llama.cpp Qwen3, Apple Speech)을 구현한다.
 - **몰래 받지 않는다**: `load`/`preload`/`transcribe`는 네트워크를 안 쓴다. 받기는 `POST /voice/stt/setup`
   (설정 UI가 확인 창을 거쳐 부른 요청)에서만. llama.cpp 실행 파일은 버전 고정·sha256 검증(`llama_release.py`).
-- Whisper(faster-whisper)는 제거했다 — 같은 정확도에서 맥은 CPU 전용이라 느렸고(문장당 1.14초 vs MLX 0.1초), 새 엔진이
-  모든 플랫폼을 덮는다(llama.cpp CPU). 저사양 서버(RAM 4GB 이하)에서 약 2GB를 쓰는 llama.cpp가 부담일 수 있다.
+- Whisper(faster-whisper)는 지원하지 않는다 — 같은 정확도에서 맥은 CPU 전용이라 느리고(문장당 1.14초 vs MLX 0.1초),
+  llama.cpp CPU 엔진이 모든 플랫폼을 덮는다. 저사양 서버(RAM 4GB 이하)에서 약 2GB를 쓰는 llama.cpp가 부담일 수 있다.
 - 폴더 밖 공유 캐시(`hub/blobs/`)까지 지우고(`hfcache.py`), 용량은 링크 중복 없이 센다.
 - `/voice/input`은 `X-Voice-Id`로 재전송 중복을 건너뛴다(최근 120초). 단계별 시간은 응답 `timing`과 서버 로그.
 
 ## 청크 업로드 (PCM)
 
-긴 녹음 중 터널이 끊기면 통째로 잃던 문제를 줄이려고, AudioWorklet이 되는 브라우저는 녹음 중에 조각을 올린다.
+긴 녹음 중 터널이 끊겨도 통째로 잃지 않도록, AudioWorklet이 되는 브라우저는 녹음 중에 조각을 올린다.
 엔드포인트 스키마와 오류 코드는 [API.md](../../API.md)의 `/voice/chunk`. 여기는 구조와 이유만 적는다.
 
 - **클라이언트**(`frontend/js/voice/`, 모두 voice 번들): `pcm-capture.js`(AudioContext + 워클릿, 입력 샘플레이트가
@@ -203,15 +203,15 @@ carry over. Two paths cover this:
   최종 인식(같은 녹음이든 다른 사용자든)은 **최대 부분 인식 한 번만큼** 기다린다. 아래 벤치마크의 문장당 시간(MLX 0.6B 0.10초,
   CPU llama.cpp 0.25초)은 짧은 문장 기준이고 20초 창은 더 걸린다 — 20초 창의 실제 시간은 아직 재지 않았다. 저사양 서버면 「부분 결과 표시」를 끈다. 기본 on으로 둔 이유: 점유율 상한과 non-blocking 건너뛰기로 최종
   결과의 정확성은 바뀌지 않고 지연 상한이 정해져 있으며, 단일 사용자 맥(권장 MLX)에서 체감 비용이 작다.
-- **바지인**: 서버 VAD 발화 시작으로 TTS를 멈추는 것은 **구현하지 않았다**. 녹음 시작에 이미 `pauseVoice(true)`가 이 화면의
+- **바지인**: 서버 VAD 발화 시작으로 TTS를 멈추는 것은 **구현하지 않는다**. 녹음 시작에 이미 `pauseVoice(true)`가 이 화면의
   재생을 멈추고 서버 큐를 멈추며(`voice_barge`), 녹음 동안 유지된다 — 발화 시작에 같은 화면을 다시 멈춰도 얻는 게 없다. 서버
   컴퓨터 출력(`destination: server`)이나 다른 기기 재생을 멈추는 것은 "녹음하는 화면의 출력만 멈춘다"는 정책을 바꾸는 일이라
-  하지 않았다. 대신 남은 틈을 클라이언트(`tts.js`)에서 막는다: 녹음 중 `/ws-voice`가 재연결되면(서버 `disconnect`가 그 화면의
+  하지 않는다. 대신 남은 틈을 클라이언트(`tts.js`)에서 막는다: 녹음 중 `/ws-voice`가 재연결되면(서버 `disconnect`가 그 화면의
   일시정지를 지운다) 일시정지를 다시 보내고, 그 틈에 온 음성은 재생하지 않고 `cancelled`로 알린다(120초 안전 해제).
 - **테스트**: `server/tests/test_voice_vad.py`(합성 사인파+잡음), `test_voice_live.py`(라우트 응답·작업 정리·락 경합, 가짜 STT), `test_routes_voice_chunk_confirm.py`(청크 경로 확인 후 전송),
   `frontend/tests/voice-ack-handler.test.js`·`voice-pcm-flow.test.js`·`voice-status-panel.test.js`·`voice-session-flow.test.js`.
 
-## STT 엔진 벤치마크 (2026-10-02)
+## STT 엔진 벤치마크
 
 `scripts/stt_bench.py`로 같은 한국어 샘플에서 모델별 CER·속도·메모리를 잰다. **앱이 쓰는 모델은 어댑터 없이
 `model:<카탈로그 id>`로 잰다**(실사용 엔진 코드를 그대로 호출 — 측정과 실사용이 갈라지지 않는다). 후보 엔진 비교용
@@ -234,9 +234,9 @@ carry over. Two paths cover this:
 | Qwen3-ASR 0.6B 8bit (MLX) | 6.1 | 0.10 | 1160 | 모델 971MB |
 | Apple SpeechAnalyzer ko-KR | 6.4 | 0.06 | 36 | Swift 헬퍼 필요, 시스템 서비스 메모리 미포함 |
 | SenseVoice-Small int8 (sherpa-onnx) | 6.4 | 0.03 | 733 | 띄어쓰기가 어긋남 |
-| faster-whisper small | 6.6 | 1.14 | 1211 | (제거됨) CPU 전용이라 느림 |
-| faster-whisper base | 6.7 | 0.35 | 648 | (제거됨) 이전 기본값 |
-| faster-whisper small 한국어(ghost613) | 6.8 | 1.14 | 1482 | (제거됨) small과 차이 없음 |
+| faster-whisper small | 6.6 | 1.14 | 1211 | (미지원) CPU 전용이라 느림 |
+| faster-whisper base | 6.7 | 0.35 | 648 | (미지원) |
+| faster-whisper small 한국어(ghost613) | 6.8 | 1.14 | 1482 | (미지원) small과 차이 없음 |
 | Qwen3-ASR 0.6B GGUF Q8 (llama.cpp, **CPU만**) | 6.1 | 0.25 | 1940~2340 | 크로스플랫폼 후보. GPU 없이 측정, 메모리는 컨텍스트 크기에 따라 다름 |
 | mlx-whisper small (fp16) | 7.2 | 0.12 | 889 | (채택 안 함) faster-whisper small과 같은 크기, 약 10배 빠름 |
 | sherpa-onnx Zipformer ko | 24.5 | 0.03 | 331 | 이 문장 도메인에서 약함 |
