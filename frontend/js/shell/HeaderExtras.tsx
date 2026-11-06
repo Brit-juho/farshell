@@ -36,7 +36,7 @@ async function safeFetch<T>(deps: HeaderDeps, path: string): Promise<T | null> {
   }
 }
 
-// 워크스페이스 칩 — "farshell / <호스트>".
+// 워크스페이스 칩 — "/ <호스트>" (앞의 FarShell 메뉴 버튼에 이어 읽힌다).
 //
 // 2026-09-28(사용자 지적) — 예전엔 로그인한 서버의 이름을 부팅 때 한 번 읽어
 // 고정했다. 레일 스위처로 M5를 고르고 M5 원격 칸을 보고 있어도 칩은 계속 M1이라,
@@ -85,9 +85,9 @@ function WorkspaceChip(props: { deps: HeaderDeps }) {
   };
 
   return (
+    // 2026-11-06 — 아이콘·「farshell」 이름을 뺐다. 메뉴바 바로 왼쪽의 FarShell 메뉴 버튼
+    // (Hud.tsx MenuButton)이 같은 아이콘과 이름을 이미 보여 줘서 두 번 나왔다. 칩은 호스트만 말한다.
     <div id="vt-workspace-chip">
-      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="5" /><path d="m7 9 3 3-3 3" /><path d="M12 15h5" /></svg>
-      <span class="vt-workspace-name">farshell</span>
       <Show
         when={viewHostId() !== 'local'}
         fallback={<Show when={hostname()}><span class="vt-workspace-host">/ {hostname()}</span></Show>}
