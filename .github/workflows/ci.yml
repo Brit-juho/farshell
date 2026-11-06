@@ -217,6 +217,6 @@ jobs:
       # 한 테스트가 60초를 넘기면 모든 스레드의 스택을 찍고, 바깥 `timeout`은
       # 8분에 SIGABRT로 끊어 **스텝이 스스로 끝나게** 한다 — 잡이 밖에서
       # 취소되면 GitHub이 로그를 통째로 버린다(2026-09-19 실측).
-      - run: timeout --signal=ABRT 840 python -m pytest server/tests -q -o faulthandler_timeout=60
+      - run: timeout --signal=ABRT 840 python -m pytest server/tests -q -o faulthandler_timeout=60 -n auto --dist loadfile
         env:
           PYTHONFAULTHANDLER: "1"

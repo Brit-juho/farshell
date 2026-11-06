@@ -5,6 +5,7 @@
 """
 
 import subprocess
+import time
 import uuid
 
 import pytest
@@ -28,6 +29,21 @@ def _tmux(*args: str) -> str:
     return r.stdout.strip()
 
 
+def _new_session(name: str, cwd) -> None:
+    """세션을 만들고 tmux 가 그 pane 의 경로를 cwd 로 보고할 때까지 기다린다.
+
+    Linux 의 tmux 는 pane_current_path 를 pane 의 foreground 프로세스(/proc/<pgrp>/cwd)에서 읽는다. 세션을 막
+    만든 직후엔 셸이 아직 foreground 를 잡지 않아 경로가 비거나 다를 수 있다 — 2026-11-06 CI(master, 3.14)에서
+    `session_for_cwd` 가 None 을 돌려 실패했다. 판정 규칙은 그대로 두고 전제(경로가 보고됨)만 기다린다."""
+    _tmux("new-session", "-d", "-s", name, "-c", str(cwd), "-x", "80", "-y", "24")
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if _tmux("display-message", "-p", "-t", f"={name}:", "#{pane_current_path}") == str(cwd):
+            return
+        time.sleep(0.02)
+    pytest.fail(f"tmux 가 5초 안에 {name} 의 경로를 {cwd} 로 보고하지 않았다")
+
+
 @pytest.fixture
 def tmux_server(monkeypatch, tmp_path):
     global SOCKET, BASE
@@ -42,14 +58,14 @@ def tmux_server(monkeypatch, tmp_path):
 def test_session_for_cwd_returns_none_when_no_match(tmux_server):
     d = tmux_server / "dev"
     d.mkdir()
-    _tmux("new-session", "-d", "-s", "dev", "-c", str(d), "-x", "80", "-y", "24")
+    _new_session("dev", d)
     assert tmux_target.session_for_cwd(str(tmux_server / "other")) is None
 
 
 def test_session_for_cwd_matches_unique_session(tmux_server):
     d = tmux_server / "dev"
     d.mkdir()
-    _tmux("new-session", "-d", "-s", "dev", "-c", str(d), "-x", "80", "-y", "24")
+    _new_session("dev", d)
     assert tmux_target.session_for_cwd(str(d)) == "dev"
 
 
@@ -57,8 +73,8 @@ def test_session_for_cwd_returns_none_when_ambiguous(tmux_server):
     """같은 cwd로 두 세션이 떠 있으면 틀린 쪽을 확신 있게 고르지 않는다."""
     d = tmux_server / "shared"
     d.mkdir()
-    _tmux("new-session", "-d", "-s", "a", "-c", str(d), "-x", "80", "-y", "24")
-    _tmux("new-session", "-d", "-s", "b", "-c", str(d), "-x", "80", "-y", "24")
+    _new_session("a", d)
+    _new_session("b", d)
     assert tmux_target.session_for_cwd(str(d)) is None
 
 
