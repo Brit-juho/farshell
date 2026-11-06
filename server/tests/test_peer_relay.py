@@ -383,3 +383,29 @@ def test_host_relay_round_trip_keeps_route_csp(a_env, monkeypatch):
     assert r.status_code == 200, r.text
     csp = r.headers.get("content-security-policy", "")
     assert _SANDBOX_CSP in csp and "frame-ancestors" not in csp
+
+
+# --- 파일 읽기 2판이 중계를 지나도 같은 계약이다(D7: 읽기 기능은 원격에서도) ---------------------
+
+
+def test_host_relay_fs_file_keeps_etag_304_range_and_409(a_env, tmp_path, monkeypatch):
+    """A → B(같은 앱) 끝까지: ETag·`If-None-Match` → 304, 구간 필드, `expected_rev` 불일치 → 409."""
+    client, _ = a_env
+    root = (tmp_path / "browse").resolve()
+    root.mkdir()
+    monkeypatch.setenv("VT_BROWSE_ROOTS", str(root))
+    (root / "a.txt").write_bytes(b"one\ntwo\n")
+    url = "/api/hosts/m5/relay/api/fs/file"
+    params = {"path": str(root / "a.txt"), "offset": "0", "length": "5"}
+    r = client.get(url, params=params)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["content"] == "one\n" and d["next_offset"] == 4 and d["rev"]
+    etag = r.headers["etag"]
+    assert r.headers["cache-control"] == "private, no-cache"
+    r = client.get(url, params=params, headers={"If-None-Match": etag})
+    assert r.status_code == 304 and r.content == b""
+    assert r.headers["etag"] == etag
+    r = client.get(url, params={"path": str(root / "a.txt"), "offset": "4", "expected_rev": "0:0:0:0"})
+    assert r.status_code == 409
+    assert r.json()["error"] == "changed" and r.json()["rev"] == d["rev"]
