@@ -55,6 +55,9 @@ jobs:
       # 버린다 — 사람 눈으로는 못 잡는 종류라 처음부터 strict로 건다.
       - name: 정의되지 않은 CSS 변수 검사
         run: python3 scripts/check_css_vars.py --strict
+      # 레이어·화면 CSS 의 선언 순서가 규칙대로인지(예전엔 어디서도 실행되지 않았다 — 2026-11-06 점검).
+      - name: CSS 선언 순서 검사
+        run: python3 scripts/check_css_order.py
       # 번역 키가 한국어 원문이라 원문을 고치면 영어 사전이 조용히 어긋난다.
       - name: 영어 사전 검사
         run: python3 scripts/check_i18n.py --strict
