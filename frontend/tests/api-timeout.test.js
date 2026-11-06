@@ -165,3 +165,25 @@ test('fetch 거부는 예전처럼 offline으로 센다', async () => {
   assert.strictEqual(R.unreachableReason(), 'offline');
   await wait(0);
 });
+
+test('vtFetchConditional — If-None-Match를 보내고 304를 정상으로 돌려준다(본문 없음). 그 밖 오류는 vtFetch와 같다', async () => {
+  const withEtag = (status, body, etag) => Promise.resolve({
+    ok: status >= 200 && status < 300, status,
+    headers: { get: (k) => (k.toLowerCase() === 'etag' ? etag : null) },
+    json: () => (status === 304 ? Promise.reject(new Error('본문을 읽으면 안 된다')) : Promise.resolve(body)),
+  });
+  let reply = () => withEtag(200, { a: 1 }, 'W/"e1"');
+  const { A, calls, delays } = await load(() => reply());
+  assert.deepStrictEqual({ ...(await A.vtFetchConditional('/api/fs/file?path=a')) }, { status: 200, etag: 'W/"e1"', data: { a: 1 } });
+  assert.ok(!calls[0].opts.headers, '처음에는 조건 없이');
+  assert.ok(delays.includes(A.GET_TIMEOUT_MS), 'GET 마감이 걸린다');
+
+  reply = () => withEtag(304, null, null);
+  const r = await A.vtFetchConditional('/api/fs/file?path=a', { etag: 'W/"e1"' });
+  assert.deepStrictEqual({ ...r }, { status: 304, etag: 'W/"e1"', data: null });
+  assert.strictEqual(calls[1].opts.headers['If-None-Match'], 'W/"e1"');
+  assert.ok(calls[1].opts.signal, '마감 signal');
+
+  reply = () => withEtag(409, { error: 'changed', rev: 'r2' }, null);
+  await assert.rejects(A.vtFetchConditional('/api/fs/file?path=a'), (e) => e.status === 409 && e.data.rev === 'r2');
+});

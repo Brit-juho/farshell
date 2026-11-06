@@ -84,6 +84,12 @@ function box() {
   return { scroll, host };
 }
 
+/** 편집기에 들어간 글자 수(KB) — 단계 3부터 큰 파일은 앞 4MB까지 이어 받는다. */
+function loadedKB(host) {
+  const h = host._vtEditor;
+  return h ? Math.round(h.view.state.doc.length / 1024) : null;
+}
+
 async function openFile(path, n = 1) {
   const boxes = Array.from({ length: n }, box);
   const t0 = performance.now();
@@ -91,7 +97,7 @@ async function openFile(path, n = 1) {
   const t1 = await nextPaint();
   // 편집기 청크를 못 받으면 file.js는 일반 텍스트로 대신 그린다 — 그 수치를 편집기 수치로 착각하지 않게 멈춘다.
   if (boxes.some((b) => !b.host.querySelector('.cm-editor'))) throw new Error('편집기(CodeMirror)로 그려지지 않았다');
-  return { paintMs: Math.round(t1 - t0), ...(await common(t0, t1)) };
+  return { paintMs: Math.round(t1 - t0), loadedKB: loadedKB(boxes[0].host), ...(await common(t0, t1)) };
 }
 
 async function diff5000() {
@@ -144,12 +150,21 @@ async function tree() {
 
 // 연속 변경: 열린 파일에 200ms 마다 변경 알림, 10초. 실제 자동 갱신과 같이 coalesce 로 묶어
 // refreshFile 을 부른다(실행 중 온 알림은 끝난 뒤 한 번으로 합쳐진다).
-async function live() {
-  const path = '/bench/live.js';
+// - live.js: 요청마다 마지막 줄이 바뀐다(512KB, 구간 하나).
+// - live-same.js: 알림만 오고 파일은 그대로 — 조건부 요청이 304 를 받아 다시 그리지 않아야 한다.
+// - live-4m.js: 4MB, 200ms 마다 바뀐다 — 1MB 구간을 이어 받는 사이에 바뀌면 409 로 처음부터 다시 받는다.
+async function live(path) {
+  if (path === '/bench/live-4m.js') await fetch('/__live-big-reset');
   const { scroll, host } = box();
   await renderFile(host, path);
   await nextPaint();
   let refreshes = 0;
+  let redraws = 0;
+  const h = host._vtEditor;
+  if (h) {
+    const set = h.setText;
+    h.setText = (t) => { const changed = set(t); if (changed) redraws += 1; return changed; };
+  }
   const refresh = coalesce(async () => { await refreshFile(scroll, path, () => true); refreshes += 1; });
   const frames = [];
   let running = true;
@@ -170,18 +185,21 @@ async function live() {
   const p95 = sorted[Math.min(sorted.length - 1, Math.ceil(0.95 * sorted.length) - 1)] || 0;
   return {
     frameP95: Math.round(p95), frameMax: Math.round(sorted[sorted.length - 1] || 0),
-    refreshes, ...(await common(t0, t1)),
+    refreshes, redraws, loadedKB: loadedKB(host), ...(await common(t0, t1)),
   };
 }
 
 const SCENARIOS = {
   'open-512k': () => openFile('/bench/code-512k.js'),
-  'open-4m': () => openFile('/bench/code-4m.js'),         // 서버가 앞 512KB 만 준다(지금 동작 그대로)
-  'long-line-1m': () => openFile('/bench/long-1m.min.js'), // 같은 이유로 512KB 한 줄
+  'open-4m': () => openFile('/bench/code-4m.js'),         // 단계 3부터 1MB 구간 4개로 4MB 전체
+  'open-12m': () => openFile('/bench/code-12m.js'),       // 앞 4MB + 「더 보기」
+  'long-line-1m': () => openFile('/bench/long-1m.min.js'), // 1MB 넘는 한 줄 — 첫 구간이 line_truncated, 다음 구간이 이어 붙는다
   'concurrent-3': () => openFile('/bench/code-512k.js', 3),
   'diff-5000': diff5000,
   tree,
-  'live-10s': live,
+  'live-10s': () => live('/bench/live.js'),
+  'live-same-10s': () => live('/bench/live-same.js'),
+  'live-4m-10s': () => live('/bench/live-4m.js'),
 };
 
 window.perfReady = (async () => {

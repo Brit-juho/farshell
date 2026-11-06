@@ -62,3 +62,11 @@ test('다른 행의 링크는 돌려주지 않는다', async () => {
   assert.strictEqual(S.linksForRow(b, 1).length, 0);
   assert.strictEqual(S.linksForRow(b, 2).length, 1);
 });
+
+test('splitPathLine — `경로:줄:열`을 나눈다(터미널 링크가 그 줄로 연다)', async () => {
+  const { splitPathLine } = await load();
+  assert.deepStrictEqual({ ...splitPathLine('src/a.py:42:10') }, { path: 'src/a.py', line: 42, col: 10 });
+  assert.deepStrictEqual({ ...splitPathLine('src/a.py:7') }, { path: 'src/a.py', line: 7, col: null });
+  assert.deepStrictEqual({ ...splitPathLine('~/x/b.ts') }, { path: '~/x/b.ts', line: null, col: null });
+  assert.deepStrictEqual({ ...splitPathLine('a/b.js:0:0') }, { path: 'a/b.js', line: null, col: null });
+});

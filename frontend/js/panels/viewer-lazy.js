@@ -13,6 +13,7 @@ import { registerAction, getAction } from '../core/dom.js';
 import { register as registerKey } from '../core/keymap.js';
 import { get as getSetting } from '../core/settings.js';
 import { openViewerPane } from '../layout/store.js';
+import { relayHost } from '../core/host-route.js';
 
 let _loading = null;
 
@@ -31,28 +32,39 @@ export function loadViewer() {
 
 /** 파일을 **페인**으로 연다. 표면 설정과 무관하다 — 「새 pane에 열기」·「페인으로」 버튼처럼
  * 정말로 pane을 원하는 자리가 쓴다(ADR-44). */
-export function openFileInPane(path) {
+// opts.line·col은 그 줄로 이동(터미널 링크 `path:줄:열`). 줄 이동은 렌더러가 맡는다 — 이 함수가 먼저 등록한
+// then이 페인 렌더(layout/panes.js의 loadViewer().then)보다 먼저 돈다.
+export function openFileInPane(path, opts = {}) {
   if (!path) return;
   // 온보딩(세션 0개 안내)은 position:fixed + z-index:500이라 페인 위를 덮는다.
   // 이제 볼 것이 생겼으므로 치운다 — term/session.js가 세션을 만들 때 하는 것과
   // 같은 처리다(같은 화면을 두 조건이 공유한다).
   document.getElementById('onboarding')?.remove();
-  loadViewer().then((v) => v._pushRecent(path)).catch(() => {});
+  loadViewer().then((v) => {
+    v._pushRecent(path);
+    if (opts.line) v.queueJump(path, opts.line, opts.col);
+  }).catch(() => {});
   openViewerPane(path);
 }
 
-/** 파일 열기의 기본 진입점. `viewer.surface`에 따라 오버레이(sheet/float) 또는 페인으로 연다. */
-export function openFile(path) {
+/**
+ * 파일 열기의 기본 진입점. `viewer.surface`에 따라 오버레이(sheet/float) 또는 페인으로 연다.
+ * opts: `line`·`col`(그 줄로 이동), `host`(파일이 있는 호스트 — 터미널 링크는 그 세션의 호스트, 계획 3.5).
+ * 지금 화면과 다른 호스트의 파일은 늘 오버레이로 연다(페인은 호스트를 기억하지 않는다). 최근 파일 목록에도 넣지
+ * 않는다 — 그 목록은 경로만 기억해서 다음에 이 호스트의 같은 경로를 열게 된다.
+ */
+export function openFile(path, opts = {}) {
   if (!path) return;
-  if (getSetting('viewer.surface') === 'pane') { openFileInPane(path); return; }
+  const cross = !!opts.host && opts.host !== 'local' && opts.host !== relayHost();
+  if (!cross && getSetting('viewer.surface') === 'pane') { openFileInPane(path, opts); return; }
   document.getElementById('onboarding')?.remove();
-  loadViewer().then((v) => v._pushRecent(path)).catch(() => {});
+  if (!cross) loadViewer().then((v) => v._pushRecent(path)).catch(() => {});
   import('./viewer/overlay.js')
-    .then((m) => m.openFileOverlay(path))
+    .then((m) => m.openFileOverlay(path, opts))
     .catch((e) => {
       // 지연 청크를 못 받았을 때 클릭이 아무 일도 안 한 것처럼 보이면 안 된다.
       console.error('[FarShell viewer]', e);
-      openViewerPane(path);
+      if (!cross) openViewerPane(path);
     });
 }
 

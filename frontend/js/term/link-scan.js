@@ -9,6 +9,15 @@ const URL_RE = /https?:\/\/[^\s<>"'\)\]]+/g;
 // 슬래시 없는 단어(README.md)는 오탐이 많아 잡지 않는다. `~/`는 홈 기준 경로.
 const PATH_RE = /(?:~\/(?:[\w.\-]+\/)*[\w.\-]+\.\w{1,10}|\.{0,2}\/(?:[\w.\-]+\/)*[\w.\-]+\.\w{1,10}|(?:[\w.\-]+\/)+[\w.\-]+\.\w{1,10})(?::\d+(?::\d+)?)?/g;
 
+/** `src/a.py:42:10` → `{path:'src/a.py', line:42, col:10}`. 줄·열이 없으면 null. 0이나 이상한 값은 버린다. */
+export function splitPathLine(text) {
+  const m = /^(.*?):(\d+)(?::(\d+))?$/.exec(String(text || ''));
+  if (!m || !m[1]) return { path: String(text || ''), line: null, col: null };
+  const line = parseInt(m[2], 10);
+  const col = m[3] ? parseInt(m[3], 10) : null;
+  return { path: m[1], line: line > 0 ? line : null, col: col && col > 0 ? col : null };
+}
+
 export function findLinkMatches(text) {
   const urls = [];
   for (const m of text.matchAll(URL_RE)) {

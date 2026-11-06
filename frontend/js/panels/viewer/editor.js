@@ -14,8 +14,8 @@
 // 색은 전부 tokens.css 변수다(AGENTS.md 계약 9). 하이라이트는 @lezer/highlight의 classHighlighter가 `tok-*`
 // 클래스를 붙이고 styles/screens/30-viewer.css가 색을 준다. 편집기 틀(줄 번호 칸, 찾기 창, 일치 표시)은 아래
 // _THEME이 정한다 — CM이 넣는 기본 테마는 @layer 밖이라, @layer legacy 안의 우리 CSS가 명시도와 무관하게 진다.
-import { EditorState, Compartment } from '@codemirror/state';
-import { EditorView, lineNumbers, highlightSpecialChars, keymap } from '@codemirror/view';
+import { EditorState, Compartment, StateEffect, StateField } from '@codemirror/state';
+import { EditorView, Decoration, lineNumbers, highlightSpecialChars, keymap } from '@codemirror/view';
 import { syntaxHighlighting, StreamLanguage } from '@codemirror/language';
 import { classHighlighter } from '@lezer/highlight';
 import { search, searchKeymap } from '@codemirror/search';
@@ -82,7 +82,31 @@ const _THEME = EditorView.theme({
   '.cm-button:hover': { backgroundColor: 'var(--menu-hover)' },
   '.cm-button:active': { backgroundImage: 'none', backgroundColor: 'var(--menu-hover)' },
   '.cm-panel button[name=close]': { color: 'var(--sub)' },
+  '.cm-vt-target': { backgroundColor: 'color-mix(in srgb, var(--acc) 16%, transparent)' },
 });
+
+// 터미널 링크(`path:줄:열`)로 연 줄 표시. 터치 기기는 편집 불가라 커서가 안 보이므로 줄 배경으로 알린다.
+const _setTarget = StateEffect.define();
+const _targetLine = Decoration.line({ class: 'cm-vt-target' });
+const _targetField = StateField.define({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    let d = deco.map(tr.changes);
+    for (const e of tr.effects) {
+      if (e.is(_setTarget)) d = e.value == null ? Decoration.none : Decoration.set([_targetLine.range(e.value)]);
+    }
+    return d;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
+// 끝부분 보기(tail)는 앞쪽 줄 수를 모른다. 줄 번호 대신 「끝에서 n번째 줄」을 -n으로 적는다(마지막 빈 줄은 세지 않는다).
+function _fromEnd(lineNo, state) {
+  const doc = state.doc;
+  const total = doc.lines - (doc.lines > 1 && doc.line(doc.lines).length === 0 ? 1 : 0);
+  const k = total - lineNo + 1;
+  return k > 0 ? `-${k}` : '';
+}
 
 /** 언어를 불러온다. 모르는 언어이거나 불러오지 못하면 null(일반 텍스트로 보인다). */
 export function loadLanguage(key) {
@@ -117,6 +141,14 @@ function _phrases() {
   };
 }
 
+function _scrollParent(el) {
+  for (let cur = el.parentElement; cur; cur = cur.parentElement) {
+    const o = getComputedStyle(cur).overflowY;
+    if ((o === 'auto' || o === 'scroll') && cur.scrollHeight > cur.clientHeight) return cur;
+  }
+  return null;
+}
+
 // 터치 기기에서는 편집 가능 상태(contenteditable)를 끈다. 켜 두면 읽기 전용이어도 누를 때마다 화상 키보드가
 // 올라온다. 데스크톱에서는 켜 둔다 — 그래야 커서 이동, 전체 선택·복사, Ctrl/Cmd+F 찾기가 파일 전체에 걸린다
 // (그리지 않은 줄은 DOM에 없어서 브라우저 찾기로는 안 잡힌다).
@@ -127,9 +159,13 @@ function _coarse() {
 /**
  * container 안에 읽기 전용 편집기를 붙인다. 돌려주는 핸들:
  * - `setText(text)` — 바뀐 부분만 교체한다(스크롤·선택 유지). 같으면 아무것도 하지 않는다.
+ * - `append(text)` — 끝에 붙인다(구간을 이어 받을 때, 「더 보기」).
+ * - `jumpTo(line, col)` — 그 줄로 옮기고 표시한다. 받은 범위를 넘으면 false.
+ * - `atBottom()` — 스크롤이 끝에 있는가(끝부분 보기에서 새 내용을 따라갈지 정한다).
  * - `destroy()`
+ * `opts.lineFrom === 'end'`면 줄 번호를 끝에서 센다(끝부분 보기).
  */
-export async function mountEditor(container, text, path, hljsName) {
+export async function mountEditor(container, text, path, hljsName, opts = {}) {
   const lang = await loadLanguage(editorLangKey(path, hljsName));
   const langSlot = new Compartment();
   const view = new EditorView({
@@ -137,7 +173,8 @@ export async function mountEditor(container, text, path, hljsName) {
     state: EditorState.create({
       doc: text,
       extensions: [
-        lineNumbers(),
+        opts.lineFrom === 'end' ? lineNumbers({ formatNumber: _fromEnd }) : lineNumbers(),
+        _targetField,
         highlightSpecialChars(),
         EditorState.readOnly.of(true),
         EditorView.editable.of(!_coarse()),
@@ -159,6 +196,32 @@ export async function mountEditor(container, text, path, hljsName) {
       const change = textChange(view.state.doc.toString(), next);
       if (change) view.dispatch({ changes: change });
       return !!change;
+    },
+    append(more) {
+      if (!more) return;
+      const end = view.state.doc.length;
+      view.dispatch({ changes: { from: end, to: end, insert: more } });
+    },
+    lines() { return view.state.doc.lines; },
+    jumpTo(line, col) {
+      const doc = view.state.doc;
+      const n = Math.floor(Number(line));
+      if (!Number.isFinite(n) || n < 1 || n > doc.lines) return false;
+      const ln = doc.line(n);
+      const c = Math.max(1, Math.floor(Number(col)) || 1);
+      const pos = Math.min(ln.to, ln.from + c - 1);
+      view.dispatch({
+        selection: { anchor: pos },
+        effects: [_setTarget.of(ln.from), EditorView.scrollIntoView(pos, { y: 'center' })],
+      });
+      return true;
+    },
+    jumpToEnd() {
+      view.dispatch({ effects: EditorView.scrollIntoView(view.state.doc.length, { y: 'end' }) });
+    },
+    atBottom() {
+      const el = _scrollParent(view.dom);
+      return !el || el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
     },
     destroy() { view.destroy(); },
   };
