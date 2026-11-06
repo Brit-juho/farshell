@@ -20,6 +20,7 @@ import hashlib
 import hmac
 import logging
 import os
+import re
 import secrets
 import time
 import uuid
@@ -254,8 +255,50 @@ def _download_response(item: dict, fp: Path) -> FileResponse:
     return resp
 
 
+# 이어받기로 받아 주는 `Range` 모양 — 범위 하나, 시작 바이트가 명시되고 0보다 크다. `bytes=0-`·접미사(`bytes=-N`)·여러
+# 범위는 파일 전체를 다시 받는 길이 되므로 이어받기로 치지 않는다(쿠키를 이미 쓴 뒤의 새 전체 다운로드는 PIN부터).
+_RESUME_RANGE = re.compile(r"bytes=([1-9][0-9]{0,18})-([0-9]{0,19})")
+
+
+async def _try_resume(token: str, request: Request):
+    """PIN 다운로드를 이어받는 요청이면 그 응답(206), 아니면 None — 호출자는 평소 흐름으로 간다.
+
+    소비된 다운로드 쿠키(file_store.claim_download)를 가진 같은 브라우저가 끊긴 전송을 `Range`로 다시 요청하는 경우다.
+    1회용이 된 뒤로 이 요청이 PIN 화면을 받아 이어받기가 깨졌다. 쿠키의 원래 기한(PIN 통과 후 DL_COOKIE_TTL초)까지만,
+    `Range`가 있을 때만, 0번째 바이트를 빼고만 받아 준다 — 평범한 재요청은 여전히 PIN 화면이고 `once` 공유가 처음부터
+    끝까지 두 번 나가지 않는다. 공유가 `once`면 레코드가 이미 지워졌으므로 `_resolve`보다 먼저 본다.
+    """
+    m = _RESUME_RANGE.fullmatch((request.headers.get("range") or "").strip())
+    if m is None:
+        return None
+    parsed = _parse_token(token)
+    if parsed is None:
+        return None
+    file_id, share_id, _ = parsed
+    cookie = request.cookies.get(f"vt_share_dl_{share_id}", "")
+    if not cookie:
+        return None
+    state, item, fp = await asyncio.to_thread(
+        file_store.claim_resume, file_id, share_id, hashlib.sha256(cookie.encode()).hexdigest())
+    if state != "ok":
+        return None
+    st = await asyncio.to_thread(os.stat, fp)
+    if int(m.group(1)) >= st.st_size:
+        return None
+    resp = FileResponse(str(fp), filename=item["name"], media_type=item.get("mime"), stat_result=st)
+    _no_store_headers(resp)
+    # If-Range가 어긋나면 FileResponse는 Range를 버리고 **전체를** 200으로 보낸다 — 그건 새 전체 다운로드다.
+    if_range = request.headers.get("if-range")
+    if if_range is not None and if_range not in (resp.headers.get("etag"), resp.headers.get("last-modified")):
+        return None
+    return resp
+
+
 @public_router.get("/s/{token}")
 async def share_download(token: str, request: Request):
+    resumed = await _try_resume(token, request)
+    if resumed is not None:
+        return resumed
     # 저장소 조회·갱신은 flock(최대 5초 대기)을 잡는다 — CLI가 잠금을 쥐고 있으면 루프가 멈추므로 스레드에서 한다.
     item, share = await asyncio.to_thread(_resolve, token)
     if item is None:
@@ -272,7 +315,8 @@ async def share_download(token: str, request: Request):
         return _download_response(item, fp)
 
     # pin 모드 — PIN 통과 후 발급된 1회용 쿠키. 검증과 소비를 저장소 락 안에서 한 번에 한다(file_store.claim_download):
-    # 같은 쿠키로 동시에 와도 하나만 받는다. 전송이 그 뒤에 실패하면 PIN을 다시 넣는다.
+    # 같은 쿠키로 동시에 와도 하나만 받는다. 쿠키는 지우라고 하지 않는다 — 원래 기한까지 `Range` 이어받기(_try_resume)에
+    # 쓰이고, 그 밖의 재요청은 서버 쪽 기록이 이미 없어 PIN 화면을 받는다. 기한이 지나 전송이 끊기면 PIN을 다시 넣는다.
     cookie_name = f"vt_share_dl_{share['shareId']}"
     dl_cookie = request.cookies.get(cookie_name, "")
     if dl_cookie:
@@ -282,9 +326,7 @@ async def share_download(token: str, request: Request):
         if state == "gone":
             return JSONResponse({"error": "not_found"}, status_code=404)
         if state == "ok":
-            resp = _download_response(claimed, fp)
-            resp.delete_cookie(cookie_name, path=f"/s/{token}")
-            return resp
+            return _download_response(claimed, fp)
     return HTMLResponse(_pin_page(token))
 
 

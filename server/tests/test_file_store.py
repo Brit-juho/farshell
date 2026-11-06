@@ -258,6 +258,46 @@ def test_claim_download_is_atomic_across_threads(store, tmp_path):
     assert out.count("ok") == 1 and out.count("denied") == 19
 
 
+# --- 이어받기(claim_resume) — 소비한 쿠키는 원래 기한까지 Range 이어받기에만 쓰인다 ----------------------
+
+
+def test_claim_resume_needs_a_claimed_cookie_within_its_original_expiry(store, tmp_path):
+    item, share, cookie_hash = _pin_share_with_cookie(store, tmp_path)
+    # 아직 소비 전 — 이어받기로는 새 다운로드를 열 수 없다.
+    assert store.claim_resume(item["id"], share["shareId"], cookie_hash)[0] == "denied"
+    assert store.claim_download(item["id"], share["shareId"], cookie_hash)[0] == "ok"
+    state, got, fp = store.claim_resume(item["id"], share["shareId"], cookie_hash)
+    assert state == "ok" and fp.read_bytes() == b"hello"
+    assert store.claim_resume(item["id"], share["shareId"], "0" * 64)[0] == "denied"
+    assert store.claim_resume(item["id"], share["shareId"], "")[0] == "denied"
+    # 조회수는 다운로드 한 번으로만 센다.
+    assert store.get_item_and_share(item["id"], share["shareId"])[1]["views"] == 1
+
+
+def test_claim_resume_ends_at_the_cookie_expiry_and_on_revoke(store, tmp_path, monkeypatch):
+    item, share, cookie_hash = _pin_share_with_cookie(store, tmp_path)
+    assert store.claim_download(item["id"], share["shareId"], cookie_hash)[0] == "ok"
+    real = time.time
+    monkeypatch.setattr(store.time, "time", lambda: real() + 61)
+    assert store.claim_resume(item["id"], share["shareId"], cookie_hash)[0] == "denied"
+    store.cleanup()
+    assert "dl_resumes" not in store.get_item(item["id"])   # 지난 기록은 정리 때 걷힌다
+    monkeypatch.setattr(store.time, "time", real)
+
+    item2, share2, hash2 = _pin_share_with_cookie(store, tmp_path)
+    assert store.claim_download(item2["id"], share2["shareId"], hash2)[0] == "ok"
+    store.remove_share(item2["id"], share2["shareId"])
+    assert store.claim_resume(item2["id"], share2["shareId"], hash2)[0] == "denied", "취소한 공유를 이어받았다"
+
+
+def test_claim_resume_works_for_a_consumed_once_share(store, tmp_path):
+    item, share, cookie_hash = _pin_share_with_cookie(store, tmp_path, once=True)
+    assert store.claim_download(item["id"], share["shareId"], cookie_hash)[0] == "ok"
+    assert store.get_item_and_share(item["id"], share["shareId"])[1] is None   # once — 공유는 지워졌다
+    assert store.claim_resume(item["id"], share["shareId"], cookie_hash)[0] == "ok"
+    assert store.claim_download(item["id"], share["shareId"], cookie_hash)[0] == "gone"
+
+
 # --- 마이그레이션 / 고아 정리 ---------------------------------------------------
 
 
