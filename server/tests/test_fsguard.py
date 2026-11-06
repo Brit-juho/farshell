@@ -479,3 +479,110 @@ def test_open_resolved_missing_file_is_file_not_found(sandbox):
     p = fsguard.resolve_under_roots(str(sandbox["root"] / "proj" / "nope.txt"))
     with pytest.raises(FileNotFoundError):
         fsguard.open_resolved(p)
+
+
+def test_open_resolved_refuses_dotdot_anywhere_in_the_path(sandbox):
+    """resolve된 경로만 받는다 — 중간 `..`는 dir_fd 걸음에서 경계 검사 없이 위로 올라간다."""
+    root = sandbox["root"]
+    escape = Path(str(root / "proj" / ".." / ".." / "outside" / "secret.txt"))
+    assert ".." in escape.parts
+    with pytest.raises(fsguard.NotRegularFile):
+        fsguard.open_resolved(escape)
+    with pytest.raises(fsguard.NotRegularFile):
+        fsguard.open_resolved(Path(str(root / "proj" / ".." / "proj" / "main.py")))
+    with pytest.raises(fsguard.NotRegularFile):
+        fsguard.open_resolved_parent(escape)
+
+
+def test_open_resolved_refuses_relative_paths(sandbox, monkeypatch):
+    monkeypatch.chdir(sandbox["root"])
+    with pytest.raises(fsguard.NotRegularFile):
+        fsguard.open_resolved(Path("proj/main.py"))
+
+
+def test_open_resolved_read_flow_still_refuses_deny_names(sandbox):
+    """판정(resolve_under_roots)이 먼저다 — 거부 이름은 여는 단계까지 가지 않는다."""
+    root = sandbox["root"]
+    for name in (".env", "key.pem", ".ssh/config"):
+        with pytest.raises(fsguard.FsDenied):
+            fsguard.resolve_under_roots(str(root / "proj" / name))
+
+
+# --- open_resolved_parent: 쓰기용 (부모 dir_fd, 이름) -----------------------------------
+
+
+def test_open_resolved_parent_returns_the_checked_directory(sandbox):
+    root = sandbox["root"]
+    p = fsguard.resolve_under_roots(str(root / "proj" / "new.txt"))   # 아직 없는 파일
+    dir_fd, name = fsguard.open_resolved_parent(p)
+    try:
+        assert name == "new.txt"
+        assert os.fstat(dir_fd).st_ino == (root / "proj").stat().st_ino
+    finally:
+        os.close(dir_fd)
+
+
+def test_open_resolved_parent_follows_an_in_root_symlink_through_resolve(sandbox):
+    root = sandbox["root"]
+    (root / "alias").symlink_to(root / "proj")
+    p = fsguard.resolve_under_roots(str(root / "alias" / "main.py"))
+    dir_fd, name = fsguard.open_resolved_parent(p)
+    try:
+        assert name == "main.py"
+        assert os.fstat(dir_fd).st_ino == (root / "proj").stat().st_ino
+    finally:
+        os.close(dir_fd)
+
+
+def test_open_resolved_parent_refuses_parent_swapped_to_symlink(sandbox):
+    root, outside = sandbox["root"], sandbox["outside"]
+    p = fsguard.resolve_under_roots(str(root / "proj" / "main.py"))
+    (root / "proj").rename(root / "proj.real")
+    (root / "proj").symlink_to(outside)
+    with pytest.raises(OSError):
+        fsguard.open_resolved_parent(p)
+
+
+# --- resolve_for_write: 쓰기 정책 ---------------------------------------------------------
+
+
+@pytest.fixture
+def writes_on(monkeypatch):
+    monkeypatch.setattr(fsguard, "WRITES_ENABLED", True)
+
+
+def test_resolve_for_write_is_closed_until_writes_are_enabled(sandbox):
+    with pytest.raises(fsguard.FsDenied):
+        fsguard.resolve_for_write(str(sandbox["root"] / "proj" / "main.py"))
+
+
+def test_resolve_for_write_allows_a_normal_file_when_enabled(sandbox, writes_on):
+    p = fsguard.resolve_for_write(str(sandbox["root"] / "proj" / "main.py"))
+    assert p == (sandbox["root"] / "proj" / "main.py").resolve()
+
+
+@pytest.mark.parametrize("part", sorted(fsguard.WRITE_DENY_DIR_PARTS))
+def test_resolve_for_write_refuses_execution_config_dirs(sandbox, writes_on, part):
+    """읽기는 되는 폴더(ALLOWED_DOT_DIRS)라도 실행 설정이 되는 곳은 쓰지 못한다."""
+    d = sandbox["root"] / "proj" / part / "sub"
+    d.mkdir(parents=True)
+    target = d / "ci.yml"
+    target.write_text("x\n")
+    assert fsguard.resolve_under_roots(str(target))       # 읽기는 허용
+    with pytest.raises(fsguard.FsDenied):
+        fsguard.resolve_for_write(str(target))
+
+
+def test_resolve_for_write_keeps_every_read_refusal(sandbox, writes_on):
+    root, outside = sandbox["root"], sandbox["outside"]
+    (root / "proj" / ".sometool").mkdir()
+    (root / "proj" / "escape").symlink_to(outside)
+    for raw in (
+        root / "proj" / ".env",                      # 읽기 거부 이름
+        root / "proj" / ".ssh" / "config",           # 읽기 거부 디렉토리
+        root / "proj" / ".sometool" / "state.json",  # 숨김 상태 디렉토리
+        outside / "secret.txt",                      # 경계 밖
+        root / "proj" / "escape" / "secret.txt",     # 밖을 가리키는 심링크
+    ):
+        with pytest.raises(fsguard.FsDenied):
+            fsguard.resolve_for_write(str(raw))

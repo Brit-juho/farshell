@@ -305,3 +305,81 @@ def test_native_transcript_relay_reads_verified_child(b_env, tmp_path, monkeypat
         assert response.status_code == 403
     finally:
         A._retire("relay-parent")
+
+
+# --- 보안 헤더가 중계를 지나도 남는다 ---------------------------------------------------
+# 라우트가 붙인 응답별 정책(파일 미리보기의 sandbox CSP 등)이 중계에서 빠지면, 바깥 서버의
+# 기본 헤더(frame-ancestors 'none'만)로 바뀌어 같은 바이트가 로컬보다 약한 정책으로 열린다.
+
+_SANDBOX_CSP = "sandbox; default-src 'none'"
+
+
+def _install_header_probe(monkeypatch, app):
+    """허용 목록 안 경로(`/api/fs/raw`)를 응답 헤더 탐침으로 바꿔 끼운다(라우터 맨 앞)."""
+    from starlette.responses import Response
+    from starlette.routing import Route
+
+    seen = {}
+
+    async def probe(request):
+        seen["if-range"] = request.headers.get("if-range")
+        seen["range"] = request.headers.get("range")
+        resp = Response(b"bytes", media_type="image/png")
+        # 같은 이름의 CSP 두 개 — 둘 다 강제되는 정책 목록이다.
+        resp.raw_headers.append((b"content-security-policy", _SANDBOX_CSP.encode()))
+        resp.raw_headers.append((b"content-security-policy", b"img-src 'self'"))
+        resp.raw_headers.append((b"x-content-type-options", b"nosniff"))
+        return resp
+
+    monkeypatch.setattr(app.router, "routes", [Route("/api/fs/raw", probe), *app.router.routes])
+    return seen
+
+
+def test_relay_passes_route_security_headers_and_if_range(b_env, monkeypatch):
+    import main
+    client, hs, secret = b_env
+    seen = _install_header_probe(monkeypatch, main.app)
+    path = "/api/peer/relay/api/fs/raw"
+    r = client.get(path + "?path=%2Fx.png", headers={
+        **_signed(hs, secret, "GET", path + "?path=%2Fx.png"),
+        "Range": "bytes=0-1", "If-Range": '"rev-1"',
+    })
+    assert r.status_code == 200, r.text
+    csp = r.headers.get("content-security-policy", "")
+    assert _SANDBOX_CSP in csp and "img-src 'self'" in csp
+    assert "frame-ancestors" not in csp           # 바깥 기본값으로 바뀌지 않았다
+    assert r.headers.get("x-content-type-options") == "nosniff"
+    assert seen == {"if-range": '"rev-1"', "range": "bytes=0-1"}
+
+
+def test_host_relay_passes_security_headers_and_if_range(a_env, monkeypatch):
+    client, _ = a_env
+    import routes.host_relay as hr
+    seen = {}
+
+    async def handler(request):
+        seen["headers"] = dict(request.headers)
+        return httpx.Response(200, content=b"bytes", headers={
+            "x-peer-relay": "1", "content-type": "image/png",
+            "content-security-policy": _SANDBOX_CSP, "x-content-type-options": "nosniff",
+        })
+
+    monkeypatch.setattr(hr, "_client", httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    r = client.get("/api/hosts/m5/relay/api/fs/raw?path=x.png",
+                   headers={"Range": "bytes=0-1", "If-Range": '"rev-1"'})
+    assert r.status_code == 200
+    assert r.headers.get("content-security-policy") == _SANDBOX_CSP
+    assert r.headers.get("x-content-type-options") == "nosniff"
+    assert seen["headers"].get("if-range") == '"rev-1"'
+    assert seen["headers"].get("range") == "bytes=0-1"
+
+
+def test_host_relay_round_trip_keeps_route_csp(a_env, monkeypatch):
+    """A → B 끝까지(같은 앱) — B 라우트의 CSP 가 A 응답에 그대로 남는다."""
+    import main
+    client, _ = a_env
+    _install_header_probe(monkeypatch, main.app)
+    r = client.get("/api/hosts/m5/relay/api/fs/raw?path=x.png")
+    assert r.status_code == 200, r.text
+    csp = r.headers.get("content-security-policy", "")
+    assert _SANDBOX_CSP in csp and "frame-ancestors" not in csp

@@ -665,54 +665,72 @@ def subagent_transcript_path(cli: str, parent_id: str, agent_id: str,
 
 
 def open_subagent_file(path: Path):
-    """Open resolved absolute components without following subsequently swapped links."""
-    import stat
-    fd = os.open(path.anchor, os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        for part in path.parts[1:-1]:
-            nxt = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
-            os.close(fd)
-            fd = nxt
-        result = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
-        if not stat.S_ISREG(os.fstat(result).st_mode):
-            os.close(result)
-            raise FsDenied(tr("기록에 접근할 수 없습니다"))
-        return os.fdopen(result, "rb")
-    finally:
-        os.close(fd)
+    """Open resolved absolute components without following subsequently swapped links.
 
+    `open_resolved`와 같은 걸음이다(그 위의 얇은 포장) — 일반 파일이 아니면 기록 접근 거부로 바꿔 알린다.
+    """
+    try:
+        fd = open_resolved(path)
+    except NotRegularFile:
+        raise FsDenied(tr("기록에 접근할 수 없습니다")) from None
+    return os.fdopen(fd, "rb")
 
 
 class NotRegularFile(OSError):
-    """`open_resolved`가 연 대상이 일반 파일이 아니다(디렉토리, FIFO, 장치 등)."""
+    """`open_resolved`가 연 대상이 일반 파일이 아니다(디렉토리, FIFO, 장치 등), 또는 resolve된 경로가 아니다."""
+
+
+_CLOEXEC = getattr(os, "O_CLOEXEC", 0)
+
+
+def open_resolved_parent(path: Path) -> tuple[int, str]:
+    """resolve된 절대경로의 **부모 디렉토리**를 열어 `(부모 dir_fd, 마지막 이름)`을 돌려준다(호출자가 dir_fd를 닫는다).
+
+    `/`부터 한 조각씩 `O_DIRECTORY|O_NOFOLLOW`로, 앞 조각의 dir_fd 기준으로 연다. 판정(`resolve_under_roots`,
+    `resolve_for_write`) 뒤에 **중간 디렉토리**를 심링크로 바꿔도 `ELOOP`/`ENOTDIR`(OSError)로 실패한다 —
+    `O_NOFOLLOW` 하나는 마지막 조각에만 걸려 이 틈을 못 막는다. 루트 안의 정상 심링크는 resolve가 이미 대상으로
+    펼쳐 두었으므로 그 대상 경로를 따라 열린다.
+
+    **resolve된 경로만 받는다(계약).** 상대경로, 어느 자리에든 `..` 조각이 있거나 마지막 조각이 비었으면 열기
+    전에 `NotRegularFile`로 거부한다. dir_fd 기준으로 한 조각씩 여는 걸음에서 `..`는 경계 검사 없이 위로
+    올라가므로, 판정한 경로와 다른 디렉토리가 열릴 수 있다. (`.` 조각은 `Path`가 이미 지운다.)
+
+    쓰기(단계 8)는 이 dir_fd 기준으로 임시 파일 생성(`O_CREAT|O_EXCL`), `os.rename(src_dir_fd=, dst_dir_fd=)`,
+    정리를 모두 한다. 그래야 판정한 그 디렉토리 안에서만 이름이 바뀐다.
+    blocking — 사용자 경로라 `fsops.call`이나 스레드에서 부른다.
+    """
+    if (not isinstance(path, Path) or not path.is_absolute() or ".." in path.parts
+            or path.name in ("", ".", "..")):
+        raise NotRegularFile(tr("일반 파일만 열 수 있습니다"))
+    fd = os.open(path.anchor, os.O_RDONLY | os.O_DIRECTORY | _CLOEXEC)
+    try:
+        for part in path.parts[1:-1]:
+            nxt = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | _CLOEXEC, dir_fd=fd)
+            os.close(fd)
+            fd = nxt
+    except BaseException:
+        os.close(fd)
+        raise
+    return fd, path.name
 
 
 def open_resolved(path: Path) -> int:
     """`resolve_under_roots`가 돌려준 **resolve된 절대경로**를 읽기용으로 열어 fd를 돌려준다(호출자가 닫는다).
 
-    판정(`resolve_under_roots`)과 열기 사이에는 틈이 있다. 그 사이에 마지막 조각만이 아니라 **중간 디렉토리**를
-    심링크로 바꿔도 `O_NOFOLLOW`(마지막 조각에만 걸린다)는 막지 못해 경계 밖 파일이 열린다. 그래서 `/`부터 한
-    조각씩 `O_DIRECTORY|O_NOFOLLOW`로 dir_fd 기준 열기를 이어 간다. resolve된 경로에는 심링크가 없으므로, 판정 뒤에
-    끼어든 링크는 `ELOOP`/`ENOTDIR`(OSError)로 실패한다. 루트 안의 정상 심링크는 resolve가 이미 대상으로 펼쳐 두었으니
-    지금처럼 그 대상이 열린다. 마지막 조각은 `O_NOFOLLOW|O_NONBLOCK`(FIFO에서 멈추지 않게)으로 열고 `fstat`으로
-    일반 파일인지 확인한다 — 아니면 `NotRegularFile`.
+    판정과 열기 사이의 틈에 마지막 조각이나 **중간 디렉토리**를 심링크로 바꿔도 경계 밖 파일이 열리지 않는다.
+    부모까지는 `open_resolved_parent`가 한 조각씩 `O_NOFOLLOW`로 걷는다(같은 경로 계약: resolve된 절대경로, `..`
+    없음). 마지막 조각은 `O_NOFOLLOW|O_NONBLOCK`(FIFO에서 멈추지 않게)으로 열고 `fstat`으로 일반 파일인지
+    확인한다 — 아니면 `NotRegularFile`. 바뀐 링크는 `ELOOP`/`ENOTDIR`(OSError), 없는 파일은 `FileNotFoundError`.
 
-    blocking — 사용자 경로라 `fsops.call`이나 스레드에서 부른다. 지금은 읽기 전용이다(쓰기용 `(dir_fd, 이름)`은
-    쓰기 기능이 생길 때 같은 걸음으로 더한다).
+    이후 판정(크기, 종류, rev)은 이 fd의 `fstat`으로 한다. 경로를 다시 `open()`하면 이 보장이 사라진다.
+    blocking — 사용자 경로라 `fsops.call`이나 스레드에서 부른다.
     """
     import stat
-    if not path.is_absolute() or path.name in ("", ".", ".."):
-        raise NotRegularFile(tr("일반 파일만 열 수 있습니다"))
-    cloexec = getattr(os, "O_CLOEXEC", 0)
-    fd = os.open(path.anchor, os.O_RDONLY | os.O_DIRECTORY | cloexec)
+    dir_fd, name = open_resolved_parent(path)
     try:
-        for part in path.parts[1:-1]:
-            nxt = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | cloexec, dir_fd=fd)
-            os.close(fd)
-            fd = nxt
-        result = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | cloexec, dir_fd=fd)
+        result = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | _CLOEXEC, dir_fd=dir_fd)
     finally:
-        os.close(fd)
+        os.close(dir_fd)
     try:
         if not stat.S_ISREG(os.fstat(result).st_mode):
             raise NotRegularFile(tr("일반 파일만 열 수 있습니다"))
@@ -720,6 +738,39 @@ def open_resolved(path: Path) -> int:
         os.close(result)
         raise
     return result
+
+
+# --- 쓰기 정책 (쓰기 API가 생길 때까지 닫혀 있다) ----------------------------------
+# 읽어도 되는 파일이 원격에서 덮어써도 되는 파일은 아니다. 아래는 읽기 허용 점 디렉토리
+# (ALLOWED_DOT_DIRS) 중 **실행 설정**이 되는 것들이다 — CI 워크플로, 훅 관리자, 개발 컨테이너,
+# 편집기 작업 정의. 쓰기에서는 경로의 어느 조각에 있어도 거부한다. 읽기 거부 목록과 점 디렉토리
+# 규칙은 쓰기에도 그대로 걸린다(`resolve_for_write`가 `resolve_under_roots`를 먼저 부른다).
+WRITE_DENY_DIR_PARTS = frozenset({
+    ".github", ".gitlab", ".husky", ".devcontainer", ".vscode", ".circleci",
+})
+
+# 쓰기 API는 아직 없다. 쓰기 경계(읽기 경계와 따로 둘 설정 값)와 승격 요구를 정하는 단계에서 이 값을 연다.
+# 그 전까지 `resolve_for_write`는 판정을 다 한 뒤에도 거부한다 — 쓰기 라우트가 먼저 생겨도 열리지 않게.
+WRITES_ENABLED = False
+
+
+def resolve_for_write(raw_path: str) -> Path:
+    """쓰기 대상 경로를 판정한다 — 쓰기 경로의 **유일한** 판정 지점(AGENTS.md 계약 2).
+
+    1. `resolve_under_roots`: 열람 경계, 읽기 거부 목록, 점 디렉토리 규칙.
+    2. `WRITE_DENY_DIR_PARTS`: 실행 설정 폴더는 읽을 수는 있어도 쓸 수 없다.
+    3. `WRITES_ENABLED`가 꺼져 있으면(지금) 거부한다.
+
+    통과한 경로는 `open_resolved_parent`로 연다(판정 뒤 바꿔치기 방어). 실패는 `FsDenied`.
+    """
+    p = resolve_under_roots(raw_path)
+    for part in p.parts:
+        if part in WRITE_DENY_DIR_PARTS:
+            raise FsDenied(tr("쓰기가 금지된 디렉토리: {name}", name=part))
+    if not WRITES_ENABLED:
+        raise FsDenied(tr("파일 쓰기는 지원하지 않습니다"))
+    return p
+
 
 def history_source_root(raw: str) -> Path:
     """Explicitly approved CLI home, not a general filesystem exemption."""

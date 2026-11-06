@@ -126,3 +126,22 @@ adb reverse tcp:PORT tcp:PORT       # phone: http://localhost:PORT
 ```
 
 Real-CLI checks need a pane on that tmux socket **and** an attached PTY (WebSocket); a pane nobody has open is never scanned. A temp `CLAUDE_CONFIG_DIR` is not logged in, so Claude Code hooks are exercised with captured payloads there.
+
+## 7. File viewer render baseline
+
+Tool: `frontend/tests/perf/` (not in CI). `npm run build` first (the page loads `frontend/dist/app.css`), then `node frontend/tests/perf/run.mjs` (`--runs N`, `--only a,b`, `--profile desktop|mobile`, `--out file.json`, `--chrome path` or `CHROME`). It serves the **unbundled** viewer modules (`viewer/file.js` `renderFile`/`refreshFile`, `viewer/diff.js` `_renderDiffDOM`, `viewer/tree.js` `showTree`) from a fake server on 127.0.0.1 that mimics `/api/fs/file` (512 KiB cap, `truncated`), `/api/fs/tree` (1000 entries, depth-2 prefetch budget) and `/api/fs/roots`; inputs come from `gen.mjs` (seeded synthetic JS, minified line, diff, 50 x 100 folder tree), never real code or paths. The file-watch WebSocket is a page-side fake so the tree scenario can send one "changed". Headless Chrome is driven over CDP (no dependency), a new tab per run. Measured: request start → next paint, including HTTP + JSON; **not** measured: lazy-chunk download and hljs script download (preloaded), real devices.
+
+Scenarios: `open-512k`, `open-4m` and `long-line-1m` (both cut to 512 KiB by the server today), `concurrent-3` (three viewers at once), `diff-5000`, `tree` (open, expand 100 folders, one change on the root), `live-10s` (a change every 200 ms for 10 s through `coalesce` + `refreshFile`, as auto-refresh does). Long tasks are the browser's >50 ms tasks; p95 over 10 runs is the nearest rank (the slowest run).
+
+Baseline 2026-11-07 (Chrome 156 headless, Node 22, Apple silicon Mac, 10 runs; median / p95):
+
+| Scenario | Desktop paint ms | Desktop long tasks ms | Phone (4x CPU) paint ms | Phone long tasks ms | DOM nodes |
+|---|---|---|---|---|---|
+| open-512k | 550 / 572 | 537 / 564 | 2308 / 2343 | 2261 / 2327 | 69,677 |
+| open-4m (512 KiB shown) | 546 / 567 | 523 / 556 | 2288 / 2348 | 2238 / 2286 | 68,959 |
+| long-line-1m (512 KiB shown) | 519 / 549 | 513 / 544 | 2040 / 2070 | 2024 / 2056 | 74,585 |
+| concurrent-3 | 1795 / 1810 | 1056 / 1086 | 8156 / 8879 | 5087 / 5599 | 209,007 |
+| diff-5000 | 295 / 316 | 289 / 311 | 1213 / 1229 | 1197 / 1216 | 41,676 |
+
+- `tree`: open 28 / 38 ms (phone 91 / 112). Expanding 100 folders, summed: 164 / 197 ms (phone 1422 / 1565). **One change on the root re-requests 101 listings** (root + every expanded folder, each `depth=2`) and redraws in 163 / 185 ms, 127 ms of it long tasks (phone 656 / 771 ms, 516 ms long tasks).
+- `live-10s`: every refresh redraws the whole file even when only one line changed. Desktop: 19 redraws in 10 s, frame interval p95 517 ms, long tasks 9.8 s of the 10 s. Phone: 5 redraws, frame interval p95 2183 ms, long tasks 11.2 s — the page is effectively frozen while a file under change is open.

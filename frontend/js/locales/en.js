@@ -4299,6 +4299,8 @@ window.__VT_I18N = {
   "지금 시점의 복사본(스냅샷)을 공유합니다. 원본이 바뀌어도 링크의 내용은 그대로입니다.": "Shares a copy (snapshot) as of now. The link's content stays the same even if the original changes.",
   "일반 파일만 공유할 수 있습니다": "Only regular files can be shared",
   "일반 파일만 열 수 있습니다": "Only regular files can be opened",
+  "쓰기가 금지된 디렉토리: {name}": "Writing is not allowed in this directory: {name}",
+  "파일 쓰기는 지원하지 않습니다": "Writing files is not supported",
   "1~1024 GiB 범위로 입력하세요": "Enter a value between 1 and 1024 GiB",
   "CLI 설정 홈 경로": "CLI configuration home path",
   "CLI 실행 파일을 찾을 수 없습니다": "CLI executable not found",
