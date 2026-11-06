@@ -161,7 +161,8 @@ async def create_share(file_id: str, request: Request):
         return JSONResponse({"error": "bad_ttl"}, status_code=400)
     if mode == "pin" and not (isinstance(pin, str) and file_store.MIN_PIN_LEN <= len(pin) <= file_store.MAX_PIN_LEN):
         return JSONResponse({"error": "bad_pin"}, status_code=400)
-    share = file_store.add_share(file_id, mode, ttl, once, pin=pin if mode == "pin" else None)
+    share = await asyncio.to_thread(file_store.add_share, file_id, mode, ttl, once,
+                                    pin=pin if mode == "pin" else None)
     if share is None:
         return JSONResponse({"error": "not_found"}, status_code=404)
     token = file_store.build_share_token(file_id, share)
@@ -171,7 +172,7 @@ async def create_share(file_id: str, request: Request):
 
 @elevated_router.delete("/api/files/{file_id}/share/{share_id}")
 async def delete_share(file_id: str, share_id: str):
-    ok = file_store.remove_share(file_id, share_id)
+    ok = await asyncio.to_thread(file_store.remove_share, file_id, share_id)
     if not ok:
         return JSONResponse({"error": "not_found"}, status_code=404)
     return {"ok": True}
@@ -247,36 +248,42 @@ button{{width:100%;margin-top:12px;padding:10px;border-radius:8px;border:none;
 # --- 공개 다운로드 진입점 -------------------------------------------------------
 
 
-async def _serve(item: dict, share: dict, request: Request) -> FileResponse:
-    fp = file_store.real_path_for(item["id"])
-    file_store.update_share(item["id"], share["shareId"], views=share.get("views", 0) + 1,
-                             lastAccess=time.time())
+def _download_response(item: dict, fp: Path) -> FileResponse:
     resp = FileResponse(str(fp), filename=item["name"], media_type=item.get("mime"))
     _no_store_headers(resp)
-    if share.get("once"):
-        file_store.remove_share(item["id"], share["shareId"])
     return resp
 
 
 @public_router.get("/s/{token}")
 async def share_download(token: str, request: Request):
-    item, share = _resolve(token)
+    # 저장소 조회·갱신은 flock(최대 5초 대기)을 잡는다 — CLI가 잠금을 쥐고 있으면 루프가 멈추므로 스레드에서 한다.
+    item, share = await asyncio.to_thread(_resolve, token)
     if item is None:
         return JSONResponse({"error": "not_found"}, status_code=404)
 
     if share["mode"] == "device":
-        device = auth.verify_device(request.cookies.get("vt_device", ""))
+        device = await asyncio.to_thread(auth.verify_device, request.cookies.get("vt_device", ""))   # devices.json 읽기·쓰기
         session_ok = auth.verify_session(request.cookies.get("vt_session", ""))
         if not (device and session_ok):
             return RedirectResponse(url=f"/?next=/s/{token}", status_code=302)
-        return await _serve(item, share, request)
+        state, item, fp = await asyncio.to_thread(file_store.claim_download, item["id"], share["shareId"])
+        if state != "ok":
+            return JSONResponse({"error": "not_found"}, status_code=404)
+        return _download_response(item, fp)
 
-    # pin 모드 — PIN 통과 후 발급된 1회용 쿠키가 있으면 바로 다운로드.
-    dl_cookie = request.cookies.get(f"vt_share_dl_{share['shareId']}", "")
-    if dl_cookie and share.get("dl_cookie_hash") and share.get("dl_cookie_exp", 0) > time.time():
-        if hmac.compare_digest(hashlib.sha256(dl_cookie.encode()).hexdigest(), share["dl_cookie_hash"]):
-            resp = await _serve(item, share, request)
-            resp.delete_cookie(f"vt_share_dl_{share['shareId']}", path=f"/s/{token}")
+    # pin 모드 — PIN 통과 후 발급된 1회용 쿠키. 검증과 소비를 저장소 락 안에서 한 번에 한다(file_store.claim_download):
+    # 같은 쿠키로 동시에 와도 하나만 받는다. 전송이 그 뒤에 실패하면 PIN을 다시 넣는다.
+    cookie_name = f"vt_share_dl_{share['shareId']}"
+    dl_cookie = request.cookies.get(cookie_name, "")
+    if dl_cookie:
+        state, claimed, fp = await asyncio.to_thread(
+            file_store.claim_download, item["id"], share["shareId"],
+            hashlib.sha256(dl_cookie.encode()).hexdigest())
+        if state == "gone":
+            return JSONResponse({"error": "not_found"}, status_code=404)
+        if state == "ok":
+            resp = _download_response(claimed, fp)
+            resp.delete_cookie(cookie_name, path=f"/s/{token}")
             return resp
     return HTMLResponse(_pin_page(token))
 
@@ -305,7 +312,7 @@ async def _read_pin(request: Request) -> str | None:
 
 @public_router.post("/s/{token}/pin")
 async def share_pin_submit(token: str, request: Request):
-    item, share = _resolve(token)
+    item, share = await asyncio.to_thread(_resolve, token)
     if item is None:
         return JSONResponse({"error": "not_found"}, status_code=404)
     if share["mode"] != "pin":
@@ -317,7 +324,7 @@ async def share_pin_submit(token: str, request: Request):
         return JSONResponse({"error": "payload_too_large"}, status_code=413)
 
     # 시도를 **검증 전에, 락 안에서** 예약한다 — 동시에 몰려 와도 한도(5회)를 넘겨 검증되지 않는다(file_store).
-    state, share = file_store.reserve_pin_attempt(item["id"], share["shareId"])
+    state, share = await asyncio.to_thread(file_store.reserve_pin_attempt, item["id"], share["shareId"])
     if state != "ok":
         if state == "exhausted":
             logger.warning(f"[share] PIN 시도 초과로 공유 취소: file={item['id']}")
@@ -327,14 +334,14 @@ async def share_pin_submit(token: str, request: Request):
     if not hmac.compare_digest(expected, share.get("pinHash", "")):
         authz_preauth.fail(source, "share_pin")   # 출처별 잠금(10회/60초 → 5분)에도 센다
         if share.get("attempts", 0) >= file_store.MAX_PIN_ATTEMPTS:
-            file_store.remove_share(item["id"], share["shareId"])
+            await asyncio.to_thread(file_store.remove_share, item["id"], share["shareId"])
             logger.warning(f"[share] PIN {file_store.MAX_PIN_ATTEMPTS}회 실패로 공유 취소: file={item['id']} share={share['shareId']}")
             return JSONResponse({"error": "not_found"}, status_code=404)
         return HTMLResponse(_pin_page(token, tr("PIN이 올바르지 않습니다")), status_code=401)
 
     secret = secrets.token_urlsafe(24)
-    file_store.update_share(
-        item["id"], share["shareId"],
+    await asyncio.to_thread(
+        file_store.update_share, item["id"], share["shareId"],
         attempts=0,
         dl_cookie_hash=hashlib.sha256(secret.encode()).hexdigest(),
         dl_cookie_exp=time.time() + DL_COOKIE_TTL,

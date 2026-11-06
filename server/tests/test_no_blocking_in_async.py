@@ -63,6 +63,12 @@ BLOCKING = {
     "fsguard.resolve_under_roots", "worktree.precheck", "snippet_store.resolve_project_key",
     # flock(최대 5초 바쁜 대기)·sqlite(약 4초) — CLI 가 잠금을 쥐고 있으면 그동안 루프가 멈춘다.
     "database", "workspace.load", "device_settings.load", "device_settings.save",
+    # 파일 저장소(첨부·공유 링크)도 같은 flock 이다. 업로드·공유 다운로드·PIN 경로가 루프 위에서 불렀다(2026-11-07).
+    "file_store.list_items", "file_store.get_item", "file_store.real_path_for", "file_store.find_by_origin",
+    "file_store.add_from_upload", "file_store.delete", "file_store.delete_many", "file_store.set_pin",
+    "file_store.cleanup", "file_store.migrate_legacy", "file_store.reconcile_orphans",
+    "file_store.add_share", "file_store.reserve_pin_attempt", "file_store.get_item_and_share",
+    "file_store.remove_share", "file_store.update_share", "file_store.claim_download",
 }
 
 # 스레드로 넘겨주는 것들 — 여기 첫 인자로 들어간 함수는 안전하다.

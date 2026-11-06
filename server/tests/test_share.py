@@ -369,6 +369,89 @@ def test_new_pins_must_be_at_least_six_characters(client):
     assert client.post(f"/api/files/{fid}/share", json={"mode": "pin", "ttl": 3600, "once": False, "pin": "123456"}).status_code == 200
 
 
+# --- PIN 다운로드 쿠키는 정확히 한 번 ------------------------------------------------
+# 예전에는 쿠키를 검증만 하고 서버 쪽 기록을 지우지 않았다. 브라우저에 「쿠키 삭제」를 보낼 뿐이라, 쿠키 값을
+# 가진 사람은 60초 안에 몇 번이고(동시에 여러 개도) 받을 수 있었다.
+
+
+def _pin_cookie(client, anon, token, share_id):
+    r = anon.post(f"/s/{token}/pin", data={"pin": "123456"}, follow_redirects=False)
+    assert r.status_code == 303
+    name = f"vt_share_dl_{share_id}"
+    value = r.cookies.get(name)
+    assert value
+    return name, value
+
+
+def test_pin_download_cookie_cannot_be_replayed(client, anon):
+    fid = _upload(client)
+    share = _share(client, fid, "pin", pin="123456")
+    token = share["token"]
+    name, value = _pin_cookie(client, anon, token, share["share"]["shareId"])
+    with TestClient(main.app) as a, TestClient(main.app) as b:
+        a.cookies.set(name, value)
+        b.cookies.set(name, value)   # 같은 값을 손에 넣은 다른 브라우저
+        assert a.get(f"/s/{token}").content == b"top secret"
+        r = b.get(f"/s/{token}")
+        assert r.status_code == 200 and r.content != b"top secret" and "PIN" in r.text
+
+
+def _widen_race_window(monkeypatch):
+    """두 요청이 모두 공유 조회를 마친 뒤에 다운로드 판정으로 가게 틈을 넓힌다 — 경쟁을 결정적으로 만든다."""
+    import file_store
+    import time as _time
+    real = file_store.get_item_and_share
+    monkeypatch.setattr(file_store, "get_item_and_share", lambda *a: (real(*a), _time.sleep(0.2))[0])
+
+
+def test_pin_download_cookie_concurrent_requests_get_one_file(client, anon, monkeypatch):
+    import threading
+    fid = _upload(client)
+    share = _share(client, fid, "pin", pin="123456")
+    token = share["token"]
+    name, value = _pin_cookie(client, anon, token, share["share"]["shareId"])
+    _widen_race_window(monkeypatch)
+    got = []
+    lock = threading.Lock()
+    gate = threading.Barrier(2)
+
+    def fetch():
+        with TestClient(main.app) as c:
+            c.cookies.set(name, value)
+            gate.wait()
+            r = c.get(f"/s/{token}")
+        with lock:
+            got.append(r.content == b"top secret")
+
+    ts = [threading.Thread(target=fetch) for _ in range(2)]
+    [t.start() for t in ts]
+    [t.join(timeout=60) for t in ts]
+    assert sorted(got) == [False, True], got
+
+
+def test_once_device_share_concurrent_requests_get_one_file(client, monkeypatch):
+    import threading
+    fid = _upload(client)
+    token = _share(client, fid, "device", once=True)["token"]
+    _widen_race_window(monkeypatch)
+    statuses = []
+    lock = threading.Lock()
+    gate = threading.Barrier(2)
+
+    def fetch():
+        with TestClient(main.app) as c:
+            _set_device_cookies(c)
+            gate.wait()
+            r = c.get(f"/s/{token}")
+        with lock:
+            statuses.append((r.status_code, r.content == b"top secret"))
+
+    ts = [threading.Thread(target=fetch) for _ in range(2)]
+    [t.start() for t in ts]
+    [t.join(timeout=60) for t in ts]
+    assert sorted(statuses) == [(200, True), (404, False)], statuses
+
+
 # --- share-import: 판정 뒤 부모 디렉토리를 심링크로 바꿔치기 ----------------------------
 # 예전에는 마지막 조각만 O_NOFOLLOW로 열어서, resolve 뒤에 중간 디렉토리를 경계 밖을 가리키는 심링크로 바꾸면 경계 밖
 # 파일이 저장소로 복사되고 공유 링크로 나갈 수 있었다.
@@ -417,3 +500,59 @@ def test_share_import_refuses_last_component_swapped_to_symlink(client, browse, 
     r = client.post("/api/fs/share-import", json={"path": str(target)})
     assert r.status_code == 400, r.text
 
+
+# --- 공유 다운로드가 저장소 잠금을 기다리는 동안 이벤트 루프가 돈다 ---------------------
+
+
+def test_share_download_waits_for_the_store_lock_without_blocking_the_loop(client):
+    import asyncio
+    import threading
+    import time as _time
+    import httpx
+    import file_store
+
+    fid = _upload(client)
+    token = _share(client, fid, "device")["token"]
+    secret, device_id = _auth.register_device("테스트기기")
+    cookies = {"vt_device": secret, "vt_session": _auth.make_session(device_id)}
+
+    held = threading.Event()
+    release = threading.Event()
+
+    def hold_lock():
+        with file_store._locked():
+            held.set()
+            release.wait(5)
+
+    async def scenario():
+        gaps = []
+        done = False
+
+        async def ticker():
+            last = _time.monotonic()
+            while not done:
+                await asyncio.sleep(0.02)
+                now = _time.monotonic()
+                gaps.append(now - last)
+                last = now
+
+        transport = httpx.ASGITransport(app=main.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver", cookies=cookies) as ac:
+            tick = asyncio.create_task(ticker())
+            await asyncio.sleep(0.05)   # 틱이 먼저 돌기 시작해야 요청 중의 멈춤이 간격으로 잡힌다
+            asyncio.get_running_loop().call_later(0.6, release.set)   # 루프가 멈추면 이것도 못 돈다
+            r = await ac.get(f"/s/{token}")
+            done = True
+            await tick
+        return r, max(gaps)
+
+    t = threading.Thread(target=hold_lock)
+    t.start()
+    assert held.wait(5)
+    try:
+        r, gap = asyncio.run(scenario())
+    finally:
+        release.set()
+        t.join(5)
+    assert r.status_code == 200 and r.content == b"top secret", r.text
+    assert gap < 0.3, f"이벤트 루프가 {gap:.2f}초 멈췄다"
