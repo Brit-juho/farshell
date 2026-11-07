@@ -220,8 +220,34 @@ async def usage_get(request: Request):
     if snap is None:
         return _etag_response({"available": False, "provider": cap.get("provider"), "reason": "read-failed"}, request)
     payload = {"available": True, **snap}
+    return _etag_response(payload, request, stable_for_etag=_usage_etag_source(payload))
+
+
+def _usage_etag_source(payload: dict) -> dict:
+    """`/api/usage` ETag의 해시 원본 — 시계만 흘러도 바뀌는 값을 걷어낸다.
+
+    - `generated_at`: 피드가 90초마다 새로 찍는 시각이라 뺀다.
+    - `resets_in_sec`: 리셋 시각(`resets_at`)과 서버의 지금 시각으로 매 요청
+      계산하므로 **매초** 줄어든다. 그대로 넣으면 리셋 시각이 있는 창이 하나라도
+      있는 한 ETag가 매초 바뀌어 304가 사실상 나오지 않는다(2026-11 CI 3.11에서
+      두 요청 사이에 초가 넘어가 ETag 테스트가 간헐적으로 깨진 원인). 화면은 분
+      단위로만 그리므로(`formatResetsIn`은 분 내림, 60초 미만은 "곧") 분 단위로
+      내려서 넣는다 — 304로 브라우저가 이전 본문을 다시 써도 보이는 값은 같고,
+      분이 바뀌면 ETag도 바뀐다. 응답 본문의 값은 초 단위 그대로다.
+    """
     stable = {k: v for k, v in payload.items() if k != "generated_at"}
-    return _etag_response(payload, request, stable_for_etag=stable)
+    profiles = []
+    for p in stable.get("profiles") or []:
+        if isinstance(p, dict) and isinstance(p.get("windows"), list):
+            p = {**p, "windows": [
+                {**w, "resets_in_sec": w["resets_in_sec"] // 60}
+                if isinstance(w, dict) and isinstance(w.get("resets_in_sec"), int) else w
+                for w in p["windows"]
+            ]}
+        profiles.append(p)
+    if "profiles" in stable:
+        stable["profiles"] = profiles
+    return stable
 
 
 @router.get("/api/usage/counter")
