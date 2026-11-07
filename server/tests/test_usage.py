@@ -305,11 +305,67 @@ def test_capabilities_includes_usage(client, feed):
     assert caps["usage"]["profiles"] == 2
 
 
-def test_capabilities_etag_stable_while_feed_timestamp_changes(client, feed):
+def _iso(epoch):
+    return time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime(epoch))
+
+
+# 분 경계(60의 배수)에 맞춘 고정 시각. 실제 시계를 쓰면 두 요청 사이에 초가
+# 넘어가는지가 운에 달려 ETag 테스트가 간헐적으로 깨진다(CI 3.11, 2026-11).
+_RESET_EPOCH = 1_800_003_600
+
+
+def _fixed_clock(monkeypatch, now):
+    """clauth 어댑터만 보는 시계를 고정한다. 전역 time.time은 건드리지 않는다."""
+    import types
+    import usage.clauth as clauth_mod
+    clock = {"now": now}
+    monkeypatch.setattr(clauth_mod, "time", types.SimpleNamespace(time=lambda: clock["now"]))
+    return clock
+
+
+def _fixed_feed(generated_epoch):
+    data = _feed(generated_at=_iso(generated_epoch))
+    data["profiles"][0]["windows"][1]["resets_at"] = _iso(_RESET_EPOCH)
+    return data
+
+
+def test_capabilities_etag_stable_while_feed_timestamp_changes(client, feed, monkeypatch):
     """generated_at만 바뀌는 갱신으로 ETag가 흔들리면 캐시가 무의미해진다."""
-    write(feed, _feed())
+    clock = _fixed_clock(monkeypatch, _RESET_EPOCH - 3030.5)
+    write(feed, _fixed_feed(clock["now"] - 10))
     usage._reset_for_tests()
     first = client.get("/api/usage").headers.get("etag")
-    write(feed, _feed(generated_at=time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime(time.time() - 1))))
+    write(feed, _fixed_feed(clock["now"] - 1))
     second = client.get("/api/usage").headers.get("etag")
     assert first and first == second
+
+
+def test_usage_etag_stable_across_second_tick(client, feed, monkeypatch):
+    """리셋까지 남은 초(resets_in_sec)는 매초 줄어든다. 그 초 단위 값이 ETag에
+    들어가면 리셋 시각이 있는 창이 하나라도 있는 한 ETag가 매초 바뀌어 304가
+    사실상 안 나온다. 화면은 분 단위로만 그리므로 같은 분 안에서는 같아야 한다.
+    """
+    clock = _fixed_clock(monkeypatch, _RESET_EPOCH - 3030.5)
+    write(feed, _fixed_feed(clock["now"] - 10))
+    usage._reset_for_tests()
+    r1 = client.get("/api/usage")
+    clock["now"] += 1.0  # 3030 -> 3029초: 초는 넘어가지만 같은 분(50분)
+    r2 = client.get("/api/usage")
+    assert r1.json()["profiles"][0]["windows"][1]["resets_in_sec"] == 3030
+    assert r2.json()["profiles"][0]["windows"][1]["resets_in_sec"] == 3029
+    assert r1.headers["etag"] == r2.headers["etag"]
+    # 304가 나와 브라우저가 이전 본문을 다시 써도 화면 값(분)은 같다.
+    r3 = client.get("/api/usage", headers={"If-None-Match": r1.headers["etag"]})
+    assert r3.status_code == 304
+
+
+def test_usage_etag_changes_when_displayed_minute_changes(client, feed, monkeypatch):
+    """분이 바뀌면 ETag도 바뀌어야 한다 — 안 그러면 304로 받은 옛 본문 때문에
+    "50분 후 리셋"이 계속 남는다."""
+    clock = _fixed_clock(monkeypatch, _RESET_EPOCH - 3000.5)
+    write(feed, _fixed_feed(clock["now"] - 10))
+    usage._reset_for_tests()
+    first = client.get("/api/usage").headers["etag"]
+    clock["now"] += 1.0  # 3000 -> 2999초: 50분 -> 49분
+    second = client.get("/api/usage").headers["etag"]
+    assert first != second
