@@ -418,7 +418,7 @@ async function _openRun(container, st, path, opts) {
 }
 
 // 아직 받지 않은 줄이면 「더 보기」 한 번(OPEN_BUDGET)까지만 스스로 더 받는다 — 지금까지의 줄 평균 길이로 보아
-// 그 안에 들 것 같을 때만. `foo.log:99999999` 같은 링크가 상한(32MB)까지 받아 버리지 않게. 그 밖이면 알리고
+// 그 안에 들 것 같을 때만. `foo.log:99999999` 같은 링크가 상한(64MB)까지 받아 버리지 않게. 그 밖이면 알리고
 // 「더 보기」·「끝부분 보기」는 사람이 고른다.
 function _jumpReach(st, lines, line) {
   const loaded = (st.meta && (st.meta.loaded || st.meta.nextOffset)) || 0;
