@@ -17,7 +17,7 @@ import { relayHost } from '../../core/host-route.js';
 
 export const CHUNK = 1024 * 1024;           // 서버 구간 상한(1,048,576)
 export const OPEN_BUDGET = 4 * CHUNK;        // 처음 여는 양, 「더 보기」 한 번의 양
-export const MAX_LOADED = 32 * CHUNK;        // 한 뷰어가 받아 두는 상한(폰 메모리)
+export const MAX_LOADED = 64 * CHUNK;        // 한 뷰어가 받아 두는 상한(2026-11-09 사용자 결정: 32→64MB)
 export const TAIL_BYTES = CHUNK;             // 끝부분 보기의 양
 export const MAX_CHANGED = 3;                // 연속 409 허용 횟수
 export const PROBE_BYTES = 8 * 1024;         // 커지기만 했는지 볼 때 묻는 창(받은 끝 바로 앞)
