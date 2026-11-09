@@ -1697,6 +1697,7 @@ _APPROVAL = {
 
 def test_경고_토스트는_340_카드로_상태_막대_위_16에_뜬다(page):
     page.evaluate("() => showToast('업로드 실패', 'error', { detail: 'a.m4a', duration: 0, actions: [{ label: '다시', onClick: () => {} }] })")
+    page.wait_for_timeout(300)   # 등장 애니메이션(translateY 4px, 120ms)이 끝난 자리를 잰다
     box = page.evaluate("""() => {
       const el = document.querySelector('#vt-toasts .vt-toast');
       const r = el.getBoundingClientRect();
@@ -1729,7 +1730,9 @@ def test_승인_창은_채운_버튼_없이_거부에_초점을_두고_바닥_�
 
 
 def test_음성_패널은_440으로_마이크_옆에_열리고_화면_밖으로_안_나간다(page):
-    page.evaluate("() => { const a = window.getAction && window.getAction('voice.status'); if (a) a(); }")
+    # 음성 상태 패널은 인증 뒤 지연 청크(voice-status)가 액션을 등록한다 — 등록을 기다린 뒤 연다.
+    page.wait_for_function("() => !!(window.getAction && window.getAction('voice.status'))", timeout=15000)
+    page.evaluate("() => window.getAction('voice.status')()")
     page.wait_for_selector("#voice-status-panel:not([hidden])", timeout=5000)
     page.evaluate("""() => {
       window.dispatchEvent(new CustomEvent('vt:voice-stage', { detail: { phase: 'recording', target: 'x' } }));
@@ -1741,7 +1744,8 @@ def test_음성_패널은_440으로_마이크_옆에_열리고_화면_밖으로_
       return { w: Math.round(p.width), left: Math.round(p.left), micRight: Math.round(m.right), bottom: p.bottom, h: innerHeight,
                bars: document.querySelectorAll('#voice-meter .vt-voice-bar').length };
     }""")
-    assert g["w"] == 440 and g["left"] == g["micRight"] + 8, g
+    # 마이크가 보이면(음성 기능이 켜진 서버) 그 바로 오른쪽, 아니면(격리 서버의 음성 게이트) 화면 왼쪽 12.
+    assert g["w"] == 440 and g["left"] == (g["micRight"] + 8 if g["micRight"] else 12), g
     assert g["bottom"] <= g["h"] and g["bars"] == 24, g
 
 
