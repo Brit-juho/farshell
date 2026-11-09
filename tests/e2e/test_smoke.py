@@ -2178,6 +2178,206 @@ def test_활동을_바꿔도_사이드바_폭이_같아_WS_resize가_없다(isol
         _cleanup_sessions(page, session_ids)
 
 
+# ── 리디자인 7단계 — 데스크톱 집중 모드(시안 D05 · D05-B · D05-C) ────────────────────────────────
+#
+# 들어가고 나올 때 body padding이 **한 번** 바뀌어 칸마다 WS resize가 정확히 한 번이고, 가장자리 노출은 막대가
+# fixed로 떠오를 뿐이라 resize가 0이어야 한다. 키는 실제 단축키(⌘.)로 누른다 — 라우터 · 키맵 · 스위치를 다 지난다.
+_FOCUS_KEY = "Meta+Period" if sys.platform == "darwin" else "Alt+Shift+Period"
+
+_FOCUS_SHAPE = """() => {
+  const r = (el) => { const b = el.getBoundingClientRect(); return { left: Math.round(b.left), top: Math.round(b.top), width: Math.round(b.width), height: Math.round(b.height) }; };
+  const vis = (id) => { const s = getComputedStyle(document.getElementById(id)); return s.visibility === 'visible' && Number(s.opacity) > 0.9; };
+  const root = document.documentElement;
+  return {
+    on: root.classList.contains('vt-focus'),
+    reveal: [...root.classList].filter((c) => c.startsWith('vt-reveal-')),
+    term: r(document.getElementById('terminal-container')),
+    vw: innerWidth, vh: innerHeight,
+    title: vis('vt-titlebar'), status: vis('vt-hud'), wb: vis('vt-workbench'),
+    inert: ['vt-workbench-slot', 'vt-titlebar', 'vt-hud'].map((id) => document.getElementById(id).hasAttribute('inert')),
+    wbWidth: Math.round(document.getElementById('vt-workbench').getBoundingClientRect().width),
+  };
+}"""
+
+
+def _two_visible_panes(page):
+    """세션 둘을 한 화면에 나란히(분할) 올리고 첫 fit이 가라앉을 때까지 기다린다. 반환: 세션 id들."""
+    page.evaluate(_WS_RESIZE_SPY)
+    page.evaluate("() => window.createSession && window.createSession()")
+    page.wait_for_selector(".vt-pane .vt-pane-body .xterm", timeout=15000)
+    page.wait_for_timeout(500)
+    page.evaluate("() => window.splitActivePane && window.splitActivePane('row')")
+    page.wait_for_selector(".vt-split-resizer", timeout=10000)
+    page.evaluate("() => window.createSession && window.createSession({ place: 'pane' })")
+    page.wait_for_function("() => document.querySelectorAll('.vt-pane .vt-pane-body .xterm').length >= 2", timeout=15000)
+    page.wait_for_function("() => Object.keys(window.__vtResizeSpy || {}).length >= 2", timeout=15000)
+    page.wait_for_timeout(1000)
+    return page.evaluate("() => Object.keys(window.allSessions())")
+
+
+def _press_focus(page):
+    # 키는 터미널이 받는 자리에서 누른다(평소 쓰는 그대로). 라우터가 앱 동작으로 먹는다.
+    page.locator(".vt-pane .xterm").first.click()
+    page.keyboard.press(_FOCUS_KEY)
+
+
+def test_집중_모드는_들어가고_나올_때_보이는_칸마다_WS_resize가_한_번이다(isolated_page):
+    page = isolated_page
+    session_ids = _two_visible_panes(page)
+    try:
+        panes = page.evaluate("() => document.querySelectorAll('.vt-pane .vt-pane-body .xterm').length")
+        assert panes == 2, panes
+        normal = page.evaluate(_FOCUS_SHAPE)
+        assert not normal["on"] and normal["title"] and normal["status"] and normal["wb"], normal
+
+        before = _resize_counts(page)
+        _press_focus(page)
+        page.wait_for_timeout(900)
+        s = page.evaluate(_FOCUS_SHAPE)
+        mid = _resize_counts(page)
+        sent_in = {u: mid.get(u, 0) - before.get(u, 0) for u in mid}
+        assert s["on"], s
+        # 칸이 창 네 변 끝까지 — 막대 넷이 사라지고 inert가 걸린다.
+        assert s["term"] == {"left": 0, "top": 0, "width": s["vw"], "height": s["vh"]}, s
+        assert not s["title"] and not s["status"] and not s["wb"], s
+        assert s["inert"] == [True, True, True], s
+        assert s["wbWidth"] == normal["wbWidth"], f"숨은 작업대도 제 폭을 지킨다: {normal['wbWidth']} → {s['wbWidth']}"
+        assert sorted(sent_in.values()) == [1, 1], f"들어갈 때 칸마다 한 번: {sent_in}"
+
+        _press_focus(page)
+        page.wait_for_timeout(900)
+        back = page.evaluate(_FOCUS_SHAPE)
+        after = _resize_counts(page)
+        sent_out = {u: after.get(u, 0) - mid.get(u, 0) for u in after}
+        assert not back["on"] and back["title"] and back["status"] and back["wb"], back
+        assert back["term"] == normal["term"], (normal["term"], back["term"])
+        assert back["inert"] == [False, False, False], back
+        assert sorted(sent_out.values()) == [1, 1], f"나올 때 칸마다 한 번: {sent_out}"
+        print(f"WS resize(집중 모드 들어감): {sent_in}, (나옴): {sent_out}, 칸 {panes}")
+    finally:
+        _cleanup_sessions(page, session_ids)
+
+
+def test_집중_모드_가장자리_노출은_칸_크기를_바꾸지_않아_WS_resize가_없다(isolated_page):
+    page = isolated_page
+    session_ids = _two_visible_panes(page)
+    try:
+        _press_focus(page)
+        page.wait_for_function("() => document.documentElement.classList.contains('vt-focus')", timeout=5000)
+        page.wait_for_selector("#vt-focus-ui .vt-focus-edge", timeout=10000)
+        page.wait_for_timeout(900)
+        base = page.evaluate(_FOCUS_SHAPE)
+        before = _resize_counts(page)
+        seen = {}
+        # 왼쪽 → 작업대(뒤가 어두워진다), 위 → 제목 막대, 아래 → 상태 막대. 250ms 머무르면 드러나고, 벗어나고 400ms 뒤 닫힌다.
+        for edge, (x, y), chrome, inert_idx in (
+            ("left", (3, 450), "wb", 0), ("top", (720, 3), "title", 1), ("bottom", (720, base["vh"] - 3), "status", 2),
+        ):
+            page.mouse.move(x, y)
+            page.wait_for_timeout(500)
+            s = page.evaluate(_FOCUS_SHAPE)
+            assert s["reveal"] == [f"vt-reveal-{edge}"], (edge, s)
+            assert s[chrome], f"{edge}: 막대가 보여야 한다 {s}"
+            assert s["inert"][inert_idx] is False and sum(s["inert"]) == 2, (edge, s)
+            assert s["term"] == base["term"], f"{edge}: 칸 자리가 바뀌었다 {base['term']} → {s['term']}"
+            if edge == "left":
+                assert page.locator(".vt-focus-scrim").count() == 1
+            page.mouse.move(720, 450)
+            page.wait_for_timeout(800)
+            closed = page.evaluate(_FOCUS_SHAPE)
+            assert closed["reveal"] == [] and not closed[chrome], (edge, closed)
+            seen[edge] = True
+        after = _resize_counts(page)
+        sent = {u: after.get(u, 0) - before.get(u, 0) for u in after}
+        assert sum(sent.values()) == 0, f"가장자리 노출에 resize가 나갔다: {sent}"
+        # Esc로 바로 닫힌다.
+        page.mouse.move(3, 450)
+        page.wait_for_timeout(500)
+        assert page.evaluate(_FOCUS_SHAPE)["reveal"] == ["vt-reveal-left"]
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(50)
+        assert page.evaluate(_FOCUS_SHAPE)["reveal"] == []
+        print(f"WS resize(가장자리 노출 {list(seen)}): {sent}")
+    finally:
+        page.evaluate("() => window.vtSettingsSet && window.vtSettingsSet('ui.focus.active', false)")
+        _cleanup_sessions(page, session_ids)
+
+
+def test_집중_모드_개입_알약을_누르면_기다리는_세션으로_간다(isolated_page):
+    page = isolated_page
+    page.evaluate("() => window.createSession && window.createSession()")
+    page.wait_for_selector(".vt-pane .vt-pane-body .xterm", timeout=15000)
+    page.wait_for_timeout(400)
+    first = page.evaluate("() => Object.keys(window.allSessions())[0]")
+    # 기다리는 쪽은 tmux 세션이어야 한다 — 에이전트 상태의 열쇠가 tmux 이름이다.
+    page.evaluate("() => window.createTmuxSession()")
+    page.wait_for_function("() => Object.keys(window.allSessions()).length >= 2", timeout=15000)
+    page.wait_for_timeout(500)
+    ids = page.evaluate("() => Object.keys(window.allSessions())")
+    try:
+        assert len(ids) == 2, ids
+        second = next(i for i in ids if i != first)
+        page.evaluate("(id) => window.revealSession(id)", first)
+        page.wait_for_function("(id) => window.activeSessionId() === id", arg=first, timeout=5000)
+        tmux = page.evaluate("(id) => { const s = window.allSessions()[id]; return s.tmuxName || s.tmux_name; }", second)
+        page.evaluate("() => window.vtSettingsSet('ui.focus.active', true)")
+        page.wait_for_function("() => document.documentElement.classList.contains('vt-focus')", timeout=5000)
+        page.wait_for_selector("#vt-focus-ui", state="attached", timeout=10000)
+        assert page.locator(".vt-focus-pill").count() == 0, "waiting이 없으면 알약이 없다"
+        # 서버 감지 결과 대신 같은 모양의 스냅샷을 넣는다(agent/state.js applySnapshot). 레일의 상태 조회가 같은
+        # 다리로 서버 스냅샷을 다시 넣어 지우지 않도록, 그 다리에도 이 엔트리를 섞어 둔다.
+        page.evaluate(
+            """(name) => {
+              const fake = { e2e: { tmux_session: name, status: 'waiting', kind: 'approval', since: Date.now() / 1000 } };
+              const orig = window.vtApplyAgentSnapshot;
+              window.__vtOrigApplySnapshot = orig;
+              window.vtApplyAgentSnapshot = (all) => orig({ ...(all || {}), ...fake });
+              orig(fake);
+            }""",
+            tmux,
+        )
+        page.wait_for_selector(".vt-focus-pill", timeout=5000)
+        pill = page.evaluate("""() => { const p = document.querySelector('.vt-focus-pill'); const b = p.getBoundingClientRect();
+          return { text: p.textContent, right: Math.round(innerWidth - b.right), top: Math.round(b.top), height: Math.round(b.height) }; }""")
+        assert "개입 1" in pill["text"] and "승인 요청" in pill["text"], pill
+        assert pill["right"] == 12 and pill["top"] == 40 and pill["height"] == 28, pill
+        page.locator(".vt-focus-pill-go").click()
+        page.wait_for_function("(id) => window.activeSessionId() === id", arg=second, timeout=5000)
+        assert page.evaluate("() => document.documentElement.classList.contains('vt-focus')"), "이동해도 집중 모드는 그대로"
+        page.locator(".vt-focus-pill-exit").click()
+        page.wait_for_function("() => !document.documentElement.classList.contains('vt-focus')", timeout=5000)
+    finally:
+        page.evaluate("() => { if (window.__vtOrigApplySnapshot) { window.vtApplyAgentSnapshot = window.__vtOrigApplySnapshot; window.vtApplyAgentSnapshot({}); } }")
+        page.evaluate("() => window.vtSettingsSet && window.vtSettingsSet('ui.focus.active', false)")
+        _cleanup_sessions(page, ids)
+
+
+def test_집중_모드_버튼과_메뉴가_제목_막대에_있고_새로고침하면_꺼진다(isolated_page):
+    page = isolated_page
+    page.wait_for_selector("#vt-tb-focus-slot #vt-tb-focus", timeout=10000)
+    btn = page.locator("#vt-tb-focus")
+    assert btn.get_attribute("aria-pressed") == "false"
+    btn.click()
+    page.wait_for_function("() => document.documentElement.classList.contains('vt-focus')", timeout=5000)
+    # 위 가장자리로 제목 막대를 띄우면 같은 버튼이 「끝내기」(눌림)로 보이고, 누르면 끝난다.
+    page.wait_for_selector("#vt-focus-ui .vt-focus-edge", timeout=10000)
+    page.mouse.move(720, 200)
+    page.mouse.move(720, 3)
+    page.wait_for_timeout(500)
+    assert btn.get_attribute("aria-pressed") == "true"
+    btn.click()
+    page.wait_for_function("() => !document.documentElement.classList.contains('vt-focus')", timeout=5000)
+    # FarShell 메뉴 「집중 모드」.
+    page.locator(".vt-mb-menu").click()
+    page.locator(".vt-mb-pop .vt-mb-item", has_text="집중 모드").click()
+    page.wait_for_function("() => document.documentElement.classList.contains('vt-focus')", timeout=5000)
+    # 켜짐은 저장하지 않는다 — 새로고침하면 평소 화면으로 돌아온다.
+    page.reload(wait_until="load")
+    page.wait_for_function("() => document.documentElement.dataset.appBooted === 'true'", timeout=15000)
+    page.wait_for_timeout(500)
+    assert not page.evaluate("() => document.documentElement.classList.contains('vt-focus')")
+
+
 # ── 2.1.2: 화면(뷰) · dock 파일 탭(50 §4) — 뷰 탭 줄은 2026-11에 없어졌다 ────────────────────────
 #
 # 2026-09-19 — 탭을 여는 전역 함수 이름과 시그니처가 두 번 바뀌었다:
