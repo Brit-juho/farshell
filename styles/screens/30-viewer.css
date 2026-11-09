@@ -354,7 +354,7 @@
 /* dock — 배경을 덮지 않는다. 터미널이 카드 바깥에서 그대로 클릭/타이핑된다.
    topbar(38px) 아래에만 걸쳐서 상단바 버튼도 계속 쓸 수 있다. */
 #vt-viewer.mode-dock{
-  inset:calc(var(--menubar-h) + var(--topbar-h)) 0 0 0; padding:0; background:transparent;
+  inset:calc(var(--menubar-h) + var(--topbar-h)) 0 var(--statusbar-h, 0px) 0; padding:0; background:transparent;
   justify-content:flex-end; pointer-events:none;
 }
 #vt-viewer.mode-dock .vt-viewer-card{

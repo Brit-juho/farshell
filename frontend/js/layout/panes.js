@@ -105,8 +105,8 @@ function _paneSessionId(paneId) {
 // (워크트리가 하나뿐이면 구분할 게 없으니 칩 자체가 안 보여야 한다).
 // 지도 자체는 layout/branch-chips.js가 갖는다(뷰 탭 툴팁과 공유).
 
-export function setBranchChipMap(map) {
-  setBranchChips(map);
+export function setBranchChipMap(map, repos) {
+  setBranchChips(map, repos);
   _paintAllChips();
 }
 

@@ -354,19 +354,22 @@
     <button data-action="search.close" aria-label="검색 닫기" data-i18n-attr="aria-label"><svg data-icon="x" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg></button>
   </div>
 
-  <!-- 2026-11 메뉴바 — macOS 메뉴바 모양의 맨 위 한 줄(regular 이상). 예전 하단 상태바(HUD)를
-       여기로 옮겼다. 내용은 shell/Hud.tsx(Solid, 지연 로드)가 채운다: 왼쪽 FarShell 메뉴 ·
-       워크스페이스 칩(#vt-workspace-chip-slot, shell/HeaderExtras.tsx) · 칩, 오른쪽 칩(시계 포함).
-       compact(<720px)에서는 CSS로 통째로 숨는다(하단 내비가 그 자리를 쓴다).
+  <!-- 리디자인 2단계 — 제목 막대 36(regular 이상, 맨 위 전체 폭). 내용은 shell/TitleBar.tsx(Solid, 지연 로드)가
+       채운다: FarShell 메뉴 · 호스트 · 저장소 › 브랜치 › 세션 · 가운데 팔레트 입력 · 오른쪽 도구.
+       compact(<720px)에서는 CSS로 통째로 숨는다(#topbar 52가 그 자리를 쓴다). -->
+  <header id="vt-titlebar" aria-label="제목 막대" data-i18n-attr="aria-label">
+    <!-- 720px 이상에서는 #topbar를 통째로 감추고 거기 있던 신호등·키바 버튼·윈도 캡션을 이 두 자리로 옮긴다
+         (layout/menubar-slots.js). compact에서는 제자리로 돌려 놓는다. TitleBar.tsx가 마운트되면 이 두 자리를
+         막대 왼쪽 끝·오른쪽 끝으로 옮긴다(id 그대로). -->
+    <div id="vt-mb-lead"></div>
+    <div id="vt-mb-tools"></div>
+  </header>
+
+  <!-- 상태 막대 24(regular 이상, 맨 아래 전체 폭). 내용은 shell/Hud.tsx(Solid, 지연 로드)가 채운다: 맨 왼쪽
+       에이전트 칩(고정) · 토스트 메시지 칸(#vt-hud-msg, ui/toast.js) · 왼쪽 칩, 오른쪽 칩(시계 포함).
        "값이 없는 항목은 숨긴다"가 규칙이라 빈 상태에서는 아무 칩도 안 나온다.
        id·클래스가 vt-hud-*인 것은 이름만 옛것이다(토스트·테스트가 기대는 계약이라 그대로 둔다). -->
-  <div id="vt-hud" role="region" aria-label="상태" data-i18n-attr="aria-label">
-    <!-- 720px 이상에서는 #topbar를 통째로 감추고(뷰 탭 줄이 사라져 남는 게 없다) 거기 있던 신호등·키바 버튼·
-         ⌘K 버튼·윈도 캡션을 이 두 자리로 옮긴다(layout/menubar-slots.js). compact에서는 제자리로 돌려 놓는다. -->
-    <div id="vt-mb-lead"></div>
-    <div id="vt-workspace-chip-slot"></div>
-    <div id="vt-mb-tools"></div>
-  </div>
+  <div id="vt-hud" role="region" aria-label="상태 막대" data-i18n-attr="aria-label"></div>
 
   <!-- 상단 통합 바 — 720px 이상에서는 숨는다(메뉴바가 상단의 전부). compact의 세션 진입점·키바·스니펫·⌘K가 산다. -->
   <header id="topbar">

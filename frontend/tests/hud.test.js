@@ -304,16 +304,42 @@ test('parseHudLayout: 메뉴바 이전(세대 표시 없음)에 저장된 배치
   const plain = (l) => JSON.parse(JSON.stringify(l));
   const legacy = '{"left":["screens"],"right":["cpu","version"]}';
   assert.deepStrictEqual(plain(parseHudLayout(legacy)),
-    { left: ['agents', 'screens'], right: ['cpu', 'version', 'push', 'clock'] },
-    'agents는 왼쪽 맨 앞, push·clock은 오른쪽 끝');
+    { left: ['screens'], right: ['cpu', 'version', 'push', 'clock'] },
+    'push·clock은 오른쪽 끝(에이전트는 배치 밖 고정이라 얹지 않는다)');
   // 이미 직접 배치해 둔 새 종류는 건드리지 않는다.
   assert.deepStrictEqual(plain(parseHudLayout('{"left":["screens"],"right":["clock","cpu"]}')),
-    { left: ['agents', 'screens'], right: ['clock', 'cpu', 'push'] });
+    { left: ['screens'], right: ['clock', 'cpu', 'push'] });
   // 한 번 저장하면 세대가 적혀서 다시 얹지 않는다 — 사용자가 새 칩을 끈 선택이 되살아나지 않는다.
   const saved = serializeHudLayout(parseHudLayout(legacy));
-  assert.ok(JSON.parse(saved).v >= 2);
+  assert.strictEqual(JSON.parse(saved).v, 3);
   const off = serializeHudLayout({ left: ['screens'], right: ['cpu'] });
   assert.deepStrictEqual(plain(parseHudLayout(off)), { left: ['screens'], right: ['cpu'] });
+});
+
+test('세대 3: 에이전트 칩은 배치 밖 고정 — 옛 배치의 agents는 버리고, 옮길 수 없고, 늘 맨 왼쪽이다', async () => {
+  const { parseHudLayout, moveHudKind, stepHudKind, buildHudChips, HUD_KINDS, PINNED_HUD_KINDS } = await mod();
+  const plain = (l) => JSON.parse(JSON.stringify(l));
+  assert.deepStrictEqual(Array.from(PINNED_HUD_KINDS), ['agents']);
+  assert.ok(!Array.from(HUD_KINDS).includes('agents'), '설정 화면이 옮기는 종류에 없다');
+  // 세대 2에서 사용자가 오른쪽 끝으로 옮겼거나 껐던 agents — 읽을 때 버린다(그래도 칩은 맨 왼쪽에 나온다).
+  assert.deepStrictEqual(plain(parseHudLayout('{"v":2,"left":["screens"],"right":["cpu","agents"]}')),
+    { left: ['screens'], right: ['cpu'] });
+  const base = { left: ['screens'], right: ['cpu'] };
+  assert.strictEqual(moveHudKind(base, 'agents', 'right', 0), base, '고정 종류는 어떤 경로로도 안 움직인다');
+  assert.strictEqual(stepHudKind(base, 'agents', 1), base);
+  const chips = buildHudChips({ screens: 1, stats: { cpu: { pct: 5 } }, agents: { waiting: 1, working: 0, done: 0 } },
+    { left: ['screens'], right: ['cpu', 'agents'] });
+  assert.deepStrictEqual(sides(chips), ['left:agents', 'left:screens', 'right:stats:cpu'], '맨 왼쪽 한 번만');
+  // 배치를 전부 꺼도 에이전트 칩은 남는다.
+  assert.deepStrictEqual(ids(buildHudChips({ agents: { waiting: 0, working: 2, done: 0 } }, { left: [], right: [] })), ['agents']);
+});
+
+test('기본 배치 왼쪽: 에이전트(고정) 다음 E2E · 세이프모드 · 연결된 화면', async () => {
+  const { buildHudChips } = await mod();
+  const chips = buildHudChips({
+    caps: {}, e2e: true, safeMode: { enabled: true }, screens: 2, agents: { waiting: 0, working: 1, done: 0 },
+  });
+  assert.deepStrictEqual(ids(chips), ['agents', 'e2e', 'safe-mode', 'screens']);
 });
 
 test('parseHudLayout 은 기본 배치 객체를 공유하지 않는다 (호출자가 바꿔도 기본이 안 변한다)', async () => {

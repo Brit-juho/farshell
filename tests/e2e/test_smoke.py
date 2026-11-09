@@ -749,11 +749,11 @@ def test_테마_칩이_서로_다른_색을_보인다(page):
     # 열지 않으면 DOM에 아예 없으므로 먼저 연다.
     # 액션(`settings.show`)은 지연 청크(panels/settings-lazy.js)가 등록하므로
     # 로드 전에는 `getAction`이 undefined다 — 실제 버튼을 눌러 그 청크까지
-    # 받아오게 한다(메뉴바의 FarShell 메뉴 → 설정, `_open_dock`과 같은 이유).
+    # 받아오게 한다(제목 막대의 FarShell 메뉴 → 설정, `_open_dock`과 같은 이유).
     page.wait_for_selector(".vt-mb-menu", timeout=10000)
     page.locator(".vt-mb-menu").click()
     # 메뉴 항목의 접근 이름에는 단축키 글자(`Ctrl+,`)가 붙는다 — exact 일치가 아니라 앞부분으로 고른다.
-    # 「메뉴바 설정」은 `^설정`에 걸리지 않는다.
+    # 「상태 막대 설정」은 `^설정`에 걸리지 않는다.
     page.get_by_role("menuitem", name=re.compile(r"^설정")).click()
     # 설정은 섹션 하나만 그린다(기본 「터미널」) — 「모양」으로 옮겨야 칩이 생긴다.
     page.wait_for_selector("#vt-settings .vt-set-navitem", timeout=15000)
@@ -1897,24 +1897,141 @@ def test_활동을_바꿔도_사이드바_폭이_같아_WS_resize가_없다(isol
 # CI에서 한 번도 실행되지 못한 사이(setup-python 캐시 에러로 10일간 막혀 있었다)
 # 테스트만 옛 이름에 남아 있었다. 탭의 DOM 구조 자체는 그대로다.
 
-def test_뷰_탭_줄은_없고_상단은_메뉴바_하나다(page):
-    """2026-11 — 뷰 탭 줄(#vt-wtabs)을 없앴다. 레일이 이미 세션·묶음 전환과 이름·닫기를 하고 있었다.
-    넓은 화면(>=720px)에서 #topbar는 숨고, 거기 있던 ⌘K 버튼은 메뉴바 오른쪽 도구 자리로 옮겨 앉는다."""
+_BARS_SHAPE = """() => {
+  const r = (el) => { const b = el.getBoundingClientRect(); return { top: Math.round(b.top), bottom: Math.round(b.bottom), left: Math.round(b.left), width: Math.round(b.width), height: Math.round(b.height) }; };
+  const pal = document.getElementById('vt-tb-palette');
+  const crumb = document.querySelector('#vt-titlebar .vt-tb-crumb');
+  const cs = getComputedStyle(document.body);
+  return {
+    vw: window.innerWidth, vh: window.innerHeight,
+    title: r(document.getElementById('vt-titlebar')),
+    status: r(document.getElementById('vt-hud')),
+    wb: r(document.getElementById('vt-workbench')),
+    term: r(document.getElementById('terminal-container')),
+    pal: pal ? r(pal) : null,
+    crumb: crumb ? getComputedStyle(crumb).display : null,
+    padTop: cs.paddingTop, padBottom: cs.paddingBottom,
+    topbar: getComputedStyle(document.getElementById('topbar')).display,
+    paletteToggleIn: document.getElementById('palette-toggle').parentElement.id,
+    menuIn: document.querySelector('.vt-mb-menu')?.closest('#vt-titlebar, #vt-hud')?.id || null,
+    leadIn: document.getElementById('vt-mb-lead').closest('#vt-titlebar')?.id || null,
+    toolsIn: document.getElementById('vt-mb-tools').closest('#vt-titlebar')?.id || null,
+    transitions: [document.getElementById('vt-titlebar'), document.getElementById('vt-hud')]
+      .map((el) => getComputedStyle(el).transitionProperty + ' ' + getComputedStyle(el).transitionDuration),
+  };
+}"""
+
+
+def _wait_bars(page):
+    page.wait_for_selector("#vt-titlebar .vt-mb-menu", timeout=10000)
+    page.wait_for_selector("#vt-titlebar #vt-tb-palette", timeout=10000)
+
+
+def test_뷰_탭_줄은_없고_위는_제목_막대_아래는_상태_막대다(page):
+    """2026-11 — 뷰 탭 줄(#vt-wtabs)을 없앴다. 리디자인 2단계 — 넓은 화면(>=720px)의 맨 위는 제목 막대 36(FarShell 메뉴 ·
+    호스트 · 경로 · 가운데 팔레트 입력 360), 맨 아래는 상태 막대 24(#vt-hud)다. #topbar는 숨고 ⌘K 버튼은 팔레트 입력이
+    대신해 옮겨 오지 않는다. 작업대·본문은 두 막대 사이에만 걸린다."""
     assert page.evaluate("() => document.getElementById('vt-wtabs')") is None
-    shape = page.evaluate(
-        """() => {
-          const bar = document.getElementById('vt-hud').getBoundingClientRect();
-          return {
-            top: Math.round(bar.top), height: Math.round(bar.height), width: Math.round(bar.width),
-            topbar: getComputedStyle(document.getElementById('topbar')).display,
-            paletteIn: document.getElementById('palette-toggle').parentElement.id,
-            vw: window.innerWidth,
-          };
-        }"""
-    )
-    assert shape["topbar"] == "none", shape
-    assert shape["top"] == 0 and shape["height"] == 28 and shape["width"] == shape["vw"], shape
-    assert shape["paletteIn"] == "vt-mb-tools", shape
+    _wait_bars(page)
+    s = page.evaluate(_BARS_SHAPE)
+    assert s["topbar"] == "none", s
+    assert s["title"]["top"] == 0 and s["title"]["height"] == 36 and s["title"]["width"] == s["vw"], s
+    assert s["status"]["bottom"] == s["vh"] and s["status"]["height"] == 24 and s["status"]["width"] == s["vw"], s
+    assert s["padTop"] == "36px" and s["padBottom"] == "24px", s
+    assert s["wb"]["top"] == 36 and s["wb"]["bottom"] == s["vh"] - 24, f"작업대가 두 막대 사이에 있지 않다: {s}"
+    assert s["term"]["top"] >= 36 and s["term"]["bottom"] <= s["vh"] - 24, s
+    assert s["pal"]["width"] == 360 and s["pal"]["height"] == 24, s
+    assert abs((s["pal"]["left"] + s["pal"]["width"] / 2) - s["vw"] / 2) <= 1, f"팔레트 입력이 가운데가 아니다: {s}"
+    assert s["paletteToggleIn"] == "topbar", s
+    assert s["menuIn"] == "vt-titlebar" and s["leadIn"] == "vt-titlebar" and s["toolsIn"] == "vt-titlebar", s
+    # 막대 높이는 칸 크기를 정한다 — transition이 걸리면 그 프레임마다 refit·SIGWINCH가 난다.
+    assert all(t.endswith(" 0s") for t in s["transitions"]), s
+
+
+def test_regular_폭에서는_팔레트_입력이_280이고_경로가_숨는다(page):
+    """시안 D04(1024×768) — 경로는 숨기고 팔레트 입력은 280. 상태 막대는 그대로 맨 아래 24."""
+    page.set_viewport_size({"width": 1024, "height": 768})
+    _wait_bars(page)
+    page.wait_for_timeout(150)
+    s = page.evaluate(_BARS_SHAPE)
+    assert s["pal"]["width"] == 280, s
+    assert abs((s["pal"]["left"] + s["pal"]["width"] / 2) - s["vw"] / 2) <= 1, s
+    assert s["crumb"] in (None, "none"), s
+    assert s["title"]["height"] == 36 and s["status"]["height"] == 24 and s["status"]["bottom"] == 768, s
+
+
+def test_compact에서는_제목_막대도_상태_막대도_없다(page):
+    """compact(<720)는 그대로 — #topbar 52 + 하단 내비 52. 두 막대는 display:none이고 막대 높이 변수도 0이다."""
+    page.set_viewport_size(COMPACT)
+    page.wait_for_timeout(200)
+    got = page.evaluate("""() => ({
+      title: getComputedStyle(document.getElementById('vt-titlebar')).display,
+      status: getComputedStyle(document.getElementById('vt-hud')).display,
+      topbar: getComputedStyle(document.getElementById('topbar')).display,
+      palette: document.getElementById('palette-toggle').parentElement.id,
+      vars: ['--titlebar-h', '--statusbar-h', '--menubar-h'].map((v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim()),
+    })""")
+    assert got["title"] == "none" and got["status"] == "none", got
+    assert got["topbar"] != "none" and got["palette"] == "topbar", got
+    assert got["vars"] == ["0px", "0px", "0px"], got
+
+
+def test_상태_막대는_에이전트_칩이_맨_왼쪽이고_토스트_메시지가_그_오른쪽에_뜬다(page):
+    """info/success 토스트는 상태 막대의 메시지 칸(#vt-hud-msg, role=status)에 뜬다. 에이전트 칩은 그동안에도 남는다.
+    실제 에이전트 칩은 에이전트 상태가 있어야 생기므로 같은 마크업의 칩을 하나 꽂아 배치 규칙(CSS order)만 본다."""
+    _wait_bars(page)
+    page.evaluate("""() => {
+      const chip = document.createElement('span');
+      chip.className = 'vt-hud-chip'; chip.dataset.chip = 'agents'; chip.textContent = '개입 1';
+      document.getElementById('vt-hud').appendChild(chip);
+    }""")
+    page.evaluate("() => window.showToast('복사했습니다', 'success')")
+    page.wait_for_selector("#vt-hud-msg:not([hidden])", timeout=5000)
+    got = page.evaluate("""() => {
+      const msg = document.getElementById('vt-hud-msg');
+      const agents = document.querySelector('#vt-hud .vt-hud-chip[data-chip="agents"]');
+      return { role: msg.getAttribute('role'), live: msg.getAttribute('aria-live'),
+               agentsShown: getComputedStyle(agents).display !== 'none',
+               agentsRight: agents.getBoundingClientRect().right, msgLeft: msg.getBoundingClientRect().left,
+               barRole: document.getElementById('vt-hud').getAttribute('role') };
+    }""")
+    assert got["role"] == "status" and got["live"] == "polite" and got["barRole"] == "region", got
+    assert got["agentsShown"], f"토스트가 에이전트 칩을 가렸다: {got}"
+    assert got["agentsRight"] <= got["msgLeft"] + 1, f"메시지가 에이전트 칩 오른쪽이 아니다: {got}"
+
+
+def test_제목_막대와_상태_막대를_써도_칸_크기가_그대로라_WS_resize가_없다(isolated_page):
+    """리디자인 2단계 — 두 막대의 높이는 CSS(--titlebar-h/--statusbar-h)로 정해져 지연 청크가 늦게 와도 칸이 다시 맞춰지지
+    않는다. 첫 fit 뒤에 막대를 쓰는 동작(상태 막대 메시지, FarShell 메뉴 열고 닫기, 팔레트 입력으로 팔레트 열고 닫기,
+    상태 막대 설정 열고 닫기)이 칸 크기를 바꾸지 않는지 — WS resize 0번, 칸 사각형 그대로 — 를 본다."""
+    page = isolated_page
+    _wait_bars(page)
+    session_ids = _open_terminal_with_spy(page)
+    try:
+        rect = ("() => { const b = document.querySelector('.vt-pane .vt-pane-body').getBoundingClientRect();"
+                " return [b.top, b.left, b.width, b.height].map(Math.round); }")
+        before, r0 = _resize_counts(page), page.evaluate(rect)
+        page.evaluate("() => window.showToast('복사했습니다', 'success')")
+        page.wait_for_timeout(200)
+        page.locator("#vt-titlebar .vt-mb-menu").click()
+        page.wait_for_selector(".vt-mb-pop", timeout=5000)
+        page.keyboard.press("Escape")
+        page.locator("#vt-tb-palette").click()
+        page.wait_for_timeout(400)
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(200)
+        page.locator("#vt-titlebar .vt-mb-menu").click()
+        page.get_by_role("menuitem", name="상태 막대 설정").click()
+        page.wait_for_selector("#vt-settings .vt-hudcfg", timeout=15000)
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(600)
+        after, r1 = _resize_counts(page), page.evaluate(rect)
+        sent = {u: after.get(u, 0) - before.get(u, 0) for u in after}
+        assert r1 == r0, f"칸 크기가 바뀌었다: {r0} → {r1}"
+        assert sum(sent.values()) == 0, f"막대를 썼는데 resize가 나갔다: {sent}"
+        print(f"WS resize(막대 사용): {sent}, 칸 {r0}")
+    finally:
+        _cleanup_sessions(page, session_ids)
 
 
 def test_뷰는_탭_줄_없이도_열리고_자기_pane_트리를_가진다(page):

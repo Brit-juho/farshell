@@ -3,7 +3,7 @@
 import { vtFetch } from '../core/api.js';
 import { setBranchChipMap } from '../layout/panes.js';
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
-import { sessionContext } from '../ui/session-context.js';
+import { sessionContext, directoryLabel } from '../ui/session-context.js';
 import { t } from '../core/i18n.js';
 import { createPoll } from '../core/poll.js';
 
@@ -17,12 +17,29 @@ export function branchChipMap(sessions) {
   return map;
 }
 
+// 제목 막대의 경로(저장소 › 브랜치 › 세션)에 쓰는 저장소 이름. 링크된 워크트리라도 **메인 저장소**의 폴더 이름을
+// 쓴다(서버 context.worktree.repositoryRoot) — 워크트리 폴더 이름은 이미 브랜치가 말한다. 모르면 저장소 최상위 폴더.
+export function repoNameMap(sessions) {
+  const map = new Map();
+  for (const s of sessions || []) {
+    const ctx = sessionContext(s);
+    const root = (ctx.worktree && ctx.worktree.repositoryRoot) || ctx.root;
+    const name = root ? directoryLabel(root) : '';
+    if (name) map.set(s.name, name);
+  }
+  return map;
+}
+
+function publish(sessions) {
+  setBranchChipMap(branchChipMap(sessions), repoNameMap(sessions));
+}
+
 let revision = 0;
 // 실패는 던진다 — 폴러(core/poll.js)가 간격을 늘린다. 화면은 마지막 성공 값을 유지한다.
 async function _load() {
   const request = ++revision;
   const sessions = await vtFetch('/api/tmux/sessions');
-  if (request === revision && Array.isArray(sessions)) setBranchChipMap(branchChipMap(sessions));
+  if (request === revision && Array.isArray(sessions)) publish(sessions);
 }
 
 export async function refreshTabWorktreeLabels() {
@@ -35,5 +52,5 @@ createPoll(_load, { interval: 60000, immediate: true }).start();
 onWorkspaceEvent('tmux_sessions', (msg) => {
   if (!Array.isArray(msg.sessions)) return;
   revision += 1;
-  setBranchChipMap(branchChipMap(msg.sessions));
+  publish(msg.sessions);
 });

@@ -60,7 +60,7 @@ export const SECTION_META = [
   { id: 'agents', label: t('에이전트'), description: t('에이전트 감지 상태를 확인합니다.') },
   { id: 'keymap', label: t('키맵'), description: t('단축키와 터미널 전달 여부를 바꿉니다.') },
   { id: 'appearance', label: t('모양'), description: t('스킨, 화면 언어, 파일 뷰어 표시 방식을 고릅니다.') },
-  { id: 'hud', label: t('메뉴바'), description: t('화면 맨 위 메뉴바에 보일 칩과 순서를 고릅니다.'), desktopOnly: true },
+  { id: 'hud', label: t('상태 막대'), description: t('화면 맨 아래 상태 막대에 보일 칩과 순서를 고릅니다.'), desktopOnly: true },
   { id: 'permissions', label: t('권한'), description: t('에이전트의 승인 요청, 페어, 폴더 lease, 허용된 권한, 감사 기록을 봅니다.') },
   { id: 'security', label: t('계정 및 보안'), description: t('로그인, OTP, 등록 기기와 현재 세션을 확인합니다.') },
   { id: 'about', label: t('정보 및 진단'), description: t('훅과 사용량 공급자의 연결 상태를 진단합니다.') },
