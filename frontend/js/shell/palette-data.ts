@@ -98,16 +98,16 @@ export const DEFAULT_COMMANDS: CommandDescriptor[] = [
   { label: t('첨부 · 공유 링크'), action: 'files.show', isPanel: true },
   { label: t('포트 대시보드'), action: 'ports.show', gate: 'ports', isPanel: true },
   { label: t('사용량'), action: 'usage.open', gate: 'usage', isPanel: true },
+  { label: t('시스템'), action: 'system.open', isPanel: true },
   { label: t('터미널 내 검색'), action: 'search.toggle' },
   { label: t('음성 전용 모드'), action: 'voice.only-toggle', gate: 'voice' },
   { label: t('음성 입력 상태'), action: 'voice.status' },
   { label: t('새 세션'), action: 'session.add-menu' },
-  // 2026-09-23(2.1 D6) — 「모든 기능」에서 찾을 수 없던 셋. rail에는 이
-  // 셋과 짝지을 data-action 버튼이 없다(설정·세션은 rail이 임베디드
-  // 패널로 직접 그리고, 변경·연결된 화면은 dock/모바일 하단내비 몫이다)
-  // — isPanel을 안 붙여 rail-palette-parity(ADR-8) 대상에서 뺀다.
+  // 2026-09-23(2.1 D6) — 「모든 기능」에서 찾을 수 없던 셋. 설정·연결된 화면은 활동 막대의 사이드바
+  // 보기가 아니라(설정은 창, 연결된 화면은 모달) isPanel을 안 붙여 활동-팔레트 패리티(ADR-8) 대상에서 뺀다.
+  // 「변경」은 리디자인 9단계부터 활동 막대 첫 도구라 패리티 대상이다.
   { label: t('설정'), action: 'settings.show' },
-  { label: t('변경'), action: 'scm.show' },
+  { label: t('변경'), action: 'scm.show', isPanel: true },
   { label: t('연결된 화면'), action: 'clients.show' },
 ];
 

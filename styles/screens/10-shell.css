@@ -439,7 +439,7 @@ html[data-skin="windows"] .caption { display:flex; }
 /* long-press가 아직 확정 전(LONGPRESS_MS 대기 중)임을 알리는 최소한의 시각
    피드백 — keybar.js의 .kb.holding과 같은 패턴(배경만 살짝). */
 /* 레일 세션 행·pane 헤더의 롱프레스 대기 표시 */
-.vt-rail-session-row.vt-drag-pending, .vt-pane-head.vt-drag-pending { background:var(--menu-hover); }
+.vt-pane-head.vt-drag-pending { background:var(--menu-hover); }
 /* 드래그 중엔 터치 스크롤/텍스트 선택이 끼어들면 안 된다. */
 body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-select:none; }
 /* pane 헤더 — root가 leaf 하나뿐이면 JS가 display:none으로 숨긴다(분할을
@@ -564,8 +564,8 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
 #terminal-container .xterm-viewport::-webkit-scrollbar { display:none; width:0; height:0; }
 
 /* ---- 음성 버튼 (voice.js 계약: .label 자식 + .recording) --------------------
-   L7: 상단바에서 이관됐다 — 활동 막대(#vt-activity-mic-home) 또는 rail 설정
-   슬롯(#vt-rail-mic-slot)에 살고(keybar.js), 음성 전용 모드에서만 잠깐
+   L7: 상단바에서 이관됐다 — 활동 막대(#vt-activity-mic-home) · 폰 #vt-mic-fab · 대기 자리
+   (#vt-mic-park, 숨김)에 살고(keybar.js), 음성 전용 모드에서만 잠깐
    #topbar로 옮겨간다(media-session.js). 키바 슬롯은 2026-09-29에 없앴다.
    색·상태(녹음 중)는 어디에 있든 공통이라 컨텍스트 무관 규칙으로 두고,
    크기·배치만 컨텍스트별로 아래에서 오버라이드한다. */
@@ -583,10 +583,6 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
   content:''; position:absolute; right:5px; bottom:5px; width:7px; height:7px; box-sizing:border-box;
   border:1.5px solid currentColor; border-radius:50%; pointer-events:none;
 }
-/* rail 설정 패널 컨텍스트 — 폭은 #vt-rail-settings-tpl .mi가 이미 주는 100%를
-   그대로 쓰고, 여긴 아이콘 크기·라벨 굵기만. */
-#vt-rail-mic-slot #mic-btn-wrap svg { width:16px; height:16px; }
-#vt-rail-mic-slot #mic-btn-wrap .label { font-weight:600; }
 
 /* 마이크에 붙는 음성 상태 패널. 기존 상태 노드는 고정 팝업 대신 패널 내용이다.
    리디자인 6단계(2026-11, 시안 O16-F 「정돈」 배치): 폭 440, raised 면, 반경 8, 머리 48, 본문 패딩 20 · 간격 12.

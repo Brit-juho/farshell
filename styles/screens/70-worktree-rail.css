@@ -13,19 +13,8 @@
  * 옮긴 자리의 옛 규칙은 반드시 지우고 가야 한다.
  */
 
-/* ── N36 §5 — 워크트리 레일 252px (2.1.0은 세션을 임시로 그린다, ADR-10) ──
-   기존 48px 아이콘 레일(#vt-rail)을 시각적으로 대체한다. **#vt-rail-panel/
-   #vt-rail-settings-tpl은 안 건드린다** — 데스크톱 마이크·테마 칩이 그 안에만
-   살아서, "⋯ 더보기" 메뉴가 숨은 #vt-rail-settings 버튼을 그대로 다시 누르면
-   그 플라이아웃이 예전과 똑같이 열려야 한다(Rail.tsx 주석 참고). 아이콘
-   스트립(#vt-rail) 자신만 지운다 — 그게 차지하던 자리는 이제 없으므로, 그
-   자리를 전제로 한 body 고정 패딩(48px)도 함께 무효화한다. 새 레일의 폭은
-   아래 @media 블록에서 --vt-wgrail-w로 다시 민다(같은 specificity, 파일
-   뒤쪽이라 이긴다 — !important 불필요. 패널이 열렸을 때의 추가 패딩 규칙은
-   더 구체적인 셀렉터라 그대로 이긴다). compact(<720px)에서는 이 레일도 하단
-   내비에 자리를 내주므로 통째로 숨는다(70-mobile.md 전까지는 안 보이는
-   것으로 충분). */
-#vt-rail { display:none !important; }
+/* ── N36 §5 — 워크트리 레일(2.1.0) ── 리디자인 9단계(2026-11)에 옛 48px 아이콘 레일(#vt-rail)·설정 플라이아웃
+   (#vt-rail-panel · #vt-rail-settings-tpl)을 DOM째 지웠다. compact(<720px)에서는 하단 내비가 대신한다. */
 @media (min-width:720px) {
   body { padding-left:env(safe-area-inset-left); }
 }

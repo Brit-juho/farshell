@@ -131,10 +131,11 @@ export function micHome() {
     if (phone) return phone;
   }
   // 2026-09-29 — 터치 기기의 키바 슬롯을 없앴다(사용자: 안 쓰는데 키 자리만
-  // 먹는다). 넓은 화면에서는 포인터 종류와 무관하게 활동 막대(없으면 rail 설정 슬롯)에 둔다.
+  // 먹는다). 넓은 화면에서는 포인터 종류와 무관하게 활동 막대에 둔다.
   // 2026-11 — 데스크톱 첫 자리는 작업대 활동 막대의 아래 무리(#vt-activity-mic-home, Workbench.tsx).
   // dock 탭 줄(#vt-dock-mic-home)은 활동 막대로 옮겨 가며 없어졌다.
-  return document.getElementById('vt-activity-mic-home') || document.getElementById('vt-rail-mic-slot');
+  // 작업대가 아직 없으면(지연 로드 전) 숨은 대기 자리(#vt-mic-park, index.html)에 그대로 둔다.
+  return document.getElementById('vt-activity-mic-home') || document.getElementById('vt-mic-park');
 }
 
 export function placeMicButton() {

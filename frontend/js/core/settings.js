@@ -89,10 +89,8 @@ export const SCHEMA = {
   // action id(레이블 아님 — 레이블은 바뀔 수 있다) 배열을 최신순 JSON
   // 문자열로 저장한다. 기기마다 쓰는 기능이 달라 device 스코프다.
   'palette.recentCommands': { type: 'str', def: '[]', scope: 'device' },
-  // L8: 우측 레일(사용량) 접힘 상태. 폭은 지금 섹션이 하나뿐이라 고정으로 두고,
-  // 섹션이 늘어나면(변경 파일·최근 diff) 그때 폭도 설정으로 뺀다.
-  // 문서 §1 표: "ui.rail.collapsed/width · ui.dock.* → device"와 같은 부류.
-  'rightRail.collapsed':    { type: 'bool', def: false, scope: 'device' },
+  // (리디자인 9단계 — 2.0의 우측 사용량 레일과 그 접힘 키 `rightRail.collapsed`를 지웠다. 저장된 값이 남아
+  // 있어도 아래 ADR-43 키와 같은 이유로 무해하다.)
   // ADR-43(2.3.0) — 옵트인 스크롤백 영속화 자체를 없앴다(한 번도 켜진 적
   // 없어 위험만 있고 값어치가 없었다). 스키마에서 뺐다 — 이미 이 키를 저장한
   // workspace.json이 있어도 무해하다(서버는 값의 의미를 모르고 보관만 하고,

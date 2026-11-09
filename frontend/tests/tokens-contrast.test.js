@@ -264,17 +264,17 @@ test('상태 dot에는 색 말고 모양 채널이 있다 (reduced-motion 대체
     'reduced-motion에서 outline 대체가 사라졌다');
 });
 
-test('rail 활성 표시가 색 단독이 아니다 (막대가 있어야 한다)', () => {
+// 리디자인 9단계 — 옛 아이콘 레일(.vt-rail-btn)을 지우고 활동 막대(.vt-act, 90-workbench.css)로 대상을 옮겼다.
+test('활동 막대의 활성 표시가 색 단독이 아니다 (2px 강조선이 있어야 한다)', () => {
   const legacy = readScreens();
-  assert.match(legacy, /\.vt-rail-btn\.active::before\s*\{[^}]*background:var\(--color-acc\)/,
-    'rail 활성 막대가 사라졌다 — 배경 단차만으로는 1.13~1.37:1이라 색 단독 신호가 된다');
+  assert.match(legacy, /\.vt-act\.active::before\s*\{[^}]*width:2px;[^}]*background:var\(--color-acc\)/,
+    '활성 강조선이 사라졌다 — 배경 단차만으로는 1.13~1.37:1이라 색 단독 신호가 된다');
 });
 
-test('rail 활성 배경이 hover와 다른 토큰을 쓴다', () => {
+test('활동 막대의 활성 항목이 hover와 같은 배경으로 표시되지 않는다', () => {
   const legacy = readScreens();
-  const active = legacy.match(/\.vt-rail-btn\.active\s*\{([^}]*)\}/);
-  assert.ok(active, '.vt-rail-btn.active 규칙이 없다');
-  assert.match(active[1], /background:var\(--color-surface-active\)/);
+  const active = legacy.match(/\.vt-act\.active\s*\{([^}]*)\}/);
+  assert.ok(active, '.vt-act.active 규칙이 없다');
   assert.doesNotMatch(active[1], /background:var\(--menu-hover\)/,
     'hover와 같은 배경이면 포인터 장치에서 활성 항목과 구분이 안 된다');
 });

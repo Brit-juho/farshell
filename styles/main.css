@@ -62,7 +62,6 @@
 @import "./screens/10-shell.css"          layer(legacy);
 @import "./screens/20-overlay.css"        layer(legacy);
 @import "./screens/30-viewer.css"         layer(legacy);
-@import "./screens/40-rail-legacy.css"    layer(legacy);
 @import "./screens/50-settings-usage.css" layer(legacy);
 @import "./screens/60-mobile-hud.css"     layer(legacy);
 @import "./screens/70-worktree-rail.css"  layer(legacy);

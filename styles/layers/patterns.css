@@ -92,7 +92,6 @@
    * 한다 — 1px 선 위에 정확히 올리는 건 마우스로 못 한다.
    * 2.1.6 이전에는 세 벌이었고 선언 여섯이 전부 같았다. */
   .vt-resizer,
-  .vt-rail-resizer,
   .vt-side-resizer {
     position: absolute;
     top: 0;
@@ -125,7 +124,6 @@
   .vt-vw-empty,
   .vt-vw-loading,
   .vt-session-empty,
-  .vt-rail-session-empty,
   .vt-usage-empty,
   .vt-usage-none {
     padding: calc(var(--spacing) * 8) calc(var(--spacing) * 4);

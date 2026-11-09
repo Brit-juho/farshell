@@ -34,8 +34,8 @@ async function buildWindow() {
 test('음성 전용 모드 ON → 마이크가 #topbar로 옮겨간다(가운데 정렬 CSS가 그 자식만 본다)', async () => {
   const { window, toggleVoiceOnly } = await buildWindow();
   const mic = window.document.getElementById('mic-btn-wrap');
-  const originalParentId = mic.parentElement.id; // vt-rail-mic-slot(데스크톱 기본 배치)
-  assert.strictEqual(originalParentId, 'vt-rail-mic-slot');
+  const originalParentId = mic.parentElement.id; // vt-mic-park(작업대가 오기 전 대기 자리)
+  assert.strictEqual(originalParentId, 'vt-mic-park');
 
   toggleVoiceOnly();
 
@@ -51,5 +51,5 @@ test('음성 전용 모드 OFF → 마이크가 원래 자리로 정확히 되�
   toggleVoiceOnly(); // OFF
 
   assert.strictEqual(window.document.body.classList.contains('voice-only-mode'), false);
-  assert.strictEqual(mic.parentElement.id, 'vt-rail-mic-slot');
+  assert.strictEqual(mic.parentElement.id, 'vt-mic-park');
 });

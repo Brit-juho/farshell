@@ -12,9 +12,9 @@ const flush = async () => { for (let i = 0; i < 6; i++) await new Promise((r) =>
 async function build({ missing = false, remote = false, failure = false } = {}) {
   const env = createDomEnv(html); doms.push(env.dom);
   const w = env.window;
-  // 마이크 버튼은 index.html에서 hidden 템플릿 안에 있다(실제 앱에서는 dock으로 옮겨 붙는다). jsdom 30부터는
+  // 마이크 버튼은 index.html의 숨은 대기 자리(#vt-mic-park)에 있다(실제 앱에서는 활동 막대로 옮겨 붙는다). jsdom 30부터는
   // 렌더되지 않는 요소의 focus()를 명세대로 무시하므로, 실제처럼 보이는 상태로 만들어 둔다.
-  w.document.getElementById('vt-rail-settings-tpl')?.removeAttribute('hidden');
+  w.document.getElementById('vt-mic-park')?.removeAttribute('hidden');
   w.API_BASE = w.location.origin;
   w.vtRelayHost = () => remote ? 'peer' : 'local';
   const actions = {}; w.registerAction = (name, fn) => { actions[name] = fn; };

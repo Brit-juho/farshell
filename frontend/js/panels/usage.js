@@ -1,8 +1,7 @@
-// U2 — 사용량 게이지. rail의 「사용량」 버튼이 여는 패널.
+// U2 — 사용량 게이지. 활동 막대 「사용량」이 사이드바(도구 보기)에 여는 패널.
 //
 // 왜 필요한가: "사용량 상시
-// 노출이 '이 앱은 내 상황을 지켜보고 있다'는 신뢰감을 만든다"였다. 동시에
-// 3단 레이아웃의 우측 레일을 채울 가장 값싼 실데이터이기도 하다.
+// 노출이 '이 앱은 내 상황을 지켜보고 있다'는 신뢰감을 만든다"였다.
 //
 // **표시 규칙 두 가지가 이 파일의 핵심이다.**
 //   1. `tier`와 `windows[].label`은 **표시 전용**이다 — 분기 키로 쓰지 않는다.
@@ -10,13 +9,11 @@
 //   2. **숫자보다 바가 먼저**다. 스캔 속도가 다르다 — 바 색만 보고 "괜찮다/
 //      곧 막힌다"를 판단할 수 있어야 하고, 정확한 %는 그 다음이다.
 //
-// **이 파일은 지연 청크(panels.js)다.** 상시 동작(rail 배지 폴링 · 액션 등록)은
-// panels/usage-badge.js에 있고, 여기는 "볼 때" 필요한 렌더러만 담는다.
+// **이 파일은 지연 청크(settings.js)다.** 상시 청크에는 액션 등록(panels/usage-badge.js)만 있다.
 import { openPanel, setPanelPoll } from './panel.js';
 import { emptyState } from '../ui/empty.js';
 import { icon } from '../ui/icons.js';
 import { vtFetch } from '../core/api.js';
-import { paintRailBadge } from './usage-badge.js';
 import { t } from '../core/i18n.js';
 import { confirmDialog } from '../core/dialog.js';
 
@@ -369,7 +366,7 @@ export function renderBody(limitData, counterData, target) {
 // 계획서 §5가 그 파일 접근을 금지한다(status.json 하나만 읽는다). 매핑 없이
 // 탭마다 배지를 붙이면 **틀린 계정을 확신 있게 표시**하게 된다 — A2에서 세운
 // "모호하면 아무것도 강조하지 않는다"와 정면으로 어긋난다.
-// 그래서 rail 버튼에 전역 지표만 단다: 활성 프로필 이름(title) + 라이브 점.
+// 그래서 전역 지표(활성 프로필 · 실행 중 목록)만 패널 안에 보인다.
 // 세션별 귀속은 세션→프로필 매핑을 정확히 얻을 수 있게 될 때까지 하지 않는다
 // (옛 계획이던 `fsh agent claude --profile`은 2026-10-02에 명령과 함께 제거됐다).
 
@@ -391,9 +388,6 @@ async function fetchBoth() {
 async function refresh(bodyEl) {
   const { limitData, counterData } = await fetchBoth();
   if (bodyEl) renderBody(limitData, counterData, bodyEl);
-  // 2.0의 우측 레일은 인스턴스와 무관한 전역 자리다 — 그대로 둔다.
-  renderBody(limitData, counterData, document.getElementById('vt-right-rail-body'));
-  paintRailBadge(limitData);
 }
 
 // N4 — `opts.paneHost`가 있으면 그 pane 칸에 그린다.
