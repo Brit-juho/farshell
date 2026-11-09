@@ -556,32 +556,40 @@
        같은 기능의 규칙이 진입점마다 달라진다. term/upload.js가 순차로 올린다. -->
   <input type="file" id="file-input" hidden multiple onchange="uploadFile(this)" />
 
-  <!-- 음성 상태 패널: voice/status-panel.js가 기존 상태 노드를 이 안에 유지한다. -->
+  <!-- 음성 상태 패널: voice/status-panel.js가 기존 상태 노드를 이 안에 유지한다.
+       리디자인 6단계(시안 O16-F, 정돈 배치 440): 머리 48(마이크 · 제목 · 서버 상태 점 · ×), 입력 대상 줄, 음량 막대,
+       부분 결과 상자, 확인 영역, 버튼 줄(채운 버튼은 「입력」 하나, 「녹음 종료」는 위험 테두리), 아래 설정 줄. -->
   <section id="voice-status-panel" hidden role="dialog" aria-label="음성 입력 상태" data-i18n-attr="aria-label">
-    <header class="vt-voice-head"><strong data-i18n>음성 입력</strong><button type="button" class="vt-btn sm quiet" id="voice-status-close" aria-label="음성 상태 닫기" data-i18n data-i18n-attr="aria-label">닫기</button></header>
-    <div class="vt-voice-server"><strong id="voice-stt-state" data-i18n>서버 상태 확인 중</strong><span id="voice-stt-detail"></span></div>
-    <div class="vt-voice-pin">
-      <label for="voice-pin-select" data-i18n>입력 대상</label>
-      <select id="voice-pin-select" class="vt-select"></select>
+    <header class="vt-voice-head"><span class="vt-voice-ic" aria-hidden="true"></span><strong data-i18n>음성 입력</strong><span class="vt-voice-srv"><span class="vt-voice-dot" aria-hidden="true"></span><span id="voice-stt-state" data-i18n>서버 상태 확인 중</span></span><button type="button" class="vt-icon-btn vt-voice-x" id="voice-status-close" aria-label="음성 상태 닫기" data-i18n-attr="aria-label"></button></header>
+    <div class="vt-voice-body">
+      <div class="vt-voice-pin">
+        <label for="voice-pin-select" data-i18n>입력 대상</label>
+        <select id="voice-pin-select" class="vt-select"></select>
+      </div>
       <p id="voice-pin-note" class="vt-voice-meta" role="status"></p>
-    </div>
-    <div id="mic-status" role="status" aria-live="polite"></div>
-    <div id="voice-confirm" hidden>
-      <p id="voice-confirm-reason" class="vt-voice-meta" role="status"></p>
-      <label for="voice-confirm-text" data-i18n>인식 결과 — 고쳐서 입력할 수 있습니다</label>
-      <textarea id="voice-confirm-text" class="vt-input" rows="3" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"></textarea>
-      <p id="voice-confirm-msg" class="vt-voice-meta" role="alert" hidden></p>
-      <div class="vt-voice-actions">
-        <button type="button" class="vt-btn sm" id="voice-confirm-send" data-i18n>입력</button>
-        <button type="button" class="vt-btn sm quiet" id="voice-confirm-cancel" data-i18n>취소</button>
-        <button type="button" class="vt-btn sm quiet" id="voice-confirm-copy" hidden data-i18n>인식 텍스트 복사</button>
+      <p id="voice-stt-detail" class="vt-voice-meta"></p>
+      <p id="voice-record-meta" class="vt-voice-meta"></p>
+      <div id="voice-meter" class="vt-voice-meter" hidden role="meter" aria-label="입력 음량" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-i18n-attr="aria-label"></div>
+      <p id="voice-partial" class="vt-voice-partial" hidden></p>
+      <div id="mic-status" role="status" aria-live="polite"></div>
+      <div id="voice-confirm" hidden>
+        <p id="voice-confirm-reason" class="vt-voice-meta" role="status"></p>
+        <textarea id="voice-confirm-text" class="vt-input" rows="3" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"></textarea>
+        <label for="voice-confirm-text" class="vt-voice-hint" data-i18n>인식 결과 — 고쳐서 입력할 수 있습니다</label>
+        <p id="voice-confirm-msg" class="vt-voice-meta" role="alert" hidden></p>
+        <div class="vt-voice-actions">
+          <button type="button" class="vt-btn quiet" id="voice-confirm-copy" hidden data-i18n>인식 텍스트 복사</button>
+          <button type="button" class="vt-btn quiet" id="voice-confirm-cancel" data-i18n>취소</button>
+          <span class="vt-voice-gap"></span>
+          <button type="button" class="vt-btn lg solid" id="voice-confirm-send" data-i18n>입력</button>
+        </div>
+      </div>
+      <div class="vt-voice-actions vt-voice-main"><span class="vt-voice-gap"></span><button type="button" class="vt-btn lg" id="voice-panel-record" data-action="voice.record" data-i18n>녹음 시작</button></div>
+      <div class="vt-voice-foot">
+        <p class="vt-voice-help" data-i18n>녹음은 이 기기에서, 음성 인식은 서버에서 처리합니다. 인식한 문장은 입력 대상에 Enter와 함께 전송됩니다. 일반 셸이나 위험한 명령은 먼저 확인합니다.</p>
+        <button type="button" class="vt-voice-link" data-action="voice.settings" data-i18n>모델 · 음성 설정</button>
       </div>
     </div>
-    <p id="voice-record-meta" class="vt-voice-meta"></p>
-    <p id="voice-partial" class="vt-voice-partial" hidden></p>
-    <div id="voice-meter" class="vt-voice-meter" hidden role="meter" aria-label="입력 음량" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-i18n-attr="aria-label"><span class="vt-voice-meter-bar"></span></div>
-    <div class="vt-voice-actions"><button type="button" class="vt-btn sm" id="voice-panel-record" data-action="voice.record" data-i18n>녹음 시작</button><button type="button" class="vt-btn sm quiet" data-action="voice.settings" data-i18n>모델 · 음성 설정</button></div>
-    <p class="vt-voice-help" data-i18n>녹음은 이 기기에서, 음성 인식은 서버에서 처리합니다. 인식한 문장은 입력 대상에 Enter와 함께 전송됩니다. 일반 셸이나 위험한 명령은 먼저 확인합니다.</p>
   </section>
   <!-- 전송 실패 시 recording.js가 #mic-status 안으로 옮겨 붙인다(기본 숨김) -->
   <button id="mic-retry-btn" class="vt-btn solid" type="button" hidden style="font-size:13px;margin-left:6px" data-i18n>다시 보내기</button>
