@@ -115,6 +115,21 @@ test('voice.js도 함께 남는다 — app 빌드가 dist를 비우고 끝나면
   assert.ok(fs.existsSync(path.join(DIST, 'voice.js')), 'frontend/dist/voice.js가 없다');
 });
 
+test('제3자 고지(THIRD_PARTY_NOTICES.md)가 dist에 있고, 번들한 라이브러리의 라이선스 본문을 담는다', () => {
+  // 줄이기가 `@license` 주석을 지우므로 고지는 이 파일이 맡는다(vite.config.js `build.license`). dist째 릴리스
+  // tarball에 실린다. voice 빌드가 같은 outDir에 이어 쓰면서 이 파일을 덮어쓰지 않았는지도 본다.
+  const p = path.join(DIST, 'THIRD_PARTY_NOTICES.md');
+  assert.ok(fs.existsSync(p), 'frontend/dist/THIRD_PARTY_NOTICES.md가 없다');
+  const text = fs.readFileSync(p, 'utf8');
+  assert.match(text, /^## marked - [\d.]+ \(MIT\)$/m);
+  assert.match(text, /Permission is hereby granted, free of charge/, 'MIT 본문이 없다');
+  assert.match(text, /^## dompurify - [\d.]+ \(\(MPL-2\.0 OR Apache-2\.0\)\)$/m);
+  assert.match(text, /Apache License\s+Version 2\.0, January 2004/, 'DOMPurify의 Apache-2.0 본문이 없다');
+  for (const name of ['@codemirror/view', 'solid-js']) {
+    assert.ok(text.includes(`## ${name} - `), `${name} 고지가 없다`);
+  }
+});
+
 test('세션 탭의 뷰 편집기(layout/session-order.js)는 screens 청크에 있고 core에는 없다', () => {
   // vite.config.js manualChunks에 이름이 없으면 포괄 규칙이 core로 보내 상시 로드가 ~5KB 늘어난다
   // (빌드·테스트는 통과하고 상한만 조용히 줄어든다 — 이 파일을 옮길 때 실제로 겪었다).

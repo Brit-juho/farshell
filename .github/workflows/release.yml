@@ -103,6 +103,7 @@ jobs:
           test -f frontend/dist/core.js
           test -f frontend/dist/app.css
           test -f frontend/dist/voice.js
+          test -f frontend/dist/THIRD_PARTY_NOTICES.md   # 제3자 고지(줄이기가 @license 주석을 지운다 — vite.config.js)
           ! ls frontend/dist | grep -E '\-[0-9a-f]{8}\.'
           # 2.1.6: ci.yml과 같은 이유로 초기 페이로드 합계를 잰다.
           [ "$(( $(wc -c < frontend/dist/app.js) + $(wc -c < frontend/dist/core.js) ))" -le 358400 ]
@@ -131,6 +132,7 @@ jobs:
           # tarball로 설치하는 경로가 실제로 성립하는지 확인 — dist가 빠지면
           # 사용자는 node를 요구받게 되고, 이 릴리스의 목적 자체가 무너진다.
           tar tzf "$NAME.tar.gz" | grep -q "$NAME/frontend/dist/app.js"
+          tar tzf "$NAME.tar.gz" | grep -q "$NAME/frontend/dist/THIRD_PARTY_NOTICES.md"
           # 받은 사람이 파일이 온전한지 확인할 수 있게 해시를 같이 올린다(`shasum -a 256 -c`).
           shasum -a 256 "$NAME.tar.gz" > "$NAME.tar.gz.sha256"
           cat "$NAME.tar.gz.sha256"

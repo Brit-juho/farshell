@@ -238,6 +238,12 @@ export default defineConfig(({ mode }) => {
       // build-output.test.js가 청크 간 싱글톤 복제를 잡는다. vite 8의 기본 minify는 이름까지 바꾼다.
       minify: isTest ? false : { mangle: false, compress: false },
       sourcemap: !isTest,
+      // 제3자 고지 — 줄이기(minify)가 `@license` 주석을 지우므로(marked·DOMPurify 등), 번들에 든 의존 패키지마다
+      // 이름·버전·라이선스 식별자·LICENSE 본문을 한 파일로 낸다(Vite `build.license`). dist/에 있으므로 릴리스
+      // tarball에 함께 실린다(release.yml이 있는지 확인한다). 주석을 산출물에 남기는 방법(legalComments)은 초기
+      // 페이로드(app.js + core.js ≤ 358,400B)를 늘리므로 쓰지 않았다. voice 빌드는 같은 outDir에 이어 쓰므로 이름을
+      // 따로 둔다(덮어쓰지 않게). DOMPurify(MPL-2.0 OR Apache-2.0)는 Apache-2.0으로 쓰고, 그 패키지의 LICENSE가 그 본문이다.
+      license: isTest ? false : { fileName: isVoice ? 'THIRD_PARTY_NOTICES.voice.md' : 'THIRD_PARTY_NOTICES.md' },
       rolldownOptions: {
         // 벤더(xterm 등)는 아직 ES 모듈로 import하지 않는다 — index.html의 classic
         // <script>가 로드하고 sw.js가 개별 프리캐시한다(F4에서 core/vendor.js가
