@@ -25,6 +25,21 @@ Everything about using FarShell in the browser. (For the CLI see `fsh help conce
 - **Open**: a session is placed in a pane of this browser tab. It describes placement, not state.
 - Each browser tab saves its own view layout. After a reload, **sessions you closed don't reopen.**
 
+### Title bar and status bar (desktop, 720px and wider)
+
+- **Title bar** (top): from the left, the **FarShell menu** (new session, quick open, copy access URL, settings,
+  status bar settings; the number of pending approvals shows as a badge), the **Mac** this screen shows (if you have
+  paired Macs, click it to switch the whole screen to another one), and the active pane's **repository › branch ›
+  session** (hidden below 1280px). Click the **Search or run a command** field in the middle, or press `Cmd+K`, to open
+  the palette. The keyboard toggle (touch devices) and window buttons sit on the right.
+- **Status bar** (bottom): the **agents chip** (`개입 N · 작업 N · 완료 N` — needs you, working, done; when something
+  needs you, click it to jump to the session that has waited longest) is pinned at the left end, and short messages
+  (copied, saved…) appear briefly just to its right. Then E2E, safe mode and connected screens, and on the right CPU,
+  GPU, RAM, network, usage, notifications, version and clock. A chip with no value is hidden, and when space runs out
+  the less important chips hide first. Choose what goes where in Settings → **Status bar** (saved on this device only;
+  the agents chip can't be moved or turned off).
+- Phones (narrower than 720px) have neither bar; the top bar and the bottom tabs do that job.
+
 ### Left rail (session list)
 
 Sessions are listed by name, and sessions waiting for input also appear in the "Needs attention" section at the top.
