@@ -582,3 +582,21 @@ test('마운트 — 폴더 행: 새 폴더 · 이름 바꾸기 · 휴지통으�
     }
   }
 });
+
+test('마운트 — 「내용 검색」 단축키 힌트는 물리 키보드가 있을 때만(폰·터치에서는 적지 않는다)', async () => {
+  const cases = [
+    { name: '데스크톱', mq: {}, hint: true },
+    { name: '좁은 화면', mq: { '(max-width:719px)': true }, hint: false },
+    { name: '터치(coarse)', mq: { '(pointer:coarse)': true }, hint: false },
+  ];
+  for (const c of cases) {
+    const env = await fresh();
+    env.window.vtContentSearchHint = () => 'Ctrl+Shift+G';
+    env.window.matchMedia = (q) => ({ matches: !!c.mq[q.replace(/\s+/g, '')], addEventListener() {}, removeEventListener() {} });
+    const { host } = await mountWith(env, { '/r': [{ name: 'a', dir: false, size: 1 }] });
+    const key = host.querySelector('.vt-fs-seg-key');
+    assert.strictEqual(!!key, c.hint, c.name);
+    if (c.hint) assert.strictEqual(key.textContent, 'Ctrl+Shift+G');
+    assert.ok(host.textContent.includes('내용 검색'), `${c.name}: 토글 라벨은 그대로`);
+  }
+});

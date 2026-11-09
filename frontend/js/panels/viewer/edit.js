@@ -25,7 +25,7 @@ import { lineChangeMarks } from './line-marks.js';
 import { isTimeoutError } from '../../core/api.js';
 import { loadHead, mixedEol, OPEN_BUDGET } from './file-load.js';
 import {
-  writeFetch, withWriteElevation, newSaveId, writeErrorText, writeBlockedReason, renameDialog, trashDialog, SAVE_MAX_BYTES,
+  writeFetch, withWriteElevation, newSaveId, writeErrorText, writeErrorShort, writeBlockedReason, renameDialog, trashDialog, SAVE_MAX_BYTES,
 } from './fs-write.js';
 
 const _key = (host, path) => `${host || 'local'}\n${path}`;
@@ -358,6 +358,8 @@ export async function saveEdit(container, st, opts = {}) {
       t('파일 저장은 높은 권한 동작입니다. 웹 로그인 비밀번호를 확인하면 이 기기에서 15분 동안 다시 묻지 않습니다.'));
   } catch (e) {
     ed.status = 'failed';
+    ed.failShort = writeErrorShort(e);
+    ed.failFull = writeErrorText(e);
     if (e && e.data && e.data.error === 'conflict') {
       ed.saveId = null;
       await _enterConflict(container, st, e.data.rev);
@@ -550,6 +552,28 @@ function _chip(text, cls, ic) {
   return s;
 }
 
+/** 저장 실패 칩 — 「저장 실패 — 원인」. 좁으면 원인만 줄임표로 줄고 전체 문구는 title·aria-label에 있다. */
+function _failChip(ed) {
+  const s = document.createElement('span');
+  s.className = 'vt-vw-ss bad vt-vw-ss-fail';
+  s.setAttribute('role', 'status');
+  s.insertAdjacentHTML('afterbegin', icon('alert-triangle', 14));
+  const head = document.createElement('span');
+  head.className = 'vt-vw-ss-head';
+  head.textContent = t('저장 실패');
+  s.append(head);
+  if (ed.failShort) {
+    const why = document.createElement('span');
+    why.className = 'vt-vw-ss-why';
+    why.textContent = `— ${ed.failShort}`;
+    s.append(why);
+    const full = `${t('저장 실패')} — ${ed.failFull || ed.failShort}`;
+    s.title = full;
+    s.setAttribute('aria-label', full);
+  }
+  return s;
+}
+
 /** 위 띠에 편집 조작을 붙인다(file.js `_syncTopBar`). 붙였으면 true. */
 export function decorateBar(container, st, bar) {
   const h = container._vtEditor;
@@ -596,7 +620,7 @@ export function decorateBar(container, st, bar) {
   if (ed.status === 'saving') tools.appendChild(_chip(t('저장 중…'), 'ing'));
   else if (ed.status === 'saved' && !ed.dirty) tools.appendChild(_chip(t('저장됨 {time}', { time: _hhmm(ed.savedAt || new Date()) }), 'ok', 'check'));
   else if (ed.status === 'conflict' || ed.conflict) tools.appendChild(_chip(t('충돌'), 'warn', 'alert-triangle'));
-  else if (ed.status === 'failed') tools.appendChild(_chip(t('저장 실패'), 'bad', 'alert-triangle'));
+  else if (ed.status === 'failed') tools.appendChild(_failChip(ed));
   else if (ed.dirty) tools.appendChild(_chip(t('편집 중 · 저장 안 됨'), 'dirty'));
   else tools.appendChild(_chip(t('편집 중'), 'idle'));
   const mac = /Mac|iPhone|iPad/.test((navigator && navigator.platform) || '');

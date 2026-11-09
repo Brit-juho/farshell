@@ -138,6 +138,7 @@
 .vt-fs-seg .vt-segment + .vt-segment { border-left:1px solid var(--line); }
 .vt-fs-seg-ic { display:inline-flex; }
 .vt-fs-seg-key { font:400 var(--fs-2xs) var(--mono); opacity:.7; margin-left:calc(var(--spacing) * 1); }
+@media (pointer:coarse), (max-width:719px) { .vt-fs-seg-key { display:none; } }
 .vt-fs-pane { display:flex; flex-direction:column; flex:1; min-height:0; min-width:0; }
 .vt-fs-pane[hidden] { display:none; }
 

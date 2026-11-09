@@ -527,3 +527,45 @@ test('편집 모드는 거터 표시를 편집기에 넘기고, 저장하면 새
   assert.strictEqual(h.marks, null);
   assert.ok(!c.classList.contains('vt-vw-dirty'));
 });
+
+test('저장 실패 원인 — 쓰기 경로가 돌려주는 모든 코드가 짧은 문구가 되고, 서버의 한국어 reason은 쓰지 않는다', async () => {
+  const { write } = await build(async () => ({ status: 500, body: {} }));
+  const codes = ['human_session_required', 'password_required', 'elevation_required', 'unauthorized', 'forbidden', 'rate_limited',
+    'audit_unavailable', 'lease_conflict', 'lease_unavailable', 'changed', 'conflict', 'save_id_reused', 'busy', 'in_progress',
+    'fs_unavailable', 'too_large', 'no_space', 'not_writable', 'denied', 'unencodable', 'hardlinked', 'not_editable', 'not_found',
+    'is_directory', 'not_a_file', 'is_symlink', 'exists', 'write_failed', 'bad_json', 'bad_path', 'bad_rev', 'bad_save_id',
+    'bad_content', 'bad_encoding', 'bad_eol', 'bad_overwrite', 'bad_kind', 'bad_name'];
+  for (const code of codes) {
+    const s = write.writeErrorShort({ status: 400, code, data: { error: code, reason: '서버의 한국어 사유' } });
+    assert.ok(s && !/서버의 한국어 사유/.test(s), code);
+    assert.ok(!/서버가 거절했습니다/.test(s), `${code}는 알려진 코드`);
+  }
+  assert.match(write.writeErrorShort({ status: 403, code: 'human_session_required', data: { error: 'human_session_required' } }), /로그인/);
+  assert.match(write.writeErrorShort({ status: 401, data: { error: 'elevation_required' } }), /재확인/);
+  assert.match(write.writeErrorShort({ status: 409, data: { error: 'changed' } }), /경로가 바뀌었습니다/);
+  assert.strictEqual(write.writeErrorShort({ status: 422, code: 'weird_code', data: { error: 'weird_code', reason: '한국어' } }), '서버가 거절했습니다 (weird_code)');
+  assert.strictEqual(write.writeErrorShort({ status: 422, data: null }), '서버가 거절했습니다 (HTTP 422)');
+  assert.match(write.writeErrorShort({ timeout: true }), /응답이 없습니다/);
+  assert.match(write.writeErrorShort(new Error('Failed to fetch')), /서버에 닿지 않았습니다/);
+});
+
+test('저장 실패 칩 — 「저장 실패 — 원인」, 전체 문구는 title·aria-label', async () => {
+  const { edit, document } = await build(async (u, m) => (m === 'PUT'
+    ? { status: 403, body: { error: 'human_session_required', reason: '브라우저에서 로그인한 사람만' } } : { status: 500, body: {} }));
+  const c = document.getElementById('c');
+  const h = fakeHandle('a\n');
+  c._vtEditor = h;
+  const st = doc();
+  c._vtDoc = st;
+  edit.startEdit(c, st, () => {});
+  h.type('b\n');
+  assert.strictEqual(await edit.saveEdit(c, st), false);
+  const bar = document.createElement('div');
+  assert.ok(edit.decorateBar(c, st, bar));
+  const chip = bar.querySelector('.vt-vw-ss-fail');
+  assert.ok(chip);
+  assert.strictEqual(chip.querySelector('.vt-vw-ss-head').textContent, '저장 실패');
+  assert.match(chip.querySelector('.vt-vw-ss-why').textContent, /^— 브라우저 로그인이 필요합니다$/);
+  assert.match(chip.title, /^저장 실패 — .*로그인/);
+  assert.strictEqual(chip.getAttribute('aria-label'), chip.title);
+});
