@@ -40,9 +40,10 @@
     }
     close() { this.readyState = 3; }
   };
-  window.__fakeWsEmit = (subs) => {
+  // extra: `tree` 알림의 `{dirs, overflow}` 같은 덧붙는 필드.
+  window.__fakeWsEmit = (subs, extra = {}) => {
     for (const ws of window.__fakeSockets) {
-      if (ws.readyState === 1 && ws.onmessage) ws.onmessage({ data: JSON.stringify({ type: 'changed', subs }) });
+      if (ws.readyState === 1 && ws.onmessage) ws.onmessage({ data: JSON.stringify({ type: 'changed', subs, ...extra }) });
     }
   };
 </script>
