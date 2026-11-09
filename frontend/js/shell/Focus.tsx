@@ -183,12 +183,18 @@ function FocusLayer(props: { deps: FocusDeps }) {
   const onLeaveWindow = (e: PointerEvent) => {
     if (reveal() && !e.relatedTarget) armHide();
   };
-  // Esc — 메뉴가 열려 있으면 메뉴가 먼저 닫는다. 드러난 막대가 있을 때만 키를 먹는다(평소 Esc는 터미널 몫).
+  // Esc — 메뉴가 열려 있으면 메뉴가 먼저 닫는다. 드러난 막대가 있으면 닫는다.
+  // 키를 먹는 것은 포커스가 그 막대 안에 있을 때뿐이다 — 포커스가 터미널(.xterm)에 있으면
+  // 막대만 닫고 Esc는 그대로 PTY로 보낸다(vim 등이 Esc 하나를 잃지 않게).
   const onKey = (e: KeyboardEvent) => {
     if (e.key !== 'Escape' || !reveal()) return;
     if (document.querySelector('.vt-mb-pop, [role="menu"]')) return;
-    e.preventDefault();
-    e.stopPropagation();
+    const a = document.activeElement;
+    const chrome = chromeOf(reveal());
+    if (a && a !== document.body && chrome && chrome.contains(a)) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     closeReveal();
   };
   // 왼쪽 노출에서 세션 행을 고르면 바로 닫는다(행 안의 ⋯ 같은 버튼은 메뉴를 여는 것이라 제외).

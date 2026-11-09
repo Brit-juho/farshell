@@ -365,6 +365,43 @@ test('가장자리 노출 — 드러난 쪽만 inert를 풀고 클래스를 붙�
   assert.strictEqual(root.classList.contains('vt-reveal-top'), false);
 });
 
+test('가장자리 노출 중 Esc — 포커스가 터미널이면 막대만 닫고 키는 터미널로, 막대 안이면 키를 먹는다', async () => {
+  const { env } = await freshLayer({ settings: { 'ui.focus.hintCount': 3 } });
+  const { document, window } = env;
+  const root = document.documentElement;
+  const host = document.getElementById('host');
+  host.insertAdjacentHTML('beforeend', '<div class="xterm"><textarea class="xterm-helper-textarea"></textarea></div>');
+  const ta = host.querySelector('.xterm textarea');
+  let reached = 0;
+  ta.addEventListener('keydown', (e) => { if (e.key === 'Escape') reached++; });
+  const open = async (edge) => {
+    document.querySelector(`.vt-focus-strip[data-edge="${edge}"]`).dispatchEvent(new window.PointerEvent('pointerenter'));
+    await tick(window, 5);
+    assert.ok(root.classList.contains(`vt-reveal-${edge}`));
+  };
+  // 1) 포커스가 터미널(.xterm) — 닫히고, 막지 않고, xterm 입력란까지 간다.
+  await open('top');
+  ta.focus();
+  assert.strictEqual(document.activeElement, ta);
+  const e1 = kd(window, { key: 'Escape' });
+  ta.dispatchEvent(e1);
+  await tick(window, 5);
+  assert.strictEqual(root.classList.contains('vt-reveal-top'), false, '막대는 닫힌다');
+  assert.strictEqual(e1.defaultPrevented, false, 'Esc를 막지 않는다');
+  assert.strictEqual(reached, 1, 'Esc가 터미널(→ PTY)에 닿는다');
+  // 2) 포커스가 드러난 막대 안 — 닫고 키를 먹는다(터미널로 새지 않는다).
+  await open('top');
+  const btn = document.getElementById('tb-btn');
+  btn.focus();
+  assert.strictEqual(document.activeElement, btn);
+  const e2 = kd(window, { key: 'Escape' });
+  btn.dispatchEvent(e2);
+  await tick(window, 5);
+  assert.strictEqual(root.classList.contains('vt-reveal-top'), false);
+  assert.strictEqual(e2.defaultPrevented, true, '막대 안의 Esc는 막대 몫이다');
+  assert.strictEqual(reached, 1);
+});
+
 test('가장자리 노출 — 반응 시간 전에 띠를 벗어나면 열리지 않는다(250ms)', async () => {
   const { env } = await freshLayer({ settings: { 'ui.focus.edgeDelay': '250', 'ui.focus.hintCount': 3 } });
   const { document, window } = env;
