@@ -158,6 +158,7 @@ export function startEdit(container, st, sync, draft = null) {
   _wireUnload();
   _recompute(container);
   _sync(container);
+  _announce(container, true);
   h.focus();
   return true;
 }
@@ -188,6 +189,7 @@ export async function stopEdit(container, { discard = false } = {}) {
   _paintMarks(container);
   _drafts.delete(_key(ed.stHost, ed.stPath));
   _sync(container);
+  _announce(container, false);
   return true;
 }
 
@@ -264,6 +266,13 @@ export async function confirmLeave(root) {
     if (!st || !(await saveEdit(c, st))) return false;
   }
   return true;
+}
+
+// 편집 시작·끝을 알린다 — 폰 편집 화면(layout/mobile-edit.js)이 듣고 아래 탭을 숨기고 키보드 위 보조 키 줄을 띄운다.
+// 칸에 vt-vw-editing을 달아 두면 칸이 통째로 사라져도(닫기·파일 바꾸기) 듣는 쪽이 「붙어 있는 편집 칸이 있나」로 다시 셀 수 있다.
+function _announce(container, on) {
+  container.classList.toggle('vt-vw-editing', on);
+  try { document.dispatchEvent(new CustomEvent('vt:viewer-edit', { detail: { on, container } })); } catch (_) {}
 }
 
 function _scheduleDirty(container) {

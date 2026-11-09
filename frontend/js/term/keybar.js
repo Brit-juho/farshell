@@ -169,6 +169,27 @@ export function _renderMods() {
     btn.classList.toggle('locked', st.latch === 'lock');
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
+  _renderModHint();
+}
+
+// 수식키 줄 오른쪽의 상태 문구(시안 M02 「Ctrl 다음 키만」). 램프와 면만으로는 「다음 키만」과 「잠김」을
+// 구분하기 어려워서 글로 한 번 더 말한다. 누르고 있는 동안은 손가락이 그 키 위에 있으니 말하지 않는다.
+// 자리는 늘 비워 두고 글자만 바꾼다(키 위치가 움직이지 않게 — 98-mobile.css).
+const MOD_LABEL = { ctrl: 'Ctrl', alt: 'Alt', shift: 'Shift' };
+export function modHintText() {
+  const pick = (latch) => MODS.filter((m) => _mods[m].latch === latch).map((m) => MOD_LABEL[m]).join('+');
+  const parts = [];
+  const lock = pick('lock');
+  const once = pick('once');
+  if (lock) parts.push(t('{keys} 잠김', { keys: lock }));
+  if (once) parts.push(t('{keys} 다음 키만', { keys: once }));
+  return parts.join(' · ');
+}
+function _renderModHint() {
+  const hint = document.getElementById('keybar-mod-hint');
+  if (!hint) return;
+  const text = modHintText();
+  if (hint.textContent !== text) { hint.textContent = text; hint.title = text; }
 }
 
 // 키 하나를 보낸 뒤: 'once'는 소비, 누르고 있는 수식키는 "조합에 쓰였다"로 표시

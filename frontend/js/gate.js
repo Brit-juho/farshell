@@ -13,7 +13,8 @@
 // OTP 미연동이면 이 분기가 아예 발생하지 않아 기존 동작과 동일하다.
 (function(){
   // 번역 — i18n-boot.js가 먼저 로드된다. 없으면 원문 그대로.
-  var T=window.vtT||function(s){ return s; };
+  // i18n-boot.js가 없을 때(시험 하네스 등)의 대체 — 번역은 못 해도 {n} 같은 자리는 채운다(안 채우면 「{n}회」가 그대로 보인다).
+  var T=window.vtT||function(s,v){ return v ? String(s).replace(/\{(\w+)\}/g,function(m,k){ return Object.prototype.hasOwnProperty.call(v,k) ? String(v[k]) : m; }) : s; };
   var gate=document.getElementById('login-gate');
   if(window.vtApplyI18n) window.vtApplyI18n(gate);
   var spin=document.getElementById('login-spinner');
@@ -24,6 +25,7 @@
   var pass=document.getElementById('login-pass');
   var otpWrap=document.getElementById('login-otp-wrap');
   var otp=document.getElementById('login-otp');
+  var otpBoxes=Array.prototype.slice.call(document.querySelectorAll('#login-otp-boxes .login-otp-box'));
   var rememberWrap=document.getElementById('login-remember');
   var passState=document.getElementById('login-pass-state');
   var btn=document.getElementById('login-submit');
@@ -140,7 +142,7 @@
     try{ host.textContent=location.host; host.hidden=!location.host; }catch(e){}
     // 공유 링크가 로그인으로 우회된 경우에만 안내를 켠다(그 외에는 거짓말이 된다).
     nextNote.hidden=!safeNext();
-    setTimeout(function(){ try{ (otpWrap.hidden?pass:otp).focus(); }catch(e){} }, 50);
+    setTimeout(function(){ try{ if(otpWrap.hidden) pass.focus(); else focusOtpBox(firstEmptyOtpBox()); }catch(e){} }, 50);
     // 기기 기억 기간은 처음 보는 기기에서만 고른다. 등록된 기기는 서버가 그 값을
     // 무시하므로(main.py auth_login) 보여 주면 거짓말이 된다. 상태를 못 읽으면 숨긴
     // 채로 둔다 — 그때는 값을 안 보내고 서버 기본(90일)이 적용된다.
@@ -305,6 +307,62 @@
     pass.addEventListener('blur',function(){ capsOn=false; koOn=false; renderPassState(); });
   }
 
+  // OTP 6칸(시안 M10). 칸은 한 자리씩 보이는 입력이고, 제출 값은 숨은 #login-otp 하나다(submit은 그것만 읽는다).
+  // - 숫자를 치면 다음 칸으로, 빈 칸에서 Backspace는 앞 칸으로 가서 그 자리를 지운다.
+  // - 여러 자리가 한꺼번에 들어오면(붙여넣기 · 문자/인증 앱 자동 채우기 — 첫 칸이 one-time-code) 그 칸부터 나눠 담는다.
+  //   여섯 자리를 붙여넣으면 어느 칸에서든 처음부터 채운다.
+  // - 칸에 들어가면 내용을 골라 둔다 — 다시 치면 그 자리를 바꾼다(뒤에 덧붙여 밀리지 않게).
+  function otpDigits(s){ return String(s||'').replace(/\D/g,''); }
+  function syncOtp(){ otp.value=otpBoxes.map(function(b){ return b.value; }).join(''); }
+  function clearOtp(){ otpBoxes.forEach(function(b){ b.value=''; }); syncOtp(); }
+  function firstEmptyOtpBox(){
+    for(var i=0;i<otpBoxes.length;i++){ if(!otpBoxes[i].value) return i; }
+    return otpBoxes.length-1;
+  }
+  function focusOtpBox(i){
+    var b=otpBoxes[Math.max(0,Math.min(otpBoxes.length-1,i))];
+    if(!b) return;
+    b.focus();
+    try{ b.select(); }catch(e){}
+  }
+  function fillOtp(from,digits){
+    if(digits.length>=otpBoxes.length) from=0;
+    for(var k=0;k<digits.length && from+k<otpBoxes.length;k++){ otpBoxes[from+k].value=digits.charAt(k); }
+    syncOtp();
+    focusOtpBox(Math.min(from+digits.length, otpBoxes.length-1));
+  }
+  otpBoxes.forEach(function(box,i){
+    box.setAttribute('aria-label',T('인증 코드 {n}번째 자리',{n:i+1}));
+    box.addEventListener('focus',function(){ try{ box.select(); }catch(e){} });
+    box.addEventListener('input',function(e){
+      var d=otpDigits(box.value);
+      if(!d){ box.value=''; syncOtp(); return; }
+      // 한 글자 타이핑인데 칸에 이미 숫자가 있었다(고르기가 안 먹은 브라우저) — 새로 친 자리만 남긴다.
+      if(d.length===2 && e && e.inputType==='insertText'){ d=otpDigits(e.data)||d.charAt(1); }
+      if(d.length===1){
+        box.value=d; syncOtp();
+        if(i<otpBoxes.length-1) focusOtpBox(i+1);
+        return;
+      }
+      box.value='';
+      fillOtp(i,d.slice(0,otpBoxes.length));
+    });
+    box.addEventListener('keydown',function(e){
+      if(e.key==='Backspace' && !box.value && i>0){
+        e.preventDefault();
+        otpBoxes[i-1].value=''; syncOtp(); focusOtpBox(i-1);
+      } else if(e.key==='ArrowLeft' && i>0){ e.preventDefault(); focusOtpBox(i-1); }
+      else if(e.key==='ArrowRight' && i<otpBoxes.length-1){ e.preventDefault(); focusOtpBox(i+1); }
+    });
+    box.addEventListener('paste',function(e){
+      var data=e.clipboardData||window.clipboardData;
+      var d=otpDigits(data && data.getData ? data.getData('text') : '');
+      if(!d) { e.preventDefault(); return; }
+      e.preventDefault();
+      fillOtp(i,d.slice(0,otpBoxes.length));
+    });
+  });
+
   // IME 조합이 끝날 때마다(음절 하나가 완성될 때마다) 한글이 섞여 있으면 즉시 되돌린다.
   pass.addEventListener('compositionend',function(){
     var fixed=fixKoreanInput(pass.value);
@@ -331,13 +389,13 @@
       return withDeadline(r.json()).catch(function(e){ if(isTimeout(e)) throw e; return {}; }).then(function(d){
         if(d.error==='otp_required'){
           otpWrap.hidden=false; setBusy(false); err.hidden=true;
-          setTimeout(function(){ try{ otp.focus(); }catch(e){} },50);
+          setTimeout(function(){ try{ focusOtpBox(firstEmptyOtpBox()); }catch(e){} },50);
           return;
         }
         if(d.error==='otp_invalid'){
           otpWrap.hidden=false;
           showErr(T('인증 코드가 올바르지 않습니다'), d.remaining!=null?(T('남은 시도 {n}회',{n:d.remaining})):'');
-          try{ otp.value=''; otp.focus(); }catch(e){}
+          try{ clearOtp(); focusOtpBox(0); }catch(e){}
           return;
         }
         if(d.error==='otp_locked'){

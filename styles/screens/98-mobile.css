@@ -156,6 +156,59 @@
   .vt-fleet-menu-sheet .vt-dialog-actions { display:flex; gap:8px; padding:12px 20px 0; }
   .vt-fleet-menu-sheet .vt-dialog-actions .vt-btn { --btn-h:44px; flex:1; height:44px; }
 
+  /* ── 설정 상세(시안 M08) — 머리 한 줄(‹ + 제목) · 행 56(라벨 왼쪽, 컨트롤 오른쪽) · 스위치 40×24 ─────────────
+     골격은 50-settings-usage.css의 compact 규칙(행을 위아래로)이고, 여기서는 컨트롤이 작은 행(스위치 · 고르기 · 숫자)만
+     라벨 옆으로 되돌린다. 넓은 컨트롤(프리셋 · 키 조합 · 표)은 위아래 그대로. */
+  .vt-settings #vt-set-body { background:var(--color-bg-0); }
+  .vt-settings .vt-set-content { padding:0 16px 24px; }
+  .vt-settings .vt-set-intro {
+    position:sticky; top:0; z-index:2; display:flex; align-items:center; gap:4px; min-height:48px;
+    margin:0 -16px 4px; padding:0 16px 0 4px; box-sizing:border-box;
+    background:var(--color-bg-1); border-bottom:1px solid var(--color-line);
+  }
+  .vt-settings .vt-set-back {
+    display:inline-flex; align-items:center; justify-content:center; flex:none;
+    width:44px; height:44px; min-height:44px; margin:0; padding:0; font-size:0; color:var(--color-sub);
+  }
+  .vt-settings .vt-set-back::before { content:"‹"; font:400 26px / 1 var(--font-ui); }
+  .vt-settings .vt-set-title {
+    flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    font:600 var(--fs-base) / 20px var(--font-ui); letter-spacing:0;
+  }
+  .vt-settings .vt-set-description { display:none; }
+  .vt-settings .vt-set-group { margin-top:16px; }
+  .vt-settings .vt-set-group-title { padding:0 0 4px; }
+  .vt-settings .vt-set-note { margin:12px 0 0; }
+  .vt-settings .vt-set-row { min-height:56px; box-sizing:border-box; padding:10px 0; gap:8px; }
+  /* 라벨이 160 아래로 줄어야 할 만큼 컨트롤이 넓으면(긴 선택값) 컨트롤만 다음 줄로 내린다 — 값을 자르지 않는다. */
+  .vt-settings .vt-set-row:has(> .vt-toggle, > .vt-select-wrap, > .vt-dd, > .vt-range:not(.has-presets), > .vt-number-spinner, > input[type="checkbox"]) {
+    flex-direction:row; flex-wrap:wrap; align-items:center; gap:8px 12px;
+  }
+  .vt-settings .vt-set-row > .vt-set-meta { flex:1 1 160px; }
+  .vt-settings .vt-set-row > .vt-select-wrap, .vt-settings .vt-set-row > .vt-dd { flex:0 1 auto; max-width:100%; }
+  /* 숫자 행 — 시안은 「− 14 +」 하나. 슬라이더는 접고 입력 + 단추만 남긴다(직접 입력 · 한 칸씩 둘 다 된다). */
+  .vt-settings .vt-set-row > .vt-range:not(.has-presets) input[type="range"] { display:none; }
+  .vt-settings .vt-set-row > .vt-range:not(.has-presets) { gap:6px; }
+  .vt-settings .vt-set-row .vt-number-spinner .vt-range-number { width:48px; text-align:center; }
+  /* 스위치 40×24(터치 52×44) — ON/OFF 두 칸 대신 손잡이 하나. 상태는 role=switch + aria-checked가 그대로 말한다. */
+  .vt-settings .vt-set-row > .vt-toggle {
+    position:relative; flex:none; align-self:center; width:52px; height:44px; min-height:44px;
+    padding:0; border:0; border-radius:var(--radius-lg); background:transparent; overflow:visible;
+  }
+  .vt-settings .vt-set-row > .vt-toggle > span { display:none; }
+  .vt-settings .vt-set-row > .vt-toggle::before {
+    content:""; position:absolute; left:6px; top:10px; width:40px; height:24px; border-radius:12px;
+    background:var(--color-bg-3); box-shadow:inset 0 0 0 1px var(--color-line-strong);
+    transition:background-color var(--dur-fast) ease;
+  }
+  .vt-settings .vt-set-row > .vt-toggle::after {
+    content:""; position:absolute; left:9px; top:13px; width:18px; height:18px; border-radius:9px;
+    background:var(--color-sub); transition:transform var(--dur-fast) ease;
+  }
+  .vt-settings .vt-set-row > .vt-toggle[aria-checked="true"]::before { background:var(--color-acc-surface); box-shadow:none; }
+  .vt-settings .vt-set-row > .vt-toggle[aria-checked="true"]::after { transform:translateX(16px); background:var(--color-acc-ink); }
+  .vt-settings .vt-set-row > .vt-toggle:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
+
   /* ── 키바 90 — 키 44×36 · 간격 6 · 패딩 6 ─────────────────────────────── */
   #keybar {
     gap:6px; background:var(--color-bg-1); border-top:1px solid var(--color-line);
@@ -166,9 +219,17 @@
   #keybar-main { grid-template-rows:36px 36px; gap:6px; }
   #keybar-mods { gap:6px; }
   #keybar-mods .kb { flex:0 0 auto; min-width:52px; padding:0 10px; }
+  /* 수식키 상태 문구 — 수식키 오른쪽 남는 폭을 늘 차지하고(비어 있어도) 글자만 바뀐다. 줄 높이는 36 고정이라
+     문구가 생기고 사라져도 키가 움직이지 않는다. 오른쪽 50(간격 6 + ↑ 왼쪽의 빈 칸 44)까지 넘어가 쓴다 — 그 칸은
+     역T자 방향키의 빈자리라 누를 것이 없다. 그래도 좁으면(집중 모드의 마이크 키) 말줄임. */
+  #keybar-mods #keybar-mod-hint {
+    display:block; flex:1 1 0; min-width:0; margin-right:-50px; align-self:center; text-align:right; pointer-events:none;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    font:400 var(--fs-2xs) / 16px var(--font-ui); color:var(--color-muted);
+  }
   #keybar-scroll { gap:6px; }
   #keybar-arrows { grid-template-columns:repeat(3, 44px); grid-template-rows:repeat(2, 36px); gap:6px; }
-  #keybar .kb {
+  #keybar .kb, #vt-edit-keys .kb {
     height:36px; min-width:44px; border-radius:var(--radius-sm); background:var(--color-bg-raised);
     border:1px solid var(--color-line-strong); color:var(--color-txt); font:500 var(--fs-sm) / 1 var(--font-mono);
   }
@@ -177,8 +238,35 @@
   /* 다음 키만(파랑 테두리) · 잠김(채움) · 누르는 동안 — 상태는 램프와 면이 같이 말한다. */
   #keybar .kb-mod.armed { background:var(--color-acc-soft); border-color:var(--color-acc); color:var(--color-acc); }
   #keybar .kb-mod.locked { background:var(--color-acc-surface); border-color:var(--color-acc); color:var(--color-acc-ink); }
-  #keybar .kb.holding, #keybar .kb:active { background:var(--menu-hover); }
+  #keybar .kb.holding, #keybar .kb:active, #vt-edit-keys .kb:active { background:var(--menu-hover); }
   #keybar-selection-actions .vt-btn { --btn-h:44px; height:44px; }
+
+  /* ── 파일 편집(시안 files.html M-F5, layout/mobile-edit.js) ─────────────────────────────────────
+     편집 중(html.vt-mobile-editing)엔 아래 탭을 숨기고 키보드 바로 위에 보조 키 줄 44(키 40×32, 키바 키 모양)를 띄운다.
+     --vt-edit-overlap(키보드가 덮은 높이)과 --vt-edit-keys-h(줄의 실측 높이)는 mobile-edit.js가 낸다 — 편집 화면 바닥을
+     그만큼 올려 커서 줄이 키 줄·키보드 뒤로 숨지 않게 한다. 편집을 끝내면 클래스가 빠져 아래 탭이 돌아온다. */
+  html.vt-mobile-editing #vt-mnav-bottom { display:none; }
+  html.vt-mobile-editing .vt-viewer-backdrop.vt-file-compact {
+    bottom:calc(var(--vt-edit-keys-h, 44px) + var(--vt-edit-overlap, 0px));
+  }
+  html.vt-mobile-editing .vt-viewer-backdrop.vt-file-compact > .vt-viewer-card { height:100%; padding-bottom:0; animation:none; }
+  #vt-edit-keys {
+    position:fixed; left:0; right:0; bottom:0; z-index:660; box-sizing:border-box;
+    align-items:center; gap:6px; min-height:44px;
+    padding:6px calc(8px + env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) calc(8px + env(safe-area-inset-left,0px));
+    background:var(--color-bg-1); border-top:1px solid var(--color-line); will-change:transform;
+  }
+  body.vt-keyboard-open #vt-edit-keys { padding-bottom:6px; }
+  html.vt-mobile-editing #vt-edit-keys:not([hidden]) { display:flex; }
+  /* 편집 위에 대화상자(저장 승격 비밀번호 · 버릴까요?)가 뜨면 줄을 걷는다 — 줄이 대화상자 바닥을 덮지 않게. */
+  html.vt-mobile-editing body:has(.vt-viewer-backdrop.vt-dialog) #vt-edit-keys { display:none; }
+  #vt-edit-keys .kb { flex:none; height:32px; min-width:40px; padding:0 8px; touch-action:manipulation; }
+  #vt-edit-keys .vt-edit-keys-sp { flex:1 1 auto; min-width:0; }
+  #vt-edit-keys .vt-edit-keys-save {
+    padding:0 14px; font-family:var(--font-ui); font-weight:600;
+    background:var(--color-acc-surface); border-color:transparent; color:var(--color-acc-ink);
+  }
+  #vt-edit-keys .vt-edit-keys-save:disabled { opacity:.5; }
 
   /* ── 떠 있는 마이크 56 — 터미널 탭에서만. 아래 탭 위 16, 키바가 열려 있으면 키바 위 16 ─────────
      --kb-height(키바 실측 높이, 닫혀 있으면 0)와 --kb-overlap(소프트 키보드가 덮은 높이)은 term/keybar-ui.js가 낸다.
@@ -257,6 +345,12 @@
   html.vt-focus #vt-focus-pill { display:flex; }
   html.vt-focus #vt-focus-pill[data-waiting]:not([data-waiting="0"]) { border-color:var(--m-wait-line); }
 }
+
+/* 편집 보조 키 줄은 폰에서만(mobile-edit.js도 폭 < 720에서만 켠다 — 이중 방어). */
+#vt-edit-keys { display:none; }
+
+/* 수식키 상태 문구는 폰(위 compact 규칙, 선택자 한 단 더 구체적)에서만 — 넓은 화면의 강제 키바는 수식키가 줄을 꽉 채운다. */
+#keybar-mod-hint { display:none; }
 
 /* 알약의 모양 — 폰 수동 집중(위)과 가로 폰의 자동 집중(아래, 폭 720 이상일 수 있다)이 같이 쓴다. */
 #vt-focus-pill, #vt-focus-edge { display:none; }
