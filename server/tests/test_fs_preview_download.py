@@ -432,3 +432,129 @@ def test_download_runs_its_io_in_the_fs_pool(client, root, monkeypatch):
     (root / "a.txt").write_text("x" * 10)
     assert _dl(client, root / "a.txt").status_code == 200
     assert "fs.download" in seen and "fs.download.read" in seen
+
+
+# --- 이상한 Range·끊긴 연결: fd가 새지 않는다 --------------------------------------------------
+
+
+def _raw_with_range_bytes(p, rng: str) -> int:
+    """Range 헤더를 **바이트 그대로** 보낸다. TestClient는 헤더를 UTF-8로 바꿔 '²'(0xB2)가 'Â²'로 닿으므로,
+    실제 서버(ASGI는 헤더를 latin-1로 푼다)와 같게 httpx의 ASGI 전송으로 바로 부른다."""
+    import asyncio
+
+    import httpx
+
+    raw = rng.encode("latin-1") if all(ord(c) < 256 for c in rng) else rng.encode("utf-8")
+
+    async def run():
+        t = httpx.ASGITransport(app=main.app, raise_app_exceptions=False)
+        async with httpx.AsyncClient(transport=t, base_url="http://testserver") as ac:
+            r = await ac.get("/api/fs/raw", params={"path": str(p)}, headers={"Range": raw})
+            return r.status_code
+
+    return asyncio.run(run())
+
+
+@pytest.mark.parametrize("rng", [
+    "bytes=²-",                       # str.isdigit()은 참, int()는 ValueError
+    "bytes=0-²",
+    "bytes=-١٢",                      # 아랍 숫자
+    "bytes=" + "9" * 5000 + "-",      # int() 자릿수 상한(4300) 초과
+    "bytes=0-" + "9" * 5000,
+    "bytes=-" + "9" * 5000,
+    "bytes=" + "0" * 5000 + "1-2",    # 앞의 0은 자릿수로 세지 않는다
+    "bytes=-5-",
+    "bytes=--5",
+    "bytes=0-1,2-3,4-5",
+])
+def test_weird_ranges_never_500_and_never_leak_fds(client, root, rng):
+    (root / "a.mp4").write_bytes(MP4)
+    _raw_with_range_bytes(root / "a.mp4", "bytes=0-1")
+    before = _open_fds()
+    for _ in range(5):
+        assert _raw_with_range_bytes(root / "a.mp4", rng) in (200, 206, 416)
+    assert _open_fds() <= before + 1
+
+
+def test_parse_range_huge_and_non_ascii_numbers():
+    big = "9" * 5000
+    assert fs_stream.parse_range("bytes=²-", 10) is None
+    assert fs_stream.parse_range("bytes=-١٢", 10) is None
+    assert fs_stream.parse_range("bytes=0-" + big, 10) == (0, 9)
+    assert fs_stream.parse_range("bytes=-" + big, 10) == (0, 9)
+    assert fs_stream.parse_range("bytes=" + "0" * 5000 + "2-3", 10) == (2, 3)
+    assert fs_stream.parse_range("bytes=" + big + "-3", 10) is None       # 끝 < 시작 → 무시
+    with pytest.raises(fs_stream.Unsatisfiable):
+        fs_stream.parse_range("bytes=" + big + "-", 10)
+
+
+def test_raw_closes_the_fd_when_building_the_reply_fails(root, monkeypatch):
+    """open_for 뒤 응답을 만들다 무엇이 터지든 fd는 닫힌다."""
+    (root / "a.mp4").write_bytes(MP4)
+    opened = []
+    real = fs_stream.open_for
+
+    async def spy(*a, **kw):
+        out = await real(*a, **kw)
+        opened.append(out)
+        return out
+
+    def boom(*a, **kw):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(fs_stream, "open_for", spy)
+    monkeypatch.setattr(fs_stream, "parse_range", boom)
+    with TestClient(main.app, raise_server_exceptions=False) as c:
+        assert _raw(c, root / "a.mp4", headers={"Range": "bytes=0-1"}).status_code == 500
+    assert opened and opened[0].closed
+    with pytest.raises(OSError):
+        os.fstat(opened[0].fd)
+
+
+@pytest.mark.parametrize("kind", ["raw", "download"])
+def test_disconnect_before_the_body_starts_closes_the_fd(root, kind):
+    """머리를 보내다 연결이 끊기면 본문 생성기는 한 번도 돌지 않는다 — 그래도 fd는 닫혀야 한다."""
+    import asyncio
+
+    p = root / "a.mp4"
+    p.write_bytes(MP4)
+
+    async def run():
+        out = await fs_stream.open_for(kind, str(p), **({"cap": 1 << 30} if kind == "download" else {}))
+        assert isinstance(out, fs_stream.Opened)
+        resp = fs_stream.FdStreamingResponse(out, 0, out.size, path=str(p), op="test")
+
+        async def receive():
+            await asyncio.sleep(3600)
+
+        async def send(msg):
+            raise OSError("client went away")
+
+        scope = {"type": "http", "asgi": {"spec_version": "2.4"}, "method": "GET"}
+        with pytest.raises(Exception):
+            await resp(scope, receive, send)
+        assert out.closed
+        with pytest.raises(OSError):
+            os.fstat(out.fd)
+
+    asyncio.run(run())
+
+
+def test_close_twice_does_not_close_a_reused_fd(root):
+    p = root / "a.txt"
+    p.write_text("x")
+    fd = os.open(p, os.O_RDONLY)
+    o = fs_stream.Opened(fd=fd, size=1, rev="r")
+    fs_stream.close(o)
+    again = os.open(p, os.O_RDONLY)        # 같은 번호를 다시 받을 수 있다
+    try:
+        fs_stream.close(o)
+        os.fstat(again)                    # 남의 fd는 살아 있다
+    finally:
+        os.close(again)
+
+
+def test_raw_head_is_not_routed(client, root):
+    """HEAD는 받지 않는다(쓰는 클라이언트가 없다) — 죽은 분기를 지웠다."""
+    (root / "a.mp4").write_bytes(MP4)
+    assert client.head("/api/fs/raw", params={"path": str(root / "a.mp4")}).status_code == 405
