@@ -78,7 +78,7 @@
 .vt-authz-approval .vt-pair-acts { flex-direction:row; }
 .vt-authz-approval .vt-pair-acts .vt-btn { width:auto; }
 /* 페어 확인 문구(시안 O11-B): 22px 고정폭, 가운데, 글자 간격 — 눈으로 비교하는 값이라 크게. */
-.vt-authz-approval .vt-pair-phrase { font:var(--weight-medium) var(--fs-lg)/32px var(--font-mono); letter-spacing:.12em; }
+.vt-authz-approval .vt-pair-phrase { font:var(--weight-medium) var(--fs-md)/28px var(--font-mono); letter-spacing:.06em; }
 .vt-authz-approval .vt-pair-phrase-cell { background:transparent; border:1px solid var(--color-line-strong); text-align:center; padding:12px; }
 
 /* ── 세션 미리보기의 터미널 색(시안 O01 · O03 · D03-A) ─────────────────────────

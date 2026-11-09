@@ -99,12 +99,14 @@ export function mountVoiceStatus() {
     panel.style.width = `${width}px`;
     let left = 12;
     let top = null;
+    let bottom = null;
     if (anchored) {
       const h = panel.offsetHeight;
       if (rect.left + rect.width / 2 < window.innerWidth / 2 && rect.right + 8 + width <= window.innerWidth - 12) {
-        // 활동 막대(왼쪽 세로 막대)의 마이크 — 바로 오른쪽에, 아래 끝을 마이크에 맞춘다(시안 O16-F).
+        // 활동 막대(왼쪽 세로 막대)의 마이크 — 바로 오른쪽에, 아래 끝을 마이크 아래 끝에 맞춘다(시안 O16-F).
+        // top이 아니라 bottom으로 붙인다: 녹음 중 부분 결과·확인 영역이 붙어 패널이 커지면 위로 자라야 화면 밖으로 안 나간다.
         left = rect.right + 8;
-        top = Math.max(12, Math.min(rect.bottom - h, window.innerHeight - h - 12));
+        bottom = Math.max(12, window.innerHeight - rect.bottom);
       } else {
         left = Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12));
         top = Math.max(12, Math.min(rect.bottom + 8, window.innerHeight - h - 12));
@@ -115,6 +117,7 @@ export function mountVoiceStatus() {
     }
     panel.style.left = `${left}px`;
     panel.style.top = top === null ? '' : `${top}px`;
+    panel.style.bottom = bottom === null ? '' : `${bottom}px`;
     panel.classList.toggle('vt-voice-mobile', !anchored);
   }
   function paintRecord() {

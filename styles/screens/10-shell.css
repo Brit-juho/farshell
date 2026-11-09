@@ -622,7 +622,7 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
 /* 입력 대상 줄 — 「입력 대상」 글자 + 들어간 면 셀렉트(시안: 12px, sunk). */
 .vt-voice-pin { display:flex; align-items:center; gap:8px; min-width:0; }
 .vt-voice-pin label { flex:none; color:var(--color-muted); font-size:var(--fs-xs); }
-.vt-voice-pin .vt-select, .vt-voice-pin .vt-dd { flex:1 1 auto; min-width:0; max-width:260px; box-sizing:border-box; background:var(--color-bg-2); font-family:var(--font-mono); font-size:var(--fs-xs); }
+.vt-voice-pin .vt-select, .vt-voice-pin .vt-dd { flex:1 1 auto; min-width:0; max-width:260px; box-sizing:border-box; background:var(--color-bg-2); font-size:var(--fs-xs); }
 /* 녹음 중 음량 막대 24개(높이 40). 값은 status-panel.js가 scaleY로 밀어 넣는다(레이아웃 없이 transform만).
    --lv(0~1)는 마지막 값 — 접근성 값(aria-valuenow)과 같다. 색은 토큰만. */
 .vt-voice-meter { display:flex; align-items:center; justify-content:center; gap:3px; height:40px; flex:none; }
