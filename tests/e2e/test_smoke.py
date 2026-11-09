@@ -1941,10 +1941,14 @@ def test_도구_패널이_정돈_치수를_쓴다(page):
               if (!root) return null;
               const h = (q) => { const e = root.querySelector(q); return e ? Math.round(e.getBoundingClientRect().height) : null; };
               const body = root.querySelector('.vt-vw-body');
-              const side = document.getElementById('vt-side');
+              // 사이드바 바탕 = bg-1(#vt-side 자신은 투명하고 안쪽 면이 칠한다) — 토큰 값을 그대로 잰다.
+              const probe = document.createElement('i');
+              probe.style.background = 'var(--color-bg-1)';
+              document.body.appendChild(probe);
+              const sideBg = getComputedStyle(probe).backgroundColor;
+              probe.remove();
               return { head: h('.vt-viewer-head'), sec: h('.vt-psec'), row: h('.vt-prow'),
-                       bodyBg: body && getComputedStyle(body).backgroundColor,
-                       sideBg: side && getComputedStyle(side).backgroundColor };
+                       bodyBg: body && getComputedStyle(body).backgroundColor, sideBg };
             }""", sel)
 
     _open_dock(page, "변경")
