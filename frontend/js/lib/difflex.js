@@ -46,6 +46,9 @@
   // type: 'ctx' | 'add' | 'del' | 'meta'
   function parse(diffText) {
     var lines = normalize(diffText).split('\n');
+    // 원문이 줄바꿈으로 끝나면 split이 끝에 빈 문자열 하나를 남긴다. diff의 빈 문맥 줄은
+    // 항상 공백 한 칸(" ")이라 이 빈 문자열은 줄이 아니다 — 남겨 두면 끝에 번호 붙은 빈 줄이 생긴다.
+    if (lines.length && lines[lines.length - 1] === '') lines.pop();
     var files = [];
     var cur = null;
     var hunk = null;

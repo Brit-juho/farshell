@@ -129,3 +129,12 @@ test('langForPath: 모르는 확장자/무확장자는 null (plaintext 폴백)',
   assert.strictEqual(D.langForPath('a.constructor'), null);
   assert.strictEqual(D.langForPath('a.toString'), null);
 });
+
+test('parse: 원문 끝 줄바꿈이 번호 붙은 빈 문맥 줄로 바뀌지 않는다', () => {
+  const src = 'diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,2 +1,2 @@\n a\n-b\n+c\n';
+  const lines = D.parse(src)[0].hunks[0].lines;
+  assert.deepStrictEqual(lines.map(l => l.type), ['ctx', 'del', 'add']);
+  // 진짜 빈 문맥 줄(공백 한 칸)은 그대로 남는다.
+  const blank = D.parse('diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,2 +1,2 @@\n \n+c\n')[0].hunks[0].lines;
+  assert.deepStrictEqual(blank.map(l => l.type), ['ctx', 'add']);
+});
