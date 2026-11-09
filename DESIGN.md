@@ -479,6 +479,17 @@ and **one sidebar** beside it. The bar's top group are the activities, in this o
 `#vt-activity-mic-home` by `term/keybar.js` `placeMicButton` from its hidden parking slot `#vt-mic-park`)
 and 설정 (opens Settings; the approval-pending badge from `share-lazy.js` sits on its icon corner).
 
+**Order and hiding are the user's choice** (Settings → 상태 막대 · 활동 막대, right column 「활동 막대 순서」, mock
+O05; device-scoped `ui.activity.layout`, JSON `{"v":1,"order":[…],"hidden":[…],"bottom":[…]}`, `''` = default).
+세션 is pinned first and cannot be hidden. A hidden activity leaves only the bar: the palette and keymap still open
+it and the sidebar shows it as usual (`available` keeps it; only the bar's `items` drop it). The bottom group can
+be reordered but not hidden (hiding the gear would remove the way back) — by CSS `order`, because the mic slot is
+the node `voice.js` caches. An activity missing from a saved layout (a newer version's) is appended in default
+order; unknown ids are dropped. Rules: `shell/activity-layout.js` (plain JS, like `hud-layout.js`). The editor
+(`panels/settings/sections/activity-order.js`) is grip + icon 14 + name, a 「맨 위 고정」 or 「숨김」 tag, an eye
+toggle (`aria-pressed`) for the top group and ↑↓ 24; drag and the arrows share `moveActivity`. It sits in the
+right column at ≥1100px and below the status bar zones when narrower (the same editor drawn twice, CSS picks one).
+
 - **Item** 48×44, icon 20 (stroke 1.75), name only in `aria-label` and the tooltip (`data-tip`, shown to
   the right; second line = badge count, plus the `railToggle` key on the current activity). **Active** =
   a 2px `--color-acc` bar on the left edge (10px inset top and bottom, `::before`), no fill. A badge
@@ -550,8 +561,10 @@ count mono 11, actions on the right; 개입 필요 is amber. Grouped views use t
    change size (`+add` in `st-working`, `−del` in `st-error`, or `파일 N`). With no context yet:
    「정보 갱신 대기」 (`faint`).
 3. **State keyword** 12/600 · 도구: name (the one place allowed to ellipsize) · badge chip · internal
-   subagent chip (「내부 2 작업 중」, `st-working` tint) · share mark · **origin icon** (local has none;
-   `laptop` = created on another Mac, `square-terminal` = CLI / plain tmux).
+   subagent chip (「내부 2 작업 중」, `st-working` tint) · share mark · **origin icon + short text** (local has none;
+   `laptop` 「다른 맥에서 만듦」, `square-terminal` 「직접 만듦」; the text ellipsizes first, the tooltip keeps the long
+   sentence). The server does not record which Mac created a peer session, so the mock's 「m5-studio에서 만듦」
+   reads 「다른 맥에서 만듦」. The phone's Fleet keeps the icon only.
 4. Only when applicable: 「다른 화면 N」 (`monitor-smartphone`) and the non-web attach count (`terminal`).
 
 The state keyword is short and fixed so it is never truncated: 승인 요청 / 선택 요청 / 계획 확인 / 질문
@@ -578,6 +591,11 @@ indent and line: state icon 16 · name 13/500 · elapsed, then 「내부 · 작�
 Ended rows (`StoppedRow`) use the same columns with the dashed state circle and a `sub` name; their
 action line (다시 확인 · 보관 해제 · 이어서 시작 — only 이어서 시작 is accent-filled) appears on hover or
 focus with a fine pointer and is always shown on touch.
+
+**Collapsing.** The 「실행 중」 head is a toggle like 「개입 필요」 (caret · label · count; the sort switch stays), and
+each grouped view has its own caret before the group icon (the title still opens the group; collapsed groups keep
+their head and count). Both are device-scoped in `rail.view` (`runningCollapsed`, `groupsCollapsed` = view ids,
+newest 200).
 
 The ⋯ button and right-click open the same menu (`rowMenuItems`: 열기/닫기 · 이름 변경 ·
 맥에서 열기 · 연결된 화면 · 종료). **레일 설정** (sliders) holds 개입 필요 on/off, show or hide sessions
@@ -681,7 +699,7 @@ events. A chip with no value is **hidden** (no usage provider → no chip). Rese
 chips show only usage.
 
 **Which chips show, on which side and in what order is the user's choice**
-(Settings → 상태 막대; device-scoped `ui.hud.layout`, JSON
+(Settings → 상태 막대 · 활동 막대; device-scoped `ui.hud.layout`, JSON
 `{"v":3,"left":[…],"right":[…]}`). The unit is a *kind* (`server`, `screens`, `e2e`, `safe-mode`,
 `cpu`, `gpu`, `ram`, `net`, `usage`, `version`, `push`, `clock`), not a chip id — usage profiles come and go,
 so the setting names «usage» once. A kind that is in neither list is hidden, so a new kind
@@ -693,7 +711,7 @@ chip» and the squeeze order below still hold wherever a chip is placed. The set
 edits the layout three ways — drag, a position select and up/down buttons — all through the same
 `moveHudKind`/`stepHudKind` (the select and buttons are the keyboard path, not an extra), shows a
 preview with sample values (the status bar as it will look, agents chip first), and is hidden in compact
-(there is no status bar there). The settings section is **상태 막대** (id `hud`). The agents chip is
+(there is no status bar there). The settings section is **상태 막대 · 활동 막대** (id `hud`). The agents chip is
 `PINNED_HUD_KINDS` — shown at the top of 「왼쪽」 with a 「고정」 tag, no grip, select or arrows. The saved layout
 carries a generation (`{"v":3,…}`): a layout without `v` gets the newer kinds (`push`, `clock`) added once at their
 default places when it is read (not an all-off layout, which is a choice); from generation 3 an `agents` entry in
@@ -886,8 +904,11 @@ the search field (28) on top; items 32 high, 13px, radius 6, the current section
 (`acc-soft`) in 600. Content padding 20/28, left-aligned (max 760): title 22/600, description 13 muted, group
 heads 12/600 muted 20 above, rows padded 12/0 with a 1px line below, label 13/500, help 12 muted, scope tag
 11/500 muted with a 1px `line-strong` border and no fill. The right preview column is 300 wide, padded 20, on
-`bg-1` (terminal and appearance sections only; hidden below 1100px). 상태 막대 (O05) lays its three zones
-side by side above 720px with 32px item tiles; 계정 및 보안 (O06) draws the device table with a 28 head and
+`bg-1` (terminal and appearance sections only; hidden below 1100px). Appearance adds a **focus mode preview**
+under the skin preview (mock O04-B): a 170px static sketch — two panes in terminal colours, the 「개입 1」 pill
+and the accent edge bands (left 4, top/bottom 3) — that follows 가장자리에 막대 띄우기 · 개입 표시 · 가장자리
+반응 시간 and explains them in the caption; it never turns focus mode on. 상태 막대 · 활동 막대 (O05) lays its three zones
+side by side above 720px with 32px item tiles and puts 「활동 막대 순서」 in the right column; 계정 및 보안 (O06) draws the device table with a 28 head and
 48 rows, this device on the selection tint.
 
 **Three settings, three icons.** 설정 = gear (reached from the FarShell menu, `Mod+,` and the activity bar's bottom gear), 레일 설정 = `sliders-horizontal` (rail header), 상태 막대 설정 = `panel-top` (FarShell menu item).
@@ -927,6 +948,17 @@ drag-select always work even under vim/tmux mouse mode.
   `::-webkit-slider-thumb` and `::-moz-range-thumb`). The desktop affordance
   is `:hover { transform:scale(1.15) }`, which never fires on touch, so the
   knob would stay a tiny 12px.
+- **MCP · 스킬 · 플러그인 window (mock P09-b, `panels/agent-config.js`).** The window keeps its size
+  (1240×860) and the legacy view's enlarged text; only the unified manager's insides follow P09-b: a top bar
+  (관리 대상 as a segmented control, 호스트/세션 selects with an inline 12px label, 새로고침 right), a 200px
+  left nav on `bg-1` (icon 16 · 13px label · mono 11 count, current = `bg-3` + 600), a sticky filter bar
+  (28px controls on `bg-2`), the bulk bar, rows with a 56px head (checkbox · caret · name mono 13/500 + kind
+  tag 16 + tool/host/scope in 12 muted, source path mono 11 ellipsized · state, `st-working` when on · 켜기/끄기
+  24) and a footer bar (help left, restart and 「기존 MCP 보관함·상세 관리」 right). Two columns only in the
+  wide modal; phones and the dock keep one column with the nav as a scrolling strip. The rules live
+  unlayered in `components.css` next to the base `.vt-ac-*` rules — in the legacy screens layer they would
+  lose to them regardless of specificity. Opening the legacy view drops `.vt-agent-config` so its 20px
+  padding returns.
 - **MCP server rows' Korean explanatory text uses the UI font**
   (`.vt-mcp-meta`/`.vt-mcp-verify`, `--ui`). Hangul in a monospace face has
   uneven glyph spacing and reads worse; a lone identifier inside a sentence

@@ -3341,3 +3341,208 @@ def test_폰_세션_카드는_두_줄_64이고_개입_카드의_답_버튼은_44
     assert hs and all(x == 44 for x in hs), hs
     badge = pg.locator("#vt-mnav-badge-waiting")
     assert badge.is_visible() and badge.inner_text().strip() == "1"
+
+
+# ── 리디자인 후속(셸) — 활동 막대 순서 · 집중 모드 미리보기 · 레일 접기 · MCP 관리 창 ─────────────────────
+# 스크린샷은 /tmp/fua-shots/에 남긴다(검증 기록용, 단언과 무관).
+
+_SHOTS = Path("/tmp/fua-shots")
+
+
+def _shot(pg, name: str, **kw) -> None:
+    _SHOTS.mkdir(parents=True, exist_ok=True)
+    pg.screenshot(path=str(_SHOTS / f"{name}.png"), **kw)
+
+
+def _open_settings_section(pg, label: str) -> None:
+    pg.locator("#vt-activitybar .vt-act-settings").click(timeout=15000)
+    pg.wait_for_selector("#vt-settings .vt-set-navitem", timeout=10000)
+    pg.locator("#vt-settings .vt-set-navitem", has_text=label).first.click()
+
+
+def test_활동_막대_순서_설정이_막대에_바로_반영되고_숨긴_활동은_팔레트로_열린다(page):
+    _open_settings_section(page, "상태 막대 · 활동 막대")
+    side = page.locator("#vt-settings .vt-set-side-actcfg")
+    expect(side).to_be_visible()
+    assert page.locator("#vt-settings .vt-actcfg-inline").is_hidden(), "넓은 창에서는 오른쪽 칸만 보인다"
+    _shot(page, "o05-activity-order")
+    # 큐 숨기기 → 활동 막대에서 바로 빠진다(새로고침 없음).
+    side.locator('.vt-actcfg-item[data-activity="queue"] [aria-pressed]').click()
+    page.wait_for_function("() => !document.querySelector('#vt-activitybar [data-activity=\"queue\"]')", timeout=5000)
+    # 시스템을 맨 위(세션 바로 아래)로 — ↑ 여러 번.
+    for _ in range(8):
+        up = side.locator('.vt-actcfg-item[data-activity="system"] button[aria-label$="위로"]')
+        if up.is_disabled():
+            break
+        up.click()
+    ids = page.evaluate("() => [...document.querySelectorAll('#vt-activitybar [role=\"tab\"]')].map((b) => b.dataset.activity)")
+    assert ids[:2] == ["sessions", "system"] and "queue" not in ids, ids
+    # 아래 무리: 설정을 맨 위로.
+    side.locator('.vt-actcfg-item[data-activity="settings"] button[aria-label$="위로"]').click()
+    side.locator('.vt-actcfg-item[data-activity="settings"] button[aria-label$="위로"]').click()
+    order = page.evaluate("""() => {
+      const y = (s) => document.querySelector(s).getBoundingClientRect().top;
+      return [y('#vt-activitybar .vt-act-settings'), y('#vt-activitybar .vt-act-mcp')];
+    }""")
+    assert order[0] < order[1], order
+    _shot(page, "o05-activity-order-changed")
+    # 좁은 창(1099 이하): 오른쪽 칸 대신 구역 아래 사본이 보인다.
+    page.set_viewport_size({"width": 1024, "height": 800})
+    page.wait_for_timeout(200)
+    assert page.locator("#vt-settings .vt-set-side-actcfg").is_hidden()
+    expect(page.locator("#vt-settings .vt-actcfg-inline")).to_be_visible()
+    page.locator("#vt-settings .vt-actcfg-inline").scroll_into_view_if_needed()
+    _shot(page, "o05-activity-order-1024")
+    page.set_viewport_size(WIDE)
+    page.locator("#vt-settings .vt-vw-x").click()
+    # 숨긴 큐는 팔레트로 열리고 사이드바에 뜬다.
+    page.evaluate("window.openPalette()")
+    page.locator("#vt-qo-input").fill("프롬프트 큐")
+    page.get_by_text("프롬프트 큐", exact=True).first.click()
+    page.wait_for_selector("#vt-side .vt-side-tools:not([hidden]) #vt-queue", timeout=10000)
+    # 되돌리기(다음 테스트에 남지 않게 — 기기 설정은 테스트 정리가 지우지만 명시적으로).
+    page.evaluate("() => window.vtSettingsSet('ui.activity.layout', '')")
+    page.wait_for_selector('#vt-activitybar [data-activity="queue"]', timeout=5000)
+
+
+def test_집중_모드_미리보기가_토글을_따른다(page):
+    _open_settings_section(page, "모양")
+    fm = page.locator("#vt-settings .vt-setpv-focus")
+    fm.scroll_into_view_if_needed()
+    expect(fm).to_be_visible()
+    box = page.evaluate("""() => {
+      const r = document.querySelector('#vt-settings .vt-setpv-fm').getBoundingClientRect();
+      const p = document.querySelector('#vt-settings .vt-set-preview').getBoundingClientRect();
+      return { h: Math.round(r.height), inside: r.right <= p.right + 0.5 && r.left >= p.left - 0.5 };
+    }""")
+    assert box["h"] == 170 and box["inside"], box
+    _shot(page, "o04b-focus-preview")
+    page.evaluate("() => { window.vtSettingsSet('ui.focus.edgeReveal', false); window.vtSettingsSet('ui.focus.pill', false); }")
+    page.wait_for_timeout(100)
+    assert page.locator("#vt-settings .vt-setpv-fm-edge").first.is_hidden()
+    assert page.locator("#vt-settings .vt-setpv-fm-pill").is_hidden()
+    _shot(page, "o04b-focus-preview-off")
+    page.evaluate("() => { window.vtSettingsSet('ui.focus.edgeReveal', true); window.vtSettingsSet('ui.focus.pill', true); }")
+
+
+def test_레일_실행_중_구역과_묶음을_접고_새로고침에도_유지된다(isolated_page):
+    page = isolated_page
+    page.evaluate("() => window.createSession && window.createSession()")
+    page.wait_for_selector(".vt-pane .vt-pane-body", timeout=15000)
+    page.wait_for_timeout(500)
+    page.evaluate("() => window.splitActivePane && window.splitActivePane('row')")
+    page.wait_for_selector(".vt-split-resizer", timeout=10000)
+    page.evaluate("() => window.createSession && window.createSession({ place: 'pane' })")
+    session_ids = []
+    try:
+        page.wait_for_function("() => Object.keys(window.allSessions()).length === 2", timeout=10000)
+        session_ids = page.evaluate("() => Object.keys(window.allSessions())")
+        page.evaluate("() => window.vtSettingsSet('ui.side.activity', 'sessions')")
+        page.wait_for_selector("#vt-wgrail .vt-view-group .vt-view-group-toggle", timeout=15000)
+        _shot(page, "d02-rail-expanded")
+        grp = page.locator("#vt-wgrail .vt-view-group").first
+        rows_before = grp.locator(".vt-srow").count()
+        assert rows_before == 2, rows_before
+        grp.locator(".vt-view-group-toggle").click()
+        expect(grp.locator(".vt-view-group-toggle")).to_have_attribute("aria-expanded", "false")
+        assert grp.locator(".vt-srow").count() == 0
+        _shot(page, "d02-rail-group-collapsed")
+        head = page.locator("#vt-wgrail .vt-wgrail-group-toggle", has_text="실행 중")
+        head.click()
+        expect(head).to_have_attribute("aria-expanded", "false")
+        assert page.locator("#vt-wgrail .vt-view-group").count() == 0
+        _shot(page, "d02-rail-running-collapsed")
+        # 기기 설정이라 새로고침해도 남는다(저장은 비동기 PUT — 잠깐 기다린다).
+        page.wait_for_timeout(600)
+        page.reload()
+        page.wait_for_function("() => document.documentElement.dataset.appReady === 'true'", timeout=20000)
+        head = page.locator("#vt-wgrail .vt-wgrail-group-toggle", has_text="실행 중")
+        expect(head).to_have_attribute("aria-expanded", "false", timeout=15000)
+        head.click()
+        page.wait_for_selector("#vt-wgrail .vt-view-group .vt-view-group-toggle[aria-expanded='false']", timeout=10000)
+        page.locator("#vt-wgrail .vt-view-group-toggle").first.click()
+        page.wait_for_selector("#vt-wgrail .vt-view-group .vt-srow", timeout=5000)
+    finally:
+        session_ids = session_ids or page.evaluate("() => Object.keys(window.allSessions())")
+        for sid in session_ids:
+            page.evaluate("(id) => window.removeSession && window.removeSession(id)", sid)
+        page.evaluate("() => window.vtSettingsSet('rail.view', '')")
+        page.wait_for_timeout(300)
+
+
+def test_레일_행_3줄에_만든_곳_글이_보인다(page, server):
+    """CLI로 만든(직접 만든) tmux 세션은 3줄에 아이콘 + 「직접 만듦」."""
+    base, token = server
+    if os.environ.get("VT_E2E_URL"):
+        pytest.skip("격리 서버에서만 tmux 소켓을 직접 만진다")
+    sock = _tmux_socket(int(base.rsplit(":", 1)[1]))
+    subprocess.run(["tmux", "-L", sock, "new-session", "-d", "-s", "fua-ext"], check=True)
+    try:
+        page.evaluate("() => window.vtSettingsSet('ui.side.activity', 'sessions')")
+        sel = "#vt-wgrail .vt-srow-line3 .vt-srow-origin.with-text"
+        page.wait_for_selector(sel, timeout=20000)
+        el = page.locator(sel).first
+        assert el.locator(".vt-srow-origin-text").inner_text() == "직접 만듦"
+        geo = page.evaluate("""(s) => {
+          const o = document.querySelector(s).getBoundingClientRect();
+          const row = document.querySelector(s).closest('.vt-srow').getBoundingClientRect();
+          return { inside: o.right <= row.right + 0.5 && o.left >= row.left, h: Math.round(o.height) };
+        }""", sel)
+        assert geo["inside"], geo
+        _shot(page, "d02-rail-origin")
+    finally:
+        subprocess.run(["tmux", "-L", sock, "kill-session", "-t", "fua-ext"], check=False)
+
+
+def test_MCP_관리_창이_P09b_치수를_따른다(page):
+    """창 크기(1240)와 큰 글자는 그대로, 안쪽만 P09-b 배치: 위 막대 · 왼쪽 탐색 200 · 행 머리 56 · 바닥 막대.
+    옛 보관함으로 넘어가면 두 단 배치가 걷히고 원래 여백(20)으로 돌아간다."""
+    page.locator("#vt-activitybar .vt-act-mcp").click()
+    page.wait_for_selector("#vt-mcp .vt-agent-config .vt-ac-nav", timeout=30000)
+    page.wait_for_selector("#vt-mcp .vt-ac-entry", timeout=30000)
+    page.wait_for_timeout(300)
+    _shot(page, "p09b-mcp-window")
+    geo = page.evaluate("""() => {
+      const q = (s) => document.querySelector(s);
+      const r = (s) => q(s).getBoundingClientRect();
+      const body = q('#vt-mcp .vt-vw-body');
+      return {
+        card: Math.round(r('#vt-mcp .vt-viewer-card').width),
+        nav: Math.round(r('#vt-mcp .vt-ac-nav').width),
+        navLeftOfPane: r('#vt-mcp .vt-ac-nav').right <= r('#vt-mcp .vt-ac-pane').left + 0.5,
+        head: Math.round(r('#vt-mcp .vt-ac-itemhead').height),
+        current: q('#vt-mcp .vt-ac-navitem[aria-current="page"]').textContent,
+        footerInCard: r('#vt-mcp .vt-ac-footer').bottom <= r('#vt-mcp .vt-viewer-card').bottom + 0.5,
+        bodyFits: body.scrollHeight <= body.clientHeight + 1,
+        padTop: getComputedStyle(body).paddingTop,
+      };
+    }""")
+    assert geo["card"] == 1240, geo
+    assert geo["nav"] == 200 and geo["navLeftOfPane"], geo
+    assert geo["head"] == 56, geo
+    assert geo["current"].startswith("목록·분류"), geo
+    assert geo["footerInCard"] and geo["bodyFits"], geo
+    assert geo["padTop"] == "0px", geo
+    page.locator("#vt-mcp .vt-ac-itemhead").first.click()
+    _shot(page, "p09b-mcp-row-open")
+    page.locator("#vt-mcp .vt-ac-navitem", has_text="프리셋").click()
+    _shot(page, "p09b-mcp-presets")
+    page.get_by_role("button", name="기존 MCP 보관함·상세 관리").click(timeout=10000)
+    page.wait_for_selector("#vt-mcp .vt-mcp-worktabs", timeout=30000)
+    pad = page.evaluate("() => getComputedStyle(document.querySelector('#vt-mcp .vt-vw-body')).paddingTop")
+    assert pad == "20px", pad
+    _shot(page, "p09b-mcp-legacy")
+    page.locator("#vt-mcp .vt-vw-x").click()
+    # 폰 — 한 단, 탐색은 가로 띠, 가로 넘침 없음.
+    page.set_viewport_size(COMPACT)
+    page.evaluate("window.openPalette()")
+    page.locator("#vt-qo-input").fill("MCP · 스킬")
+    page.get_by_text("MCP · 스킬 관리", exact=True).click()
+    page.wait_for_selector("#vt-mcp .vt-agent-config .vt-ac-entry", timeout=30000)
+    page.wait_for_timeout(300)
+    _shot(page, "p09b-mcp-phone")
+    m = page.evaluate("""() => {
+      const body = document.querySelector('#vt-mcp .vt-vw-body');
+      return { sw: body.scrollWidth, cw: body.clientWidth };
+    }""")
+    assert m["sw"] <= m["cw"] + 1, m

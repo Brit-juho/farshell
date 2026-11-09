@@ -741,7 +741,68 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
 .vt-setpv-cursor.blink { animation:vt-setpv-blink 1.1s steps(1) infinite; }
 @keyframes vt-setpv-blink { 50% { opacity:0; } }
 .vt-setpv-foot { font:400 var(--fs-xs) / 1.5 var(--ui); color:var(--color-muted); }
+/* 모양 › 집중 모드 미리보기(시안 O04-B 오른쪽) — 칸 둘 · 알약 · 가장자리 감지 띠. 칸 글자는 터미널 색 토큰. */
+.vt-set-preview:has(.vt-setpv-focus) { overflow-y:auto; }
+.vt-setpv-focus { display:flex; flex-direction:column; gap:12px; margin-top:8px; padding-top:20px; border-top:1px solid var(--color-line); }
+.vt-setpv-fm {
+  position:relative; display:flex; height:170px; overflow:hidden;
+  border:1px solid var(--color-line-strong); border-radius:var(--radius-sm); background:var(--color-term-bg);
+}
+.vt-setpv-fm-pane { padding:6px; font:var(--weight-normal) 9px / 12px var(--font-mono); color:var(--color-term-fg); white-space:nowrap; overflow:hidden; }
+.vt-setpv-fm-pane.a { flex:0 0 55%; border-right:1px solid var(--color-line-strong); }
+.vt-setpv-fm-pane.b { flex:1; min-width:0; }
+.vt-setpv-fm-pane [data-tone="ok"] { color:var(--color-term-green); }
+.vt-setpv-fm-pane [data-tone="err"] { color:var(--color-term-red); }
+.vt-setpv-fm-pane [data-tone="warn"] { color:var(--color-term-amber); }
+.vt-setpv-fm-pane [data-tone="mag"] { color:var(--color-term-mag); }
+.vt-setpv-fm-pane [data-tone="cyan"] { color:var(--color-term-cyan); }
+.vt-setpv-fm-pill {
+  position:absolute; right:6px; top:6px; height:16px; padding:0 6px; box-sizing:border-box;
+  border:1px solid color-mix(in srgb, var(--color-st-waiting) 45%, transparent); border-radius:var(--radius-full);
+  background:var(--color-bg-raised); color:var(--color-st-waiting); font:var(--weight-medium) 9px / 14px var(--font-ui);
+}
+.vt-setpv-fm-edge { position:absolute; background:color-mix(in srgb, var(--color-acc) 50%, transparent); }
+.vt-setpv-fm-edge[data-side="left"] { left:0; top:0; bottom:0; width:4px; }
+.vt-setpv-fm-edge[data-side="top"] { left:0; right:0; top:0; height:3px; }
+.vt-setpv-fm-edge[data-side="bottom"] { left:0; right:0; bottom:0; height:3px; }
+.vt-setpv-fm-pill[hidden], .vt-setpv-fm-edge[hidden] { display:none; }
 @media (max-width:1099px) { .vt-set-preview { display:none; } }
+
+/* ── 활동 막대 순서 (시안 O05 오른쪽 칸, panels/settings/sections/activity-order.js) ──────────
+   같은 편집기가 오른쪽 칸(≥1100)과 상태 막대 구역 아래(<1100) 두 자리에 그려진다. 보이는 쪽은 여기서 고른다.
+   항목 32 · 손잡이 14 · ↑↓ 24 — 상태 막대 구역의 낱장(components.css .vt-hudcfg-item)과 같은 치수. */
+.vt-set-side-actcfg { overflow-y:auto; }
+.vt-actcfg { display:flex; flex-direction:column; gap:8px; min-width:0; }
+.vt-actcfg-inline { grid-column:1 / -1; max-width:360px; }
+@media (min-width:1100px) { .vt-actcfg-inline { display:none; } }
+.vt-actcfg-head { display:flex; align-items:baseline; gap:8px; }
+.vt-actcfg-title { margin:0; font:var(--weight-semibold) var(--fs-sm) / 1.2 var(--font-ui); color:var(--color-txt); }
+.vt-actcfg-hint { margin-left:auto; font:var(--weight-normal) var(--fs-xs) / 1 var(--font-ui); color:var(--color-muted); }
+.vt-actcfg-sub { margin-top:4px; font:var(--weight-semibold) var(--fs-3xs) / 1 var(--font-ui); color:var(--color-muted); }
+.vt-actcfg-list {
+  display:flex; flex-direction:column; gap:4px; margin:0; padding:0; list-style:none;
+  border-radius:var(--radius-sm); outline:1px solid transparent; outline-offset:2px;
+}
+.vt-actcfg-list.drop { outline-color:var(--color-acc); }
+.vt-actcfg-item {
+  display:flex; align-items:center; gap:8px; min-height:32px; box-sizing:border-box; padding:0 4px;
+  border:1px solid var(--color-line); border-radius:var(--radius-sm); background:var(--color-bg-2);
+  font:var(--weight-normal) var(--fs-sm) / 1 var(--font-ui); color:var(--color-txt);
+}
+/* 고정 행(세션)은 손잡이가 없다 — 손잡이 자리(14 + 간격 8)만큼 들여 이름을 맞춘다. */
+.vt-actcfg-item.pinned { padding-left:calc(4px + 14px + 8px); }
+.vt-actcfg-item.off .vt-actcfg-ico,
+.vt-actcfg-item.off .vt-actcfg-name { color:var(--color-muted); }
+.vt-actcfg-item.dragging { opacity:.4; }
+.vt-actcfg-grip { display:inline-flex; flex:none; color:var(--color-faint); cursor:grab; }
+.vt-actcfg-item:active .vt-actcfg-grip { cursor:grabbing; }
+.vt-actcfg-ico { display:inline-flex; flex:none; color:var(--color-muted); }
+.vt-actcfg-name { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-actcfg-tag { flex:none; }
+.vt-actcfg-item .vt-icon-btn { flex:none; }
+.vt-actcfg-item .vt-icon-btn[aria-pressed="true"] { color:var(--color-muted); }
+.vt-actcfg-note { margin:4px 0 0; font:var(--weight-normal) var(--fs-xs) / 1.5 var(--font-ui); color:var(--color-muted); }
+.vt-actcfg-reset { align-self:flex-start; }
 @media (prefers-reduced-motion: reduce) { .vt-setpv-cursor.blink { animation:none; } }
 
 /* ── MCP · 스킬 · 플러그인 글자 한 단계 키움 (2026-10-27 팝업 리뉴얼) ────────────────

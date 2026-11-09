@@ -14,7 +14,7 @@ import { Portal } from 'solid-js/web';
 import { t } from '../core/i18n.js';
 import {
   buildRailLists, splitRunning, groupSessionRows, compactRailRows, rowMenuItems, rowSummaryDetails, runRowMenu,
-  ATTENTION_COLLAPSED_KEY, ATTENTION_SHOW_KEY, ORDER_KEY, LINEAGE_KEY, VIEW_KEY, encodeOrder, encodeLineagePrefs, encodeRailView,
+  ATTENTION_COLLAPSED_KEY, ATTENTION_SHOW_KEY, ORDER_KEY, LINEAGE_KEY, VIEW_KEY, encodeOrder, encodeLineagePrefs, encodeRailView, toggleGroupCollapsed,
   buildSessionTree, kidsProgress, moveInOrder,
   type SessionRow, type RailSort, type TreeEntry,
 } from './rail-data.js';
@@ -390,6 +390,10 @@ export function Rail(props: RailProps) {
     openSessionRecord(session.id, () => { catalogPoll.kick(); }, { tmuxName: tmuxName || session.tmux_name || '' });
   };
   const recentCollapsedToggle = () => setPref(VIEW_KEY, encodeRailView({ ...prefs().view, recentCollapsed: !prefs().view.recentCollapsed }));
+  // 「실행 중」 구역과 묶음 접힘 — 같은 rail.view 한 덩어리(기기별). 접힌 묶음도 머리(제목 · 개수)는 남는다.
+  const toggleRunningCollapsed = () => setPref(VIEW_KEY, encodeRailView({ ...prefs().view, runningCollapsed: !prefs().view.runningCollapsed }));
+  const groupCollapsed = (id: string) => !!id && prefs().view.groupsCollapsed.includes(id);
+  const toggleGroup = (id: string) => setPref(VIEW_KEY, encodeRailView({ ...prefs().view, groupsCollapsed: toggleGroupCollapsed(prefs().view.groupsCollapsed, id) }));
 
   // 폭 720px 이상 + 터치일 때만 「오른쪽에 나란히/아래에 열기」가 들어간다(term/session-actions.js).
   const splitAvailable = (row: SessionRow): boolean => !!(window as any).vtTouchSplitAvailable?.(row.sessionId || null);
@@ -612,10 +616,18 @@ export function Rail(props: RailProps) {
           <Show when={!collapsed() && !archiveOpen() && !(prefs().view.byRepo && catalog()) && running().length > 0}>
             <Show when={!collapsed()}>
               <div class="vt-wgrail-group-head">
-                <span class="vt-wgrail-group-label">
-                  {t('실행 중')}
+                {/* 제목 줄(캐럿 · 실행 중 · 개수)이 접기 토글이다 — 「개입 필요」와 같은 모양. 접힘은 기기별(rail.view). */}
+                <button
+                  type="button"
+                  class="vt-wgrail-group-toggle"
+                  classList={{ collapsed: prefs().view.runningCollapsed }}
+                  aria-expanded={!prefs().view.runningCollapsed}
+                  onClick={toggleRunningCollapsed}
+                >
+                  <span class="vt-wgrail-group-caret" innerHTML={icon('chevron-down', 12, 2)} />
+                  <span class="vt-wgrail-group-label">{t('실행 중')}</span>
                   <span class="vt-wgrail-group-count">{running().length}</span>
-                </span>
+                </button>
                 <div class="vt-rail-sort" role="radiogroup" aria-label={t('세션 정렬')}>
                   <For each={[['name', t('이름순')], ['manual', t('수동')]] as [RailSort, string][]}>{([id, label]) => (
                     <button
@@ -631,8 +643,10 @@ export function Rail(props: RailProps) {
                 </div>
               </div>
             </Show>
+            <Show when={!prefs().view.runningCollapsed}>
             <For each={groupedViews()}>{(group) => (
-              <ViewGroup group={group} onOpen={() => { void openRow({} as MouseEvent, group.rows[0]); }}>
+              <ViewGroup group={group} onOpen={() => { void openRow({} as MouseEvent, group.rows[0]); }}
+                collapsed={groupCollapsed(group.id)} onToggle={() => toggleGroup(group.id)}>
                 <For each={group.rows}>{(row) => renderRow(row)}</For>
               </ViewGroup>
             )}</For>
@@ -687,6 +701,7 @@ export function Rail(props: RailProps) {
                 </Show>
               </div>
             )}</For>
+            </Show>
           </Show>
           {/* 최근 종료 → 보관함 한 줄. 카탈로그가 없는 옛 호스트는 위의 실행 중 목록만 남는다. */}
           <Show when={!collapsed() && !archiveOpen() && catalog()}>

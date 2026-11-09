@@ -5,12 +5,22 @@ import { relayHost } from '../core/host-route.js';
 import { promptDialog, confirmDialog } from '../core/dialog.js';
 import { showToast } from '../ui/toast.js';
 import { t } from '../core/i18n.js';
+import { icon } from '../ui/icons.js';
 
 const KIND = { mcp: 'MCP', skill: t('스킬'), plugin: t('플러그인') };
 const ORIGIN = { personal: t('개인 작성'), git: t('Git 저장소'), marketplace: t('마켓플레이스'), local: t('로컬 설치'), unknown: t('출처 미확인') };
 const UPDATE = { unchecked: t('업데이트 미확인'), unavailable: t('업데이트 확인 불가'), current: t('최신'), available: t('업데이트 있음'), modified: t('로컬 수정 있음') };
 const STATE = { waiting: t('안전한 재시작 대기'), restarting: t('재시작 중'), resumed: t('같은 대화로 재시작됨'), failed: t('재시작 실패'), cancelled: t('재시작 취소됨') };
 const READ = new Set(['inventory', 'environment', 'sync-status', 'restart-status', 'restart-jobs', 'requests', 'preview', 'restart-preview', 'edit-preview']);
+
+// 관리 창 안쪽 배치(리디자인 후속, 시안 panels P09-b): 위 막대(관리 대상 · 호스트 · 세션 · 새로고침) /
+// 왼쪽 탐색 200(아이콘 + 이름 + 개수) / 오른쪽 내용(필터 막대 · 일괄 막대 · 56 높이 행) / 바닥 막대(안내 · 재시작 ·
+// 옛 보관함). 창 크기(1240×860)와 큰 글자 결정은 그대로다 — 이 파일은 구획만 나누고 모양은 CSS(.vt-ac-*)가 맡는다.
+// 기능·문구는 바꾸지 않는다(버튼 이름이 곧 테스트의 손잡이다).
+const NAV = [
+  ['items', 'list'], ['profiles', 'sliders-horizontal'], ['presets', 'layout-panels'],
+  ['environment', 'braces'], ['sync', 'refresh-cw'], ['requests', 'shield'],
+];
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -274,9 +284,19 @@ export function mount(host, initialContext = {}, onLegacy = null) {
     const summary = el('summary', 'vt-ac-itemhead');
     const scopeText = row.scope === 'global' ? (row.profile === `${row.context?.home}/.${row.tool}` ? t('기본 유저') : t('프로필 유저')) : row.level === 'local' ? t('프로젝트 개인') : t('프로젝트 공용');
     const contextName = row.project ? row.project.split('/').pop() : row.profile?.split('/').pop();
-    summary.append(el('strong', null, row.name), el('span', 'vt-mcp-meta', `${KIND[row.kind]} · ${row.tool} · ${hostLabel(row.host)}`),
-      el('span', 'vt-mcp-meta', `${scopeText}${contextName ? ` · ${contextName}` : ''}`),
-      el('span', 'vt-ac-status', row.enabled == null ? t('기본값 또는 확인 불가') : row.enabled ? t('설정상 켜짐') : t('설정상 꺼짐')));
+    // 행 56(P09-b): 1줄 = 이름(mono 13/500) · 종류 태그(mono) · 도구·호스트 · 범위, 2줄 = 원본 위치(mono 11, 말줄임).
+    const head = el('span', 'vt-ac-headmain');
+    const line1 = el('span', 'vt-ac-line1');
+    const kindTag = el('span', 'vt-ac-tag mono', KIND[row.kind]);
+    kindTag.dataset.kind = row.kind;
+    line1.append(el('strong', null, row.name), kindTag, el('span', 'vt-mcp-meta', `${row.tool} · ${hostLabel(row.host)}`),
+      el('span', 'vt-mcp-meta', `${scopeText}${contextName ? ` · ${contextName}` : ''}`));
+    head.append(line1, el('span', 'vt-ac-line2', row.source || ''));
+    const status = el('span', 'vt-ac-status', row.enabled == null ? t('기본값 또는 확인 불가') : row.enabled ? t('설정상 켜짐') : t('설정상 꺼짐'));
+    status.dataset.state = row.enabled == null ? 'unknown' : row.enabled ? 'on' : 'off';
+    summary.append(el('span', 'vt-ac-chev', null), head, status);
+    summary.querySelector('.vt-ac-chev').innerHTML = icon('chevron-right', 12, 2);
+    summary.querySelector('.vt-ac-chev').setAttribute('aria-hidden', 'true');
     box.appendChild(summary);
     const info = el('div', 'vt-ac-itembody');
     info.append(el('p', 'vt-mcp-meta', `${ORIGIN[row.origin] || ORIGIN.unknown} · ${row.metadata?.category || t('미분류')} · ${UPDATE[row.update?.state] || UPDATE.unchecked}`));
@@ -340,7 +360,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
   }
 
   function renderItems(body) {
-    const filters = el('div', 'vt-ac-controls');
+    const filters = el('div', 'vt-ac-controls vt-ac-filters');
     filters.appendChild(select(t('종류'), [['all', t('모든 종류')], ...Object.entries(KIND)], kind, (v) => { kind = v; paint(); }));
     filters.appendChild(select(t('도구'), [['all', t('모든 도구')], ['claude', 'Claude'], ['codex', 'Codex'], ['agy', 'agy'], ['opencode', 'OpenCode']], tool, (v) => { tool = v; paint(); }));
     filters.appendChild(select(t('적용 범위'), [['all', t('전체')], ['global', t('기본·프로필 유저')], ['local', t('프로젝트 개인')], ['project', t('프로젝트 공용')]], scope, (v) => { scope = v; paint(); }));
@@ -354,7 +374,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
     search.addEventListener('input', () => { q = search.value; renderList(); });
     filters.appendChild(search);
     body.appendChild(filters);
-    const bulk = el('div', 'vt-ac-controls');
+    const bulk = el('div', 'vt-ac-controls vt-ac-bulk');
     bulk.appendChild(el('span', 'vt-ac-selected', t('{n}개 선택', { n: selected.size })));
     for (const [text, enabled] of [[t('선택 켜기'), true], [t('선택 끄기'), false]]) {
       const btn = button(text, () => perform(() => applySelection(enabled)));
@@ -384,7 +404,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
     categorize.dataset.requiresSelection = 'true'; bulk.appendChild(categorize);
     bulk.appendChild(button(t('선택 해제'), () => { selected.clear(); paint(); }));
     body.appendChild(bulk);
-    if (!plugins) body.appendChild(button(t('플러그인 묶음 불러오기'), () => perform(async () => { plugins = true; await load(); })));
+    if (!plugins) bulk.appendChild(button(t('플러그인 묶음 불러오기'), () => perform(async () => { plugins = true; await load(); }), 'vt-chip sm vt-ac-plugins'));
     const list = el('div', 'vt-ac-list');
     body.appendChild(list);
     function renderList() {
@@ -396,7 +416,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
         && (category === 'all' || (category === 'uncategorized' ? !r.metadata?.category : r.metadata?.category === category))
         && (!query || [r.name, r.source, r.profile, r.metadata?.description, r.metadata?.category, ORIGIN[r.origin]].join(' ').toLocaleLowerCase().includes(query)));
       visible.sort((a, b) => `${a.metadata?.category || ''}:${a.name}:${a.kind}`.localeCompare(`${b.metadata?.category || ''}:${b.name}:${b.kind}`));
-      list.appendChild(el('p', 'vt-mcp-meta', t('{n}개 항목', { n: visible.length })));
+      list.appendChild(el('p', 'vt-mcp-meta vt-ac-count', t('{n}개 항목', { n: visible.length })));
       for (const row of visible) list.appendChild(item(row));
       if (!visible.length) list.appendChild(el('p', 'vt-set-help', t('이 범위에 표시할 자료가 없습니다. 세션·도구·필터를 확인하세요.')));
       updateSelection();
@@ -526,10 +546,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
       tabs.appendChild(btn);
     }
     top.appendChild(tabs);
-    top.appendChild(button(t('새로고침'), () => perform(load)));
-    host.appendChild(top);
-    if (loading) host.appendChild(el('p', 'vt-mcp-meta', t('나머지 위치를 확인하는 중…')));
-    const controls = el('div', 'vt-ac-controls');
+    const controls = el('div', 'vt-ac-controls vt-ac-target');
     const hostOptions = hosts.map((h) => [h.id, h.label + (h.online === false ? ` · ${t('연결되지 않음')}` : '')]);
     if (view === 'all') hostOptions.unshift(['all', t('모든 호스트')]);
     controls.appendChild(select(t('호스트'), hostOptions, selectedHost, (v) => perform(() => changeContext(() => { selectedHost = v; session = ''; }))));
@@ -539,28 +556,48 @@ export function mount(host, initialContext = {}, onLegacy = null) {
       if (session && !available.some((s) => s.name === session)) entries.push([session, session]);
       controls.appendChild(select(t('세션'), entries, session, (v) => perform(() => changeContext(() => { session = v; }))));
     }
-    host.appendChild(controls);
+    top.appendChild(controls);
+    top.appendChild(button(t('새로고침'), () => perform(load), 'vt-chip sm vt-ac-refresh'));
+    host.appendChild(top);
+    const main = el('div', 'vt-ac-main');
+    const navigation = el('nav', 'vt-ac-nav');
+    navigation.setAttribute('aria-label', t('관리 메뉴'));
+    const presetCount = snapshots.reduce((n, s2) => n + (s2.presets || []).length, 0);
+    const counts = { items: rows.length, presets: presetCount, requests: requests.length };
+    const labels = { items: t('목록·분류'), profiles: t('실행 프로필'), presets: t('프리셋'), environment: t('환경변수'), sync: t('동기화'), requests: t('원격 승인') };
+    for (const [key, ic] of NAV) {
+      // 이름은 버튼의 글자 그대로 — 아이콘·개수는 aria-hidden이라 접근 이름이 바뀌지 않는다.
+      const btn = button(labels[key], () => { section = key; paint(); }, 'vt-ac-navitem');
+      btn.setAttribute('aria-current', section === key ? 'page' : 'false');
+      const ico = el('span', 'vt-ac-navico');
+      ico.setAttribute('aria-hidden', 'true');
+      ico.innerHTML = icon(ic, 16, 2);
+      btn.prepend(ico);
+      if (counts[key]) {
+        const n = el('span', 'vt-ac-navcount', String(counts[key]));
+        n.setAttribute('aria-hidden', 'true');
+        btn.appendChild(n);
+      }
+      navigation.appendChild(btn);
+    }
+    main.appendChild(navigation);
+    const pane = el('div', 'vt-ac-pane');
+    main.appendChild(pane);
+    host.appendChild(main);
+    const intro = el('div', 'vt-ac-intro');
+    if (loading) intro.appendChild(el('p', 'vt-mcp-meta', t('나머지 위치를 확인하는 중…')));
     const current = snapshots.find((s) => s.host === selectedHost)?.selected;
-    if (view === 'session' && current) host.appendChild(el('p', 'vt-ac-context', `${current.tool} · ${current.root}\n${current.project}`));
-    host.appendChild(el('p', 'vt-set-help', view === 'all'
-      ? t('설치된 원본을 한곳에서 관리합니다. 파일은 자동으로 이동하지 않습니다.')
-      : t('선택한 세션이 사용하는 프로필과 프로젝트 설정입니다. 저장 상태와 실행 중 반영은 다를 수 있습니다.')));
-    if (notice) { const status = el('p', 'vt-ac-notice', notice); status.setAttribute('role', 'status'); host.appendChild(status); }
+    if (view === 'session' && current) intro.appendChild(el('p', 'vt-ac-context', `${current.tool} · ${current.root}\n${current.project}`));
+    if (notice) { const status = el('p', 'vt-ac-notice', notice); status.setAttribute('role', 'status'); intro.appendChild(status); }
     if (errors.length) {
       const details = el('details', 'vt-ac-errors'); details.appendChild(el('summary', null, t('확인하지 못한 항목 {n}개', { n: errors.length })));
       for (const error of errors) details.appendChild(el('p', 'vt-set-help', error));
-      host.appendChild(details);
+      intro.appendChild(details);
     }
-    const navigation = el('nav', 'vt-ac-nav');
-    navigation.setAttribute('aria-label', t('관리 메뉴'));
-    for (const [key, label] of [['items', t('목록·분류')], ['profiles', t('실행 프로필')], ['presets', t('프리셋')], ['environment', t('환경변수')], ['sync', t('동기화')], ['requests', t('원격 승인')]]) {
-      const btn = button(label, () => { section = key; paint(); });
-      btn.setAttribute('aria-current', section === key ? 'page' : 'false');
-      navigation.appendChild(btn);
-    }
-    host.appendChild(navigation);
+    if (intro.childElementCount) pane.appendChild(intro);
     const body = el('div', 'vt-ac-body');
-    host.appendChild(body);
+    body.dataset.section = section;
+    pane.appendChild(body);
     if (section === 'items') renderItems(body);
     else if (section === 'profiles') import('./agent-profiles.js').then((module) => {
       if (alive() && body.isConnected) profilePanel = module.mount(body);
@@ -569,24 +606,36 @@ export function mount(host, initialContext = {}, onLegacy = null) {
     else if (section === 'environment') renderEnvironment(body);
     else if (section === 'sync') renderSync(body);
     else renderRequests(body);
-    if (view === 'session' && session && current) {
-      const footer = el('div', 'vt-ac-footer');
-      footer.appendChild(button(t('안전할 때 CLI 재시작'), () => perform(scheduleRestart)));
-      footer.appendChild(el('span', 'vt-mcp-meta', t('동일 대화·프로필로 이어가기')));
-      host.appendChild(footer);
-    }
+    // 바닥 막대 — 안내 한 줄(왼쪽) · 재시작 · 옛 보관함(오른쪽). 재시작 작업 상태도 여기서 말한다.
+    const footer = el('div', 'vt-ac-footer');
+    footer.appendChild(el('p', 'vt-set-help vt-ac-foothelp', view === 'all'
+      ? t('설치된 원본을 한곳에서 관리합니다. 파일은 자동으로 이동하지 않습니다.')
+      : t('선택한 세션이 사용하는 프로필과 프로젝트 설정입니다. 저장 상태와 실행 중 반영은 다를 수 있습니다.')));
     if (job) {
       const status = el('div', 'vt-ac-job'); status.setAttribute('role', 'status');
       status.appendChild(el('p', null, `${STATE[job.state] || job.state}${job.reason ? ` · ${job.reason}` : ''}${job.note ? ` · ${job.note}` : ''}`));
       if (job.state === 'waiting') status.appendChild(button(t('재시작 예약 취소'), () => perform(async () => { job = { ...await api(job.host, 'restart-cancel', { job: job.id }), host: job.host }; })));
-      host.appendChild(status);
+      footer.appendChild(status);
     }
-    if (onLegacy) host.appendChild(button(t('기존 MCP 보관함·상세 관리'), () => { dispose(); onLegacy(); }));
+    if (view === 'session' && session && current) {
+      footer.appendChild(el('span', 'vt-mcp-meta', t('동일 대화·프로필로 이어가기')));
+      footer.appendChild(button(t('안전할 때 CLI 재시작'), () => perform(scheduleRestart)));
+    }
+    if (onLegacy) {
+      const legacy = button(t('기존 MCP 보관함·상세 관리'), () => { dispose(); onLegacy(); }, 'vt-chip sm vt-ac-legacy');
+      const ico = el('span', 'vt-ac-navico');
+      ico.setAttribute('aria-hidden', 'true');
+      ico.innerHTML = icon('archive', 14, 2);
+      legacy.prepend(ico);
+      footer.appendChild(legacy);
+    }
+    host.appendChild(footer);
     updateSelection();
     if (busy) host.querySelectorAll('button, input, select, textarea').forEach((node) => { node.disabled = true; });
   }
 
-  function dispose() { disposed = true; generation++; profilePanel?.dispose(); if (timer) clearTimeout(timer); }
+  // 옛 보관함(mcp.js)이 같은 본문에 그려지므로 이 화면의 배치 클래스를 거둔다.
+  function dispose() { disposed = true; generation++; profilePanel?.dispose(); if (timer) clearTimeout(timer); host.classList.remove('vt-agent-config'); }
   host.replaceChildren(el('p', 'vt-set-help', t('설정과 설치 위치를 확인하는 중…')));
   vtFetch('/api/hosts').then((data) => {
     if (!alive()) return;
