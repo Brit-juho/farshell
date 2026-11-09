@@ -39,6 +39,12 @@ Everything about using FarShell in the browser. (For the CLI see `fsh help conce
   the less important chips hide first. Choose what goes where in Settings → **Status bar** (saved on this device only;
   the agents chip can't be moved or turned off).
 - Phones (narrower than 720px) have neither bar; the top bar and the bottom tabs do that job.
+- **Phone mic**: the round mic floating at the bottom right of the Terminal tab (above the bottom tabs, or above the keybar when it is open)
+  starts recording; tap again to stop. A dot on it means voice needs setting up (long-press for the voice panel).
+- **Phone focus mode**: the first button in the Terminal tab's top bar (the four-corners icon) hides the top bar and bottom tabs and leaves
+  the terminal and keybar. The mic moves to the first keybar key. A small pill at the top right shows a session waiting for approval as
+  "Needs you N name"; tap it to open that session. To leave, tap the pill's exit button or pull down from the very top edge and let go
+  (a short pull snaps back).
 
 ### Left rail (session list)
 
@@ -153,7 +159,7 @@ Hand that path to claude as is. (The upload files button does the same.)
 | **Previews** | Markdown opens rendered; the 「Rendered \| Source」 switch in the top bar flips it (raw HTML shows as text, external images are blocked). CSV/TSV open as a table (up to 1 MB), SVG as a picture only (its scripts never run), video (mp4, webm) and audio (mp3, m4a, wav) in the browser's player. PDFs are not previewed — download only |
 | **Download** | Get the real file from the tree's row menu, the viewer header (also on the phone), the pane viewer or the binary/PDF screen. If the file on disk differs from the version you were viewing, nothing is downloaded and you are told why. Size limit: `VT_MAX_UPLOAD_MB`. Files on this computer only — while viewing a remote host the buttons are dimmed with the reason |
 | **Phone 「Files」 tab** | The 4th bottom tab. It opens the file tree; the 「Files \| Attachments」 switch at the top reaches the attachments screen (the last side is remembered). The upload badge sits on this tab. A long press on a row opens the row menu as a bottom sheet |
-| **Landscape phone + soft keyboard** | When the height visible above the keyboard drops below 300px, the tab bar, pane headers and rail hide and the terminal uses all the remaining height. Dismiss the keyboard and the usual screen returns. (On a portrait phone the bottom nav hides while the keyboard is up. This is intended.) |
+| **Landscape phone + soft keyboard** | (Automatic focus) When the height visible above the keyboard drops below 300px, the tab bar, pane headers and rail hide and the terminal uses all the remaining height. Dismiss the keyboard and the usual screen returns. (On a portrait phone the bottom nav hides while the keyboard is up. This is intended.) |
 
 ---
 
