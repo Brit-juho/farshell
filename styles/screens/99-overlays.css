@@ -1,0 +1,82 @@
+/* 리디자인 6단계(2026-11) — 오버레이(시안 overlays.html O08–O16).
+ *
+ * 떠 있는 면은 전부 같은 껍데기를 쓴다: raised 면(--color-bg-raised), 1px 강한 선, 반경 8(창)·6(입력·버튼)·4(작은 칩),
+ * 그림자 e2, 뒤 막(scrim)은 --color-scrim 하나. 머리 44(승인·음성처럼 「정돈」 배치는 48), 바닥 줄은 위 선 + 12/16 패딩.
+ * 색은 토큰만(AGENTS.md 9번). 폭·패딩에 transition을 쓰지 않는다(움직임은 transform).
+ *
+ * 이 파일이 마지막(99)인 이유: 대화상자 껍데기(30-viewer.css의 .vt-viewer-card)와 화면별 규칙(20·50·70)을 덮는다.
+ * 패널(dock 본문 — 변경·첨부·스니펫·큐·포트·사용량·시스템·MCP)은 이 파일이 아니라 패널 쪽 규칙이 맡는다. */
+
+/* ── 공용: 뒤 막 · 대화상자 껍데기 ─────────────────────────────────────────── */
+.vt-viewer-backdrop { background:var(--color-scrim); }
+
+.vt-dialog .vt-viewer-card {
+  background:var(--color-bg-raised); color:var(--color-txt);
+  border:1px solid var(--color-line-strong); border-radius:var(--radius-lg); box-shadow:var(--shadow-e2);
+}
+.vt-dialog .vt-viewer-head {
+  min-height:44px; box-sizing:border-box; padding:0 8px 0 16px; gap:8px;
+  background:transparent; border-bottom:1px solid var(--color-line);
+}
+.vt-dialog .vt-vw-title { font:var(--weight-semibold) var(--fs-base)/1.3 var(--font-ui); }
+.vt-dialog-ic { display:inline-flex; flex:none; color:var(--color-sub); }
+.vt-dialog .vt-vw-body { background:transparent; padding:16px; }
+/* 확인·입력·알림의 버튼 줄은 창 바닥 줄이다(시안 .dlg-f): 위 선, 12/16 패딩, 오른쪽 정렬. */
+.vt-dialog .vt-vw-body > .vt-dialog-actions {
+  margin:16px -16px -16px; padding:12px 16px; border-top:1px solid var(--color-line);
+}
+.vt-dialog-msg { color:var(--color-sub); line-height:1.55; }
+.vt-dialog-input {
+  box-sizing:border-box; height:36px; padding:0 10px;
+  background:var(--color-bg-2); color:var(--color-txt);
+  border:1px solid var(--color-line-strong); border-radius:var(--radius-sm);
+}
+.vt-dialog-input[type="password"] { font-family:var(--font-mono); letter-spacing:.08em; }
+.vt-dialog-input:focus { border-color:var(--color-acc); box-shadow:0 0 0 3px color-mix(in srgb, var(--color-acc) 18%, transparent); }
+
+/* ── O11 · O11-B 에이전트 접근 요청 · 페어 승인(「정돈」 배치) ────────────────
+ * 창 560, 강조색 테두리, 머리 48(방패 · 제목 · n/m), 본문 패딩 20 · 간격 12, 항목 이름 열 88.
+ * 바닥 60: 왼쪽 「거부」(기본 초점), 오른쪽 「한 번만 · 이 세션 동안 · 나중에」 — 어떤 버튼도 채우지 않는다. */
+.vt-authz-approval .vt-viewer-card {
+  width:min(560px, 100%); max-height:min(88vh, 760px);
+  border-color:color-mix(in srgb, var(--color-acc) 45%, var(--color-line-strong));
+}
+.vt-authz-approval .vt-viewer-head { min-height:48px; padding:0 12px 0 20px; gap:10px; }
+.vt-authz-ic { color:var(--color-acc); }
+.vt-authz-approval .vt-authz-count { margin-left:0; font-family:var(--font-mono); color:var(--color-muted); }
+.vt-authz-approval .vt-viewer-head .vt-vw-title { flex:0 1 auto; }
+.vt-authz-approval .vt-vw-x { margin-left:auto; }
+.vt-authz-approval .vt-vw-body { padding:20px 20px 0; }
+.vt-authz-approval-body { display:flex; flex-direction:column; gap:12px; }
+.vt-authz-approval-body > * { margin:0; }
+.vt-authz-approval .vt-authz-ask { color:var(--color-txt); font:var(--weight-medium) var(--fs-sm)/1.5 var(--font-ui); }
+.vt-authz-approval .vt-authz-facts {
+  grid-template-columns:88px minmax(0, 1fr); gap:4px 16px; margin:0;
+  font:var(--weight-normal) var(--fs-sm)/24px var(--font-ui);
+}
+.vt-authz-approval .vt-authz-facts dt { color:var(--color-muted); font-size:var(--fs-xs); }
+.vt-authz-label { margin:0 0 6px; color:var(--color-sub); font:var(--weight-medium) var(--fs-xs)/1 var(--font-ui); }
+.vt-authz-reason-box .vt-authz-reason {
+  padding:8px 10px; border-radius:var(--radius-sm); background:var(--color-bg-2); border:1px solid var(--color-line-strong);
+  color:var(--color-sub); font:var(--weight-normal) var(--fs-sm)/20px var(--font-ui); overflow-wrap:anywhere;
+}
+.vt-authz-approval .vt-authz-elevated {
+  display:flex; align-items:flex-start; gap:8px; padding:10px 12px; border-radius:var(--radius-sm);
+  background:var(--color-st-waiting-tint); color:var(--color-sub); font:var(--weight-normal) var(--fs-xs)/1.5 var(--font-ui);
+}
+.vt-authz-elev-ic { display:inline-flex; flex:none; margin-top:1px; color:var(--color-st-waiting); }
+.vt-authz-elev-text strong { color:var(--color-st-waiting); }
+.vt-authz-approval .vt-authz-note, .vt-authz-approval .vt-authz-why { margin:0; }
+/* 바닥 줄 — 본문 스크롤과 함께 맨 아래에 붙는다(sticky). 긴 페어 화면에서도 결정 버튼이 늘 보인다. */
+.vt-authz-foot {
+  position:sticky; bottom:0; z-index:1; display:flex; flex-wrap:wrap; align-items:center; gap:8px;
+  min-height:60px; box-sizing:border-box; margin:4px -20px 0; padding:12px 20px;
+  background:var(--color-bg-raised); border-top:1px solid var(--color-line);
+}
+.vt-authz-gap { flex:1 1 auto; }
+.vt-authz-foot .vt-btn.solid { background:transparent; color:var(--color-txt); border-color:var(--color-line-strong); }
+.vt-authz-approval .vt-pair-acts { flex-direction:row; }
+.vt-authz-approval .vt-pair-acts .vt-btn { width:auto; }
+/* 페어 확인 문구(시안 O11-B): 22px 고정폭, 가운데, 글자 간격 — 눈으로 비교하는 값이라 크게. */
+.vt-authz-approval .vt-pair-phrase { font:var(--weight-medium) var(--fs-lg)/32px var(--font-mono); letter-spacing:.12em; }
+.vt-authz-approval .vt-pair-phrase-cell { background:transparent; border:1px solid var(--color-line-strong); text-align:center; padding:12px; }
