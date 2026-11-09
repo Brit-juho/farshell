@@ -2502,13 +2502,26 @@ def test_집중_모드_가장자리_노출은_칸_크기를_바꾸지_않아_WS_
         after = _resize_counts(page)
         sent = {u: after.get(u, 0) - before.get(u, 0) for u in after}
         assert sum(sent.values()) == 0, f"가장자리 노출에 resize가 나갔다: {sent}"
-        # Esc로 바로 닫힌다.
+        # Esc로 바로 닫힌다. 포커스가 터미널에 있으면 Esc는 막대만 닫고 그대로 터미널(→ PTY)로 간다
+        # (vim 등이 Esc 하나를 잃지 않게). 포커스를 가진 칸의 xterm onData(= WS로 보낼 바이트)에서 \x1b를 센다.
+        page.locator(".vt-pane .xterm").first.click()
+        page.evaluate("""() => {
+          window.__vtEscData = 0;
+          const a = document.activeElement;
+          for (const s of Object.values(window.allSessions())) {
+            if (s && s.term && s.term.element && s.term.element.contains(a)) {
+              s.term.onData((d) => { if (d === '\\x1b') window.__vtEscData++; });
+            }
+          }
+        }""")
         page.mouse.move(3, 450)
         page.wait_for_timeout(500)
         assert page.evaluate(_FOCUS_SHAPE)["reveal"] == ["vt-reveal-left"]
+        assert page.evaluate("() => !!document.activeElement.closest('.xterm')"), "포커스는 터미널에 있다"
         page.keyboard.press("Escape")
         page.wait_for_timeout(50)
         assert page.evaluate(_FOCUS_SHAPE)["reveal"] == []
+        assert page.evaluate("() => window.__vtEscData") == 1, "터미널 포커스의 Esc는 PTY로 가야 한다"
         print(f"WS resize(가장자리 노출 {list(seen)}): {sent}")
     finally:
         page.evaluate("() => window.vtSettingsSet && window.vtSettingsSet('ui.focus.active', false)")
