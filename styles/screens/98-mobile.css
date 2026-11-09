@@ -101,6 +101,10 @@
   }
   .vt-fleet-loc > span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .vt-fleet-loc .vt-srow-workspace-kind { margin-right:6px; flex:none; }
+  /* 우선순위: 브랜치는 줄지 않고(너무 길 때만 60%에서 말줄임), 폭이 모자라면 디렉터리가 먼저 말줄임한다.
+     기본 규칙(components.css)의 branch flex:1 · directory flex:1 1 auto가 남는 폭을 나눠 브랜치가 「/m…」로 잘렸다. */
+  .vt-fleet-loc .vt-srow-directory { flex:0 1 auto; }
+  .vt-fleet-loc .vt-srow-branch { flex:0 0 auto; max-width:60%; }
   .vt-fleet-loc .vt-srow-directory + .vt-srow-branch::before { content:"/"; }
   #vt-fleet .vt-fleet-diff { flex:none; font:400 var(--fs-xs) / 16px var(--font-mono); color:var(--color-sub); }
   .vt-fleet-gls { display:inline-flex; align-items:center; gap:4px; margin-left:auto; padding-left:4px; flex:none; color:var(--color-muted); }

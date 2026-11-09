@@ -549,7 +549,7 @@ label.vt-railset-row { cursor:pointer; }
   color:var(--color-muted); font:var(--weight-normal) var(--fs-xs) / 18px var(--font-ui);
 }
 #vt-wgrail .vt-srow-line2 { font-family:var(--font-mono); }
-#vt-wgrail .vt-srow-line2 .vt-srow-branch { flex:0 1 auto; max-width:none; }
+#vt-wgrail .vt-srow-line2 .vt-srow-branch { flex:0 0 auto; max-width:60%; }   /* 브랜치 먼저 온전히, 모자라면 디렉터리가 줄임표 */
 #vt-wgrail .vt-srow-directory { flex:0 1 auto; }
 #vt-wgrail .vt-srow-directory + .vt-srow-branch::before { content:none; }
 /* 작업 공간 종류 — 별도 워크트리(WT)만 강조 상자, 메인 체크아웃은 보조 글자 그대로(행마다 상자가 생기지 않게). */
