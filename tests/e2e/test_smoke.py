@@ -3407,14 +3407,24 @@ def test_폰_세션_카드는_두_줄_64이고_개입_카드의_답_버튼은_44
     assert h == 64, h
     if not name:
         return
-    pg.evaluate("""(n) => window.vtApplyAgentSnapshot({ e2e: { tmux_session: n, session_id: 'e2e-w', status: 'waiting',
-      kind: 'approval', question: 'npm test', options: [{ key: '1', label: '예' }, { key: '3', label: '아니요' }] } })""", name)
-    pg.wait_for_selector("#vt-fleet .vt-fleet-card .vt-fleet-answers .vt-btn", timeout=5000)
-    hs = pg.evaluate("() => [...document.querySelectorAll('#vt-fleet .vt-fleet-card .vt-fleet-answers .vt-btn')]"
-                     ".map(b => Math.round(b.getBoundingClientRect().height))")
-    assert hs and all(x == 44 for x in hs), hs
-    badge = pg.locator("#vt-mnav-badge-waiting")
-    assert badge.is_visible() and badge.inner_text().strip() == "1"
+    # 서버가 곧바로 실제 상태 스냅숏을 보내면 주입한 가짜 「승인 대기」가 덮어써진다(느린 CI에서 버튼이 나타난 직후
+    # 사라져 `[]`가 됐다). 주입과 측정을 한 프레임 안에 묶고, 덮어써졌으면 다시 주입해 같은 기준(높이 44, 배지 1)을 잰다.
+    got = pg.evaluate("""async (n) => {
+      const snap = () => window.vtApplyAgentSnapshot({ e2e: { tmux_session: n, session_id: 'e2e-w', status: 'waiting',
+        kind: 'approval', question: 'npm test', options: [{ key: '1', label: '예' }, { key: '3', label: '아니요' }] } });
+      for (let i = 0; i < 40; i++) {
+        snap();
+        await new Promise((r) => requestAnimationFrame(() => r()));
+        const hs = [...document.querySelectorAll('#vt-fleet .vt-fleet-card .vt-fleet-answers .vt-btn')]
+          .map((b) => Math.round(b.getBoundingClientRect().height));
+        const badge = document.getElementById('vt-mnav-badge-waiting');
+        const shown = !!badge && badge.getClientRects().length > 0;
+        if (hs.length && shown) return { hs, shown, text: badge.textContent.trim(), tries: i + 1 };
+      }
+      return { hs: [], shown: false, text: '', tries: 40 };
+    }""", name)
+    assert got["hs"] and all(x == 44 for x in got["hs"]), got
+    assert got["shown"] and got["text"] == "1", got
 
 
 # ── 리디자인 후속(셸) — 활동 막대 순서 · 집중 모드 미리보기 · 레일 접기 · MCP 관리 창 ─────────────────────
