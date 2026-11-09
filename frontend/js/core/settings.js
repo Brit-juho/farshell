@@ -107,6 +107,14 @@ export const SCHEMA = {
   'ui.dock.collapsed':      { type: 'bool', def: false, migrate: 'vt-dock-collapsed', parse: (v) => v === '1', scope: 'device' },
   'ui.dock.width':          { type: 'int',  def: 392, min: 320, max: 560, migrate: 'vt-dock-w', scope: 'device' },
   'ui.dock.tab':            { type: 'str',  def: 'scm', migrate: 'vt-dock-tab', scope: 'device' },
+  // 리디자인 1단계(작업대) — 사이드바 하나. 폭은 **활동 전체가 공유**한다(활동을 바꿔도 칸 크기가
+  // 그대로라 터미널 refit이 없다). 기본값·폴백(새 키 → ui.dock.width → ui.rail.width, 접힘은
+  // ui.rail.collapsed → 티어 기본)은 shell/side-prefs.js가 읽을 때 적용한다 — 옛 키를 옮겨 쓰지
+  // 않으므로 migrate가 없다. 위 ui.rail.*·ui.dock.*는 그 폴백 때문에 스키마에 남는다.
+  // 활동 값 목록은 shell/activity-data.ts의 ACTIVITIES와 같아야 한다(테스트가 대조).
+  'ui.side.width':          { type: 'int',  def: 360, min: 240, max: 480, scope: 'device' },
+  'ui.side.activity':       { type: 'enum', def: 'sessions', values: ['sessions', 'scm', 'dir', 'queue', 'files', 'snippets', 'ports', 'usage', 'system'], scope: 'device' },
+  'ui.side.collapsed':      { type: 'bool', def: false, scope: 'device' },
 
   // N38(70-mobile.md §1) — compact 하단 내비의 시작 탭. 기기 스코프인 이유는
   // rail/dock 폭과 같다: 폰에서 고른 첫 화면이 맥 터미널 시작 화면에 새면 안 된다.

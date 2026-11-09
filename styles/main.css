@@ -49,7 +49,7 @@
 @source not "../frontend/dist/**";
 
 /* 화면별 레거시 CSS — 2.1.6에서 legacy.css(2927줄 한 파일)를 섹션 경계 그대로
- * 9개로 쪼갰다. **내용은 한 줄도 안 바꿨고 순서도 원본 그대로**라 컴파일된
+ * 9개로 쪼갰다(지금은 작업대 파일 90-까지 10개). **내용은 한 줄도 안 바꿨고 순서도 원본 그대로**라 컴파일된
  * 규칙 시퀀스가 동일하다(scripts/check_css_order.py가 검증한다).
  *
  * 순서가 곧 우선순위이므로 아래 줄 순서를 바꾸면 화면이 바뀐다. 새 파일을
@@ -67,3 +67,5 @@
 @import "./screens/60-mobile-hud.css"     layer(legacy);
 @import "./screens/70-worktree-rail.css"  layer(legacy);
 @import "./screens/80-dock.css"           layer(legacy);
+/* 리디자인 1단계(2026-11) — 작업대(활동 막대 + 사이드바). 70(레일)·80(dock)의 프레임을 덮으므로 마지막. */
+@import "./screens/90-workbench.css"      layer(legacy);

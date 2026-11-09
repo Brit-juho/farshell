@@ -174,20 +174,9 @@ function _setRect(el, r) {
   for (const k of ['x', 'y', 'w', 'h']) el.style.setProperty(`--vt-file-${k}`, `${Math.round(r[k])}px`);
 }
 
-// 좁은 화면에서는 dock이 터미널을 밀지 않고 위에 덮인다. 그때 오버레이가 dock 밑으로
-// 파고들어 코드가 가려지므로, 겹친 폭만큼 오른쪽을 비운다(밀리는 폭에서는 0).
-function _dockInset(mount) {
-  const dock = document.getElementById('vt-dock');
-  if (!dock || !mount) return 0;
-  const d = dock.getBoundingClientRect();
-  const m = mount.getBoundingClientRect();
-  if (d.width === 0) return 0;
-  return Math.max(0, Math.round(m.right - d.left));
-}
-
-function _syncDockInset(el) {
-  el.style.setProperty('--vt-file-inset-r', `${_dockInset(_container())}px`);
-}
+// 2026-11(작업대) — 예전엔 regular 폭에서 오른쪽 dock이 터미널 위에 덮여, 오버레이가 그 밑으로
+// 파고들지 않게 겹친 폭만큼 오른쪽을 비웠다(--vt-file-inset-r). 이제 사이드바는 왼쪽 하나이고
+// 언제나 칸을 민다 — 터미널 영역을 덮는 패널이 없어 비울 자리도 없다.
 
 // 머리줄의 「떠 있는 창 ↔ 위쪽에 붙이기」 버튼 — 지금 표면에 맞춰 이름과 눌림 상태를 맞춘다.
 function _syncSurfaceBtn(el, surface) {
@@ -202,7 +191,6 @@ function _syncSurfaceBtn(el, surface) {
 function _applyGeometry(el) {
   const surface = _surface();
   _syncSurfaceBtn(el, surface);
-  _syncDockInset(el);
   _repaintTerminals();
   el.classList.toggle('surface-sheet', surface === 'sheet');
   el.classList.toggle('surface-float', surface === 'float');
@@ -212,7 +200,7 @@ function _applyGeometry(el) {
   }
   const c = _container();
   if (!c) return;
-  const cw = c.clientWidth - _dockInset(c);
+  const cw = c.clientWidth;
   const ch = c.clientHeight;
   _setRect(el, clampRect(parseRect(get('viewer.float.rect')) || defaultRect(cw, ch), cw, ch));
 }
@@ -330,16 +318,13 @@ export function openFileOverlay(path, opts = {}) {
     _wireFloatDrag(el, corner, 'resize');
     _applyGeometry(el);
     tick = _startRepaintTick();
-    // dock·레일을 접고 펴도 컨테이너 폭이 바뀐다 — 창 크기 이벤트만으로는 못 잡는다.
+    // 사이드바를 접고 펴도 컨테이너 폭이 바뀐다 — 창 크기 이벤트만으로는 못 잡는다.
     if (typeof window.ResizeObserver === 'function') {
       ro = new window.ResizeObserver(() => {
-        _syncDockInset(el);
         if (!el.classList.contains('surface-float') || !el._vtRect) return;
-        _setRect(el, clampRect(el._vtRect, mount.clientWidth - _dockInset(mount), mount.clientHeight));
+        _setRect(el, clampRect(el._vtRect, mount.clientWidth, mount.clientHeight));
       });
       ro.observe(mount);
-      const dockEl = document.getElementById('vt-dock');
-      if (dockEl) ro.observe(dockEl);
     }
     // 키보드로 바로 스크롤하고 Esc로 닫을 수 있게. 닫으면 panel.js가 열기 전 포커스(터미널)로 돌려준다.
     body.tabIndex = -1;

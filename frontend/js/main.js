@@ -33,7 +33,7 @@ import { isMac } from './core/env.js';
 import { getAction, registerAction } from './core/dom.js';
 import { E2E_ENABLED } from './term/e2e.js';
 import { get as settingGet, subscribe as settingSubscribe } from './core/settings.js';  // S2 — 설정 스토어(모듈 평가 시점에 캐시+마이그레이션 동기 적용)
-import './core/keymap.js';    // S3 — 키맵 레지스트리(각 모듈이 register()로 액션을 붙인다)
+import { getBinding, displayCombo } from './core/keymap.js';    // S3 — 키맵 레지스트리(각 모듈이 register()로 액션을 붙인다)
 import './core/dom.js';
 import { showToast } from './ui/toast.js';   // F5 — showToast/dismissToast. 다른 모듈이 참조하므로 먼저.
 import { prefetchUpload } from './term/upload-lite.js';  // 업로드 본체는 upload 청크 — 유휴 시간에 미리 받는다
@@ -225,22 +225,22 @@ try {
       .catch((e) => console.error('[FarShell header]', e));
   }
 
-  // N36 §5 — 워크트리 레일. 같은 지연 청크(shell.js)를 공유한다.
-  const railRoot = document.getElementById('vt-wgrail-slot');
-  if (railRoot) {
-    import('./shell/Rail.tsx')
-      .then(({ mountRail }) => mountRail(railRoot, { vtFetch, getAction }))
-      .catch((e) => console.error('[FarShell rail]', e));
-  }
-  // N35 §6 — dock. 같은 지연 청크(shell.js)를 공유한다. 레일 뒤에 마운트하는
-  // 이유는 dock이 부팅 시 활성 탭의 패널 렌더러(queue.js 등)를 곧바로 부르기
-  // 때문이다 — 그 액션들이 registerAction으로 등록돼 있어야 한다(정적 import가
-  // 위에서 이미 끝났으므로 이 시점엔 전부 등록돼 있다).
-  const dockRoot = document.getElementById('vt-dock-slot');
-  if (dockRoot) {
-    import('./shell/Dock.tsx')
-      .then(({ mountDock }) => mountDock(dockRoot, { vtFetch, getAction }))
-      .catch((e) => console.error('[FarShell dock]', e));
+  // 리디자인 1단계 — 작업대(활동 막대 + 사이드바). 사이드바 안에 워크트리 레일(N36 §5)과
+  // dock 본문(N35 §6)이 함께 마운트된다. 같은 지연 청크(shell.js)를 공유한다. dock은 부팅 시
+  // 펼친 도구 활동의 패널 렌더러(queue.js 등)를 곧바로 부르므로 그 액션들이 registerAction으로
+  // 등록돼 있어야 한다(정적 import가 위에서 이미 끝났으므로 이 시점엔 전부 등록돼 있다).
+  const workbenchRoot = document.getElementById('vt-workbench-slot');
+  if (workbenchRoot) {
+    import('./shell/Workbench.tsx')
+      .then(({ mountWorkbench }) => mountWorkbench(workbenchRoot, {
+        vtFetch, getAction,
+        // 활동 막대 툴팁의 단축키. core/keymap.js는 지연 청크가 직접 못 읽으므로 여기서 넘긴다.
+        keyHint: (id) => {
+          const b = getBinding(id);
+          return b && !b.unavailable ? displayCombo(b.combo) : '';
+        },
+      }))
+      .catch((e) => console.error('[FarShell workbench]', e));
   }
 
   // 부팅 완료 표시. `appBootFailed`(아래)와 짝이다 — 지금까지 실패만 표시하고

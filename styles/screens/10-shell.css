@@ -569,7 +569,7 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
 #terminal-container .xterm-viewport::-webkit-scrollbar { display:none; width:0; height:0; }
 
 /* ---- 음성 버튼 (voice.js 계약: .label 자식 + .recording) --------------------
-   L7: 상단바에서 이관됐다 — dock(#vt-dock-mic-home) 또는 rail 설정
+   L7: 상단바에서 이관됐다 — 활동 막대(#vt-activity-mic-home) 또는 rail 설정
    슬롯(#vt-rail-mic-slot)에 살고(keybar.js), 음성 전용 모드에서만 잠깐
    #topbar로 옮겨간다(media-session.js). 키바 슬롯은 2026-09-29에 없앴다.
    색·상태(녹음 중)는 어디에 있든 공통이라 컨텍스트 무관 규칙으로 두고,

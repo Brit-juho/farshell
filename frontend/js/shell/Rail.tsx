@@ -10,10 +10,10 @@
 // ADR-26/N35 커밋 참고). 전부 그 파일들이 이미 노출해 둔 window 브리지로만
 // 읽는다. vtFetch·getAction만 main.js가 인자로 넘긴다(Hud.tsx와 같은 이유).
 import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
-import { render, Portal } from 'solid-js/web';
+import { Portal } from 'solid-js/web';
 import { t } from '../core/i18n.js';
 import {
-  buildRailLists, splitRunning, groupSessionRows, compactRailRows, rowMenuItems, rowSummaryDetails, runRowMenu, defaultRailCollapsed,
+  buildRailLists, splitRunning, groupSessionRows, compactRailRows, rowMenuItems, rowSummaryDetails, runRowMenu,
   ATTENTION_COLLAPSED_KEY, ORDER_KEY, LINEAGE_KEY, VIEW_KEY, encodeOrder, encodeLineagePrefs, encodeRailView,
   buildSessionTree, kidsProgress, moveInOrder,
   type SessionRow, type RailSort, type TreeEntry,
@@ -29,7 +29,6 @@ import {
   createDiffWatcher,
 } from './rail-fetch.js';
 import { createRailPrefs } from './rail-prefs.js';
-import { REGULAR_MAX } from '../layout/breakpoints.js';
 import { Menu, Row, type MenuItem } from './RailRow.js';
 import { NativeChildren } from './NativeChildren.js';
 import { CatalogTree, RecentEnded, ArchiveEntry, ArchiveList, type CatalogSnapshot } from './CatalogTree.js';
@@ -38,7 +37,6 @@ import { historyApi } from '../history/api.js';
 import { icon } from '../ui/icons.js';
 
 export type { RailDeps } from './rail-fetch.js';
-import { wireRatioResizer } from '../layout/resizer.js';
 import { RepoVisibility } from './RepoVisibility.js';
 import { RailSettingsLead } from './RailSettings.js';
 import { ViewGroup } from './ViewGroup.js';
@@ -63,15 +61,18 @@ const WORKTREES_POLL_MS = 60000;
 const HOSTS_POLL_MS = 15000;
 // 보관 세션 카탈로그(로컬에서만). 레일의 가장 짧은 주기라 갱신 지연 판정의 기준이다.
 const CATALOG_POLL_MS = 5000;
-const MIN_W = 240, MAX_W = 480, DEFAULT_W = 252;
-// N3(60-settings-palette.md §1)가 생겨 device-settings 정식 스토어로
-// 옮겼다 — 이전엔 여기 주석이 "N3 전이라 임시로 localStorage"였다. core/
-// settings.js도 지연 청크가 정적 import 못 하는 모듈이라(파일 상단 주석과
-// 같은 이유) window 브리지(vtSettingsGet/Set)로만 읽는다.
-const SETTINGS_W_KEY = 'ui.rail.width';
-const SETTINGS_COLLAPSE_KEY = 'ui.rail.collapsed';
+// 폭·접힘은 작업대(Workbench.tsx)가 정한다 — 사이드바 폭은 활동 전체가 하나를 쓴다
+// (`ui.side.*`, shell/side-prefs.js). 레일은 받은 접힘 상태대로 그리기만 한다.
 
-function Rail(props: { deps: RailDeps }) {
+export interface RailProps {
+  deps: RailDeps;
+  /** 사이드바가 접혀 48px 띠로 그려지는가(세션 활동일 때만 의미가 있다). */
+  collapsed: () => boolean;
+  /** 레일 머리의 접기/펼치기 버튼 — 작업대의 사이드바 토글과 같은 동작이다. */
+  onToggleCollapse: () => void;
+}
+
+export function Rail(props: RailProps) {
   const sessionsVersion = useSessionsVersion();
   const agentVersion = useAgentVersion();
   const layoutVersion = useLayoutVersion();
@@ -101,15 +102,7 @@ function Rail(props: { deps: RailDeps }) {
   const diffWatcher = createDiffWatcher(() => setDiffTick((n) => n + 1));
   createEffect(() => diffWatcher.sync(tmuxSessions().filter((t: any) => !t.context).map((t: any) => t.cwd)));
   onCleanup(() => diffWatcher.dispose());
-  // 접힘 기본값은 티어를 따른다(§3 표) — wide(≥1280) 미만에서는 접힘으로 시작.
-  // 저장된 값이 있으면 그게 이긴다(사용자가 직접 정한 것이므로). Dock.tsx가
-  // 같은 판단을 이미 하고 있었는데 레일에만 없었다: 그래서 좁은 화면에서
-  // 레일 252 + dock 36이 자리를 먼저 먹고 HUD가 칩을 다 못 싣는 상태로 시작했다.
-  const [collapsed, setCollapsed] = createSignal(
-    (window as any).vtSettingsHas?.(SETTINGS_COLLAPSE_KEY)
-      ? Boolean((window as any).vtSettingsGet?.(SETTINGS_COLLAPSE_KEY))
-      : defaultRailCollapsed(window.innerWidth, REGULAR_MAX),
-  );
+  const collapsed = () => props.collapsed();
   // 행 메뉴 — ⋯ 버튼과 우클릭이 같은 상태를 연다. 대상은 항상 세션 하나다.
   const [ctxMenu, setCtxMenu] = createSignal<{ x: number; y: number; row: SessionRow } | null>(null);
   const [hosts, setHosts] = createSignal<HostEntry[]>([]);
@@ -433,58 +426,7 @@ function Rail(props: { deps: RailDeps }) {
       run: () => selectHost(h.id),
     }));
 
-  let railRef: HTMLElement | undefined;
-  // storedWidth는 "펼쳤을 때 폭"이라는 사용자 의도다 — 접힘 여부와 별개로
-  // 기억해 둔다. 실제 화면에 반영되는 --vt-wgrail-w는 늘 이 둘을 합친
-  // 값이어야 body의 padding-left(같은 변수를 쓴다)가 접힘 상태를 따라간다 —
-  // 안 그러면 레일은 48px로 줄었는데 본문은 여전히 252px만큼 밀린 채로
-  // 빈 틈이 남는다(실브라우저로 실제 재현·확인).
-  const [storedWidth, setStoredWidth] = createSignal(
-    Math.min(MAX_W, Math.max(MIN_W, Number((window as any).vtSettingsGet?.(SETTINGS_W_KEY)) || DEFAULT_W)),
-  );
-  const applyCssVar = () => {
-    // 저장값(ui.rail.width)은 "얼마로 쓰고 싶은가"이고, 화면에 그리는 폭은
-    // 거기에 "창이 그만큼 내줄 수 있는가"를 한 번 더 건 값이다. 창을 좁히면
-    // 40vw에서 걸리고, 다시 넓히면 저장값으로 알아서 돌아온다 — 저장값 자체는
-    // 건드리지 않으므로 사용자가 끌어 맞춘 폭이 창 크기 때문에 지워지지 않는다.
-    //
-    // 40vw인 이유: 레일이 창의 절반 가까이를 먹으면 터미널이 남지 않는다.
-    // 레일이 존재하는 최소 폭이 720px(그 아래는 compact라 레일이 아예 없다)
-    // 이므로 40vw는 항상 288px 이상 — 레일 자체의 최소폭 240px을 밑돌지 않는다.
-    document.documentElement.style.setProperty(
-      '--vt-wgrail-w',
-      collapsed() ? '48px' : `min(${storedWidth()}px, 40vw)`,
-    );
-  };
-  const setWidth = (w: number) => {
-    const clamped = Math.min(MAX_W, Math.max(MIN_W, Math.round(w)));
-    setStoredWidth(clamped);
-    (window as any).vtSettingsSet?.(SETTINGS_W_KEY, clamped);
-  };
-  const toggleCollapse = () => {
-    const next = !collapsed();
-    setCollapsed(next);
-    (window as any).vtSettingsSet?.(SETTINGS_COLLAPSE_KEY, next);
-  };
-  createEffect(applyCssVar);
-
-  let resizerRef: HTMLDivElement | undefined;
-  const wireResizerOnMount = (el: HTMLDivElement) => {
-    resizerRef = el;
-    wireRatioResizer(el, {
-      dir: 'row',
-      getContainerSize: () => 1, // 컨테이너=1로 두고 비율을 그대로 픽셀 델타로 쓴다(§5: layout/resizer.js 재사용)
-      // 실제로 그려진 폭에서 출발한다. --vt-wgrail-w를 parseInt 하던 걸 바꿨다 —
-      // 이제 그 값이 `min(252px, 40vw)` 같은 식이라 숫자로 파싱되지 않고(커스텀
-      // 속성은 계산된 px로 안 내려온다) NaN → 기본값으로 튀어, 창이 좁아 clamp가
-      // 걸린 상태에서 드래그를 시작하면 레일이 순간 점프한다.
-      getStartRatio: () => railRef?.getBoundingClientRect().width || DEFAULT_W,
-      onRatio: (r: number) => { if (!collapsed()) setWidth(r); },
-      onStart: () => {},
-      onEnd: () => {},
-    });
-  };
-
+  const toggleCollapse = () => props.onToggleCollapse();
 
   // 같은 행이 두 구역(개입 필요·세션)에 나올 수 있다 — 같은 세션이라 편집·활성 상태도 같이 따라간다.
   const renderRow = (row: SessionRow, lin?: { kid?: boolean; entry?: TreeEntry<SessionRow> }) => (
@@ -513,7 +455,7 @@ function Rail(props: { deps: RailDeps }) {
   );
 
   return (
-    <aside id="vt-wgrail" class="vt-sidepanel left" ref={railRef} classList={{ collapsed: collapsed() }} aria-label={t('세션')}>
+    <aside id="vt-wgrail" classList={{ collapsed: collapsed() }} aria-label={t('세션')}>
       <div class="vt-wgrail-head">
         <Show when={!collapsed()}>
           {/* C1 — 호스트가 로컬 하나뿐이면 칩을 아예 안 그린다. 멀티호스트를
@@ -766,7 +708,6 @@ function Rail(props: { deps: RailDeps }) {
           <Show when={!collapsed()} fallback={<span class="vt-wgrail-new-mark" innerHTML={icon('plus', 15, 2)} />}>+ {t('새 세션')}</Show>
         </button>
       </div>
-      <div ref={wireResizerOnMount} class="vt-wgrail-resizer" />
       {/* 2026-09-21 — RepoVisibility와 같은 이유로 Portal로 body에 붙인다.
           `.vt-sidepanel`이 z-index:70짜리 쌓임 맥락을 만들어서, `.vt-menu`의
           z-index:520이 레일 밖의 더 높은 오버레이(예: 온보딩 z:500 이상의
@@ -809,8 +750,4 @@ function Rail(props: { deps: RailDeps }) {
       </Show>
     </aside>
   );
-}
-
-export function mountRail(root: HTMLElement, deps: RailDeps) {
-  return render(() => <Rail deps={deps} />, root);
 }

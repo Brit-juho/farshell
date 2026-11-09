@@ -30,15 +30,11 @@
   body { padding-left:env(safe-area-inset-left); }
 }
 
-#vt-wgrail-slot { display:contents; }
-/* 2.1.6 — 프레임(고정 배치·배경·전이·접힘 방향)은 components.css의
-   `.vt-sidepanel.left`가 맡는다. 여기 남는 건 이 패널의 폭뿐이다. */
-#vt-wgrail { width:var(--vt-wgrail-w, 252px); }
-#vt-wgrail.collapsed { width:48px !important; }
-@media (min-width:720px) {
-  #vt-wgrail { display:flex; }
-  body { padding-left:calc(env(safe-area-inset-left) + var(--vt-wgrail-w, 252px)) !important; }
-}
+/* 2026-11(리디자인 1단계) — 레일은 작업대 사이드바의 「세션」 보기다. 고정 배치·배경·
+   body padding은 작업대(`#vt-workbench.vt-sidepanel.left`, 90-workbench.css)가 맡고,
+   레일은 사이드바 폭(--vt-side-w, 활동 전체가 공유)을 그대로 채운다. 접힘(48px 띠)도
+   사이드바 폭이 48이 되는 것이라 여기서 폭을 따로 정하지 않는다. */
+#vt-wgrail { display:flex; flex-direction:column; flex:1; min-height:0; min-width:0; width:100%; }
 
 .vt-wgrail-head {
   display:flex; align-items:center; justify-content:space-between;
@@ -219,11 +215,7 @@
 #vt-wgrail.collapsed .vt-wgrail-new { justify-content:center; padding:0; }
 .vt-wgrail-new-mark { display:inline-flex; flex:none; }
 
-.vt-wgrail-resizer {
-  right:-3px;
-}
-#vt-wgrail.collapsed .vt-wgrail-resizer { display:none; }
-.vt-wgrail-resizer.dragging { background:var(--acc); opacity:.4; }
+/* 폭 리사이저는 레일이 아니라 사이드바 하나에 있다(90-workbench.css `.vt-side-resizer`). */
 
 /* ── N44 — 워크트리 만들기 다이얼로그(30-worktree.md §3) ────────────────────
    껍데기는 .vt-viewer-backdrop/.vt-viewer-card(코드 뷰어·가이드·pane picker와

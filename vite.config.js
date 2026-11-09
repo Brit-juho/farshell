@@ -164,6 +164,9 @@ function chunkOf(id) {
     // 에이전트 브랜드 로고 path(18KB) — 초기 페이로드 상한 때문에 뗐다.
     // ui/icons.js가 부팅 직후 지연 import하고, 오기 전엔 선 기호로 그린다.
     if (p.endsWith('/frontend/js/ui/brand-icons.js')) return 'brand';
+    // 작업대(활동 막대·사이드바) 전용 아이콘 — shell 청크(Workbench.tsx)만 정적 import한다.
+    // 규칙이 없으면 포괄 규칙이 core로 보내 초기 페이로드가 는다.
+    if (p.endsWith('/frontend/js/ui/icons-shell.js')) return 'shell';
     // 「연결된 화면」 모달 + 클라이언트 목록 — HUD 칩·레일 메뉴가 열 때만 쓴다.
     // layout/connected-screens-lazy.js가 지연 import하고, 설정 > 음성 섹션도
     // clients.js를 정적 import한다(settings -> screens 단방향, core는 안 따라온다).

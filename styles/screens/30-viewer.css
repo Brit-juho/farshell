@@ -359,7 +359,7 @@
 }
 #vt-viewer.mode-dock .vt-viewer-card{
   pointer-events:auto; position:relative;
-  width:var(--vt-dock-w, 420px); max-width:92vw; max-height:none; height:100%;
+  width:var(--vt-side-w, 420px); max-width:92vw; max-height:none; height:100%;
   border-radius:0; border-top:none; border-right:none; border-bottom:none;
   box-shadow:-16px 0 32px rgba(0,0,0,.35);
 }
@@ -379,8 +379,9 @@
   width:98vw; max-width:none; height:92vh; max-height:none;
 }
 
-/* 도킹으로 좁아진 만큼 터미널이 리플로우할 공간. JS가 --vt-dock-w 를 갱신한다. */
-body.vt-docked #terminal-container{ margin-right:var(--vt-dock-w, 420px); transition:margin-right .18s ease; }
+/* 도킹으로 좁아진 만큼 터미널이 리플로우할 공간. 폭은 작업대 사이드바와 같은 --vt-side-w.
+   margin에 transition을 두지 않는다 — 매 프레임 칸이 다시 맞춰진다(터미널 refit). */
+body.vt-docked #terminal-container{ margin-right:var(--vt-side-w, 420px); }
 /* 리사이즈 드래그 중엔 transition을 끈다 — 매 프레임 지연이 그대로 체감된다. */
 body.vt-resizing #terminal-container{ transition:none; }
 
@@ -414,7 +415,7 @@ body.vt-resizing #terminal-container{ transition:none; }
    만들지 않는다 — 그게 이 작업이 없애려는 리플로우 자체다.
    z-index 20: 컨테이너 안 기존 최고값(드롭 오버레이 9) 위, body의 fixed 레이어 아래.
    ------------------------------------------------------------------------- */
-.vt-file-overlay{ position:absolute; inset:0 var(--vt-file-inset-r, 0px) 0 0; z-index:20; pointer-events:none; }
+.vt-file-overlay{ position:absolute; inset:0; z-index:20; pointer-events:none; }
 .vt-file-overlay > .vt-viewer-card{
   position:absolute; pointer-events:auto;
   max-height:none; box-shadow:var(--shadow-e2);

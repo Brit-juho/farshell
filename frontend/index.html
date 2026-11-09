@@ -422,7 +422,10 @@
        #vt-rail-panel/#vt-rail-settings-tpl(데스크톱 마이크·테마 칩이 사는
        유일한 자리)은 DOM에서 지우지 않았다: CSS로만 숨기고, 새 레일의
        "⋯ 더보기" 메뉴가 그 버튼들을 그대로 다시 누른다(shell/Rail.tsx). -->
-  <div id="vt-wgrail-slot"></div>
+  <!-- 리디자인 1단계(2026-11) — 작업대: 활동 막대 48 + 사이드바(폭은 활동 전체가 공유).
+       세션 활동은 위 워크트리 레일(#vt-wgrail), 도구 활동은 아래 dock 본문(#vt-dock)을
+       그대로 사이드바에 띄운다(shell/Workbench.tsx, 지연 로드). -->
+  <div id="vt-workbench-slot"></div>
   <nav id="vt-rail" aria-label="사이드바" data-i18n-attr="aria-label">
     <button type="button" class="vt-rail-btn" id="vt-rail-session" data-rail="session" aria-label="세션" aria-pressed="false" data-tip="세션" data-tip-side="right" data-i18n-attr="aria-label,data-tip">
       <svg data-icon="layout-panels" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
@@ -486,11 +489,9 @@
        WebGL 컨텍스트를 그 안에 계속 들고 있다, 10-shell-layout.md §1). -->
   <div id="vt-fleet-slot" hidden></div>
 
-  <!-- N35 §6 — dock 392px(Solid, 지연 로드). 탭 내용은 기존 큐·포트·사용량
-       패널 렌더러가 그대로 그린다(panels/panel.js의 dock 호스트). 2.0의 우측
-       사용량 레일(#vt-right-rail)은 이 dock의 「사용량」 탭이 대신하므로
-       CSS로만 숨긴다 — DOM은 남겨 둔다(usage.js가 id로 직접 찾는다). -->
-  <div id="vt-dock-slot"></div>
+  <!-- N35 §6의 dock은 작업대 사이드바의 도구 보기가 됐다(#vt-workbench-slot). 2.0의 우측
+       사용량 레일(#vt-right-rail)은 「사용량」 활동이 대신하므로 CSS로만 숨긴다 — DOM은
+       남겨 둔다(usage.js가 id로 직접 찾는다). -->
 
   <!-- L8/U2: 우측 레일 — wide(≥1024px)에서만 상시 노출된다. 사용량의 요점이
        "상시 노출로 신뢰감을 만든다"(60-usage-provider.md §왜 하는가)인데 패널을

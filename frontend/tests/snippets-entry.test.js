@@ -24,7 +24,7 @@ test('버튼은 좁은 화면의 터미널 탭에서만 보인다 — 넓은 화
   assert.match(css, /data-mobile-tab\]:not\(\[data-mobile-tab="terminal"\]\) #snippets-open-btn \{ display:none; \}/);
 });
 
-test('dock 탭 목록에 스니펫이 있다', () => {
-  const dock = read('frontend/js/shell/Dock.tsx');
+test('활동 막대 목록에 스니펫이 있다(옛 dock 탭과 같은 패널 id·액션)', () => {
+  const dock = read('frontend/js/shell/activity-data.ts');
   assert.match(dock, /id: 'snippets'[^}]*panelId: 'vt-snippets'[^}]*action: 'snippets\.show'/);
 });

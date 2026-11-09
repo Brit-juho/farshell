@@ -111,7 +111,7 @@ export function _selectAllVisible() {
 // (#vt-dock-mic-home, 탭 줄 바로 아래)으로 다시 옮긴다.
 //
 // dock은 지연 로드되는 Solid 컴포넌트라 이 모듈이 평가될 때는 아직 없다 —
-// Dock.tsx가 마운트 직후 placeMicButton()을 한 번 더 부른다. 그래서 이 함수는
+// Workbench.tsx가 마운트 직후 placeMicButton()을 한 번 더 부른다. 그래서 이 함수는
 // **여러 번 불려도 안전**해야 하고(이미 제자리면 아무것도 안 한다), dock이 아직
 // 없으면 옛 슬롯에 그대로 둔다(음성이 조용히 사라지지 않게).
 export function placeMicButton() {
@@ -119,7 +119,9 @@ export function placeMicButton() {
   if (!mic) return; // .needs-voice로 이미 숨겨졌거나(음성 미설치) 마크업 자체가 없는 테스트 환경
   // 2026-09-29 — 터치 기기의 키바 슬롯을 없앴다(사용자: 안 쓰는데 키 자리만
   // 먹는다). 이제 포인터 종류와 무관하게 dock(없으면 rail 설정 슬롯)에 둔다.
-  const target = document.getElementById('vt-dock-mic-home') || document.getElementById('vt-rail-mic-slot');
+  // 2026-11 — 데스크톱 첫 자리는 작업대 활동 막대의 아래 무리(#vt-activity-mic-home, Workbench.tsx).
+  // dock 탭 줄(#vt-dock-mic-home)은 활동 막대로 옮겨 가며 없어졌다.
+  const target = document.getElementById('vt-activity-mic-home') || document.getElementById('vt-rail-mic-slot');
   if (target && mic.parentElement !== target) target.appendChild(mic);
   window.dispatchEvent(new CustomEvent('vt:mic-placed'));
 }

@@ -484,14 +484,16 @@ def _boot(pg, url: str) -> None:
 
 
 def _dock_tab(pg, label: str):
-    """dock 탭 하나. 탭은 **아이콘만** 그려서 텍스트가 없다(2026-10-15, 이름은 aria-label·툴팁에 있다)."""
-    return pg.locator(f'#vt-dock .vt-dock-tab[aria-label^="{label}"]').first
+    """활동 막대의 활동 버튼 하나(2026-11 작업대 — 옛 dock 탭 줄이 활동 막대로 옮겨 갔다).
+    버튼은 **아이콘만** 그려서 텍스트가 없다 — 이름은 aria-label·툴팁에 있다."""
+    return pg.locator(f'#vt-activitybar [role="tab"][aria-label^="{label}"]').first
 
 
 def _open_dock(pg, label: str) -> None:
-    """dock 탭을 연다 — **이미 그 탭이 열려 있으면 클릭하지 않는다.**
-    같은 탭 재클릭은 접기라서, 앞 테스트가 남긴 상태(dock은 활성 탭·접힘을
-    localStorage에 저장한다) 위에서 무조건 클릭하면 닫아버린다.
+    """도구 활동을 사이드바에 연다 — **이미 그 활동이 펼쳐져 있으면 클릭하지 않는다.**
+    펼친 활동 재클릭은 접기라서, 앞 테스트가 남긴 상태(사이드바는 활동·접힘을
+    기기 설정에 저장한다) 위에서 무조건 클릭하면 닫아버린다. 활성 표시(.active)는
+    「지금 활동이고 사이드바가 보인다」일 때만 붙는다.
 
     선택자를 `:has-text()`로 쓰지 않는 이유: 그건 playwright 전용 문법이라
     `page.evaluate` 안의 querySelector에서는 SyntaxError가 난다(실측). 클릭은
@@ -503,9 +505,9 @@ def _open_dock(pg, label: str) -> None:
     항상 이미 로드돼 있었고, 그래서 이 함수가 패널을 안 기다려도 통과했다.
     청크가 진짜로 지연되자 그 의존이 드러났다 — 여기서 같이 기다린다.
     """
-    pg.wait_for_selector("#vt-dock .vt-dock-tab", timeout=10000)
+    pg.wait_for_selector('#vt-activitybar [role="tab"]', timeout=10000)
     is_active = (
-        "(label) => [...document.querySelectorAll('#vt-dock .vt-dock-tab')]"
+        "(label) => [...document.querySelectorAll('#vt-activitybar [role=tab]')]"
         ".some((t) => (t.getAttribute('aria-label') || '').startsWith(label) && t.classList.contains('active'))"
     )
     if not pg.evaluate(is_active, label):
@@ -672,7 +674,7 @@ def test_열린_표면의_내용이_그_표면을_넘지_않는다(page):
     page.wait_for_timeout(300)
     bad = page.evaluate(
         """() => {
-          const surfaces = ['#vt-wgrail', '#vt-dock', '.vt-onboarding', '#topbar'];
+          const surfaces = ['#vt-workbench', '#vt-activitybar', '#vt-side', '#vt-dock', '.vt-onboarding', '#topbar'];
           const out = [];
           for (const sel of surfaces) {
             const host = document.querySelector(sel);
@@ -707,18 +709,19 @@ def test_가로_스크롤이_생기지_않는다(page, viewport):
 
 # ── 반응형 구간 ───────────────────────────────────────────────────────────
 
-def test_레일과_dock은_compact에서_숨고_그_위에서_보인다(page):
-    """N35·N36 — 티어 표(10 §3): compact는 레일·dock 둘 다 없다(하단 내비가
-    자리를 쓴다), regular부터 둘 다 보인다."""
+def test_작업대는_compact에서_숨고_그_위에서_보인다(page):
+    """티어 표(DESIGN.md §3): compact는 작업대(활동 막대·사이드바)가 없다(하단 내비가
+    자리를 쓴다), regular부터 활동 막대가 보이고 세션 활동이면 레일(펼침 또는 48px 띠)이 보인다."""
     page.set_viewport_size(COMPACT)
     page.wait_for_timeout(300)
+    assert not page.locator("#vt-workbench").is_visible(), "compact에서는 하단 내비가 대신한다"
     assert not page.locator("#vt-wgrail").is_visible(), "compact에서는 팔레트·바텀시트가 대신한다"
-    assert not page.locator("#vt-dock").is_visible(), "compact에서는 하단 내비가 대신한다"
 
     page.set_viewport_size(REGULAR)
     page.wait_for_timeout(300)
+    assert page.locator("#vt-activitybar").is_visible()
     assert page.locator("#vt-wgrail").is_visible()
-    assert page.locator("#vt-dock").is_visible()
+    assert not page.locator("#vt-dock").is_visible(), "세션 활동에서 dock 본문은 hidden이다"
 
 
 # ── 스킨 ──────────────────────────────────────────────────────────────────
@@ -824,17 +827,17 @@ def test_온보딩이_레일과_dock을_덮지_않는다(page):
     page.wait_for_timeout(300)
     hit = page.evaluate(
         """() => {
-          const top = (x, y) => document.elementFromPoint(x, y)?.closest('#vt-wgrail, #vt-dock, .vt-onboarding')?.id || 'onboarding';
+          const top = (x, y) => document.elementFromPoint(x, y)?.closest('#vt-wgrail, #vt-activitybar, .vt-onboarding')?.id || 'onboarding';
           const rail = document.getElementById('vt-wgrail').getBoundingClientRect();
-          const dock = document.getElementById('vt-dock').getBoundingClientRect();
+          const bar = document.getElementById('vt-activitybar').getBoundingClientRect();
           return {
             rail: top(rail.left + rail.width / 2, 400),
-            dock: top(dock.left + dock.width / 2, 400),
+            bar: top(bar.left + bar.width / 2, 100),
           };
         }"""
     )
     assert hit["rail"] == "vt-wgrail", f"온보딩이 레일을 덮었다: {hit}"
-    assert hit["dock"] == "vt-dock", f"온보딩이 dock을 덮었다: {hit}"
+    assert hit["bar"] == "vt-activitybar", f"온보딩이 활동 막대를 덮었다: {hit}"
 
 
 def test_온보딩이_모바일_하단_내비를_덮지_않는다(page):
@@ -1199,17 +1202,16 @@ def test_레일_파일_버튼은_사라지고_팔레트가_그_자리다(page):
 
 # ── N3(60-settings-palette.md §1) 기기 스코프 설정 ─────────────────────────
 
-def test_레일_폭이_기기_설정으로_저장되고_새로고침에도_유지된다(page, server):
-    """N3 — Rail.tsx/Dock.tsx가 localStorage 대신 /api/device-settings로
-    옮겨갔는지 실제 새로고침으로 확인한다(재부팅 없이는 캐시만으로도 통과
-    하는 버그를 놓친다)."""
+def test_사이드바_폭이_기기_설정으로_저장되고_새로고침에도_유지된다(page, server):
+    """사이드바 폭(`ui.side.width`, 활동 전체가 공유)이 /api/device-settings에 저장되고
+    실제 새로고침 뒤에도 돌아오는가(재부팅 없이는 캐시만으로도 통과하는 버그를 놓친다)."""
     base, token = server
-    page.evaluate("() => window.vtSettingsSet('ui.rail.width', 300)")
+    page.evaluate("() => { window.vtSettingsSet('ui.side.collapsed', false); window.vtSettingsSet('ui.side.width', 300); }")
     page.wait_for_timeout(400)
     # 저장 위치는 OS별 프로필(mac/windows/linux/mobile)이라 호스트마다 다르다 — 어느 프로필이든
     # 이 값이 서버에 있으면 된다. 프로필 없는 조회는 다른 저장소(기기 id)를 본다.
     saved = [
-        page.request.get(f"{base}/api/device-settings", params={"profile": prof}).json()["settings"].get("ui.rail.width")
+        page.request.get(f"{base}/api/device-settings", params={"profile": prof}).json()["settings"].get("ui.side.width")
         for prof in ("mac", "windows", "linux", "mobile")
     ]
     assert 300 in saved, saved
@@ -1218,21 +1220,18 @@ def test_레일_폭이_기기_설정으로_저장되고_새로고침에도_유�
     page.wait_for_function(
         "() => document.documentElement.dataset.appBooted === 'true'", timeout=20000
     )
-    page.wait_for_timeout(500)
-    # 2026-09-19 — `--vt-wgrail-w`는 이제 **원시 px이 아니라 식**이다:
-    # `min(<저장값>px, 40vw)` (Rail.tsx의 applyCssVar — 창을 좁히면 레일이
-    # 화면의 40%에서 걸리되 저장값 자체는 안 지운다). 커스텀 속성은 계산된
-    # px으로 내려오지 않으므로 문자열 비교는 그 식을 그대로 받는다. 이
-    # 테스트가 지키려는 것은 표기가 아니라 **복원된 폭**이므로 실제로 그려진
-    # 폭을 잰다. 뷰포트는 WIDE(1440)라 40vw=576px, 즉 min은 300px이다.
+    page.wait_for_function("() => document.documentElement.dataset.vtSide === 'open'", timeout=10000)
+    page.wait_for_timeout(300)
+    # `--vt-side-w`는 식(min(저장 폭, 40vw))이라 px로 내려오지 않는다. 저장값 변수와 실제로
+    # 그려진 폭을 본다. 뷰포트는 WIDE(1440)라 40vw=576px, 즉 min은 300px이다.
     var = page.evaluate(
-        "() => getComputedStyle(document.documentElement).getPropertyValue('--vt-wgrail-w')"
+        "() => document.documentElement.style.getPropertyValue('--vt-side-stored')"
     )
-    assert "300px" in var, f"저장값이 CSS 변수에 안 들어왔다: {var}"
+    assert var == "300px", f"저장값이 CSS 변수에 안 들어왔다: {var}"
     got = page.evaluate(
-        "() => Math.round(document.getElementById('vt-wgrail').getBoundingClientRect().width)"
+        "() => Math.round(document.getElementById('vt-side').getBoundingClientRect().width)"
     )
-    assert got == 300, f"새로고침 후 레일 폭이 안 돌아왔다: {got}px (변수 {var})"
+    assert abs(got - 300) <= 1, f"새로고침 후 사이드바 폭이 안 돌아왔다: {got}px (변수 {var})"
 
 
 # ── N43 §8 리사이즈 오버레이 ────────────────────────────────────────────────
@@ -1506,12 +1505,18 @@ def test_파일을_터미널_칸에_끌어다_놓으면_경로가_꽂힌다(isol
         # 그다음 **경로가 꽂혔는지**. DOM이 아니라 xterm 버퍼를 읽는다 —
         # 렌더러가 WebGL이라 화면은 캔버스고 `.xterm-screen`의 textContent는 비어
         # 있다(실측으로 한 번 헛다리를 짚었다).
+        # 줄바꿈으로 접힌 줄(isWrapped)은 이어 붙인다 — 경로가 칸 폭보다 길면 파일 이름이 두 줄에
+        # 걸쳐 그려지고, 줄마다 '\n'을 끼우면 이름이 끊겨 못 찾는다(칸 폭에 따라 결과가 갈렸다).
         read_buf = """() => {
           const s = Object.values(window.allSessions())[0];
           const b = s && s.term && s.term.buffer && s.term.buffer.active;
           if (!b) return '';
           let out = '';
-          for (let i = 0; i < b.length; i++) out += (b.getLine(i)?.translateToString(true) || '') + '\\n';
+          for (let i = 0; i < b.length; i++) {
+            const line = b.getLine(i);
+            if (!line) continue;
+            out += (line.isWrapped ? '' : '\\n') + line.translateToString(true);
+          }
           return out;
         }"""
         page.wait_for_function(
@@ -1530,34 +1535,76 @@ def test_파일을_터미널_칸에_끌어다_놓으면_경로가_꽂힌다(isol
 
 # ── N35 §6 dock ───────────────────────────────────────────────────────────
 
-def test_dock_탭_행이_문서대로_그려진다(page):
-    """소스컨트롤 | 큐 | 포트 | 사용량 — capability가 없는 탭은 아예 없다."""
-    page.wait_for_selector("#vt-dock .vt-dock-tab", timeout=10000)
-    labels = [t.get_attribute("aria-label") for t in page.locator("#vt-dock .vt-dock-tab").all()]
-    assert labels[:1] == ["소스컨트롤"], f"첫 탭이 소스컨트롤이 아니다: {labels}"
-    assert "큐" in labels, labels
-
-
-def test_dock은_wide에서_접힘이_기본이고_본문_패딩이_접힘을_따라간다(page):
-    """§5에서 실제로 났던 버그의 dock 판: 접었는데 body padding이 펼친 폭
-    그대로 남으면 화면 오른쪽에 빈 띠가 생긴다. 두 값을 같이 본다."""
-    page.set_viewport_size(WIDE)   # 1440 — xwide(1600) 미만이라 접힘 기본
-    page.wait_for_timeout(300)
-    got = page.evaluate(
-        """() => ({
-             collapsed: document.getElementById('vt-dock').classList.contains('collapsed'),
-             dockW: Math.round(document.getElementById('vt-dock').getBoundingClientRect().width),
-             padR: getComputedStyle(document.body).paddingRight,
-           })"""
+def test_활동_막대가_문서대로_그려진다(page):
+    """세션 | 변경 | 파일 | 큐 | 첨부 | 스니펫 | (포트) | (사용량) | 시스템 — capability가 없는 활동은
+    아예 없다. 세로 탭 목록이고, 아래 무리(MCP · 음성 · 설정)는 탭이 아니다."""
+    page.wait_for_selector('#vt-activitybar [role="tab"]', timeout=10000)
+    shape = page.evaluate(
+        """() => {
+          const list = document.querySelector('#vt-activitybar [role="tablist"]');
+          const bar = document.getElementById('vt-activitybar').getBoundingClientRect();
+          const tabs = [...list.querySelectorAll('[role="tab"]')];
+          return {
+            orient: list.getAttribute('aria-orientation'),
+            labels: tabs.map((t) => t.getAttribute('aria-label')),
+            barW: Math.round(bar.width),
+            itemH: Math.round(tabs[0].getBoundingClientRect().height),
+            tabsInBottom: document.querySelectorAll('.vt-act-bottom [role="tab"]').length,
+            settings: !!document.querySelector('.vt-act-bottom .vt-act-settings'),
+          };
+        }"""
     )
-    assert got["collapsed"], f"wide에서는 접힘이 기본이어야 한다: {got}"
-    assert got["dockW"] == 36, got
-    assert got["padR"] == "36px", f"본문 패딩이 접힘 폭을 안 따라간다: {got}"
+    assert shape["orient"] == "vertical", shape
+    assert shape["labels"][:4] == ["세션", "변경", "파일", "큐"], shape
+    assert shape["labels"][-1] == "시스템", shape
+    assert shape["barW"] == 48 and shape["itemH"] == 44, shape
+    assert shape["tabsInBottom"] == 0 and shape["settings"], shape
+
+
+def test_작업대_기본_폭과_본문_패딩이_티어와_접힘을_따라간다(page):
+    """§5에서 실제로 났던 버그의 작업대 판: 접거나 폭이 바뀌었는데 body padding이 옛 폭 그대로면
+    화면에 빈 띠가 생기거나 칸이 사이드바 밑으로 들어간다. 저장값이 없는 기기에서
+    wide(1440)는 펼침 360, 접으면 세션 48px 띠, regular(900)는 min(저장 폭, 260, 40vw)."""
+    page.set_viewport_size(WIDE)
+    page.wait_for_function("() => document.documentElement.dataset.vtSide === 'open'", timeout=10000)
+    page.wait_for_timeout(200)
+    measure = """() => ({
+        mode: document.documentElement.dataset.vtSide,
+        side: Math.round(document.getElementById('vt-side').getBoundingClientRect().width),
+        wb: Math.round(document.getElementById('vt-workbench').getBoundingClientRect().width),
+        padL: getComputedStyle(document.body).paddingLeft,
+        padR: getComputedStyle(document.body).paddingRight,
+      })"""
+    got = page.evaluate(measure)
+    assert got["wb"] == 48 + 360, got
+    assert got["padL"] == "408px", f"본문 패딩이 사이드바 폭을 안 따라간다: {got}"
+    assert got["padR"] == "0px", f"오른쪽 dock 자리가 남았다: {got}"
+
+    _dock_tab(page, "세션").click()   # 펼친 세션 재클릭 = 48px 띠
+    page.wait_for_function("() => document.documentElement.dataset.vtSide === 'strip'", timeout=5000)
+    got = page.evaluate(measure)
+    assert got["wb"] == 96 and got["padL"] == "96px", got
+
+    _dock_tab(page, "세션").click()
+    page.wait_for_function("() => document.documentElement.dataset.vtSide === 'open'", timeout=5000)
+    page.set_viewport_size(REGULAR)
+    page.wait_for_timeout(300)
+    got = page.evaluate(measure)
+    assert got["wb"] == 48 + 260 and got["padL"] == "308px", f"regular 상한 260이 안 걸렸다: {got}"
+
+
+def test_regular는_저장값이_없으면_사이드바가_접힌_채로_시작한다(page):
+    page.set_viewport_size(REGULAR)
+    page.reload()
+    page.wait_for_function("() => !!document.documentElement.dataset.vtSide", timeout=20000)
+    page.wait_for_timeout(200)
+    mode = page.evaluate("() => document.documentElement.dataset.vtSide")
+    assert mode == "strip", f"regular는 저장값이 없으면 접힘(세션 띠)으로 시작해야 한다: {mode}"
 
 
 def test_dock_탭을_누르면_그_패널이_dock_안에_마운트된다(page):
-    """모달 backdrop이 아니라 dock 본문에 들어가는가(패널 렌더러 재사용의 핵심).
-    같은 탭을 다시 누르면 접힌다 — 진입점을 이중화하지 않기 위한 규칙."""
+    """모달 backdrop이 아니라 사이드바의 dock 본문에 들어가는가(패널 렌더러 재사용의 핵심).
+    같은 활동을 다시 누르면 접힌다(도구는 0) — 진입점을 이중화하지 않기 위한 규칙."""
     _open_dock(page, "큐")
     got = page.evaluate(
         """() => {
@@ -1573,10 +1620,10 @@ def test_dock_탭을_누르면_그_패널이_dock_안에_마운트된다(page):
     assert not got["backdrop"], "dock 안인데 모달 backdrop 클래스가 붙었다"
     assert got["inside"], f"패널이 dock 폭을 넘는다: {got}"
 
-    # 같은 탭 재클릭 = 접기
+    # 같은 활동 재클릭 = 접기(도구는 0)
     _dock_tab(page, "큐").click()
     page.wait_for_function(
-        "() => document.getElementById('vt-dock').classList.contains('collapsed')", timeout=5000
+        "() => document.documentElement.dataset.vtSide === 'closed'", timeout=5000
     )
     assert page.evaluate("() => !document.getElementById('vt-queue')"), "접었는데 패널이 남았다"
 
@@ -1618,7 +1665,7 @@ def test_dock_탭을_페인으로_끌어내면_그_칸이_패널_칸이_되고_d
             // 분할이면 패널 칸이 **오른쪽**에 와야 한다.
             isRightmost: panes.every((p) => p.getBoundingClientRect().left <= pr.left + 1),
             head: pane.querySelector('.vt-pane-name')?.textContent.trim(),
-            dockCollapsed: document.getElementById('vt-dock').classList.contains('collapsed'),
+            dockCollapsed: document.documentElement.dataset.vtSide === 'closed',
             stillInDock: !!document.querySelector('#vt-dock .vt-dock-body #vt-queue'),
             overflow: [...root.querySelectorAll('*')].filter((el) => {
               const r = el.getBoundingClientRect();
@@ -1640,7 +1687,7 @@ def test_dock_탭을_페인으로_끌어내면_그_칸이_패널_칸이_되고_d
 
 def test_dock_소스컨트롤_탭이_저장소_상태를_읽어온다(page):
     """40 §3 — 머리말(저장소·브랜치)과 목록이 실제 API 응답으로 채워지는가."""
-    _open_dock(page, "소스컨트롤")
+    _open_dock(page, "변경")
     page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=15000)
     # 머리말(status)과 커밋 기록(log)은 **서로 다른 요청**이라 따로 도착한다.
     # 패널이 진짜 지연 청크가 된 뒤로는 둘 사이 간격이 눈에 띄게 벌어져서,
@@ -1663,7 +1710,7 @@ def test_dock_소스컨트롤_탭이_저장소_상태를_읽어온다(page):
 def test_dock_소스컨트롤_stage_commit은_실동작하고_push_PR은_렌더되지_않는다(page):
     """40 §5 · ADR-27 — 2.1.1: stage/unstage/커밋은 ambient git로 실제 동작.
     push·PR/MR 버튼과 계정 칩은 렌더 자체가 없다(disabled로도 남기지 않는다)."""
-    _open_dock(page, "소스컨트롤")
+    _open_dock(page, "변경")
     page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=15000)
     # 머리말(status)과 커밋 기록(log)은 **서로 다른 요청**이라 따로 도착한다.
     # 패널이 진짜 지연 청크가 된 뒤로는 둘 사이 간격이 눈에 띄게 벌어져서,
@@ -1695,7 +1742,7 @@ def test_dock_소스컨트롤_stage_commit은_실동작하고_push_PR은_렌더�
 def test_dock_소스컨트롤_파일_클릭시_뷰어로_연다(page):
     """40 §5 — 파일 행의 「뷰어」 버튼이 파일을 연다. ADR-44부터 표면 설정을 따르므로
     기본값(sheet)에서는 오버레이로 열린다. 변경된 파일이 없으면 건너뛴다."""
-    _open_dock(page, "소스컨트롤")
+    _open_dock(page, "변경")
     page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=15000)
     # 머리말(status)과 커밋 기록(log)은 **서로 다른 요청**이라 따로 도착한다.
     # 패널이 진짜 지연 청크가 된 뒤로는 둘 사이 간격이 눈에 띄게 벌어져서,
@@ -1716,7 +1763,7 @@ def test_dock_소스컨트롤_파일_클릭시_뷰어로_연다(page):
 def test_dock_소스컨트롤_diff_줄에서_큐_코멘트가_열린다(page):
     """40 §3의 「줄 클릭 → 큐에 코멘트」. 2.0 뷰어의 같은 코드를 dock에서
     그대로 쓰는지 실제 클릭으로 확인한다 — 변경된 파일이 없으면 건너뛴다."""
-    _open_dock(page, "소스컨트롤")
+    _open_dock(page, "변경")
     page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=15000)
     # 머리말(status)과 커밋 기록(log)은 **서로 다른 요청**이라 따로 도착한다.
     # 패널이 진짜 지연 청크가 된 뒤로는 둘 사이 간격이 눈에 띄게 벌어져서,
@@ -1734,20 +1781,112 @@ def test_dock_소스컨트롤_diff_줄에서_큐_코멘트가_열린다(page):
     page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=15000)
 
 
-def test_dock_폭_리사이저가_범위를_지킨다(page):
-    """320~560. 드래그로 그 밖으로 못 나간다 — 나가면 pane이 죽거나 dock이 빈다."""
+def test_사이드바_폭_리사이저가_범위를_지킨다(page):
+    """240~480. 드래그로 그 밖으로 못 나간다 — 나가면 칸이 죽거나 사이드바가 빈다."""
     _open_dock(page, "큐")
-    box = page.locator("#vt-dock .vt-dock-resizer").bounding_box()
+    box = page.locator("#vt-side .vt-side-resizer").bounding_box()
     assert box, "리사이저가 렌더되지 않았다"
-    for dx in (-600, 900):   # 넓히는 쪽 · 좁히는 쪽 둘 다 끝까지
+    for dx in (900, -600):   # 넓히는 쪽 · 좁히는 쪽 둘 다 끝까지
         page.mouse.move(box["x"] + 3, box["y"] + 200)
         page.mouse.down()
         page.mouse.move(box["x"] + 3 + dx, box["y"] + 200, steps=8)
         page.mouse.up()
         page.wait_for_timeout(150)
-        w = page.evaluate("() => Math.round(document.getElementById('vt-dock').getBoundingClientRect().width)")
-        assert 320 <= w <= 560, f"dock 폭이 범위를 벗어났다: {w}px (dx={dx})"
-        box = page.locator("#vt-dock .vt-dock-resizer").bounding_box()
+        w = page.evaluate("() => Math.round(document.getElementById('vt-side').getBoundingClientRect().width)")
+        assert 239 <= w <= 481, f"사이드바 폭이 범위를 벗어났다: {w}px (dx={dx})"
+        box = page.locator("#vt-side .vt-side-resizer").bounding_box()
+
+
+# 리디자인 1단계 — 폭을 끄는 동안 터미널 fit을 미루는가(옛 레일·dock 리사이저는 onStart가 비어 있어
+# 매 프레임 refit·WS resize가 나갔다), 활동을 바꿔도 칸 크기가 그대로인가(폭 공유).
+# WS resize는 페이지의 WebSocket.send를 감싸 `{"type":"resize"}` 프레임만 소켓 URL별로 센다.
+_WS_RESIZE_SPY = """
+(() => {
+  if (window.__vtResizeSpy) return;
+  const counts = {};
+  window.__vtResizeSpy = counts;
+  const send = WebSocket.prototype.send;
+  WebSocket.prototype.send = function (data) {
+    try {
+      if (typeof data === 'string' && data.includes('"resize"')) {
+        const m = JSON.parse(data);
+        if (m && m.type === 'resize') counts[this.url] = (counts[this.url] || 0) + 1;
+      }
+    } catch (_) {}
+    return send.call(this, data);
+  };
+})();
+"""
+
+
+def _resize_counts(page) -> dict:
+    return page.evaluate("() => ({ ...(window.__vtResizeSpy || {}) })")
+
+
+def _open_terminal_with_spy(page):
+    """세션 하나를 칸에 올리고 첫 fit이 끝날 때까지 기다린다. 반환: 만든 세션 id들."""
+    page.evaluate(_WS_RESIZE_SPY)
+    page.evaluate("() => window.createSession && window.createSession()")
+    page.wait_for_selector(".vt-pane .vt-pane-body .xterm", timeout=15000)
+    page.wait_for_function("() => Object.keys(window.__vtResizeSpy || {}).length > 0", timeout=15000)
+    page.wait_for_timeout(800)   # PTY 연결 + 첫 fit + 부팅 뒤 늦은 배치가 가라앉을 때까지
+    return page.evaluate("() => Object.keys(window.allSessions())")
+
+
+def _cleanup_sessions(page, session_ids):
+    for sid in session_ids:
+        page.evaluate("(id) => window.removeSession && window.removeSession(id)", sid)
+    page.wait_for_timeout(300)
+
+
+def test_사이드바_폭을_끌어도_칸마다_WS_resize는_놓은_뒤_한_번이다(isolated_page):
+    page = isolated_page
+    page.wait_for_function("() => document.documentElement.dataset.vtSide === 'open'", timeout=10000)
+    session_ids = _open_terminal_with_spy(page)
+    try:
+        before = _resize_counts(page)
+        box = page.locator("#vt-side .vt-side-resizer").bounding_box()
+        assert box, "리사이저가 없다"
+        page.mouse.move(box["x"] + 3, box["y"] + 300)
+        page.mouse.down()
+        # 20px씩 6프레임 — 매 프레임 fit하던 옛 동작이면 칸마다 여러 번 나간다.
+        for i in range(1, 7):
+            page.mouse.move(box["x"] + 3 - 20 * i, box["y"] + 300)
+            page.wait_for_timeout(40)
+        during = _resize_counts(page)
+        page.mouse.up()
+        page.wait_for_timeout(700)
+        after = _resize_counts(page)
+        panes = page.evaluate("() => document.querySelectorAll('.vt-pane .vt-pane-body .xterm').length")
+        sent = {u: after.get(u, 0) - before.get(u, 0) for u in after}
+        assert during == before, f"끄는 동안 resize가 나갔다: {before} → {during}"
+        assert all(n <= 1 for n in sent.values()), f"칸마다 최대 1번이어야 한다: {sent}"
+        assert sum(sent.values()) >= 1, f"폭이 120px 줄었는데 resize가 한 번도 안 나갔다: {sent}"
+        assert len([n for n in sent.values() if n]) <= panes, (sent, panes)
+        print(f"WS resize(드래그): {sent}, 칸 {panes}")
+    finally:
+        _cleanup_sessions(page, session_ids)
+
+
+def test_활동을_바꿔도_사이드바_폭이_같아_WS_resize가_없다(isolated_page):
+    page = isolated_page
+    page.wait_for_function("() => document.documentElement.dataset.vtSide === 'open'", timeout=10000)
+    session_ids = _open_terminal_with_spy(page)
+    try:
+        before = _resize_counts(page)
+        widths = []
+        for label in ("큐", "변경", "첨부", "세션", "시스템", "세션"):
+            _dock_tab(page, label).click()
+            page.wait_for_timeout(250)
+            widths.append(page.evaluate("() => Math.round(document.getElementById('vt-side').getBoundingClientRect().width)"))
+        page.wait_for_timeout(500)
+        after = _resize_counts(page)
+        sent = {u: after.get(u, 0) - before.get(u, 0) for u in after}
+        assert len(set(widths)) == 1, f"활동마다 사이드바 폭이 달랐다: {widths}"
+        assert sum(sent.values()) == 0, f"활동 전환에 resize가 나갔다: {sent}"
+        print(f"WS resize(활동 전환 6회): {sent}, 폭 {widths}")
+    finally:
+        _cleanup_sessions(page, session_ids)
 
 
 # ── 2.1.2: 화면(뷰) · dock 파일 탭(50 §4) — 뷰 탭 줄은 2026-11에 없어졌다 ────────────────────────
@@ -1902,7 +2041,7 @@ def test_모바일_플릿_홈에_호스트_스위처가_있다(page):
     # 연 테스트가 `collapsed=false`를 남기면, compact에서 그 탭이 자동으로
     # 열리면서 풀스크린 시트(panel.js는 compact에서 backdrop으로 폴백한다)가
     # 플릿 홈을 통째로 덮는다. 폰의 기본 상태를 명시해 그 전이를 끊는다.
-    page.evaluate("() => window.vtSettingsSet('ui.dock.collapsed', true)")
+    page.evaluate("() => window.vtSettingsSet('ui.side.collapsed', true)")
     page.wait_for_timeout(300)
     page.set_viewport_size(COMPACT)
     page.reload(wait_until="load")
@@ -1943,7 +2082,7 @@ def _open_legacy_mcp_workspace(page, root="#vt-mcp"):
 
 def test_mcp_workspace_tabs_fit_desktop_and_mobile(page):
     """실제 브라우저에서 세 탭과 보관함 미리보기 진입면의 가로 넘침을 잡는다."""
-    page.locator(".vt-dock-mcp-btn").click()
+    page.locator("#vt-activitybar .vt-act-mcp").click()
     _open_legacy_mcp_workspace(page)
     assert page.locator("#vt-mcp .vt-mcp-worktab").all_text_contents() == [
         "보관함", "도구 설정", "현재 세션"]

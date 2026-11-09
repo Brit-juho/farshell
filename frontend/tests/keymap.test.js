@@ -179,7 +179,25 @@ test('일반 입력창의 붙여넣기는 터미널 액션을 실행하지 않�
   assert.strictEqual(e.defaultPrevented, false);
 });
 
-test('사이드바 토글은 현재 레일의 접기 버튼을 누른다', async () => {
+test('사이드바 토글은 작업대가 열어 둔 vtSideToggle을 부른다(레일 버튼은 누르지 않는다)', async () => {
+  const { K, window, context, cache } = await load({ platform: 'Linux x86_64' });
+  let toggles = 0;
+  window.vtSideToggle = () => { toggles += 1; };
+  const rail = window.document.createElement('aside');
+  rail.id = 'vt-wgrail';
+  const button = window.document.createElement('button');
+  button.className = 'vt-wgrail-collapse';
+  rail.appendChild(button);
+  window.document.body.appendChild(rail);
+  let clicks = 0;
+  button.addEventListener('click', () => { clicks += 1; });
+  await importFresh(KEYMAP_ACTIONS_JS, context, cache);
+  K.handleKeydown(kd(window, { key: 'b', altKey: true, shiftKey: true }));
+  assert.strictEqual(toggles, 1);
+  assert.strictEqual(clicks, 0);
+});
+
+test('사이드바 토글 — 작업대가 아직 없으면(초기 로드 경합) 레일의 접기 버튼을 누른다', async () => {
   const { K, window, context, cache } = await load({ platform: 'Linux x86_64' });
   const rail = window.document.createElement('aside');
   rail.id = 'vt-wgrail';

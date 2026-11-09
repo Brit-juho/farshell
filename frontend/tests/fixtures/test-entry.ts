@@ -34,3 +34,8 @@ export {
 export {
   deleteWorktreeRow, fetchDiffCount, diffCountStale, cachedDiffCount, createDiffWatcher, msUntilDiffRefresh,
 } from '../../js/shell/rail-fetch.js';
+export {
+  ACTIVITIES, TOOL_ACTIVITIES, availableActivities, activityById, activityByPanelId, badgeTip, stepActivityIndex,
+} from '../../js/shell/activity-data.js';
+export { mountActivityBar } from './activity-bar-mount.js';
+export { mountWorkbench } from '../../js/shell/Workbench.tsx';
