@@ -1,4 +1,4 @@
-// 리디자인 8단계 — 폰 수동 집중 모드(layout/mobile-focus.js, 시안 M14 · M14-a · M14-c).
+// 리디자인 8단계 — 폰 수동 집중 모드(layout/mobile-focus.js, 시안 M14 · M14-a · M14-c). 스위치는 layout/focus.js 하나다.
 // 들어가기는 상단바 버튼(focus.toggle)만, 나가기는 알약의 나가기 · 위 가장자리 24px에서 64px 넘게 끌어내리기 · 터미널 탭 떠나기.
 //   node --experimental-vm-modules --test frontend/tests/mobile-focus.test.js
 'use strict';
@@ -15,7 +15,7 @@ const INDEX = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8')
 const _doms = [];
 after(() => { for (const d of _doms) { try { d.window.close(); } catch (_) {} } });
 
-async function build({ compact = true, desktopToggle = null } = {}) {
+async function build({ compact = true } = {}) {
   const env = createDomEnv(INDEX);
   _doms.push(env.dom);
   const { window } = env;
@@ -23,8 +23,10 @@ async function build({ compact = true, desktopToggle = null } = {}) {
   const mq = { matches: compact, media: '', addEventListener: (_t, fn) => mqListeners.push(fn), removeEventListener() {}, addListener() {}, removeListener() {} };
   window.matchMedia = (q) => (q.includes('max-width') ? mq : { matches: false, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
   const cache = new Map();
+  window.API_BASE = '';
+  window._tokenQuery = '';
+  window.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
   const dom = await importFresh(path.join(JS, 'core/dom.js'), env.context, cache);
-  if (desktopToggle) dom.registerAction('focus.toggle', desktopToggle);
   const state = await importFresh(path.join(JS, 'agent/state.js'), env.context, cache);
   const focus = await importFresh(path.join(JS, 'layout/mobile-focus.js'), env.context, cache);
   const events = [];
@@ -117,13 +119,15 @@ test('터미널 탭을 떠나거나 폭이 720 이상이 되면 나간다', asyn
   assert.ok(!html(window).classList.contains('vt-focus'));
 });
 
-test('넓은 화면에서는 켜지지 않고, 먼저 등록된 데스크톱 집중 모드 처리기에 넘긴다(같은 액션 이름)', async () => {
-  const calls = [];
-  const { window, dom, focus } = await build({ compact: false, desktopToggle: () => calls.push('desktop') });
-  dom.getAction('focus.toggle')();
-  assert.deepStrictEqual(calls, ['desktop']);
+test('넓은 화면에서는 setMobileFocus가 켜지 않고, focus.toggle은 하나뿐인 처리기(layout/focus.js)가 데스크톱 몫으로 켠다', async () => {
+  const { window, dom, focus, events } = await build({ compact: false });
   assert.strictEqual(focus.setMobileFocus(true), false);
   assert.ok(!html(window).classList.contains('vt-focus'));
+  dom.getAction('focus.toggle')();
+  assert.ok(html(window).classList.contains('vt-focus'), '같은 액션 · 같은 클래스 — 넓은 화면이면 데스크톱 집중 모드');
+  assert.strictEqual(focus.isMobileFocus(), false);
+  dom.getAction('focus.toggle')();
+  assert.deepStrictEqual(events, [true, false]);
 });
 
 test('CSS — 집중 모드는 상단바·아래 탭을 숨기고 키바를 바닥에 남기며, 자동 집중(보이는 높이 < 300)은 그대로다', () => {

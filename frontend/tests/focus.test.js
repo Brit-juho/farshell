@@ -1,9 +1,11 @@
-// 리디자인 7단계 — 데스크톱 집중 모드.
+// 리디자인 7단계 — 데스크톱 집중 모드(폰 몫은 mobile-focus.test.js).
 // 1부: core 스위치(layout/focus.js) — `<html class="vt-focus">`, 숨은 막대의 inert, 저장하지 않는 `ui.focus.active`,
-//      `focus.toggle` 액션, 키맵 `focusMode`(mac ⌘. · 그 밖 Alt+Shift+. 물리 키), 사용자 재지정 보존.
+//      `focus.toggle` 액션 하나(폭에 따라 데스크톱 · 폰 몫), 폭이 720을 넘나들면 끝, 키맵 `focusMode`(mac ⌘. · 그 밖
+//      Alt+Shift+. 물리 키), 사용자 재지정 보존.
 // 2부: 설정 색인 — 모양 › 집중 모드 네 줄(팔레트 `>`와 설정 화면이 같은 정의를 읽는다).
-// 3부: 떠 있는 층(shell/Focus.tsx) — 개입 알약 수 · 이동, 가장자리 노출(드러난 쪽만 inert 해제 · 400ms 뒤 닫힘 · Esc),
-//      들어올 때 안내 횟수, 설정으로 끄기, 마우스 없는 기기의 끝내기 버튼.
+// 3부: 개입 알약(#vt-focus-pill — 두 폭 공용, layout/mobile-focus.js)의 데스크톱 내용 · 이동 · 끄기.
+// 4부: 떠 있는 층(shell/Focus.tsx) — 가장자리 노출(드러난 쪽만 inert 해제 · 400ms 뒤 닫힘 · Esc), 들어올 때 안내 횟수,
+//      마우스 없는 기기의 끝내기 버튼.
 'use strict';
 const { test, after } = require('node:test');
 const assert = require('node:assert');
@@ -16,13 +18,15 @@ const FOCUS_JS = path.join(__dirname, '../js/layout/focus.js');
 const SETTINGS_JS = path.join(__dirname, '../js/core/settings.js');
 const KEYMAP_JS = path.join(__dirname, '../js/core/keymap.js');
 const DOM_JS = path.join(__dirname, '../js/core/dom.js');
+const STATE_JS = path.join(__dirname, '../js/agent/state.js');
+const MOBILE_FOCUS_JS = path.join(__dirname, '../js/layout/mobile-focus.js');
 
 const _doms = [];
 after(() => { for (const d of _doms) { try { d.window.close(); } catch (_) {} } });
 
 const CHROME = '<header id="vt-titlebar"><button id="tb-btn">x</button></header><div id="vt-workbench-slot"><div id="vt-workbench"><button id="wb-btn">s</button></div></div><footer id="vt-hud"></footer>';
 
-async function loadCore({ platform = 'MacIntel' } = {}) {
+async function loadCore({ platform = 'MacIntel', compact = false, mobile = false } = {}) {
   const env = createDomEnv(`<!doctype html><html><body>${CHROME}</body></html>`);
   _doms.push(env.dom);
   const { window } = env;
@@ -34,13 +38,19 @@ async function loadCore({ platform = 'MacIntel' } = {}) {
     return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
   };
   Object.defineProperty(window.navigator, 'platform', { value: platform, configurable: true });
-  window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  // 폭(compact) 미디어쿼리 하나만 바꿀 수 있게 — 바꾸면 등록된 change 처리기를 부른다.
+  const mqListeners = [];
+  const mq = { matches: compact, media: '(max-width:719px)', addEventListener: (_t, fn) => mqListeners.push(fn), removeEventListener() {} };
+  window.matchMedia = (q) => (q.includes('max-width') ? mq : { matches: false, media: q, addEventListener() {}, removeEventListener() {} });
   const cache = new Map();
   const S = await importFresh(SETTINGS_JS, env.context, cache);
   const K = await importFresh(KEYMAP_JS, env.context, cache);
   const D = await importFresh(DOM_JS, env.context, cache);
+  const A = await importFresh(STATE_JS, env.context, cache);
   const F = await importFresh(FOCUS_JS, env.context, cache);
-  return { window, document: window.document, S, K, D, F, puts };
+  const M = mobile ? await importFresh(MOBILE_FOCUS_JS, env.context, cache) : null;
+  const setWidth = (isCompact) => { mq.matches = isCompact; for (const fn of mqListeners) fn({ matches: isCompact }); };
+  return { window, document: window.document, S, K, D, A, F, M, puts, setWidth };
 }
 
 const kd = (window, opts) => new window.KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...opts });
@@ -66,6 +76,37 @@ test('focus.toggle — html.vt-focus를 켜고 끄며, 숨은 막대 셋에 iner
   assert.deepStrictEqual(events, [true, false], '바뀔 때마다 한 번씩 알린다');
   D.getAction('focus.exit')();
   assert.deepStrictEqual(events, [true, false], '이미 꺼져 있으면 focus.exit은 아무것도 하지 않는다');
+});
+
+test('focus.toggle은 하나다 — 폰 폭에서도 같은 처리기가 켜고(막대 inert는 데스크톱에서만), 이벤트는 document에서 쏜다', async () => {
+  const { window, document, D, M } = await loadCore({ compact: true, mobile: true });
+  const seen = [];
+  document.addEventListener('vt:focus-change', (e) => seen.push(e.detail));
+  D.getAction('focus.toggle')();
+  assert.ok(document.documentElement.classList.contains('vt-focus'));
+  assert.strictEqual(document.getElementById('vt-titlebar').hasAttribute('inert'), false, '폰에는 숨길 데스크톱 막대가 없다');
+  assert.strictEqual(M.isMobileFocus(), true);
+  D.getAction('focus.toggle')();
+  assert.strictEqual(document.documentElement.classList.contains('vt-focus'), false);
+  assert.deepStrictEqual(seen.map((d) => [d.on, d.source]), [[true, 'mobile'], [false, 'mobile']]);
+  void window;
+});
+
+test('켠 채 창 폭이 720을 넘나들면 끝난다 — 데스크톱 → 폰, 폰 → 데스크톱 둘 다', async () => {
+  const { document, F, S, setWidth } = await loadCore({ mobile: true });
+  const root = document.documentElement;
+  F.toggleFocus(true);
+  assert.ok(root.classList.contains('vt-focus'));
+  assert.strictEqual(document.getElementById('vt-hud').hasAttribute('inert'), true);
+  setWidth(true);   // 데스크톱 → 폰
+  assert.strictEqual(root.classList.contains('vt-focus'), false);
+  assert.strictEqual(S.get('ui.focus.active'), false);
+  assert.strictEqual(document.getElementById('vt-hud').hasAttribute('inert'), false, '숨겼던 막대를 되살린다');
+  F.toggleFocus(true);   // 폰에서 켬
+  assert.ok(root.classList.contains('vt-focus'));
+  setWidth(false);  // 폰 → 데스크톱
+  assert.strictEqual(root.classList.contains('vt-focus'), false);
+  assert.strictEqual(document.getElementById('vt-focus-btn'), null, '시험 문서에는 상단바 버튼이 없어도 된다');
 });
 
 test('끌 때 드러난 쪽 클래스도 함께 지운다', async () => {
@@ -193,22 +234,69 @@ test('설정 색인 — 모양 › 집중 모드 네 줄이 팔레트 `>`에 그
   assert.strictEqual(env.buildSettingEntries(['terminal']).some((e) => keys.includes(e.key)), false);
 });
 
-// ── 3부: 떠 있는 층(Focus.tsx) ───────────────────────────────────────────
+// ── 3부: 개입 알약(두 폭 공용 #vt-focus-pill) ────────────────────────────
+
+test('개입 알약 — 데스크톱 내용: 「개입 N · 이름 · 종류 ›」와 「⌘. 끝내기」, 누르면 가장 오래 기다린 세션 · 끝내기', async () => {
+  const { window, document, A, F } = await loadCore({ mobile: true });
+  const opened = [];
+  window.vtOpenSessionFromRail = (o) => { opened.push(o); return Promise.resolve(true); };
+  F.toggleFocus(true);
+  const pill = document.getElementById('vt-focus-pill');
+  assert.ok(pill, '알약은 한 요소다');
+  assert.strictEqual(document.querySelectorAll('#vt-focus-pill').length, 1);
+  assert.strictEqual(pill.dataset.waiting, '0');
+  assert.strictEqual(pill.querySelector('.vt-focus-pill-go').hidden, true, 'waiting 0이면 go가 숨는다(데스크톱은 알약 전체가 CSS로 숨는다)');
+  const now = Date.now() / 1000;
+  A.applySnapshot({
+    a: { tmux_session: 'newer', session_id: 'a', status: 'waiting', kind: 'plan', since: now },
+    b: { tmux_session: 'older<x>', session_id: 'b', status: 'waiting', kind: 'approval', since: now - 60 },
+  });
+  assert.strictEqual(pill.dataset.waiting, '2');
+  const go = pill.querySelector('.vt-focus-pill-go');
+  assert.strictEqual(go.querySelector('.vt-focus-pill-n').textContent, '개입 2');
+  assert.strictEqual(go.querySelector('.vt-focus-pill-name').textContent, 'older<x>', '가장 오래 기다린 세션 · 글자로만');
+  assert.strictEqual(go.querySelector('.vt-focus-pill-name').children.length, 0);
+  assert.strictEqual(go.querySelector('.vt-focus-pill-kind').textContent, '승인 요청');
+  assert.strictEqual(pill.querySelector('.vt-focus-pill-keys').textContent, '⌘.');
+  assert.strictEqual(pill.querySelector('.vt-focus-pill-exit-label').textContent, '끝내기');
+  go.click();
+  assert.strictEqual(JSON.stringify(opened), JSON.stringify([{ tmuxName: 'older<x>' }]));
+  pill.querySelector('.vt-focus-pill-exit').click();
+  assert.strictEqual(document.documentElement.classList.contains('vt-focus'), false);
+});
+
+test('개입 알약 — 설정 「개입 표시」를 끄면 data-pill="off"(데스크톱 CSS가 숨긴다), 키 재지정은 표기에 따라온다', async () => {
+  const { document, S, K, F } = await loadCore({ mobile: true });
+  F.toggleFocus(true);
+  const pill = document.getElementById('vt-focus-pill');
+  assert.strictEqual(pill.dataset.pill, 'on');
+  await S.set('ui.focus.pill', false);
+  assert.strictEqual(pill.dataset.pill, 'off');
+  await K.setBinding('focusMode', 'Ctrl+Shift+Z');
+  assert.strictEqual(pill.querySelector('.vt-focus-pill-keys').textContent, '⌃⇧Z');
+});
+
+test('CSS — 데스크톱 알약은 waiting이 있고 설정이 켜져 있을 때만, 오른쪽 12 · 위 40(제목 막대가 보이면 44) · 높이 28', () => {
+  const css = require('node:fs').readFileSync(path.join(__dirname, '../../styles/screens/98-focus.css'), 'utf8');
+  assert.match(css, /html\.vt-focus #vt-focus-pill:not\(\[data-waiting="0"\]\):not\(\[data-pill="off"\]\) \{[^}]*top:40px; right:12px;[^}]*height:28px;/);
+  assert.match(css, /html\.vt-focus\.vt-reveal-top #vt-focus-pill \{ top:44px; \}/);
+  assert.match(css, /\.vt-focus-pill-sep, \.vt-focus-pill-kind, \.vt-focus-pill-chev, \.vt-focus-pill-keys, \.vt-focus-pill-exit-label \{ display:none; \}/,
+    '데스크톱 전용 조각은 폰에서 숨는다');
+  // 자리 변수 넷만 0 — 막대 자신의 폭 · 높이는 그대로(숨은 채 제 모양).
+  assert.match(css, /html\.vt-focus:root \{\s*--vt-activity-w:0px; --vt-side-w:0px; --titlebar-h:0px; --statusbar-h:0px;/);
+  assert.doesNotMatch(css.replace(/\/\*[\s\S]*?\*\//g, ''), /transition:[^;]*(width|height|padding|left|top)/, '크기에는 transition이 없다');
+});
+
+// ── 4부: 떠 있는 층(Focus.tsx) ───────────────────────────────────────────
 
 function focusDeps(env, over = {}) {
   const calls = [];
-  const settings = { 'ui.focus.edgeReveal': true, 'ui.focus.pill': true, 'ui.focus.edgeDelay': '0', 'ui.focus.hintCount': 0, ...(over.settings || {}) };
+  const settings = { 'ui.focus.edgeReveal': true, 'ui.focus.edgeDelay': '0', 'ui.focus.hintCount': 0, ...(over.settings || {}) };
   const subs = new Set();
-  const agentSubs = new Set();
-  let counts = over.counts || { waiting: 0, working: 0, done: 0 };
-  let first = over.first || null;
   let active = over.active ?? true;
   const deps = {
     getAction: (n) => () => calls.push(n),
     keyHint: (id) => (id === 'focusMode' ? '⌘.' : ''),
-    agentCounts: () => counts,
-    subscribeAgents: (fn) => { agentSubs.add(fn); return () => agentSubs.delete(fn); },
-    oldestWaiting: () => first,
     active: () => active,
     focusEvent: 'vt:focus-change',
     getSetting: (k) => settings[k],
@@ -217,7 +305,6 @@ function focusDeps(env, over = {}) {
   };
   return {
     deps, calls, settings,
-    setAgents(c, f) { counts = c; first = f; for (const fn of agentSubs) fn(); },
     setActive(on) {
       active = on;
       const root = env.document.documentElement;
@@ -226,7 +313,7 @@ function focusDeps(env, over = {}) {
         const el = env.document.getElementById(id);
         el.inert = on; if (on) el.setAttribute('inert', ''); else el.removeAttribute('inert');
       }
-      env.window.dispatchEvent(new env.window.CustomEvent('vt:focus-change', { detail: { on } }));
+      env.document.dispatchEvent(new env.window.CustomEvent('vt:focus-change', { bubbles: true, detail: { on } }));
     },
   };
 }
@@ -244,44 +331,13 @@ async function freshLayer(over = {}) {
   return { env, ...h };
 }
 
-const raf = (w) => new Promise((r) => w.requestAnimationFrame(() => r()));
-
-test('개입 알약 — waiting이 없으면 숨고, 생기면 「개입 N · 세션 · 종류」, 누르면 agents.jump · 끝내기는 focus.exit', async () => {
-  const { env, calls, setAgents } = await freshLayer({ settings: { 'ui.focus.hintCount': 3 } });
-  const { document, window } = env;
-  assert.strictEqual(document.querySelector('.vt-focus-pill'), null, 'waiting 0이면 알약 없음');
-  setAgents({ waiting: 2, working: 1, done: 0 }, { tmuxName: 'fsh-dev', sessionId: 's1', name: 'sample-dev', kind: 'approval' });
-  await raf(window); await tick(window, 5);
-  const pill = document.querySelector('.vt-focus-pill');
-  assert.ok(pill);
-  assert.strictEqual(pill.querySelector('.vt-focus-pill-count').textContent, '개입 2');
-  assert.strictEqual(pill.querySelector('.vt-focus-pill-name').textContent, 'sample-dev');
-  assert.strictEqual(pill.querySelector('.vt-focus-pill-kind').textContent, '승인 요청');
-  assert.match(pill.querySelector('.vt-focus-pill-exit').textContent, /⌘\.끝내기/);
-  pill.querySelector('.vt-focus-pill-go').click();
-  pill.querySelector('.vt-focus-pill-exit').click();
-  assert.deepStrictEqual(calls, ['agents.jump', 'focus.exit']);
-  setAgents({ waiting: 0, working: 1, done: 0 }, null);
-  await raf(window); await tick(window, 5);
-  assert.strictEqual(document.querySelector('.vt-focus-pill'), null, '다 처리하면 사라진다');
-});
-
-test('개입 알약 — 설정으로 끄면 waiting이 있어도 숨는다', async () => {
-  const h = await freshLayer({ counts: { waiting: 1, working: 0, done: 0 }, settings: { 'ui.focus.hintCount': 3 } });
-  const { document } = h.env;
-  assert.ok(document.querySelector('.vt-focus-pill'));
-  h.deps.setSetting('ui.focus.pill', false);
-  await tick(h.env.window, 5);
-  assert.strictEqual(document.querySelector('.vt-focus-pill'), null);
-});
-
 test('가장자리 노출 — 드러난 쪽만 inert를 풀고 클래스를 붙인다. 밖으로 나가면 400ms 뒤, Esc면 바로 닫힌다', async () => {
   const { env } = await freshLayer({ settings: { 'ui.focus.hintCount': 3 } });
   const { document, window } = env;
   const root = document.documentElement;
-  const edges = [...document.querySelectorAll('.vt-focus-edge')].map((e) => e.dataset.edge);
+  const edges = [...document.querySelectorAll('.vt-focus-strip')].map((e) => e.dataset.edge);
   assert.deepStrictEqual(edges, ['left', 'top', 'bottom'], '오른쪽 가장자리는 쓰지 않는다');
-  const left = document.querySelector('.vt-focus-edge[data-edge="left"]');
+  const left = document.querySelector('.vt-focus-strip[data-edge="left"]');
   left.dispatchEvent(new window.PointerEvent('pointerenter'));
   await tick(window, 5);
   assert.ok(root.classList.contains('vt-reveal-left'));
@@ -300,7 +356,7 @@ test('가장자리 노출 — 드러난 쪽만 inert를 풀고 클래스를 붙�
   assert.strictEqual(root.classList.contains('vt-reveal-left'), false);
   assert.strictEqual(document.getElementById('vt-workbench-slot').hasAttribute('inert'), true, '닫히면 다시 inert');
   // 위 가장자리 → 제목 막대, Esc로 바로 닫힘.
-  document.querySelector('.vt-focus-edge[data-edge="top"]').dispatchEvent(new window.PointerEvent('pointerenter'));
+  document.querySelector('.vt-focus-strip[data-edge="top"]').dispatchEvent(new window.PointerEvent('pointerenter'));
   await tick(window, 5);
   assert.ok(root.classList.contains('vt-reveal-top'));
   assert.strictEqual(document.querySelector('.vt-focus-scrim'), null, '위 · 아래는 어둡게 하지 않는다');
@@ -312,7 +368,7 @@ test('가장자리 노출 — 드러난 쪽만 inert를 풀고 클래스를 붙�
 test('가장자리 노출 — 반응 시간 전에 띠를 벗어나면 열리지 않는다(250ms)', async () => {
   const { env } = await freshLayer({ settings: { 'ui.focus.edgeDelay': '250', 'ui.focus.hintCount': 3 } });
   const { document, window } = env;
-  const bottom = document.querySelector('.vt-focus-edge[data-edge="bottom"]');
+  const bottom = document.querySelector('.vt-focus-strip[data-edge="bottom"]');
   bottom.dispatchEvent(new window.PointerEvent('pointerenter'));
   await tick(window, 100);
   bottom.dispatchEvent(new window.PointerEvent('pointerleave'));
@@ -327,7 +383,7 @@ test('가장자리 노출 — 반응 시간 전에 띠를 벗어나면 열리지
 test('왼쪽 노출에서 세션 행을 고르면 바로 닫힌다(행 안의 ⋯ 버튼은 아니다)', async () => {
   const { env } = await freshLayer({ settings: { 'ui.focus.hintCount': 3 } });
   const { document, window } = env;
-  document.querySelector('.vt-focus-edge[data-edge="left"]').dispatchEvent(new window.PointerEvent('pointerenter'));
+  document.querySelector('.vt-focus-strip[data-edge="left"]').dispatchEvent(new window.PointerEvent('pointerenter'));
   await tick(window, 5);
   document.querySelector('#vt-wgrail .more').click();
   await tick(window, 5);
@@ -339,30 +395,30 @@ test('왼쪽 노출에서 세션 행을 고르면 바로 닫힌다(행 안의 �
 
 test('가장자리에 막대 띄우기를 끄면 감지 띠가 없다', async () => {
   const { env } = await freshLayer({ settings: { 'ui.focus.edgeReveal': false, 'ui.focus.hintCount': 3 } });
-  assert.strictEqual(env.document.querySelectorAll('.vt-focus-edge').length, 0);
+  assert.strictEqual(env.document.querySelectorAll('.vt-focus-strip').length, 0);
 });
 
 test('들어올 때 안내 — 세 번까지만 보이고 횟수를 센다. 끄면 사라진다', async () => {
   const h = await freshLayer({ settings: { 'ui.focus.hintCount': 2 } });
   const { document } = h.env;
-  const hint = document.querySelector('.vt-focus-hint');
+  const hint = document.querySelector('.vt-focus-intro');
   assert.ok(hint, '세 번째 진입이라 보인다');
   assert.match(hint.textContent, /가장자리에 마우스를 대면 막대가 나타납니다/);
   assert.match(hint.textContent, /⌘\.끝내기/);
   assert.strictEqual(h.settings['ui.focus.hintCount'], 3);
   h.setActive(false);
   await tick(h.env.window, 5);
-  assert.strictEqual(document.querySelector('.vt-focus-hint'), null);
+  assert.strictEqual(document.querySelector('.vt-focus-intro'), null);
   h.setActive(true);
   await tick(h.env.window, 5);
-  assert.strictEqual(document.querySelector('.vt-focus-hint'), null, '세 번 본 뒤에는 생략');
+  assert.strictEqual(document.querySelector('.vt-focus-intro'), null, '세 번 본 뒤에는 생략');
   assert.strictEqual(h.settings['ui.focus.hintCount'], 3);
 });
 
 test('마우스가 없는 기기 — 가장자리 띠 대신 끝내기 버튼이 늘 있다', async () => {
   const { env, calls } = await freshLayer({ hover: false, settings: { 'ui.focus.hintCount': 3 } });
   const { document } = env;
-  assert.strictEqual(document.querySelectorAll('.vt-focus-edge').length, 0);
+  assert.strictEqual(document.querySelectorAll('.vt-focus-strip').length, 0);
   const exit = document.querySelector('.vt-focus-exit');
   assert.ok(exit);
   exit.click();
@@ -370,9 +426,9 @@ test('마우스가 없는 기기 — 가장자리 띠 대신 끝내기 버튼이
 });
 
 test('꺼져 있을 때는 아무것도 그리지 않고, 끄면 드러난 막대도 닫는다', async () => {
-  const h = await freshLayer({ counts: { waiting: 1, working: 0, done: 0 }, settings: { 'ui.focus.hintCount': 3 } });
+  const h = await freshLayer({ settings: { 'ui.focus.hintCount': 3 } });
   const { document, window } = h.env;
-  document.querySelector('.vt-focus-edge[data-edge="top"]').dispatchEvent(new window.PointerEvent('pointerenter'));
+  document.querySelector('.vt-focus-strip[data-edge="top"]').dispatchEvent(new window.PointerEvent('pointerenter'));
   await tick(window, 5);
   assert.ok(document.documentElement.classList.contains('vt-reveal-top'));
   h.setActive(false);

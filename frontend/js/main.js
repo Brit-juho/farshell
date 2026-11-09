@@ -25,16 +25,16 @@ hydrateIcons();
 // N34 — HUD(지연 청크)에 넘겨줄 것들. 위 부수효과 import와 같은 모듈 인스턴스라
 // 여기서 이름으로 한 번 더 가져와도 중복 평가는 없다(ES 모듈 캐시).
 import { vtFetch } from './core/api.js';
-import { getSession, activeSessionId, allSessions, sessionDisplayName, subscribe as storeSubscribe } from './core/store.js';
+import { getSession, activeSessionId, sessionDisplayName, subscribe as storeSubscribe } from './core/store.js';
 import { onLayoutChange } from './layout/store.js';
 import { branchOf, repoOf, onBranchChips } from './layout/branch-chips.js';
-import { allStatuses, agentDetails, isUnseen, onStatusChange } from './agent/state.js';
+import { allStatuses, isUnseen, onStatusChange } from './agent/state.js';
 import { copyToClipboard } from './term/clipboard.js';
 import { lang } from './core/i18n.js';
 import { isMac } from './core/env.js';
 import { getAction, registerAction } from './core/dom.js';
 import { E2E_ENABLED } from './term/e2e.js';
-import { setFocusUiLoader, isFocusActive, FOCUS_EVENT } from './layout/focus.js';  // 리디자인 7단계 — 집중 모드 스위치(지연 UI는 아래)
+import { setFocusUiLoader, isFocusActive, jumpToWaiting, FOCUS_EVENT } from './layout/focus.js';  // 리디자인 7단계 — 집중 모드 스위치(지연 UI는 아래)
 import { get as settingGet, set as settingSet, subscribe as settingSubscribe } from './core/settings.js';  // S2 — 설정 스토어(모듈 평가 시점에 캐시+마이그레이션 동기 적용)
 import { getBinding, displayCombo } from './core/keymap.js';    // S3 — 키맵 레지스트리(각 모듈이 register()로 액션을 붙인다)
 import './core/dom.js';
@@ -172,36 +172,9 @@ try {
     }
     return { waiting, working, done };
   };
-  // 가장 오래 기다린 입력 대기 세션. since를 모르는 항목은 맨 뒤로 보낸다. 상태 막대 칩(agents.jump)과
-  // 집중 모드의 개입 알약(이름 · 종류를 보여 주고 누르면 같은 곳으로 간다)이 같은 세션을 가리키도록 한 곳에서 고른다.
-  const oldestWaiting = () => {
-    const details = agentDetails();
-    const sinceOf = (name) => {
-      const v = details[name] && details[name].since;
-      const n = typeof v === 'number' ? v : Date.parse(v);
-      return Number.isFinite(n) ? n : Infinity;
-    };
-    const waiting = [...allStatuses()].filter(([, st]) => st === 'waiting').map(([name]) => name);
-    if (!waiting.length) return null;
-    waiting.sort((a, b) => sinceOf(a) - sinceOf(b));
-    const tmuxName = waiting[0];
-    const sessions = allSessions();
-    const sessionId = Object.keys(sessions).find((id) => {
-      const s = sessions[id];
-      return s && (s.tmuxName || s.tmux_name) === tmuxName && !s.remote;
-    }) || null;
-    return {
-      tmuxName, sessionId,
-      name: (sessionId && sessionDisplayName(sessionId)) || tmuxName,
-      kind: (details[tmuxName] && details[tmuxName].kind) || null,
-    };
-  };
-  registerAction('agents.jump', () => {
-    const w = oldestWaiting();
-    if (!w) return;
-    const open = window.vtOpenSessionFromRail;
-    if (typeof open === 'function') open({ sessionId: w.sessionId, tmuxName: w.tmuxName });
-  });
+  // 가장 오래 기다린 입력 대기 세션으로 이동한다. 고르는 규칙은 layout/focus.js 한 곳 — 집중 모드의 개입 알약도
+  // 같은 세션을 가리킨다.
+  registerAction('agents.jump', () => jumpToWaiting());
   // 키맵 id → 표시용 조합. core/keymap.js는 지연 청크가 직접 못 읽으므로 여기서 넘긴다.
   const keyHint = (id) => {
     const b = getBinding(id);
@@ -270,14 +243,14 @@ try {
       .catch((e) => console.error('[FarShell workbench]', e));
   }
 
-  // 리디자인 7단계 — 집중 모드의 떠 있는 부분(가장자리 노출 · 개입 알약 · 들어올 때 안내 · 터치용 끝내기)은 처음 켤 때
-  // 같은 지연 청크(shell.js)에서 불러온다. 켜고 끄는 스위치 자체는 core(layout/focus.js)다.
+  // 리디자인 7단계 — 데스크톱 집중 모드의 떠 있는 부분(가장자리 노출 · 들어올 때 안내 · 터치용 끝내기)은 처음 켤 때
+  // 같은 지연 청크(shell.js)에서 불러온다. 스위치는 core(layout/focus.js), 개입 알약은 두 폭 공용(layout/mobile-focus.js).
   setFocusUiLoader(() => import('./shell/Focus.tsx').then(({ mountFocus }) => {
     const host = document.createElement('div');
     host.id = 'vt-focus-ui';
     document.body.appendChild(host);
     return mountFocus(host, {
-      getAction, keyHint, agentCounts, subscribeAgents: onStatusChange, oldestWaiting,
+      getAction, keyHint,
       active: isFocusActive, focusEvent: FOCUS_EVENT,
       getSetting: settingGet, setSetting: settingSet, subscribeSettings: settingSubscribe,
     });

@@ -4828,8 +4828,6 @@ window.__VT_I18N = {
   "아래로 끌면 상단바와 탭이 돌아옵니다": "Pull down to bring back the top bar and tabs",
   "놓으면 집중 모드를 끝냅니다": "Release to exit focus mode",
   "더 끌어내리면 집중 모드를 끝냅니다": "Pull further to exit focus mode",
-  "집중 모드 개입 표시": "Focus mode needs-you pill",
-  "누르면 그 세션으로": "Go to that session",
   "화면 가장자리에 마우스를 대면 막대가 나타납니다": "Move the pointer to a screen edge to show the bars",
   "왼쪽 아래 버튼으로 끝냅니다": "Use the button at the bottom left to exit",
   "가장자리에 막대 띄우기": "Show bars at screen edges",

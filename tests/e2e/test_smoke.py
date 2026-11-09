@@ -2264,7 +2264,7 @@ def test_집중_모드_가장자리_노출은_칸_크기를_바꾸지_않아_WS_
     try:
         _press_focus(page)
         page.wait_for_function("() => document.documentElement.classList.contains('vt-focus')", timeout=5000)
-        page.wait_for_selector("#vt-focus-ui .vt-focus-edge", timeout=10000)
+        page.wait_for_selector("#vt-focus-ui .vt-focus-strip", timeout=10000)
         page.wait_for_timeout(900)
         base = page.evaluate(_FOCUS_SHAPE)
         before = _resize_counts(page)
@@ -2323,7 +2323,7 @@ def test_집중_모드_개입_알약을_누르면_기다리는_세션으로_간�
         page.evaluate("() => window.vtSettingsSet('ui.focus.active', true)")
         page.wait_for_function("() => document.documentElement.classList.contains('vt-focus')", timeout=5000)
         page.wait_for_selector("#vt-focus-ui", state="attached", timeout=10000)
-        assert page.locator(".vt-focus-pill").count() == 0, "waiting이 없으면 알약이 없다"
+        assert not page.locator("#vt-focus-pill").is_visible(), "waiting이 없으면 데스크톱 알약은 숨는다"
         # 서버 감지 결과 대신 같은 모양의 스냅샷을 넣는다(agent/state.js applySnapshot). 레일의 상태 조회가 같은
         # 다리로 서버 스냅샷을 다시 넣어 지우지 않도록, 그 다리에도 이 엔트리를 섞어 둔다.
         page.evaluate(
@@ -2336,20 +2336,47 @@ def test_집중_모드_개입_알약을_누르면_기다리는_세션으로_간�
             }""",
             tmux,
         )
-        page.wait_for_selector(".vt-focus-pill", timeout=5000)
-        pill = page.evaluate("""() => { const p = document.querySelector('.vt-focus-pill'); const b = p.getBoundingClientRect();
+        page.wait_for_selector("#vt-focus-pill", state="visible", timeout=5000)
+        pill = page.evaluate("""() => { const p = document.getElementById('vt-focus-pill'); const b = p.getBoundingClientRect();
           return { text: p.textContent, right: Math.round(innerWidth - b.right), top: Math.round(b.top), height: Math.round(b.height) }; }""")
-        assert "개입 1" in pill["text"] and "승인 요청" in pill["text"], pill
+        assert "개입 1" in pill["text"] and "승인 요청" in pill["text"] and "끝내기" in pill["text"], pill
         assert pill["right"] == 12 and pill["top"] == 40 and pill["height"] == 28, pill
-        page.locator(".vt-focus-pill-go").click()
+        page.locator("#vt-focus-pill .vt-focus-pill-go").click()
         page.wait_for_function("(id) => window.activeSessionId() === id", arg=second, timeout=5000)
         assert page.evaluate("() => document.documentElement.classList.contains('vt-focus')"), "이동해도 집중 모드는 그대로"
-        page.locator(".vt-focus-pill-exit").click()
+        page.locator("#vt-focus-pill .vt-focus-pill-exit").click()
         page.wait_for_function("() => !document.documentElement.classList.contains('vt-focus')", timeout=5000)
     finally:
         page.evaluate("() => { if (window.__vtOrigApplySnapshot) { window.vtApplyAgentSnapshot = window.__vtOrigApplySnapshot; window.vtApplyAgentSnapshot({}); } }")
         page.evaluate("() => window.vtSettingsSet && window.vtSettingsSet('ui.focus.active', false)")
         _cleanup_sessions(page, ids)
+
+
+def test_집중_모드를_켠_채_창_폭이_720을_넘나들면_끝나고_막대가_돌아온다(isolated_page):
+    """스위치는 하나(layout/focus.js)다. 데스크톱 집중 모드(막대 넷 숨김)와 폰 집중 모드(상단바 · 아래 탭 숨김)는 숨기는
+    막대가 달라, 켠 채 폭이 바뀌면 끝낸다 — 다른 쪽 화면이 막대 없이 시작하지 않게."""
+    page = isolated_page
+    page.wait_for_selector("#vt-tb-focus", timeout=10000)
+    page.evaluate("() => window.vtSettingsSet('ui.focus.active', true)")
+    page.wait_for_function("() => document.documentElement.classList.contains('vt-focus')", timeout=5000)
+    assert page.evaluate("() => document.getElementById('vt-titlebar').hasAttribute('inert')")
+    page.set_viewport_size(COMPACT)   # 데스크톱 → 폰
+    page.wait_for_function("() => !document.documentElement.classList.contains('vt-focus')", timeout=5000)
+    got = page.evaluate("""() => ({
+      inert: ['vt-workbench-slot', 'vt-titlebar', 'vt-hud'].some((id) => document.getElementById(id).hasAttribute('inert')),
+      active: window.vtSettingsGet('ui.focus.active'),
+      topbar: getComputedStyle(document.getElementById('topbar')).display,
+      btn: document.getElementById('vt-focus-btn').getAttribute('aria-pressed'),
+    })""")
+    assert got == {"inert": False, "active": False, "topbar": got["topbar"], "btn": "false"} and got["topbar"] != "none", got
+    # 폰에서 켠 채 넓히면 → 끝나고 데스크톱 막대가 그대로 보인다.
+    page.evaluate("() => window.vtSettingsSet('ui.focus.active', true)")
+    page.wait_for_function("() => document.documentElement.classList.contains('vt-focus')", timeout=5000)
+    page.set_viewport_size(WIDE)
+    page.wait_for_function("() => !document.documentElement.classList.contains('vt-focus')", timeout=5000)
+    page.wait_for_timeout(300)
+    s = page.evaluate(_FOCUS_SHAPE)
+    assert s["title"] and s["status"] and s["wb"] and s["inert"] == [False, False, False], s
 
 
 def test_집중_모드_버튼과_메뉴가_제목_막대에_있고_새로고침하면_꺼진다(isolated_page):
@@ -2360,7 +2387,7 @@ def test_집중_모드_버튼과_메뉴가_제목_막대에_있고_새로고침�
     btn.click()
     page.wait_for_function("() => document.documentElement.classList.contains('vt-focus')", timeout=5000)
     # 위 가장자리로 제목 막대를 띄우면 같은 버튼이 「끝내기」(눌림)로 보이고, 누르면 끝난다.
-    page.wait_for_selector("#vt-focus-ui .vt-focus-edge", timeout=10000)
+    page.wait_for_selector("#vt-focus-ui .vt-focus-strip", timeout=10000)
     page.mouse.move(720, 200)
     page.mouse.move(720, 3)
     page.wait_for_timeout(500)

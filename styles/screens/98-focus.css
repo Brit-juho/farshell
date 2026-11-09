@@ -1,7 +1,8 @@
 /* 집중 모드 — 데스크톱(리디자인 7단계, 2026-11)
  *
  * 시안: docs/local의 redesign-2026-11 specimen(desktop.html D05 · D05-B · D05-C, spec.html 「집중 모드 규칙」 「모션」).
- * 스위치는 layout/focus.js(`<html class="vt-focus">`), 떠 있는 부분은 shell/Focus.tsx(#vt-focus-ui)가 그린다.
+ * 스위치는 layout/focus.js(`<html class="vt-focus">`), 떠 있는 부분은 shell/Focus.tsx(#vt-focus-ui), 개입 알약은 폰과 같은
+ * 요소(#vt-focus-pill, layout/mobile-focus.js)다. 폰 집중 모드의 규칙은 98-mobile.css.
  *
  * 어떻게 칸이 「한 번에」 넓어지나: 본문이 비워 두는 자리 네 개(--vt-activity-w · --vt-side-w · --titlebar-h ·
  * --statusbar-h)만 0이 된다. body padding이 한 번 바뀌어 칸마다 ResizeObserver → refit 게이트 → fit 한 번(WS resize
@@ -12,6 +13,9 @@
  * ⚠ 이 파일은 main.css에서 `layer(legacy)`로, 막대(95) 뒤에 import된다. compact(<720)에는 아무것도 하지 않는다. */
 
 #vt-focus-ui { display:contents; }
+/* 개입 알약의 데스크톱 전용 조각(종류 키워드 · › · 「⌘. 끝내기」 글자). 폰과 자동 집중에서는 숨고, 넓은 화면 집중 모드만 보인다. */
+.vt-focus-pill-sep, .vt-focus-pill-kind, .vt-focus-pill-chev, .vt-focus-pill-keys, .vt-focus-pill-exit-label { display:none; }
+.vt-focus-pill-exit-ico { display:inline-flex; }
 
 @media (min-width:720px) {
   /* ── 자리 0 — 칸이 창 네 변 끝까지 ─────────────────────────────────────── */
@@ -51,38 +55,48 @@
   }
 
   /* 가장자리 감지 띠 8px — 왼쪽 · 위 · 아래. 보이지 않는다. 드러난 막대(507)보다 아래라 막대의 첫 8px을 가리지 않는다. */
-  .vt-focus-edge { position:fixed; z-index:505; background:transparent; }
-  .vt-focus-edge[data-edge="left"] { left:0; top:0; bottom:0; width:8px; }
-  .vt-focus-edge[data-edge="top"] { left:8px; right:0; top:0; height:8px; }
-  .vt-focus-edge[data-edge="bottom"] { left:8px; right:0; bottom:0; height:8px; }
+  .vt-focus-strip { position:fixed; z-index:505; background:transparent; }
+  .vt-focus-strip[data-edge="left"] { left:0; top:0; bottom:0; width:8px; }
+  .vt-focus-strip[data-edge="top"] { left:8px; right:0; top:0; height:8px; }
+  .vt-focus-strip[data-edge="bottom"] { left:8px; right:0; bottom:0; height:8px; }
 
   /* 왼쪽 노출 때만 뒤 캔버스를 어둡게 한다(위 · 아래는 어둡게 하지 않는다). 누르면 닫힌다. */
   .vt-focus-scrim { position:fixed; inset:0; z-index:506; background:var(--color-scrim); }
 
-  /* ── 개입 알약 — 오른쪽 12 · 위 40(제목 막대가 보이면 44), 높이 28 · 반경 14 ── */
-  .vt-focus-pill {
-    position:fixed; right:12px; top:40px; z-index:510;
-    display:flex; align-items:center; height:28px; box-sizing:border-box; overflow:hidden;
-    border-radius:14px; background:var(--color-bg-raised);
+  /* ── 개입 알약(#vt-focus-pill — 폰과 같은 요소, layout/mobile-focus.js) ──
+     데스크톱: waiting이 있을 때만 · 오른쪽 12 · 위 40(제목 막대가 보이면 44) · 높이 28 · 반경 14 · 호박 테두리 45%.
+     왼쪽 「개입 N · 세션 · 종류 ›」, 오른쪽 「⌘. 끝내기」(글자). 설정 「개입 표시」를 끄면(data-pill="off") 숨는다.
+     폰의 규칙(98-mobile.css, 뒤에 온다)보다 선택자가 강하다(html.vt-focus를 앞에 붙인다). */
+  html.vt-focus #vt-focus-pill { display:none; }
+  html.vt-focus #vt-focus-pill:not([data-waiting="0"]):not([data-pill="off"]) {
+    display:flex; top:40px; right:12px; z-index:510; height:28px; padding:0; overflow:hidden;
+    background:var(--color-bg-raised);
     border:1px solid color-mix(in srgb, var(--color-st-waiting) 45%, transparent);
-    box-shadow:var(--shadow-e2);
-    font:var(--weight-normal) var(--fs-xs) var(--font-ui); color:var(--color-txt); white-space:nowrap;
+    font:var(--weight-normal) var(--fs-xs) var(--font-ui); color:var(--color-txt);
   }
-  html.vt-focus.vt-reveal-top .vt-focus-pill { top:44px; }
-  .vt-focus-pill > button {
-    display:flex; align-items:center; gap:6px; height:100%; margin:0;
-    border:0; border-radius:0; background:transparent; color:inherit; font:inherit; cursor:pointer;
+  html.vt-focus.vt-reveal-top #vt-focus-pill { top:44px; }
+  html.vt-focus #vt-focus-pill button { height:28px; gap:6px; font:inherit; }
+  html.vt-focus #vt-focus-pill button::before { content:none; }
+  html.vt-focus #vt-focus-pill button:hover { background:var(--menu-hover); }
+  html.vt-focus #vt-focus-pill button:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
+  html.vt-focus #vt-focus-pill .vt-focus-pill-go { padding:0 10px 0 8px; max-width:420px; min-width:0; color:var(--color-txt); }
+  html.vt-focus #vt-focus-pill .vt-focus-pill-ic { flex:none; color:var(--color-st-waiting); }
+  html.vt-focus #vt-focus-pill .vt-focus-pill-n { flex:none; color:var(--color-st-waiting); font-weight:var(--weight-semibold); }
+  html.vt-focus #vt-focus-pill .vt-focus-pill-name { min-width:0; max-width:200px; font:inherit; color:var(--color-txt); }
+  html.vt-focus #vt-focus-pill .vt-focus-pill-sep { display:inline; flex:none; color:var(--color-muted); }
+  html.vt-focus #vt-focus-pill .vt-focus-pill-kind { display:inline; flex:none; color:var(--color-st-waiting); }
+  html.vt-focus #vt-focus-pill .vt-focus-pill-chev { display:inline-flex; flex:none; color:var(--color-muted); }
+  html.vt-focus #vt-focus-pill .vt-focus-pill-exit {
+    padding:0 10px 0 8px; gap:4px; min-width:0; border-left:0;
+    box-shadow:inset 1px 0 var(--color-line-strong); color:var(--color-sub);
   }
-  .vt-focus-pill > button:hover { background:var(--menu-hover); }
-  .vt-focus-pill > button:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
-  .vt-focus-pill-go { padding:0 10px 0 8px; max-width:420px; min-width:0; }
-  .vt-focus-pill-ico { display:inline-flex; flex:none; color:var(--color-st-waiting); }
-  .vt-focus-pill-count { color:var(--color-st-waiting); font-weight:var(--weight-semibold); flex:none; }
-  .vt-focus-pill-sep { color:var(--color-muted); flex:none; }
-  .vt-focus-pill-name { min-width:0; overflow:hidden; text-overflow:ellipsis; }
-  .vt-focus-pill-kind { color:var(--color-st-waiting); flex:none; }
-  .vt-focus-pill-chev { display:inline-flex; flex:none; color:var(--color-muted); }
-  .vt-focus-pill-exit { padding:0 10px 0 8px; gap:4px; box-shadow:inset 1px 0 var(--color-line-strong); color:var(--color-sub) !important; }
+  html.vt-focus #vt-focus-pill .vt-focus-pill-exit-ico { display:none; }
+  html.vt-focus #vt-focus-pill .vt-focus-pill-keys:not(:empty) {
+    display:inline-block; padding:0 5px; border-radius:var(--radius-sm);
+    background:var(--menu-hover); color:var(--color-sub);
+    font:var(--weight-medium) var(--fs-3xs) / 16px var(--font-mono);
+  }
+  html.vt-focus #vt-focus-pill .vt-focus-pill-exit-label { display:inline; }
 
   .vt-focus-kbd {
     display:inline-block; margin-right:4px; padding:0 5px; border-radius:var(--radius-sm);
@@ -91,7 +105,7 @@
   }
 
   /* ── 들어올 때 안내 — 아래 가운데 32 높이, 3초(Focus.tsx). 움직이지 않는다(한 화면에 움직이는 것 하나). ── */
-  .vt-focus-hint {
+  .vt-focus-intro {
     position:fixed; left:50%; bottom:16px; transform:translateX(-50%); z-index:510;
     display:flex; align-items:center; gap:8px; height:32px; padding:0 14px; box-sizing:border-box;
     border-radius:8px; background:var(--color-bg-raised); border:1px solid var(--color-line-strong);
@@ -99,8 +113,8 @@
     font:var(--weight-normal) var(--fs-xs) var(--font-ui); color:var(--color-sub); white-space:nowrap;
     pointer-events:none;
   }
-  .vt-focus-hint-ico { display:inline-flex; color:var(--color-muted); }
-  .vt-focus-hint-sep { color:var(--color-muted); }
+  .vt-focus-intro-ico { display:inline-flex; color:var(--color-muted); }
+  .vt-focus-intro-sep { color:var(--color-muted); }
 
   /* ── 마우스가 없는 기기의 끝내기 버튼 — 가장자리를 쓸 수 없으니 왼쪽 아래에 늘 둔다(36×36). ── */
   .vt-focus-exit {
