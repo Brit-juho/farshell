@@ -283,7 +283,7 @@ test('CSS — 데스크톱 알약은 waiting이 있고 설정이 켜져 있을 �
   assert.match(css, /\.vt-focus-pill-sep, \.vt-focus-pill-kind, \.vt-focus-pill-chev, \.vt-focus-pill-keys, \.vt-focus-pill-exit-label \{ display:none; \}/,
     '데스크톱 전용 조각은 폰에서 숨는다');
   // 자리 변수 넷만 0 — 막대 자신의 폭 · 높이는 그대로(숨은 채 제 모양).
-  assert.match(css, /html\.vt-focus:root \{\s*--vt-activity-w:0px; --vt-side-w:0px; --titlebar-h:0px; --statusbar-h:0px;/);
+  assert.match(css, /html\.vt-focus:root \{\s*--vt-activity-w:0px; --vt-side-w:0px; --vt-pin-w:0px; --titlebar-h:0px; --statusbar-h:0px;/);
   assert.doesNotMatch(css.replace(/\/\*[\s\S]*?\*\//g, ''), /transition:[^;]*(width|height|padding|left|top)/, '크기에는 transition이 없다');
 });
 
