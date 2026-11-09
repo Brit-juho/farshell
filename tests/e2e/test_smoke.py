@@ -2190,6 +2190,57 @@ def test_dock_소스컨트롤_diff_줄_글자는_기본색이고_부호만_상�
     assert got["nums"] == 1, f"줄 번호 열은 하나다: {got}"
 
 
+def test_dock_소스컨트롤_큰_diff는_보이는_줄만_그리고_스크롤해도_지시_상자가_남는다(page):
+    """파일 개편 단계 9 — diff 가상 목록. 400행이 넘는 diff는 보이는 줄만 DOM에 있고, 스크롤하면 그 자리의 줄이
+    그려지며, 열어 둔 「이 줄에 지시…」 상자는 그 줄이 화면 밖으로 나가도 쓰던 글자와 함께 남는다. 문맥 줄은 lezer
+    `tok-*`로 칠해진다(hljs 제거). 작업 트리에 400행 넘는 diff가 없으면 건너뛴다."""
+    _open_dock(page, "변경")
+    page.wait_for_selector("#vt-dock-scm .vt-vw-crow", timeout=15000)
+    rows = page.locator("#vt-dock-scm .vt-vw-gsec .vt-vw-grow")
+    if rows.count() == 0:
+        pytest.skip("작업 트리가 깨끗해 diff를 열 파일이 없다")
+    rows.first.click()
+    page.wait_for_selector("#vt-dock-scm .vt-vw-dlines .vt-vw-dl", timeout=15000)
+    info = page.evaluate(
+        """() => {
+          const box = document.querySelector('#vt-dock-scm .vt-vw-dlines');
+          return { h: parseFloat(box.style.height), drawn: box.querySelectorAll('.vt-vw-dl, .vt-vw-hunk').length };
+        }""")
+    if info["h"] <= 400 * 20:
+        pytest.skip(f"diff가 작아 전부 그린다: {info}")
+    assert info["drawn"] < 200, f"큰 diff인데 행을 너무 많이 그렸다: {info}"
+    # 스크롤만으로(다른 신호 없이) 그 자리의 줄이 그려진다 — 스크롤 상자는 diff를 그린 칸(.vt-vw-body) 자신이다.
+    scroll_to = """async (where) => {
+          const box = document.querySelector('#vt-dock-scm .vt-vw-dlines');
+          const sc = box.closest('.vt-vw-body');
+          sc.scrollTop = where === 'end' ? sc.scrollHeight : 0;
+          await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+          const tops = [...box.querySelectorAll('.vt-vw-dl, .vt-vw-hunk')].map((e) => parseFloat(e.style.top));
+          return { h: parseFloat(box.style.height), minTop: Math.min(...tops), maxTop: Math.max(...tops),
+                   drawn: box.querySelectorAll('.vt-vw-dl, .vt-vw-hunk').length,
+                   annot: box.querySelector('.vt-vw-annotate textarea')?.value ?? null };
+        }"""
+    got = page.evaluate(scroll_to, "end")
+    assert got["maxTop"] >= got["h"] - 100, f"스크롤한 자리의 줄이 그려지지 않았다: {got}"
+    assert got["minTop"] > 1000, f"화면 밖 위쪽 줄이 DOM에 남아 있다: {got}"
+    assert got["drawn"] < 200, got
+    # 보이는 마지막 줄에 지시 상자를 열고 글자를 쓴다(playwright click은 행 가운데로 가로 스크롤하므로 DOM click).
+    page.evaluate("() => { const r = [...document.querySelectorAll('#vt-dock-scm .vt-vw-dlines .vt-vw-dl')]; "
+                  "r.sort((a, b) => parseFloat(b.style.top) - parseFloat(a.style.top)); r[5].click(); }")
+    ta = page.locator("#vt-dock-scm .vt-vw-annotate textarea")
+    ta.fill("가상 목록 확인")
+    # 맨 위로 — 그 줄은 화면 밖으로 나가 지워지지만 상자는 쓰던 글자와 함께 남는다.
+    got = page.evaluate(scroll_to, "top")
+    assert got["minTop"] == 0, f"맨 위 줄이 그려지지 않았다: {got}"
+    assert got["annot"] == "가상 목록 확인", f"화면 밖으로 나간 줄의 지시 상자가 사라졌다: {got}"
+    # 문맥 줄 하이라이트(편집기 청크의 언어 팩) — 언어를 아는 파일일 때만 본다.
+    path = page.locator("#vt-dock-scm .vt-psub-file").first.get_attribute("title") or ""
+    if path.rsplit(".", 1)[-1] in ("js", "py", "ts", "tsx", "css", "json", "md", "go", "java"):
+        page.wait_for_function(
+            "() => !!document.querySelector('#vt-dock-scm .vt-vw-dl:not(.add):not(.del) .vt-vw-tx [class^=\"tok-\"]')",
+            timeout=15000)
+
+
 def test_사이드바_폭_리사이저가_범위를_지킨다(page):
     """240~480. 드래그로 그 밖으로 못 나간다 — 나가면 칸이 죽거나 사이드바가 빈다."""
     _open_dock(page, "큐")

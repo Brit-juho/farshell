@@ -254,10 +254,10 @@ Change ([files.md](./files.md) 「Diff」): `viewer/diff.js` draws only the visi
 | Scenario | Profile | Paint ms before → after | Long tasks ms | Longest task ms | DOM nodes | DOM rows |
 |---|---|---|---|---|---|---|
 | diff-5000 (one file, 50-line hunks) | desktop | 184 / 205 → 32 / 42 | 180 / 201 → 0 / 0 | 99 → 0 | 30,023 → 728 | every line → 63 |
-| diff-5000 | phone (4x CPU) | 852 / 876 → 121 / 140 | 845 / 867 → 92 / 108 | 505 → 92 | 30,023 → 776 | every line → 68 |
+| diff-5000 | phone (4x CPU) | 852 / 876 → 119 / 123 | 845 / 867 → 91 / 95 | 505 → 91 | 30,023 → 776 | every line → 68 |
 
-- The 2026-11-07 baseline (desktop 295 ms, phone 1213 ms) is now 32 / 121 ms. What is left on the phone profile is mostly the JSON parse and diff parse of the 5,000-line text and the first visible rows; hunks below the screen are not parsed for highlighting until they are drawn.
+- The 2026-11-07 baseline (desktop 295 ms, phone 1213 ms) is now 32 / 119 ms. What is left on the phone profile is mostly the JSON parse and diff parse of the 5,000-line text and the first visible rows; hunks below the screen are not parsed for highlighting until they are drawn.
 - A diff of at most 400 rows is still drawn whole (browser find and copy cover it); the bench diff is far above that.
 - Not measured: scrolling through the list (rows are created per frame for the newly visible range), real devices, a real server.
 
-Bundles (raw bytes, `npm run build`): initial payload (app.js + core.js) unchanged at 345,311 B (cap 358,400). `panels.js` 223,374 → 230,640 B (+7,266, the virtual list); `editor.js` 650,390 → 651,601 B (+1,211, `highlighterFor`; 160 KB gzip). `frontend/vendor/highlight.min.js` (127,496 B, 43 KB gzip) is deleted and out of `sw.js` PRECACHE (`vt-static-v11`). Opening a diff now fetches the `editor` chunk plus the file's language chunk (for example `editor-js` 86.6 KB) instead of hljs, usually already cached by a file view.
+Bundles (raw bytes, `npm run build`): initial payload (app.js + core.js) unchanged at 345,311 B (cap 358,400). `panels.js` 223,374 → 230,716 B (+7,342, the virtual list; 63 KB gzip); `editor.js` 650,390 → 651,601 B (+1,211, `highlighterFor`; 160 KB gzip). `frontend/vendor/highlight.min.js` (127,496 B, 43 KB gzip) is deleted and out of `sw.js` PRECACHE (`vt-static-v11`). Opening a diff now fetches the `editor` chunk plus the file's language chunk (for example `editor-js` 86.6 KB) instead of hljs, usually already cached by a file view.

@@ -127,12 +127,18 @@ export function maxColumns(items) {
   return best;
 }
 
+/** 스크롤하는 상자 — 소비처가 넘기는 칸(`.vt-vw-body`) 자신이 그 상자인 경우가 흔해서 자기부터 본다. overflow만
+ * auto이고 높이가 내용만큼 늘어나는 상자(페인의 `.vt-vw-code-pane`)는 건너뛰고 실제로 넘치는 상자를 고른다. 그런
+ * 상자가 없으면(내용이 짧다) 처음 만난 auto 상자 — 짧은 diff는 어차피 전부 그린다. */
 function _scrollParent(el) {
-  for (let cur = el.parentElement; cur; cur = cur.parentElement) {
+  let first = null;
+  for (let cur = el; cur; cur = cur.parentElement) {
     const o = getComputedStyle(cur).overflowY;
-    if (o === 'auto' || o === 'scroll') return cur;
+    if (o !== 'auto' && o !== 'scroll') continue;
+    if (cur.scrollHeight > cur.clientHeight) return cur;
+    first ||= cur;
   }
-  return null;
+  return first;
 }
 
 /** 파일 하나의 줄 영역. */
