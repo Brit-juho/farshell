@@ -12,6 +12,11 @@
 // 폭을 끄는 동안에는 터미널 fit을 미룬다(window.vtSurfaceDrag — layout/surface.js의 refit
 // 게이트). 예전 레일·dock 리사이저는 `onStart: () => {}`라 매 프레임 refit·WS resize가 나갔다.
 //
+// 오른쪽 고정 사이드바(리디자인 9단계, 시안 D01 · D04): 도구 패널 하나를 오른쪽 300에 고정해 왼쪽 사이드바와
+// 나란히 본다(`ui.side.pinned` = 패널 id). wide는 칸 옆에 자리를 차지하고(body padding-right), regular는 칸 위에
+// 뜬 서랍이다(칸 크기 그대로). 고정한 도구는 왼쪽 활동이 될 수 없다 — 패널 id가 전역 하나라서다. 고정을 켜고 끌
+// 때는 칸 폭이 한 번 바뀌므로 refit 게이트로 감싸 칸마다 fit 한 번이 되게 한다.
+//
 // ⚠ 지연 청크(shell) — core/store.js·layout/surface.js·core/settings.js 같은 상태를 가진
 // 모듈을 정적 import 하지 않는다(ADR-26). 설정은 window 브리지(vtSettingsGet/Has/Set)로만.
 import { batch, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
@@ -21,9 +26,11 @@ import { Dock } from './Dock.js';
 import { ActivityBar } from './ActivityBar.js';
 import { availableActivities, activityById } from './activity-data.js';
 import {
-  SESSIONS_ACTIVITY, SIDE_WIDTH_KEY, SIDE_ACTIVITY_KEY, SIDE_COLLAPSED_KEY,
-  readSideWidth, readSideActivity, readSideCollapsed, effectiveActivity, sideMode, nextOnActivityClick, clampSideWidth,
+  SESSIONS_ACTIVITY, SIDE_WIDTH_KEY, SIDE_ACTIVITY_KEY, SIDE_COLLAPSED_KEY, SIDE_PINNED_KEY,
+  readSideWidth, readSideActivity, readSideCollapsed, readSidePinned, effectiveActivity, effectivePinned, sideMode,
+  nextOnActivityClick, clampSideWidth,
 } from './side-prefs.js';
+import { t } from '../core/i18n.js';
 // 상태 없는 순수 모듈 — 지연 청크에 복제돼도 된다.
 import { createPoll } from '../core/poll.js';
 import { wireRatioResizer } from '../layout/resizer.js';
@@ -67,9 +74,9 @@ function Workbench(props: { deps: WorkbenchDeps }) {
   const [activity, setActivity] = createSignal(readSideActivity(_sGet, _sHas));
   const [collapsed, setCollapsed] = createSignal(readSideCollapsed(_sGet, _sHas, window.innerWidth));
 
+  const [pinnedPanel, setPinnedPanel] = createSignal(readSidePinned(_sGet, _sHas));
+
   const available = createMemo(() => availableActivities(caps()));
-  const current = createMemo(() => effectiveActivity(activity(), available().map((a) => a.id)));
-  const mode = createMemo(() => sideMode(collapsed(), current()));
   // compact(<720)에는 작업대가 없다(CSS로 숨는다 — 하단 내비가 대신한다). 그 동안 도구 패널을
   // 열면 panels/panel.js가 dock 대신 풀스크린 모달로 띄워 폰 화면을 덮으므로, 열린 도구를 없는
   // 것으로 친다. 레일은 compact에서 스스로 폴링을 쉰다(Rail.tsx).
@@ -78,6 +85,14 @@ function Workbench(props: { deps: WorkbenchDeps }) {
   const onMq = () => setDesktop(desktopMq ? desktopMq.matches : window.innerWidth >= 720);
   desktopMq?.addEventListener?.('change', onMq);
   onCleanup(() => desktopMq?.removeEventListener?.('change', onMq));
+  /** 오른쪽에 고정해 보이는 도구 활동. 없거나 지금 쓸 수 없거나 compact면 null. */
+  const pinned = createMemo(() => (desktop() ? effectivePinned(pinnedPanel(), available()) : null));
+  // 고정한 도구는 왼쪽 활동 후보에서 뺀다 — 저장된 왼쪽 활동이 그것이면 세션으로 물러난다(저장값은 그대로).
+  const current = createMemo(() => {
+    const pin = pinned();
+    return effectiveActivity(activity(), available().map((a) => a.id).filter((id) => id !== pin));
+  });
+  const mode = createMemo(() => sideMode(collapsed(), current()));
   /** 사이드바에 펼쳐진 도구 활동. 세션이거나 접혀 있거나 compact면 null — Dock.tsx가 이것만 본다. */
   const openTool = createMemo(() => (desktop() && mode() === 'open' && current() !== SESSIONS_ACTIVITY ? current() : null));
 
@@ -87,6 +102,8 @@ function Workbench(props: { deps: WorkbenchDeps }) {
   // batch: 두 시그널을 따로 쓰면 Dock의 effect가 **중간 상태**(펼침 + 옛 활동)로 한 번 돌아
   // 엉뚱한 패널을 연다(옛 Dock.tsx pendingSelf 주석의 그 버그).
   const select = (id: string) => {
+    // 고정한 도구의 활동 버튼은 왼쪽을 바꾸지 않고 오른쪽 그 패널로 초점을 보낸다.
+    if (id === pinned()) { focusPinned(); return; }
     const next = nextOnActivityClick({ activity: current(), collapsed: collapsed() }, id);
     batch(() => { setActivityPersist(next.activity); setCollapsedPersist(next.collapsed); });
   };
@@ -95,6 +112,46 @@ function Workbench(props: { deps: WorkbenchDeps }) {
 
   (window as any).vtSideToggle = toggle;
   onCleanup(() => { delete (window as any).vtSideToggle; });
+
+  // ── 오른쪽 고정 ─────────────────────────────────────────────────────────
+  const [rightBody, setRightBody] = createSignal<HTMLElement | undefined>(undefined);
+  const surfaceDrag = (phase: 'begin' | 'end') => (window as any).vtSurfaceDrag?.(phase);
+  // 칸 폭이 한 번 바뀌는 일(고정 켜기·끄기)을 refit 게이트로 감싼다 — 바뀐 폭을 ResizeObserver가 다음 프레임에
+  // 알리므로 두 프레임 뒤에 닫는다(아래 폭 리사이저와 같은 이유).
+  const withRefitGate = (fn: () => void) => {
+    surfaceDrag('begin');
+    const raf = typeof window.requestAnimationFrame === 'function'
+      ? (f: () => void) => window.requestAnimationFrame(f) : (f: () => void) => setTimeout(f, 16);
+    try { fn(); } finally { raf(() => raf(() => surfaceDrag('end'))); }
+  };
+  const setPinnedPersist = (panelId: string) => { setPinnedPanel(panelId); _sSet(SIDE_PINNED_KEY, panelId); };
+  /** 패널 머리 버튼: 왼쪽 패널이면 오른쪽에 고정(왼쪽은 세션으로), 고정한 패널이면 해제(왼쪽 그 활동으로 돌려놓는다). */
+  const togglePin = (id: string) => {
+    const a = activityById(id);
+    if (!a || !a.panelId) return;
+    withRefitGate(() => batch(() => {
+      if (pinned() === id) {
+        setPinnedPersist('');
+        setActivityPersist(id);
+        setCollapsedPersist(false);
+      } else {
+        setPinnedPersist(a.panelId!);
+        if (current() === id) setActivityPersist(SESSIONS_ACTIVITY);
+      }
+    }));
+  };
+  const unpinClosed = (id: string) => { if (pinned() === id) withRefitGate(() => setPinnedPersist('')); };
+  function focusPinned() {
+    const el = rightBody()?.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    el?.focus();
+  }
+  // 넓이 판단(docked/drawer)은 CSS 미디어쿼리 몫이다. 여기서는 「고정한 것이 있다」만 알린다.
+  createEffect(() => {
+    const root = document.documentElement;
+    if (pinned()) root.dataset.vtPin = pinned()!;
+    else delete root.dataset.vtPin;
+  });
+  onCleanup(() => { delete document.documentElement.dataset.vtPin; });
 
   // ── 폭·표시 상태를 CSS로 ────────────────────────────────────────────────
   // `--vt-side-w`·`--vt-activity-w`는 90-workbench.css가 이 두 값으로 계산한다(티어별 상한은
@@ -154,7 +211,6 @@ function Workbench(props: { deps: WorkbenchDeps }) {
   // 마지막 pointermove의 폭 변화를 ResizeObserver가 다음 프레임에 알리므로, 바로 end를 부르면
   // 그 보고가 게이트 밖에서 한 번 더 fit을 내 칸마다 WS resize가 두 번 나갈 수 있다.
   let sideRef: HTMLDivElement | undefined;
-  const surfaceDrag = (phase: 'begin' | 'end') => (window as any).vtSurfaceDrag?.(phase);
   const wireResizer = (el: HTMLDivElement) => {
     wireRatioResizer(el, {
       dir: 'row',
@@ -173,12 +229,15 @@ function Workbench(props: { deps: WorkbenchDeps }) {
   const act = (name: string) => (props.deps.getAction(name) as (() => void) | undefined)?.();
   const keyHint = (id: string) => props.deps.keyHint?.(id) || '';
   const sideLabel = () => activityById(current())?.label || '';
+  const pinnedLabel = () => activityById(pinned() || '')?.label || '';
 
   return (
+    <>
     <div id="vt-workbench" class="vt-sidepanel left" data-mode={mode()}>
       <ActivityBar
         items={available}
         current={current}
+        pinned={pinned}
         shown={() => mode() !== 'closed'}
         badges={allBadges}
         onSelect={select}
@@ -192,11 +251,27 @@ function Workbench(props: { deps: WorkbenchDeps }) {
           <Rail deps={props.deps} collapsed={() => mode() === 'strip'} onToggleCollapse={toggle} onWaitingCount={setWaitingCount} />
         </div>
         <div class="vt-side-view vt-side-tools" hidden={current() === SESSIONS_ACTIVITY}>
-          <Dock deps={props.deps as any} active={openTool} available={available} onExternalOpen={openActivity} />
+          <Dock
+            deps={props.deps as any}
+            active={openTool}
+            pinned={pinned}
+            rightBody={rightBody}
+            available={available}
+            onExternalOpen={openActivity}
+            onTogglePin={togglePin}
+            onPinnedClosed={unpinClosed}
+          />
         </div>
         <div ref={wireResizer} class="vt-side-resizer" hidden={mode() !== 'open'} />
       </div>
     </div>
+    {/* 오른쪽 고정 사이드바 — 늘 마운트하고 hidden만 바꾼다. 고정을 풀 때 Dock이 패널 노드를 왼쪽으로 옮기기
+        전에 이 상자가 DOM에서 빠지면 패널이 함께 떨어져 나가 다시 열어야 한다(상태를 잃는다). */}
+    <aside id="vt-side-right" class="vt-sidepanel right vt-side-pinned" hidden={!pinned()}
+      aria-label={pinned() ? t('오른쪽 고정: {name}', { name: pinnedLabel() }) : undefined}>
+      <div class="vt-side-pinned-body" ref={setRightBody} />
+    </aside>
+    </>
   );
 }
 

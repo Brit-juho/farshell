@@ -26,7 +26,10 @@
 /* 리디자인 7단계 — 막대 자신의 폭(--vt-activity-nat · --vt-side-nat)과 본문이 비워 두는 폭(--vt-activity-w ·
    --vt-side-w)을 나눴다. 평소엔 같고, 집중 모드(98-focus.css)는 뒤의 둘만 0으로 만든다 — 숨은 작업대는 제 폭을 그대로
    가진 채 가장자리에서 칸 위로 떠오를 수 있다. */
-:root { --vt-activity-nat:0px; --vt-side-nat:0px; --vt-activity-w:var(--vt-activity-nat); --vt-side-w:var(--vt-side-nat); }
+:root { --vt-activity-nat:0px; --vt-side-nat:0px; --vt-activity-w:var(--vt-activity-nat); --vt-side-w:var(--vt-side-nat);
+  /* 오른쪽 고정 사이드바(리디자인 9단계)가 본문에서 비워 두는 폭. wide에서 무언가를 고정했을 때만 300이다 —
+     regular는 칸 위에 뜬 서랍이라 0(칸 크기가 바뀌지 않는다). 집중 모드는 -w만 0으로 만든다(98-focus.css). */
+  --vt-pin-nat:0px; --vt-pin-w:var(--vt-pin-nat); }
 @media (min-width:720px) {
   /* 활동 막대는 지연 청크가 오기 전에도 자리를 잡아 둔다 — 늘 있는 막대라 부팅 후 칸이 한 번
      더 줄어드는 일을 하나라도 줄인다. 사이드바 폭은 저장값을 알아야 해서 마운트 뒤에 정해진다. */
@@ -37,7 +40,7 @@
 
   body {
     padding-left:calc(env(safe-area-inset-left) + var(--vt-activity-w) + var(--vt-side-w)) !important;
-    padding-right:env(safe-area-inset-right) !important;
+    padding-right:calc(env(safe-area-inset-right) + var(--vt-pin-w)) !important;
   }
   #vt-workbench {
     display:flex; flex-direction:row;
@@ -46,6 +49,9 @@
 }
 @media (min-width:720px) and (max-width:1279.98px) {
   :root[data-vt-side="open"] { --vt-side-nat:min(var(--vt-side-stored, 360px), 260px, 40vw); }
+}
+@media (min-width:1280px) {
+  :root[data-vt-pin] { --vt-pin-nat:300px; }
 }
 
 /* ── 활동 막대 48 ─────────────────────────────────────────────────────────── */
@@ -141,3 +147,24 @@
 .vt-side-resizer[hidden] { display:none; }
 .vt-side-resizer:hover,
 .vt-side-resizer.dragging { background:color-mix(in srgb, var(--color-acc) 30%, transparent); }
+
+/* ── 오른쪽 고정 사이드바 300(리디자인 9단계, 시안 desktop.html D01 · D04) ──────────────────────────
+   Workbench.tsx가 무언가를 고정했을 때만 그린다(#vt-side-right, `<html data-vt-pin="활동 id">`). 본문에는 Dock.tsx가
+   그 도구의 패널을 붙인다 — 왼쪽 도구 보기와 같은 .vt-dock-panel 규칙(80-dock.css)이 그대로 맞는다.
+   위치·배경·왼쪽 테두리는 .vt-sidepanel.right(components.css)가 준다. 폭에 transition 없음. */
+@media (min-width:720px) {
+  #vt-side-right { display:flex; width:300px; }
+  #vt-side-right[hidden] { display:none; }
+  .vt-side-pinned-body { display:flex; flex-direction:column; flex:1; min-height:0; min-width:0; }
+  /* 패널 머리의 「오른쪽에 고정 / 고정 해제」(Dock.tsx) — 닫기 X 바로 앞. 고정 중이면 강조색. */
+  .vt-dock-pin[aria-pressed="true"] { color:var(--color-acc); }
+}
+/* regular(720~1279): 칸 위에 뜬 서랍 — 칸 폭을 바꾸지 않고(--vt-pin-w 0), 그림자 e2로 떠 있음을 말한다. */
+@media (min-width:720px) and (max-width:1279.98px) {
+  #vt-side-right { z-index:80; box-shadow:var(--shadow-e2); }
+}
+/* 활동 막대에서 고정한 도구 — 오른쪽 위 모서리 강조 점 4px(시안 `.ai.pinr::after`). 배지와 겹치지 않게 반대편 모서리다. */
+.vt-act.pinned::after {
+  content:""; position:absolute; right:6px; top:8px; width:4px; height:4px; border-radius:2px;
+  background:var(--color-acc); pointer-events:none;
+}

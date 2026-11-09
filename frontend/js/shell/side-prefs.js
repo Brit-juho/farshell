@@ -113,3 +113,42 @@ export function nextOnActivityClick(state, id) {
 export function dragSideWidth(startWidth, dx) {
   return clampSideWidth(Number(startWidth) + Number(dx));
 }
+
+// ── 오른쪽 고정 사이드바(리디자인 9단계, 시안 desktop.html D01 · D04) ─────────────────────────────
+//
+// 도구 패널 하나를 오른쪽에 고정해 왼쪽 사이드바(보통 「세션」)와 나란히 본다. 저장값은 **패널 id**
+// (`vt-dock-scm` 같은, panels/panel.js·팔레트가 부르는 그 id)이고 빈 문자열이면 없음이다.
+// 폭은 300 고정 — 왼쪽 사이드바의 공유 폭 규칙과 따로다(끌어 바꾸지 않으니 refit 원인이 하나 줄어든다).
+// wide(≥1280)에서는 칸 옆에 자리를 차지하고, regular(720~1279)에서는 칸 위에 뜬 서랍(e2)이라 칸 폭을
+// 바꾸지 않는다. compact(<720)에는 없다(패널은 모달로 뜬다).
+export const SIDE_PINNED_KEY = 'ui.side.pinned';
+export const PIN_W = 300;
+
+/** 저장된 고정 패널 id. 없으면 ''. */
+export function readSidePinned(get, has) {
+  return has(SIDE_PINNED_KEY) ? String(get(SIDE_PINNED_KEY) || '') : '';
+}
+
+/**
+ * 지금 오른쪽에 고정해 그릴 활동 id. 저장된 패널이 도구 활동이 아니거나 지금 쓸 수 없으면(capability 게이팅·
+ * 응답 전) null — 저장값은 그대로 두어 capabilities가 오면 돌아온다.
+ * @param {string} storedPanelId
+ * @param {{id:string, panelId:string|null}[]} available 지금 보이는 활동
+ */
+export function effectivePinned(storedPanelId, available) {
+  if (!storedPanelId) return null;
+  const a = available.find((x) => x.panelId && x.panelId === storedPanelId);
+  return a ? a.id : null;
+}
+
+/**
+ * 고정 사이드바의 표시 방식. CSS(90-workbench.css)의 미디어쿼리와 같은 경계다.
+ *   'docked' — wide: 칸 옆 300 (body padding-right)
+ *   'drawer' — regular: 칸 위에 뜬 300 서랍(칸 크기 그대로)
+ *   'none'   — compact: 없음
+ */
+export function pinnedMode(viewportWidth, compactMax = 720) {
+  const vw = Number(viewportWidth) || 0;
+  if (vw < compactMax) return 'none';
+  return vw < REGULAR_MAX ? 'drawer' : 'docked';
+}

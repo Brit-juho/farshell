@@ -19,6 +19,8 @@ export interface ActivityBarProps {
   items: () => Activity[];
   /** 지금 활동(펼침·접힘과 무관). */
   current: () => string;
+  /** 오른쪽에 고정한 도구 활동 id(없으면 null) — 모서리에 강조 점 4px(시안 `.pinr`). */
+  pinned?: () => string | null;
   /** 사이드바가 보이는가(펼침 또는 세션 48px 띠). 도구를 접어 0이면 false — 활성 표시를 끈다. */
   shown: () => boolean;
   badges: () => Record<string, number>;
@@ -42,6 +44,7 @@ export function ActivityBar(props: ActivityBarProps) {
     const parts: string[] = [];
     const b = badgeTip(a, badgeOf(a));
     if (b) parts.push(b);
+    if (props.pinned?.() === a.id) parts.push(t('오른쪽에 고정됨'));
     // 지금 활동의 툴팁만 ⌘B를 알린다 — 그 키가 접고 펴는 대상이 지금 활동이다.
     if (a.id === props.current()) {
       const k = props.keyHint('railToggle');
@@ -83,7 +86,7 @@ export function ActivityBar(props: ActivityBarProps) {
               <button
                 type="button"
                 class="vt-act"
-                classList={{ active: selected() && props.shown() }}
+                classList={{ active: selected() && props.shown(), pinned: props.pinned?.() === a.id }}
                 role="tab"
                 id={`vt-act-${a.id}`}
                 data-activity={a.id}

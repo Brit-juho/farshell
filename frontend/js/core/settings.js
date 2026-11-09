@@ -113,6 +113,9 @@ export const SCHEMA = {
   'ui.side.width':          { type: 'int',  def: 360, min: 240, max: 480, scope: 'device' },
   'ui.side.activity':       { type: 'enum', def: 'sessions', values: ['sessions', 'scm', 'dir', 'queue', 'files', 'snippets', 'ports', 'usage', 'system'], scope: 'device' },
   'ui.side.collapsed':      { type: 'bool', def: false, scope: 'device' },
+  // 리디자인 9단계 — 오른쪽 고정 사이드바의 패널 id(''이면 없음). 값 목록은 도구 활동의 panelId와 같아야 한다
+  // (shell/activity-data.ts, 테스트가 대조). 폭은 300 고정이라 키가 없다(shell/side-prefs.js).
+  'ui.side.pinned':         { type: 'enum', def: '', values: ['', 'vt-dock-scm', 'vt-dir', 'vt-queue', 'vt-files', 'vt-snippets', 'vt-ports', 'vt-usage', 'vt-system'], scope: 'device' },
 
   // N38(70-mobile.md §1) — compact 하단 내비의 시작 탭. 기기 스코프인 이유는
   // rail/dock 폭과 같다: 폰에서 고른 첫 화면이 맥 터미널 시작 화면에 새면 안 된다.

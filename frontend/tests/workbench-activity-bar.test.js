@@ -45,6 +45,14 @@ test('설정 스키마의 ui.side.activity 값 목록이 활동 목록과 같다
   assert.strictEqual(SETTINGS_SCHEMA['ui.side.collapsed'].scope, 'device');
 });
 
+test('설정 스키마의 ui.side.pinned 값 목록이 빈 값 + 도구 활동의 패널 id와 같다', async () => {
+  const { TOOL_ACTIVITIES, SETTINGS_SCHEMA } = await fresh();
+  const spec = SETTINGS_SCHEMA['ui.side.pinned'];
+  assert.deepStrictEqual(Array.from(spec.values), ['', ...Array.from(TOOL_ACTIVITIES, (a) => a.panelId)]);
+  assert.strictEqual(spec.def, '');
+  assert.strictEqual(spec.scope, 'device');
+});
+
 test('capability 게이팅 — 응답 전에는 포트·사용량을 그리지 않고, 응답에 있으면 보인다', async () => {
   const { availableActivities } = await fresh();
   assert.ok(!availableActivities(null).some((a) => a.id === 'ports' || a.id === 'usage'));
@@ -295,4 +303,107 @@ test('작업대 — 레일이 센 waiting 수가 활동 막대 「세션」 배�
   assert.ok(badge(), '세션 배지가 그려진다');
   assert.strictEqual(badge().textContent, '2');
   assert.strictEqual(badge().dataset.state, 'waiting');
+});
+
+// ── 4부: 오른쪽 고정 사이드바(리디자인 9단계) ─────────────────────────────
+
+// 패널 렌더러 흉내 — 액션이 불리면 panels/panel.js처럼 vtDockHost에 자리를 묻고 머리 + 닫기 X를 가진 루트를 붙인다.
+async function mountWbPanels(initial) {
+  const env = await fresh();
+  Object.defineProperty(env.window, 'innerWidth', { value: 1440, configurable: true });
+  const s = settingsBridge(env.window, initial);
+  const doc = env.document;
+  const panelOf = { 'scm.show': 'vt-dock-scm', 'queue.show': 'vt-queue', 'files.show': 'vt-files' };
+  const closes = [];
+  env.window.closePanel = (id) => {
+    const el = doc.getElementById(id);
+    if (!el) return;
+    el.remove(); closes.push(id);
+    doc.dispatchEvent(new env.window.CustomEvent('vt:panel-close', { detail: { id } }));
+  };
+  const open = (name) => {
+    const id = panelOf[name];
+    if (!id) return;
+    if (doc.getElementById(id)) { env.window.closePanel(id); return; }
+    const host = env.window.vtDockHost(id);
+    if (!host || host === 'stale') return;
+    const el = doc.createElement('div');
+    el.id = id; el.className = 'vt-dock-panel';
+    el.innerHTML = '<div class="vt-viewer-card"><div class="vt-viewer-head"><b>t</b><button class="vt-icon-btn vt-vw-x"></button></div><div class="vt-vw-body"><button class="inner">x</button></div></div>';
+    host.appendChild(el);
+  };
+  const root = doc.createElement('div');
+  doc.body.appendChild(root);
+  env.mountWorkbench(root, { vtFetch: async () => ({}), getAction: (name) => () => open(name), keyHint: () => '' });
+  const flush = async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0)); };
+  await flush();
+  return { env, doc, root, s, open, closes, flush };
+}
+
+test('고정 — 저장된 고정 패널은 오른쪽(#vt-side-right)에 열리고 활동 막대에 점이 붙는다', async () => {
+  const { doc, root, flush } = await mountWbPanels({ 'ui.side.collapsed': false, 'ui.side.pinned': 'vt-dock-scm' });
+  await flush();
+  const right = doc.getElementById('vt-side-right');
+  assert.ok(right && !right.hidden, '오른쪽 고정 사이드바');
+  assert.strictEqual(doc.documentElement.dataset.vtPin, 'scm');
+  assert.ok(right.querySelector('#vt-dock-scm'), '변경 패널이 오른쪽 본문에 붙는다');
+  assert.ok(root.querySelector('[data-activity="scm"]').classList.contains('pinned'));
+  assert.strictEqual(doc.documentElement.dataset.vtSide, 'open', '왼쪽은 세션 그대로');
+  assert.ok(!root.querySelector('.vt-side-sessions').hidden);
+});
+
+test('고정 — 고정한 도구의 활동 버튼은 왼쪽 활동을 바꾸지 않는다', async () => {
+  const { env, root, s, flush } = await mountWbPanels({ 'ui.side.collapsed': false, 'ui.side.pinned': 'vt-dock-scm' });
+  root.querySelector('[data-activity="scm"]').dispatchEvent(new env.window.MouseEvent('click', { bubbles: true }));
+  await flush();
+  assert.ok(!s.writes.some(([k]) => k === 'ui.side.activity' || k === 'ui.side.collapsed'));
+  assert.ok(!root.querySelector('.vt-side-sessions').hidden);
+});
+
+test('고정 — 패널 머리 버튼으로 왼쪽 도구를 오른쪽에 고정했다가 되돌린다(노드를 옮기고 다시 열지 않는다)', async () => {
+  const { doc, root, s, closes, flush } = await mountWbPanels({ 'ui.side.collapsed': false, 'ui.side.activity': 'queue' });
+  await flush();
+  const panel = doc.getElementById('vt-queue');
+  assert.ok(panel && root.querySelector('.vt-dock-body').contains(panel), '처음에는 왼쪽 도구 보기에 있다');
+  const pinBtn = () => doc.querySelector('#vt-queue .vt-viewer-head > .vt-dock-pin');
+  assert.ok(pinBtn(), '머리에 고정 버튼');
+  assert.strictEqual(pinBtn().nextElementSibling.classList.contains('vt-vw-x'), true, '닫기 X 바로 앞');
+  assert.strictEqual(pinBtn().getAttribute('aria-pressed'), 'false');
+  pinBtn().click();
+  await flush();
+  const right = doc.getElementById('vt-side-right');
+  assert.ok(right && right.contains(panel), '같은 노드가 오른쪽으로 옮겨 갔다');
+  assert.strictEqual(doc.getElementById('vt-queue'), panel);
+  assert.deepStrictEqual(closes, [], '닫았다 다시 열지 않는다');
+  assert.ok(!root.querySelector('.vt-side-sessions').hidden, '왼쪽은 세션으로 물러난다');
+  assert.strictEqual(pinBtn().getAttribute('aria-pressed'), 'true');
+  assert.deepStrictEqual(s.writes.filter(([k]) => k === 'ui.side.pinned').map(([, v]) => v), ['vt-queue']);
+
+  pinBtn().click();
+  await flush();
+  assert.strictEqual(doc.getElementById('vt-side-right').hidden, true, '고정을 풀면 오른쪽이 숨는다');
+  assert.ok(root.querySelector('.vt-dock-body').contains(panel), '왼쪽 도구 보기로 돌아온다');
+  assert.ok(root.querySelector('.vt-side-sessions').hidden);
+  assert.deepStrictEqual(s.writes.filter(([k]) => k === 'ui.side.pinned').map(([, v]) => v), ['vt-queue', '']);
+});
+
+test('고정 — 고정한 패널을 닫으면(닫기 X · 팔레트 토글) 고정이 풀린다', async () => {
+  const { env, doc, s, flush } = await mountWbPanels({ 'ui.side.collapsed': false, 'ui.side.pinned': 'vt-dock-scm' });
+  await flush();
+  assert.ok(doc.getElementById('vt-dock-scm'));
+  env.window.closePanel('vt-dock-scm');
+  await flush();
+  assert.strictEqual(doc.getElementById('vt-side-right').hidden, true);
+  assert.strictEqual(doc.documentElement.dataset.vtPin, undefined);
+  assert.deepStrictEqual(s.writes.filter(([k]) => k === 'ui.side.pinned').map(([, v]) => v), ['']);
+});
+
+test('고정 — 고정 켜기·끄기는 refit 게이트(vtSurfaceDrag)로 감싼다', async () => {
+  const { env, doc, flush } = await mountWbPanels({ 'ui.side.collapsed': false, 'ui.side.activity': 'queue' });
+  const phases = [];
+  env.window.vtSurfaceDrag = (p) => phases.push(p);
+  await flush();
+  doc.querySelector('#vt-queue .vt-dock-pin').click();
+  for (let i = 0; i < 10 && phases.length < 2; i += 1) await new Promise((r) => setTimeout(r, 20));
+  assert.deepStrictEqual(phases, ['begin', 'end']);
 });
