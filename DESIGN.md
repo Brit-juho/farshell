@@ -320,7 +320,7 @@ scanning prose lets a wrong value slip through unnoticed.
 | `skins` | `farshell, macos, catppuccin, windows, vscode, notepad, warp, linear, vercel` | `frontend/js/theme.js` — `VT_SKINS` |
 | `breakpoints` | `720/1280` | `frontend/js/layout/breakpoints.js` — `COMPACT_MAX`/`REGULAR_MAX` |
 | `pane-cap` | `1/4/6` | `frontend/js/layout/dnd.js` — `tierCap()` (compact/regular/wide; xwide is `Infinity`, so it isn't captured in the table) |
-| `rail-items` | `8` | `frontend/index.html` — count of `.vt-rail-btn` (**the legacy 48px icon rail `#vt-rail`, hidden via CSS** — see §3. The shell's worktree rail `#vt-wgrail` is not counted here). `dir` is counted alongside `files` |
+| `activity-items` | `sessions, scm, dir, queue, files, snippets, ports, usage, system` | `frontend/js/shell/activity-data.ts` — ids of `ACTIVITIES` in order (the activity bar's upper group, §3; `ports`/`usage` are capability-gated at runtime but always listed). Replaced `rail-items` (the legacy icon rail, removed in redesign phase 9) |
 | `agent-states` | `5` | `server/agent_status.py` — `STATUSES` (`error` is reserved, §5) |
 | `color-bg-0` | `#121316` | `styles/theme/tokens.css` |
 | `color-acc` | `#7aa2ff` | `styles/theme/tokens.css` |
