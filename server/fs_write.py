@@ -7,8 +7,9 @@
 - **직렬화**: (부모 dev, 부모 ino, 이름) 키의 프로세스 안 잠금 아래에서 rev 비교부터 rename까지 한 번에 한다.
   같은 서버를 거치는 동시 저장 두 건 중 하나는 반드시 409 `conflict`다. 외부 편집기와의 경합은 rename 직전 재검사와
   rename 사이의 아주 짧은 구간에 남는다(문서화한 한계).
-- **원자적 저장**: 같은 폴더에 `.fsh-<uuid>.tmp`를 `O_CREAT|O_EXCL|O_NOFOLLOW`로 만들고, 원래 mode를 `fchmod`로
-  옮기고, 쓰고 `fsync`, rev를 다시 확인하고, `rename`, 부모 `fsync`. 실패하면 임시 파일을 지운다.
+- **원자적 저장**: 같은 폴더에 `.fsh-<uuid>.tmp`를 `O_CREAT|O_EXCL|O_NOFOLLOW`(0600)로 만들고, 쓰고, 원래 mode를
+  `fchmod`로 옮기고 `fsync`, rev를 다시 확인하고, `rename`, 부모 `fsync`. 실패하면 임시 파일을 지운다(아직 그 inode일
+  때만). 서버가 도중에 죽어 남은 0600 임시 파일은 다음 저장이 그 폴더에서 치운다(`sweep_stale_temps`).
 - **인코딩·줄 끝(D9)**: 지금 디스크 내용을 요청한 인코딩으로 엄격하게 풀 수 있고 줄 끝이 한 가지일 때만 저장한다.
   BOM과 줄 끝은 디스크에 있던 것을 지킨다.
 - **멱등**: `save_id`별 결과를 10분 기억한다. 시간 초과(503)로 다시 보낸 같은 저장은 첫 결과를 받고 두 번 쓰지 않는다.
@@ -21,6 +22,7 @@ import codecs
 import errno
 import hashlib
 import os
+import re
 import stat
 import threading
 import time
@@ -103,8 +105,9 @@ LOCKS = _Locks()
 
 
 def _lock_key(dir_fd: int, name: str) -> tuple:
+    """macOS는 대소문자·정규화(NFC/NFD)를 가리지 않아 `Café`와 `cafe\\u0301`이 같은 항목이다 — 같은 잠금을 쓴다."""
     st = os.fstat(dir_fd)
-    return (st.st_dev, st.st_ino, name.casefold())
+    return (st.st_dev, st.st_ino, fsguard.write_name_key(name))
 
 
 # --- save_id 기억 ----------------------------------------------------------------------
@@ -226,6 +229,29 @@ def _lstat_at(dir_fd: int, name: str) -> Optional[os.stat_result]:
         return os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
     except FileNotFoundError:
         return None
+
+
+def _same(a: Optional[os.stat_result], b: Optional[os.stat_result]) -> bool:
+    return a is not None and b is not None and (a.st_dev, a.st_ino) == (b.st_dev, b.st_ino)
+
+
+def _unlink_if_same(dir_fd: int, name: str, mine: os.stat_result) -> bool:
+    """정리용 unlink — `name`이 아직 **우리가 만든 그 inode**일 때만 지운다. 그 사이 다른 항목으로 바뀌었으면 두고
+    False. (lstat과 unlink 사이의 틈은 남는다 — 같은 사용자의 프로세스가 그 순간 이름을 바꿔치기해야 한다.)"""
+    try:
+        if not _same(_lstat_at(dir_fd, name), mine):
+            return False
+        os.unlink(name, dir_fd=dir_fd)
+        return True
+    except OSError:
+        return False
+
+
+def _refuse_denied_alias(dir_fd: int, name: str) -> None:
+    """이름 정규화(`resolve_for_write`)를 지나도, 같은 폴더의 `.git`·훅 설정과 **같은 inode**인 이름은 쓰지 않는다."""
+    reason = fsguard.write_denied_alias_at(dir_fd, name)
+    if reason:
+        raise WriteError(403, "denied", reason)
 
 
 def _require_regular(st: Optional[os.stat_result], *, what: str = "file") -> os.stat_result:
@@ -355,10 +381,69 @@ def save(raw_path: str, content: str, *, encoding: str, eol: Optional[str], expe
         raise WriteError(400, "bad_eol", tr("줄 끝 값이 잘못됐습니다"))
     p = _resolve(raw_path)
     with _parent(p) as (dir_fd, name):
+        sweep_stale_temps(dir_fd)
         with LOCKS.hold(_lock_key(dir_fd, name)):
+            _refuse_denied_alias(dir_fd, name)
             if expected_rev is None:
                 return _create_with(dir_fd, name, p, content, encoding, eol or "lf")
             return _replace(dir_fd, name, p, content, encoding, eol, expected_rev)
+
+
+# --- 남은 임시 파일 치우기 ------------------------------------------------------------------
+# 저장 도중 서버가 죽으면 `.fsh-<uuid>.tmp`가 남는다. 다음 저장 때 **그 폴더에서만**, 아래 조건을 모두 갖춘 것만
+# 지운다: 정확히 우리 이름 모양, 일반 파일, 내 것, 하드 링크 없음, mode 0600(쓰는 동안의 mode — 원래 mode는 rename
+# 직전에 옮긴다), STALE_TEMP_AGE보다 오래됨. dir_fd 기준 `O_NOFOLLOW`로 열어 확인한 inode만 지운다. 한 폴더는
+# STALE_SWEEP_EVERY마다 한 번, 한 번에 STALE_SWEEP_SCAN개까지만 본다(큰 폴더에서 저장이 느려지지 않게).
+
+_TEMP_NAME = re.compile(r"\.fsh-[0-9a-f]{32}\.tmp")
+STALE_TEMP_AGE = 15 * 60.0
+STALE_SWEEP_EVERY = 10 * 60.0
+STALE_SWEEP_SCAN = 10000
+_swept: dict[tuple, float] = {}
+_swept_mu = threading.Lock()
+
+
+def sweep_stale_temps(dir_fd: int, *, now: Optional[float] = None) -> int:
+    """`dir_fd` 폴더에 남은 오래된 우리 임시 파일을 지우고 지운 개수를 돌려준다. 실패는 조용히 넘긴다(저장을 막지 않는다)."""
+    now = time.time() if now is None else now
+    try:
+        dst = os.fstat(dir_fd)
+    except OSError:
+        return 0
+    key = (dst.st_dev, dst.st_ino)
+    with _swept_mu:
+        if now - _swept.get(key, float("-inf")) < STALE_SWEEP_EVERY:
+            return 0
+        _swept[key] = now
+        if len(_swept) > 4096:
+            for k, _ in sorted(_swept.items(), key=lambda kv: kv[1])[:2048]:
+                del _swept[k]
+    removed = 0
+    try:
+        with os.scandir(dir_fd) as it:
+            for i, entry in enumerate(it):
+                if i >= STALE_SWEEP_SCAN:
+                    break
+                if _TEMP_NAME.fullmatch(entry.name) and _remove_stale_temp(dir_fd, entry.name, now):
+                    removed += 1
+    except OSError:
+        pass
+    return removed
+
+
+def _remove_stale_temp(dir_fd: int, name: str, now: float) -> bool:
+    try:
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | _CLOEXEC, dir_fd=dir_fd)
+    except OSError:
+        return False
+    try:
+        st = os.fstat(fd)
+    finally:
+        os.close(fd)
+    if not stat.S_ISREG(st.st_mode) or st.st_uid != os.geteuid() or st.st_nlink != 1 \
+            or stat.S_IMODE(st.st_mode) != 0o600 or now - st.st_mtime < STALE_TEMP_AGE:
+        return False
+    return _unlink_if_same(dir_fd, name, st)
 
 
 def _open_target(dir_fd: int, name: str) -> int:
@@ -405,17 +490,24 @@ def _atomic_replace(dir_fd: int, name: str, data: bytes, st: os.stat_result, cur
         raise _os_error(e, tr("임시 파일을 만들 수 없습니다")) from None
     renamed = False
     try:
+        mine: Optional[os.stat_result] = os.fstat(tfd)
+    except OSError:
+        mine = None                            # 확인할 수 없으면 지우지 않는다(0600으로 남아 다음 저장이 치운다)
+    try:
         try:
+            if mine is None:
+                raise OSError(errno.EIO, "fstat")
+            view = memoryview(data)
+            while view:
+                n = os.write(tfd, view)
+                view = view[n:]
+            # 원래 mode는 다 쓴 뒤에 옮긴다 — 쓰는 도중 죽어 남은 임시 파일은 0600이라 다음 저장이 알아보고 치운다.
             os.fchmod(tfd, stat.S_IMODE(st.st_mode))
             if os.fstat(tfd).st_gid != st.st_gid:
                 try:
                     os.fchown(tfd, -1, st.st_gid)
                 except OSError:
                     pass                       # 그룹을 못 맞추면 폴더 기본값으로 남는다(문서화한 한계)
-            view = memoryview(data)
-            while view:
-                n = os.write(tfd, view)
-                view = view[n:]
             os.fsync(tfd)
         except OSError as e:
             raise _os_error(e, tr("임시 파일에 쓰지 못했습니다")) from None
@@ -431,11 +523,8 @@ def _atomic_replace(dir_fd: int, name: str, data: bytes, st: os.stat_result, cur
         new_rev = fs_read.rev_of(os.fstat(tfd))
     finally:
         os.close(tfd)
-        if not renamed:
-            try:
-                os.unlink(tmp, dir_fd=dir_fd)
-            except OSError:
-                pass
+        if not renamed and mine is not None:
+            _unlink_if_same(dir_fd, tmp, mine)     # 이름으로 지우되, 아직 우리가 만든 그 inode일 때만
     try:
         os.fsync(dir_fd)
         durable = True
@@ -463,7 +552,9 @@ def _create_exclusive(dir_fd: int, name: str, data: bytes) -> str:
     except OSError as e:
         raise _os_error(e, tr("파일을 만들 수 없습니다")) from None
     ok = False
+    mine: Optional[os.stat_result] = None
     try:
+        mine = os.fstat(fd)
         view = memoryview(data)
         while view:
             n = os.write(fd, view)
@@ -475,11 +566,8 @@ def _create_exclusive(dir_fd: int, name: str, data: bytes) -> str:
         raise _os_error(e, tr("파일에 쓰지 못했습니다")) from None
     finally:
         os.close(fd)
-        if not ok:
-            try:
-                os.unlink(name, dir_fd=dir_fd)     # 방금 O_EXCL로 만든 빈 파일만
-            except OSError:
-                pass
+        if not ok and mine is not None:
+            _unlink_if_same(dir_fd, name, mine)    # 방금 O_EXCL로 만든 그 파일일 때만 — 바뀌었으면 두고 간다
     try:
         os.fsync(dir_fd)
     except OSError:
@@ -500,6 +588,7 @@ def create(raw_dir: str, name) -> dict:
         raise WriteError(409, "exists", tr("같은 이름이 이미 있습니다 (덮어쓰지 않음)"))
     with _parent(p) as (dir_fd, leaf):
         with LOCKS.hold(_lock_key(dir_fd, leaf)):
+            _refuse_denied_alias(dir_fd, leaf)
             rev = _create_exclusive(dir_fd, leaf, b"")
     return {"ok": True, "path": str(p), "rev": rev}
 
@@ -524,13 +613,16 @@ def rename(raw_from: str, raw_to: str, *, overwrite: bool = False, expected_rev:
         raise WriteError(400, "same_path", tr("같은 이름입니다"))
     with _parent(src) as (sfd, sname), _parent(dst) as (dfd, dname):
         with LOCKS.hold(_lock_key(sfd, sname), _lock_key(dfd, dname)):
+            _refuse_denied_alias(sfd, sname)
+            _refuse_denied_alias(dfd, dname)
             st = _require_regular(_lstat_at(sfd, sname))
             if expected_rev is not None and fs_read.rev_of(st) != expected_rev:
                 raise WriteError(409, "conflict", tr("파일이 바뀌었습니다"), rev=fs_read.rev_of(st))
             _require_mine_and_writable(st)
             target = _lstat_at(dfd, dname)
-            case_only = target is not None and (target.st_dev, target.st_ino) == (st.st_dev, st.st_ino) \
-                and sname.casefold() == dname.casefold() and os.fstat(sfd).st_ino == os.fstat(dfd).st_ino
+            # 대소문자만 바꾸기: 같은 폴더(dev+ino — 다른 장치의 폴더가 같은 ino일 수 있다)의 같은 파일.
+            case_only = _same(target, st) and fsguard.write_name_key(sname) == fsguard.write_name_key(dname) \
+                and _same(os.fstat(sfd), os.fstat(dfd))
             if target is not None and not case_only:
                 if not overwrite:
                     raise WriteError(409, "exists", tr("같은 이름이 이미 있습니다 (덮어쓰지 않음)"))
@@ -538,11 +630,15 @@ def rename(raw_from: str, raw_to: str, *, overwrite: bool = False, expected_rev:
                 if target.st_nlink > 1:
                     raise WriteError(409, "hardlinked", tr("하드 링크가 걸린 파일이라 바꿔 쓰지 않았습니다"))
                 _require_mine_and_writable(target)
+                _require_unchanged(sfd, sname, st)
+                _require_unchanged(dfd, dname, target)      # 확인한 대상이 그대로일 때만(심링크로 바뀌었으면 거부)
                 _rename_at(sfd, sname, dfd, dname)
             elif case_only:
+                _require_unchanged(sfd, sname, st)
                 _rename_at(sfd, sname, dfd, dname)          # 대소문자만 바꾸기(같은 파일)
             else:
-                _rename_noreplace(sfd, sname, dfd, dname)
+                _require_unchanged(sfd, sname, st)
+                _rename_noreplace(sfd, sname, dfd, dname, st)
             for fd in {sfd, dfd}:
                 try:
                     os.fsync(fd)
@@ -552,6 +648,14 @@ def rename(raw_from: str, raw_to: str, *, overwrite: bool = False, expected_rev:
     return {"ok": True, "path": str(dst), "rev": fs_read.rev_of(moved) if moved is not None else None}
 
 
+def _require_unchanged(dir_fd: int, name: str, checked: os.stat_result) -> None:
+    """rename 바로 앞에서 dir_fd 기준 lstat을 다시 본다 — 확인한 그 일반 파일(dev, ino)이 아니면(심링크로 바뀜,
+    다른 파일로 바뀜, 사라짐) 409 `changed`. 남는 틈은 이 lstat과 rename 사이뿐이고, rename은 심링크를 따라가지 않는다."""
+    now = _lstat_at(dir_fd, name)
+    if now is None or not stat.S_ISREG(now.st_mode) or not _same(now, checked):
+        raise WriteError(409, "changed", tr("경로가 바뀌었습니다 (심링크로 바뀜)"))
+
+
 def _rename_at(sfd: int, sname: str, dfd: int, dname: str) -> None:
     try:
         os.rename(sname, dname, src_dir_fd=sfd, dst_dir_fd=dfd)
@@ -559,7 +663,7 @@ def _rename_at(sfd: int, sname: str, dfd: int, dname: str) -> None:
         raise _os_error(e, tr("이름을 바꾸지 못했습니다")) from None
 
 
-def _rename_noreplace(sfd: int, sname: str, dfd: int, dname: str) -> None:
+def _rename_noreplace(sfd: int, sname: str, dfd: int, dname: str, st: os.stat_result) -> None:
     """덮어쓰지 않는 이름 바꾸기. `link`는 대상이 있으면 원자적으로 실패한다(EEXIST) — 그 뒤 원래 이름만 지운다.
     하드 링크를 못 거는 파일시스템이면 잠금 안에서 없음을 확인하고 `rename`한다(외부 프로세스와의 아주 짧은 경합만 남는다)."""
     try:
@@ -573,14 +677,24 @@ def _rename_noreplace(sfd: int, sname: str, dfd: int, dname: str) -> None:
             raise WriteError(409, "exists", tr("같은 이름이 이미 있습니다 (덮어쓰지 않음)")) from None
         _rename_at(sfd, sname, dfd, dname)
         return
+    # 원래 이름을 지운다 — 새 이름이 같은 inode를 가리키므로 내용은 그대로다. 그 사이 원래 이름이 다른 항목으로
+    # 바뀌었으면 지우지 않고 방금 건 링크만 되돌린다.
+    if not _same(_lstat_at(sfd, sname), st):
+        _undo_link(dfd, dname, st)
+        raise WriteError(409, "changed", tr("경로가 바뀌었습니다 (심링크로 바뀜)"))
     try:
-        os.unlink(sname, dir_fd=sfd)                  # 새 이름이 같은 inode를 가리키므로 내용은 그대로다
+        os.unlink(sname, dir_fd=sfd)
     except OSError as e:
-        try:
-            os.unlink(dname, dir_fd=dfd)              # 되돌린다 — 방금 건 링크만
-        except OSError:
-            pass
+        _undo_link(dfd, dname, st)
         raise _os_error(e, tr("이름을 바꾸지 못했습니다")) from None
+
+
+def _undo_link(dfd: int, dname: str, st: os.stat_result) -> None:
+    """방금 `link`로 건 새 이름을 되돌린다 — 그 이름이 아직 우리 inode이고 **다른 이름도 남아 있을 때만**
+    (`st_nlink > 1`). 마지막 이름이면 지우지 않는다(내용을 잃느니 새 이름에 남겨 둔다)."""
+    now = _lstat_at(dfd, dname)
+    if _same(now, st) and now.st_nlink > 1:
+        _unlink_if_same(dfd, dname, now)
 
 
 # --- 삭제 = 휴지통 ------------------------------------------------------------------------
@@ -593,6 +707,7 @@ def delete(raw_path: str, *, expected_rev: Optional[str] = None) -> dict:
     p = _resolve(raw_path)
     with _parent(p) as (dir_fd, name):
         with LOCKS.hold(_lock_key(dir_fd, name)):
+            _refuse_denied_alias(dir_fd, name)
             st = _require_regular(_lstat_at(dir_fd, name))
             if expected_rev is not None and fs_read.rev_of(st) != expected_rev:
                 raise WriteError(409, "conflict", tr("파일이 바뀌었습니다"), rev=fs_read.rev_of(st))

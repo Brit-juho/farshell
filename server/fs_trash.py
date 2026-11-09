@@ -5,7 +5,9 @@
 - Linux·WSL: freedesktop.org 휴지통 규격 1.0. 같은 장치면 `$XDG_DATA_HOME/Trash`(기본 `~/.local/share/Trash`),
   다른 장치면 그 마운트 꼭대기의 `.Trash/<uid>`(끈적 비트가 있는 진짜 폴더일 때만) 또는 `.Trash-<uid>`.
   `info/<이름>.trashinfo`(`Path=`, `DeletionDate=`)를 `O_EXCL`로 먼저 만들어 이름을 잡고, 파일은 판정한 부모 dir_fd
-  기준 `rename`으로 `files/<이름>`에 옮긴다 — 경로를 다시 해석하지 않는다.
+  기준 `rename`으로 `files/<이름>`에 옮긴다 — 경로를 다시 해석하지 않는다. `Path=`는 이름의 **바이트**를 퍼센트
+  인코딩하고(UTF-8이 아닌 이름도), 휴지통 안 이름은 `<이름>.trashinfo`가 NAME_MAX(255바이트) 안에 들게 줄인다.
+  옮기기 전 단계의 OSError(이름 너무 김, 권한, 디스크 가득 …)는 모두 `TrashUnavailable`이다.
 - 그 밖의 OS, 휴지통을 만들 수 없는 곳(권한, 읽기 전용, 다른 장치로의 이동): `TrashUnavailable` → 409
   `trash_unavailable`. 대신 지우지 않는다.
 
@@ -89,9 +91,12 @@ def _trash_macos(path: Path, st: os.stat_result) -> dict:
     if not _same(cur, st) or not stat.S_ISREG(cur.st_mode):
         raise TrashChanged("path no longer names the checked file")
     try:
-        cp = proc.run([sys.executable, "-I", str(HELPER), str(path)], timeout=HELPER_TIMEOUT)
+        cp = _run_helper(path)
     except subprocess.TimeoutExpired:
-        raise TrashUnavailable(tr("휴지통 이동이 응답하지 않아 멈췄습니다")) from None
+        # `proc.run`이 프로세스 묶음을 죽였다. 죽기 전에 옮겼을 수 있다 — 출력이 없을 때와 같이 원래 자리를 본다.
+        if _still_there(path, st):
+            raise TrashUnavailable(tr("휴지통 이동이 응답하지 않아 멈췄습니다")) from None
+        raise TrashMismatch("helper timed out after the file moved") from None
     out = _parse_helper(cp.stdout)
     if out is None:
         # 도우미가 죽었다. 옮겨졌는지 모른다 — 원래 자리에 그대로면 「못 옮김」, 없으면 결과 불명으로 알린다.
@@ -109,6 +114,12 @@ def _trash_macos(path: Path, st: os.stat_result) -> dict:
     if not _same(moved, st):
         raise TrashMismatch("trash item is a different file")
     return {"trash": "macos", "name": Path(dest).name}
+
+
+def _run_helper(path: Path) -> subprocess.CompletedProcess:
+    """macOS 도우미를 실제로 부르는 유일한 곳. 서버 시험은 conftest가 이것을 막는다 — `HOME`을 바꿔도
+    `NSFileManager`는 진짜 `~/.Trash`로 옮기기 때문이다(시험은 이 함수를 가짜로 바꿔 쓴다)."""
+    return proc.run([sys.executable, "-I", str(HELPER), str(path)], timeout=HELPER_TIMEOUT)
 
 
 def _parse_helper(raw: Optional[bytes]) -> Optional[dict]:
@@ -177,9 +188,9 @@ def _pick_trash(path: Path, dev: int) -> tuple[Path, str]:
     except OSError:
         home_dev = None
     if home_dev == dev:
-        return home, quote(str(path), safe="/")
+        return home, _info_path(path)
     top = _topdir(path, dev)
-    rel = quote(str(path.relative_to(top)), safe="/")
+    rel = _info_path(path.relative_to(top))
     uid = os.geteuid()
     shared = top / ".Trash"
     try:
@@ -198,13 +209,39 @@ def _pick_trash(path: Path, dev: int) -> tuple[Path, str]:
     return own, rel
 
 
+def _info_path(path: Path) -> str:
+    """`.trashinfo`의 `Path=` 값 — 규격대로 **바이트**를 퍼센트 인코딩한다(UTF-8이 아닌 이름도, `/`만 그대로)."""
+    return quote(os.fsencode(str(path)), safe=b"/")
+
+
+# 이름 하나의 최대 바이트(NAME_MAX). `info/<후보>.trashinfo`도 이 안에 들어야 한다.
+NAME_MAX = 255
+_INFO_SUFFIX = ".trashinfo"
+
+
+def _fit(text: str, limit: int) -> str:
+    """`text`를 파일시스템 바이트로 `limit` 이하가 되게 글자 단위로 자른다(멀티바이트 글자 중간을 자르지 않는다)."""
+    while text and len(os.fsencode(text)) > limit:
+        text = text[:-1]
+    return text
+
+
 def _candidates(name: str):
+    """휴지통 안 이름 후보: `name`, `stem.2.ext`, `stem.3.ext`, … 모두 `<후보>.trashinfo`가 NAME_MAX 이하가 되게
+    줄기를 줄인다(긴 이름 파일도 휴지통으로 갈 수 있게)."""
+    budget = NAME_MAX - len(_INFO_SUFFIX)
     stem, dot, ext = name.rpartition(".")
     if not stem:                       # `.bashrc`처럼 점으로 시작하는 이름, 또는 확장자 없음
         stem, dot, ext = name, "", ""
-    yield name
-    for i in range(2, 1000):
-        yield f"{stem}.{i}{dot}{ext}" if dot else f"{name}.{i}"
+    tail = f"{dot}{ext}"
+    if len(os.fsencode(tail)) > budget // 2:   # 확장자가 지나치게 길면 확장자로 보지 않는다
+        stem, tail = name, ""
+    for i in range(1, 1000):
+        mark = "" if i == 1 else f".{i}"
+        room = budget - len(os.fsencode(mark + tail))
+        cand = _fit(stem, room) + mark + tail
+        if cand and cand not in (".", ".."):
+            yield cand
 
 
 def _trash_freedesktop(dir_fd: int, name: str, path: Path, st: os.stat_result) -> dict:
@@ -215,34 +252,51 @@ def _trash_freedesktop(dir_fd: int, name: str, path: Path, st: os.stat_result) -
         raise TrashUnavailable(tr("이 위치의 휴지통을 만들 수 없어 삭제하지 않았습니다: {error}", error=e.strerror or e)) from None
     files_fd = info_fd = -1
     try:
-        for sub in ("files", "info"):
-            try:
-                os.mkdir(sub, 0o700, dir_fd=tfd)
-            except FileExistsError:
-                pass
-        files_fd = os.open("files", _DIR_FLAGS, dir_fd=tfd)
-        info_fd = os.open("info", _DIR_FLAGS, dir_fd=tfd)
-        if os.fstat(files_fd).st_dev != st.st_dev:
+        try:
+            for sub in ("files", "info"):
+                try:
+                    os.mkdir(sub, 0o700, dir_fd=tfd)
+                except FileExistsError:
+                    pass
+            files_fd = os.open("files", _DIR_FLAGS, dir_fd=tfd)
+            info_fd = os.open("info", _DIR_FLAGS, dir_fd=tfd)
+            same_dev = os.fstat(files_fd).st_dev == st.st_dev
+        except OSError as e:
+            raise _unavailable(e) from None
+        if not same_dev:
             raise TrashUnavailable(tr("휴지통이 다른 장치에 있어 옮길 수 없습니다. 삭제하지 않았습니다"))
         when = time.strftime("%Y-%m-%dT%H:%M:%S")
         body = f"[Trash Info]\nPath={info_path}\nDeletionDate={when}\n".encode("utf-8")
         for cand in _candidates(name):
-            info_name = cand + ".trashinfo"
+            info_name = cand + _INFO_SUFFIX
+            # 이름 잡기(.trashinfo 만들기) 단계의 실패(ENAMETOOLONG, EACCES, 디스크 가득 …)는 모두 「못 옮김」 —
+            # 파일은 아직 제자리다. 지우는 길로 떨어지지 않는다.
             try:
                 fd = os.open(info_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=info_fd)
             except FileExistsError:
                 continue
+            except OSError as e:
+                raise _unavailable(e) from None
             try:
-                os.write(fd, body)
-                os.fsync(fd)
-            finally:
-                os.close(fd)
+                try:
+                    os.write(fd, body)
+                    os.fsync(fd)
+                finally:
+                    os.close(fd)
+            except OSError as e:
+                with _quiet():
+                    os.unlink(info_name, dir_fd=info_fd)
+                raise _unavailable(e) from None
             try:
                 os.lstat(cand, dir_fd=files_fd)
                 os.unlink(info_name, dir_fd=info_fd)      # 우리가 방금 만든 .trashinfo만 지운다(대상 파일이 아니다)
                 continue
             except FileNotFoundError:
                 pass
+            except OSError as e:
+                with _quiet():
+                    os.unlink(info_name, dir_fd=info_fd)
+                raise _unavailable(e) from None
             try:
                 os.rename(name, cand, src_dir_fd=dir_fd, dst_dir_fd=files_fd)
             except OSError as e:
@@ -253,7 +307,10 @@ def _trash_freedesktop(dir_fd: int, name: str, path: Path, st: os.stat_result) -
                 raise TrashUnavailable(tr("휴지통으로 옮기지 못해 삭제하지 않았습니다: {reason}", reason=e.strerror or e)) from None
             with _quiet():
                 os.fsync(files_fd)
-            moved = os.lstat(cand, dir_fd=files_fd)
+            try:
+                moved = os.lstat(cand, dir_fd=files_fd)
+            except OSError:
+                raise TrashMismatch("trash item not found") from None   # 옮긴 뒤다 — 「못 옮김」이라 하지 않는다
             if not _same(moved, st):
                 raise TrashMismatch("trash item is a different file")
             return {"trash": "freedesktop", "name": cand}
@@ -262,6 +319,11 @@ def _trash_freedesktop(dir_fd: int, name: str, path: Path, st: os.stat_result) -
         for fd in (files_fd, info_fd, tfd):
             if fd >= 0:
                 os.close(fd)
+
+
+def _unavailable(e: OSError) -> TrashUnavailable:
+    """옮기기 **전** 단계의 OSError → 409 `trash_unavailable`(파일은 제자리, 지우지 않는다)."""
+    return TrashUnavailable(tr("휴지통으로 옮기지 못해 삭제하지 않았습니다: {reason}", reason=e.strerror or e))
 
 
 class _quiet:

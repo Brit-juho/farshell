@@ -206,6 +206,25 @@ test('409 충돌 → 배너(비교 · 다시 불러오기 · 덮어쓰기), 덮�
   disk = '';
 });
 
+test('충돌 중 디스크 내용을 못 받아 왔으면 편집 끝내기는 이전 판(글 · rev)으로 돌아간다(null로 비우지 않는다)', async () => {
+  const { edit, document } = await build(async (u, m) => (m === 'PUT'
+    ? { status: 409, body: { error: 'conflict', rev: 'disk-2' } } : { status: 500, body: {} }));
+  const c = document.getElementById('c');
+  const h = fakeHandle('one\ntwo\n');
+  c._vtEditor = h;
+  const st = doc();
+  c._vtDoc = st;
+  edit.startEdit(c, st, () => {});
+  h.type('one\nmine\n');
+  assert.strictEqual(await edit.saveEdit(c, st), false);
+  assert.strictEqual(c._vtEdit.conflict.text, null, '디스크 읽기가 실패한 충돌');
+  assert.strictEqual(await edit.stopEdit(c, { discard: true }), true);
+  assert.strictEqual(h.text, 'one\ntwo\n');
+  assert.strictEqual(c._vtEdit.base, 'one\ntwo\n');
+  assert.strictEqual(c._vtEdit.rev, '1:2:10:100');
+  assert.strictEqual(c._vtEdit.conflict, null);
+});
+
 test('503 · 시간 초과면 같은 save_id로 한 번 더 — 서버가 첫 결과(replayed)를 준다', async () => {
   let n = 0;
   const { edit, document, calls, toasts } = await build(async (u, m) => {

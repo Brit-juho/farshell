@@ -24,6 +24,7 @@ import logging
 import contextlib
 import os
 import re
+import unicodedata
 from pathlib import Path
 from typing import Optional
 from i18n import tr
@@ -815,12 +816,78 @@ def open_resolved(path: Path) -> int:
 # 규칙은 쓰기에도 그대로 걸린다(`resolve_for_write`가 `resolve_under_roots`를 먼저 부른다).
 WRITE_DENY_DIR_PARTS = frozenset({
     ".github", ".gitlab", ".husky", ".devcontainer", ".vscode", ".circleci",
+    # Storybook의 `main.js`·`preview.js`는 `storybook dev`·빌드가 그대로 실행한다.
+    ".storybook",
 })
 
 # 쓰기에서만 거부하는 **이름**(경로의 어느 조각이든). `.git` 디렉토리는 점 디렉토리 규칙이 이미 닫지만, `.git`
 # **파일**(gitfile, `gitdir: <경로>`)은 점 파일이라 읽기가 열려 있다. 그 파일을 쓰면 git이 다른 저장소의 설정·훅
 # (`core.fsmonitor`, `core.hooksPath`)을 쓰게 되어 다음 git 명령에서 임의 명령이 돈다 — 실행 설정이다.
-WRITE_DENY_NAMES = frozenset({".git"})
+WRITE_DENY_NAMES = frozenset({
+    ".git",
+    # 훅·설치 설정 파일 — 다음 `git commit`·`npm install`이 그 안의 명령을 돌린다. 저장소 꼭대기에 흩어져 있어
+    # 폴더 규칙으로는 닫히지 않는다. `.npmrc`는 읽기 거부 목록에도 있다(토큰) — 여기서는 쓰기 쪽 이유를 명시한다.
+    ".npmrc", ".pre-commit-config.yaml", ".pre-commit-config.yml",
+    "lefthook.yml", "lefthook.yaml", ".lefthook.yml", ".lefthook.yaml",
+    "lefthook-local.yml", "lefthook-local.yaml", ".lefthook-local.yml", ".lefthook-local.yaml",
+})
+
+# 이름 비교 전에 지우는 **기본 무시 코드 포인트**(Unicode Default_Ignorable_Code_Point). HFS+는 이 중 일부
+# (U+200C–U+200F, U+202A–U+202E, U+206A–U+206F, U+FEFF)를 이름에서 무시해 `.g<U+200C>it`이 `.git`과 같은 항목이 된다.
+# 집합을 넓게 잡는다 — 쓰기 거부 판정과 이름 잠금에만 쓰므로 넓어도 정상 이름을 막지 않는다.
+_IGNORABLE_RANGES = (
+    (0x00AD, 0x00AD), (0x034F, 0x034F), (0x061C, 0x061C), (0x115F, 0x1160), (0x17B4, 0x17B5),
+    (0x180B, 0x180F), (0x200B, 0x200F), (0x202A, 0x202E), (0x2060, 0x206F), (0x3164, 0x3164),
+    (0xFE00, 0xFE0F), (0xFEFF, 0xFEFF), (0xFFA0, 0xFFA0), (0xFFF0, 0xFFF8), (0x1BCA0, 0x1BCA3),
+    (0x1D173, 0x1D17A), (0xE0000, 0xE0FFF),
+)
+
+
+def _ignorable(ch: str) -> bool:
+    o = ord(ch)
+    return any(lo <= o <= hi for lo, hi in _IGNORABLE_RANGES)
+
+
+def write_name_key(name: str) -> str:
+    """쓰기 거부 목록·이름 잠금이 비교하는 이름 모양: 기본 무시 코드 포인트를 빼고 NFD로 풀고 casefold.
+
+    macOS 파일시스템은 대소문자를 가리지 않고(APFS·HFS+ 기본), 정규화를 가리지 않으며(APFS는 정규화 무관,
+    HFS+는 NFD로 저장), HFS+는 무시 코드 포인트까지 지운다. 그래서 `.GIT`, `.g<U+200C>it`, 조합형·분해형이 같은 항목이다."""
+    stripped = "".join(ch for ch in name if not _ignorable(ch))
+    return unicodedata.normalize("NFD", stripped).casefold()
+
+
+_WRITE_DENY_DIR_KEYS = frozenset(write_name_key(n) for n in WRITE_DENY_DIR_PARTS)
+_WRITE_DENY_NAME_KEYS = frozenset(write_name_key(n) for n in WRITE_DENY_NAMES)
+
+
+def write_denied_part(part: str) -> Optional[str]:
+    """경로 조각 하나가 쓰기 거부 대상이면 사유, 아니면 None."""
+    key = write_name_key(part)
+    if key in _WRITE_DENY_DIR_KEYS:
+        return tr("쓰기가 금지된 디렉토리: {name}", name=part)
+    if key in _WRITE_DENY_NAME_KEYS:
+        return tr("쓰기가 금지된 이름: {name}", name=part)
+    return None
+
+
+def write_denied_alias_at(dir_fd: int, name: str) -> Optional[str]:
+    """`dir_fd` 안의 `name`이 **같은 폴더의 쓰기 거부 항목과 같은 inode**면 사유, 아니면 None.
+
+    이름 정규화가 놓치는 파일시스템 고유의 이름 접기에 대비한 두 번째 줄 — `.git`(파일이든 폴더든)·훅 설정과
+    같은 항목을 가리키는 이름은 쓰지 않는다. `name`이 아직 없으면 None. blocking — 쓰기 경로가 dir_fd를 연 채 부른다."""
+    try:
+        st = os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+    except OSError:
+        return None
+    for denied in sorted(WRITE_DENY_NAMES | WRITE_DENY_DIR_PARTS):
+        try:
+            dst = os.stat(denied, dir_fd=dir_fd, follow_symlinks=False)
+        except OSError:
+            continue
+        if (dst.st_dev, dst.st_ino) == (st.st_dev, st.st_ino):
+            return tr("쓰기가 금지된 이름: {name}", name=denied)
+    return None
 
 # 쓰기 경계 `VT_WRITE_ROOTS`(결정 D3). 비우면 열람 경계와 같다(`get_roots()`). `off`면 쓰기를 모두 닫는다.
 # 값을 주면 그 루트들만 — 열람 경계 밖의 루트는 `resolve_under_roots`가 먼저 막으므로 넓어지지 않는다(쓰기 ⊆ 읽기).
@@ -872,19 +939,19 @@ def resolve_for_write(raw_path: str) -> Path:
 
     1. 모양: 절대경로, `..` 조각·제어 문자 없음.
     2. `resolve_under_roots`: 열람 경계, 읽기 거부 목록, 점 디렉토리 규칙.
-    3. `WRITE_DENY_DIR_PARTS`·`WRITE_DENY_NAMES`: 실행 설정은 읽을 수는 있어도 쓸 수 없다. 대소문자를 가리지
-       않는다(macOS 기본 파일시스템은 대소문자를 구별하지 않아 `.GitHub`이 `.github`과 같은 폴더다).
+    3. `WRITE_DENY_DIR_PARTS`·`WRITE_DENY_NAMES`: 실행 설정은 읽을 수는 있어도 쓸 수 없다. `write_name_key`로
+       비교한다 — 대소문자·정규화(NFC/NFD)·기본 무시 코드 포인트를 가리지 않는다(macOS 파일시스템은 `.GitHub`,
+       분해형, HFS+에서는 `.g<U+200C>it`까지 같은 항목으로 본다). 쓰기 경로(`fs_write`)는 여기에 더해 dir_fd
+       기준으로 `write_denied_alias_at`(같은 inode) 검사를 한다.
     4. 쓰기 경계(`get_write_roots`) 안이어야 한다. `VT_WRITE_ROOTS=off`면 모두 거부.
 
     통과한 경로는 `open_resolved_parent`로 연다(판정 뒤 바꿔치기 방어). 실패는 `FsDenied`.
     """
     p = resolve_under_roots(_raw_write_path(raw_path))
     for part in p.parts:
-        folded = part.casefold()
-        if folded in WRITE_DENY_DIR_PARTS:
-            raise FsDenied(tr("쓰기가 금지된 디렉토리: {name}", name=part))
-        if folded in WRITE_DENY_NAMES:
-            raise FsDenied(tr("쓰기가 금지된 이름: {name}", name=part))
+        reason = write_denied_part(part)
+        if reason:
+            raise FsDenied(reason)
     roots = get_write_roots()
     if not roots:
         raise FsDenied(tr("파일 쓰기가 꺼져 있습니다 (VT_WRITE_ROOTS=off)"))
