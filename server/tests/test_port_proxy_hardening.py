@@ -389,6 +389,18 @@ def test_web_expose_of_dangerous_port_needs_explicit_force(routes):
     assert _status(r) == 200 and r["ok"] is True
 
 
+# 웹 확인 창(panels/ports/danger-confirm.js)은 위험 목록을 따로 들지 않고 이 409만 보고 뜬다 —
+# 목록의 모든 종류(프록시 범위 포함)가 force 없이는 거부되고 터널도 상태도 남기지 않아야 한다.
+@pytest.mark.parametrize("port", [9222, 9229, 2375, 2376, 4040, 20241, 7940, 8039])
+def test_web_expose_refuses_every_dangerous_kind_without_force(routes, port):
+    for body in ({"confirm": True}, {"confirm": True, "force_danger": False}, {"confirm": True, "force_danger": None}):
+        r = asyncio.run(routes.expose_port(port, _Body(body)))
+        assert _status(r) == 409, f"{port} {body}"
+        assert json.loads(r.body)["error"] == "dangerous_port"
+    assert routes.calls["vt"] == [], "거부한 요청은 터널을 띄우지 않는다"
+    assert routes.pshare.list_shares(include_expired=True) == [], "공개 정책도 남기지 않는다"
+
+
 def test_web_expose_of_ordinary_port_needs_no_force(routes):
     r = asyncio.run(routes.expose_port(3000, _Body({"confirm": True, "mode": "pin"})))
     assert _status(r) == 200
