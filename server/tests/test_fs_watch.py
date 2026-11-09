@@ -174,13 +174,21 @@ def test_real_file_change_is_reported_once_per_subscription(root, polling_watch)
         tmp = root / "d" / ".a.md.tmp"
         tmp.write_text("v2")
         tmp.replace(f)
+        want_file = {"kind": "file", "path": str(f)}
+        want_dir = {"kind": "dir", "path": str(root / "d")}
+
+        def seen(msgs):
+            return [s for x in msgs if x["type"] == "changed" for s in x["subs"]]
+
+        # 감시가 임시 파일 생성과 rename 사이에 한 번 돌면 두 묶음으로 온다 — 앞 묶음(.a.md.tmp 생성)에는
+        # 폴더 구독만 걸린다. 첫 메시지만 보면 그 틈에 따라 실패하므로 두 구독이 다 올 때까지 모은다.
         try:
-            await _collect(got, lambda m: any(x["type"] == "changed" for x in m))
+            await _collect(got, lambda m: want_file in seen(m) and want_dir in seen(m))
         finally:
             await hub.remove(1)
-        changed = [x for x in got if x["type"] == "changed"][0]["subs"]
-        assert {"kind": "file", "path": str(f)} in changed
-        assert {"kind": "dir", "path": str(root / "d")} in changed
+        for x in got:
+            if x["type"] == "changed":   # 한 메시지 안에서 구독 하나는 한 번만
+                assert len(x["subs"]) == len({(s["kind"], s["path"]) for s in x["subs"]}), x
         assert hub._tasks == []   # 마지막 연결이 빠지면 감시도 멈춘다
 
     asyncio.run(run())
