@@ -207,3 +207,60 @@ test('서버 스킨 복원 — 캐시 없는 브라우저의 화면·터미널�
   assert.strictEqual(env.window.localStorage.getItem('vt-skin'), 'vscode');
   assert.strictEqual(calls.filter((c) => c.opts?.method === 'PUT').length, 0);
 });
+
+// 2026-11 리디자인 3단계 — CSS의 --color-term-*(미리보기·뷰어·작업 기록이 터미널
+// 내용을 xterm 밖에서 그릴 때 쓰는 색)가 그 스킨의 VT_XTERM_THEMES와 같아야 한다.
+// 다르면 같은 출력이 칸 안과 미리보기에서 다른 색으로 보인다.
+//
+// ANSI 색은 normal을 쓰되, 그 값이 바탕에서 4.5에 못 미치는 스킨은 같은 이름의
+// bright를 쓴다(tokens.css 주석). 그래서 허용 슬롯이 둘이다 — 어느 쪽이든 그 스킨
+// 팔레트에 실제로 있는 값이어야 하고, 대비는 tokens-contrast.test.js가 따로 본다.
+const fsMod = require('node:fs');
+const ROOT = path.join(__dirname, '..', '..');
+function _cssTermTokens() {
+  const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, ' ');
+  const read = (css) => {
+    const out = {};
+    const re = /(--[\w-]+):\s*([^;]+);/g;
+    let m;
+    while ((m = re.exec(css))) out[m[1]] = m[2].trim();
+    return out;
+  };
+  const base = read(strip(fsMod.readFileSync(path.join(ROOT, 'styles/theme/tokens.css'), 'utf8')));
+  const skins = strip(fsMod.readFileSync(path.join(ROOT, 'styles/theme/skins.css'), 'utf8'));
+  const out = { farshell: base };
+  const re = /html\[data-skin="(\w+)"\]\s*\{([\s\S]*?)\n\s*\}/g;
+  let m;
+  while ((m = re.exec(skins))) out[m[1]] = { ...base, ...read(m[2]) };
+  return out;
+}
+const TERM_SLOTS = {
+  bg: ['background'], fg: ['foreground'], bright: ['brightWhite'],
+  // 라이트 스킨(notepad)은 brightBlack이 종이 위에서 너무 옅어 white(회색)가 흐린 글자다.
+  dim: ['brightBlack', 'white'],
+  red: ['red', 'brightRed'], green: ['green', 'brightGreen'], amber: ['yellow', 'brightYellow'],
+  blue: ['blue', 'brightBlue'], mag: ['magenta', 'brightMagenta'], cyan: ['cyan', 'brightCyan'],
+  sel: ['selectionBackground'],
+};
+const _norm = (v) => String(v).replace(/\s+/g, '').toLowerCase();
+
+test('CSS --color-term-*가 9스킨 전부 그 스킨의 VT_XTERM_THEMES 값과 같다', async () => {
+  const { vtSkins, getVtXtermTheme } = await buildThemeWindow();
+  const css = _cssTermTokens();
+  const fails = [];
+  let checked = 0;
+  for (const skin of vtSkins()) {
+    const xt = getVtXtermTheme(skin);
+    assert.ok(css[skin], `skins.css에 ${skin} 블록이 없다`);
+    for (const [tok, slots] of Object.entries(TERM_SLOTS)) {
+      const got = css[skin][`--color-term-${tok}`];
+      const allowed = slots.map((s) => _norm(xt[s]));
+      if (!got || !allowed.includes(_norm(got))) {
+        fails.push(`${skin} --color-term-${tok} = ${got} (xterm ${slots.map((s) => `${s}=${xt[s]}`).join(' / ')})`);
+      }
+      checked += 1;
+    }
+  }
+  assert.strictEqual(checked, 9 * Object.keys(TERM_SLOTS).length);
+  assert.deepStrictEqual(fails, [], fails.join('\n'));
+});

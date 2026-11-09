@@ -80,7 +80,9 @@
 html[data-skin="farshell"] {
   --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-1); --tab-active:var(--color-bg-3); --tab-active-txt:var(--color-txt);
   --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
-  --menu:var(--color-bg-2); --menu-hover:rgb(255 255 255 / .09); --line:var(--color-line);
+  /* 2026-11 리디자인 3단계 — farshell의 bg-2가 「들어간 면」(칸보다 어둡다)이 되어
+   * 떠 있는 메뉴는 bg-raised로 옮겼다. 다른 스킨의 --menu는 그대로다. */
+  --menu:var(--color-bg-raised); --menu-hover:rgb(255 255 255 / .09); --line:var(--color-line);
   --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#000000;
   --wrad:12px; --trad:7px;
   --topbar-h:32px; --topbar-popup-y:38px;

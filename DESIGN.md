@@ -130,11 +130,11 @@ JS-generated overlays (palette, dock) also inherit tokens through `.vt-*` classe
 
 | Skin | Identity | Default |
 |------|----------|---------|
-| `farshell` | Near-black (#08090a) + **single amber accent** (#f0a860). Not an impersonation of any OS — our own face | ✅ default |
-| `macos` | iTerm2/Terminal.app — traffic lights, SF fonts, system blue, translucent header bar | |
+| `farshell` | Near-black (panes #121316, chrome #17181b) + **single blue accent** (#7aa2ff). Amber survives only as the `waiting` state (#f2b350). Not an impersonation of any OS — our own face. Since redesign phase 3 (2026-11) — it was near-black + amber accent (#f0a860) before | ✅ default |
+| `macos` | iTerm2/Terminal.app — traffic lights, SF fonts, system blue, translucent title bar (`--color-titlebar-bg`) | |
 | `catppuccin` | Pastel — no chrome, lavender accent | |
-| `windows` | Windows Terminal — caption buttons, Cascadia, Fluent blue, square UI (`--radius-sm` overridden to 2px) | |
-| `vscode` | VS Code integrated terminal — dark gray, Fluent blue accent, square UI (`--radius-sm` 2px) | |
+| `windows` | Windows Terminal — caption buttons, Cascadia, Fluent blue, Campbell terminal palette | |
+| `vscode` | VS Code integrated terminal — dark gray, Fluent blue accent, blue status bar (`--color-statusbar-bg`) | |
 | `notepad` | Notepad/paper feel — the only **light theme**, warm off-white background | |
 | `warp` | Warp terminal — near-black with a violet cast, single-token accent (`--color-acc`) drawn from a coral→lavender→sky gradient family that surface CSS (e.g. the settings page title) can paint as a gradient text-fill; rounder corners (`--wrad` 16px) than any other skin | |
 | `linear` | Linear — near-black, one flat indigo accent, almost-invisible hairline borders (`--color-line` alpha .05, half of every other dark skin) | |
@@ -146,6 +146,10 @@ from the restraint language in §0. Every value (backgrounds, the 4-step text
 ramp, the accent, status colors) is solved algorithmically against
 `scripts/check_contrast.py`'s thresholds rather than picked by eye: pick
 values, compute contrast, adjust until passing.
+
+**App icon.** The favicon and PWA icons (`frontend/icon-192.png`, `icon-512.png`) are a
+purple tile, and `frontend/manifest.json` still names Catppuccin colours (`#1e1e2e` /
+`#181825`) — neither follows the `farshell` palette yet.
 
 Switched from the header's ⚙ settings, or the theme chip in the command
 palette (`Mod+K`, shows up mixed into a bare search, or under the `>`
@@ -165,29 +169,72 @@ Vite builds all four into `frontend/dist/app.css`.
 
 ### Color tokens (farshell baseline)
 
-The contract is **21 colors** (4 background + 2 divider + 4 text + 6 accent +
-5 status), plus 2 terminal colors handed to xterm and 1 surface-state color
-that ride alongside. The corner radius has one step (there is no
-`--radius-md`).
+The contract is **21 colors** (5 background + 2 divider + 4 text + 5 accent incl. the
+selection tint + 5 status, rewritten for redesign phase 3), plus the terminal colors
+(`--color-term-*`), the chrome-bar colors, the scrim and 1 surface-state color that ride
+alongside. Every token below is defined in **all 9 skins** (`tokens.css` for `farshell`,
+`skins.css` for the rest).
+
+The redesign mockups use short names (`--bg`, `--side`, `--sunk`, `--raised`, `--hover`,
+`--acc`, `--line`, `--t1..t4`). **Those collide with the legacy aliases** in
+`styles/screens/00-tokens-reset.css` (`--acc`, `--line`, …), so code only ever uses the
+`--color-*` names: `--bg` → `bg-0`, `--side` → `bg-1`, `--sunk` → `bg-2`, `--hover` →
+`bg-3`, `--raised` → `bg-raised`, `--t1..t4` → `txt/sub/muted/faint`, `--acc-soft` →
+`acc-soft`, `--wait/work/done/err/idle` → `st-*`, `--term-*` → `--color-term-*`.
 
 | Token | Value | Use |
 |------|-----|------|
-| `--color-bg-0` | `#08090a` | Deepest background |
-| `--color-bg-1` | `#0e1011` | Chrome (header, rail, dock, HUD) |
-| `--color-bg-2` | `#0b0d0e` | Row headers, subbars — **darker than `bg-1`.** A subbar has to sit one notch below the chrome itself to read as a "subheading laid on a row" (the order is not monotonically increasing) |
-| `--color-bg-3` | `#141719` | Hover / active row — also the raised surface an active rail row sits on |
-| `--color-line` / `--color-line-strong` | `rgb(255 255 255 / .07)` / `.14` | Two divider steps |
-| `--color-txt` / `--color-sub` / `--color-muted` / `--color-faint` | `#e8e9ea` `#8e9296` `#73787c` `#5d6164` | Four text steps (`faint` is for disabled labels, placeholders and decorative numbers — never body text) |
-| `--color-acc` | `var(--acc-farshell)` = `#f0a860` | The accent. Kept, together with the 5 status colors, **for those two roles only** |
-| `--color-acc-dim` | `#b3803f` | Badge border, outline |
-| `--color-acc-surface` | `var(--color-acc)` (skin-overridable) | The surface under `acc-ink` text (primary buttons, active-tab underline background). Defaults to the accent itself — **only `macos` overrides it to `acc-dim`**, since white text on Apple's system blue measured 3.65:1 |
-| `--color-acc-ink` | `#17140f` | Text on top of the accent |
-| `--acc-farshell/macos/catppuccin/windows/vscode/notepad` | Each skin's own accent hex | **Out-of-scope constants.** The theme chip needs to show the accent dot of "a different skin than the one active now," so these live outside `data-skin`'s scoping alongside the scoped `--color-acc` — they're the single source both the chip dot and each skin's `--color-acc` read |
-| `--color-st-{idle,working,waiting,done,error}` | `#7c7c84` `#4fd1a5` `#f0a860` `#5b8def` `#f06868` | The 5 agent states (§5) |
-| `--color-term-bg` / `--color-term-fg` | `#0a0a0b` / `#eeeef0` | xterm background / foreground |
+| `--color-bg-0` | `#121316` | Panes (the terminal area) |
+| `--color-bg-1` | `#17181b` | Chrome — activity bar, sidebar, menu bar |
+| `--color-bg-2` | `#0f1012` | Sunk surfaces — inputs, row headers, subbars. **Darker than `bg-1`** (and, in `farshell`, darker than `bg-0` too): a sunk surface sits one notch below the chrome it is laid on (the order is not monotonic) |
+| `--color-bg-3` | `#25272d` | Hover / pressed row and icon button |
+| `--color-bg-raised` | `#202227` | Floating surfaces — menus, dialogs, toasts, sheets. The four text steps meet the same bars on it as on `bg-0..2`. `farshell`'s legacy `--menu` alias points here |
+| `--color-line` / `--color-line-strong` | `rgb(255 255 255 / .07)` / `.12` | Two divider steps |
+| `--color-txt` / `--color-sub` / `--color-muted` / `--color-faint` | `#ecebe8` `#a9a7a2` `#8c8a85` `#706e68` | Four text steps (`faint` is for disabled labels, placeholders and decorative numbers — never body text) |
+| `--color-acc` | `var(--acc-farshell)` = `#7aa2ff` | The accent — focus, selection, the primary button. Kept, together with the 5 status colors, **for those roles only** |
+| `--color-acc-dim` | `#5b80e0` | Badge border, outline |
+| `--color-acc-surface` | `var(--color-acc)` (skin-overridable) | The surface under `acc-ink` text (primary buttons, active-tab underline background). Defaults to the accent itself — `macos`, `linear` and `vercel` override it, since white text on their accents measured under 4.5:1 |
+| `--color-acc-ink` | `#0b1020` | Text on top of the accent |
+| `--color-acc-soft` (+ `--acc-soft-pct: 13%`) | `color-mix(--color-acc 13%, transparent)` | The selected surface (selected row / tree item). Same rule as the waiting tint: on it, secondary text steps up one level |
+| `--acc-<skin>` (9) | Each skin's own accent hex | **Out-of-scope constants.** The theme chip needs to show the accent dot of "a different skin than the one active now," so these live outside `data-skin`'s scoping alongside the scoped `--color-acc` — they're the single source both the chip dot and each skin's `--color-acc` read |
+| `--color-st-{idle,working,waiting,done,error}` | `#7b7a76` `#52d1a0` `#f2b350` `#5fb8f0` `#f07070` | The 5 agent states (§5). `done` must be a different color from the accent (CIE76 ΔE ≥ 15) — a "finished" dot that matches the selection and the primary button reads as one of them |
 | `--color-surface-active` | `rgb(255 255 255 / .18)` | The "currently selected" surface (rail, fleet home rows). Twice the hover overlay's alpha — the same value would be indistinguishable from hover on a pointer device. The accessibility requirement (WCAG 1.4.11) is carried by the row's left 3px status bar, not by this |
-| `--color-st-waiting-tint` (+ `--waiting-tint-pct: 10%`) | `color-mix(--color-st-waiting 10%, transparent)` | Background of an attention-needed row (`.vt-srow.is-waiting`, Fleet). Used instead of `--color-surface-active`, which reads as a pressed grey "inactive" row on the light skin. On this tint the row's secondary text rises from muted to sub and the amber keyword to txt; `scripts/check_contrast.py` and `tokens-contrast.test.js` check txt/sub >= 4.5:1 on the tint over bg-0/1/2 in all 9 skins (the percentage is the ceiling — windows' yellow waiting colour leaves sub at 4.69:1) |
+| `--color-st-waiting-tint` (+ `--waiting-tint-pct: 10%`) | `color-mix(--color-st-waiting 10%, transparent)` | Background of an attention-needed row (`.vt-srow.is-waiting`, Fleet). Used instead of `--color-surface-active`, which reads as a pressed grey "inactive" row on the light skin. On this tint the row's secondary text rises from muted to sub and the amber keyword to txt (the percentage is the ceiling — windows' yellow waiting colour leaves sub at 4.69:1) |
 | `--color-on-solid` | `#ffffff` | Fixed white text over status banners, etc. |
+
+**Tinted rows.** On both tints — waiting (`--color-st-waiting-tint`) and selection
+(`--color-acc-soft`) — secondary text steps up one level: muted text is drawn in `sub`,
+sub text in `txt`. Each token must therefore pass the bar of the role it is promoted into
+on the tint (over `bg-0..2`): `txt` ≥ 6.0, `sub` ≥ 4.5, `muted` ≥ 3.0. The waiting row
+already does this in CSS (`.vt-srow.is-waiting .vt-srow-meta`); no row uses `acc-soft`
+yet — selected rows adopt it, with the same promotion, when they are redrawn (redesign
+phase 4).
+
+**Terminal colors** — `--color-term-*`. Everything that draws terminal content outside
+xterm (pane preview cards, the palette's `@` preview, the work log's tool calls, the file
+viewer, settings previews) uses only these. Each skin takes them from its own
+`VT_XTERM_THEMES` entry in `frontend/js/theme.js`, so a preview matches that skin's
+terminal (`frontend/tests/theme.test.js` checks it):
+
+| Token | From `VT_XTERM_THEMES` | `farshell` |
+|---|---|---|
+| `term-bg` / `term-fg` / `term-bright` | `background` / `foreground` / `brightWhite` | `#121316` / `#d9d7d2` / `#ffffff` |
+| `term-dim` | `brightBlack` (`white` on the light skin, where `brightBlack` is too pale) | `#77756f` |
+| `term-red/green/amber/blue/mag/cyan` | `red/green/yellow/blue/magenta/cyan`; the `bright*` of the same name where the normal one is under 4.5:1 on the background (vscode and windows red/blue/magenta) | `#f07070` `#7fd18b` `#e8c46a` `#7aa2ff` `#c49cf0` `#6fc8d6` |
+| `term-sel` | `selectionBackground` | `rgba(122,162,255,0.32)` |
+| `term-add-bg` / `term-del-bg` | `term-green` / `term-red` at 12% | — |
+| `term-hl` (search match) | `term-amber` at 35% (`catppuccin` 12%: its pastel yellow made the surface too light) | — |
+
+Diff lines are drawn in `term-fg` on `term-add-bg`/`term-del-bg`; green and red mark the
+`+`/`-` sign and changed words (3:1). Green or red as the text of a whole line cannot reach
+4.5:1 on any visible tint in `notepad` and `vscode`.
+
+**Chrome bars** (title bar 36, status bar 24 — redesign phase 2 draws them):
+`--color-titlebar-bg`, `--color-statusbar-bg`, `--color-statusbar-fg`,
+`--color-activity-bg`. They default to `bg-1` with `sub` text; `vscode` paints the status
+bar its accent blue with white text (4.51:1), `macos` makes the title bar translucent
+(`rgb(44 44 46 / .72)`; the blur goes on that bar only). `--color-scrim` is the layer
+behind dialogs and sheets (`rgb(6 7 9 / .62)`; `notepad` uses a light ink scrim).
 
 ### Contrast rules
 
@@ -204,24 +251,29 @@ skins.
 | `faint` | **3.0:1** | Disabled labels, placeholders, decoration — never body text |
 | `acc`, `acc-dim`, `st-*` | **3:1** | Borders, dots, markers (WCAG 1.4.11) |
 | `acc-ink` on `acc-surface` | **4.5:1** | Text on a filled accent button |
+| `statusbar-fg` on `statusbar-bg` | **4.5:1** | Status bar text; `txt`/`sub` keep their bars on the title and activity bars |
+| `term-*` on `term-bg` | **4.5:1** (`term-dim` **3.0:1**) | Terminal content; `term-fg` also on `term-sel`, `term-add-bg`, `term-del-bg`, `term-bright` on `term-hl` |
+| Tinted rows | `txt` 6.0 · `sub` 4.5 · `muted` 3.0 | On the waiting and selection tints (see above) |
+| `st-done` vs `acc` | **ΔE ≥ 15** (CIE76) | The two must not read as one color |
 
-The text bars are checked on `bg-0`, `bg-1` and `bg-2` (`bg-3` is the
-hover/active row, where text is only briefly seen).
+The text bars are checked on `bg-0`, `bg-1`, `bg-2` and `bg-raised` (`bg-3` is the
+hover/active row, where text is only briefly seen). Translucent bars are composited over
+`bg-0` first.
 
-**Measured (worst case across 9 skins x `bg-0..2`, from
+**Measured (worst case across 9 skins x `bg-0..2` + `bg-raised`, from
 `python3 scripts/check_contrast.py --table`):**
 
-| Skin | `txt` | `sub` | `muted` | `faint` |
-|---|---|---|---|---|
-| farshell | 15.69 | 6.09 | 4.28 | 3.05 |
-| macos | 11.20 | 6.09 | 4.28 | 3.05 |
-| catppuccin | 8.69 | 6.29 | 4.29 | 3.06 |
-| windows | 10.84 | 6.11 | 4.29 | 3.08 |
-| vscode | 9.54 | 6.07 | 4.26 | 3.09 |
-| notepad | 11.53 | 6.10 | 4.30 | 3.06 |
-| warp | 16.34 | 7.07 | 4.45 | 3.33 |
-| linear | 17.27 | 6.71 | 4.45 | 3.23 |
-| vercel | 19.80 | 7.57 | 4.61 | 3.30 |
+| Skin | `txt` | `sub` | `muted` | `faint` | term ANSI (min) | `term-dim` | ΔE `done`/`acc` |
+|---|---|---|---|---|---|---|---|
+| farshell | 13.35 | 6.62 | 4.61 | 3.12 | 6.42 | 4.03 | 27.0 |
+| macos | 11.20 | 6.09 | 4.28 | 3.05 | 5.21 | 3.14 | 52.5 |
+| catppuccin | 8.69 | 6.29 | 4.29 | 3.06 | 7.08 | 3.36 | 25.5 |
+| windows | 10.84 | 6.11 | 4.29 | 3.08 | 4.63 | 4.31 | 56.7 |
+| vscode | 9.54 | 6.07 | 4.26 | 3.09 | 4.67 | 3.13 | 16.9 |
+| notepad | 11.53 | 6.10 | 4.30 | 3.06 | 4.54 | 4.77 | 115.6 |
+| warp | 15.48 | 6.70 | 4.21 | 3.15 | 7.14 | 4.76 | 50.3 |
+| linear | 16.44 | 6.39 | 4.24 | 3.07 | 5.09 | 4.63 | 71.7 |
+| vercel | 18.88 | 7.22 | 4.40 | 3.14 | 4.51 | 4.89 | 76.5 |
 
 This table is recomputed on every CI run by
 `frontend/tests/tokens-contrast.test.js` — you don't need to hand-update this
@@ -232,10 +284,15 @@ enough, refresh it.
 
 - **Spacing:** a single `--spacing: 4px` scale. Every margin is
   `calc(var(--spacing) * N)`.
-- **Font size:** 11 steps, `--fs-3xs`(10.5px) through `--fs-4xl`(46px); `--fs-base` is 15px.
-- **Radius:** `--radius-sm`(**5px**, every control) / `--radius-lg`(**10px**,
-  outer frames, sheets) / `--radius-full`. There is no `--radius-md`; use `sm`. The `windows` and `vscode`
-  skins override `--radius-sm` to 2px inside the skin for their square UI.
+- **Font size:** the redesign's seven steps **11 / 12 / 13 / 15 / 18 / 22 / 28**. The existing
+  `--fs-*` names were kept and moved to the nearest step (renaming 440-odd consumers is not a token
+  change): `3xs` 11 (was 10.5) · `2xs` 11 · `xs` 12 (12.5) · `sm` 13 (13.5) · `base` 15 · `md` 18 (17) ·
+  `lg` 22 (20) · `xl` 22 (24) · `2xl` 28 (30). `3xs`/`2xs` and `lg`/`xl` now share a value. `3xl`/`4xl`
+  (38/46) stay outside the scale — they size three empty-state glyphs, not text.
+- **Radius:** `--radius-xs`(**4px** — small 24px buttons, chips, menu items) / `--radius-sm`(**6px**,
+  was 5 — every control: 28px buttons, inputs, selects) / `--radius-lg`(**8px**, was 10 — menus,
+  dialogs, cards, sheets) / `--radius-full`. There is no `--radius-md`. No skin overrides the radius
+  scale (skins shape their window and tab corners with `--wrad`/`--trad`).
 - **Shadow:** `--shadow-e1` (the current row) + `--shadow-e2`/`e3` (overlays).
   e1 must be defined in every skin — see §0 for why.
 - **Motion:** `--dur-fast`(120ms) / `--dur-base`(200ms), `--ease-out-quint`.
@@ -264,9 +321,9 @@ scanning prose lets a wrong value slip through unnoticed.
 | `pane-cap` | `1/4/6` | `frontend/js/layout/dnd.js` — `tierCap()` (compact/regular/wide; xwide is `Infinity`, so it isn't captured in the table) |
 | `rail-items` | `8` | `frontend/index.html` — count of `.vt-rail-btn` (**the legacy 48px icon rail `#vt-rail`, hidden via CSS** — see §3. The shell's worktree rail `#vt-wgrail` is not counted here). `dir` is counted alongside `files` |
 | `agent-states` | `5` | `server/agent_status.py` — `STATUSES` (`error` is reserved, §5) |
-| `color-bg-0` | `#08090a` | `styles/theme/tokens.css` |
-| `color-acc` | `#f0a860` | `styles/theme/tokens.css` |
-| `color-txt` | `#e8e9ea` | `styles/theme/tokens.css` |
+| `color-bg-0` | `#121316` | `styles/theme/tokens.css` |
+| `color-acc` | `#7aa2ff` | `styles/theme/tokens.css` |
+| `color-txt` | `#ecebe8` | `styles/theme/tokens.css` |
 
 ### Legacy aliases
 
@@ -992,12 +1049,18 @@ chrome, it's **the terminal's own background + the 16 ANSI colors**.
 `js/theme.js`'s `VT_XTERM_THEMES` defines a complete palette per skin:
 `background/foreground/cursor/selection + black..white + brightBlack..brightWhite`.
 
-- farshell: near-black (#0a0a0b) + amber cursor
+- farshell: #121316 (the pane background) + blue cursor (#7aa2ff); ANSI colors are the redesign's terminal palette (§2 "Terminal colors")
 - macos: deep black (#101012) + macOS system colors (red #ff453a, green #32d74b, blue #0a84ff, …)
 - catppuccin: #1e1e2e + the Catppuccin Mocha palette
 - windows: the **official Campbell palette** (#0c0c0c, red #c50f1f, blue #0037da, …)
 - vscode: #1e1e1e + VS Code's integrated-terminal default palette
 - notepad: the only light background (#fffefb) + blue cursor (#0060df)
+
+Each skin's palette is also the source of its `--color-term-*` tokens (§2), so previews
+outside xterm use the same colors. Redesign phase 3 changed a few ANSI values that were
+under the contrast bar: `macos` brightBlack #5a5a60→#626268, `catppuccin` brightBlack
+#585b70→#6c7086 (Mocha overlay0), `vscode` brightBlack #666666→#6b6b6b, `windows`
+brightMagenta #b4009e→#e000c4, `notepad` yellow #b08800→#917000 and cyan #0598bc→#047e9c.
 
 `addSession()` (`js/term/xterm-setup.js`) applies `getVtXtermTheme()` at
 creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
