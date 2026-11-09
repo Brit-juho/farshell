@@ -508,12 +508,12 @@ def test_macos_helper_failure_keeps_the_file(client, root, monkeypatch):
     import subprocess
     p = root / "proj" / "a.txt"
     monkeypatch.setattr(fs_trash, "IMPL", "macos")
-    monkeypatch.setattr(fs_trash.proc, "run", lambda argv, **k: subprocess.CompletedProcess(
-        argv, 0, json.dumps({"ok": False, "code": 513, "reason": "no trash on this volume"}).encode(), b""))
+    monkeypatch.setattr(fs_trash, "_run_helper", lambda path: subprocess.CompletedProcess(
+        [str(path)], 0, json.dumps({"ok": False, "code": 513, "reason": "no trash on this volume"}).encode(), b""))
     r = client.post("/api/fs/delete", json={"path": str(p)})
     assert r.status_code == 409 and r.json()["error"] == "trash_unavailable"
     assert p.exists()
-    monkeypatch.setattr(fs_trash.proc, "run", lambda argv, **k: subprocess.CompletedProcess(argv, -11, b"", b"segv"))
+    monkeypatch.setattr(fs_trash, "_run_helper", lambda path: subprocess.CompletedProcess([str(path)], -11, b"", b"segv"))
     r = client.post("/api/fs/delete", json={"path": str(p)})
     assert r.status_code == 409 and p.exists()
 
@@ -571,3 +571,253 @@ def test_writes_are_audited_without_path_or_content(client, root, tmp_path):
     assert [r["result"] for r in mine] == ["started", "ok"]
     assert "SECRET-CONTENT" not in log and str(p) not in log
     assert mine[0]["principal"].startswith("human:")
+
+
+# --- 리뷰 후속: 시험 안전 · 휴지통 · 정리 · 이름 · 경합 -------------------------------------------
+
+
+def test_server_tests_never_reach_the_real_trash_by_default():
+    """conftest 기본값 — 휴지통 없음, macOS 도우미는 부르면 실패, XDG_DATA_HOME 없음(시험 전용 HOME 아래)."""
+    assert fs_trash._impl() == "none"
+    with pytest.raises(AssertionError):
+        fs_trash._run_helper(Path("/nonexistent"))
+    assert "XDG_DATA_HOME" not in os.environ
+
+
+def test_macos_helper_timeout_after_the_move_is_a_mismatch_not_unavailable(client, root, monkeypatch, tmp_path):
+    import subprocess
+    p = root / "proj" / "a.txt"
+    monkeypatch.setattr(fs_trash, "IMPL", "macos")
+
+    def hang(path):
+        raise subprocess.TimeoutExpired(["helper"], 15)
+    monkeypatch.setattr(fs_trash, "_run_helper", hang)
+    r = client.post("/api/fs/delete", json={"path": str(p)})
+    assert r.status_code == 409 and r.json()["error"] == "trash_unavailable" and p.exists()
+
+    def moved_then_hang(path):
+        os.rename(path, tmp_path / "fake-trash-a.txt")             # 도우미가 옮긴 뒤 멈춘 경우
+        raise subprocess.TimeoutExpired(["helper"], 15)
+    monkeypatch.setattr(fs_trash, "_run_helper", moved_then_hang)
+    r = client.post("/api/fs/delete", json={"path": str(p)})
+    assert r.status_code == 500 and r.json()["error"] == "trash_mismatch", r.text
+
+
+def test_trashinfo_path_percent_encodes_bytes():
+    raw = Path(os.fsdecode(b"/r/caf\xc3\xa9 \xff.txt"))           # 끝의 \xff는 UTF-8이 아니다
+    assert fs_trash._info_path(raw) == "/r/caf%C3%A9%20%FF.txt"
+
+
+def test_freedesktop_trash_long_name_is_shortened_within_name_max(client, root, monkeypatch, tmp_path):
+    data = tmp_path / "xdg"
+    monkeypatch.setenv("XDG_DATA_HOME", str(data))
+    monkeypatch.setattr(fs_trash, "IMPL", "freedesktop")
+    name = "a" * 246 + ".txt"                                        # 250바이트 — `.trashinfo`를 붙이면 255 초과
+    p = root / "proj" / name
+    p.write_text("long\n")
+    r = client.post("/api/fs/delete", json={"path": str(p)})
+    assert r.status_code == 200, r.text
+    got = r.json()["trash_name"]
+    assert got.endswith(".txt") and len((got + ".trashinfo").encode()) <= 255
+    assert (data / "Trash" / "files" / got).read_text() == "long\n"
+    assert (data / "Trash" / "info" / (got + ".trashinfo")).exists() and not p.exists()
+    p.write_text("again\n")
+    r = client.post("/api/fs/delete", json={"path": str(p)})
+    got2 = r.json()["trash_name"]
+    assert r.status_code == 200 and got2 != got and got2.endswith(".2.txt")
+    assert len((got2 + ".trashinfo").encode()) <= 255
+
+
+def test_freedesktop_trashinfo_os_error_is_unavailable_and_keeps_the_file(client, root, monkeypatch, tmp_path):
+    data = tmp_path / "xdg"
+    monkeypatch.setenv("XDG_DATA_HOME", str(data))
+    monkeypatch.setattr(fs_trash, "IMPL", "freedesktop")
+    info = data / "Trash" / "info"
+    info.mkdir(parents=True)
+    (data / "Trash" / "files").mkdir()
+    os.chmod(data / "Trash", 0o700)
+    os.chmod(info, 0o500)                                            # .trashinfo를 만들 수 없다(EACCES)
+    p = root / "proj" / "a.txt"
+    try:
+        r = client.post("/api/fs/delete", json={"path": str(p)})
+    finally:
+        os.chmod(info, 0o700)
+    assert r.status_code == 409 and r.json()["error"] == "trash_unavailable", r.text
+    assert p.read_text() == "one\ntwo\n"
+
+
+def test_failed_create_cleanup_does_not_unlink_a_swapped_file(root, monkeypatch):
+    d = root / "proj"
+    real_fsync = os.fsync
+
+    def swap_then_fail(fd):
+        if (d / "n.txt").exists() and stat.S_ISREG(os.fstat(fd).st_mode):
+            os.unlink(d / "n.txt")
+            (d / "n.txt").write_text("someone else\n")           # 그 사이 다른 프로세스가 같은 이름으로 만든 파일
+            raise OSError(5, "EIO")
+        return real_fsync(fd)
+    monkeypatch.setattr(os, "fsync", swap_then_fail)
+    with pytest.raises(fs_write.WriteError):
+        fs_write.create(str(d), "n.txt")
+    monkeypatch.setattr(os, "fsync", real_fsync)
+    assert (d / "n.txt").read_text() == "someone else\n"
+
+
+def test_failed_save_cleanup_does_not_unlink_a_swapped_temp(root, monkeypatch):
+    p = root / "proj" / "a.txt"
+    d = p.parent
+    real_fsync = os.fsync
+    seen = []
+
+    def swap_then_fail(fd):
+        tmps = [x for x in d.iterdir() if x.name.startswith(".fsh-")]
+        if tmps and not seen:
+            seen.append(tmps[0].name)
+            os.unlink(tmps[0])
+            tmps[0].write_text("not ours\n")
+            raise OSError(5, "EIO")
+        return real_fsync(fd)
+    monkeypatch.setattr(os, "fsync", swap_then_fail)
+    with pytest.raises(fs_write.WriteError):
+        fs_write.save(str(p), "x\n", encoding="utf-8", eol=None, expected_rev=rev(p))
+    monkeypatch.setattr(os, "fsync", real_fsync)
+    assert seen and (d / seen[0]).read_text() == "not ours\n"
+    assert p.read_text() == "one\ntwo\n"
+
+
+def test_rename_revert_does_not_unlink_a_swapped_target(root, monkeypatch):
+    a, b = root / "proj" / "a.txt", root / "proj" / "b.txt"
+    real_unlink = os.unlink
+
+    def fail_source_unlink(path, *, dir_fd=None):
+        if path == "a.txt" and dir_fd is not None:
+            real_unlink(b)
+            b.write_text("someone else\n")                          # 새 이름이 그 사이 다른 파일로
+            raise PermissionError(13, "EACCES")
+        return real_unlink(path, dir_fd=dir_fd)
+    monkeypatch.setattr(os, "unlink", fail_source_unlink)
+    with pytest.raises(fs_write.WriteError):
+        fs_write.rename(str(a), str(b))
+    monkeypatch.setattr(os, "unlink", real_unlink)
+    assert b.read_text() == "someone else\n" and a.read_text() == "one\ntwo\n"
+
+
+@pytest.mark.parametrize("alias", [".GIT", ".g‌it", ".gi﻿t", ".g­it", ".pre-commit-config.yaml",
+                                   "lefthook.yml", ".npmrc", ".storybook/main.js", ".Storybook/main.js", ".sto​rybook/main.js"])
+def test_write_deny_names_are_normalised(root, alias):
+    with pytest.raises(fsguard.FsDenied):
+        fsguard.resolve_for_write(str(root / "proj" / alias))
+
+
+def test_write_name_key_folds_case_normalisation_and_ignorables():
+    assert fsguard.write_name_key("Café") == fsguard.write_name_key("café")
+    assert fsguard.write_name_key(".g‌IT") == ".git"
+    assert fsguard.write_name_key("a.txt") == "a.txt"
+
+
+def test_target_with_the_same_inode_as_dot_git_is_refused(client, root):
+    """HFS+처럼 정규화가 놓치는 이름 접기 — 이름이 무엇이든 같은 폴더의 `.git`과 같은 inode면 쓰지 않는다."""
+    d = root / "proj"
+    (d / ".git").write_text("gitdir: /elsewhere\n")
+    os.link(d / ".git", d / "alias")                                # 같은 inode를 다른 이름으로(HFS+ 무시 문자 흉내)
+    with fs_write._parent(d / "alias") as (dir_fd, name):
+        assert fsguard.write_denied_alias_at(dir_fd, name)
+        assert fsguard.write_denied_alias_at(dir_fd, "a.txt") is None
+    os.chmod(d / ".git", 0o644)
+    r = client.put("/api/fs/file", json=save_body(d / "alias", "gitdir: /attacker\n"))
+    assert r.status_code == 403 and r.json()["error"] == "denied", r.text
+    r = client.post("/api/fs/rename", json={"path": str(d / "a.txt"), "to": str(d / "alias"), "overwrite": True})
+    assert r.status_code == 403
+    assert (d / ".git").read_text() == "gitdir: /elsewhere\n"
+
+
+def test_lock_key_matches_nfc_and_nfd_names(root):
+    with fs_write._parent(root / "proj" / "x") as (dir_fd, _):
+        assert fs_write._lock_key(dir_fd, "Café.txt") == fs_write._lock_key(dir_fd, "café.TXT")
+
+
+def test_rename_overwrite_refuses_a_target_swapped_to_a_symlink_at_rename_time(root, monkeypatch):
+    a, b = root / "proj" / "a.txt", root / "proj" / "b.txt"
+    b.write_text("bee\n")
+    victim = root.parent / "outside" / "victim.txt"
+    real = fs_write._require_mine_and_writable
+    calls = []
+
+    def swap_on_target_check(st):
+        real(st)
+        calls.append(st)
+        if len(calls) == 2:                                          # 대상 확인 뒤, rename 앞
+            os.unlink(b)
+            b.symlink_to(victim)
+    monkeypatch.setattr(fs_write, "_require_mine_and_writable", swap_on_target_check)
+    with pytest.raises(fs_write.WriteError) as ei:
+        fs_write.rename(str(a), str(b), overwrite=True)
+    assert ei.value.status == 409 and ei.value.body["error"] == "changed"
+    assert b.is_symlink() and a.read_text() == "one\ntwo\n" and victim.read_text() == "keep me\n"
+
+
+def test_case_only_rename_compares_folder_device_and_inode(root, monkeypatch):
+    """다른 장치의 두 폴더가 같은 ino를 가질 수 있다 — ino만 같다고 「대소문자만 바꾸기」로 보지 않는다."""
+    sa, sb = root / "proj" / "A", root / "proj" / "B"
+    sa.mkdir()
+    sb.mkdir()
+    (sa / "f.txt").write_text("one\n")
+    os.link(sa / "f.txt", sb / "F.txt")                              # 두 폴더에 같은 inode
+    real_fstat = os.fstat
+
+    def fake_fstat(fd):
+        st = real_fstat(fd)
+        if stat.S_ISDIR(st.st_mode):                                 # 폴더: ino는 모두 1, 장치는 서로 다르게
+            return os.stat_result((st.st_mode, 1, st.st_ino, st.st_nlink, st.st_uid, st.st_gid, st.st_size,
+                                   int(st.st_atime), int(st.st_mtime), int(st.st_ctime)))
+        return st
+    monkeypatch.setattr(os, "fstat", fake_fstat)
+    try:
+        with pytest.raises(fs_write.WriteError) as ei:
+            fs_write.rename(str(sa / "f.txt"), str(sb / "F.txt"))
+    finally:
+        monkeypatch.setattr(os, "fstat", real_fstat)
+    assert ei.value.status == 409 and ei.value.body["error"] in ("exists", "hardlinked")
+    assert (sa / "f.txt").read_text() == "one\n" and (sb / "F.txt").read_text() == "one\n"
+
+
+def test_stale_temps_are_swept_on_the_next_save_only_when_safe(root):
+    d = root / "proj"
+    old = time.time() - 3600
+    stale = d / (".fsh-" + "a" * 32 + ".tmp")
+    fresh = d / (".fsh-" + "b" * 32 + ".tmp")
+    widened = d / (".fsh-" + "c" * 32 + ".tmp")
+    other = d / ".fsh-notours.tmp"
+    linked = d / (".fsh-" + "d" * 32 + ".tmp")
+    for f, mode in ((stale, 0o600), (fresh, 0o600), (widened, 0o644), (other, 0o600), (linked, 0o600)):
+        f.write_text("x")
+        os.chmod(f, mode)
+    os.link(linked, d / "keep-link")
+    (d / (".fsh-" + "e" * 32 + ".tmp")).symlink_to(root.parent / "outside" / "victim.txt")
+    for f in (stale, widened, other, linked):
+        os.utime(f, (old, old))
+    fs_write._swept.clear()
+    p = d / "a.txt"
+    fs_write.save(str(p), "new\n", encoding="utf-8", eol=None, expected_rev=rev(p))
+    assert not stale.exists()                                        # 오래됨 + 0600 + 우리 이름 + 내 것 → 치움
+    assert fresh.exists() and widened.exists() and other.exists() and linked.exists()
+    assert (d / (".fsh-" + "e" * 32 + ".tmp")).is_symlink()
+    assert (root.parent / "outside" / "victim.txt").read_text() == "keep me\n"
+    stale.write_text("x")
+    os.chmod(stale, 0o600)
+    os.utime(stale, (old, old))
+    fd = os.open(d, os.O_RDONLY)
+    try:
+        assert fs_write.sweep_stale_temps(fd) == 0                   # 같은 폴더는 STALE_SWEEP_EVERY마다 한 번
+        assert fs_write.sweep_stale_temps(fd, now=time.time() + fs_write.STALE_SWEEP_EVERY + 1) == 1
+    finally:
+        os.close(fd)
+    assert not stale.exists()
+
+
+def test_save_leaves_no_temp_and_keeps_the_original_mode(root):
+    p = root / "proj" / "a.txt"
+    os.chmod(p, 0o640)
+    fs_write.save(str(p), "z\n", encoding="utf-8", eol=None, expected_rev=rev(p))
+    assert stat.S_IMODE(os.stat(p).st_mode) == 0o640
+    assert not [x for x in p.parent.iterdir() if x.name.startswith(".fsh-")]

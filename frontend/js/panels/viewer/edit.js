@@ -165,8 +165,10 @@ export async function stopEdit(container, { discard = false } = {}) {
       { title: t('편집을 버릴까요?'), okLabel: t('버리기'), danger: true });
     if (!ok) return false;
   }
-  if (isDirty(container) || ed.conflict) h.setText(ed.conflict ? ed.conflict.text : ed.base);
-  if (ed.conflict) { ed.rev = ed.conflict.rev; ed.base = ed.conflict.text; }
+  // 충돌 중에 디스크 내용을 못 받아 왔으면(text null) 디스크 판을 모른다 — 이전 판(base, rev)으로 돌아간다.
+  const disk = ed.conflict && ed.conflict.text != null ? ed.conflict : null;
+  if (isDirty(container) || disk) h.setText(disk ? disk.text : ed.base);
+  if (disk) { ed.rev = disk.rev; ed.base = disk.text; }
   ed.on = false;
   ed.conflict = null;
   ed.compare = false;
