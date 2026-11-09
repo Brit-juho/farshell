@@ -271,6 +271,10 @@
   --color-term-add-bg: color-mix(in srgb, var(--color-term-green) 12%, transparent);
   --color-term-del-bg: color-mix(in srgb, var(--color-term-red) 12%, transparent);
   --color-term-hl: color-mix(in srgb, var(--color-term-amber) 35%, transparent);
+  /* 편집 모드 거터의 바뀐 줄 표시(파일 개편 후속) — 추가 · 수정 · 삭제. 스킨의 term 색을 그대로 따른다. */
+  --color-vw-chg-add: var(--color-term-green);
+  --color-vw-chg-mod: var(--color-term-blue);
+  --color-vw-chg-del: var(--color-term-red);
 
   /* ── 크롬 막대 4종 — 2026-11 리디자인 2단계(제목 막대 36·상태 막대 24)가 쓴다 ──
    * 기본은 전부 크롬 바탕(bg-1)과 보조 글자(sub)다. 스킨이 막대 하나만 다르게

@@ -68,6 +68,7 @@ def test_policy_allows_host_scoped_apis(method, path):
     ("GET", "/api/fs/download"),                         # 경로 기반 다운로드는 로컬 전용(D7)
     ("PUT", "/api/fs/file"),                             # 쓰기는 로컬 전용(D7) — 읽기 GET만 중계
     ("POST", "/api/fs/new"),
+    ("POST", "/api/fs/mkdir"),
     ("POST", "/api/fs/rename"),
     ("POST", "/api/fs/delete"),
 ])
@@ -551,7 +552,7 @@ def test_host_relay_refuses_path_download_before_calling_out(a_env, monkeypatch)
     assert called == []
 
 
-@pytest.mark.parametrize("method,target", [("PUT", "/api/fs/file"), ("POST", "/api/fs/new"),
+@pytest.mark.parametrize("method,target", [("PUT", "/api/fs/file"), ("POST", "/api/fs/new"), ("POST", "/api/fs/mkdir"),
                                            ("POST", "/api/fs/rename"), ("POST", "/api/fs/delete")])
 def test_host_relay_refuses_file_writes_before_calling_out(a_env, monkeypatch, method, target):
     """파일 쓰기는 이 맥의 파일만(결정 D7) — 다른 호스트로는 보내지도 않는다."""
@@ -569,7 +570,7 @@ def test_host_relay_refuses_file_writes_before_calling_out(a_env, monkeypatch, m
     assert called == []
 
 
-@pytest.mark.parametrize("method,target", [("PUT", "/api/fs/file"), ("POST", "/api/fs/delete")])
+@pytest.mark.parametrize("method,target", [("PUT", "/api/fs/file"), ("POST", "/api/fs/delete"), ("POST", "/api/fs/mkdir")])
 def test_peer_relay_refuses_file_writes_even_when_signed(b_env, method, target):
     """B도 스스로 거절한다 — 서명이 맞아도 쓰기 라우트는 중계 허용 목록에 없다."""
     client, hs, secret = b_env

@@ -3,6 +3,7 @@
 import { openPanel, closePanel } from '../panel.js';
 import { renderFile, refreshFile, refreshGap, jumpToLine, disposeViewer, downloadFsPath, viewerRev } from './file.js';
 import { downloadBlockedReason } from './download.js';
+import { confirmLeave, dirtyEditors } from './edit.js';
 import { isCrossHost } from './file-load.js';
 import { watchPath, coalesce } from '../../shell/fs-watch.js';
 import { _viewerState, _shareFile } from './state.js';
@@ -276,7 +277,16 @@ function _escClosesOnlyWhenFocused() {
 export function openFileOverlay(path, opts = {}) {
   if (!path) return;
   const existing = document.getElementById(PANEL_ID);
-  if (existing) { _setFile(existing, path, opts); return; }
+  if (existing) {
+    // 다른 파일로 바꾸기 전에 고친 편집을 묻는다(저장 / 버리기 / 취소). 같은 파일이면 줄 이동만 한다.
+    const other = existing.dataset.viewerFile !== path || (existing._vtHost || null) !== (opts.host || null);
+    if (other && dirtyEditors(existing).length) {
+      confirmLeave(existing).then((ok) => { if (ok && existing.isConnected) _setFile(existing, path, opts); }).catch(() => {});
+      return;
+    }
+    _setFile(existing, path, opts);
+    return;
+  }
 
   // 폰에서는 표면 설정과 무관하게 전체화면 시트 + 뒤로가기 닫기(panel.js의 mobile route).
   const compact = isCompactMode();
@@ -290,6 +300,11 @@ export function openFileOverlay(path, opts = {}) {
     bodyId: 'vt-file-body',
     extraClass: compact ? 'vt-file-compact' : '',
     ...(mount ? { mount, modal: false, onKey: _escClosesOnlyWhenFocused } : {}),
+    // 고친 편집이 있으면 닫기 전에 묻는다(X · Esc · 배경 · 폰 뒤로가기). 없으면 바로 닫는다.
+    beforeClose: () => {
+      const cur = document.getElementById(PANEL_ID);
+      return !cur || !dirtyEditors(cur).length ? true : confirmLeave(cur);
+    },
     onClose: () => {
       _repaintTerminals();
       if (tick) { clearInterval(tick); tick = null; }
@@ -313,7 +328,7 @@ export function openFileOverlay(path, opts = {}) {
   floatBtn.addEventListener('click', () => set('viewer.surface', _surface() === 'float' ? 'sheet' : 'float'));
   el.querySelector('.vt-file-topane').addEventListener('click', () => {
     const file = el.dataset.viewerFile;
-    closePanel(el);
+    closePanel(el, { force: true });   // 표면 이동 — 고친 편집은 보관했다가 페인에서 이어 연다(묻지 않는다)
     if (file) openViewerPane(file);
   });
 
@@ -352,7 +367,7 @@ subscribe((changed) => {
   if (!el || el.classList.contains('vt-file-compact')) return;
   if (changed['viewer.surface'] === 'pane' && !isCrossHost(el._vtHost)) {
     const file = el.dataset.viewerFile;
-    closePanel(el);
+    closePanel(el, { force: true });
     if (file) openViewerPane(file);
     return;
   }
@@ -368,7 +383,7 @@ if (_compactMq && typeof _compactMq.addEventListener === 'function') {
     if (!el) return;
     const file = el.dataset.viewerFile;
     const fileHost = el._vtHost || null;
-    closePanel(el, { history: 'replace' });
+    closePanel(el, { history: 'replace', force: true });
     if (file) openFileOverlay(file, { host: fileHost });
   });
 }

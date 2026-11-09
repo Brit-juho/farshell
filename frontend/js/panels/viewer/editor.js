@@ -14,8 +14,8 @@
 // 색은 전부 tokens.css 변수다(AGENTS.md 계약 9). 하이라이트는 @lezer/highlight의 classHighlighter가 `tok-*`
 // 클래스를 붙이고 styles/screens/30-viewer.css가 색을 준다. 편집기 틀(줄 번호 칸, 찾기 창, 일치 표시)은 아래
 // _THEME이 정한다 — CM이 넣는 기본 테마는 @layer 밖이라, @layer legacy 안의 우리 CSS가 명시도와 무관하게 진다.
-import { EditorState, Compartment, StateEffect, StateField } from '@codemirror/state';
-import { EditorView, Decoration, lineNumbers, highlightSpecialChars, keymap } from '@codemirror/view';
+import { EditorState, Compartment, StateEffect, StateField, RangeSet } from '@codemirror/state';
+import { EditorView, Decoration, lineNumbers, highlightSpecialChars, keymap, gutter, GutterMarker } from '@codemirror/view';
 import { syntaxHighlighting, StreamLanguage } from '@codemirror/language';
 import { classHighlighter, highlightCode } from '@lezer/highlight';
 import { search, searchKeymap } from '@codemirror/search';
@@ -101,6 +101,46 @@ const _targetField = StateField.define({
   },
   provide: (f) => EditorView.decorations.from(f),
 });
+
+// 편집 모드 거터의 바뀐 줄 표시(추가 · 수정 · 삭제). 계산은 edit.js가 line-marks.js `lineChangeMarks`로 하고
+// `setChangeMarks`로 넘긴다. 색은 30-viewer.css의 `.cm-vt-chg.*`(tokens.css `--color-vw-chg-*`) — 여기에는 색이 없다.
+// 다음 계산 전까지는 편집에 맞춰 위치만 옮긴다(map). 거터 칸은 편집 확장(editSlot) 안에만 있어 읽기 전용에는 없다.
+class _ChgMarker extends GutterMarker {
+  constructor(kind) { super(); this.kind = kind; }
+  eq(other) { return other.kind === this.kind; }
+  toDOM() {
+    const s = document.createElement('span');
+    s.className = `cm-vt-chg ${this.kind}`;
+    return s;
+  }
+}
+const _CHG = { add: new _ChgMarker('add'), mod: new _ChgMarker('mod'), del: new _ChgMarker('del'), 'del-below': new _ChgMarker('del-below') };
+const _setChg = StateEffect.define();
+const _chgField = StateField.define({
+  create: () => RangeSet.empty,
+  update(set, tr) {
+    let next = set.map(tr.changes);
+    for (const e of tr.effects) if (e.is(_setChg)) next = e.value;
+    return next;
+  },
+});
+const _chgGutter = () => gutter({
+  class: 'cm-vt-chg-gutter',
+  markers: (view) => view.state.field(_chgField),
+  initialSpacer: () => _CHG.add,
+});
+
+/** `[{line, kind}]` → 거터 표식 묶음. 문서 밖 줄 번호는 버린다. */
+function _chgSet(doc, marks) {
+  if (!marks || !marks.length) return RangeSet.empty;
+  const ranges = [];
+  for (const m of marks) {
+    const mk = _CHG[m.kind];
+    if (!mk || !(m.line >= 1 && m.line <= doc.lines)) continue;
+    ranges.push(mk.range(doc.line(m.line).from));
+  }
+  return RangeSet.of(ranges, true);
+}
 
 // 끝부분 보기(tail)는 앞쪽 줄 수를 모른다. 줄 번호 대신 「끝에서 n번째 줄」을 -n으로 적는다(마지막 빈 줄은 세지 않는다).
 function _fromEnd(lineNo, state) {
@@ -192,6 +232,7 @@ function _coarse() {
  * - `setEditable(on, {onSave})` — 편집 모드(단계 8). 같은 EditorState를 그대로 두고 읽기 전용만 푼다(스크롤·선택 유지).
  *   켜면 되돌리기 기록·기본 편집 키·⌘S/Ctrl+S(`onSave`)·Tab 들여쓰기가 붙는다. 끄면 읽기 전용으로 돌아간다.
  * - `getText()`, `onChange(fn)` — 문서가 바뀔 때마다 `fn()`(편집·다시 읽기 모두). `focus()`.
+ * - `setChangeMarks(marks)` — 편집 모드 거터의 바뀐 줄 표시(`[{line, kind: 'add'|'mod'|'del'|'del-below'}]`, null = 지움).
  * - `destroy()`
  * `opts.lineFrom === 'end'`면 줄 번호를 끝에서 센다(끝부분 보기).
  */
@@ -210,6 +251,7 @@ export async function mountEditor(container, text, path, hljsName, opts = {}) {
   const editExt = () => [
     EditorState.readOnly.of(false),
     EditorView.editable.of(true),
+    _chgGutter(),
     history(),
     keymap.of([
       { key: 'Mod-s', preventDefault: true, run: () => { if (saveFn) saveFn(); return true; } },
@@ -224,6 +266,7 @@ export async function mountEditor(container, text, path, hljsName, opts = {}) {
       extensions: [
         opts.lineFrom === 'end' ? lineNumbers({ formatNumber: _fromEnd }) : lineNumbers(),
         _targetField,
+        _chgField,
         highlightSpecialChars(),
         editSlot.of(readOnlyExt()),
         EditorState.tabSize.of(4),
@@ -246,6 +289,10 @@ export async function mountEditor(container, text, path, hljsName, opts = {}) {
       container.classList.toggle('vt-vw-cm-edit', !!on);
     },
     getText() { return view.state.doc.toString(); },
+    /** 거터의 바뀐 줄 표시(`[{line, kind}]`, line-marks.js `lineChangeMarks`). null이면 지운다. */
+    setChangeMarks(marks) {
+      view.dispatch({ effects: _setChg.of(_chgSet(view.state.doc, marks)) });
+    },
     onChange(fn) { changed = fn || null; },
     focus() { view.focus(); },
     setText(next) {

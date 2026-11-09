@@ -523,8 +523,8 @@ test('마운트 — 쓰기(단계 8): 새 파일 · 이름 바꾸기 · 휴지�
       deps: {
         remote, toast: (m, k) => toasts.push([m, k]),
         newFile: async (d) => { got.push(['new', d]); return null; },
-        renamePath: async (p) => { got.push(['rename', p]); return null; },
-        trashPath: async (p) => { got.push(['trash', p]); return false; },
+        renamePath: async (p, k) => { got.push(['rename', p, k]); return null; },
+        trashPath: async (p, k) => { got.push(['trash', p, k]); return false; },
       },
     });
     scroll.dispatchEvent(new env.window.FocusEvent('focus'));
@@ -542,7 +542,43 @@ test('마운트 — 쓰기(단계 8): 새 파일 · 이름 바꾸기 · 휴지�
       deq(got, []);
       assert.ok(toasts.length === 3 && toasts.every(([m]) => /원격 호스트 파일은 읽기만/.test(m)));
     } else {
-      deq(got, [['new', '/r'], ['rename', '/r/a.txt'], ['trash', '/r/a.txt']]);
+      deq(got, [['new', '/r'], ['rename', '/r/a.txt', 'file'], ['trash', '/r/a.txt', 'file']]);
+    }
+  }
+});
+
+test('마운트 — 폴더 행: 새 폴더 · 이름 바꾸기 · 휴지통으로 이동이 kind=dir로 불리고, 원격이면 부르지 않는다(D7)', async () => {
+  const tree = { '/r': [{ name: 'd', dir: true, size: 0 }, { name: 'a.txt', dir: false, size: 3 }], '/r/d': [] };
+  for (const remote of [false, true]) {
+    const env = await fresh();
+    const got = [];
+    const toasts = [];
+    const { scroll } = await mountWith(env, tree, {
+      deps: {
+        remote, toast: (m, k) => toasts.push([m, k]),
+        newFile: async (d) => { got.push(['new', d]); return null; },
+        newFolder: async (d) => { got.push(['newdir', d]); return null; },
+        renamePath: async (p, k) => { got.push(['rename', p, k]); return null; },
+        trashPath: async (p, k) => { got.push(['trash', p, k]); return false; },
+      },
+    });
+    scroll.dispatchEvent(new env.window.FocusEvent('focus'));
+    await tick();
+    const labels = () => Array.from(env.document.querySelectorAll('.vt-ft-menu [role="menuitem"]'), (b) => b.textContent);
+    for (const label of ['이 폴더에 새 폴더…', '이름 바꾸기…', '휴지통으로 이동…']) {
+      scroll.dispatchEvent(new env.window.KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true }));
+      await tick();
+      const item = Array.from(env.document.querySelectorAll('.vt-ft-menu [role="menuitem"]')).find((b) => b.textContent.includes(label));
+      assert.ok(item, `${label} in ${labels().join(' | ')}`);
+      if (remote) assert.match(item.textContent, /이 컴퓨터에서만/);
+      item.click();
+      await tick();
+    }
+    if (remote) {
+      deq(got, []);
+      assert.strictEqual(toasts.length, 3);
+    } else {
+      deq(got, [['newdir', '/r/d'], ['rename', '/r/d', 'dir'], ['trash', '/r/d', 'dir']]);
     }
   }
 });

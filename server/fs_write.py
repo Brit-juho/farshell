@@ -24,6 +24,7 @@ import hashlib
 import os
 import re
 import stat
+import sys
 import threading
 import time
 import uuid
@@ -260,7 +261,7 @@ def _require_regular(st: Optional[os.stat_result], *, what: str = "file") -> os.
     if stat.S_ISLNK(st.st_mode):
         raise WriteError(400, "is_symlink", tr("심링크는 이 작업을 할 수 없습니다"))
     if stat.S_ISDIR(st.st_mode):
-        raise WriteError(400, "is_directory", tr("폴더는 아직 이 작업을 할 수 없습니다 (파일만)"))
+        raise WriteError(400, "is_directory", tr("폴더입니다 — 폴더 작업(kind: dir)으로 요청해야 합니다"))
     if not stat.S_ISREG(st.st_mode):
         raise WriteError(400, "not_a_file", tr("일반 파일만 쓸 수 있습니다"))
     return st
@@ -722,3 +723,176 @@ def delete(raw_path: str, *, expected_rev: Optional[str] = None) -> dict:
                 raise WriteError(500, "trash_mismatch",
                                  tr("휴지통으로 옮긴 항목이 확인한 파일과 다릅니다 — 휴지통을 확인하세요")) from None
     return {"ok": True, "path": str(p), "trash": out["trash"], "trash_name": out["name"]}
+
+
+# --- 폴더: 새 폴더 · 이름 바꾸기 · 휴지통(결정 D2 후속) ---------------------------------------------
+# 파일과 같은 규칙(승격 · 감사 · 이름 잠금 · dir_fd 기준)에 폴더만의 규칙을 더한다:
+# - 판정은 `fsguard.resolve_dir_for_write` — 루트 자신·루트를 품는 폴더, 숨은 상태 폴더 이름도 거부.
+# - 심링크 폴더는 거부한다(경로가 링크면 링크를 따라간 **대상**이 옮겨지거나 휴지통에 간다).
+# - 자기 안으로 옮기기는 resolve된 경로로 먼저 거부하고, 커널도 EINVAL로 막는다.
+# - 이름 바꾸기는 **절대 덮어쓰지 않는다** — `rename(2)`은 빈 폴더를 말없이 갈아 끼우므로 `RENAME_EXCL`
+#   (macOS `renameatx_np`, Linux `renameat2` `RENAME_NOREPLACE`)로 원자적으로 거절한다. 없는 시스템은 잠금 안에서
+#   없음을 확인하고 옮긴다(그 사이 외부 프로세스가 빈 폴더를 만드는 아주 짧은 틈만 남는다).
+# - 휴지통은 내용이 있어도 된다(지우는 게 아니라 옮기기). 마운트 지점은 옮기지 않는다.
+# - 요청은 `kind: "dir"`를 밝혀야 폴더로 다룬다 — 파일 삭제 요청이 바꿔치기로 폴더 통째 삭제가 되지 않게.
+
+
+def _resolve_dir(raw: str) -> Path:
+    try:
+        return fsguard.resolve_dir_for_write(raw)
+    except fsguard.FsDenied as e:
+        raise WriteError(403, "denied", e.reason) from None
+
+
+def _require_dir(st: Optional[os.stat_result], dir_fd: int) -> os.stat_result:
+    if st is None:
+        raise WriteError(404, "not_found", tr("폴더가 없습니다"))
+    if stat.S_ISLNK(st.st_mode):
+        raise WriteError(400, "is_symlink", tr("심링크는 이 작업을 할 수 없습니다"))
+    if not stat.S_ISDIR(st.st_mode):
+        raise WriteError(400, "not_a_directory", tr("폴더가 아닙니다"))
+    if st.st_dev != os.fstat(dir_fd).st_dev:
+        raise WriteError(400, "mount_point", tr("다른 디스크가 연결된 폴더(마운트 지점)는 옮길 수 없습니다"))
+    return st
+
+
+def _require_dir_unchanged(dir_fd: int, name: str, checked: os.stat_result) -> None:
+    now = _lstat_at(dir_fd, name)
+    if now is None or not stat.S_ISDIR(now.st_mode) or not _same(now, checked):
+        raise WriteError(409, "changed", tr("경로가 바뀌었습니다 (심링크로 바뀜)"))
+
+
+def mkdir(raw_dir: str, name) -> dict:
+    """빈 새 폴더. 같은 이름(파일·폴더·심링크)이 있으면 409 `exists`."""
+    name = check_name(name)
+    d = _resolve(raw_dir)
+    p = _resolve_dir(os.path.join(os.path.expanduser(raw_dir), name))
+    if p.parent != d or p.name != name:
+        raise WriteError(409, "exists", tr("같은 이름이 이미 있습니다 (덮어쓰지 않음)"))
+    with _parent(p) as (dir_fd, leaf):
+        with LOCKS.hold(_lock_key(dir_fd, leaf)):
+            _refuse_denied_alias(dir_fd, leaf)
+            try:
+                os.mkdir(leaf, 0o777, dir_fd=dir_fd)      # 마지막 조각이 심링크여도 따라가지 않는다(EEXIST)
+            except FileExistsError:
+                raise WriteError(409, "exists", tr("같은 이름이 이미 있습니다 (덮어쓰지 않음)")) from None
+            except OSError as e:
+                raise _os_error(e, tr("폴더를 만들 수 없습니다")) from None
+            try:
+                os.fsync(dir_fd)
+            except OSError:
+                pass
+    return {"ok": True, "path": str(p), "kind": "dir"}
+
+
+def rename_dir(raw_from: str, raw_to: str) -> dict:
+    """폴더 하나의 이름 바꾸기·옮기기. 대상이 있으면 늘 409 `exists`(폴더는 덮어쓰지 않는다)."""
+    if _lexical_is_symlink(raw_from):
+        raise WriteError(400, "is_symlink", tr("심링크는 이 작업을 할 수 없습니다"))
+    if _lexical_is_symlink(raw_to):
+        raise WriteError(409, "exists", tr("같은 이름이 이미 있습니다 (덮어쓰지 않음)"))
+    src = _resolve_dir(raw_from)
+    dst = _resolve_dir(raw_to)
+    check_name(dst.name)
+    if src == dst:
+        raise WriteError(400, "same_path", tr("같은 이름입니다"))
+    if dst.is_relative_to(src):
+        raise WriteError(400, "into_itself", tr("폴더를 자기 안으로 옮길 수 없습니다"))
+    with _parent(src) as (sfd, sname), _parent(dst) as (dfd, dname):
+        with LOCKS.hold(_lock_key(sfd, sname), _lock_key(dfd, dname)):
+            _refuse_denied_alias(sfd, sname)
+            _refuse_denied_alias(dfd, dname)
+            st = _require_dir(_lstat_at(sfd, sname), sfd)
+            _require_mine_and_writable(st)
+            target = _lstat_at(dfd, dname)
+            case_only = _same(target, st) and fsguard.write_name_key(sname) == fsguard.write_name_key(dname) \
+                and _same(os.fstat(sfd), os.fstat(dfd))
+            if target is not None and not case_only:
+                raise WriteError(409, "exists", tr("같은 이름이 이미 있습니다 (덮어쓰지 않음)"))
+            _require_dir_unchanged(sfd, sname, st)
+            if case_only:
+                _rename_at(sfd, sname, dfd, dname)
+            else:
+                _rename_dir_noreplace(sfd, sname, dfd, dname)
+            for fd in {sfd, dfd}:
+                try:
+                    os.fsync(fd)
+                except OSError:
+                    pass
+    return {"ok": True, "path": str(dst), "kind": "dir"}
+
+
+# macOS `RENAME_EXCL`(0x4), Linux `RENAME_NOREPLACE`(0x1).
+_RENAME_EXCL_FLAG = 0x4 if sys.platform == "darwin" else 0x1
+_renamex: Optional[tuple] = None
+_renamex_checked = False
+
+
+def _renamex_fn() -> Optional[tuple]:
+    """`(renameatx_np 또는 renameat2, ctypes)`. 이 C 라이브러리에 없으면 None."""
+    global _renamex, _renamex_checked
+    if _renamex_checked:
+        return _renamex
+    _renamex_checked = True
+    try:
+        import ctypes
+        libc = ctypes.CDLL(None, use_errno=True)
+        fn = getattr(libc, "renameatx_np" if sys.platform == "darwin" else "renameat2")
+        fn.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+        fn.restype = ctypes.c_int
+        _renamex = (fn, ctypes)
+    except (OSError, AttributeError):
+        _renamex = None
+    return _renamex
+
+
+def _rename_dir_noreplace(sfd: int, sname: str, dfd: int, dname: str) -> None:
+    """덮어쓰지 않는 폴더 이름 바꾸기. 원자적 `RENAME_EXCL`이 안 되면 잠금 안에서 없음을 확인하고 `rename`."""
+    got = _renamex_fn()
+    if got is not None:
+        fn, ctypes = got
+        rc = fn(sfd, os.fsencode(sname), dfd, os.fsencode(dname), _RENAME_EXCL_FLAG)
+        if rc == 0:
+            return
+        err = ctypes.get_errno()
+        if err not in (errno.ENOSYS, errno.EINVAL, errno.ENOTSUP, errno.EOPNOTSUPP):
+            raise _dir_os_error(OSError(err, os.strerror(err)))
+        # 플래그를 모르는 파일시스템(또는 EINVAL — 자기 안으로 옮기기면 아래 rename이 같은 EINVAL을 낸다)
+    if _lstat_at(dfd, dname) is not None:
+        raise WriteError(409, "exists", tr("같은 이름이 이미 있습니다 (덮어쓰지 않음)"))
+    try:
+        os.rename(sname, dname, src_dir_fd=sfd, dst_dir_fd=dfd)
+    except OSError as e:
+        raise _dir_os_error(e) from None
+
+
+def _dir_os_error(e: OSError) -> WriteError:
+    if e.errno == errno.EINVAL:
+        return WriteError(400, "into_itself", tr("폴더를 자기 안으로 옮길 수 없습니다"))
+    if e.errno in (errno.EEXIST, errno.ENOTEMPTY):
+        return WriteError(409, "exists", tr("같은 이름이 이미 있습니다 (덮어쓰지 않음)"))
+    if e.errno == errno.EBUSY:
+        return WriteError(409, "busy", tr("사용 중인 폴더라 옮기지 못했습니다"))
+    return _os_error(e, tr("이름을 바꾸지 못했습니다"))
+
+
+def delete_dir(raw_path: str) -> dict:
+    """폴더 하나를 OS 휴지통으로 옮긴다(내용이 있어도 된다 — 지우지 않고 옮긴다). 휴지통을 못 쓰면 409, 지우지 않는다."""
+    if _lexical_is_symlink(raw_path):
+        raise WriteError(400, "is_symlink", tr("심링크는 이 작업을 할 수 없습니다"))
+    p = _resolve_dir(raw_path)
+    with _parent(p) as (dir_fd, name):
+        with LOCKS.hold(_lock_key(dir_fd, name)):
+            _refuse_denied_alias(dir_fd, name)
+            st = _require_dir(_lstat_at(dir_fd, name), dir_fd)
+            _require_mine_and_writable(st)
+            try:
+                out = fs_trash.trash(dir_fd, name, p, st)
+            except fs_trash.TrashUnavailable as e:
+                raise WriteError(409, "trash_unavailable", e.reason) from None
+            except fs_trash.TrashChanged:
+                raise WriteError(409, "changed", tr("경로가 바뀌었습니다 (심링크로 바뀜)")) from None
+            except fs_trash.TrashMismatch:
+                raise WriteError(500, "trash_mismatch",
+                                 tr("휴지통으로 옮긴 항목이 확인한 폴더와 다릅니다 — 휴지통을 확인하세요")) from None
+    return {"ok": True, "path": str(p), "kind": "dir", "trash": out["trash"], "trash_name": out["name"]}

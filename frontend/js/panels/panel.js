@@ -47,6 +47,10 @@ import { errorState } from '../ui/empty.js';
     //                     topbar를 가리지 않는다).
     //   modal          — 기본 true. false면 모달 관용구 셋(배경 클릭 닫기 · 포커스 트랩 ·
     //                     aria-modal)을 끈다. Esc는 그대로 onKey가 결정한다.
+    //   beforeClose()  — 닫기 전에 물을 것이 있을 때(파일 뷰어의 「저장 / 버리기 / 취소」). true면 그대로 닫고,
+    //                     false면 닫지 않는다. Promise면 지금은 닫지 않고, true로 풀리면 그때 닫는다(X · 배경 · Esc ·
+    //                     폰 뒤로가기 전부 — 뒤로가기로 취소하면 history 항목을 다시 쌓는다). `closePanel(el, {force:true})`는
+    //                     묻지 않는다(표면 이동처럼 내용을 보관하고 옮기는 쪽이 쓴다).
     //   onClose()      — 패널이 실제로 닫힐 때(X · 배경 클릭 · Esc · 재호출 토글 전부) 호출된다.
     //                     showViewer()가 직접 부르는 게 아니라 X/배경/Esc는 panel.js가 스스로
     //                     closePanel()을 부르므로, "닫힐 때 정리할 것"은 여기로 등록해야
@@ -201,6 +205,7 @@ export function openPanel(opts) {
       el._vtCtx = ctx;
       el._vtPanelId = opts.id;
       el._vtOnClose = opts.onClose;
+      el._vtBeforeClose = opts.beforeClose || null;
       // D7: 닫을 때 열기 전 포커스로 복귀 — 트리거 버튼(⋯ 메뉴 항목 등)을 놓치지 않는다.
       el._vtTriggerEl = document.activeElement;
       el.querySelector('.vt-vw-x').addEventListener('click', () => closePanel(el.id));
@@ -269,6 +274,24 @@ export function closePanel(idOrEl, options = {}) {
       const el = typeof idOrEl === 'string' ? document.getElementById(idOrEl) : idOrEl;
       if (!el || !el.isConnected) return;
       const id = el._vtPanelId || el.id;
+      if (!options.force && !el._vtCloseConfirmed && typeof el._vtBeforeClose === 'function') {
+        const ok = el._vtBeforeClose();
+        if (ok !== true) {
+          // 뒤로가기는 이미 history 항목을 꺼냈다 — 닫지 않으면 다시 쌓아 다음 뒤로가기도 이 패널을 닫게 한다.
+          if (options.fromHistory && el._vtMobileHistory) {
+            try { history.pushState({ ...(history.state || {}), vtPanel: id }, '', location.href); } catch (_) {}
+          }
+          if (ok && typeof ok.then === 'function') {
+            // 답을 받았으면 다시 묻지 않는다(폰 뒤로가기로 돌아오는 두 번째 closePanel 포함).
+            ok.then((yes) => {
+              if (!yes || !el.isConnected) return;
+              el._vtCloseConfirmed = true;
+              closePanel(el, { history: options.history });
+            }, () => {});
+          }
+          return;
+        }
+      }
       if (el._vtMobileHistory && options.history !== 'replace' && options.fromHistory !== true) {
         try {
           if (history.state?.vtPanel === id) { history.back(); return; }

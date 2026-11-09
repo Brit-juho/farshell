@@ -771,6 +771,18 @@ body.vt-resizing #terminal-container{ transition:none; }
 .vt-vw-ss.warn{ color:var(--warn); }
 .vt-vw-cm-edit .cm-content{ caret-color:var(--color-acc); }
 .vt-vw-cm-edit .cm-gutters{ border-right:1px solid color-mix(in srgb, var(--color-st-waiting) 40%, var(--line)); }
+/* 바뀐 줄 표시(editor.js `_chgGutter`): 추가 = 초록 막대, 수정 = 파랑 막대, 삭제 = 그 줄 위(파일 끝이면 아래)의 빨강 쐐기.
+ * 막대는 색 말고 모양으로도 갈린다 — 추가는 꽉 찬 막대, 수정은 점선 막대, 삭제는 쐐기. */
+.cm-vt-chg-gutter .cm-gutterElement{ position:relative; width:4px; padding:0; }
+.cm-vt-chg{ position:absolute; inset:0 0 0 1px; display:block; }
+.cm-vt-chg.add{ background:var(--color-vw-chg-add); }
+.cm-vt-chg.mod{ background:repeating-linear-gradient(to bottom, var(--color-vw-chg-mod) 0 3px, transparent 3px 5px); }
+.cm-vt-chg.del::before, .cm-vt-chg.del-below::before{
+  content:""; position:absolute; left:0; width:0; height:0;
+  border-left:5px solid var(--color-vw-chg-del); border-top:4px solid transparent; border-bottom:4px solid transparent;
+}
+.cm-vt-chg.del::before{ top:-4px; }
+.cm-vt-chg.del-below::before{ bottom:-4px; }
 
 .vt-vw-conflict{
   display:flex; flex-wrap:wrap; align-items:flex-start; gap:calc(var(--spacing) * 2);

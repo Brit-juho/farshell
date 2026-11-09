@@ -960,6 +960,25 @@ def resolve_for_write(raw_path: str) -> Path:
     return p
 
 
+def resolve_dir_for_write(raw_path: str) -> Path:
+    """**폴더** 쓰기(새 폴더·폴더 이름 바꾸기·폴더 휴지통)의 판정. `resolve_for_write`의 모든 규칙에 더해:
+
+    - 열람 루트·쓰기 루트 **자신**과 루트를 품는 폴더는 거부한다 — 루트를 옮기거나 휴지통에 넣으면 경계 자체가
+      사라진다. `resolve_for_write`는 루트 자신을 허용한다(파일 쓰기에는 해가 없다).
+    - 마지막 이름이 숨은 상태 폴더 이름(`.sometool` 등 허용 목록 밖의 점 폴더)이면 거부한다. 읽기 규칙은 **이미 있는**
+      폴더만 보므로, 새로 만들거나 그 이름으로 옮기는 폴더는 여기서 막는다(만들면 트리에서 보이지도 않는다).
+
+    조상·자신이 실행 설정 폴더(`.github` 등)인 경우와 경계 밖은 `resolve_for_write`가 이미 거부한다. 심링크 폴더 거부와
+    「자기 안으로 옮기기」 거부는 dir_fd로 확인하는 `fs_write`가 한다."""
+    p = resolve_for_write(raw_path)
+    for root in (*get_roots(), *get_write_roots()):
+        if _is_within(root, p):
+            raise FsDenied(tr("루트 폴더 자체는 바꾸거나 옮길 수 없습니다"))
+    if is_hidden_state_dir_name(p.name):
+        raise FsDenied(tr("거부된 디렉토리: {name}", name=p.name))
+    return p
+
+
 def history_source_root(raw: str) -> Path:
     """Explicitly approved CLI home, not a general filesystem exemption."""
     import vt_paths

@@ -1052,7 +1052,7 @@ def test_떠_있는_창은_헤더로_옮겨지고_화면_밖으로_안_나간다
         saved = page.evaluate("() => JSON.parse(window.vtSettingsGet('viewer.float.rect'))")
         assert round(saved["x"]) == round(far["x"] - c["x"]), (saved, far, c)
     finally:
-        page.evaluate("() => { const el = document.getElementById('vt-file'); if (el) window.closePanel(el); }")
+        page.evaluate("() => { const el = document.getElementById('vt-file'); if (el) window.closePanel(el, { force: true }); }")
         page.evaluate("() => window.vtSettingsSet('viewer.surface', 'sheet')")
         page.evaluate("() => window.vtSettingsSet('viewer.float.rect', '{}')")
         page.wait_for_timeout(300)
@@ -1090,7 +1090,7 @@ def _open_overlay(page, path, opts=None):
 
 
 def _close_overlay(page):
-    page.evaluate("() => { const el = document.getElementById('vt-file'); if (el) window.closePanel(el); }")
+    page.evaluate("() => { const el = document.getElementById('vt-file'); if (el) window.closePanel(el, { force: true }); }")
 
 
 _DOC = "document.querySelector('#vt-file .vt-vw-code-pane')._vtEditor.view.state.doc"
@@ -1269,6 +1269,80 @@ def test_새_파일_이름_바꾸기_휴지통은_승격과_경계를_지킨다(
         xdg = browse.parent / "xdg" / "Trash"
         assert (xdg / "files" / "renamed.txt").exists()
         assert f"Path={browse / 'renamed.txt'}" in (xdg / "info" / "renamed.txt.trashinfo").read_text()
+
+
+def test_고친_채_닫으면_저장_버리기_취소를_묻고_거터에_바뀐_줄을_표시한다(page):
+    """파일 개편 후속 — 편집 중 거터에 추가 줄 표시, 고친 채 × 를 누르면 「저장 / 버리기 / 취소」. Esc는 취소(뷰어가
+    남는다), 버리기는 닫고 디스크를 건드리지 않는다."""
+    target = _viewer_file("unsaved.txt")
+    Path(target).write_text("one\ntwo\n")
+    try:
+        _open_overlay(page, target)
+        page.locator("#vt-file .vt-vw-edit-btn").click()
+        page.wait_for_selector("#vt-file .vt-vw-cm-edit", timeout=5000)
+        _type_at_end(page, "three\n")
+        # 거터의 첫 칸은 폭을 잡는 숨은 자리표시(spacer)다 — 보이는 표식만 센다.
+        page.wait_for_function(
+            "() => [...document.querySelectorAll('#vt-file .cm-vt-chg-gutter .cm-vt-chg.add')]"
+            ".some((e) => e.getBoundingClientRect().height > 0 && getComputedStyle(e).visibility !== 'hidden')",
+            timeout=5000,
+        )
+        expect(page.locator("#vt-file .vt-vw-ss")).to_contain_text("저장 안 됨", timeout=5000)
+        page.locator("#vt-file .vt-vw-x").click()
+        dlg = page.locator(".vt-dialog", has_text="저장하지 않은 편집")
+        dlg.wait_for(timeout=5000)
+        assert page.evaluate("() => document.activeElement?.classList.contains('vt-dialog-cancel')")
+        page.keyboard.press("Escape")
+        dlg.wait_for(state="detached", timeout=5000)
+        assert page.locator("#vt-file").count() == 1, "취소면 뷰어가 남는다"
+        page.locator("#vt-file .vt-vw-x").click()
+        page.locator(".vt-dialog-discard").click()
+        page.wait_for_selector("#vt-file", state="detached", timeout=5000)
+        assert Path(target).read_text() == "one\ntwo\n"
+    finally:
+        _close_overlay(page)
+
+
+def test_폴더_만들기_이름_바꾸기_휴지통은_경계와_덮어쓰기_금지를_지킨다(page, server):
+    """파일 개편 후속(D2) — 새 폴더, kind=dir 이름 바꾸기(같은 이름이면 빈 폴더라도 409, 자기 안으로 400), 루트·경계 밖 403.
+    폴더 휴지통은 파일과 같은 이유로 macOS는 다른 볼륨(`VT_E2E_TRASH_DIR`)에서만."""
+    base, _ = server
+    req = page.context.request
+    browse = Path(_viewer_file("edit.txt")).parent
+    j = {"Content-Type": "application/json"}
+    post = lambda path, body, **h: req.post(f"{base}{path}", data=json.dumps(body), headers={**j, **h})  # noqa: E731
+    assert req.post(f"{base}/api/auth/elevate", data={"password": E2E_PASSWORD}).ok
+    assert post("/api/fs/mkdir", {"dir": str(browse), "name": "dir-a"}).status == 200
+    assert post("/api/fs/mkdir", {"dir": str(browse), "name": "dir-b"}).status == 200
+    assert post("/api/fs/mkdir", {"dir": str(browse), "name": ".github"}).status == 403
+    assert post("/api/fs/mkdir", {"dir": str(ROOT), "name": "dir-x"}).status == 403 and not (ROOT / "dir-x").exists()
+    (browse / "dir-a" / "inner.txt").write_text("in a\n")
+    r = post("/api/fs/rename", {"path": str(browse / "dir-a"), "to": str(browse / "dir-b"), "kind": "dir"})
+    assert r.status == 409 and (browse / "dir-a" / "inner.txt").exists() and (browse / "dir-b").is_dir()
+    r = post("/api/fs/rename", {"path": str(browse / "dir-a"), "to": str(browse / "dir-a" / "x"), "kind": "dir"})
+    assert r.status == 400 and r.json()["error"] == "into_itself"
+    assert post("/api/fs/rename", {"path": str(browse / "dir-a"), "to": str(browse / "dir-c")}).status == 400  # kind 없음
+    r = post("/api/fs/rename", {"path": str(browse / "dir-a"), "to": str(browse / "dir-c"), "kind": "dir"})
+    assert r.status == 200 and (browse / "dir-c" / "inner.txt").read_text() == "in a\n"
+    assert post("/api/fs/delete", {"path": str(browse), "kind": "dir"}).status == 403      # 쓰기 루트 자신
+    if sys.platform == "darwin":
+        tdir = _trash_dir()
+        if not tdir:
+            pytest.skip("macOS 휴지통 시험은 다른 볼륨(VT_E2E_TRASH_DIR)에서만 — 진짜 ~/.Trash를 쓰지 않는다")
+        victim = Path(tdir) / "trash-dir"
+        victim.mkdir(exist_ok=True)
+        (victim / "f.txt").write_text("folder trash\n")
+        r = post("/api/fs/delete", {"path": str(victim), "kind": "dir"})
+        assert r.status == 200, r.text()
+        assert not victim.exists()
+        vol = Path(tdir)
+        while vol.parent != vol and os.stat(vol.parent).st_dev == os.stat(tdir).st_dev:
+            vol = vol.parent
+        assert (vol / ".Trashes" / str(os.getuid()) / r.json()["trash_name"] / "f.txt").read_text() == "folder trash\n"
+    else:
+        r = post("/api/fs/delete", {"path": str(browse / "dir-c"), "kind": "dir"})
+        assert r.status == 200, r.text()
+        assert (browse.parent / "xdg" / "Trash" / "files" / "dir-c" / "inner.txt").exists()
 
 
 def test_줄_이동은_그_줄로_옮기고_표시한다(page):

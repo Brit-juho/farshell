@@ -31,8 +31,10 @@ export interface FileTreeDeps {
   downloadPath?: (path: string, size: number) => void;
   /** 파일 쓰기(단계 8) — 이 컴퓨터의 파일만(결정 D7). 원격이면 트리가 부르지 않고 이유를 알린다. 끝나면 그 폴더를 다시 읽는다. */
   newFile?: (dir: string) => Promise<string | null>;
-  renamePath?: (path: string) => Promise<string | null>;
-  trashPath?: (path: string) => Promise<boolean>;
+  /** 새 폴더 · 폴더 이름 바꾸기 · 폴더 휴지통(내용째) — `kind: 'dir'`. */
+  newFolder?: (dir: string) => Promise<string | null>;
+  renamePath?: (path: string, kind?: 'file' | 'dir') => Promise<string | null>;
+  trashPath?: (path: string, kind?: 'file' | 'dir') => Promise<boolean>;
   /** 지금 터미널 세션의 cwd. 모르면 null(이유는 deps가 토스트로 말한다). */
   terminalCwd: () => Promise<string | null>;
   /** 지금 터미널 세션 이름(행 메뉴 「경로 삽입」 옆에 적는다). */
@@ -270,13 +272,18 @@ export function FileTree(props: { deps: FileTreeDeps }) {
       if (deps.remote) { remoteWrite(); return; }
       void deps.newFile!(dirOf).then((p) => { if (p) { void store.refreshDir(dirOf); deps.openFile(p); } });
     } });
-    if (r.kind === 'file' && deps.renamePath) items.push({ id: 'rename', label: t('이름 바꾸기…'), icon: 'pencil', hint: writeHint, run: () => {
+    if (r.kind === 'dir' && deps.newFolder) items.push({ id: 'newdir', label: t('이 폴더에 새 폴더…'), icon: 'folder', hint: writeHint, run: () => {
       if (deps.remote) { remoteWrite(); return; }
-      void deps.renamePath!(r.path).then((p) => { if (p) void store.refreshDir(parentOf(r.path)); });
+      void deps.newFolder!(r.path).then((p) => { if (p) void store.refreshDir(r.path); });
     } });
-    if (r.kind === 'file' && deps.trashPath) items.push({ id: 'trash', label: t('휴지통으로 이동…'), icon: 'trash-2', hint: writeHint, run: () => {
+    const kind = r.kind === 'dir' ? 'dir' : 'file';
+    if (deps.renamePath) items.push({ id: 'rename', label: t('이름 바꾸기…'), icon: 'pencil', hint: writeHint, run: () => {
       if (deps.remote) { remoteWrite(); return; }
-      void deps.trashPath!(r.path).then((ok) => { if (ok) void store.refreshDir(parentOf(r.path)); });
+      void deps.renamePath!(r.path, kind).then((p) => { if (p) void store.refreshDir(parentOf(r.path)); });
+    } });
+    if (deps.trashPath) items.push({ id: 'trash', label: t('휴지통으로 이동…'), icon: 'trash-2', hint: writeHint, run: () => {
+      if (deps.remote) { remoteWrite(); return; }
+      void deps.trashPath!(r.path, kind).then((ok) => { if (ok) void store.refreshDir(parentOf(r.path)); });
     } });
     items.push({ id: 'refresh', label: r.kind === 'dir' ? t('이 폴더 새로고침') : t('새로고침'), icon: 'refresh-cw', run: () => refreshRow(r) });
     return items;
