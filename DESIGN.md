@@ -596,7 +596,7 @@ Three columns (`grid-template-columns: minmax(0,1fr) auto minmax(0,1fr)`, equal 
 sits exactly at the window centre and the sides shrink first:
 
 - **Left:** `#vt-mb-lead` (macOS traffic lights) · the **FarShell menu** (`MenuButton`, class `.vt-mb-menu`: 새 세션 ·
-  빠른 열기 · 접속 주소 복사 · 설정 · 상태 막대 설정; the dropdown is a `Portal` into `body`; Esc/outside click/↑↓/Home/End
+  빠른 열기 · 집중 모드 · 접속 주소 복사 · 설정 · 상태 막대 설정; the dropdown is a `Portal` into `body`; Esc/outside click/↑↓/Home/End
   work; the approval-pending badge from `share-lazy.js` attaches to `.vt-mb-menu`) · the **host** (`#vt-workspace-chip`:
   the Mac the active pane shows — `laptop` icon locally, `server` + accent when it is another Mac; with two or more
   registered hosts it is a button that opens the host list and switches the whole screen, like the rail header's
@@ -605,7 +605,8 @@ sits exactly at the window centre and the sides shrink first:
   worktree's folder name; unknown parts are omitted; hidden in regular).
 - **Centre:** the **palette field** (`#vt-tb-palette`, 360×24; 280 in regular; below 900px only the icon and `⌘K`).
   It is a button, not an input: clicking opens the existing palette (`quickopen.open`).
-- **Right:** `#vt-tb-focus-slot` — the focus-mode button's place (phase 7; empty until then, no disabled button) —
+- **Right:** `#vt-tb-focus-slot` holding the **focus-mode button** (`#vt-tb-focus`, 28px, `maximize`; in focus mode,
+  when the title bar is revealed from the top edge, it shows `minimize` pressed and exits — see 「Focus mode」 below) —
   and `#vt-mb-tools` (keyboard toggle on touch devices, Windows caption buttons). `#vt-mb-lead` and `#vt-mb-tools`
   are static nodes in `index.html`; after mount `TitleBar.tsx` moves them into its own childless elements so Solid
   never re-renders over them.
@@ -676,6 +677,46 @@ real DOM. It re-runs on chip changes and on a `ResizeObserver` for the bar,
 coalesced through `requestAnimationFrame` so dragging the rail measures once a
 frame. `overflow-x: auto` stays underneath as the floor for the degenerate case
 where even one chip doesn't fit.
+
+### Focus mode — desktop (`layout/focus.js`, `shell/Focus.tsx`, `styles/screens/98-focus.css`)
+
+One switch for both widths: the device setting `ui.focus.active` (**not persisted** — `persist: false` in
+`core/settings.js`, memory only, so a reload always starts with the bars) toggles `<html class="vt-focus">`, and
+`focus.toggle` is registered **once**, in `layout/focus.js`. Entry points: `focusMode` (⌘. on macOS,
+Alt+Shift+. elsewhere — matched on the physical Period key because Shift turns `.` into `>`; user rebinds win), the
+title-bar button, the FarShell menu, the palette (`:` keymap row 「집중 모드」, `>` 모양 › 집중 모드) and Settings →
+모양. On phones (<720) the same switch drives the phone focus mode (§7). **Crossing 720px while on ends focus mode**
+(either direction) — the two widths hide different bars, so the other layout never starts without its bars.
+
+- **What hides (≥720).** Only the four *reservations* go to 0 — `--vt-activity-w`, `--vt-side-w`, `--titlebar-h`,
+  `--statusbar-h` — so `body` padding changes **once**: each visible pane gets one ResizeObserver report, one fit
+  through the refit gate and **one WS `resize`** on entry and one on exit (e2e). The bars keep their own size
+  (`--vt-activity-nat` / `--vt-side-nat` in `90-workbench.css`, 36 / 24 fixed), stay `position: fixed`, and fade out
+  with `opacity` + `transform` (160ms; `visibility` after). No transition on any width, height or padding. Hidden
+  bars get `inert` (`#vt-workbench-slot`, `#vt-titlebar`, `#vt-hud`); keyboard focus inside them moves to the active
+  terminal. Pane headers stay (a single pane hides its header as usual).
+- **Edge reveal** (`ui.focus.edgeReveal`, default on; hover-capable pointers only). Invisible 8px strips on the
+  left, top and bottom (`.vt-focus-strip`; the right edge is the scrollbar's). Resting there for `ui.focus.edgeDelay`
+  (`0` / `250` / `500` ms, default 250) adds `vt-reveal-left|top|bottom` to `<html>`: that one bar floats over the
+  panes (e2, 180ms; left −12px → 0, top −8 → 0, bottom +8 → 0) and loses `inert`. Padding does not change — **zero
+  WS `resize`** (e2e). Left also draws `--color-scrim` behind (click closes); top and bottom do not dim. It closes
+  400ms after the pointer leaves the bar (menus and tooltips it opened count as inside; an open menu or a focused
+  input keeps it), at once on Esc or when a session row is picked. One side at a time.
+- **Needs-you pill** — the same `#vt-focus-pill` element as the phone (`layout/mobile-focus.js`), styled for desktop
+  by `98-focus.css`: only while a session waits and `ui.focus.pill` is on; right 12 · top 40 (44 while the title bar
+  is revealed) · 28 high · radius 14 · raised · 45% amber border. Left 「개입 N · name · kind ›」 goes to the
+  longest-waiting session (`oldestWaiting` / `jumpToWaiting` in `focus.js`, the same pick as the status bar's
+  `agents.jump`); right 「⌘. 끝내기」 exits (the shown combo follows the keymap).
+- **Entry hint** — bottom centre, 32 high, 3s, 「집중 모드 · 화면 가장자리에 마우스를 대면 막대가 나타납니다 · ⌘. 끝내기」;
+  skipped after it has been shown three times on this device (`ui.focus.hintCount`).
+- **Touch without hover** (tablets): no edge strips; a 36×36 exit button sits at the bottom left
+  (`.vt-focus-exit`), besides the title-bar button and shortcut.
+- **Layers.** Strips 505 < scrim 506 < revealed bar 507 < pill · hint · exit 510, all above the onboarding (500) that
+  covers an empty window and below menus (520/620), sheets (540) and modals (600+). Toasts rise to 511 in focus mode
+  and move 16px above the status bar while it is revealed; the approval dialog, palette and settings open as usual.
+- **Lazy.** `layout/focus.js` (core) is the switch, `inert` and the pick of the waiting session; strips, scrim, hint
+  and the touch exit button are `shell/Focus.tsx`, loaded from the `shell` chunk the first time focus mode turns on
+  at desktop width.
 
 ### Resize overlay
 
@@ -1135,15 +1176,15 @@ bottom sheet above the nav, over the mic.
 
 **Focus mode (manual, `layout/mobile-focus.js`).** Entered **only** from the app-bar
 button (user decision 5 — no two-finger double tap; it clashes with pinch zoom). It sets
-`html.vt-focus` (the same class and `focus.toggle` action as desktop focus mode; on wide
-screens the action is handed to the handler registered before it) and hides the app bar,
+`html.vt-focus` (the same switch, class and `focus.toggle` action as desktop focus mode — `layout/focus.js`
+owns them, this file only paints the button, the pill and the pull-down edge) and hides the app bar,
 bottom nav and session slot. The keybar stays at the bottom and is shown even when closed
 (its toggle is gone with the app bar); the mic is its first key. The terminal gets 40px of top
 padding for the **pill**: top right, 28px high with 44px touch targets, 「개입 N name」 in amber
-when a session waits (tap → `vtOpenSessionFromRail({ tmuxName })`) plus an exit button. Exit
+when a session waits (tap → the longest-waiting session, `jumpToWaiting`) plus an exit button. Exit
 also by pulling down from the **top 24px edge** (`#vt-focus-edge`, handle 36×4): a hint follows
 the finger and reads 「놓으면 집중 모드를 끝냅니다」 past 64px; releasing past 64px exits,
-less snaps back. Leaving the terminal tab or widening past 720px also exits. Not persisted.
+less snaps back. Leaving the terminal tab or crossing 720px (either way) also exits. Not persisted.
 
 ## 8. Usage (dock "Usage" tab)
 
@@ -1367,7 +1408,10 @@ design.
 | `styles/screens/99-overlays.css` | Overlay shell (dialogs, approval, work record, archive, picker, sheets, state screens) and terminal-colour session previews (`.vt-ansi`, `lib/ansi-spans.js`) |
 | `frontend/js/shell/Fleet.tsx` | Mobile fleet home; `FleetRow` is the two-line 64px session card |
 | `styles/screens/98-mobile.css` | Phone (compact) look: app bar, bottom nav, cards, sheets, keybar, floating mic, focus mode |
-| `frontend/js/layout/mobile-focus.js` | Phone focus mode: app-bar button, pill, top-edge pull to exit |
+| `frontend/js/layout/mobile-focus.js` | Phone focus mode: app-bar button, top-edge pull to exit; the needs-you pill shared with desktop |
+| `frontend/js/layout/focus.js` | The one focus-mode switch (`ui.focus.active`, `focus.toggle`, `focusMode`), `inert`, width-change exit, longest-waiting pick |
+| `frontend/js/shell/Focus.tsx` | Desktop focus mode: edge strips and reveal, scrim, entry hint, touch exit button (lazy `shell` chunk) |
+| `styles/screens/98-focus.css` | Desktop focus mode: reservations to 0, hidden/revealed bars, strips, desktop pill, layers |
 | `frontend/js/shell/Palette.tsx` · `palette-data.ts` | Command palette, 8 modes |
 | `frontend/js/layout/resize-overlay.js` | px / cols×rows caption while dragging a divider |
 | `frontend/js/layout/tree.js` | Pane tree — leaf `kind: 'terminal'\|'viewer'\|'panel'` |

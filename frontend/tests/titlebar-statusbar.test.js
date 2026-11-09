@@ -69,7 +69,9 @@ test('마운트: 메뉴 · 호스트 · 경로 · 팔레트 입력, 정적 자�
   assert.strictEqual(left.firstElementChild.firstElementChild, lead, '신호등 자리는 왼쪽 맨 앞(같은 노드)');
   assert.ok(right.contains(tools) && right.lastElementChild.contains(tools), '도구 자리는 오른쪽 맨 끝');
   assert.ok(document.getElementById('vt-tb-focus-slot'), '집중 모드 버튼 자리(7단계)');
-  assert.strictEqual(document.getElementById('vt-tb-focus-slot').children.length, 0, '지금은 아무것도 그리지 않는다');
+  const focusBtn = document.querySelector('#vt-tb-focus-slot > #vt-tb-focus');
+  assert.ok(focusBtn, '7단계 — 자리 안에 집중 모드 버튼이 있다');
+  assert.strictEqual(focusBtn.getAttribute('aria-pressed'), 'false');
   assert.strictEqual(document.querySelectorAll('#vt-mb-lead').length, 1);
 
   const menu = tb.querySelector('.vt-mb-menu');
@@ -108,8 +110,8 @@ test('FarShell 메뉴: 「상태 막대 설정」이 설정의 hud 섹션을 연
   await flush(window);
   const items = Array.from(document.querySelectorAll('.vt-mb-pop .vt-mb-item'));
   const labels = items.map((b) => b.querySelector('.vt-mb-label').textContent);
-  assert.deepStrictEqual(labels, ['새 세션', '빠른 열기', '접속 주소 복사', '설정', '상태 막대 설정']);
-  items[4].click();
+  assert.deepStrictEqual(labels, ['새 세션', '빠른 열기', '집중 모드', '접속 주소 복사', '설정', '상태 막대 설정']);
+  items[5].click();
   assert.deepStrictEqual(calls, ['section:hud']);
   assert.strictEqual(document.querySelector('.vt-mb-pop'), null, '실행하면 닫힌다');
 });

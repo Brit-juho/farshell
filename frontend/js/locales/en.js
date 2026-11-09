@@ -2335,7 +2335,7 @@ window.__VT_I18N = {
   "스크린 리더 모드": "Screen reader mode",
   "스킨": "Skin",
   "스킨 변경": "Change skin",
-  "스킨, 화면 언어, 파일 뷰어 표시 방식을 고릅니다.": "Pick a skin, display language and file viewer style.",
+  "스킨, 화면 언어, 파일 뷰어 표시 방식, 집중 모드를 고릅니다.": "Pick a skin, display language, file viewer style and focus mode.",
   "스킬 {n}": {
     "one": "1 skill",
     "other": "{n} skills"
@@ -4960,5 +4960,15 @@ window.__VT_I18N = {
   "{name} 승인 요청 — 누르면 그 세션으로": "{name} is waiting for approval — tap to open it",
   "아래로 끌면 상단바와 탭이 돌아옵니다": "Pull down to bring back the top bar and tabs",
   "놓으면 집중 모드를 끝냅니다": "Release to exit focus mode",
-  "더 끌어내리면 집중 모드를 끝냅니다": "Pull further to exit focus mode"
+  "더 끌어내리면 집중 모드를 끝냅니다": "Pull further to exit focus mode",
+  "화면 가장자리에 마우스를 대면 막대가 나타납니다": "Move the pointer to a screen edge to show the bars",
+  "왼쪽 아래 버튼으로 끝냅니다": "Use the button at the bottom left to exit",
+  "가장자리에 막대 띄우기": "Show bars at screen edges",
+  "개입 표시": "Needs-you pill",
+  "가장자리 반응 시간": "Edge reveal delay",
+  "바로": "Instant",
+  "활동 막대 · 사이드바 · 제목 막대 · 상태 막대를 숨기고 칸을 창 끝까지 넓힙니다. FarShell 메뉴와 팔레트에서도 켭니다. 새로고침하면 꺼집니다.": "Hides the activity bar, sidebar, title bar and status bar so the panes reach the window edges. Also available from the FarShell menu and the palette. Turns off when the page reloads.",
+  "왼쪽 가장자리 → 활동 막대 · 사이드바, 위 → 제목 막대, 아래 → 상태 막대. 끄면 단축키나 개입 표시로만 돌아옵니다.": "Left edge → activity bar and sidebar, top → title bar, bottom → status bar. When off, you can only get back with the shortcut or the needs-you pill.",
+  "승인 대기가 생기면 오른쪽 위에 「개입 N」 알약을 띄웁니다. 누르면 그 세션으로 갑니다.": "When something is waiting for approval, a “Needs you N” pill appears at the top right. Click it to go to that session.",
+  "전체 화면 막대 숨기기 젠 zen focus": "full screen hide bars zen focus distraction"
 };

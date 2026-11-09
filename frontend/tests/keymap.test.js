@@ -97,7 +97,7 @@ test('모든 기본 키맵은 mac과 비-mac에서 충돌 없이 자신의 액�
   for (const platform of ['MacIntel', 'Linux x86_64']) {
     const { K, window } = await load({ platform });
     const bindings = K.list();
-    assert.strictEqual(bindings.length, 13);
+    assert.strictEqual(bindings.length, 14);
     assert.deepEqual(K.conflicts(), {});
     for (const b of bindings) {
       assert.strictEqual(b.unavailable, false, `${platform}: ${b.id}가 브라우저 예약키면 안 된다`);

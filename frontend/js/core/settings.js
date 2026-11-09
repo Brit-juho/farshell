@@ -163,6 +163,16 @@ export const SCHEMA = {
   // 비어 있으면 shell/hud-data.ts의 DEFAULT_HUD_LAYOUT. 폰에는 HUD가 없고 기기마다 화면 폭이
   // 달라 device 스코프다.
   'ui.hud.layout': { type: 'str', def: '', scope: 'device' },
+  // 리디자인 7단계 — 데스크톱 집중 모드(layout/focus.js, shell/Focus.tsx). 범위는 이 기기(시안 spec 「집중 모드 규칙」).
+  // `active`는 **저장하지 않는다**(persist:false — 이 탭의 메모리에만 있다). 새로고침하면 막대가 다시 보이는
+  // 평소 화면으로 돌아온다: 숨긴 막대를 어떻게 되돌리는지 잊은 채 다시 열었을 때 빈 화면처럼 보이지 않게 하려는 것이고,
+  // 다른 탭·다른 창이 같은 기기 설정을 읽어 따라 숨지 않게 하려는 것이다. 나머지 넷은 기기 설정으로 저장한다.
+  // hintCount는 들어올 때 안내를 본 횟수 — 3번 본 뒤에는 생략한다.
+  'ui.focus.active':     { type: 'bool', def: false, scope: 'device', persist: false },
+  'ui.focus.edgeReveal': { type: 'bool', def: true, scope: 'device' },
+  'ui.focus.pill':       { type: 'bool', def: true, scope: 'device' },
+  'ui.focus.edgeDelay':  { type: 'enum', def: '250', values: ['0', '250', '500'], scope: 'device' },
+  'ui.focus.hintCount':  { type: 'int',  def: 0, min: 0, max: 3, scope: 'device' },
   'rail.order':   { type: 'str', def: '' },
   'rail.lineage': { type: 'str', def: '', scope: 'device' },
   'rail.view':    { type: 'str', def: '', scope: 'device' },
@@ -170,6 +180,13 @@ export const SCHEMA = {
 
 function _scopeOf(key) {
   return SCHEMA[key]?.scope === 'device' ? 'device' : 'global';
+}
+
+// `persist: false` — 값은 이 탭의 메모리에만 둔다(캐시·서버에 쓰지 않고, 서버 값도 받지 않는다).
+// 구독·설정 화면·팔레트는 다른 키와 똑같이 쓴다. 스코프(배지)는 스키마의 scope 그대로다.
+const _volatile = {};
+function _isVolatile(key) {
+  return SCHEMA[key]?.persist === false;
 }
 
 // 스코프 하나의 상태 뭉치. 두 스코프가 "값 보관 + 캐시 키 + 엔드포인트"라는
@@ -214,6 +231,7 @@ export function get(key) {
     console.warn(`[settings] 알 수 없는 키: ${key}`);
     return undefined;
   }
+  if (_isVolatile(key)) return key in _volatile ? _volatile[key] : spec.def;
   const values = _stores[_scopeOf(key)].values;
   return key in values ? values[key] : spec.def;
 }
@@ -222,6 +240,7 @@ export function get(key) {
 // 있는 항목(모바일 폰트 12 vs 데스크톱 14)에서 "설정 없음"과 "설정이 기본값과
 // 같음"을 구분해야 해서 필요하다.
 export function has(key) {
+  if (_isVolatile(key)) return key in _volatile;
   return key in _stores[_scopeOf(key)].values;
 }
 
@@ -272,6 +291,12 @@ export function set(key, value) {
   if (!spec) { console.warn(`[settings] 알 수 없는 키: ${key}`); return Promise.resolve(false); }
   const v = _coerce(key, value);
   if (v === undefined) { console.warn(`[settings] ${key}에 맞지 않는 값: ${value}`); return Promise.resolve(false); }
+  if (_isVolatile(key)) {
+    if (get(key) === v) return Promise.resolve(true);
+    _volatile[key] = v;
+    _notify({ [key]: v });
+    return Promise.resolve(true);
+  }
   if (has(key) && get(key) === v && !(key in _pending[_scopeOf(key)])) return Promise.resolve(true);
   const scope = _scopeOf(key);
   _stores[scope].values[key] = v;
@@ -354,6 +379,7 @@ function _applyRemote(scope, remote, revision) {
   const next = {};
   for (const [k, v] of Object.entries(remote)) {
     if (_scopeOf(k) !== scope) continue;   // 스키마가 다른 스코프로 옮긴 키 방어
+    if (_isVolatile(k)) continue;           // 저장하지 않는 키는 서버에 남은 값도 받지 않는다
     const c = _coerce(k, v);
     if (c !== undefined) next[k] = c;
   }
