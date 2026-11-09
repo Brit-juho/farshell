@@ -31,6 +31,7 @@ import relay_policy
     ("GET", "/api/files/abc/download"),
     ("POST", "/api/upload"),
     ("GET", "/api/fs/raw"),
+    ("GET", "/api/fs/grep"),
     ("GET", "/api/git/status"),
     ("POST", "/api/queue"),
     ("GET", "/api/capabilities"),
@@ -57,6 +58,7 @@ def test_policy_allows_host_scoped_apis(method, path):
     ("POST", "/api/agent/event"),
     ("POST", "/api/tmux/open-on-mac"),
     ("POST", "/api/capabilities"),                       # 읽기 전용은 GET만
+    ("POST", "/api/fs/grep"),
     ("GET", "/api/files/../auth"),
     ("GET", "/api//files"),
     ("GET", "/api/unknown"),
@@ -546,3 +548,24 @@ def test_host_relay_fs_file_keeps_etag_304_range_and_409(a_env, tmp_path, monkey
     r = client.get(url, params={"path": str(root / "a.txt"), "offset": "4", "expected_rev": "0:0:0:0"})
     assert r.status_code == 409
     assert r.json()["error"] == "changed" and r.json()["rev"] == d["rev"]
+
+
+def test_host_relay_fs_grep_end_to_end(a_env, tmp_path, monkeypatch):
+    """내용 검색도 읽기 기능이라 원격에서 된다(D7). 경계·거부 규칙은 B(상대)가 자기 것으로 판정한다."""
+    client, _ = a_env
+    root = (tmp_path / "grep-root").resolve()
+    root.mkdir()
+    monkeypatch.setenv("VT_BROWSE_ROOTS", str(root))
+    (root / "a.txt").write_text("one\nneedle here\n")
+    (root / ".env").write_text("needle=secret\n")
+    url = "/api/hosts/m5/relay/api/fs/grep"
+    r = client.get(url, params={"q": "needle", "path": str(root), "sid": "tab1"})
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"] == "application/json"
+    d = r.json()
+    assert [(x["rel"], x["line"], x["col"], x["path"]) for x in d["results"]] == [("a.txt", 2, 1, str(root / "a.txt"))]
+    _assert_a_policy(r)
+    r = client.get(url, params={"q": "needle", "path": "/etc"})
+    assert r.status_code == 403 and r.json()["error"] == "denied"
+    r = client.get(url, params={"q": "(", "mode": "regex", "path": str(root)})
+    assert r.status_code == 400 and r.json()["error"] == "bad_regex"
