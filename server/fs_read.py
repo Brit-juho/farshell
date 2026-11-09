@@ -228,6 +228,10 @@ def _image_or_binary(p: Path, size: int, head: bytes) -> Optional[dict]:
     if mime:
         return {"binary": True, "image": True, "mime": mime,
                 "too_large": size > fsguard.MAX_IMAGE_BYTES, "content": ""}
+    # 동영상·소리 — 뷰어가 `/api/fs/raw`(Range)로 재생한다. 크기 상한이 없다(나눠 받는다).
+    mime = fsguard.media_type(p, head)
+    if mime:
+        return {"binary": True, "image": False, "media": mime.split("/", 1)[0], "mime": mime, "content": ""}
     return None
 
 

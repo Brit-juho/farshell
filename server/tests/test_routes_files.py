@@ -489,12 +489,18 @@ def test_raw_serves_the_image_bytes_with_nosniff(client, repo):
     assert r.content == PNG_1PX
 
 
-def test_raw_refuses_svg(client, repo):
-    """SVG는 스크립트를 품을 수 있다 — 같은 오리진에서 열면 XSS다.
-    (텍스트라 뷰어는 어차피 소스로 보여준다 — 잃는 게 없다.)"""
+def test_raw_serves_svg_only_under_a_sandbox_csp(client, repo):
+    """SVG는 스크립트를 품을 수 있다 — 같은 오리진에서 문서로 열면 XSS다. 그래서 내보낼 때 언제나 sandbox CSP를
+    붙인다(결정 D8: 화면은 `<img>`로만 그리고, 주소를 직접 열어도 스크립트가 돌지 않는다)."""
     p = repo / "icon.svg"
     p.write_text('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>')
-    assert client.get(f"/api/fs/raw?path={p}").status_code == 403
+    r = client.get(f"/api/fs/raw?path={p}")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("image/svg+xml")
+    csp = r.headers["content-security-policy"]
+    assert "sandbox" in csp and "default-src 'none'" in csp and "frame-ancestors 'none'" in csp
+    assert "allow-scripts" not in csp
+    assert r.headers["x-content-type-options"] == "nosniff"
 
 
 def test_raw_refuses_html_renamed_to_png(client, repo):
