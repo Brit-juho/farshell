@@ -20,6 +20,7 @@
 | `Cmd+F` / `Ctrl+Shift+F` | Scrollback search |
 | `Alt+Shift+F` | In-terminal search (also on Mac — formerly `Cmd+Shift+F`) |
 | `Cmd+Shift+F` / `Ctrl+Shift+G` | File content search — the sidebar 「Files › Search contents」. In the palette, the `?` prefix |
+| `Cmd+S` / `Ctrl+S` (while editing in the viewer) | Save the file — the first save asks for your web login password once (kept 15 minutes). There is no autosave |
 | `⌥C` · `⌥W` · `⌥R` in the palette `?` mode | Toggle match case · whole word · regex (`⌥Enter` moves the search to the sidebar) |
 | `⋯` on a rail row, or right-click | Session menu (open/close, rename, open on Mac, connected screens, kill) |
 
