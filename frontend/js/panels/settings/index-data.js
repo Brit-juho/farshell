@@ -52,6 +52,19 @@ export const TERMINAL_GROUPS = [
   },
 ];
 
+// 리디자인 7단계 — 설정 › 모양 「집중 모드」(시안 O04-B). 화면(sections/appearance.js)과 팔레트 `>` 줄이 같이 읽는다.
+// 집중 모드는 데스크톱(720px 이상)에서만 막대를 숨긴다 — 폰 화면은 이 값과 무관하다.
+export const FOCUS_ITEMS = [
+  { key: 'ui.focus.active', label: t('집중 모드'), kind: 'bool',
+    help: t('활동 막대 · 사이드바 · 제목 막대 · 상태 막대를 숨기고 칸을 창 끝까지 넓힙니다. FarShell 메뉴와 팔레트에서도 켭니다. 새로고침하면 꺼집니다.') },
+  { key: 'ui.focus.edgeReveal', label: t('가장자리에 막대 띄우기'), kind: 'bool',
+    help: t('왼쪽 가장자리 → 활동 막대 · 사이드바, 위 → 제목 막대, 아래 → 상태 막대. 끄면 단축키나 개입 표시로만 돌아옵니다.') },
+  { key: 'ui.focus.pill', label: t('개입 표시'), kind: 'bool',
+    help: t('승인 대기가 생기면 오른쪽 위에 「개입 N」 알약을 띄웁니다. 누르면 그 세션으로 갑니다.') },
+  { key: 'ui.focus.edgeDelay', label: t('가장자리 반응 시간'), kind: 'select',
+    labels: { 0: t('바로'), 250: '250ms', 500: '500ms' } },
+];
+
 // 섹션의 이름·설명. 렌더 함수(custom)는 settings.js가 id로 붙인다 — 렌더러를 여기서
 // import하면 이 파일이 화면 전체를 끌고 들어와 팔레트 청크가 부풀기 때문이다.
 export const SECTION_META = [
@@ -59,7 +72,7 @@ export const SECTION_META = [
   { id: 'voice', label: t('음성 및 알림'), description: t('알림과 음성 입력 엔진을 관리합니다.') },
   { id: 'agents', label: t('에이전트'), description: t('에이전트 감지 상태를 확인합니다.') },
   { id: 'keymap', label: t('키맵'), description: t('단축키와 터미널 전달 여부를 바꿉니다.') },
-  { id: 'appearance', label: t('모양'), description: t('스킨, 화면 언어, 파일 뷰어 표시 방식을 고릅니다.') },
+  { id: 'appearance', label: t('모양'), description: t('스킨, 화면 언어, 파일 뷰어 표시 방식, 집중 모드를 고릅니다.') },
   { id: 'hud', label: t('상태 막대'), description: t('화면 맨 아래 상태 막대에 보일 칩과 순서를 고릅니다.'), desktopOnly: true },
   { id: 'permissions', label: t('권한'), description: t('에이전트의 승인 요청, 페어, 폴더 lease, 허용된 권한, 감사 기록을 봅니다.') },
   { id: 'security', label: t('계정 및 보안'), description: t('로그인, OTP, 등록 기기와 현재 세션을 확인합니다.') },
@@ -76,6 +89,7 @@ export const SEARCH_ITEMS = [
   ['agents', t('에이전트 감지 상태')],
   ['keymap', t('단축키와 터미널 전달')],
   ['appearance', t('스킨')], ['appearance', t('화면 언어')], ['appearance', t('파일 뷰어 표시 방식')],
+  ['appearance', t('집중 모드')], ['appearance', t('가장자리에 막대 띄우기')], ['appearance', t('개입 표시')], ['appearance', t('가장자리 반응 시간')],
   ['permissions', t('승인 대기')], ['permissions', t('페어')], ['permissions', t('폴더 lease')], ['permissions', t('허용된 권한')], ['permissions', t('감사 기록')], ['permissions', t('비상 정지')],
   ['security', t('로그인과 OTP')], ['security', t('등록 기기')], ['security', t('로그아웃')],
   ['about', t('에이전트 훅')], ['about', t('사용량 공급자')], ['about', t('버전과 진단')],
@@ -102,6 +116,7 @@ export const SEARCH_ALIASES = {
   [t('감사 기록')]: t('audit 로그 체인 거부 기록'),
   [t('비상 정지')]: t('panic 모든 에이전트 권한 회수'),
   [t('화면 언어')]: t('언어 language 한국어 영어 english'),
+  [t('집중 모드')]: t('전체 화면 막대 숨기기 젠 zen focus'),
   [t('에이전트 훅')]: 'hook codex claude',
 };
 
@@ -135,6 +150,16 @@ export function buildSettingEntries(shownSectionIds) {
         id: `s:${it.key}`, key: it.key, label: it.label, kind: it.kind,
         labels: it.labels, unit: it.unit, step: it.step, presets: it.presets, help: it.help,
         section: 'terminal', path: `${sectionLabel('terminal')} › ${g.label}`,
+        aliases: SEARCH_ALIASES[it.label] || '',
+      });
+    }
+  }
+  if (visible('appearance')) {
+    for (const it of FOCUS_ITEMS) {
+      inlineLabels.add(it.label);
+      entries.push({
+        id: `s:${it.key}`, key: it.key, label: it.label, kind: it.kind, labels: it.labels, help: it.help,
+        section: 'appearance', path: `${sectionLabel('appearance')} › ${t('집중 모드')}`,
         aliases: SEARCH_ALIASES[it.label] || '',
       });
     }

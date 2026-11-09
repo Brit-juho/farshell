@@ -75,6 +75,10 @@ const ACTIONS = [
   // 자리를 먼저 먹는다(mac `Cmd+Shift+N`, 비-mac `Ctrl+Shift+N`) — paneClose와
   // 같은 이유로 갈라 둔다.
   { id: 'worktreeNew', def: 'Ctrl+Shift+N', defNonMac: 'Alt+Shift+N',  label: t('워크트리 만들기') },
+  // 리디자인 결정 4 — 집중 모드(layout/focus.js). mac은 ⌘.(브라우저·터미널 어느 쪽도 쓰지 않는다), 그 밖은
+  // `Alt+Shift+.` — 비-mac의 Ctrl+.는 터미널 앱이 받을 수 있는 조합이라 피한다. Shift를 누르면 `.`이 `>`로 바뀌므로
+  // 글자가 아니라 **물리 키(Period)**로 맞춘다(keyKind 'code', core/keyboard-event.js physicalKey).
+  { id: 'focusMode',  def: 'Mod+.',        defNonMac: 'Alt+Shift+.',  label: t('집중 모드') },
 ];
 
 const BY_ID = new Map(ACTIONS.map((a) => [a.id, a]));
@@ -106,6 +110,12 @@ function _defaultCombo(spec) {
   return (!IS_MAC && spec.defNonMac) || spec.def;
 }
 
+// 조합의 마지막 키를 무엇으로 맞출지. 글자·숫자·`.`은 물리 키(code) — Option/Shift가 글자를 바꿔도(⌥⇧F → Ï,
+// ⇧. → >) 같은 키로 잡힌다. 나머지 기호는 배열의 논리 문자(key)다.
+function keyKindOf(combo) {
+  return /^[a-z0-9.]$/i.test(normalize(combo).split('+').at(-1)) ? 'code' : 'key';
+}
+
 // { binding?: string, passthrough?: boolean } 형태의 사용자 재정의
 export function getBinding(id) {
   const spec = BY_ID.get(id);
@@ -118,7 +128,7 @@ export function getBinding(id) {
     combo: ov.binding || def,
     passthrough: ov.delivery === 'app-and-terminal' || (ov.delivery == null && (ov.passthrough ?? false)),
     delivery: ov.delivery || (ov.passthrough ? 'app-and-terminal' : 'app'),
-    keyKind: ov.keyKind || (/^[a-z0-9]$/i.test(normalize(ov.binding || def).split('+').at(-1)) ? 'code' : 'key'),
+    keyKind: ov.keyKind || keyKindOf(ov.binding || def),
     isDefault: !ov.binding && ov.passthrough === undefined && !ov.delivery,
     customCombo: !!ov.binding,
     // 일반 브라우저 탭에서 이 조합이 가로채지지 않는다면 그 사실을 함께 알린다.
@@ -147,7 +157,7 @@ export function conflicts() {
 export function setBinding(id, combo, keyKind) {
   if (!BY_ID.has(id)) return Promise.resolve(false);
   const ov = { ..._overrides() };
-  ov[id] = { ...(ov[id] || {}), binding: combo || undefined, keyKind: keyKind || (/^[a-z0-9]$/i.test(normalize(combo).split('+').at(-1)) ? 'code' : 'key') };
+  ov[id] = { ...(ov[id] || {}), binding: combo || undefined, keyKind: keyKind || keyKindOf(combo) };
   if (!combo) delete ov[id].binding;
   return saveOverrides(ov);
 }

@@ -1,0 +1,132 @@
+/* 집중 모드 — 데스크톱(리디자인 7단계, 2026-11)
+ *
+ * 시안: docs/local의 redesign-2026-11 specimen(desktop.html D05 · D05-B · D05-C, spec.html 「집중 모드 규칙」 「모션」).
+ * 스위치는 layout/focus.js(`<html class="vt-focus">`), 떠 있는 부분은 shell/Focus.tsx(#vt-focus-ui)가 그린다.
+ *
+ * 어떻게 칸이 「한 번에」 넓어지나: 본문이 비워 두는 자리 네 개(--vt-activity-w · --vt-side-w · --titlebar-h ·
+ * --statusbar-h)만 0이 된다. body padding이 한 번 바뀌어 칸마다 ResizeObserver → refit 게이트 → fit 한 번(WS resize
+ * 한 번)이다. 막대 자신은 fixed라 흐름에 없고, 제 크기(-nat, 36, 24)를 그대로 가진 채 transform·opacity로만 숨는다.
+ * 가장자리에서 다시 드러날 때(`vt-reveal-left|top|bottom`)도 padding은 그대로라 칸 크기가 바뀌지 않는다.
+ *
+ * ⚠ 폭·높이·padding에 transition을 두지 않는다(칸이 매 프레임 refit된다). 움직임은 transform·opacity뿐이다.
+ * ⚠ 이 파일은 main.css에서 `layer(legacy)`로, 막대(95) 뒤에 import된다. compact(<720)에는 아무것도 하지 않는다. */
+
+#vt-focus-ui { display:contents; }
+
+@media (min-width:720px) {
+  /* ── 자리 0 — 칸이 창 네 변 끝까지 ─────────────────────────────────────── */
+  html.vt-focus:root {
+    --vt-activity-w:0px; --vt-side-w:0px; --titlebar-h:0px; --statusbar-h:0px;
+  }
+
+  /* 막대 자신의 크기는 자리 변수가 아니라 고정값으로 — 숨었다 드러나도 같은 모양이다(10-shell.css 36 · 24와 같다). */
+  html.vt-focus #vt-titlebar { height:36px; }
+  html.vt-focus #vt-titlebar .caption span { height:36px; }
+  html.vt-focus #vt-hud { height:24px; }
+  html.vt-focus .vt-hud-chip { height:24px; }
+  /* 작업대는 위·아래 막대가 없으니 창 높이 전체에 뜬다(시안 D05-B). 폭은 90-workbench.css가 -nat로 이미 잡는다. */
+  html.vt-focus #vt-workbench { top:0; bottom:0; }
+
+  /* ── 숨김 — 들어갈 때 160ms에 접힌다(spec 「모션」). visibility는 움직임이 끝난 뒤 꺼진다. ── */
+  html.vt-focus #vt-titlebar,
+  html.vt-focus #vt-hud,
+  html.vt-focus #vt-workbench {
+    opacity:0; visibility:hidden; pointer-events:none;
+    transition:opacity 160ms ease-out, transform 160ms ease-out, visibility 0s linear 160ms;
+  }
+  /* 층 순서 — 칸이 비어 창 전체를 덮는 온보딩(500) 위, 메뉴(520 · 620) · 세션 시트(540) · 모달(600~) 아래:
+     감지 띠 505 < 뒤 막 506 < 드러난 막대 507 < 알약 · 안내 · 끝내기 510. 토스트(평소 200)는 511로 올려 늘 보이게 한다. */
+  html.vt-focus #vt-titlebar { transform:translateY(-8px); z-index:507; }
+  html.vt-focus #vt-hud { transform:translateY(8px); z-index:507; }
+  html.vt-focus #vt-workbench { transform:translateX(-12px); z-index:507; }
+  html.vt-focus #vt-toasts { z-index:511; }
+
+  /* ── 가장자리 노출 — 180ms 이동, 칸 위에 뜬다(e2). 한 번에 한쪽만(Focus.tsx). ── */
+  html.vt-focus.vt-reveal-top #vt-titlebar,
+  html.vt-focus.vt-reveal-bottom #vt-hud,
+  html.vt-focus.vt-reveal-left #vt-workbench {
+    opacity:1; visibility:visible; pointer-events:auto; transform:none;
+    box-shadow:var(--shadow-e2);
+    transition:opacity 180ms ease-out, transform 180ms ease-out, visibility 0s;
+  }
+
+  /* 가장자리 감지 띠 8px — 왼쪽 · 위 · 아래. 보이지 않는다. 드러난 막대(507)보다 아래라 막대의 첫 8px을 가리지 않는다. */
+  .vt-focus-edge { position:fixed; z-index:505; background:transparent; }
+  .vt-focus-edge[data-edge="left"] { left:0; top:0; bottom:0; width:8px; }
+  .vt-focus-edge[data-edge="top"] { left:8px; right:0; top:0; height:8px; }
+  .vt-focus-edge[data-edge="bottom"] { left:8px; right:0; bottom:0; height:8px; }
+
+  /* 왼쪽 노출 때만 뒤 캔버스를 어둡게 한다(위 · 아래는 어둡게 하지 않는다). 누르면 닫힌다. */
+  .vt-focus-scrim { position:fixed; inset:0; z-index:506; background:var(--color-scrim); }
+
+  /* ── 개입 알약 — 오른쪽 12 · 위 40(제목 막대가 보이면 44), 높이 28 · 반경 14 ── */
+  .vt-focus-pill {
+    position:fixed; right:12px; top:40px; z-index:510;
+    display:flex; align-items:center; height:28px; box-sizing:border-box; overflow:hidden;
+    border-radius:14px; background:var(--color-bg-raised);
+    border:1px solid color-mix(in srgb, var(--color-st-waiting) 45%, transparent);
+    box-shadow:var(--shadow-e2);
+    font:var(--weight-normal) var(--fs-xs) var(--font-ui); color:var(--color-txt); white-space:nowrap;
+  }
+  html.vt-focus.vt-reveal-top .vt-focus-pill { top:44px; }
+  .vt-focus-pill > button {
+    display:flex; align-items:center; gap:6px; height:100%; margin:0;
+    border:0; border-radius:0; background:transparent; color:inherit; font:inherit; cursor:pointer;
+  }
+  .vt-focus-pill > button:hover { background:var(--menu-hover); }
+  .vt-focus-pill > button:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
+  .vt-focus-pill-go { padding:0 10px 0 8px; max-width:420px; min-width:0; }
+  .vt-focus-pill-ico { display:inline-flex; flex:none; color:var(--color-st-waiting); }
+  .vt-focus-pill-count { color:var(--color-st-waiting); font-weight:var(--weight-semibold); flex:none; }
+  .vt-focus-pill-sep { color:var(--color-muted); flex:none; }
+  .vt-focus-pill-name { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .vt-focus-pill-kind { color:var(--color-st-waiting); flex:none; }
+  .vt-focus-pill-chev { display:inline-flex; flex:none; color:var(--color-muted); }
+  .vt-focus-pill-exit { padding:0 10px 0 8px; gap:4px; box-shadow:inset 1px 0 var(--color-line-strong); color:var(--color-sub) !important; }
+
+  .vt-focus-kbd {
+    display:inline-block; margin-right:4px; padding:0 5px; border-radius:var(--radius-sm);
+    background:var(--menu-hover); color:var(--color-sub);
+    font:var(--weight-medium) var(--fs-3xs) / 16px var(--font-mono);
+  }
+
+  /* ── 들어올 때 안내 — 아래 가운데 32 높이, 3초(Focus.tsx). 움직이지 않는다(한 화면에 움직이는 것 하나). ── */
+  .vt-focus-hint {
+    position:fixed; left:50%; bottom:16px; transform:translateX(-50%); z-index:510;
+    display:flex; align-items:center; gap:8px; height:32px; padding:0 14px; box-sizing:border-box;
+    border-radius:8px; background:var(--color-bg-raised); border:1px solid var(--color-line-strong);
+    box-shadow:var(--shadow-e2);
+    font:var(--weight-normal) var(--fs-xs) var(--font-ui); color:var(--color-sub); white-space:nowrap;
+    pointer-events:none;
+  }
+  .vt-focus-hint-ico { display:inline-flex; color:var(--color-muted); }
+  .vt-focus-hint-sep { color:var(--color-muted); }
+
+  /* ── 마우스가 없는 기기의 끝내기 버튼 — 가장자리를 쓸 수 없으니 왼쪽 아래에 늘 둔다(36×36). ── */
+  .vt-focus-exit {
+    position:fixed; left:12px; bottom:12px; z-index:510;
+    display:flex; align-items:center; justify-content:center; width:36px; height:36px; padding:0; margin:0;
+    border-radius:8px; border:1px solid var(--color-line-strong); background:var(--color-bg-raised);
+    box-shadow:var(--shadow-e2); color:var(--color-sub); cursor:pointer;
+  }
+  .vt-focus-exit:focus-visible { outline:2px solid var(--color-acc); outline-offset:2px; }
+
+  /* 토스트 카드는 집중 모드에서도 뜬다 — 상태 막대 자리가 0이라 창 아래 16. 상태 막대가 드러나면 그 위 16으로 비킨다. */
+  html.vt-focus.vt-reveal-bottom #vt-toasts { bottom:calc(24px + 16px + env(safe-area-inset-bottom, 0px)); }
+
+  /* 제목 막대의 집중 모드 버튼(28). 집중 모드에서 위로 띄웠을 때는 눌린 모양(끝내기). */
+  .vt-tb-focus {
+    display:flex; align-items:center; justify-content:center; flex:none;
+    width:28px; height:28px; padding:0; margin:0;
+    border:0; border-radius:var(--radius-sm); background:transparent; color:var(--color-sub); cursor:pointer;
+  }
+  .vt-tb-focus:hover { background:var(--menu-hover); color:var(--color-txt); }
+  .vt-tb-focus.on { background:var(--color-surface-active); color:var(--color-txt); }
+  .vt-tb-focus:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.vt-focus #vt-titlebar,
+  html.vt-focus #vt-hud,
+  html.vt-focus #vt-workbench { transition:none !important; transform:none !important; }
+}

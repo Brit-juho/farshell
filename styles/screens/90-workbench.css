@@ -5,7 +5,7 @@
  * 리디자인 3단계에서 토큰으로 들어온다.
  *
  * 폭은 두 변수다. 화면에 무언가를 왼쪽에서 띄우는 곳(body padding·온보딩·뷰어 dock 모드)은
- * 전부 이 둘을 더해 쓴다.
+ * 전부 이 둘을 더해 쓴다. 규칙은 `-nat`(막대 자신의 폭)에 걸고 `-w`는 그것을 따라간다 — 집중 모드만 `-w`를 0으로 만든다.
  *   --vt-activity-w  활동 막대. 720px 이상에서 48, compact는 0(작업대가 없다).
  *   --vt-side-w      사이드바. Workbench.tsx가 `<html data-vt-side>`(open|strip|closed)와
  *                    `--vt-side-stored`(저장 폭 px)를 주고, 그리는 폭은 여기서 정한다:
@@ -23,14 +23,17 @@
 
 #vt-workbench-slot { display:contents; }
 
-:root { --vt-activity-w:0px; --vt-side-w:0px; }
+/* 리디자인 7단계 — 막대 자신의 폭(--vt-activity-nat · --vt-side-nat)과 본문이 비워 두는 폭(--vt-activity-w ·
+   --vt-side-w)을 나눴다. 평소엔 같고, 집중 모드(98-focus.css)는 뒤의 둘만 0으로 만든다 — 숨은 작업대는 제 폭을 그대로
+   가진 채 가장자리에서 칸 위로 떠오를 수 있다. */
+:root { --vt-activity-nat:0px; --vt-side-nat:0px; --vt-activity-w:var(--vt-activity-nat); --vt-side-w:var(--vt-side-nat); }
 @media (min-width:720px) {
   /* 활동 막대는 지연 청크가 오기 전에도 자리를 잡아 둔다 — 늘 있는 막대라 부팅 후 칸이 한 번
      더 줄어드는 일을 하나라도 줄인다. 사이드바 폭은 저장값을 알아야 해서 마운트 뒤에 정해진다. */
-  :root { --vt-activity-w:48px; }
-  :root[data-vt-side="open"] { --vt-side-w:min(var(--vt-side-stored, 360px), 40vw); }
-  :root[data-vt-side="strip"] { --vt-side-w:48px; }
-  :root[data-vt-side="closed"] { --vt-side-w:0px; }
+  :root { --vt-activity-nat:48px; }
+  :root[data-vt-side="open"] { --vt-side-nat:min(var(--vt-side-stored, 360px), 40vw); }
+  :root[data-vt-side="strip"] { --vt-side-nat:48px; }
+  :root[data-vt-side="closed"] { --vt-side-nat:0px; }
 
   body {
     padding-left:calc(env(safe-area-inset-left) + var(--vt-activity-w) + var(--vt-side-w)) !important;
@@ -40,11 +43,11 @@
   }
   #vt-workbench {
     display:flex; flex-direction:row;
-    width:calc(var(--vt-activity-w) + var(--vt-side-w));
+    width:calc(var(--vt-activity-nat) + var(--vt-side-nat));
   }
 }
 @media (min-width:720px) and (max-width:1279.98px) {
-  :root[data-vt-side="open"] { --vt-side-w:min(var(--vt-side-stored, 360px), 260px, 40vw); }
+  :root[data-vt-side="open"] { --vt-side-nat:min(var(--vt-side-stored, 360px), 260px, 40vw); }
 }
 
 /* ── 활동 막대 48 ─────────────────────────────────────────────────────────── */

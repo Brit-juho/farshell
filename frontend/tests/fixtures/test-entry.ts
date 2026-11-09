@@ -27,7 +27,7 @@ export {
   splitGlobs, globParam, grepUrl, groupByFile, segments, hitColumn, summary, skippedLine, DEFAULT_OPTIONS as GREP_DEFAULTS,
 } from '../../js/shell/grep-data.js';
 export {
-  buildSettingEntries, matchSettingEntry, stepSettingValue, formatSettingValue, SECTION_META, RAIL_TOGGLES,
+  buildSettingEntries, matchSettingEntry, stepSettingValue, formatSettingValue, SECTION_META, RAIL_TOGGLES, FOCUS_ITEMS,
 } from '../../js/panels/settings/index-data.js';
 export { estimateCols, cursorClass, SAMPLE_LINES, resolveSkin, MONO_ADVANCE } from '../../js/panels/settings/preview-data.js';
 export { mountPalette } from '../../js/shell/Palette.tsx';
@@ -51,3 +51,4 @@ export {
 } from '../../js/files/tree-model.js';
 export { TreeStore } from '../../js/files/tree-store.js';
 export { mountFileTree } from '../../js/files/mount.tsx';
+export { mountFocus, edgeDelayMs, shouldShowHint, insideReveal, EDGE_CHROME } from '../../js/shell/Focus.tsx';

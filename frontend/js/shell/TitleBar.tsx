@@ -11,7 +11,7 @@
 //   경로는 활성 칸 세션의 저장소 › 브랜치 › 세션 이름이다(layout/branch-chips.js — 칸 머리 브랜치 칩과 같은 출처).
 // - **팔레트 입력**은 진짜 입력란이 아니라 팔레트를 여는 버튼이다(누르면 기존 팔레트, `quickopen.open`). 가운데에
 //   두려고 막대를 세 칸 격자(1fr auto 1fr)로 나눈다 — 양옆이 좁아지면 양옆이 먼저 줄고 입력은 가운데에 남는다.
-// - **오른쪽 도구**: 집중 모드 버튼 자리(7단계가 채운다 — 지금은 빈 자리), 그리고 `#vt-mb-tools`(키바 버튼 ·
+// - **오른쪽 도구**: 집중 모드 버튼(7단계, `#vt-tb-focus-slot` 안), 그리고 `#vt-mb-tools`(키바 버튼 ·
 //   윈도 캡션, layout/menubar-slots.js가 #topbar에서 옮겨 온다). 왼쪽 끝 `#vt-mb-lead`(macOS 신호등)도 같다.
 //   이 둘은 index.html의 정적 노드라 Solid가 소유하지 않는다 — 마운트 뒤 이 막대의 빈 자리(자식이 없는 요소)로
 //   **옮겨** 둔다. 그 자리는 JSX 자식이 없어서 Solid가 그 안을 다시 그릴 일이 없다.
@@ -44,6 +44,12 @@ export interface TitleBarDeps {
   crumb?: () => TitleCrumb;
   /** 경로가 바뀔 수 있을 때 부른다(세션 전환·칸 이동·브랜치 지도 갱신). 해제 함수를 돌려준다. */
   subscribeCrumb?: (fn: () => void) => () => void;
+  /** 키맵 id → 표시용 조합(사용자가 바꿨으면 바꾼 조합). 못 쓰는 조합이면 ''. */
+  keyHint?: (id: string) => string;
+  /** 집중 모드가 켜져 있는가(layout/focus.js). */
+  focusActive?: () => boolean;
+  /** 집중 모드를 켜고 끌 때 window에 오는 이벤트 이름. */
+  focusEvent?: string;
 }
 
 interface Caps { hostname?: string; tunnel?: unknown }
@@ -78,7 +84,7 @@ export function accessUrl(caps: unknown): string {
 }
 
 /**
- * 제목 막대 왼쪽 첫 칸의 FarShell 메뉴. 새 세션 · 빠른 열기 · 접속 주소 복사 · 설정 · 상태 막대 설정.
+ * 제목 막대 왼쪽 첫 칸의 FarShell 메뉴. 새 세션 · 빠른 열기 · 집중 모드 · 접속 주소 복사 · 설정 · 상태 막대 설정.
  * 드롭다운은 Portal로 body에 그린다 — 막대가 overflow를 자르고 OS 흉내 스킨은 backdrop-filter를 쓰는데, 그게
  * fixed의 기준 상자를 바꿔서 안에 두면 잘린다. 닫기: 바깥 클릭 · Esc · 항목 실행 · 창 크기 변경/포커스 잃음.
  * 키보드: ↑↓ Home End.
@@ -105,6 +111,8 @@ function MenuButton(props: { deps: TitleBarDeps; getCaps: () => unknown }) {
   const entries = (): MenuEntry[] => [
     { id: 'new', iconName: 'plus', label: t('새 세션'), run: (el) => act('session.add-menu', el) },
     { id: 'quick', iconName: 'search', label: t('빠른 열기'), keys: `${mod}K`, run: () => act('quickopen.open') },
+    // 리디자인 7단계(시안 O07) — 집중 모드. 표기는 키맵의 지금 조합(사용자가 바꿨으면 그 조합)이다.
+    { id: 'focus', iconName: 'maximize', label: t('집중 모드'), keys: props.deps.keyHint?.('focusMode') || undefined, run: () => act('focus.toggle') },
     {
       id: 'copy-url', iconName: 'link', label: t('접속 주소 복사'), sepBefore: true,
       run: () => {
@@ -314,6 +322,39 @@ function HostSwitcher(props: { deps: TitleBarDeps; hostname: () => string }) {
   );
 }
 
+/**
+ * 집중 모드 버튼(리디자인 7단계, 시안 D01 오른쪽 · D05-C). 평소엔 `maximize`(켜기), 집중 모드에서 위 가장자리로
+ * 제목 막대를 띄웠을 때는 `minimize`(끝내기) + 눌림 표시. 상태는 core가 쏘는 이벤트로만 따라간다.
+ */
+function FocusButton(props: { deps: TitleBarDeps }) {
+  const [on, setOn] = createSignal(!!props.deps.focusActive?.());
+  const evt = props.deps.focusEvent || 'vt:focus-change';
+  const onChange = (e: Event) => setOn(!!(e as CustomEvent).detail?.on);
+  window.addEventListener(evt, onChange);
+  onCleanup(() => window.removeEventListener(evt, onChange));
+  const label = () => (on() ? t('집중 모드 끝내기') : t('집중 모드'));
+  const keys = () => props.deps.keyHint?.('focusMode') || '';
+  return (
+    <button
+      type="button"
+      id="vt-tb-focus"
+      class="vt-tb-focus"
+      classList={{ on: on() }}
+      aria-pressed={on()}
+      aria-label={label()}
+      data-tip={label()}
+      data-tip-sub={keys() || undefined}
+      data-tip-side="bottom"
+      onClick={() => {
+        const fn = props.deps.getAction('focus.toggle');
+        if (typeof fn === 'function') (fn as () => void)();
+      }}
+    >
+      {svg(on() ? 'minimize' : 'maximize', 16)}
+    </button>
+  );
+}
+
 /** 저장소 › 브랜치 › 세션 — 활성 칸의 세션. 모르는 조각은 빼고, 셋 다 없으면 아무것도 그리지 않는다. */
 function Breadcrumb(props: { deps: TitleBarDeps }) {
   const read = (): TitleCrumb => props.deps.crumb?.() || {};
@@ -410,8 +451,8 @@ function TitleBar(props: { deps: TitleBarDeps; root: HTMLElement }) {
         <kbd class="vt-tb-kbd">{`${mod}K`}</kbd>
       </button>
       <div class="vt-tb-right">
-        {/* 집중 모드 버튼 자리 — 리디자인 7단계가 채운다. 지금은 아무것도 그리지 않는다(누를 수 없는 버튼을 두지 않는다). */}
-        <div id="vt-tb-focus-slot" class="vt-tb-home" />
+        {/* 집중 모드 버튼(리디자인 7단계). 자리 요소는 2단계 계약 그대로 두고 그 안에 그린다. */}
+        <div id="vt-tb-focus-slot" class="vt-tb-home"><FocusButton deps={props.deps} /></div>
         <div class="vt-tb-home" ref={toolsHome} />
       </div>
     </>
