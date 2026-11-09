@@ -2611,15 +2611,22 @@ def phone_page(browser, server):
     _login(ctx, base)
     pg = ctx.new_page()
     _boot(pg, f"{base}/")
+    before = set(pg.evaluate("() => Object.keys(window.allSessions())"))
     yield pg
+    # 이 테스트가 만든 세션은 닫기 버튼과 같은 경로로 지운다 — 다음 테스트의 「세션 0개」 전제를 지킨다.
+    try:
+        for sid in set(pg.evaluate("() => Object.keys(window.allSessions())")) - before:
+            pg.evaluate("(id) => window.removeSession && window.removeSession(id)", sid)
+    except PlaywrightError:
+        pass
     ctx.close()
     _reset_saved_layout(base, token)
 
 
 def _phone_terminal(pg) -> None:
     """터미널 탭 · 세션 하나 · 키바 닫힘에서 시작한다."""
-    if pg.evaluate("() => (window.allSessions?.() || new Map()).size") == 0:
-        pg.evaluate("() => window.createSession?.()")
+    if pg.evaluate("() => Object.keys(window.allSessions?.() || {}).length") == 0:
+        pg.evaluate("() => window.createTmuxSession?.()")
         pg.wait_for_selector(".vt-pane .xterm", timeout=15000)
     pg.evaluate("() => window.vtSettingsSet('keybar.open', false)")
     pg.locator('#vt-mnav-bottom [data-mnav="terminal"]').click()
@@ -2695,7 +2702,7 @@ def test_폰_집중_모드는_상단바_버튼으로_들어가고_끌어내리�
 def test_폰_세션_카드는_두_줄_64이고_개입_카드의_답_버튼은_44다(phone_page):
     pg = phone_page
     _phone_terminal(pg)
-    name = pg.evaluate("() => { const s = [...window.allSessions().values()][0]; return s.tmuxName || s.tmux_name || null; }")
+    name = pg.evaluate("() => { const s = Object.values(window.allSessions())[0]; return s && (s.tmuxName || s.tmux_name) || null; }")
     pg.locator('#vt-mnav-bottom [data-mnav="fleet"]').click()
     pg.wait_for_selector("#vt-fleet .vt-fleet-row", timeout=15000)
     h = pg.evaluate("() => Math.round(document.querySelector('#vt-fleet .vt-fleet-row').getBoundingClientRect().height)")
