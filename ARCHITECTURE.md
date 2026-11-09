@@ -194,8 +194,15 @@ build outputs, both with fixed (non-hashed) filenames so `sw.js`'s offline
 precache stays valid:
 
 - `frontend/dist/app.js` + `frontend/dist/app.css` — the main entry
-  (`frontend/js/main.js`), which statically imports essentially everything
-  below.
+  (`frontend/js/main.js`). `app.js` is only the boot wiring; everything needed at
+  boot is in `core.js`, and **app.js + core.js is the initial payload**, capped at
+  358,400 B (`frontend/tests/build-output.test.js`, CI). Everything else is a
+  fixed-name lazy chunk chosen by `chunkOf()` in `vite.config.js`: `shell`
+  (Solid + `js/shell/` — workbench, title bar, status bar, palette, fleet, focus),
+  `panels`, `settings`, `files`, `editor`/`editor-*`, `preview`, `panel`, `screens`,
+  `share`, `history`, `touch`, `upload`, `select`, `brand`, `tooltip`,
+  `resize-overlay`, `voice-status`, `subagents`. A module with no rule falls into
+  `core` — when you add one that is not needed at boot, give it a chunk.
 - `frontend/dist/voice.js` — `frontend/js/voice/` built as a **separate,
   fully independent** Vite entry. `frontend/js/agent/status.js` lazy-loads it
   with a `<script type="module">` tag only after `/api/capabilities` reports
@@ -212,12 +219,14 @@ precache stays valid:
 | `js/core/` | `env.js` (API_BASE/token/cookie exchange), `api.js` (`apiFetch`/`vtFetch`/`vtEsc`), `store.js` (session state), `dom.js` (the `data-action` click-delegation registry that replaced 29 inline `onclick` attributes), `settings.js` (**settings store — the server's `/api/workspace.settings` is the source of truth, localStorage is only a pre-render cache**), `keymap.js` (keybinding registry with `passthrough`, so a shell key like `Mod+F` can be handed back to the terminal) |
 | `js/term/` | The terminal client, split by concern: `e2e.js` (client side of the E2E handshake), `session.js` (`addSession`/`switchTo`/tab lifecycle — the riskiest split, kept as one orchestrator over `xterm-setup.js`/`ws.js` "assembly parts" rather than force-split), `clipboard.js`, `touch.js`, `links.js`, `selection.js`, `resize.js`, `workspace.js` (tab order persistence), `conn-overlay.js`, `keybar.js`, `guide.js`, `boot.js` (`bootApp()`) |
 | `js/agent/` | The session grid plus the client half of the agent state machine: `badges.js` (which icon), `status.js` (`/ws-agent`, capability gating), `preview.js` (session preview cards), `state.js` (**the single client-side source of the four states**, keyed by tmux session name — a web session id changes on every re-attach), `paint.js` (**the single place that paints them**: tabs, pane headers, favicon, app badge) |
-| `js/panels/` | `panel.js` (shared modal-panel shell for code viewer/ports/queue/snippets) + `viewer/` (the code viewer: `state.js`, `overlay.js`, `tree.js`, `file.js`, `diff.js`, `git.js`, `scm.js`, `recent.js`) |
+| `js/shell/` | Solid + TypeScript desktop shell (lazy `shell` chunk; reads core state only through `window` bridges, never by static import — ADR-26): `Workbench.tsx` (activity bar + one shared-width sidebar + the right pinned sidebar, `side-prefs.js` rules), `ActivityBar.tsx`/`activity-data.ts`, `Rail.tsx`/`RailRow.tsx` (sessions view), `Dock.tsx` (tool view, `window.vtDockHost`, pinned-panel hosting), `TitleBar.tsx` (36), `Hud.tsx` (status bar 24), `Palette.tsx`, `Fleet.tsx` (phone home), `Focus.tsx` (desktop focus mode), `GrepView.tsx` |
+| `js/files/` | The folder tree and file panel (Solid + TS, lazy `files` chunk) |
+| `js/panels/` | `panel.js` (shared panel shell: modal on phones, docked into a sidebar on desktop via `vtDockHost`, or a pane leaf) + `viewer/` (the code viewer), the tool renderers (`ports/`, `usage.js`, `system.js`, `files/` …; the queue is top-level `js/queue.js`) with small `*-lazy.js` stubs in core that register the action and `import()` the body, and `settings/` (the settings window) |
 | `js/voice/` | The voice client: `recording.js`, `capture.js`, `pcm.js`, `notify.js`, `media-session.js`, `index.js` (the entry point). Built as its own bundle (see above) |
-| `js/ui/` | `toast.js` (unified toast — still window-bridged since `voice.js`'s separate bundle needs it; routes `info`/`success` into the HUD strip and only floats `warn`/`error`, see DESIGN.md), `okflash.js` (success shown at the trigger — swaps a button's icon for a check), `favicon.js` (dynamic tab-badge canvas, UMD-style) |
+| `js/ui/` | `toast.js` (unified toast — still window-bridged since `voice.js`'s separate bundle needs it; routes `info`/`success` into the HUD strip and only floats `warn`/`error`, see DESIGN.md), `okflash.js` (success shown at the trigger — swaps a button's icon for a check), `favicon.js` (dynamic tab-badge canvas, UMD-style), `icons.js` (the icon registry; `icons-shell.js` and `panels/panel-icons.js` hold icons only lazy chunks draw), `tooltip.js` (lazy, behind `tooltip-lazy.js`) |
 | `js/push/` | `swreg.js` — Service Worker registration for Web Push |
 | `js/lib/` | `ansilex.js`, `difflex.js`, `keyseq.js`, `shell-quote.js` — pure logic, UMD-wrapped so both the browser (`window.VTAnsiLex`) and the Node test suite (`require(...)`) can use them |
-| `js/layout/` | The shell. `store.js`/`tree.js` (split-pane tree — pure functions + the single place that holds it), `panes.js` (recursive renderer; moves existing session wrappers instead of recreating them), `dnd.js` (5-zone drop targets), `resizer.js`, `compact.js` (<720px + coarse pointer render mode), `pane-picker.js`, `right-rail.js` (usage rail, ≥1280px), `clients.js` ("Connected screens"), `persist.js` (layout persistence — leaves store `{id, tmux}` so a tmux session survives a new PTY id), `breakpoints.js` |
+| `js/layout/` | The shell. `store.js`/`tree.js` (split-pane tree — pure functions + the single place that holds it), `panes.js` (recursive renderer; moves existing session wrappers instead of recreating them), `dnd.js` (5-zone drop targets), `resizer.js`, `compact.js` (<720px + coarse pointer render mode), `pane-picker.js`, `surface.js` (refit gate + `#vt-term-stage`), `focus.js`/`mobile-focus.js` (focus mode), `resize-overlay.js` (lazy), `clients.js` ("Connected screens"), `persist.js` (layout persistence — leaves store `{id, tmux}` so a tmux session survives a new PTY id), `breakpoints.js` |
 | `js/theme.js`, `picker.js`, `queue.js`, `snippets.js`, `pushui.js`, `gate.js`, `main.js` | Top-level feature modules and the app entry point. `gate.js` is the one deliberately-classic (non-module) script — it runs the login gate before any ES module (which is deferred) could paint |
 | `sw.js` | Service Worker — offline caching, precache list |
 | `manifest.json` | PWA manifest |

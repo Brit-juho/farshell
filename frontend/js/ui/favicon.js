@@ -24,15 +24,17 @@
   'use strict';
 
   var SIZE = 64;               // 렌더 해상도 (브라우저가 16px로 다운스케일 → 선명)
-  var BG = '#8839ef';          // catppuccin mauve — Claude 에이전트 색과 동일 계열
-  var FG = '#ffffff';          // 터미널 글리프
+  // 리디자인 9단계 — 기본 스킨 farshell의 크롬(bg-1)과 강조(파랑)에 맞췄다(옛: catppuccin mauve 보라 + 흰 글리프).
+  // scripts/gen-icons.html(앱 아이콘 PNG)과 같은 값이어야 한다 — 마크는 하나다.
+  var BG = '#17181b';          // --color-bg-1
+  var FG = '#7aa2ff';          // --color-acc(--acc-farshell) — 터미널 글리프
   // A5: waiting 추가 + **D3 토큰과 색 정렬**. 이 파일은 D3(디자인 시스템)보다
   // 먼저 있던 classic script라 그때 색(작업중=앰버, 완료=그린)을 그대로 들고
   // 있었는데, 토큰은 작업중=그린·대기=앰버(액센트)·완료=블루로 이미 재정의돼
   // 있었다 — 같은 화면에서 탭 dot과 파비콘이 서로 다른 색으로 같은 상태를
   // 가리키고 있었다는 뜻이다. canvas라 CSS 변수를 못 읽어 리터럴이지만,
-  // 값은 styles/theme/skins.css의 --color-st-*와 같게 유지한다.
-  var BADGE = { working: '#32d74b', waiting: '#ffd60a', done: '#0a84ff' };
+  // 값은 styles/theme/tokens.css(farshell)의 --color-st-*와 같게 유지한다.
+  var BADGE = { working: '#52d1a0', waiting: '#f2b350', done: '#5fb8f0' };   // farshell --color-st-*(리디자인 3단계 값)
 
   var _status = 'idle';
   var _canvas = null;
