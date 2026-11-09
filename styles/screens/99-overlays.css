@@ -225,3 +225,119 @@
   .vt-wl-updated, .vt-wl-head-sub { display:none; }
 }
 @media (pointer:coarse) { .vt-wl-row { min-height:44px; } }
+
+/* ── 같은 껍데기를 쓰는 독립 창: 워크트리 만들기(O09) · 세션 목록 설정 시트(O10) · 연결된 화면(O12) ── */
+.vt-wtd-card {
+  background:var(--color-bg-raised); border:1px solid var(--color-line-strong);
+  border-radius:var(--radius-lg); box-shadow:var(--shadow-e2);
+}
+.vt-wtd-head { min-height:44px; box-sizing:border-box; padding:0 8px 0 16px; background:transparent; border-bottom:1px solid var(--color-line); }
+.vt-wtd-title { font:var(--weight-semibold) var(--fs-base)/1.3 var(--font-ui); }
+.vt-wtd-body { padding:16px; gap:14px; }
+.vt-wtd-label { flex:0 0 96px; font:var(--weight-medium) var(--fs-xs)/1 var(--font-ui); color:var(--color-sub); }
+.vt-wtd-input, .vt-wtd-select { height:28px; box-sizing:border-box; background:var(--color-bg-2); border-radius:var(--radius-sm); }
+.vt-wtd-warn {
+  align-items:flex-start; padding:8px 10px; border-radius:var(--radius-sm);
+  color:var(--color-st-waiting); background:var(--color-st-waiting-tint); font:var(--weight-normal) var(--fs-xs)/1.5 var(--font-ui);
+}
+.vt-wtd-warn-fix { --btn-h:24px; color:var(--color-st-waiting); border-color:color-mix(in srgb, var(--color-st-waiting) 40%, transparent); background:transparent; }
+.vt-wtd-error { color:var(--color-st-error); font-size:var(--fs-xs); }
+.vt-wtd-foot { display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--color-line); }
+/* O09 — 560 폭 폼(시안). */
+.vt-wtd-card:not(.vt-repovis-card) { max-width:560px; width:min(560px, 100%); }
+
+/* O10 세션 목록 설정 시트 — 사이드바 바로 옆으로 펼친다(폭 520, 제목 막대 아래부터 상태 막대 위까지). 뒤 막은 옅게. */
+@media (min-width:720px) {
+  .vt-wtd-backdrop:has(.vt-repovis-card) {
+    align-items:stretch; justify-content:flex-start; padding:0;
+    padding-left:calc(var(--vt-activity-w, 48px) + var(--vt-side-w, 0px));
+    padding-top:var(--titlebar-h, 0px); padding-bottom:var(--statusbar-h, 0px);
+    background:color-mix(in srgb, var(--color-scrim) 65%, transparent);
+  }
+  .vt-wtd-card.vt-repovis-card {
+    width:520px; max-width:min(520px, 100%); height:100%; max-height:none;
+    border-radius:0; border:0; border-right:1px solid var(--color-line-strong);
+  }
+}
+.vt-repovis-card .vt-wtd-body { padding:4px 20px 16px; }
+.vt-railset-row { min-height:36px; }
+.vt-railset-label { font:var(--weight-normal) var(--fs-sm)/1.4 var(--font-ui); }
+.vt-railset-hint, .vt-railset-note { font-size:var(--fs-xs); color:var(--color-muted); }
+
+/* O12 연결된 화면 — 상태 막대의 「화면 N」에서 위로 여는 떠 있는 면(360). 다른 곳(레일 메뉴)에서 열면 가운데 창. */
+#vt-connected-screens .vt-wtd-card { max-width:360px; width:min(360px, 100%); padding:0; }
+#vt-connected-screens .vt-wtd-head { min-height:36px; padding:0 4px 0 12px; }
+#vt-connected-screens .vt-wtd-title { font:var(--weight-semibold) var(--fs-sm)/1 var(--font-ui); }
+#vt-connected-screens .vt-wtd-body { padding:0; gap:0; }
+#vt-connected-screens .vt-clients { display:flex; flex-direction:column; }
+#vt-connected-screens .vt-clients-head { order:3; padding:8px 12px; border-top:1px solid var(--color-line); }
+#vt-connected-screens .vt-clients-head .vt-btn { width:100%; justify-content:center; background:var(--color-bg-raised); border:1px solid var(--color-line-strong); color:var(--color-txt); --btn-h:24px; }
+#vt-connected-screens .vt-clients-list { margin:0; }
+#vt-connected-screens .vt-clients-row { min-height:48px; padding:0 12px; gap:10px; }
+#vt-connected-screens .vt-clients-row + .vt-clients-row { border-top:1px solid var(--color-line); }
+#vt-connected-screens .vt-clients-meta { font-size:var(--fs-xs); color:var(--color-muted); }
+#vt-connected-screens .vt-clients-badge { color:var(--color-acc); background:var(--color-acc-soft); border-color:transparent; }
+#vt-connected-screens .vt-clients-status, #vt-connected-screens .vt-clients-note { padding:6px 12px; margin:0; }
+#vt-connected-screens.vt-screens-pop { background:transparent; display:block; padding:0; }
+#vt-connected-screens.vt-screens-pop .vt-wtd-card { position:fixed; bottom:calc(var(--statusbar-h, 24px) + 4px); max-height:min(60vh, 480px); }
+
+/* ── O08 공유 및 권한 — .vt-dialog 껍데기(위)를 쓴다. 폭만 시안(480)에 맞춘다. */
+.vt-dialog.vt-share-dialog .vt-viewer-card { width:min(480px, 100%); }
+
+/* ── O13 파일 뷰어 — 떠 있는 창 · 상단 시트 껍데기(raised 머리, 반경 8). 본문(코드 면)은 그대로. */
+.vt-file-overlay > .vt-viewer-card { border:1px solid var(--color-line-strong); border-radius:var(--radius-lg); box-shadow:var(--shadow-e2); }
+.vt-file-overlay .vt-viewer-head { min-height:40px; box-sizing:border-box; background:var(--color-bg-raised); border-bottom:1px solid var(--color-line); }
+.vt-file-overlay.surface-sheet > .vt-viewer-card { border-top-left-radius:0; border-top-right-radius:0; }
+
+/* ── O14 대화 보관함 — 1200 창, 왼쪽 목록 380(구분선만), 선택 행은 강조 틴트 + 2px 선. */
+#vt-history .vt-viewer-card { width:min(1200px, calc(100vw - 32px)); height:min(788px, calc(100dvh - 32px)); }
+#vt-history .vt-vw-body { padding:16px 20px; }
+.vt-history-split { grid-template-columns:minmax(260px, 380px) minmax(0, 1fr); gap:20px; }
+.vt-history-list { padding-right:0; }
+.vt-history-item { padding:10px 12px; gap:3px; font-size:var(--fs-sm); border-bottom:1px solid var(--color-line); }
+.vt-history-item[aria-pressed="true"] { background:var(--color-acc-soft); }
+.vt-history-detail h3 { font:var(--weight-semibold) var(--fs-base)/1.3 var(--font-ui); }
+.vt-history-message { padding-block:10px; }
+.vt-history-message h4 { font-size:var(--fs-xs); color:var(--color-muted); margin-bottom:4px; }
+.vt-history-message pre { font-size:var(--fs-sm); line-height:1.6; }
+.vt-history-actions .vt-btn { --btn-h:24px; font-size:var(--fs-xs); }
+@media (max-width:719px) { #vt-history .vt-viewer-card { width:100%; height:100%; } }
+
+/* ── O16-A 온보딩 — 가운데 기둥: 강조 아이콘 · 28 제목 · 15 본문 · 살아 있는 tmux 목록(400, 선 상자) · 버튼. */
+.vt-onboarding .vt-ob-icon { color:var(--color-acc); }
+.vt-onboarding h2 { font:var(--weight-semibold) var(--fs-2xl)/1.2 var(--font-ui); letter-spacing:var(--tracking-tight); color:var(--color-txt); margin:0; }
+.vt-onboarding p { color:var(--color-sub); font-size:var(--fs-base); }
+.vt-onboarding .vt-ob-sessions { width:min(400px, 100%); border:1px solid var(--color-line-strong); border-radius:var(--radius-lg); text-align:left; }
+.vt-onboarding .vt-ob-hint { color:var(--color-muted); font-size:var(--fs-xs); opacity:1; }
+
+/* ── O16-B 연결 끊김 — 블러 없이 짙은 막(DESIGN.md §0: 블러는 OS 흉내 스킨 제목 막대만), 20px 아이콘 · 22 제목. */
+.vt-overlay {
+  background:color-mix(in srgb, var(--color-bg-0) 90%, transparent);
+  -webkit-backdrop-filter:none; backdrop-filter:none; gap:8px;
+}
+.vt-overlay .vt-ov-icon { color:var(--color-st-error); }
+.vt-overlay .vt-ov-icon svg { width:20px; height:20px; }
+.vt-overlay .vt-ov-title { color:var(--color-txt); font:var(--weight-semibold) var(--fs-lg)/1.3 var(--font-ui); }
+.vt-overlay .vt-ov-sub { color:var(--color-sub); font-size:var(--fs-sm); }
+.vt-overlay .vt-ov-elapsed { margin-top:0; color:var(--color-muted); font-size:var(--fs-xs); }
+.vt-overlay .vt-ov-stop-btn { margin-top:8px; }
+
+/* ── O16-C 서버 응답 없음 배너 — 제목 막대 바로 아래 36 띠(틴트 면, 본문색 글자, 앞에 상태 점). */
+.vt-unreachable {
+  top:var(--titlebar-h, 0px); display:flex; align-items:center; flex-wrap:wrap; gap:4px 8px; min-height:36px; box-sizing:border-box;
+  padding:6px 12px; text-align:left; box-shadow:none; border-bottom:1px solid var(--color-line);
+  color:var(--color-txt); background:color-mix(in srgb, var(--color-st-error) 14%, var(--color-bg-1));
+}
+.vt-unreachable::before { content:""; flex:none; width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-st-error); }
+.vt-unreachable-title { font:var(--weight-semibold) var(--fs-sm)/1.4 var(--font-ui); }
+.vt-unreachable-sub { margin:0; opacity:1; color:var(--color-sub); font-size:var(--fs-sm); }
+
+/* ── O16-E 툴팁 · 터미널 검색 바 ── */
+.vt-tip { padding:6px 8px; background:var(--color-bg-raised); border-color:var(--color-line-strong); box-shadow:var(--shadow-e2); font-size:var(--fs-xs); }
+#search-bar {
+  width:380px; height:36px; box-sizing:border-box; padding:0 4px 0 10px; gap:6px;
+  background:var(--color-bg-raised); border:1px solid var(--color-line-strong); border-radius:var(--radius-sm); box-shadow:var(--shadow-e2);
+}
+#search-bar input { flex:1 1 auto; width:auto; min-width:0; height:26px; background:transparent; border:0; box-shadow:none; }
+#search-bar input:focus { outline:none; }
+@media (max-width:719px) { #search-bar { width:auto; left:8px; right:8px; } }
