@@ -5,6 +5,7 @@ import { t } from '../../../core/i18n.js';
 import {
   parseHudLayout, serializeHudLayout, hudZoneOf, moveHudKind, stepHudKind, HUD_KINDS, PINNED_HUD_KINDS,
 } from '../../../shell/hud-layout.js';
+import { createActivityOrderEditor } from './activity-order.js';
 
 // ── 「상태 막대」 ──────────────────────────────────────────────────────────
 // 맨 아래 상태 막대(옛 메뉴바·하단바, HUD)에 어떤 칩을 어느 쪽에 어떤 순서로 둘지 정한다(iTerm2의 상태바 구성처럼).
@@ -242,6 +243,8 @@ export function renderHudSection() {
     reset.addEventListener('click', () => { settingSet(KEY, ''); draw(); });
     foot.appendChild(reset);
     root.appendChild(foot);
+    // 활동 막대 순서 — 창이 넓으면 오른쪽 칸(preview.js)에 그려지고, 이 사본은 CSS가 숨긴다(좁을 때만 보인다).
+    root.appendChild(createActivityOrderEditor('inline').el);
   };
 
   draw();

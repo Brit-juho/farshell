@@ -41,6 +41,10 @@ export {
   ACTIVITIES, TOOL_ACTIVITIES, availableActivities, activityById, activityByPanelId, badgeTip, stepActivityIndex,
 } from '../../js/shell/activity-data.js';
 export { mountActivityBar } from './activity-bar-mount.js';
+export {
+  ACTIVITY_IDS, BOTTOM_IDS, FIXED_ACTIVITY, parseActivityLayout, serializeActivityLayout, moveActivity, stepActivity,
+  setActivityHidden, orderedActivities, bottomOrderOf, isDefaultActivityLayout,
+} from '../../js/shell/activity-layout.js';
 export { mountWorkbench } from '../../js/shell/Workbench.tsx';
 export { mountTitleBar, accessUrl } from '../../js/shell/TitleBar.tsx';
 export { mountHud } from '../../js/shell/Hud.tsx';

@@ -25,6 +25,7 @@ import { Rail, type RailDeps } from './Rail.js';
 import { Dock } from './Dock.js';
 import { ActivityBar } from './ActivityBar.js';
 import { availableActivities, activityById } from './activity-data.js';
+import { ACTIVITY_LAYOUT_KEY, parseActivityLayout, orderedActivities, bottomOrderOf } from './activity-layout.js';
 import {
   SESSIONS_ACTIVITY, SIDE_WIDTH_KEY, SIDE_ACTIVITY_KEY, SIDE_COLLAPSED_KEY, SIDE_PINNED_KEY,
   readSideWidth, readSideActivity, readSideCollapsed, readSidePinned, effectiveActivity, effectivePinned, sideMode,
@@ -77,6 +78,14 @@ function Workbench(props: { deps: WorkbenchDeps }) {
   const [pinnedPanel, setPinnedPanel] = createSignal(readSidePinned(_sGet, _sHas));
 
   const available = createMemo(() => availableActivities(caps()));
+  // 활동 막대 배치(설정 → 상태 막대 · 활동 막대). 막대에 그릴 것만 바꾼다 — 숨긴 활동도 `available`에는 남아
+  // 팔레트·키맵으로 열면 사이드바에 그대로 뜨고, 고정·지금 활동 판정도 그대로다(shell/activity-layout.js).
+  const [actLayout, setActLayout] = createSignal(parseActivityLayout(_sGet(ACTIVITY_LAYOUT_KEY)));
+  const unsubLayout = (window as any).vtSettingsSubscribe?.((changed: Record<string, unknown> | null) => {
+    if (changed && ACTIVITY_LAYOUT_KEY in changed) setActLayout(parseActivityLayout(_sGet(ACTIVITY_LAYOUT_KEY)));
+  });
+  onCleanup(() => unsubLayout?.());
+  const barItems = createMemo(() => orderedActivities(available(), actLayout()));
   // compact(<720)에는 작업대가 없다(CSS로 숨는다 — 하단 내비가 대신한다). 그 동안 도구 패널을
   // 열면 panels/panel.js가 dock 대신 풀스크린 모달로 띄워 폰 화면을 덮으므로, 열린 도구를 없는
   // 것으로 친다. 레일은 compact에서 스스로 폴링을 쉰다(Rail.tsx).
@@ -235,7 +244,7 @@ function Workbench(props: { deps: WorkbenchDeps }) {
     <>
     <div id="vt-workbench" class="vt-sidepanel left" data-mode={mode()}>
       <ActivityBar
-        items={available}
+        items={barItems}
         current={current}
         pinned={pinned}
         shown={() => mode() !== 'closed'}
@@ -245,6 +254,7 @@ function Workbench(props: { deps: WorkbenchDeps }) {
         onSettings={() => act('settings.show')}
         keyHint={keyHint}
         wireDrag={wireDrag}
+        bottomOrder={(id) => bottomOrderOf(actLayout(), id)}
       />
       <div id="vt-side" class="vt-side" ref={sideRef} role="tabpanel" aria-label={sideLabel()} hidden={mode() === 'closed'}>
         <div class="vt-side-view vt-side-sessions" hidden={current() !== SESSIONS_ACTIVITY}>

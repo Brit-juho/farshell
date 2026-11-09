@@ -94,9 +94,12 @@ function renderSearch() {
     const query = input.value.trim().toLocaleLowerCase();
     results.innerHTML = '';
     if (!query) { results.hidden = true; return; }
+    // 폰에서 안 보이는 섹션(상태 막대 · 활동 막대)의 항목은 검색에도 안 나온다.
+    const shown = shownSections();
     const matches = SEARCH_ITEMS.filter((item) => {
-      const section = SECTIONS.find((s) => s.id === item.sectionId);
-      return `${item.label} ${SEARCH_ALIASES[item.label] || ''} ${section?.label || ''} ${section?.description || ''}`.toLocaleLowerCase().includes(query);
+      const section = shown.find((s) => s.id === item.sectionId);
+      if (!section) return false;
+      return `${item.label} ${SEARCH_ALIASES[item.label] || ''} ${section.label} ${section.description || ''}`.toLocaleLowerCase().includes(query);
     });
     results.hidden = false;
     if (!matches.length) {

@@ -164,6 +164,8 @@ export const SCHEMA = {
   // 비어 있으면 shell/hud-data.ts의 DEFAULT_HUD_LAYOUT. 폰에는 HUD가 없고 기기마다 화면 폭이
   // 달라 device 스코프다.
   'ui.hud.layout': { type: 'str', def: '', scope: 'device' },
+  // 활동 막대 순서·숨김(설정 › 상태 막대 · 활동 막대). 형식·규칙은 shell/activity-layout.js.
+  'ui.activity.layout': { type: 'str', def: '', scope: 'device' },
   // 리디자인 7단계 — 데스크톱 집중 모드(layout/focus.js, shell/Focus.tsx). 범위는 이 기기(시안 spec 「집중 모드 규칙」).
   // `active`는 **저장하지 않는다**(persist:false — 이 탭의 메모리에만 있다). 새로고침하면 막대가 다시 보이는
   // 평소 화면으로 돌아온다: 숨긴 막대를 어떻게 되돌리는지 잊은 채 다시 열었을 때 빈 화면처럼 보이지 않게 하려는 것이고,

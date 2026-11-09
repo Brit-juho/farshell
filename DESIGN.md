@@ -479,6 +479,17 @@ and **one sidebar** beside it. The bar's top group are the activities, in this o
 `#vt-activity-mic-home` by `term/keybar.js` `placeMicButton` from its hidden parking slot `#vt-mic-park`)
 and 설정 (opens Settings; the approval-pending badge from `share-lazy.js` sits on its icon corner).
 
+**Order and hiding are the user's choice** (Settings → 상태 막대 · 활동 막대, right column 「활동 막대 순서」, mock
+O05; device-scoped `ui.activity.layout`, JSON `{"v":1,"order":[…],"hidden":[…],"bottom":[…]}`, `''` = default).
+세션 is pinned first and cannot be hidden. A hidden activity leaves only the bar: the palette and keymap still open
+it and the sidebar shows it as usual (`available` keeps it; only the bar's `items` drop it). The bottom group can
+be reordered but not hidden (hiding the gear would remove the way back) — by CSS `order`, because the mic slot is
+the node `voice.js` caches. An activity missing from a saved layout (a newer version's) is appended in default
+order; unknown ids are dropped. Rules: `shell/activity-layout.js` (plain JS, like `hud-layout.js`). The editor
+(`panels/settings/sections/activity-order.js`) is grip + icon 14 + name, a 「맨 위 고정」 or 「숨김」 tag, an eye
+toggle (`aria-pressed`) for the top group and ↑↓ 24; drag and the arrows share `moveActivity`. It sits in the
+right column at ≥1100px and below the status bar zones when narrower (the same editor drawn twice, CSS picks one).
+
 - **Item** 48×44, icon 20 (stroke 1.75), name only in `aria-label` and the tooltip (`data-tip`, shown to
   the right; second line = badge count, plus the `railToggle` key on the current activity). **Active** =
   a 2px `--color-acc` bar on the left edge (10px inset top and bottom, `::before`), no fill. A badge
@@ -688,7 +699,7 @@ events. A chip with no value is **hidden** (no usage provider → no chip). Rese
 chips show only usage.
 
 **Which chips show, on which side and in what order is the user's choice**
-(Settings → 상태 막대; device-scoped `ui.hud.layout`, JSON
+(Settings → 상태 막대 · 활동 막대; device-scoped `ui.hud.layout`, JSON
 `{"v":3,"left":[…],"right":[…]}`). The unit is a *kind* (`server`, `screens`, `e2e`, `safe-mode`,
 `cpu`, `gpu`, `ram`, `net`, `usage`, `version`, `push`, `clock`), not a chip id — usage profiles come and go,
 so the setting names «usage» once. A kind that is in neither list is hidden, so a new kind
@@ -700,7 +711,7 @@ chip» and the squeeze order below still hold wherever a chip is placed. The set
 edits the layout three ways — drag, a position select and up/down buttons — all through the same
 `moveHudKind`/`stepHudKind` (the select and buttons are the keyboard path, not an extra), shows a
 preview with sample values (the status bar as it will look, agents chip first), and is hidden in compact
-(there is no status bar there). The settings section is **상태 막대** (id `hud`). The agents chip is
+(there is no status bar there). The settings section is **상태 막대 · 활동 막대** (id `hud`). The agents chip is
 `PINNED_HUD_KINDS` — shown at the top of 「왼쪽」 with a 「고정」 tag, no grip, select or arrows. The saved layout
 carries a generation (`{"v":3,…}`): a layout without `v` gets the newer kinds (`push`, `clock`) added once at their
 default places when it is read (not an all-off layout, which is a choice); from generation 3 an `agents` entry in
@@ -893,8 +904,11 @@ the search field (28) on top; items 32 high, 13px, radius 6, the current section
 (`acc-soft`) in 600. Content padding 20/28, left-aligned (max 760): title 22/600, description 13 muted, group
 heads 12/600 muted 20 above, rows padded 12/0 with a 1px line below, label 13/500, help 12 muted, scope tag
 11/500 muted with a 1px `line-strong` border and no fill. The right preview column is 300 wide, padded 20, on
-`bg-1` (terminal and appearance sections only; hidden below 1100px). 상태 막대 (O05) lays its three zones
-side by side above 720px with 32px item tiles; 계정 및 보안 (O06) draws the device table with a 28 head and
+`bg-1` (terminal and appearance sections only; hidden below 1100px). Appearance adds a **focus mode preview**
+under the skin preview (mock O04-B): a 170px static sketch — two panes in terminal colours, the 「개입 1」 pill
+and the accent edge bands (left 4, top/bottom 3) — that follows 가장자리에 막대 띄우기 · 개입 표시 · 가장자리
+반응 시간 and explains them in the caption; it never turns focus mode on. 상태 막대 · 활동 막대 (O05) lays its three zones
+side by side above 720px with 32px item tiles and puts 「활동 막대 순서」 in the right column; 계정 및 보안 (O06) draws the device table with a 28 head and
 48 rows, this device on the selection tint.
 
 **Three settings, three icons.** 설정 = gear (reached from the FarShell menu, `Mod+,` and the activity bar's bottom gear), 레일 설정 = `sliders-horizontal` (rail header), 상태 막대 설정 = `panel-top` (FarShell menu item).
