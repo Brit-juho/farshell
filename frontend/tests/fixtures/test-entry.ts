@@ -26,6 +26,7 @@ export {
 export {
   splitGlobs, globParam, grepUrl, groupByFile, segments, hitColumn, summary, skippedLine, DEFAULT_OPTIONS as GREP_DEFAULTS,
 } from '../../js/shell/grep-data.js';
+export { changeTouches } from '../../js/shell/GrepView.tsx';
 export {
   buildSettingEntries, matchSettingEntry, stepSettingValue, formatSettingValue, SECTION_META, RAIL_TOGGLES, FOCUS_ITEMS,
 } from '../../js/panels/settings/index-data.js';

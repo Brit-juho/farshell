@@ -257,14 +257,23 @@ function paintExtras(el, type, detail, actions) {
   const list = Array.isArray(actions) ? actions.filter((a) => a && a.label && typeof a.onClick === 'function').slice(0, 2) : [];
   if (!list.length) { if (row) row.remove(); return; }
   if (!row) { row = document.createElement('div'); row.className = 'vt-toast-actions'; body.appendChild(row); }
+  // 같은 단추들이면 그대로 두고 동작만 바꾼다 — 진행 카드는 200ms마다 다시 칠해지는데, 단추를 매번 새로 만들면
+  // 누르는 사이(mousedown과 mouseup 사이)에 단추가 바뀌어 click이 오지 않는다(진행 카드의 「취소」가 안 눌린다).
+  const old = [...row.children];
+  if (old.length === list.length && old.every((b, i) => b.textContent === String(list[i].label))) {
+    old.forEach((b, i) => { b._vtAct = list[i]; });
+    return;
+  }
   row.replaceChildren(...list.map((a) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'vt-btn sm';
     b.textContent = String(a.label);
+    b._vtAct = a;
     b.addEventListener('click', (e) => {
       e.stopPropagation();
-      try { a.onClick(); } finally { if (a.keepOpen !== true) retire(el); }
+      const act = b._vtAct;
+      try { act.onClick(); } finally { if (act.keepOpen !== true) retire(el); }
     });
     return b;
   }));
@@ -288,7 +297,12 @@ export function showToast(msg, type, opts) {
   const actions = Array.isArray(opts.actions) ? opts.actions : null;
   if (HUD_TYPES[type] && !(actions && actions.length)) {
     const hud = hudLine();
-    if (hud) return paintHud(hud, text, type, ms, key);
+    if (hud) {
+      // 같은 key의 카드(취소 단추가 있던 진행 카드 등)가 떠 있으면 거둔다 — 한 동작의 끝맺음이 상태 막대로 가면서
+      // 카드가 「받는 중」으로 남으면 안 된다.
+      if (key) { const card = keyed.get(key); if (card) retire(card); }
+      return paintHud(hud, text, type, ms, key);
+    }
   }
   // 같은 key는 등급이 달라도 한 마디다. "이미지 업로드 중…"(info → HUD 줄)이
   // 실패로 끝나면 카드가 뜨는데, HUD 줄에 옛 진행 문구가 남아 있으면 한 동작이

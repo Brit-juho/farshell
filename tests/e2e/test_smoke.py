@@ -1460,6 +1460,104 @@ def test_뷰어_머리줄에서_내려받으면_같은_이름과_내용이_저�
         _close_overlay(page)
 
 
+def test_다운로드는_동시에_3개까지_넷째는_대기하고_취소하면_요청하지_않는다(page):
+    """시안 F08 — 넷째부터는 「대기 중」 카드(취소 가능)로 줄을 선다. 응답 머리를 붙잡아 셋이 받는 중인 상태를 만든다."""
+    names = ["rows.txt", "k949.txt", "mixed.txt", "보고서 1.txt"]
+    held = []
+    page.route("**/api/fs/download?**", lambda route: held.append(route))
+    try:
+        for n in names:
+            _open_overlay(page, _viewer_file(n))
+            page.locator("#vt-file .vt-file-download").click()
+        page.wait_for_function("() => [...document.querySelectorAll('#vt-toasts .vt-toast')]"
+                               ".some((t) => t.textContent.includes('대기 중'))", timeout=5000)
+        page.wait_for_timeout(200)
+        assert len(held) == 3, f"넷째는 요청하지 않는다: {len(held)}"
+        card = page.locator("#vt-toasts .vt-toast", has_text="대기 중")
+        assert "동시에 3개까지" in card.inner_text()
+        card.locator(".vt-toast-actions button", has_text="취소").click()
+        page.wait_for_function("() => /받기를 취소했습니다/.test(document.body.textContent)", timeout=5000)
+        got = []
+        page.on("download", lambda d: got.append(d.suggested_filename))
+        for r in held:
+            r.continue_()
+        deadline = time.time() + 10
+        while len(got) < 3 and time.time() < deadline:
+            page.wait_for_timeout(100)
+        page.wait_for_timeout(500)
+        assert sorted(got) == sorted(names[:3]), got
+        assert len(held) == 3, "취소한 넷째는 끝내 요청하지 않았다"
+    finally:
+        page.unroute("**/api/fs/download?**")
+        _close_overlay(page)
+
+
+def test_이미지는_맞춤과_100퍼센트를_오가고_100퍼센트에서_확대된다(page):
+    """시안 F07-C — 맞춤은 원래보다 키우지 않고, 100%는 원래 크기, ⌘/Ctrl + 휠로 확대하면 그림 칸이 스크롤하되 카드를 넘지 않는다."""
+    try:
+        page.evaluate("(p) => window.openFile(p)", _viewer_file("pics/icon.png"))
+        page.wait_for_selector("#vt-file .vt-vw-image .vt-vw-zoom-bar", timeout=15000)
+        page.wait_for_function("() => document.querySelector('#vt-file .vt-vw-image img').naturalWidth > 0", timeout=10000)
+        page.wait_for_function("() => document.querySelector('#vt-file .vt-vw-zoom-pct').textContent === '맞춤 · 100%'",
+                               timeout=5000)
+        page.locator("#vt-file .vt-vw-zoom-bar .vt-vw-seg-btn", has_text="100%").click()
+        assert page.locator("#vt-file .vt-vw-zoom-pct").inner_text() == "100%"
+        assert page.evaluate("() => document.querySelector('#vt-file .vt-vw-image img').getBoundingClientRect().width") == 192
+        page.locator("#vt-file .vt-vw-zoom-box").hover()
+        page.keyboard.down("Control")
+        for _ in range(4):
+            page.mouse.wheel(0, -120)
+        page.keyboard.up("Control")
+        page.wait_for_function("() => document.querySelector('#vt-file .vt-vw-image img').getBoundingClientRect().width > 192 * 3",
+                               timeout=5000)
+        geo = page.evaluate(
+            """() => {
+              const box = document.querySelector('#vt-file .vt-vw-zoom-box');
+              const card = document.querySelector('#vt-file .vt-viewer-card') || document.getElementById('vt-file');
+              const b = box.getBoundingClientRect(), c = card.getBoundingClientRect();
+              return { scrolls: box.scrollWidth > box.clientWidth || box.scrollHeight > box.clientHeight,
+                       out: Math.round(b.right - c.right), pct: document.querySelector('#vt-file .vt-vw-zoom-pct').textContent };
+            }"""
+        )
+        assert geo["out"] <= 1 and geo["pct"].endswith("%") and int(geo["pct"][:-1]) > 300, geo
+        page.locator("#vt-file .vt-vw-zoom-bar .vt-vw-seg-btn", has_text="맞춤").click()
+        assert page.evaluate("() => document.querySelector('#vt-file .vt-vw-image img').getBoundingClientRect().width") == 192
+    finally:
+        _close_overlay(page)
+
+
+def test_사이드바_내용_검색은_진행을_보이고_범위_안_변경에_결과가_오래됨을_띄운다(page):
+    """시안 F06-C — 결과가 온 뒤 트리 감시가 그 폴더의 변경을 알리면 「결과가 오래됨 · 다시 찾기」, 누르면 새 결과로 바꾼다."""
+    d = Path(_viewer_file("grepdir"))
+    d.mkdir(exist_ok=True)
+    (d / "a.txt").write_text("stale-needle one\n")
+    (d / "b.txt").unlink(missing_ok=True)
+    page.evaluate("() => window.getAction('dir.show')()")
+    try:
+        path = page.locator(".vt-ft-path")
+        path.wait_for(timeout=15000)
+        path.fill(str(d))
+        path.press("Enter")
+        page.wait_for_function("(p) => document.querySelector('.vt-ft-path')?.value === p", arg=str(d), timeout=5000)
+        page.locator(".vt-fs-seg .vt-segment", has_text="내용 검색").click()
+        q = page.locator(".vt-gr.side .vt-gr-q input")
+        q.fill("stale-needle")
+        page.wait_for_function("() => document.querySelectorAll('.vt-gr.side .vt-gr-row').length === 1", timeout=10000)
+        assert page.locator(".vt-gr.side .vt-gr-stale").count() == 0
+        (d / "b.txt").write_text("stale-needle two\n")
+        page.wait_for_selector(".vt-gr.side .vt-gr-stale", timeout=10000)
+        banner = page.locator(".vt-gr.side .vt-gr-stale")
+        assert "결과가 오래됨" in banner.inner_text()
+        banner.locator("button", has_text="다시 찾기").click()
+        page.wait_for_function("() => document.querySelectorAll('.vt-gr.side .vt-gr-row').length === 2", timeout=10000)
+        assert page.locator(".vt-gr.side .vt-gr-stale").count() == 0
+        # 진행 조회 경로 — 이 화면의 sid로 묻는다(돌고 있는 검색이 없으면 running:false).
+        r = page.evaluate("() => window.vtFetch('/api/fs/grep/progress?sid=none')")
+        assert r == {"running": False}
+    finally:
+        page.evaluate("() => { const el = document.getElementById('vt-dir'); if (el) window.closePanel(el); }")
+
+
 def test_레일_파일_버튼은_사라지고_팔레트가_그_자리다(page):
     """§6 — 「파일」 진입점은 팔레트로 옮겨갔다. 옛 rail 버튼이 남아 있으면
     누를 대상이 없는 버튼이 된다."""

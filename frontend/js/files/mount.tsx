@@ -41,21 +41,25 @@ function takePending(): SearchRequest | null {
 
 // 내용 검색은 줄 번호로 열어야 한다 — 트리의 `openFile(path)`는 줄을 모른다. 파일 열기 브리지(viewer-lazy.js
 // `window.openFile(path, {line, col, host})`, ADR-44 표면 설정)와 요청 함수(`window.vtFetch` — 마감·중계·signal)를 쓴다.
-function grepDeps(host: string) {
+function grepDeps(host: string, watch?: TreeStoreDeps['watch']) {
   const w = window as any;
   return {
     host,
+    // 트리와 같은 감시(`tree` 구독) — 사이드바 검색이 「결과가 오래됨」을 띄운다(GrepView.tsx GrepSide).
+    watch,
     fetch: (p: string, o?: Record<string, unknown>) => w.vtFetch(p, o),
     openFile: (path: string, o: { line: number; col: number; host?: string }) => w.openFile?.(path, o),
     openFileInPane: (path: string, o: { line: number; col: number }) => w.openFileInPane?.(path, o),
   };
 }
 
-function FilesSide(props: { deps: FileTreeDeps; host: string }) {
+function FilesSide(props: { deps: FileTreeDeps; host: string; watch?: TreeStoreDeps['watch'] }) {
   const pending = takePending();
   const [view, setView] = createSignal<'tree' | 'grep'>(pending ? 'grep' : 'tree');
   let grepApi: GrepSideApi | null = null;
-  const root = () => props.deps.store.root || '';
+  // 트리 루트는 처음 열 때(비동기)와 루트를 바꿀 때 정해진다 — 검색 범위와 감시가 따라가게 신호로 둔다.
+  const [root, setRoot] = createSignal(props.deps.store.root || '');
+  onCleanup(props.deps.store.subscribe(() => setRoot(props.deps.store.root || '')));
   function onRequest(ev: Event) {
     const req = ((ev as CustomEvent).detail || {}) as SearchRequest;
     setView('grep');
@@ -84,7 +88,7 @@ function FilesSide(props: { deps: FileTreeDeps; host: string }) {
         <FileTree deps={props.deps} />
       </div>
       <div class="vt-fs-pane" hidden={view() !== 'grep'}>
-        <GrepSide deps={grepDeps(props.host)} scope={root} initial={pending || undefined}
+        <GrepSide deps={grepDeps(props.host, props.watch)} scope={root} initial={pending || undefined}
           onApi={(a) => { grepApi = a; if (pending?.focus !== false && pending) a.focus(); }} />
       </div>
     </div>
@@ -103,7 +107,7 @@ export function mountFileTree(el: HTMLElement, deps: MountDeps): MountedTree {
   });
   const [hostLabel, setHostLabel] = createSignal(deps.host);
   deps.fetchHostLabel().then((l) => { if (l) setHostLabel(l); }).catch(() => {});
-  const disposeView = render(() => <FilesSide deps={{ ...deps, store, dense, mobile, hostLabel }} host={deps.host} />, el);
+  const disposeView = render(() => <FilesSide deps={{ ...deps, store, dense, mobile, hostLabel }} host={deps.host} watch={deps.watch} />, el);
   let disposed = false;
   return {
     store,

@@ -69,7 +69,7 @@ _HTTP_RULES: tuple[tuple[re.Pattern, frozenset], ...] = tuple(
         (r"/api/files/[^/]+/(download|path)", _GET),
         (r"/api/files/[^/]+/insert", _ANY),
         (r"/api/upload", _ANY),
-        (r"/api/fs/(file|grep|raw|roots|search|tree)", _GET),
+        (r"/api/fs/(file|grep|grep/progress|raw|roots|search|tree)", _GET),
         # git (계정·바인딩 제외)
         (r"/api/git/(status|diff|log|show)", _GET),
         (r"/api/git/(stage|unstage|commit)", _ANY),

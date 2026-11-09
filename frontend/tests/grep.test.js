@@ -269,3 +269,116 @@ test('사이드바 — 대기 중인 요청(⌘⇧F)이 있으면 「내용 검�
   await waitFor(() => calls.fetch.some((c) => c.p.includes('q=other')));
   mounted.dispose();
 });
+
+// ── 4부: 진행 · 「결과가 오래됨」 ─────────────────────────────────────────────────────
+
+test('changeTouches — 검색 범위 안의 폴더가 바뀌었을 때만, 목록이 없거나 넘치면 언제나', async () => {
+  const { changeTouches } = await mod();
+  assert.strictEqual(changeTouches('/r', '/r', { dirs: ['sub'] }), true);
+  assert.strictEqual(changeTouches('/r', '/r', { dirs: [] }), false);
+  assert.strictEqual(changeTouches('/r', '', { dirs: [''] }), true, '시작 루트 전부를 찾았으면 트리 안 어디든');
+  assert.strictEqual(changeTouches('/r', '/r/sub', { dirs: ['sub/deep'] }), true);
+  assert.strictEqual(changeTouches('/r', '/r/sub', { dirs: ['subway', 'other'] }), false, '이름 앞부분만 같은 폴더는 아니다');
+  assert.strictEqual(changeTouches('/r', '/elsewhere', { dirs: ['x'] }), false);
+  assert.strictEqual(changeTouches('/r', '/r', { overflow: true }), true);
+  assert.strictEqual(changeTouches('/r', '/r', { reconnect: true }), true);
+  assert.strictEqual(changeTouches('/r', '/r', undefined), true);
+});
+
+test('팔레트 `?` — 오래 걸리는 검색은 진행(읽은 파일 / 후보)을 물어 보이고 막대를 채운다', async () => {
+  let release = null;
+  const prog = [];
+  const { env, type } = await openGrep((path) => {
+    if (path.startsWith('/api/fs/grep/progress')) {
+      prog.push(path);
+      return { running: true, total: 40, searched: 12 };
+    }
+    return new Promise((resolve) => { release = () => resolve(RESULT); });
+  });
+  type('? needle');
+  const line = await waitFor(() => {
+    const el = env.document.querySelector('.vt-gr-prog');
+    return el && el.textContent.includes('파일 12 / 40') ? el : null;
+  }, 4000);
+  assert.ok(new URL(`http://x${prog[0]}`).searchParams.get('sid'), '같은 sid로 묻는다');
+  const bar = line.querySelector('.vt-gr-bar.det');
+  assert.ok(bar, '후보 수를 알면 채워지는 막대');
+  assert.strictEqual(bar.style.width, '30%');
+  const asked = prog.length;
+  release();
+  await waitFor(() => env.document.querySelectorAll('.vt-gr-row').length === 2);
+  await new Promise((r) => setTimeout(r, 700));
+  assert.strictEqual(prog.length, asked, '끝나면 더 묻지 않는다');
+});
+
+test('팔레트 `?` — 진행 경로가 없는 옛 서버(404)면 묻기를 그만두고 걸린 시간만 보인다', async () => {
+  let release = null;
+  const prog = [];
+  const { env, type } = await openGrep((path) => {
+    if (path.startsWith('/api/fs/grep/progress')) {
+      prog.push(path);
+      const e = new Error('nf'); e.status = 404; throw e;
+    }
+    return new Promise((resolve) => { release = () => resolve(RESULT); });
+  });
+  type('? needle');
+  await waitFor(() => prog.length === 1, 4000);
+  await new Promise((r) => setTimeout(r, 700));
+  assert.strictEqual(prog.length, 1);
+  assert.match(env.document.querySelector('.vt-gr-prog').textContent, /검색 중 · \d+\.\d초/);
+  assert.ok(env.document.querySelector('.vt-gr-bar:not(.det)'));
+  release();
+});
+
+test('사이드바 — 결과가 온 뒤 트리 감시가 범위 안 변경을 알리면 「결과가 오래됨 · 다시 찾기」, 누르면 다시 찾고 지운다', async () => {
+  const env = await fresh();
+  const { window, document } = env;
+  const calls = [];
+  let hold = null;
+  window.vtFetch = async (p) => {
+    if (p.startsWith('/api/fs/grep/progress')) return { running: false };
+    calls.push(p);
+    if (hold) await hold;
+    return RESULT;
+  };
+  window.openFile = () => {};
+  window.__vtFilesSearchPending = { q: 'needle' };
+  const watchers = [];
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const mounted = env.mountFileTree(host, {
+    host: 'local', remote: false,
+    fetchJSON: async () => ({ entries: [], total: 0, next: null }),
+    watch: (kind, p, fn) => { const w = { kind, p, fn, off: false }; watchers.push(w); return () => { w.off = true; }; },
+    fetchHostLabel: async () => 'Mac', openFile: () => {}, insertPath: () => true, copyPath: async () => true, sharePath: () => {},
+    terminalCwd: async () => null, sessionName: () => '', recent: () => [], clearRecent: () => {}, toast: () => {},
+    getDense: () => false, subscribeSettings: () => () => {},
+  });
+  await mounted.store.open('/r');
+  await waitFor(() => host.querySelectorAll('.vt-gr-row').length === 2);
+  const live = () => watchers.filter((w) => !w.off && w.kind === 'tree' && w.p === '/r');
+  await waitFor(() => live().length >= 2, 2000);   // 트리 + 검색(같은 키 — 서버 구독은 하나)
+  const fire = (detail) => { for (const w of live()) w.fn(detail); };
+  assert.strictEqual(host.querySelector('.vt-gr-stale'), null);
+  fire({ dirs: [] });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.strictEqual(host.querySelector('.vt-gr-stale'), null, '보이는 폴더 변경이 없으면 띄우지 않는다');
+  fire({ dirs: ['sub'] });
+  const banner = await waitFor(() => host.querySelector('.vt-gr-stale'));
+  assert.match(banner.textContent, /결과가 오래됨/);
+  const n = calls.length;
+  banner.querySelector('button').click();
+  await waitFor(() => calls.length === n + 1);
+  await waitFor(() => !host.querySelector('.vt-gr-stale'));
+  // 찾는 동안 바뀐 것도 결과가 오면 오래됨으로 띄운다.
+  let open = null;
+  hold = new Promise((r) => { open = r; });
+  (await waitFor(() => host.querySelector('.vt-gr-acts button'))).click();   // 결과 머리의 「다시 찾기」
+  await waitFor(() => host.querySelector('.vt-gr-bar'));
+  fire({ overflow: true });
+  hold = null;
+  open();
+  await waitFor(() => host.querySelector('.vt-gr-stale'));
+  mounted.dispose();
+  assert.ok(watchers.every((w) => w.off), '닫으면 감시를 푼다');
+});

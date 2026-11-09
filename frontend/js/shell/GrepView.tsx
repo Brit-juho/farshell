@@ -21,7 +21,12 @@ export interface GrepDeps {
   openFileInPane?: (path: string, opts: { line: number; col: number }) => void;
   /** 지금 화면이 보는 호스트(`relayHost()`) — 결과를 그 호스트의 파일로 연다. */
   host: string;
+  /** `shell/fs-watch.js` `watchPath` — 사이드바가 트리 루트의 변경을 듣고 「결과가 오래됨」을 띄운다(없으면 안 띄운다). */
+  watch?: (kind: string, path: string, fn: (detail?: { dirs?: string[]; overflow?: boolean; reconnect?: boolean }) => void) => () => void;
 }
+
+/** 진행 — 서버가 아는 후보 수(`total`)와 읽은 파일 수(`searched`). 후보 목록이 나오기 전에는 `total`이 null. */
+export interface GrepProgress { total: number | null; searched: number; }
 
 type Status = 'idle' | 'running' | 'done' | 'error';
 
@@ -30,6 +35,10 @@ interface GrepError { code: string; reason: string; status: number; pos?: number
 // 서버 기한(10초) + 중계·자식 정리 여유. 브라우저 쪽 마감은 이보다 길어야 서버의 「기한 초과 + 부분 결과」를 받는다.
 const REQUEST_TIMEOUT_MS = 25000;
 const DEBOUNCE_MS = 250;
+// 진행 조회(`GET /api/fs/grep/progress`). 빨리 끝나는 검색(대부분)은 조회 없이 끝나게 잠깐 기다렸다 시작한다.
+// 조회는 검색 풀을 쓰지 않고 서버가 적어 둔 숫자 두 개만 읽는다. 옛 서버(경로 없음 404)면 그 검색 동안 그만둔다.
+export const PROGRESS_DELAY_MS = 400;
+export const PROGRESS_EVERY_MS = 500;
 // 제외 칸 자리표시 글. 소스에 그대로 쓰면 `/*`·`*/`가 생겨 scripts/check_i18n.py(주석 걷기)가 그 사이의 t() 키를
 // 못 본다 — 실제로 「제외」가 en.js 누락으로 잡히지 않았다.
 const EXCLUDE_HINT = ['**', '*.test.*'].join('/');
@@ -46,6 +55,8 @@ export interface GrepController {
   data: () => GrepResponse | null;
   error: () => GrepError | null;
   elapsed: () => number;
+  /** 진행(서버가 알려 준 것). 모르면 null — 그때는 걸린 시간만 보인다. */
+  progress: () => GrepProgress | null;
   groups: () => ReturnType<typeof groupByFile>;
   selected: () => number;
   setSelected: (i: number) => void;
@@ -64,17 +75,41 @@ export function createGrep(deps: GrepDeps, getScope: () => string, initial?: { q
   const [data, setData] = createSignal<GrepResponse | null>(null);
   const [error, setError] = createSignal<GrepError | null>(null);
   const [elapsed, setElapsed] = createSignal(0);
+  const [progress, setProgress] = createSignal<GrepProgress | null>(null);
   const [selected, setSelected] = createSignal(0);
   const [scope, setScope] = createSignal(getScope());
   const sid = newSid();
   let ctl: AbortController | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let ticker: ReturnType<typeof setInterval> | null = null;
+  let poller: ReturnType<typeof setTimeout> | null = null;
   let seq = 0;
 
   const groups = createMemo(() => groupByFile(data()?.results || []));
 
-  function stopTicker() { if (ticker) { clearInterval(ticker); ticker = null; } }
+  function stopTicker() {
+    if (ticker) { clearInterval(ticker); ticker = null; }
+    if (poller) { clearTimeout(poller); poller = null; }
+  }
+
+  // 돌고 있는 검색(mine)의 진행을 묻는다. 한 번에 하나만, 답이 온 뒤 다음 것을 건다.
+  function pollProgress(mine: number, delay: number) {
+    poller = setTimeout(async () => {
+      poller = null;
+      if (mine !== seq) return;
+      let d: any = null;
+      try {
+        d = await deps.fetch(`/api/fs/grep/progress?sid=${encodeURIComponent(sid)}`, { timeout: 3000 });
+      } catch (e: any) {
+        if (e?.status === 404) return;           // 옛 서버 — 걸린 시간만 보인다
+      }
+      if (mine !== seq || status() !== 'running') return;
+      if (d && d.running && typeof d.searched === 'number') {
+        setProgress({ total: typeof d.total === 'number' ? d.total : null, searched: d.searched });
+      }
+      pollProgress(mine, PROGRESS_EVERY_MS);
+    }, delay);
+  }
 
   function cancel() {
     if (timer) { clearTimeout(timer); timer = null; }
@@ -97,7 +132,9 @@ export function createGrep(deps: GrepDeps, getScope: () => string, initial?: { q
     setStatus('running');
     setError(null);
     setElapsed(0);
+    setProgress(null);
     ticker = setInterval(() => setElapsed(Date.now() - started), 100);
+    pollProgress(mine, PROGRESS_DELAY_MS);
     try {
       const d = await deps.fetch(grepUrl(q, untrack(opts), path, sid), { signal: ctl.signal, timeout: REQUEST_TIMEOUT_MS });
       if (mine !== seq) return;
@@ -149,7 +186,7 @@ export function createGrep(deps: GrepDeps, getScope: () => string, initial?: { q
   const ctlApi: GrepController = {
     query, setQuery, opts, scope,
     setOpt: (k, v) => setOpts((o) => ({ ...o, [k]: v })),
-    status, data, error, elapsed, groups, selected, setSelected, move, open,
+    status, data, error, elapsed, progress, groups, selected, setSelected, move, open,
     runNow: () => { setScope(getScope()); void run(); },
     cancel,
     dispose: () => { cancel(); },
@@ -197,17 +234,34 @@ function Toggles(props: { ctl: GrepController; small?: boolean }) {
 function Progress(props: { ctl: GrepController }) {
   const c = props.ctl;
   const done = createMemo(() => (c.status() === 'done' && c.data() ? summary(c.data()!) : null));
+  // 서버가 후보 수를 알려 주면 「파일 120 / 4,812」와 채워지는 막대, 모르면 걸린 시간과 오가는 막대.
+  const ratio = () => {
+    const p = c.progress();
+    return p && p.total ? Math.min(1, p.searched / p.total) : null;
+  };
+  const runningText = () => {
+    const p = c.progress();
+    const secs = fmtSeconds(c.elapsed());
+    if (p && p.total != null) {
+      return t('검색 중 · 파일 {searched} / {total} · {secs}', {
+        searched: p.searched.toLocaleString(), total: p.total.toLocaleString(), secs,
+      });
+    }
+    return t('검색 중 · {secs}', { secs });
+  };
   return (
     <Show when={c.status() !== 'idle'}>
       <div class="vt-gr-prog" classList={{ warn: done()?.tone === 'warn', err: c.status() === 'error' }} role="status" aria-live="polite">
         <Show when={c.status() === 'running'}>
           <span class="vt-gr-prog-ic" innerHTML={shellIcon('loader', 14)} />
-          <span>{t('검색 중 · {secs}', { secs: fmtSeconds(c.elapsed()) })}</span>
+          <span class="vt-gr-prog-tx">{runningText()}</span>
           <span class="vt-gr-sp" />
           <button type="button" class="vt-btn quiet vt-gr-cancel" onClick={() => c.cancel()}>
             <span innerHTML={shellIcon('x', 12)} />{t('취소')}
           </button>
-          <span class="vt-gr-bar" aria-hidden="true" />
+          <Show when={ratio() != null} fallback={<span class="vt-gr-bar" aria-hidden="true" />}>
+            <span class="vt-gr-bar det" aria-hidden="true" style={{ width: `${Math.round(ratio()! * 100)}%` }} />
+          </Show>
         </Show>
         <Show when={done()}>
           {(s) => (
@@ -464,6 +518,24 @@ export interface GrepSideApi {
   apply: (q?: string, opts?: Partial<GrepOptions>) => void;
 }
 
+/**
+ * 트리 감시 알림(`tree` 구독, 루트 기준으로 바뀐 폴더 목록)이 검색한 범위 안의 변경인가.
+ * `root`는 감시하는 트리 루트, `searched`는 검색 범위(빈 문자열 = 시작 루트 전부). 목록이 없거나(다시 붙음) 넘쳤으면
+ * 무엇이 바뀌었는지 모르므로 그렇다고 본다.
+ */
+export function changeTouches(root: string, searched: string,
+  detail?: { dirs?: string[]; overflow?: boolean; reconnect?: boolean }): boolean {
+  if (!detail || detail.overflow || detail.reconnect || !Array.isArray(detail.dirs)) return true;
+  const trim = (p: string) => p.replace(/\/+$/, '');
+  const r = trim(root);
+  const sp = trim(searched || '');
+  // 검색 범위가 트리 루트이거나 그 위(시작 루트 전부)면 트리 안의 어느 변경이든 해당한다.
+  if (!sp || sp === r || (r + '/').startsWith(sp + '/')) return detail.dirs.length > 0;
+  if (!sp.startsWith(r + '/')) return false;      // 트리 밖을 찾았다 — 이 감시로는 알 수 없다
+  const rel = sp.slice(r.length + 1);
+  return detail.dirs.some((d) => d === rel || d.startsWith(rel + '/'));
+}
+
 /** 사이드바 「파일 › 내용 검색」 본문. 범위는 트리의 지금 루트. */
 export function GrepSide(props: {
   deps: GrepDeps;
@@ -473,6 +545,28 @@ export function GrepSide(props: {
 }) {
   const c = createGrep(props.deps, props.scope, props.initial);
   const [collapsed, setCollapsed] = createSignal<Set<string>>(new Set());
+  // 「결과가 오래됨」(시안 F06-C) — 결과가 온 뒤(또는 찾는 동안) 검색 범위 안의 파일이 바뀌었다는 트리 감시 알림이 오면
+  // 결과 머리 아래에 띄운다. 다시 찾으면 지운다. 감시는 트리가 이미 건 `tree` 구독과 같은 키라 서버 구독이 늘지 않는다.
+  const [stale, setStale] = createSignal(false);
+  let changedWhileRunning = false;
+  createEffect(() => {
+    const st = c.status();
+    if (st === 'running') { setStale(false); changedWhileRunning = false; }
+    else if (st === 'done' && changedWhileRunning) { changedWhileRunning = false; setStale(true); }
+    else if (st === 'idle' || st === 'error') setStale(false);
+  });
+  createEffect(() => {
+    const root = props.scope();
+    const watch = props.deps.watch;
+    if (!root || !watch) return;
+    const off = watch('tree', root, (detail) => {
+      if (!c.query().trim() || !changeTouches(root, c.scope(), detail)) return;
+      const st = untrack(c.status);
+      if (st === 'running') changedWhileRunning = true;
+      else if (st === 'done') setStale(true);
+    });
+    onCleanup(off);
+  });
   let input: HTMLInputElement | undefined;
   props.onApi?.({
     focus: () => requestAnimationFrame(() => { input?.focus(); input?.select(); }),
@@ -537,6 +631,13 @@ export function GrepSide(props: {
           </span>
         </Show>
       </div>
+      <Show when={stale() && c.status() === 'done'}>
+        <div class="vt-gr-stale" role="status" title={t('검색한 뒤 이 범위의 파일이 바뀌었습니다')}>
+          <span class="vt-gr-prog-ic" innerHTML={shellIcon('refresh-cw', 14)} />
+          <span class="vt-gr-prog-tx">{t('결과가 오래됨')}</span>
+          <button type="button" class="vt-btn quiet vt-gr-cancel" onClick={() => c.runNow()}>{t('다시 찾기')}</button>
+        </div>
+      </Show>
       <Results ctl={c} variant="side" collapsed={collapsed} toggle={toggle} />
     </div>
   );

@@ -12,7 +12,7 @@ import {
 import { _setMsg } from './state.js';
 import { t } from '../../core/i18n.js';
 import {
-  previewKind, hasRenderedView, fitsPreview, viewLabels, mountCsvTable, mountPlayer, mountSvg, emptyState, downloadButton,
+  previewKind, hasRenderedView, fitsPreview, viewLabels, mountCsvTable, mountPlayer, mountSvg, mountImageView, emptyState, downloadButton,
   CSV_MAX_COLS, CSV_MAX_ROWS,
 } from './preview.js';
 import { slugify } from './markdown.js';
@@ -385,22 +385,12 @@ function _paintMedia(container, d, path, host) {
         t('미리보기 상한을 넘어 표시하지 않습니다.'), [_dlButton(container, path, host, d, t('다운로드'))]);
       return;
     }
-    const wrap = document.createElement('div');
-    wrap.className = 'vt-vw-image';
-    const img = document.createElement('img');
-    img.src = _rawUrl(path, host);
-    img.alt = path.split('/').pop() || t('이미지');
-    img.loading = 'lazy';
-    // 못 불러오면 빈 칸을 남기지 않는다 — 깨진 아이콘만 뜨면 "왜 안 되는지"를 모른다.
-    img.addEventListener('error', () => {
-      _setMsg(container, 'vt-vw-empty', [t('이미지를 불러오지 못했습니다.')]);
+    // 맞춤 / 100% 전환과 확대(시안 F07-C)는 preview.js `mountImageView`가 맡는다.
+    mountImageView(container, _rawUrl(path, host), path.split('/').pop() || t('이미지'), {
+      note: `${d.mime} · ${_fmtSize(d.size)}`,
+      // 못 불러오면 빈 칸을 남기지 않는다 — 깨진 아이콘만 뜨면 "왜 안 되는지"를 모른다.
+      onError: () => { _setMsg(container, 'vt-vw-empty', [t('이미지를 불러오지 못했습니다.')]); },
     });
-    wrap.appendChild(img);
-    const note = document.createElement('div');
-    note.className = 'vt-vw-note';
-    note.textContent = `${d.mime} · ${_fmtSize(d.size)}`;
-    wrap.appendChild(note);
-    container.appendChild(wrap);
     return;
   }
   if (d.media === 'video' || d.media === 'audio') {

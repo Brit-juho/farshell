@@ -337,6 +337,45 @@ def test_route_is_busy_when_two_other_clients_search(client, root, monkeypatch):
     assert r.status_code == 503 and r.json()["error"] == "grep_busy"
 
 
+def test_search_writes_progress_into_its_slot(root):
+    """자식이 보내는 후보 수·읽은 수가 자리의 `progress`에 남는다 — 진행 조회가 그것을 읽는다."""
+    for i in range(300):
+        (root / f"f{i}.txt").write_text("x\n")
+    slots = fs_grep.Slots(limit=2)
+    token = slots.acquire("k")
+    assert slots.progress("k") == {"total": None, "searched": 0}
+    out = _search(root, "needle", cancel=token)
+    assert out["total"] == 300
+    p = slots.progress("k")
+    assert p["total"] == 300 and p["searched"] >= 256    # 256개마다 알린다
+    slots.release("k", token)
+    assert slots.progress("k") is None
+    a = slots.acquire("a")
+    slots.acquire("a")                                      # 밀려난 검색의 진행은 새 검색의 것이 아니다
+    assert a.cancelled and slots.progress("a") == {"total": None, "searched": 0}
+
+
+def test_progress_route_shows_only_this_clients_running_search(client, root, monkeypatch):
+    slots = fs_grep.Slots(limit=2)
+    monkeypatch.setattr(fs_grep, "SLOTS", slots)
+    assert client.get("/api/fs/grep/progress", params={"sid": "s1"}).json() == {"running": False}
+
+    class Peer:
+        host = "testclient"                                 # TestClient가 보내는 주소(자격이 없을 때 키가 된다)
+
+    class Req:
+        cookies: dict = {}
+        headers: dict = {}
+        client = Peer()
+
+    token = slots.acquire(fs_grep.client_key(Req(), "s1"))
+    token.progress.update(total=40, searched=12)
+    r = client.get("/api/fs/grep/progress", params={"sid": "s1"})
+    assert r.status_code == 200 and r.json() == {"running": True, "total": 40, "searched": 12}
+    # 같은 자격이라도 다른 화면(sid)의 검색은 보이지 않는다.
+    assert client.get("/api/fs/grep/progress", params={"sid": "s2"}).json() == {"running": False}
+
+
 def test_worker_spawn_failure_is_503_not_inprocess(client, root, monkeypatch):
     (root / "a.txt").write_text("needle\n")
 

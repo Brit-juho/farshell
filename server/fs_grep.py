@@ -153,7 +153,11 @@ def client_key(request, sid: str = "") -> str:
 
 
 class Slots:
-    """동시 검색 자리. 같은 키의 새 검색은 이전 검색을 취소하고 자리를 이어받는다(전체 수가 늘지 않는다)."""
+    """동시 검색 자리. 같은 키의 새 검색은 이전 검색을 취소하고 자리를 이어받는다(전체 수가 늘지 않는다).
+
+    자리마다 진행 상황(`token.progress` — 후보 수 `total`, 읽은 수 `searched`)을 둔다. 검색 스레드가 자식의 진행
+    메시지로 고쳐 쓰고, `GET /api/fs/grep/progress`가 같은 클라이언트 키로 읽는다(`progress`). 숫자 두 개를 덮어쓰고
+    읽기만 하므로 잠금 없이 둔다 — 읽는 쪽은 한 박자 늦은 값을 볼 뿐이다."""
 
     def __init__(self, limit: int = MAX_GLOBAL):
         self.limit = limit
@@ -162,6 +166,7 @@ class Slots:
 
     def acquire(self, key: str) -> res_scan.Cancel:
         token = res_scan.Cancel()
+        token.progress = {"total": None, "searched": 0}
         with self._lock:
             old = self._active.get(key)
             if old is None and len(self._active) >= self.limit:
@@ -179,6 +184,15 @@ class Slots:
     def active(self) -> int:
         with self._lock:
             return len(self._active)
+
+    def progress(self, key: str) -> Optional[dict]:
+        """그 클라이언트의 돌고 있는 검색의 진행 `{total, searched}`(사본). 돌고 있지 않으면 None."""
+        with self._lock:
+            token = self._active.get(key)
+        if token is None or token.cancelled:
+            return None
+        p = getattr(token, "progress", None) or {}
+        return {"total": p.get("total"), "searched": p.get("searched", 0)}
 
 
 SLOTS = Slots()
@@ -230,11 +244,14 @@ def _still_allowed(path: str, cache: dict) -> bool:
 def search(path: str, spec: dict, skip_prefixes: list[str], cancel: Optional[res_scan.Cancel] = None,
            timeout: float = TIMEOUT) -> dict:
     """검색 한 번(동기). 기한이면 그때까지 찾은 결과와 `timeout: true`. 취소면 `cancelled: true`.
-    던지는 것: `fsguard.FsDenied`(403), `NotADirectory`(404), `res_scan.ScanUnavailable`(503)."""
+    던지는 것: `fsguard.FsDenied`(403), `NotADirectory`(404), `res_scan.ScanUnavailable`(503).
+    `cancel`에 `progress` 사전이 있으면(`Slots.acquire`) 진행을 거기에 써서 `/api/fs/grep/progress`가 읽게 한다."""
     started = time.monotonic()
     roots = _roots(path)
     hits: list[tuple[str, str, list]] = []
-    progress = {"total": None, "searched": 0}
+    progress = getattr(cancel, "progress", None)
+    if not isinstance(progress, dict):
+        progress = {"total": None, "searched": 0}
 
     def on_message(msg: dict) -> None:
         if "hits" in msg:

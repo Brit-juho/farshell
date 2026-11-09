@@ -300,3 +300,24 @@ test('× 닫기는 그 카드만 닫고, 보조 줄이 다르면 합치지 않�
   assert.ok(els[1].classList.contains('leaving'));
   assert.ok(!els[0].classList.contains('leaving'));
 });
+
+// 다운로드 진행 카드(panels/viewer/download.js)는 200ms마다 같은 key로 다시 칠해진다.
+test('같은 key로 다시 칠해도 같은 동작 단추는 그대로 두고 새 동작만 건다(누르는 사이 단추가 바뀌지 않게)', async () => {
+  const { showToast } = await buildWindow({ hud: true });
+  const ran = [];
+  const el = showToast('a 받는 중 · 10%', 'info', { key: 'dl', duration: 0, actions: [{ label: '취소', onClick: () => ran.push(1) }] });
+  const btn = el.querySelector('.vt-toast-actions button');
+  showToast('a 받는 중 · 20%', 'info', { key: 'dl', duration: 0, actions: [{ label: '취소', onClick: () => ran.push(2) }] });
+  assert.strictEqual(el.querySelector('.vt-toast-actions button'), btn, '단추 요소가 같다');
+  btn.click();
+  assert.deepStrictEqual(ran, [2], '마지막으로 건 동작이 돈다');
+});
+
+test('같은 key의 끝맺음이 상태 막대로 가면 떠 있던 진행 카드를 거둔다', async () => {
+  const { window, showToast } = await buildWindow({ hud: true });
+  const card = showToast('a 받는 중', 'info', { key: 'dl', duration: 0, actions: [{ label: '취소', onClick: () => {} }] });
+  assert.strictEqual(toasts(window).length, 1);
+  showToast('a 받음', 'success', { key: 'dl' });
+  assert.ok(card.classList.contains('leaving'), '「받는 중」 카드가 남지 않는다');
+  assert.strictEqual(hudMsg(window).hidden, false);
+});
