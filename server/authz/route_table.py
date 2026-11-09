@@ -201,6 +201,7 @@ _ROWS: tuple = (
     ("GET", "/api/fs/roots", auth()),
     ("GET", "/api/fs/search", auth()),
     ("GET", "/api/fs/grep", auth()),
+    ("GET", "/api/fs/grep/progress", auth()),
     ("GET", "/api/fs/tree", auth()),
     ("GET", "/api/fs/file", auth()),
     ("GET", "/api/fs/raw", auth()),
