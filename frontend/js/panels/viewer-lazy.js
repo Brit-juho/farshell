@@ -12,7 +12,9 @@
 import { registerAction, getAction } from '../core/dom.js';
 import { register as registerKey } from '../core/keymap.js';
 import { get as getSetting } from '../core/settings.js';
-import { openViewerPane } from '../layout/store.js';
+import { openViewerPane, getTree, getActivePaneId } from '../layout/store.js';
+import { findNode } from '../layout/tree.js';
+import { paneElId } from '../layout/dom-ids.js';
 import { relayHost } from '../core/host-route.js';
 
 let _loading = null;
@@ -30,6 +32,15 @@ export function loadViewer() {
   return _loading;
 }
 
+/**
+ * `el`(뷰어 칸·오버레이) 안에 고친 편집이 있으면 「저장 / 버리기 / 취소」를 묻는다(edit.js `confirmLeave`). 계속해도 되면
+ * true. 고친 편집이 없으면 청크를 받지 않고 바로 true — 표시(`.vt-vw-dirty`)는 편집기가 붙인 것이라, 있으면 청크도 이미 있다.
+ */
+export function confirmViewerLeave(el) {
+  if (!el || !el.querySelector || !el.querySelector('.vt-vw-code-pane.vt-vw-dirty')) return Promise.resolve(true);
+  return loadViewer().then((v) => v.confirmLeave(el)).catch(() => false);
+}
+
 /** 파일을 **페인**으로 연다. 표면 설정과 무관하다 — 「새 pane에 열기」·「페인으로」 버튼처럼
  * 정말로 pane을 원하는 자리가 쓴다(ADR-44). */
 // opts.line·col은 그 줄로 이동(터미널 링크 `path:줄:열`). 줄 이동은 렌더러가 맡는다 — 이 함수가 먼저 등록한
@@ -39,6 +50,20 @@ export function openFileInPane(path, opts = {}) {
   // 온보딩(세션 0개 안내)은 position:fixed + z-index:500이라 페인 위를 덮는다.
   // 이제 볼 것이 생겼으므로 치운다 — term/session.js가 세션을 만들 때 하는 것과
   // 같은 처리다(같은 화면을 두 조건이 공유한다).
+  // 지금 칸이 다른 파일을 고치던 뷰어면 그 칸을 바꾸기 전에 묻는다(openViewerPane은 뷰어 칸을 그 자리에서 바꾼다).
+  const pid = getActivePaneId();
+  const node = findNode(getTree(), pid);
+  if (node && node.t === 'leaf' && node.kind === 'viewer' && node.file && node.file !== path) {
+    const el = document.getElementById(paneElId(pid));
+    if (el && el.querySelector('.vt-vw-code-pane.vt-vw-dirty')) {
+      confirmViewerLeave(el).then((ok) => { if (ok) _openInPane(path, opts); }).catch(() => {});
+      return;
+    }
+  }
+  _openInPane(path, opts);
+}
+
+function _openInPane(path, opts) {
   document.getElementById('onboarding')?.remove();
   loadViewer().then((v) => {
     v._pushRecent(path);

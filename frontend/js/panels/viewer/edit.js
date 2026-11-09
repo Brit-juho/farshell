@@ -10,11 +10,18 @@
 // - 바깥 변경: 다시 읽기(감시 알림·새로고침)가 편집 중이면 문서를 덮지 않고 여기로 온다(`refreshEditing`). 디스크 판이
 //   내가 마지막으로 저장한 판이면 무시, 고친 내용이 없으면 조용히 따라가고, 있으면 충돌 배너(비교 · 다시 불러오기 ·
 //   내 것으로 덮어쓰기).
-// - 고친 채 칸이 사라지면(닫기 · 다른 파일 · 페인 제거 · 표면 이동) 고친 내용을 (호스트, 경로) 키로 보관하고, 같은
-//   파일을 다시 열면 편집 모드로 이어 연다(`stash`·`restore`). 페이지를 떠날 때는 브라우저가 한 번 묻는다.
+// - 고친 채 닫으려 하면(오버레이 닫기 · 다른 파일 열기 · 페인 닫기) 「저장 / 버리기 / 취소」를 묻는다(`confirmLeave`,
+//   Esc = 취소, 기본 초점 취소). 묻지 않고 칸이 사라지는 길(표면 이동, 페인 자리 바꾸기 등)은 그대로 고친 내용을
+//   (호스트, 경로) 키로 보관하고, 같은 파일을 다시 열면 편집 모드로 이어 연다(`stash`·`restore`). 페이지를 떠날 때는
+//   브라우저가 한 번 묻는다(`beforeunload`).
+// - 편집 중에는 거터에 바뀐 줄 표시(추가 · 수정 · 삭제)를 그린다 — 기준은 불러온 판(`ed.base`), 계산은
+//   line-marks.js `lineChangeMarks`, 그리기는 editor.js `setChangeMarks`.
 import { t } from '../../core/i18n.js';
 import { icon } from '../../ui/icons.js';
-import { confirmDialog } from '../../core/dialog.js';
+import { confirmDialog, openDialog, nextId } from '../../core/dialog.js';
+import { closePanel } from '../panel.js';
+import { vtEsc } from '../../core/api.js';
+import { lineChangeMarks } from './line-marks.js';
 import { isTimeoutError } from '../../core/api.js';
 import { loadHead, mixedEol, OPEN_BUDGET } from './file-load.js';
 import {
@@ -173,10 +180,89 @@ export async function stopEdit(container, { discard = false } = {}) {
   ed.conflict = null;
   ed.compare = false;
   ed.status = 'idle';
+  ed.dirty = false;
+  clearTimeout(ed.timer);
+  container.classList.remove('vt-vw-dirty');
   h.setEditable(false);
   h.onChange(null);
+  _paintMarks(container);
   _drafts.delete(_key(ed.stHost, ed.stPath));
   _sync(container);
+  return true;
+}
+
+// --- 고친 채 닫기: 저장 / 버리기 / 취소 ---------------------------------------------------------
+
+/**
+ * 「저장 / 버리기 / 취소」 창. 돌려주는 것: `'save' | 'discard' | 'cancel'`. Esc · × · 배경 = 취소, 기본 초점은 「취소」
+ * (Enter 한 번으로 버리거나 저장하지 않게). `name`은 파일 이름(본문에 적는다).
+ */
+export function unsavedChoice(name) {
+  const id = nextId();
+  return new Promise((resolve) => {
+    let result = 'cancel';
+    let settled = false;
+    const finish = () => { if (!settled) { settled = true; resolve(result); } };
+    const { body } = openDialog({
+      id, title: t('저장하지 않은 편집'), onClose: finish, iconName: 'alert-triangle',
+      bodyHTML: `
+        <p class="vt-dialog-msg">${vtEsc(t('{name}에 저장하지 않은 편집이 있습니다. 저장할까요?', { name }))}</p>
+        <div class="vt-dialog-actions">
+          <button type="button" class="vt-btn vt-dialog-cancel">${vtEsc(t('취소'))}</button>
+          <button type="button" class="vt-btn danger vt-dialog-discard">${vtEsc(t('버리기'))}</button>
+          <button type="button" class="vt-btn solid vt-dialog-ok">${vtEsc(t('저장'))}</button>
+        </div>`,
+    });
+    if (!body) { finish(); return; }
+    const pick = (v) => () => { result = v; closePanel(id); };
+    body.querySelector('.vt-dialog-ok').addEventListener('click', pick('save'));
+    body.querySelector('.vt-dialog-discard').addEventListener('click', pick('discard'));
+    body.querySelector('.vt-dialog-cancel').addEventListener('click', pick('cancel'));
+    body.querySelector('.vt-dialog-cancel').focus();
+  });
+}
+
+const _asking = new WeakSet();
+
+/** `root`(칸 하나 또는 그것을 담은 상자) 안의, 고친 편집이 있는 칸들. */
+export function dirtyEditors(root) {
+  if (!root) return [];
+  const hosts = [];
+  if (root.classList && root.classList.contains('vt-vw-code-pane')) hosts.push(root);
+  if (root.querySelectorAll) hosts.push(...root.querySelectorAll('.vt-vw-code-pane'));
+  return hosts.filter((c) => isDirty(c));
+}
+
+/**
+ * 고친 편집이 있는 칸을 닫기 전에 묻는다. 계속 닫아도 되면 true.
+ * - 저장: 저장해 보고 성공해야 true(실패 · 충돌 · 비밀번호 취소면 false — 칸과 편집이 그대로 남는다).
+ * - 버리기: 편집을 끝내고(디스크 판으로 되돌림, 보관하지 않음) true.
+ * - 취소(Esc): false.
+ * 같은 칸에 대해 이미 묻는 중이면 false(두 번 묻지 않는다).
+ */
+export async function confirmLeave(root) {
+  const list = dirtyEditors(root);
+  if (!list.length) return true;
+  for (const c of list) {
+    if (_asking.has(c)) return false;
+  }
+  for (const c of list) {
+    if (!isDirty(c)) continue;
+    const st = c._vtDoc;
+    _asking.add(c);
+    let choice;
+    try {
+      choice = await unsavedChoice((st && st.path ? st.path.split('/').pop() : '') || t('이 파일'));
+    } finally {
+      _asking.delete(c);
+    }
+    if (choice === 'cancel') return false;
+    if (choice === 'discard') {
+      await stopEdit(c, { discard: true });
+      continue;
+    }
+    if (!st || !(await saveEdit(c, st))) return false;
+  }
   return true;
 }
 
@@ -194,6 +280,15 @@ function _recompute(container) {
   ed.dirty = isDirty(container);
   if (ed.dirty && ed.status === 'saved') ed.status = 'idle';
   if (was !== ed.dirty) container.classList.toggle('vt-vw-dirty', ed.dirty);
+  _paintMarks(container);
+}
+
+/** 거터의 바뀐 줄 표시 — 불러온 판(`ed.base`) 대비. 편집 중이 아니면 지운다. */
+function _paintMarks(container) {
+  const h = container._vtEditor;
+  if (!h || typeof h.setChangeMarks !== 'function') return;
+  const ed = container._vtEdit;
+  h.setChangeMarks(ed && ed.on ? lineChangeMarks(ed.base, h.getText()) : null);
 }
 
 function _sync(container) {

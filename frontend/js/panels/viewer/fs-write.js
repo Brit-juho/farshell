@@ -1,4 +1,5 @@
-// 파일 쓰기 호출 — 저장 `PUT /api/fs/file`, 새 파일, 이름 바꾸기, 휴지통 삭제(파일 개편 단계 8). 계약은 API.md.
+// 파일 쓰기 호출 — 저장 `PUT /api/fs/file`, 새 파일·새 폴더, 이름 바꾸기, 휴지통 삭제(파일 개편 단계 8, 폴더는 후속).
+// 계약은 API.md. 폴더 요청은 `kind: 'dir'`를 밝힌다(서버는 밝히지 않은 폴더 요청을 거부한다).
 //
 // - **이 컴퓨터의 파일만**(결정 D7). 화면이 다른 호스트를 보고 있거나 파일이 다른 호스트의 것이면 요청하지 않고
 //   이유를 돌려준다(`writeBlockedReason`). 서버도 중계 허용 목록에 쓰기를 두지 않는다.
@@ -73,6 +74,10 @@ export function writeErrorText(e) {
     case 'not_editable': return d.reason || t('이 파일은 편집할 수 없습니다');
     case 'exists': return t('같은 이름이 이미 있습니다 (덮어쓰지 않음)');
     case 'trash_unavailable': return d.reason || t('휴지통으로 옮기지 못해 삭제하지 않았습니다');
+    case 'into_itself': return t('폴더를 자기 안으로 옮길 수 없습니다');
+    case 'is_symlink': return t('심링크는 이 작업을 할 수 없습니다');
+    case 'mount_point': return t('다른 디스크가 연결된 폴더(마운트 지점)는 옮길 수 없습니다');
+    case 'denied': return d.reason || t('이 위치에는 쓸 수 없습니다');
     case 'human_session_required': return t('브라우저에서 로그인한 사람만 파일을 쓸 수 있습니다');
     case 'password_required': return t('웹 로그인 비밀번호를 설정해야 파일을 쓸 수 있습니다');
     case 'fs_unavailable': return d.reason || t('파일 작업이 밀려 있습니다 — 잠시 뒤 다시 시도하세요');
@@ -118,19 +123,42 @@ export async function createFileDialog(dir, host) {
   }
 }
 
-/** 이름 바꾸기(같은 폴더 안). 바꿨으면 새 경로, 아니면 null. */
-export async function renameDialog(path, host) {
+/** 새 빈 폴더. 만들었으면 그 경로, 아니면 null. `host`가 원격이면 이유만 알린다. */
+export async function createFolderDialog(dir, host) {
   const blocked = writeBlockedReason(host);
   if (blocked) { _toast(blocked, 'warn'); return null; }
+  const name = await promptDialog(t('{dir}에 만들 폴더 이름. 같은 이름이 있으면 만들지 않습니다.', { dir: _join(dir, '') }),
+    { title: t('새 폴더'), okLabel: t('만들기') });
+  if (name == null) return null;
+  const bad = nameProblem(name);
+  if (bad) { _toast(bad, 'warn'); return null; }
+  try {
+    const out = await withWriteElevation(() => writeFetch('/api/fs/mkdir', 'POST', { dir, name }),
+      t('폴더를 만들려면 웹 로그인 비밀번호를 확인하세요. 확인하면 이 기기에서 15분 동안 다시 묻지 않습니다.'));
+    if (!out) return null;
+    _toast(t('{name} 폴더를 만들었습니다', { name }));
+    return out.path || _join(dir, name);
+  } catch (e) {
+    _toast(writeErrorText(e), 'error');
+    return null;
+  }
+}
+
+/** 이름 바꾸기(같은 폴더 안). `opts.kind === 'dir'`면 폴더(덮어쓰지 않는다). 바꿨으면 새 경로, 아니면 null. */
+export async function renameDialog(path, host, opts = {}) {
+  const blocked = writeBlockedReason(host);
+  if (blocked) { _toast(blocked, 'warn'); return null; }
+  const dirKind = opts.kind === 'dir';
   const old = _base(path);
   const name = await promptDialog(t('새 이름. 같은 이름이 있으면 바꾸지 않습니다(덮어쓰지 않음).'),
-    { title: t('이름 바꾸기'), okLabel: t('바꾸기'), defaultValue: old });
+    { title: dirKind ? t('폴더 이름 바꾸기') : t('이름 바꾸기'), okLabel: t('바꾸기'), defaultValue: old });
   if (name == null || name === old) return null;
   const bad = nameProblem(name);
   if (bad) { _toast(bad, 'warn'); return null; }
   const to = _join(_dir(path), name);
   try {
-    const out = await withWriteElevation(() => writeFetch('/api/fs/rename', 'POST', { path, to }),
+    const body = dirKind ? { path, to, kind: 'dir' } : { path, to };
+    const out = await withWriteElevation(() => writeFetch('/api/fs/rename', 'POST', body),
       t('이름을 바꾸려면 웹 로그인 비밀번호를 확인하세요. 확인하면 이 기기에서 15분 동안 다시 묻지 않습니다.'));
     if (!out) return null;
     _toast(t('이름을 바꿨습니다: {name}', { name }));
@@ -141,16 +169,20 @@ export async function renameDialog(path, host) {
   }
 }
 
-/** 휴지통으로 이동(지우지 않는다, 결정 D2). 옮겼으면 true. */
-export async function trashDialog(path, host, rev) {
+/** 휴지통으로 이동(지우지 않는다, 결정 D2). `opts.kind === 'dir'`면 폴더를 안의 내용째. 옮겼으면 true. */
+export async function trashDialog(path, host, rev, opts = {}) {
   const blocked = writeBlockedReason(host);
   if (blocked) { _toast(blocked, 'warn'); return false; }
-  const ok = await confirmDialog(
-    t('{name}을(를) 휴지통으로 옮깁니다. 휴지통에서 되돌릴 수 있습니다(macOS Finder 「되돌리기」).', { name: _base(path) }),
-    { title: t('휴지통으로 이동'), okLabel: t('휴지통으로 이동'), danger: true });
+  const dirKind = opts.kind === 'dir';
+  const msg = dirKind
+    ? t('{name} 폴더를 안의 파일과 함께 휴지통으로 옮깁니다. 휴지통에서 되돌릴 수 있습니다(macOS Finder 「되돌리기」).', { name: _base(path) })
+    : t('{name}을(를) 휴지통으로 옮깁니다. 휴지통에서 되돌릴 수 있습니다(macOS Finder 「되돌리기」).', { name: _base(path) });
+  const ok = await confirmDialog(msg, { title: t('휴지통으로 이동'), okLabel: t('휴지통으로 이동'), danger: true });
   if (!ok) return false;
   try {
-    const body = rev ? { path, expected_rev: rev } : { path };
+    let body;
+    if (dirKind) body = { path, kind: 'dir' };
+    else body = rev ? { path, expected_rev: rev } : { path };
     const out = await withWriteElevation(() => writeFetch('/api/fs/delete', 'POST', body),
       t('휴지통으로 옮기려면 웹 로그인 비밀번호를 확인하세요. 확인하면 이 기기에서 15분 동안 다시 묻지 않습니다.'));
     if (!out) return false;

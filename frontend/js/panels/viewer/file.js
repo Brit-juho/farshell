@@ -18,6 +18,9 @@ import {
 import { slugify } from './markdown.js';
 import { downloadFsPath as _downloadFsPath, downloadBlockedReason } from './download.js';
 import { decorateBar, syncConflict, editing, refreshEditing, stash, restore } from './edit.js';
+
+// 고친 편집이 있는 칸을 닫기 전의 「저장 / 버리기 / 취소」 — 앱 본체(viewer-lazy.js `confirmViewerLeave`)가 loadViewer로 부른다.
+export { confirmLeave } from './edit.js';
 // UMD 전역 VTDiffLex — 뷰어 전용이라 panels 청크에서 평가한다. ⚠ 마지막 import여야 한다:
 // tests/helpers/vm-esm.js의 IMPORT_RE가 뒤에 `from '…'`이 더 있으면 부작용 import를 삼킨다.
 import '../../lib/difflex.js';
