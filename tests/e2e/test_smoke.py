@@ -3899,3 +3899,114 @@ def test_windows_vscode_스킨은_컨트롤이_2px로_각진다(page, skin):
     page.keyboard.press("Escape")
     page.evaluate("() => document.documentElement.setAttribute('data-skin', 'farshell')")
     assert page.evaluate("() => getComputedStyle(document.documentElement).getPropertyValue('--radius-sm').trim()") == "6px"
+
+
+# ── 실기기 지적(2026-11) — 모바일 세션 카드 · 파일 면 ──
+
+def _dfx_shot(pg, name: str) -> None:
+    """화면 증거 — E2E_SHOT_DIR이 있을 때만 남긴다(기본은 저장하지 않는다)."""
+    d = os.environ.get("E2E_SHOT_DIR")
+    if d:
+        Path(d).mkdir(parents=True, exist_ok=True)
+        pg.screenshot(path=str(Path(d) / f"{name}.png"))
+
+
+def _mobile_ctx(browser, base):
+    ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True, device_scale_factor=2)
+    _login(ctx, base)
+    return ctx
+
+
+def _git_repo(path: Path, branch: str) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", "-q", "-b", branch, str(path)], check=True)
+    return path
+
+
+def test_모바일_세션_카드_2줄은_브랜치를_온전히_보이고_디렉터리만_줄임표로_줄인다(browser, server):
+    """실기기: 「유휴 메인 demo-app /m… +1」 — 브랜치가 `/m…`로 잘려 어느 브랜치인지 알 수 없었다.
+    원인: 기본 규칙의 `.vt-srow-branch{flex:1}`(basis 0) + `.vt-srow-directory{flex:1 1 auto}`가 남는 폭을 나눠
+    칸이 넉넉한데도 브랜치 폭이 0~절반이 됐다. 브랜치가 들어갈 만하면 말줄임이 없어야 하고, 모자랄 때는 디렉터리가 줄어야 한다."""
+    if _BROWSE_DIR is None:
+        pytest.skip("외부 서버(VT_E2E_URL)에서는 시험 저장소를 만들 수 없다")
+    base, token = server
+    deep = _git_repo(_BROWSE_DIR / "client-projects" / "acme-platform" / "services" / "api-gateway-long-directory-name", "feat/auth")
+    short = _git_repo(_BROWSE_DIR / "demo-app", "master")
+    made = []
+    ctx = None
+    try:
+        for name, cwd in (("dfx-deep", deep), ("dfx-short", short)):
+            made.append(_api(base, token, "POST", "/api/tmux/create", {"name": name, "cwd": str(cwd)})["id"])
+        _reset_saved_layout(base, token)
+        ctx = _mobile_ctx(browser, base)
+        pg = ctx.new_page()
+        _boot(pg, f"{base}/")
+        pg.wait_for_selector(".vt-fleet-loc .vt-srow-branch", state="attached", timeout=20000)   # 잘못되면 폭 0이라 visible이 아니다
+        pg.wait_for_timeout(500)
+        rows = pg.evaluate("""() => [...document.querySelectorAll('.vt-fleet-loc')].map((l) => {
+          const q = (s) => l.querySelector(s);
+          const m = (el) => el && { text: el.textContent, cw: el.clientWidth, sw: el.scrollWidth };
+          const line = l.closest('.vt-fleet-line2').getBoundingClientRect();
+          return { dir: m(q('.vt-srow-directory')), br: m(q('.vt-srow-branch')), loc: m(l), lineW: Math.round(line.width) };
+        })""")
+        by = {r["br"]["text"]: r for r in rows if r["br"]}
+        assert {"feat/auth", "master"} <= set(by), rows
+        for text, r in by.items():
+            # 브랜치는 잘리지 않는다 — 보이는 폭이 내용 폭과 같다.
+            assert r["br"]["sw"] <= r["br"]["cw"] + 1, f"브랜치 {text}가 잘렸다: {r}"
+            assert r["br"]["cw"] > 20, r
+        # 짧은 디렉터리(demo-app)는 이 폭에서 아무것도 안 잘린다.
+        assert by["master"]["dir"]["sw"] <= by["master"]["dir"]["cw"] + 1, by["master"]
+        # 긴 디렉터리는 줄임표로 줄되(브랜치를 위해) 칸 밖으로 넘치지 않는다.
+        deep_row = by["feat/auth"]
+        assert deep_row["loc"]["sw"] <= deep_row["loc"]["cw"] + 1, deep_row
+        _dfx_shot(pg, "dfx-fleet-390")
+    finally:
+        if ctx is not None:
+            ctx.close()
+        for sid in made:
+            try:
+                _api(base, token, "DELETE", f"/api/sessions/{sid}")
+            except Exception:
+                pass
+        _reset_saved_layout(base, token)
+
+
+def test_모바일_파일_트리와_뷰어_본문은_칸_면_bg0이고_검정이_아니다(browser, server):
+    """실기기: 파일 트리 · 마크다운 렌더 · 원문 영역이 위 크롬보다 훨씬 어두운 #000이었다 — `.vt-vw-body{background:var(--crust)}`
+    (farshell 스킨에서 #000)와 편집기 줄 번호 칸이 `--crust`였다. 칸 면(`--color-bg-0`)으로 맞춘다."""
+    if _BROWSE_DIR is None:
+        pytest.skip("외부 서버(VT_E2E_URL)에서는 시험 파일을 열 수 없다")
+    base, token = server
+    ctx = _mobile_ctx(browser, base)
+    try:
+        pg = ctx.new_page()
+        _boot(pg, f"{base}/")
+        probe = """() => {
+          const t = document.createElement('i'); t.style.background = 'var(--color-bg-0)'; document.body.append(t);
+          const bg0 = getComputedStyle(t).backgroundColor; t.remove();
+          const bgOf = (sel) => { const e = document.querySelector(sel); return e ? getComputedStyle(e).backgroundColor : null; };
+          return { bg0, body: bgOf('#vt-file-body'), md: bgOf('#vt-file .vt-md'), gut: bgOf('#vt-file .cm-gutters'), dir: bgOf('#vt-dir-body') };
+        }"""
+        pg.click('#vt-mnav-bottom .vt-mnav-btn[data-mnav="files"]')
+        pg.wait_for_selector("#vt-dir-body .vt-ft", timeout=15000)
+        pg.wait_for_timeout(500)
+        r = pg.evaluate(probe)
+        assert r["dir"] == r["bg0"], f"파일 트리 본문이 칸 면이 아니다: {r}"
+        _dfx_shot(pg, "dfx-files-390")
+        pg.evaluate("(p) => window.openFile(p)", _viewer_file("notes.md"))
+        pg.wait_for_selector("#vt-file .vt-md h1", timeout=15000)
+        r = pg.evaluate(probe)
+        assert r["body"] == r["bg0"] and r["body"] != "rgb(0, 0, 0)", f"마크다운 렌더 본문: {r}"
+        _dfx_shot(pg, "dfx-md-390")
+        for b in pg.query_selector_all("#vt-file button, #vt-file [role=tab]"):
+            if (b.inner_text() or "").strip() == "원문":
+                b.click()
+                break
+        pg.wait_for_selector("#vt-file .cm-editor", timeout=15000)
+        pg.wait_for_timeout(400)
+        r = pg.evaluate(probe)
+        assert r["body"] == r["bg0"] and r["gut"] == r["bg0"], f"원문 본문·줄 번호 칸: {r}"
+        _dfx_shot(pg, "dfx-raw-390")
+    finally:
+        ctx.close()
