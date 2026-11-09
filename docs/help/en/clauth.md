@@ -1,6 +1,6 @@
 # Usage display (clauth integration)
 
-FarShell can show a **usage gauge** in the rail of the web/mobile UI. It reads the data from the
+FarShell can show a **usage gauge** in the web/mobile UI (on the desktop: the activity bar's Usage and the status bar's usage chip). It reads the data from the
 status feed that [clauth](https://github.com/uwuclxdy/clauth) writes.
 
 **If you don't use clauth, this feature quietly disappears.** There's nothing to configure and no error.
@@ -13,7 +13,7 @@ fsh clauth which      # just the name of the active profile
 fsh doctor            # also diagnoses feed freshness
 ```
 
-On the web, use the 📊 "Usage" button in the rail. With no source, the button itself is hidden.
+On the web, the activity bar's "Usage" (gauge icon) opens it in the sidebar. With no source, the activity itself is hidden.
 
 ## How it reads
 
@@ -61,5 +61,5 @@ clauth's own command.
 
 For the same reason, **FarShell doesn't put a profile badge on each tab or pane.** The feed only says
 "some session is running on this profile". It doesn't say which tmux session. A badge without that
-mapping would confidently show the wrong account. The rail button shows only the active profile and
+mapping would confidently show the wrong account. The Usage view shows only the active profile and
 whether it's running, as a global indicator.

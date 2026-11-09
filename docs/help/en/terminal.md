@@ -34,7 +34,7 @@ fsh terminal unset            # back to automatic selection
 
 ## Saved sessions and conversation archives
 
-The rail browses repositories → workspaces → sessions, with All sessions and Session archive views.
+The sidebar's Sessions view browses repositories → workspaces → sessions, with All sessions and Session archive views.
 Closing a view keeps its execution running. Task history shows the logical task name and execution history.
 Stop an execution explicitly before archiving it; independently running child sessions are not stopped together.
 

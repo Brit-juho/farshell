@@ -21,7 +21,7 @@ Everything about using FarShell in the browser. (For the CLI see `fsh help conce
 ## 2. Sessions and views
 
 - **Session**: one tmux session. It keeps running until you kill it (the work inside, such as claude, keeps going too).
-- **View**: one tab along the top. A view with one pane is a single view; with two or more it's a group view.
+- **View**: one arrangement of panes. A view with one pane is a single view; with two or more it's a group view. The desktop has no row of view tabs — click a session or group in the sidebar's Sessions view to go to its view.
 - **Open**: a session is placed in a pane of this browser tab. It describes placement, not state.
 - Each browser tab saves its own view layout. After a reload, **sessions you closed don't reopen.**
 
@@ -55,7 +55,23 @@ Everything about using FarShell in the browser. (For the CLI see `fsh help conce
   "Needs you N name"; tap it to open that session. To leave, tap the pill's exit button or pull down from the very top edge and let go
   (a short pull snaps back).
 
-### Left rail (session list)
+### Workbench — activity bar and sidebar (desktop, 720px and wider)
+
+- **Activity bar** (the 48px vertical bar on the far left): the top group picks what the sidebar shows — Sessions · Changes · Files ·
+  Queue · Attachments · Snippets · Ports · Usage · System (Ports and Usage only when available). The bottom group is MCP · skills,
+  the mic and Settings (with the number of pending approvals as a badge). The current activity has a 2px blue line on its left.
+  Hover an icon for its name.
+- **Sidebar**: one column to the right of the activity bar. Every activity shares its width (360 by default; drag its right edge,
+  240–480), so switching activities never resizes the terminals. Click the current activity again, or press `Cmd+B` (`Alt+Shift+B`
+  off the Mac), to collapse or expand it. Sessions collapse to a 48px strip, tools to nothing. Drag a tool icon onto a pane to open
+  that tool in the pane.
+- **Pin to the right**: the 「Pin to the right (side by side)」 button in a tool panel's header pins that tool to the right 300px of
+  the window and puts the left sidebar back on Sessions, so you see the session list and a tool such as Changes or Queue side by side.
+  The pinned tool's activity icon gets a small blue dot in its top-right corner. The same button (「Unpin from the right」) or closing
+  the panel unpins it. At 1280px and wider it takes room beside the panes; narrower, it floats over them as a drawer (pane sizes
+  stay the same). Focus mode hides it. Saved on this device only.
+
+### Sidebar Sessions view (session list)
 
 Sessions are listed by name, and sessions waiting for input also appear in the "Needs attention" section at the top.
 Each row has three lines: status, agent, name / branch, change count / status keyword (Approval request, Choice requested, Plan review, Question), elapsed time, origin.
@@ -67,23 +83,19 @@ Each row has three lines: status, agent, name / branch, change count / status ke
 | Row ⋯ / right-click / long-press (menu) | The top line of the menu summarizes status · (if waiting for input) type · Non-web N · origin · branch (touch has no hover tooltip). It's an info line; tapping it does nothing |
 | Drag a row to a pane edge | Splits in that direction — this is how you group sessions (touch devices can also use the menu items below) |
 | Row menu "Open to the right", "Open below" | Shown only on touch devices at least 720px wide (tablets). Splits the active pane in that direction and puts the session there (a session from another view is moved over, and a view left empty is closed). Not available on phones under 720px |
-| Pane `×` | The session becomes "Not open" in the rail (tmux keeps running). The pane stays as an empty pane |
-| View tab `×` | Closes only the view. A group view's layout is remembered, and you reopen it from the rail |
+| Pane `×` | The session becomes "Not open" in the sidebar (tmux keeps running). The pane stays as an empty pane |
+| Close on a group header | Closes only the group view. Its layout is remembered, and you reopen it from the sidebar |
 | Row `⋯` or right-click | Open/close · Rename · Open on Mac · Connected screens · agent sharing items (below) · **Kill** |
 
 - **Kill** ends the tmux session, and the claude or shell inside it, with no undo. A confirmation always appears,
   and it warns you if the session is working or waiting for input. Panes open in other browser tabs become empty panes.
 - **Mobile session management**: tap the header session name to switch between the Sessions tab and the terminal. Use each session row's menu to open, close, rename or stop it.
 - **Mobile navigation order**: swipe left/right, the next/previous tab keys, the header's `n/m`, and the palette use the same order.
-  It goes view tab order → pane order within a view (top left first), skips empty panes, and wraps from the end to the start. Navigating never moves a session;
-  it only goes to that session's view and pane. To change the order, drag the view tabs at the top on desktop, or enable Edit views on the mobile Sessions tab
+  It goes view order → pane order within a view (top left first), skips empty panes, and wraps from the end to the start. Navigating never moves a session;
+  it only goes to that session's view and pane. To change the order, enable Edit views on the mobile Sessions tab
   and use the up/down buttons per view. A group view moves as one.
-  While editing, each view also has a Close button (same as the tab `×`: the session stays alive, a group view's layout is remembered, and closing the last view
-  shows the start screen). Opening the Sessions tab on a phone automatically cleans up empty single views ("Empty screen").
-- Each top view tab uses one 44px row for its name, pane count and close button. The count includes empty, file and panel panes.
-  A top accent line and background mark the active view. With a tab focused, use Left/Right arrows or Home/End to switch views.
-  On mobile, pane counts appear in Edit views on the Sessions tab. Closing a view keeps its execution running.
-- The **status bar** under the view tabs has one segment per session. Color is the state; a bold segment is a change you haven't checked yet.
+  While editing, each view also has a Close button (the session stays alive, a group view's layout is remembered, and closing the last view
+  shows the start screen). Each view's pane count (empty, file and panel panes included) is shown there too. Opening the Sessions tab on a phone automatically cleans up empty single views ("Empty screen").
 - **Agents and session sharing**: lets an agent (Claude Code, for example) read and type into **only the sessions you've shared** through the FarShell MCP tools.
   Agents can't create or close sessions.
   - **Sharing**: row menu "Share with agent…" → choose a nickname (1-32 characters: letters, digits, `_`, `-`) and a mode (Read-only / Read & write).
@@ -106,7 +118,7 @@ Each row has three lines: status, agent, name / branch, change count / status ke
     read & write, the earlier write approval comes back without re-approval. To block it permanently, revoke write access or unshare.
     This feature isn't available on screens that show another Mac, and a session whose name is in Korean can't be shared (rename it in English).
     Approving and sharing don't work on a screen opened with a `?token=` link (password sign-in is required).
-- The gear in the rail header opens **Rail settings**: show the "Needs attention" section, show by origin (other Macs, external), and show repos.
+- The sliders icon in the Sessions view header opens **Rail settings**: show the "Needs attention" section, show by origin (other Macs, external), and show repos.
 
 ## 3. Where new sessions start
 
@@ -170,7 +182,7 @@ Hand that path to claude as is. (The upload files button does the same.)
 | **Edit and save** | 「Edit」 in the viewer's top bar edits the file in place (no autosave). Save with ⌘S / Ctrl+S or 「Save」; the first save asks for your **web login password** once (kept for 15 minutes on this device). Works for text files up to 2 MB that are fully loaded, with a known encoding and one kind of line ending (otherwise 「Edit」 is dimmed with the reason). If the file changed elsewhere before you save, nothing is overwritten and a conflict banner appears — 「Compare」 · 「Reload」 · 「Overwrite with mine」. Closing the viewer with unsaved edits keeps them, and reopening the same file continues editing. On a phone the edit bar stays at the top, so 「Save」 is visible above the keyboard |
 | **New file, rename, delete** | The tree's row menu (「New file in this folder…」 · 「Rename…」 · 「Move to Trash…」) and the viewer's top bar. An existing name is never overwritten. Deleting only **moves the file to the OS trash**, so it can be restored (Finder 「Put Back」 on macOS, the desktop trash on Linux); where no trash can be used, nothing is deleted and you are told why. Folders and symlinks cannot be renamed or deleted yet. Writes work only on this computer's files, inside the write boundary (`VT_WRITE_ROOTS`, the browse boundary by default), and never inside execution-config folders such as `.github` or `.vscode` |
 | **Phone 「Files」 tab** | The 4th bottom tab. It opens the file tree; the 「Files \| Attachments」 switch at the top reaches the attachments screen (the last side is remembered). The upload badge sits on this tab. A long press on a row opens the row menu as a bottom sheet |
-| **Landscape phone + soft keyboard** | (Automatic focus) When the height visible above the keyboard drops below 300px, the tab bar, pane headers and rail hide and the terminal uses all the remaining height. Dismiss the keyboard and the usual screen returns. (On a portrait phone the bottom nav hides while the keyboard is up. This is intended.) |
+| **Landscape phone + soft keyboard** | (Automatic focus) When the height visible above the keyboard drops below 300px, the tab bar, pane headers and workbench hide and the terminal uses all the remaining height. Dismiss the keyboard and the usual screen returns. (On a portrait phone the bottom nav hides while the keyboard is up. This is intended.) |
 
 ---
 
@@ -202,7 +214,7 @@ Shown only if you installed with voice mode.
 | Paste doesn't work | Tap the terminal once to focus it, then `Cmd/Ctrl+V`. Reading the clipboard works only over HTTPS/localhost |
 | TUI (claude) lines are misaligned | Switching views or reloading resyncs the size. If it keeps happening, see `fsh help troubleshoot` |
 | New sessions open in the project folder | Set `VT_START_DIR` (section 3 above) — the default is home |
-| You closed a pane but the session is still in the rail | Expected. Closing only removes it from the pane; the session keeps running. To end it, use **Kill** in the row menu |
+| You closed a pane but the session is still in the sidebar | Expected. Closing only removes it from the pane; the session keeps running. To end it, use **Kill** in the row menu |
 
 More troubleshooting: `fsh help troubleshoot`
 
