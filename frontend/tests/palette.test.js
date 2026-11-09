@@ -222,6 +222,30 @@ test('`@` 접두사 — 세션이 tmux 라이브 프리뷰 후보면 카드로 �
   assert.ok(card, '라이브 프리뷰 카드가 나와야 한다');
 });
 
+// 리디자인 6단계(시안 O01 · O03) — `@`에서 고른 세션의 화면을 오른쪽 칸에 터미널 색 클래스로 그린다(글자는 textContent).
+test('`@` 접두사 — 고른 세션 화면을 터미널 색으로 미리 보이고, 화면 글자는 마크업으로 해석되지 않는다', async () => {
+  const { mountPalette, document, window, root } = await mountFresh();
+  window.allSessions = () => ({ a: { tmuxName: 'dev' } });
+  const asked = [];
+  const deps = fakeDeps(document, {
+    listSessions: () => [{ id: 'a', name: 'dev' }],
+    vtFetch: async (path) => {
+      if (path.includes('/api/tmux/sessions')) return [{ name: 'dev', command: 'claude' }];
+      if (path.includes('/api/tmux/preview/')) { asked.push(path); return { available: true, content: '\x1b[32m✓ 42 passed\x1b[0m\n\x1b[31m<b>x</b>\x1b[0m' }; }
+      return {};
+    },
+  });
+  const api = mountPalette(root, deps);
+  api.open('session');
+  const term = await waitFor(() => document.querySelector('.vt-qo-preview-pane .vt-qo-term .ta-green'));
+  assert.strictEqual(term.textContent, '✓ 42 passed');
+  assert.match(asked[0], /^\/api\/tmux\/preview\/dev\?lines=40&ansi=1$/);
+  const pane = document.querySelector('.vt-qo-preview-pane');
+  assert.strictEqual(pane.querySelector('b'), null);
+  assert.strictEqual(pane.querySelector('.ta-red').textContent, '<b>x</b>');
+  api.close();
+});
+
 test('명령을 실행하면 「최근 사용 기능」으로 기본 화면 위에 올라온다', async () => {
   // window.vtSettingsGet/Set은 core/settings.js가 앱 부팅 시 공개하는
   // 브리지다(테스트는 solid-env가 만든 jsdom window를 직접 스텁한다).

@@ -80,3 +80,47 @@
 /* 페어 확인 문구(시안 O11-B): 22px 고정폭, 가운데, 글자 간격 — 눈으로 비교하는 값이라 크게. */
 .vt-authz-approval .vt-pair-phrase { font:var(--weight-medium) var(--fs-lg)/32px var(--font-mono); letter-spacing:.12em; }
 .vt-authz-approval .vt-pair-phrase-cell { background:transparent; border:1px solid var(--color-line-strong); text-align:center; padding:12px; }
+
+/* ── 세션 미리보기의 터미널 색(시안 O01 · O03 · D03-A) ─────────────────────────
+ * lib/ansi-spans.js가 tmux 화면 원문을 줄(.vt-ansi-line)과 클래스(ta-*)로만 그린다. 색은 --color-term-* 토큰뿐 —
+ * 스킨을 바꾸면 미리보기 색도 따라간다. 인라인 색은 쓰지 않는다. */
+.vt-ansi { font-family:var(--font-mono); color:var(--color-term-fg); background:var(--color-term-bg); white-space:pre; overflow:hidden; }
+.vt-ansi-line { min-height:1lh; overflow:hidden; text-overflow:clip; }
+.vt-ansi .ta-dim { color:var(--color-term-dim); }
+.vt-ansi .ta-red { color:var(--color-term-red); }
+.vt-ansi .ta-green { color:var(--color-term-green); }
+.vt-ansi .ta-amber { color:var(--color-term-amber); }
+.vt-ansi .ta-blue { color:var(--color-term-blue); }
+.vt-ansi .ta-mag { color:var(--color-term-mag); }
+.vt-ansi .ta-cyan { color:var(--color-term-cyan); }
+.vt-ansi .ta-bright { color:var(--color-term-bright); }
+.vt-ansi .ta-bold { font-weight:700; }
+.vt-ansi .ta-rev { color:var(--color-term-bg); background:var(--color-term-fg); }
+.vt-ansi .ta-bg-add { background:var(--color-term-add-bg); }
+.vt-ansi .ta-bg-del { background:var(--color-term-del-bg); }
+.vt-ansi .ta-bg-hl { background:var(--color-term-hl); color:var(--color-term-bright); }
+.vt-ansi .ta-bg-sel { background:var(--color-term-sel); }
+
+/* 팔레트 오른쪽 칸(세션): 머리(이름 · 명령) + 터미널 12/18. */
+.vt-qo-term-wrap { display:flex; flex-direction:column; min-height:100%; }
+.vt-qo-term-wrap .vt-qo-preview-head { display:flex; align-items:baseline; gap:8px; padding:0 4px 6px; }
+.vt-qo-term-name { color:var(--color-txt); font:var(--weight-semibold) var(--fs-sm)/1.4 var(--font-ui); }
+.vt-qo-term-cmd { color:var(--color-muted); font:var(--weight-normal) var(--fs-xs)/1.4 var(--font-mono); }
+.vt-qo-term { flex:1 1 auto; padding:8px 10px; border-radius:var(--radius-sm); border:1px solid var(--color-line); font-size:var(--fs-xs); line-height:18px; }
+.vt-qo-preview-pane:has(.vt-qo-term-wrap) { background:var(--color-term-bg); }
+
+/* 빈 칸 세션 선택(D03-A): 창 620, 카드 2열, 카드 = 머리 28 + 터미널 6줄 11/14. */
+.vt-pane-pick .vt-viewer-card { width:min(620px, 100%); max-width:none; }
+.vt-pane-pick .vt-vw-body { padding:12px 16px; }
+.vt-pane-pick .vt-card-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; margin-top:12px; }
+.vt-pane-pick .vt-card { padding:0; gap:0; overflow:hidden; background:var(--color-bg-1); border-color:var(--color-line-strong); border-radius:var(--radius-sm); }
+.vt-pane-pick .vt-card:hover, .vt-pane-pick .vt-card:focus-within { border-color:var(--color-acc); }
+.vt-pane-pick .vt-card .card-head { min-height:28px; box-sizing:border-box; padding:0 8px; gap:6px; justify-content:flex-start; }
+.vt-pane-pick .vt-card .card-title { flex:0 1 auto; font:var(--weight-semibold) var(--fs-sm)/1.3 var(--font-ui); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-pane-pick .vt-card .card-cmd { margin-left:auto; font-family:var(--font-mono); }
+.vt-pane-pick .vt-card .card-meta { padding:0 8px 4px; color:var(--color-muted); }
+.vt-pane-pick .card-term { height:calc(6 * 14px + 12px); box-sizing:border-box; padding:6px 8px; font-size:var(--fs-3xs); line-height:14px; border-top:1px solid var(--color-line); }
+.vt-pane-pick .card-term[data-empty] { background:var(--color-term-bg); }
+.vt-pane-pick .vt-pp-sep { margin-top:14px; padding-top:0; border-top:0; color:var(--color-muted); font:var(--weight-semibold) var(--fs-xs)/1 var(--font-ui); }
+.vt-pane-pick .vt-pp-panel { --btn-h:24px; }
+@media (max-width:719px) { .vt-pane-pick .vt-card-grid { grid-template-columns:minmax(0, 1fr); } }

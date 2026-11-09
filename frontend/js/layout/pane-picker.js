@@ -24,8 +24,35 @@ import { PANELS } from '../panels/registry.js';
 import { icon } from '../ui/icons.js';
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
 import { t } from '../core/i18n.js';
+import { renderAnsi, fetchPreview } from '../lib/ansi-spans.js';
 
 const PANEL_ID = 'vt-pane-pick';
+// 리디자인 6단계(시안 D03-A) — 카드마다 그 세션 화면의 마지막 6줄을 터미널 색으로. 열려 있는 동안 3초마다 다시 받는다.
+// 세션이 많아도 서버에 capture-pane이 몰리지 않게 앞 12장만, 한 번에 하나씩 묻는다.
+const PREVIEW_LINES = 6;
+const PREVIEW_MAX_CARDS = 12;
+const PREVIEW_EVERY_MS = 3000;
+const fetchJson = (path) => apiFetch(`${API_BASE}${path}`).then((r) => r.json());
+
+async function _paintPreviews(cardsEl) {
+  const cards = [...cardsEl.querySelectorAll('.vt-card[data-name]')].slice(0, PREVIEW_MAX_CARDS);
+  for (const card of cards) {
+    if (!card.isConnected) return;
+    const name = card.dataset.name;
+    const content = await fetchPreview(fetchJson, name, { lines: PREVIEW_LINES * 3 });
+    if (!card.isConnected || card.dataset.name !== name) continue;
+    let term = card.querySelector(':scope > .card-term');
+    if (!term) {
+      term = document.createElement('div');
+      term.className = 'card-term';
+      term.setAttribute('aria-hidden', 'true');   // 스크린리더에는 카드 이름·위치로 충분하다(화면 글자는 매번 바뀐다)
+      card.appendChild(term);
+    }
+    if (content == null) { term.replaceChildren(); term.dataset.empty = ''; continue; }
+    delete term.dataset.empty;
+    renderAnsi(term, content, { maxLines: PREVIEW_LINES, maxCols: 160 });
+  }
+}
 
 function _sessionLabel(id) {
   const s = getSession(id);
@@ -34,11 +61,12 @@ function _sessionLabel(id) {
 
 export function openPanePicker(paneId) {
   let offSessions = () => {};
+  let previewTimer = null;
   const panel = openPanel({
     id: PANEL_ID,
     ariaLabel: t('이 화면에 표시할 세션 선택'),
-    extraClass: 'vt-pane-pick',
-    onClose: () => offSessions(),
+    extraClass: 'vt-dialog vt-pane-pick',
+    onClose: () => { offSessions(); clearTimeout(previewTimer); },
     headHTML: `<div class="vt-vw-title">${t('이 화면에 표시할 세션')}</div>`,
     bodyId: 'vt-pp-body',
     bodyHTML: `
@@ -56,7 +84,13 @@ export function openPanePicker(paneId) {
     closePanel(PANEL_ID);
   });
 
-  _renderCandidates(paneId, panel.body.querySelector('#vt-pp-cards'));
+  const cardsEl = panel.body.querySelector('#vt-pp-cards');
+  const loop = async () => {
+    if (!cardsEl.isConnected) return;
+    if (!document.hidden) await _paintPreviews(cardsEl).catch(() => {});
+    if (cardsEl.isConnected) previewTimer = setTimeout(loop, PREVIEW_EVERY_MS);
+  };
+  _renderCandidates(paneId, cardsEl).then(loop);
   offSessions = onWorkspaceEvent('tmux_sessions', (msg) => {
     if (!Array.isArray(msg.sessions)) return;
     const byName = new Map(msg.sessions.map((s) => [s.name, s]));
