@@ -965,4 +965,5 @@ body.vt-resizing #terminal-container{ transition:none; }
 .vt-vw-cmp-row.gap{ display:block; padding:calc(var(--spacing) * 1) calc(var(--spacing) * 3); color:var(--sub); font-family:var(--ui); background:var(--bar); }
 @media (pointer: coarse){
   .vt-vw-conflict .vt-vw-bar-btn, .vt-vw-edit-tools .vt-vw-bar-btn{ min-height:44px; }
+  .vt-vw-bar-btn kbd{ display:none; }   /* 화상 키보드에는 ⌘S가 없다 */
 }
