@@ -297,6 +297,38 @@ test('뷰어 — 1MB를 넘는 마크다운·CSV는 원문으로 열고 이유�
   assert.ok(host.querySelector('.vt-vw-seg button').disabled, '표 단추는 막힌다');
 });
 
+test('뷰어 — 열이 512개를 넘거나 행이 10만을 넘는 CSV는 표를 만들지 않고 원문으로 열고 이유를 적는다', async () => {
+  const wide = `${','.repeat(100000)}\n1\n`;              // 1MB 안, 열 10만 개 — 표로 그리면 탭이 멈춘다
+  const tall = 'a\n' + '1\n'.repeat(100001);
+  const ok = `${Array.from({ length: 512 }, (_, i) => `c${i}`).join(',')}\n${'1,'.repeat(511)}1\n`;
+  const { file, host, document } = await viewerEnv({
+    '/repo/wide.csv': { text: wide }, '/repo/tall.csv': { text: tall }, '/repo/ok.csv': { text: ok },
+  });
+  for (const p of ['/repo/wide.csv', '/repo/tall.csv']) {
+    const h = document.createElement('div');
+    h.className = 'vt-vw-code-pane';
+    document.body.appendChild(h);
+    await file.renderFile(h, p);
+    assert.strictEqual(h.querySelector('.vt-csv'), null, `${p}: 표를 만들었다`);
+    assert.strictEqual(h.querySelectorAll('th').length, 0);
+    assert.ok(h.querySelector('pre.vt-vw-plain'), `${p}: 원문이 없다`);
+    assert.match(h.querySelector('.vt-vw-bar').textContent, /표가 너무 커서\(최대 512열/);
+    assert.ok(h.querySelector('.vt-vw-seg button').disabled, '표 단추는 막힌다');
+  }
+  await file.renderFile(host, '/repo/ok.csv');
+  assert.strictEqual(host.querySelectorAll('.vt-csv-table thead th').length, 513, '512열은 표로 그린다');
+});
+
+test('CSV 표 — 상한을 넘으면 아무것도 붙이지 않는다', async () => {
+  const e = createDomEnv('<!doctype html><html><body></body></html>');
+  _doms.push(e.dom);
+  const p = await importFresh(PREVIEW_JS, e.context, new Map());
+  const box = e.document.createElement('div');
+  const r = p.mountCsvTable(box, `${','.repeat(p.CSV_MAX_COLS)}\n`, '/a.csv');
+  assert.ok(r.tooBig && r.cols === p.CSV_MAX_COLS + 1);
+  assert.strictEqual(box.childNodes.length, 0);
+});
+
 test('뷰어 — CSV는 표(머리 고정, 칸은 글자로만), SVG는 <img>로만 그린다', async () => {
   const csv = 'name,n\n"<img src=x onerror=alert(1)>",1\nb,2\n';
   const svg = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>';

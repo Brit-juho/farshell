@@ -4758,6 +4758,7 @@ window.__VT_I18N = {
   "{name} 받음 · {size}": "{name} downloaded · {size}",
   "1MB를 넘어 표 대신 원문으로 보여 줍니다.": "Over 1 MB, so it is shown as source instead of a table.",
   "1MB를 넘어 렌더 대신 원문으로 보여 줍니다.": "Over 1 MB, so it is shown as source instead of rendered.",
+  "표가 너무 커서(최대 {cols}열 · {rows}행) 표 대신 원문으로 보여 줍니다.": "Too large for a table (at most {cols} columns · {rows} rows), so it is shown as source.",
   "그림으로만 보여 줍니다 — SVG 안의 스크립트와 외부 불러오기는 실행되지 않습니다(sandbox).": "Shown as a picture only — scripts and external loads inside the SVG do not run (sandbox).",
   "원문 HTML은 글자로 보이고, 링크는 새 탭으로 열립니다. 외부 이미지는 막습니다.": "Raw HTML shows as text, links open in a new tab, external images are blocked.",
   "SVG를 그림으로 불러오지 못했습니다.": "Couldn't load the SVG as a picture.",

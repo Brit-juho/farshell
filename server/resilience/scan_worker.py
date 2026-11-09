@@ -331,6 +331,21 @@ def _git_candidates(root: str, req: dict, limit: int):
     argv = req.get("git_argv")
     if not argv:
         return None
+    root_n = root.rstrip("/") or "/"
+    inside = []
+    for pre in req.get("skip_prefixes") or []:
+        pre = (pre or "").rstrip("/")
+        if not pre:
+            continue
+        if _within(root_n, pre):
+            return [], False                    # 루트 전체가 건너뛸 자리 — git을 띄우지도 않는다
+        if _within(pre, root_n):
+            inside.append(os.path.relpath(pre, root_n))
+    if inside:
+        # 건너뛸 자리(위험한 마운트·File Provider·iCloud·격리된 폴더)를 **git이 걷기 전에** 뺀다. 목록을 받은 뒤
+        # 거르면 git 자신이 그 아래를 이미 걸었다(홈이 저장소면 ~/Library 전체). 제외 pathspec이면 git이 그 폴더에
+        # 들어가지 않는다. `literal`: 이름의 `*`·`?`를 글롭으로 보지 않는다.
+        argv = list(argv) + ["--"] + [f":(exclude,literal){rel}" for rel in sorted(inside)]
     env = dict(os.environ)
     env.update(req.get("git_env") or {})
     try:
@@ -397,11 +412,63 @@ def _walk_candidates(root: str, rules: _Rules, max_dirs: int, limit: int):
     return out[:limit], over
 
 
-def _read_file(path: str, max_bytes: int):
-    """일반 파일만, 심링크는 따라가지 않고(`O_NOFOLLOW`) 연다. (바이트, 사유) — 사유는 None·"large"·"unreadable".
-    루트 안의 심링크 파일이 경계 밖(`~/.ssh/id_rsa` 등)을 가리켜도 여기서 열리지 않는다."""
+_CLOEXEC = getattr(os, "O_CLOEXEC", 0)
+
+
+class _Opener:
+    """검색 루트 안의 파일을 **한 조각씩** `O_NOFOLLOW`로 연다(`fsguard.open_resolved`와 같은 걸음 — 이 프로세스는
+    표준 라이브러리만 쓰므로 그 규칙을 여기 둔다). 루트 fd에서 시작해 중간 폴더는 `O_DIRECTORY|O_NOFOLLOW`, 마지막
+    조각은 `O_NOFOLLOW|O_NONBLOCK`. 저장소 색인을 꾸며 `sub/secret` 같은 경로를 넣고 `sub`를 바깥 폴더로 가는
+    심링크로 두어도 `ELOOP`/`ENOTDIR`로 열리지 않는다 — 마지막 조각에만 건 `O_NOFOLLOW`로는 이 틈을 못 막는다.
+    후보는 정렬돼 있으므로 직전 폴더의 fd 하나만 붙들어 둔다."""
+
+    _DIR = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | _CLOEXEC
+
+    def __init__(self, root: str):
+        # 루트 자신은 부모가 resolve해 판정한 경로다(심링크가 이미 펼쳐져 있다).
+        self.root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | _CLOEXEC)
+        self.dir_key = None
+        self.dir_fd = None
+
+    def _dir(self, parts: list) -> int:
+        key = tuple(parts)
+        if key == self.dir_key:
+            return self.dir_fd
+        self._drop_dir()
+        fd = os.dup(self.root_fd)
+        try:
+            for part in parts:
+                nxt = os.open(part, self._DIR, dir_fd=fd)
+                os.close(fd)
+                fd = nxt
+        except BaseException:
+            os.close(fd)
+            raise
+        self.dir_key, self.dir_fd = key, fd
+        return fd
+
+    def _drop_dir(self) -> None:
+        if self.dir_fd is not None:
+            os.close(self.dir_fd)
+        self.dir_key = self.dir_fd = None
+
+    def open(self, rel: str) -> int:
+        parts = rel.split("/")
+        if any(p in ("", ".", "..") for p in parts):
+            raise OSError("bad path")
+        d = self._dir(parts[:-1])
+        return os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | _CLOEXEC, dir_fd=d)
+
+    def close(self) -> None:
+        self._drop_dir()
+        os.close(self.root_fd)
+
+
+def _read_file(opener: _Opener, rel: str, max_bytes: int):
+    """일반 파일만, 경로의 어느 조각에 있는 심링크도 따라가지 않고(`_Opener`) 연다. (바이트, 사유) — 사유는
+    None·"large"·"unreadable". 루트 안의 심링크 파일·폴더가 경계 밖(`~/.ssh/id_rsa` 등)을 가리켜도 열리지 않는다."""
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0))
+        fd = opener.open(rel)
     except OSError:
         return None, "unreadable"
     try:
@@ -449,16 +516,28 @@ def _line_hit(line: str, spans, line_no: int, max_chars: int, max_ranges: int) -
     return hit
 
 
-def _file_hits(text: str, pat, max_lines: int):
-    """찾은 줄들: [(줄 번호, 줄 시작, 줄 끝, [(일치 시작, 끝) — 줄 기준])]. 빈 일치는 건너뛴다(부모가 그런 정규식을 막는다)."""
+def _file_hits(text: str, pat, max_lines: int, max_ranges: int):
+    """찾은 줄들: [(줄 번호, 줄 시작, 줄 끝, [(일치 시작, 끝) — 줄 기준])]. 빈 일치는 건너뛴다(부모가 그런 정규식을 막는다).
+
+    한 줄의 일치는 `max_ranges`개까지만 모으고 그 줄의 나머지는 건너뛴다 — 화면(`_line_hit`)은 그만큼만 쓰는데,
+    2MB 한 줄에 정규식 `.`이면 일치 200만 개(튜플 수백 MB)를 쌓게 된다. `pattern.search(text, pos)`는 `^`·뒤보기를
+    문자열 전체 기준으로 보므로 `finditer`와 같은 일치를 낸다."""
+    max_ranges = max(1, max_ranges)
     hits = []
     line_no = 1
     pos = 0          # line_no 줄이 시작하는 위치
     cur = None
-    for m in pat.finditer(text):
+    at = 0
+    n = len(text)
+    while at <= n:
+        m = pat.search(text, at)
+        if m is None:
+            break
         a, b = m.span()
         if a == b:
+            at = a + 1
             continue
+        at = b
         if a >= pos:
             nl = text.count("\n", pos, a)
             if nl:
@@ -472,6 +551,8 @@ def _file_hits(text: str, pat, max_lines: int):
             end = text.find("\n", pos)
             cur = (line_no, pos, len(text) if end < 0 else end, [])
         cur[3].append((a - cur[1], min(b, cur[2]) - cur[1]))
+        if len(cur[3]) >= max_ranges:
+            at = max(b, cur[2] + 1)              # 이 줄은 찼다 — 다음 줄부터
     if cur is not None:
         hits.append(cur)
     return hits
@@ -526,46 +607,54 @@ def grep(req: dict) -> dict:
     matched_files = 0
     limit = None
     for root, files in plan:
-        for rel in files:
-            if limit:
-                break
-            data, why = _read_file(os.path.join(root, rel), max_file)
-            if why:
-                skipped[why] += 1
-                continue
-            searched += 1
-            read_bytes += len(data)
-            if b"\0" in data[:sniff]:
-                skipped["binary"] += 1
-            else:
-                text = data.decode("utf-8", errors="replace")
-                if needle is None or needle in text:
-                    batch = []
-                    for ln, s0, s1, spans in _file_hits(text, pat, max_results - results):
-                        line = text[s0:s1]
-                        if line.endswith("\r"):
-                            line = line[:-1]
-                        spans = [(a, min(b, len(line))) for a, b in spans if a < len(line)] or [(0, 0)]
-                        hit = _line_hit(line, spans, ln, max_chars, max_ranges)
-                        size = len(hit["text"].encode("utf-8", "surrogatepass")) + 64
-                        if out_bytes + size > max_output:
-                            limit = "output"
-                            break
-                        out_bytes += size
-                        batch.append(hit)
-                        results += 1
-                        if results >= max_results:
-                            limit = "results"
-                            break
-                    if batch:
-                        matched_files += 1
-                        _emit({"hits": {"root": root, "path": rel, "lines": batch}})
-            if read_bytes >= max_total and not limit:
-                limit = "bytes"
-            if searched % 256 == 0:
-                _emit({"progress": {"searched": searched, "results": results}})
         if limit:
             break
+        try:
+            opener = _Opener(root)
+        except OSError:
+            skipped["unreadable"] += len(files)
+            continue
+        try:
+            for rel in files:
+                if limit:
+                    break
+                data, why = _read_file(opener, rel, max_file)
+                if why:
+                    skipped[why] += 1
+                    continue
+                searched += 1
+                read_bytes += len(data)
+                if b"\0" in data[:sniff]:
+                    skipped["binary"] += 1
+                else:
+                    text = data.decode("utf-8", errors="replace")
+                    if needle is None or needle in text:
+                        batch = []
+                        for ln, s0, s1, spans in _file_hits(text, pat, max_results - results, max_ranges):
+                            line = text[s0:s1]
+                            if line.endswith("\r"):
+                                line = line[:-1]
+                            spans = [(a, min(b, len(line))) for a, b in spans if a < len(line)] or [(0, 0)]
+                            hit = _line_hit(line, spans, ln, max_chars, max_ranges)
+                            size = len(hit["text"].encode("utf-8", "surrogatepass")) + 64
+                            if out_bytes + size > max_output:
+                                limit = "output"
+                                break
+                            out_bytes += size
+                            batch.append(hit)
+                            results += 1
+                            if results >= max_results:
+                                limit = "results"
+                                break
+                        if batch:
+                            matched_files += 1
+                            _emit({"hits": {"root": root, "path": rel, "lines": batch}})
+                if read_bytes >= max_total and not limit:
+                    limit = "bytes"
+                if searched % 256 == 0:
+                    _emit({"progress": {"searched": searched, "results": results}})
+        finally:
+            opener.close()
     return {
         "total": total, "searched": searched, "results": results, "matched_files": matched_files,
         "skipped": skipped, "limit": limit or ("files" if files_over else None), "engine": engines,

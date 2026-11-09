@@ -14,6 +14,7 @@ import { _setMsg } from './state.js';
 import { t } from '../../core/i18n.js';
 import {
   previewKind, hasRenderedView, fitsPreview, viewLabels, mountCsvTable, mountPlayer, mountSvg, emptyState, downloadButton,
+  CSV_MAX_COLS, CSV_MAX_ROWS,
 } from './preview.js';
 import { slugify } from './markdown.js';
 import { downloadFsPath as _downloadFsPath, downloadBlockedReason } from './download.js';
@@ -145,7 +146,7 @@ function _plainText(container, text) {
 function _newDoc(path, host, mode) {
   return {
     path, host: host || null, mode: mode === 'tail' ? 'tail' : 'head', meta: null, etag: null, carry: '',
-    changing: false, queue: Promise.resolve(), preview: false,
+    changing: false, queue: Promise.resolve(), preview: false, previewBlocked: null,
   };
 }
 
@@ -251,7 +252,8 @@ function _viewToggle(container, st, bar, kind) {
   seg.className = 'vt-vw-seg';
   seg.setAttribute('role', 'group');
   seg.setAttribute('aria-label', t('보기 전환'));
-  const fits = !st.meta || fitsPreview(kind, st.meta.size);
+  const tooBig = st.previewBlocked === 'csv-shape';
+  const fits = (!st.meta || fitsPreview(kind, st.meta.size)) && !tooBig;
   for (const [v, label] of [['render', renderLabel], ['source', sourceLabel]]) {
     const b = _button(label, () => {
       if (v === view) return;
@@ -265,7 +267,11 @@ function _viewToggle(container, st, bar, kind) {
     seg.appendChild(b);
   }
   bar.appendChild(seg);
-  if (!fits) {
+  if (tooBig) {
+    bar.appendChild(_span(t('표가 너무 커서(최대 {cols}열 · {rows}행) 표 대신 원문으로 보여 줍니다.', {
+      cols: CSV_MAX_COLS, rows: CSV_MAX_ROWS.toLocaleString(),
+    })));
+  } else if (!fits) {
     bar.appendChild(_span(kind === 'csv'
       ? t('1MB를 넘어 표 대신 원문으로 보여 줍니다.')
       : t('1MB를 넘어 렌더 대신 원문으로 보여 줍니다.')));
@@ -330,7 +336,11 @@ async function _paintMarkdown(container, text, st) {
 // 「렌더」 그리기. 그렸으면 true(원문 편집기를 붙이지 않는다).
 async function _paintPreview(container, st, kind, text) {
   if (kind === 'md') return _paintMarkdown(container, text, st);
-  if (kind === 'csv') { mountCsvTable(container, text, st.path); return true; }
+  if (kind === 'csv') {
+    const r = mountCsvTable(container, text, st.path);
+    if (r.tooBig) { st.previewBlocked = 'csv-shape'; return false; }   // 열·행 상한 — 원문으로, 띠에 이유
+    return true;
+  }
   if (kind === 'svg') {
     mountSvg(container, _rawUrl(st.path, st.host), st.path.split('/').pop() || 'svg', () => {
       _setMsg(container, 'vt-vw-empty', [t('SVG를 그림으로 불러오지 못했습니다.'), t('「원문」으로 보세요.')]);

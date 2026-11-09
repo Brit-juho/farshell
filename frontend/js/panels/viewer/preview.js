@@ -10,6 +10,11 @@ import { MD_MAX_BYTES } from './markdown.js';
 export const CSV_MAX_BYTES = 1024 * 1024;
 export const CSV_ROW_H = 24;
 const CSV_OVERSCAN = 20;
+/** 표로 그리는 열·행 상한. 1MB 안에도 쉼표만 있으면 열이 50만 개다 — 머리 행과 보이는 행마다 그만큼 칸을 만들어
+ * 탭이 멈춘다. 행은 가상 스크롤이지만 몸통 높이(행 × 24px)가 브라우저의 요소 높이 상한에 닿지 않게 둔다.
+ * 넘으면 표 대신 원문으로 연다(file.js가 이유를 적는다). */
+export const CSV_MAX_COLS = 512;
+export const CSV_MAX_ROWS = 100000;
 
 /** 경로의 미리보기 종류: 'md' | 'csv' | 'svg' | 'pdf' | null. */
 export function previewKind(path) {
@@ -94,6 +99,8 @@ function _scrollAncestor(el) {
 /**
  * CSV 표 — 머리 행은 고정, 몸통은 가상 스크롤(보이는 행 + 위아래 20행만 DOM에). 스크롤은 바깥 상자
  * (.vt-vw-body·페인 본문)가 하므로 그 상자의 스크롤로 구간을 정한다. 칸 내용은 textContent로만 넣는다.
+ * 열이 `CSV_MAX_COLS`, 몸통 행이 `CSV_MAX_ROWS`를 넘으면 아무것도 붙이지 않고 `{ tooBig: true, rows, cols }`를
+ * 돌려준다(호출자가 원문으로 연다).
  */
 export function mountCsvTable(container, text, path) {
   const delim = /\.tsv$/i.test(path) ? '\t' : ',';
@@ -101,6 +108,7 @@ export function mountCsvTable(container, text, path) {
   const head = rows.length ? rows[0] : [];
   const body = rows.slice(1);
   const cols = rows.reduce((n, r) => Math.max(n, r.length), 0);
+  if (cols > CSV_MAX_COLS || body.length > CSV_MAX_ROWS) return { tooBig: true, rows: body.length, cols };
   const numeric = [];
   for (let c = 0; c < cols; c += 1) {
     let num = 0;

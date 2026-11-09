@@ -360,3 +360,138 @@ def test_route_happy_path_shape(client, root):
                              "text": "    return needle", "ranges": [[11, 17]]}]
     assert d["files"] == 1 and d["root"] == str(root) and d["timeout"] is False and d["limit"] is None
     assert set(d["skipped"]) == {"large", "binary", "excluded", "denied", "unreadable"}
+
+
+# --- 건너뛸 자리는 git이 걷기 전에 뺀다 -----------------------------------------------------------------------
+
+
+def _git_req(skip):
+    return fs_grep._worker_request([], fs_grep.build_spec("x", "literal", False, False, ""), skip)
+
+
+def test_git_listing_excludes_skip_prefixes_before_git_walks_them(root, monkeypatch):
+    """건너뛸 자리(File Provider·iCloud·위험한 마운트)가 저장소 안이면 git에 제외 pathspec으로 넘긴다 — 목록을 받은
+    뒤 거르면 git 자신이 이미 그 아래를 다 걸었다."""
+    repo = _repo(root)
+    (repo / "ok.txt").write_text("x\n")
+    cloud = repo / "Library" / "Cloud*"           # 글롭 문자도 글자 그대로
+    (cloud / "deep").mkdir(parents=True)
+    (cloud / "deep" / "f.txt").write_text("x\n")
+    (repo / "Library" / "CloudX").mkdir()          # `Cloud*`가 글롭이면 함께 빠졌을 이웃
+    (repo / "Library" / "CloudX" / "g.txt").write_text("x\n")
+    seen = []
+    real = scan_worker.subprocess.Popen
+
+    def spy(argv, **kw):
+        seen.append(list(argv))
+        return real(argv, **kw)
+
+    monkeypatch.setattr(scan_worker.subprocess, "Popen", spy)
+    files, over = scan_worker._git_candidates(str(repo), _git_req([str(cloud)]), 1000)
+    assert files == ["Library/CloudX/g.txt", "ok.txt"] and over is False
+    assert seen and seen[0][-2:] == ["--", ":(exclude,literal)Library/Cloud*"]
+
+
+def test_git_does_not_enter_an_excluded_dir(root):
+    """제외 pathspec이면 git이 그 폴더에 아예 들어가지 않는다 — 열 수 없는 폴더를 두어도 경고(=걸음)가 없다."""
+    repo = _repo(root)
+    (repo / "ok.txt").write_text("x\n")
+    (repo / "mnt" / "deep").mkdir(parents=True)
+    (repo / "mnt" / "deep" / "f.txt").write_text("x\n")
+    req = _git_req([str(repo / "mnt")])
+    argv = req["git_argv"] + ["--", ":(exclude,literal)mnt"]
+    os.chmod(repo / "mnt" / "deep", 0)
+    try:
+        p = subprocess.run(argv, cwd=repo, capture_output=True)
+        plain = subprocess.run(req["git_argv"], cwd=repo, capture_output=True)
+    finally:
+        os.chmod(repo / "mnt" / "deep", 0o755)
+    assert p.returncode == 0 and p.stdout.split(b"\0")[0] == b"ok.txt" and b"mnt" not in p.stderr
+    assert b"mnt/deep" in plain.stderr          # 대조: 빼지 않으면 git이 들어가려 한다
+
+
+def test_git_listing_is_skipped_when_the_root_itself_is_a_skip_prefix(root, monkeypatch):
+    repo = _repo(root)
+    (repo / "ok.txt").write_text("x\n")
+    monkeypatch.setattr(scan_worker.subprocess, "Popen", lambda *a, **k: pytest.fail("git ran"))
+    assert scan_worker._git_candidates(str(repo), _git_req([str(root)]), 1000) == ([], False)
+
+
+# --- 중간 폴더 심링크로 경계 밖을 읽지 않는다 ------------------------------------------------------------------
+
+
+def test_crafted_index_through_an_intermediate_dir_symlink_is_not_read(root, tmp_path):
+    """색인에 `sub/secret.txt`가 있고 `sub`가 바깥 폴더로 가는 심링크면, 마지막 조각에만 건 O_NOFOLLOW로는 바깥
+    파일이 읽힌다. 결과는 나중 재검사가 걸러도 `dropped` 수가 「바깥에 그 글자가 있다」를 알려 준다 — 아예 읽지 않는다."""
+    outside = (tmp_path / "outside").resolve()
+    outside.mkdir()
+    (outside / "secret.txt").write_text("needle outside\n")
+    repo = _repo(root)
+    (repo / "sub").mkdir()
+    (repo / "sub" / "secret.txt").write_text("plain\n")
+    (repo / "ok.txt").write_text("needle\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", "x")
+    (repo / "sub" / "secret.txt").unlink()
+    (repo / "sub").rmdir()
+    os.symlink(outside, repo / "sub")
+    out = _search(repo, "needle")
+    assert _rels(out) == ["ok.txt"]
+    assert out["dropped"] == 0
+    assert out["skipped"]["unreadable"] >= 1
+
+
+def test_opener_refuses_intermediate_symlinks_and_dotdot(tmp_path):
+    base = (tmp_path / "r").resolve()
+    (base / "a" / "b").mkdir(parents=True)
+    (base / "a" / "b" / "f.txt").write_text("hi")
+    (base / "a" / "c.txt").write_text("c")
+    os.symlink(base / "a", base / "link")
+    op = scan_worker._Opener(str(base))
+    try:
+        assert scan_worker._read_file(op, "a/b/f.txt", 100) == (b"hi", None)
+        assert scan_worker._read_file(op, "a/c.txt", 100) == (b"c", None)
+        for rel in ("link/b/f.txt", "a/../a/c.txt", "link"):
+            assert scan_worker._read_file(op, rel, 100) == (None, "unreadable")
+        assert scan_worker._read_file(op, "a/b/f.txt", 100) == (b"hi", None)
+    finally:
+        op.close()
+
+
+# --- 한 줄의 일치는 max_ranges에서 멈춘다 -----------------------------------------------------------------------
+
+
+def test_matches_on_one_line_stop_at_max_ranges():
+    """2MB 한 줄에 `.`이면 일치가 200만 개다 — 화면이 쓰는 `max_ranges`개만 모으고 그 줄은 건너뛴다."""
+    import re
+
+    real = re.compile(".", re.MULTILINE)
+    calls = {"n": 0}
+
+    class Counting:
+        def search(self, *a):
+            calls["n"] += 1
+            return real.search(*a)
+
+        def finditer(self, *a):
+            for m in real.finditer(*a):
+                calls["n"] += 1
+                yield m
+
+    text = "x" * 200_000 + "\nab\n" + "y" * 50
+    hits = scan_worker._file_hits(text, Counting(), 100, 20)
+    assert [h[0] for h in hits] == [1, 2, 3]
+    assert [len(h[3]) for h in hits] == [20, 2, 20]
+    assert hits[0][3][:2] == [(0, 1), (1, 2)] and hits[1][3] == [(0, 1), (1, 2)]
+    assert calls["n"] < 100
+
+
+def test_file_hits_matches_finditer_below_the_cap():
+    import re
+
+    text = "foo bar foo\nbaz\nfoo\n\nfoofoo"
+    pat = re.compile(r"^foo|o\b", re.MULTILINE)
+    hits = scan_worker._file_hits(text, pat, 100, 20)
+    want = [text.count("\n", 0, m.start()) + 1 for m in pat.finditer(text)]
+    assert [h[0] for h in hits] == sorted(set(want))
+    assert sum(len(h[3]) for h in hits) == len(want)

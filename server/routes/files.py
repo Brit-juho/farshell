@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 
 from fastapi import APIRouter, Query, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 
 from authz import leases as authz_leases
 import file_store
@@ -517,6 +517,15 @@ async def fs_raw(request: Request, path: str = Query(...)):
                 status_code=413,
             )
         return _denied(tr("미리 볼 수 있는 파일이 아닙니다"))
+    try:
+        return _raw_response(request, out, path)
+    except BaseException:
+        # 응답을 넘기기 전에 무엇이 터지든(헤더 해석·취소) 연 fd를 닫는다 — 남기면 요청마다 fd가 새어 서버가 멈춘다.
+        fs_stream.close(out)
+        raise
+
+
+def _raw_response(request: Request, out: "fs_stream.Opened", path: str) -> Response:
     etag = fs_stream.raw_etag(out.rev)
     headers = _raw_headers(out.mime, etag)
     try:
@@ -533,11 +542,11 @@ async def fs_raw(request: Request, path: str = Query(...)):
     if rng is not None:
         status = 206
         headers["Content-Range"] = f"bytes {start}-{end}/{out.size}"
-    if request.method == "HEAD" or length == 0:
+    if length == 0:
         fs_stream.close(out)
         return Response(status_code=status, headers=headers)
-    return StreamingResponse(fs_stream.stream(out, start, length, path=path, op="fs.raw.read"),
-                             status_code=status, headers=headers, media_type=out.mime)
+    return fs_stream.FdStreamingResponse(out, start, length, path=path, op="fs.raw.read",
+                                         status_code=status, headers=headers, media_type=out.mime)
 
 
 @router.get("/api/fs/download")
@@ -565,20 +574,24 @@ async def fs_download(path: str = Query(...), rev: str | None = Query(None)):
             {"error": "too_large", "size": out[1], "max": cap,
              "reason": tr("파일이 너무 커서 받을 수 없습니다 (최대 {max}MB)", max=cap // (1024 * 1024))},
             status_code=413, headers={"Cache-Control": "no-store"})
-    headers = {
-        "Content-Disposition": fs_stream.content_disposition("attachment", Path(path).name),
-        "X-Content-Type-Options": "nosniff",
-        "Content-Security-Policy": fsguard.RAW_CSP,
-        "Cache-Control": "no-store",
-        "Content-Length": str(out.size),
-        "ETag": fs_stream.raw_etag(out.rev),
-        "X-FS-Rev": out.rev,
-    }
-    if out.size == 0:
-        fs_stream.close(out)
-        return Response(status_code=200, headers=headers, media_type="application/octet-stream")
-    return StreamingResponse(fs_stream.stream(out, 0, out.size, path=path, op="fs.download.read"),
-                             headers=headers, media_type="application/octet-stream")
+    try:
+        headers = {
+            "Content-Disposition": fs_stream.content_disposition("attachment", Path(path).name),
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": fsguard.RAW_CSP,
+            "Cache-Control": "no-store",
+            "Content-Length": str(out.size),
+            "ETag": fs_stream.raw_etag(out.rev),
+            "X-FS-Rev": out.rev,
+        }
+        if out.size == 0:
+            fs_stream.close(out)
+            return Response(status_code=200, headers=headers, media_type="application/octet-stream")
+        return fs_stream.FdStreamingResponse(out, 0, out.size, path=path, op="fs.download.read",
+                                             headers=headers, media_type="application/octet-stream")
+    except BaseException:
+        fs_stream.close(out)       # fs_raw와 같다 — 응답을 넘기기 전 실패에도 fd를 남기지 않는다
+        raise
 
 
 async def _read_json_body(request: Request) -> dict:

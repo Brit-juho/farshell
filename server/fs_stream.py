@@ -7,8 +7,10 @@
   바꿔치기)을 되살리므로 쓰지 않는다.
 - **보내는 도중 파일이 바뀌면 끊는다.** 조각마다 같은 fd의 `fstat`으로 rev를 다시 보고, 처음과 다르면 스트림을
   예외로 끝낸다(연결이 끊겨 받는 쪽이 「덜 받음」을 안다 — 바뀐 바이트를 섞어 완성된 파일처럼 주지 않는다).
-- **연결이 끊기거나 실패해도 fd는 닫힌다.** 스트림의 `finally`가 닫는다. 여는 일이 기한을 넘겨 버려진 경우에도
-  열린 fd를 닫는다(`_Holder`).
+- **연결이 끊기거나 실패해도 fd는 닫힌다.** 스트림의 `finally`가 닫고, 응답(`FdStreamingResponse`)의 `__call__`이
+  `finally`에서 한 번 더 닫는다 — 머리를 보내는 중 연결이 끊겨 생성기가 한 번도 돌지 않으면 생성기의 `finally`는
+  돌지 않기 때문이다. `close`는 두 번 불려도 한 번만 닫는다(같은 번호를 다시 받은 남의 fd를 닫지 않게).
+  여는 일이 기한을 넘겨 버려진 경우에도 열린 fd를 닫는다(`_Holder`).
 - blocking I/O(열기·조각 읽기)는 전부 `fsops`(`fs` 풀, 기한, 차단기)에서 한다.
 """
 from __future__ import annotations
@@ -16,10 +18,13 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+import re
 import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import AsyncIterator, Optional, Union
+
+from starlette.responses import StreamingResponse
 
 import fs_read
 import fsguard
@@ -44,9 +49,25 @@ class Opened:
     size: int
     rev: str
     mime: Optional[str] = None
+    closed: bool = False
 
 
 # --- Range ----------------------------------------------------------------------------
+
+# ASCII 숫자만. `str.isdigit()`은 '²'·'١' 같은 글자도 참이라 `int()`가 ValueError를 던진다(→ 500, fd 누수).
+_DIGITS = re.compile(r"[0-9]+")
+# 유효 자릿수가 이보다 많으면 `int()`로 바꾸지 않고 `_HUGE`로 본다 — 어떤 파일 크기(< 2**63 ≈ 9.2e18)보다 크다.
+# (5000자리 수는 `int()`의 자릿수 상한(4300)에 걸려 ValueError가 난다.)
+_MAX_DIGITS = 19
+_HUGE = 10 ** _MAX_DIGITS
+
+
+def _num(s: str) -> Optional[int]:
+    """ASCII 숫자열 → 수(너무 길면 `_HUGE`). 숫자열이 아니면 None."""
+    if not _DIGITS.fullmatch(s):
+        return None
+    s = s.lstrip("0") or "0"
+    return _HUGE if len(s) > _MAX_DIGITS else int(s)
 
 
 def parse_range(header: Optional[str], size: int) -> Optional[tuple[int, int]]:
@@ -66,16 +87,19 @@ def parse_range(header: Optional[str], size: int) -> Optional[tuple[int, int]]:
         return None
     first, dash, last = spec.partition("-")
     first, last = first.strip(), last.strip()
-    if not dash or (first and not first.isdigit()) or (last and not last.isdigit()) or (not first and not last):
+    if not dash or (not first and not last):
         return None
-    if not first:                                   # bytes=-n
-        n = int(last)
-        if n == 0 or size == 0:
+    start = _num(first) if first else None
+    end = _num(last) if last else None
+    if (first and start is None) or (last and end is None):
+        return None
+    if start is None:                               # bytes=-n
+        if end == 0 or size == 0:
             raise Unsatisfiable()
-        return max(0, size - n), size - 1
-    start = int(first)
-    end = int(last) if last else size - 1
-    if last and end < start:
+        return max(0, size - end), size - 1
+    if end is None:
+        end = size - 1
+    elif end < start:
         return None
     if start >= size:
         raise Unsatisfiable()
@@ -173,6 +197,11 @@ async def open_for(kind: str, path: str, **kw) -> Result:
 
 
 def close(opened: Opened) -> None:
+    """fd를 닫는다. 두 번째부터는 아무것도 안 한다 — 닫힌 번호는 곧 다른 파일에 다시 쓰이므로 두 번 닫으면 남의 fd를
+    닫는다. 이벤트 루프에서만 부른다(스트림 `finally`와 응답 `__call__` — 같은 스레드라 깃발에 잠금이 필요 없다)."""
+    if opened.closed:
+        return
+    opened.closed = True
     try:
         os.close(opened.fd)
     except OSError:
@@ -208,6 +237,30 @@ async def stream(opened: Opened, start: int, length: int, *, path: str, op: str)
             left -= len(data)
     finally:
         close(opened)
+
+
+class FdStreamingResponse(StreamingResponse):
+    """`stream()`을 내보내고, 어떻게 끝나든(머리를 보내다 끊김·취소·예외) `__call__`의 `finally`에서 fd를 닫는다.
+
+    `StreamingResponse`는 머리(`http.response.start`)를 보내다 연결이 끊기면 본문 생성기를 한 번도 돌리지 않는다 —
+    시작하지 않은 async 생성기의 `finally`는 돌지 않으므로 생성기만 믿으면 fd가 GC 때까지 남는다(요청이 쌓이면
+    서버 전체가 fd 고갈로 멈춘다)."""
+
+    def __init__(self, opened: Opened, start: int, length: int, *, path: str, op: str, **kw):
+        self._opened = opened
+        super().__init__(stream(opened, start, length, path=path, op=op), **kw)
+
+    async def __call__(self, scope, receive, send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            close(self._opened)
+            aclose = getattr(self.body_iterator, "aclose", None)
+            if aclose is not None:
+                try:
+                    await aclose()
+                except Exception:
+                    pass
 
 
 # --- 헤더 -----------------------------------------------------------------------------
