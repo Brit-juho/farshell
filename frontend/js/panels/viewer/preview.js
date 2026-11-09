@@ -255,17 +255,133 @@ export function mountPlayer(container, kind, src, note, onError) {
   return el;
 }
 
-/** SVG — `<img>`로만 그린다(결정 D8). 응답에는 sandbox CSP가 붙어 있다(server/fsguard.py RAW_CSP). */
-export function mountSvg(container, src, alt, onError) {
+// ── 이미지 보기: 맞춤 / 100%(시안 F07-C) ──────────────────────────────────────────────────────────────
+// 「맞춤」은 칸 폭에 맞춰 줄이고(원래보다 크게 늘리지는 않는다), 「100%」는 원래 크기로 그리고 칸이 스크롤한다.
+// 100%에서는 ⌘/Ctrl + 휠(트랙패드 핀치도 이 이벤트로 온다)과 두 손가락 핀치로 10%–800% 사이를 확대·축소한다.
+// 맞춤에서 확대하면 지금 보이는 배율에서 100% 쪽으로 넘어가 이어서 확대한다. 그림은 늘 `<img>` 하나다 — SVG도
+// 같은 `<img>`라 sandbox 규칙(결정 D8, 스크립트·외부 불러오기 없음)이 그대로다.
+export const ZOOM_MIN = 0.1;
+export const ZOOM_MAX = 8;
+
+/** 배율 한 단계 — 휠 deltaY(위로 굴리면 음수)만큼. 범위 밖은 자른다. */
+export function zoomStep(scale, deltaY) {
+  const next = scale * Math.exp(-Number(deltaY || 0) * 0.01);
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
+}
+
+/** 「맞춤」일 때 보이는 배율(0–1). 원래 폭을 모르면 null. */
+export function fitScale(shownWidth, naturalWidth) {
+  if (!(naturalWidth > 0) || !(shownWidth > 0)) return null;
+  return Math.min(1, shownWidth / naturalWidth);
+}
+
+/**
+ * 이미지 한 장을 맞춤/100% 전환과 함께 그린다. opts: `svg`(SVG면 true — 클래스만 다르다), `note`(아래 줄 글),
+ * `onError`. 돌려주는 것: `{ img, setMode(mode), mode(), scale() }`(시험용).
+ */
+export function mountImageView(container, src, alt, opts = {}) {
   const wrap = document.createElement('div');
-  wrap.className = 'vt-vw-image vt-vw-svg';
+  wrap.className = opts.svg ? 'vt-vw-image vt-vw-svg' : 'vt-vw-image';
+  const bar = document.createElement('div');
+  bar.className = 'vt-vw-zoom-bar';
+  const seg = document.createElement('span');
+  seg.className = 'vt-vw-seg';
+  seg.setAttribute('role', 'group');
+  seg.setAttribute('aria-label', t('이미지 크기'));
+  const pct = document.createElement('span');
+  pct.className = 'vt-vw-zoom-pct';
+  const hint = document.createElement('span');
+  hint.className = 'vt-vw-zoom-hint';
+  hint.textContent = t('⌘/Ctrl + 휠 · 두 손가락으로 확대');
+  bar.append(seg, pct, hint);
+  const box = document.createElement('div');
+  box.className = 'vt-vw-zoom-box';
   const img = document.createElement('img');
-  img.src = src;
   img.alt = alt;
   img.decoding = 'async';
   img.referrerPolicy = 'no-referrer';
-  img.addEventListener('error', onError);
-  wrap.appendChild(img);
+  if (opts.onError) img.addEventListener('error', opts.onError);
+  box.appendChild(img);
+  wrap.append(bar, box);
+  if (opts.note) {
+    const n = document.createElement('div');
+    n.className = 'vt-vw-note';
+    n.textContent = opts.note;
+    wrap.appendChild(n);
+  }
+
+  let mode = 'fit';
+  let scale = 1;
+  const natural = () => img.naturalWidth || 0;
+  const buttons = {};
+  const paint = () => {
+    wrap.dataset.zoom = mode;
+    for (const [m, b] of Object.entries(buttons)) b.setAttribute('aria-pressed', String(m === mode));
+    if (mode === 'fit') {
+      img.style.width = '';
+      const f = fitScale(img.clientWidth, natural());
+      pct.textContent = f == null ? t('맞춤') : t('맞춤 · {pct}%', { pct: Math.round(f * 100) });
+      return;
+    }
+    const w = natural();
+    img.style.width = w > 0 ? `${Math.round(w * scale)}px` : '';
+    pct.textContent = `${Math.round(scale * 100)}%`;
+  };
+  const setMode = (m, s = 1) => {
+    mode = m === 'actual' ? 'actual' : 'fit';
+    scale = mode === 'actual' ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, s)) : 1;
+    paint();
+  };
+  for (const [m, label] of [['fit', t('맞춤')], ['actual', '100%']]) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'vt-vw-bar-btn vt-vw-seg-btn';
+    b.textContent = label;
+    b.addEventListener('click', () => setMode(m));
+    buttons[m] = b;
+    seg.appendChild(b);
+  }
+  // 맞춤에서 확대를 시작하면 지금 보이는 배율에서 이어 간다(갑자기 100%로 튀지 않게).
+  const zoomTo = (next) => {
+    if (mode !== 'actual') { mode = 'actual'; }
+    scale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
+    paint();
+  };
+  const current = () => (mode === 'actual' ? scale : (fitScale(img.clientWidth, natural()) || 1));
+  box.addEventListener('wheel', (ev) => {
+    if (!(ev.ctrlKey || ev.metaKey)) return;     // 그냥 휠은 스크롤
+    ev.preventDefault();
+    zoomTo(zoomStep(current(), ev.deltaY));
+  }, { passive: false });
+  // 두 손가락 핀치 — 포인터 둘의 거리 비율. 한 손가락은 스크롤(브라우저 기본)에 맡긴다.
+  const pts = new Map();
+  let pinch = null;
+  const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; };
+  box.addEventListener('pointerdown', (ev) => {
+    if (ev.pointerType !== 'touch') return;
+    pts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (pts.size === 2) pinch = { d: dist(), s: current() };
+  });
+  box.addEventListener('pointermove', (ev) => {
+    if (!pts.has(ev.pointerId)) return;
+    pts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (pinch && pts.size === 2) zoomTo(pinch.s * (dist() / pinch.d));
+  });
+  const lift = (ev) => { pts.delete(ev.pointerId); if (pts.size < 2) pinch = null; };
+  box.addEventListener('pointerup', lift);
+  box.addEventListener('pointercancel', lift);
+  img.addEventListener('load', paint);
+  if (typeof ResizeObserver === 'function') {
+    const ro = new ResizeObserver(() => { if (!wrap.isConnected) { ro.disconnect(); return; } if (mode === 'fit') paint(); });
+    ro.observe(box);
+  }
+  img.src = src;
+  paint();
   container.appendChild(wrap);
-  return img;
+  return { img, setMode, mode: () => mode, scale: () => scale };
+}
+
+/** SVG — `<img>`로만 그린다(결정 D8). 응답에는 sandbox CSP가 붙어 있다(server/fsguard.py RAW_CSP). */
+export function mountSvg(container, src, alt, onError) {
+  return mountImageView(container, src, alt, { svg: true, onError }).img;
 }

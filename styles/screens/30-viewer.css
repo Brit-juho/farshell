@@ -113,9 +113,21 @@
 /* [T3] 인라인 이미지 미리보기. 페인 안에 갇혀야 한다(밖으로 새면 표면 레이어의
    터미널 위를 덮는다 — 실브라우저 스모크가 그 규칙을 지킨다). 체커보드 배경은
    투명 PNG의 알파를 눈으로 구분하기 위한 것. */
-.vt-vw-image{ display:flex; flex-direction:column; min-width:0; overflow:auto; }
+.vt-vw-image{ display:flex; flex-direction:column; min-width:0; }
+/* 맞춤 / 100% 전환(시안 F07-C, preview.js mountImageView). 100%에서는 그림이 칸보다 크면 칸(.vt-vw-zoom-box)이 스크롤한다.
+   핀치는 이 칸이 직접 받는다(touch-action) — 한 손가락 끌기는 스크롤 그대로. */
+.vt-vw-zoom-bar{
+  display:flex; align-items:center; gap:calc(var(--spacing) * 2.5);
+  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3); border-bottom:1px solid var(--line);
+  background:var(--bar); color:var(--sub); font:400 var(--fs-xs) var(--ui);
+}
+.vt-vw-zoom-pct{ font-family:var(--mono); color:var(--txt); font-variant-numeric:tabular-nums; }
+.vt-vw-zoom-hint{ margin-left:auto; color:var(--color-faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vt-vw-zoom-box{ min-width:0; overflow:auto; touch-action:pan-x pan-y; }
+.vt-vw-image[data-zoom="actual"] .vt-vw-zoom-box img{ max-width:none; }
+@media (max-width:719px){ .vt-vw-zoom-hint{ display:none; } }
 .vt-vw-image img{
-  max-width:100%; height:auto; align-self:flex-start;
+  max-width:100%; height:auto; align-self:flex-start; display:block;
   background-image:
     linear-gradient(45deg, var(--color-bg-2) 25%, transparent 25%, transparent 75%, var(--color-bg-2) 75%),
     linear-gradient(45deg, var(--color-bg-2) 25%, transparent 25%, transparent 75%, var(--color-bg-2) 75%);

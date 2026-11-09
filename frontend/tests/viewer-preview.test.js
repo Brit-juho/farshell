@@ -352,6 +352,51 @@ test('뷰어 — CSV는 표(머리 고정, 칸은 글자로만), SVG는 <img>로
   assert.strictEqual(h2.querySelector('svg script'), null);
   assert.strictEqual(h2.querySelectorAll('script').length, 0);
   assert.match(h2.querySelector('.vt-vw-bar').textContent, /sandbox/);
+  assert.ok(h2.querySelector('.vt-vw-svg .vt-vw-zoom-bar'), 'SVG 그림에도 맞춤 / 100%');
+  assert.strictEqual(h2.querySelectorAll('.vt-vw-svg img').length, 1, '그림은 여전히 <img> 하나');
+});
+
+test('이미지 — 맞춤 / 100% 전환, 100%에서 ⌘/Ctrl + 휠로 확대(10%–800%), 그냥 휠은 스크롤', async () => {
+  const e = createDomEnv('<!doctype html><html><body></body></html>');
+  _doms.push(e.dom);
+  const p = await importFresh(PREVIEW_JS, e.context, new Map());
+  const box = e.document.createElement('div');
+  e.document.body.appendChild(box);
+  const v = p.mountImageView(box, '/api/fs/raw?path=%2Fr%2Fa.png', 'a.png', { note: 'image/png · 4KB' });
+  Object.defineProperty(v.img, 'naturalWidth', { value: 1000 });
+  Object.defineProperty(v.img, 'clientWidth', { value: 250 });
+  v.img.dispatchEvent(new e.window.Event('load'));
+  const wrap = box.querySelector('.vt-vw-image');
+  const [fit, actual] = wrap.querySelectorAll('.vt-vw-seg-btn');
+  assert.strictEqual(wrap.dataset.zoom, 'fit', '처음은 맞춤');
+  assert.strictEqual(fit.getAttribute('aria-pressed'), 'true');
+  assert.match(wrap.querySelector('.vt-vw-zoom-pct').textContent, /맞춤 · 25%/);
+  assert.strictEqual(wrap.querySelector('.vt-vw-note').textContent, 'image/png · 4KB');
+  actual.click();
+  assert.strictEqual(wrap.dataset.zoom, 'actual');
+  assert.strictEqual(v.img.style.width, '1000px');
+  assert.strictEqual(wrap.querySelector('.vt-vw-zoom-pct').textContent, '100%');
+  const zbox = wrap.querySelector('.vt-vw-zoom-box');
+  const plain = new e.window.WheelEvent('wheel', { deltaY: -100, cancelable: true });
+  zbox.dispatchEvent(plain);
+  assert.strictEqual(v.scale(), 1, '그냥 휠은 확대하지 않는다');
+  assert.strictEqual(plain.defaultPrevented, false);
+  const zoom = new e.window.WheelEvent('wheel', { deltaY: -100, ctrlKey: true, cancelable: true });
+  zbox.dispatchEvent(zoom);
+  assert.ok(zoom.defaultPrevented);
+  assert.ok(v.scale() > 2.5 && v.scale() < 3, `e^1 ≈ 2.72배: ${v.scale()}`);
+  for (let i = 0; i < 10; i += 1) zbox.dispatchEvent(new e.window.WheelEvent('wheel', { deltaY: -500, metaKey: true, cancelable: true }));
+  assert.strictEqual(v.scale(), p.ZOOM_MAX);
+  assert.strictEqual(v.img.style.width, '8000px');
+  fit.click();
+  assert.strictEqual(v.img.style.width, '', '맞춤으로 돌아가면 폭 지정을 푼다');
+  // 맞춤에서 확대를 시작하면 보이는 배율(25%)에서 이어 간다.
+  zbox.dispatchEvent(new e.window.WheelEvent('wheel', { deltaY: -10, ctrlKey: true, cancelable: true }));
+  assert.strictEqual(wrap.dataset.zoom, 'actual');
+  assert.ok(v.scale() > 0.25 && v.scale() < 0.3, `25%에서 이어 간다: ${v.scale()}`);
+  assert.strictEqual(p.zoomStep(0.1, 10000), p.ZOOM_MIN);
+  assert.strictEqual(p.fitScale(2000, 1000), 1, '맞춤은 원래보다 크게 늘리지 않는다');
+  assert.strictEqual(p.fitScale(100, 0), null);
 });
 
 test('뷰어 — PDF는 미리 보지 않고 다운로드 하나, 그 밖 바이너리도 다운로드, 동영상·소리는 플레이어', async () => {
@@ -493,4 +538,84 @@ test('다운로드 — 64MB를 넘으면 메모리에 담지 않고 브라우저
   assert.strictEqual(saved.length, 1);
   assert.strictEqual(saved[0].href, calls[0].url);
   assert.strictEqual(saved[0].name, 'big.iso');
+});
+
+// 끝나지 않는 몸통 — 시험이 조각을 하나씩 밀어 넣고, 신호(signal)가 끊으면 읽기가 AbortError로 끝난다.
+function pendingBody(signal) {
+  const waiters = [];
+  const queue = [];
+  let ended = false;
+  let failed = null;
+  const flush = () => {
+    while (waiters.length && (queue.length || ended || failed)) {
+      const w = waiters.shift();
+      if (failed) w.reject(failed);
+      else if (queue.length) w.resolve({ done: false, value: queue.shift() });
+      else w.resolve({ done: true });
+    }
+  };
+  if (signal) signal.addEventListener('abort', () => { const e = new Error('aborted'); e.name = 'AbortError'; failed = e; flush(); });
+  return {
+    push(bytes) { queue.push(bytes); flush(); },
+    end() { ended = true; flush(); },
+    body: { getReader: () => ({ read: () => new Promise((resolve, reject) => { waiters.push({ resolve, reject }); flush(); }), cancel: async () => {} }) },
+  };
+}
+
+const tick = () => new Promise((r) => { setTimeout(r, 0); });
+
+test('다운로드 — 동시에 3개까지, 넷째는 「대기 중」으로 줄을 서고 앞의 것이 끝나면 시작한다', async () => {
+  const bodies = [];
+  const { dl, toasts, calls, saved } = await dlEnv((url, opts) => {
+    const b = pendingBody(opts.signal);
+    bodies.push(b);
+    return { ok: true, status: 200, headers: { get: (k) => (k === 'content-length' ? '2' : null) }, body: b.body };
+  });
+  const runs = ['/r/a', '/r/b', '/r/c', '/r/d'].map((p) => dl.downloadFsPath(p));
+  await tick();
+  assert.strictEqual(calls.length, 3, '넷째는 아직 요청하지 않는다');
+  assert.deepStrictEqual({ ...dl.downloadQueueState() }, { active: 3, queued: 1 });
+  const wait = toasts.find((x) => /^d 대기 중/.test(x[0]));
+  assert.ok(wait, '줄 선 것은 「대기 중」 카드');
+  assert.strictEqual(wait[2].actions[0].label, '취소');
+  assert.match(wait[2].detail, /동시에 3개까지/);
+  bodies[0].push(new Uint8Array(2)); bodies[0].end();
+  assert.strictEqual(await runs[0], 'done');
+  await tick();
+  assert.strictEqual(calls.length, 4, '자리가 나면 줄의 다음 것을 시작한다');
+  assert.strictEqual(new URL(calls[3].url, 'http://x').searchParams.get('path'), '/r/d');
+  for (const i of [1, 2, 3]) { bodies[i].push(new Uint8Array(2)); bodies[i].end(); }
+  assert.deepStrictEqual(await Promise.all(runs.slice(1)), ['done', 'done', 'done']);
+  assert.strictEqual(saved.length, 4);
+  assert.deepStrictEqual({ ...dl.downloadQueueState() }, { active: 0, queued: 0 });
+});
+
+test('다운로드 — 줄 선 것을 취소하면 요청을 보내지 않고, 받는 중인 것을 취소하면 끊고 저장하지 않는다', async () => {
+  const bodies = [];
+  const signals = [];
+  const { dl, toasts, calls, saved } = await dlEnv((url, opts) => {
+    const b = pendingBody(opts.signal);
+    bodies.push(b);
+    signals.push(opts.signal);
+    return { ok: true, status: 200, headers: { get: (k) => (k === 'content-length' ? String(4 * 1024 * 1024) : null) }, body: b.body };
+  });
+  const runs = ['/r/a', '/r/b', '/r/c', '/r/d'].map((p) => dl.downloadFsPath(p));
+  await tick();
+  // 넷째(줄 선 것) 취소 — 요청 없이 끝난다.
+  toasts.find((x) => /^d 대기 중/.test(x[0]))[2].actions[0].onClick();
+  assert.strictEqual(await runs[3], 'cancelled');
+  assert.match(toasts.at(-1)[0], /^d 받기를 취소했습니다/);
+  // 첫째는 1MB가 넘어 처음부터 진행 카드(취소 단추)가 있다. 조각을 조금 받다가 취소한다.
+  bodies[0].push(new Uint8Array(1024));
+  await tick();
+  const prog = toasts.find((x) => /^a 받는 중/.test(x[0]));
+  assert.ok(prog && prog[2].duration === 0 && prog[2].actions[0].label === '취소', '진행 카드에 취소');
+  prog[2].actions[0].onClick();
+  assert.ok(signals[0].aborted, 'AbortController로 요청을 끊는다');
+  assert.strictEqual(await runs[0], 'cancelled');
+  assert.match(toasts.at(-1)[0], /^a 받기를 취소했습니다/);
+  for (const i of [1, 2]) { bodies[i].push(new Uint8Array(4 * 1024 * 1024)); bodies[i].end(); }
+  assert.deepStrictEqual(await Promise.all(runs.slice(1, 3)), ['done', 'done']);
+  assert.strictEqual(calls.length, 3, '취소한 넷째는 끝내 요청하지 않았다');
+  assert.strictEqual(saved.length, 2, '취소한 것은 저장하지 않는다');
 });

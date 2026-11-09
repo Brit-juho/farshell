@@ -540,6 +540,61 @@ def test_disconnect_before_the_body_starts_closes_the_fd(root, kind):
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("spec", ["2.4", "2.3"])
+def test_client_abort_mid_body_stops_reading_and_closes_the_fd(root, monkeypatch, spec):
+    """브라우저가 받는 도중 「취소」(AbortController)하면 연결이 끊긴다 — 남은 조각을 더 읽지 않고 fd를 닫는다.
+
+    2.4: 다음 조각을 보내는 `send`가 끊김 예외를 던진다. 2.3 이하: Starlette가 `http.disconnect`를 듣고 보내기를 멈춘다."""
+    import asyncio
+
+    monkeypatch.setattr(fs_stream, "CHUNK", 16)
+    p = root / "a.bin"
+    p.write_bytes(bytes(range(256)) * 4)        # 1024바이트 = 64조각
+    reads = []
+    real = fs_stream._read_chunk
+
+    def counting(fd, n, pos):
+        reads.append(pos)
+        return real(fd, n, pos)
+
+    monkeypatch.setattr(fs_stream, "_read_chunk", counting)
+
+    async def run():
+        out = await fs_stream.open_for("download", str(p), cap=1 << 30)
+        assert isinstance(out, fs_stream.Opened)
+        resp = fs_stream.FdStreamingResponse(out, 0, out.size, path=str(p), op="test")
+        bodies = []
+        gone = asyncio.Event()
+
+        async def receive():
+            if spec == "2.4":
+                await asyncio.sleep(3600)
+            await gone.wait()
+            return {"type": "http.disconnect"}
+
+        async def send(msg):
+            if msg["type"] != "http.response.body":
+                return
+            bodies.append(msg)
+            if len(bodies) >= 2:
+                gone.set()
+                if spec == "2.4":
+                    raise OSError("client went away")
+                await asyncio.sleep(0.05)       # 끊김을 들을 틈
+
+        scope = {"type": "http", "asgi": {"spec_version": spec}, "method": "GET"}
+        try:
+            await resp(scope, receive, send)
+        except Exception:
+            pass
+        assert out.closed
+        with pytest.raises(OSError):
+            os.fstat(out.fd)
+        assert len(reads) < 64, "끊긴 뒤에도 파일 끝까지 읽었다"
+
+    asyncio.run(run())
+
+
 def test_close_twice_does_not_close_a_reused_fd(root):
     p = root / "a.txt"
     p.write_text("x")
