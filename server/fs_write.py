@@ -255,6 +255,13 @@ def _refuse_denied_alias(dir_fd: int, name: str) -> None:
         raise WriteError(403, "denied", reason)
 
 
+def _refuse_git_dir(dir_fd: int, name: str) -> None:
+    """새 폴더·새 파일·저장·옮겨 오기로 bare 저장소 모양(`HEAD`·`objects`·`refs`)을 조립하거나 그 안에 쓰지 않는다."""
+    reason = fsguard.git_dir_refusal(dir_fd, name)
+    if reason:
+        raise WriteError(403, "denied", reason)
+
+
 def _require_regular(st: Optional[os.stat_result], *, what: str = "file") -> os.stat_result:
     if st is None:
         raise WriteError(404, "not_found", tr("파일이 없습니다"))
@@ -385,6 +392,7 @@ def save(raw_path: str, content: str, *, encoding: str, eol: Optional[str], expe
         sweep_stale_temps(dir_fd)
         with LOCKS.hold(_lock_key(dir_fd, name)):
             _refuse_denied_alias(dir_fd, name)
+            _refuse_git_dir(dir_fd, name)
             if expected_rev is None:
                 return _create_with(dir_fd, name, p, content, encoding, eol or "lf")
             return _replace(dir_fd, name, p, content, encoding, eol, expected_rev)
@@ -590,6 +598,7 @@ def create(raw_dir: str, name) -> dict:
     with _parent(p) as (dir_fd, leaf):
         with LOCKS.hold(_lock_key(dir_fd, leaf)):
             _refuse_denied_alias(dir_fd, leaf)
+            _refuse_git_dir(dir_fd, leaf)
             rev = _create_exclusive(dir_fd, leaf, b"")
     return {"ok": True, "path": str(p), "rev": rev}
 
@@ -616,6 +625,7 @@ def rename(raw_from: str, raw_to: str, *, overwrite: bool = False, expected_rev:
         with LOCKS.hold(_lock_key(sfd, sname), _lock_key(dfd, dname)):
             _refuse_denied_alias(sfd, sname)
             _refuse_denied_alias(dfd, dname)
+            _refuse_git_dir(dfd, dname)
             st = _require_regular(_lstat_at(sfd, sname))
             if expected_rev is not None and fs_read.rev_of(st) != expected_rev:
                 raise WriteError(409, "conflict", tr("파일이 바뀌었습니다"), rev=fs_read.rev_of(st))
@@ -733,7 +743,9 @@ def delete(raw_path: str, *, expected_rev: Optional[str] = None) -> dict:
 # - 이름 바꾸기는 **절대 덮어쓰지 않는다** — `rename(2)`은 빈 폴더를 말없이 갈아 끼우므로 `RENAME_EXCL`
 #   (macOS `renameatx_np`, Linux `renameat2` `RENAME_NOREPLACE`)로 원자적으로 거절한다. 없는 시스템은 잠금 안에서
 #   없음을 확인하고 옮긴다(그 사이 외부 프로세스가 빈 폴더를 만드는 아주 짧은 틈만 남는다).
-# - 휴지통은 내용이 있어도 된다(지우는 게 아니라 옮기기). 마운트 지점은 옮기지 않는다.
+# - 휴지통은 내용이 있어도 된다(지우는 게 아니라 옮기기). 마운트 지점과 아래에 마운트를 품은 폴더는 옮기지 않는다.
+# - 루트·설치 폴더·상태 폴더와 그 조상은 (st_dev, st_ino)로도 거부한다(글자 비교가 놓치는 이름 변형).
+# - 새 이름이 bare git 저장소 모양(`HEAD`·`objects`·`refs`)을 완성하거나 그런 폴더 안이면 거부한다(파일도 같다).
 # - 요청은 `kind: "dir"`를 밝혀야 폴더로 다룬다 — 파일 삭제 요청이 바꿔치기로 폴더 통째 삭제가 되지 않게.
 
 
@@ -756,6 +768,22 @@ def _require_dir(st: Optional[os.stat_result], dir_fd: int) -> os.stat_result:
     return st
 
 
+def _refuse_protected_dir(st: os.stat_result) -> None:
+    """루트·설치 폴더·상태 폴더와 그 조상은 inode로 거부한다 — 글자 비교(`resolve_dir_for_write`)는 대소문자·정규화만
+    다른 이름이나 다른 경로로 닿는 같은 폴더를 놓친다."""
+    if (st.st_dev, st.st_ino) in fsguard.protected_dir_ids():
+        raise WriteError(403, "denied", tr("루트 폴더·서버 폴더나 그 상위 폴더는 바꾸거나 옮길 수 없습니다"))
+
+
+def _refuse_contained_mount(p: Path) -> None:
+    """아래에 다른 파일시스템이 마운트된 폴더는 휴지통에 넣지 않는다(비우면 마운트된 쪽 내용까지 지워진다)."""
+    found = fsguard.contains_mount(p)
+    if found is None:
+        raise WriteError(409, "trash_unavailable", tr("마운트 표를 읽지 못해 폴더를 휴지통으로 옮기지 않았습니다"))
+    if found:
+        raise WriteError(400, "mount_point", tr("안에 다른 디스크가 연결된(마운트된) 폴더는 휴지통으로 옮길 수 없습니다"))
+
+
 def _require_dir_unchanged(dir_fd: int, name: str, checked: os.stat_result) -> None:
     now = _lstat_at(dir_fd, name)
     if now is None or not stat.S_ISDIR(now.st_mode) or not _same(now, checked):
@@ -772,6 +800,7 @@ def mkdir(raw_dir: str, name) -> dict:
     with _parent(p) as (dir_fd, leaf):
         with LOCKS.hold(_lock_key(dir_fd, leaf)):
             _refuse_denied_alias(dir_fd, leaf)
+            _refuse_git_dir(dir_fd, leaf)
             try:
                 os.mkdir(leaf, 0o777, dir_fd=dir_fd)      # 마지막 조각이 심링크여도 따라가지 않는다(EEXIST)
             except FileExistsError:
@@ -802,7 +831,9 @@ def rename_dir(raw_from: str, raw_to: str) -> dict:
         with LOCKS.hold(_lock_key(sfd, sname), _lock_key(dfd, dname)):
             _refuse_denied_alias(sfd, sname)
             _refuse_denied_alias(dfd, dname)
+            _refuse_git_dir(dfd, dname)
             st = _require_dir(_lstat_at(sfd, sname), sfd)
+            _refuse_protected_dir(st)
             _require_mine_and_writable(st)
             target = _lstat_at(dfd, dname)
             case_only = _same(target, st) and fsguard.write_name_key(sname) == fsguard.write_name_key(dname) \
@@ -885,7 +916,9 @@ def delete_dir(raw_path: str) -> dict:
         with LOCKS.hold(_lock_key(dir_fd, name)):
             _refuse_denied_alias(dir_fd, name)
             st = _require_dir(_lstat_at(dir_fd, name), dir_fd)
+            _refuse_protected_dir(st)
             _require_mine_and_writable(st)
+            _refuse_contained_mount(p)
             try:
                 out = fs_trash.trash(dir_fd, name, p, st)
             except fs_trash.TrashUnavailable as e:

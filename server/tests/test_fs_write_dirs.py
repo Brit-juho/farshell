@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 from pathlib import Path
 
 import pytest
@@ -17,7 +18,9 @@ from starlette.testclient import TestClient
 
 import fs_trash
 import fs_write
+import fsguard
 import main
+from resilience import mounts
 from authz import principals as P
 from shared_testkit import _Sock
 from test_fs_write import _auth_env, client, root, unelevated  # noqa: F401 — 픽스처 재사용
@@ -360,3 +363,192 @@ def test_write_roots_off_closes_folder_writes(client, root, monkeypatch):
     assert client.post("/api/fs/rename", json={"path": str(d), "to": str(root / "proj" / "e"), "kind": "dir"}).status_code == 403
     assert client.post("/api/fs/delete", json={"path": str(d), "kind": "dir"}).status_code == 403
     assert d.is_dir()
+
+
+# --- 리뷰 후속: 끝의 「/」·「.」, inode 기준 루트 보호, 마운트, git 저장소 모양, 서버 폴더 ---------------------
+# 모두 고치기 전 코드에서 실패한다(링크 대상·루트 조상·마운트를 품은 폴더가 옮겨지거나, 저장소 모양이 조립된다).
+
+
+@pytest.mark.parametrize("suffix", ["/", "/.", "/./", "//"])
+def test_dir_ops_with_trailing_slash_or_dot_never_touch_the_link_target(client, root, monkeypatch, suffix):
+    """`lstat("x/link/")`은 링크를 따라가고 `Path`는 끝의 `/`·`.`를 지운다 — 링크 **대상**이 옮겨지면 안 된다."""
+    called = _no_trash(monkeypatch)
+    d = _tree(root)
+    link = root / "proj" / "lnin"
+    link.symlink_to(d)
+    r = client.post("/api/fs/delete", json={"path": str(link) + suffix, "kind": "dir"})
+    assert r.status_code == 403, r.text
+    r = client.post("/api/fs/rename", json={"path": str(link) + suffix, "to": str(root / "proj" / "moved"), "kind": "dir"})
+    assert r.status_code == 403, r.text
+    assert called == [] and d.is_dir() and link.is_symlink() and not (root / "proj" / "moved").exists()
+
+
+@pytest.mark.parametrize("suffix", ["/.", "/./"])
+def test_file_ops_with_trailing_dot_never_touch_the_link_target(client, root, monkeypatch, suffix):
+    called = _no_trash(monkeypatch)
+    target = root / "proj" / "a.txt"
+    link = root / "proj" / "fl"
+    link.symlink_to(target)
+    r = client.post("/api/fs/delete", json={"path": str(link) + suffix})
+    assert r.status_code == 403, r.text
+    r = client.post("/api/fs/rename", json={"path": str(link) + suffix, "to": str(root / "proj" / "b.txt")})
+    assert r.status_code == 403, r.text
+    assert called == [] and target.read_text() == "one\ntwo\n" and not (root / "proj" / "b.txt").exists()
+
+
+def test_rename_dir_alias_of_a_root_ancestor_is_refused_by_inode(client, root, monkeypatch, tmp_path):
+    """루트 목록이 다른 경로(링크)로 같은 폴더를 가리키면 글자 비교는 놓친다 — inode로 거부한다."""
+    called = _no_trash(monkeypatch)
+    work = root / "proj" / "Work"
+    (work / "c").mkdir(parents=True)
+    alias = tmp_path / "alias"
+    alias.symlink_to(work)
+    real = fsguard.get_write_roots
+    monkeypatch.setattr(fsguard, "get_write_roots", lambda: [*real(), alias / "c"])
+    r = client.post("/api/fs/delete", json={"path": str(work), "kind": "dir"})
+    assert r.status_code == 403, r.text
+    r = client.post("/api/fs/rename", json={"path": str(work), "to": str(root / "proj" / "W2"), "kind": "dir"})
+    assert r.status_code == 403, r.text
+    assert called == [] and (work / "c").is_dir()
+
+
+def _case_insensitive(p: Path) -> bool:
+    probe = p / "CaseProbe"
+    probe.mkdir()
+    try:
+        return (p / "caseprobe").exists()
+    finally:
+        probe.rmdir()
+
+
+def test_delete_dir_case_variant_of_an_overlapping_root_ancestor_is_refused(client, root, monkeypatch):
+    if not _case_insensitive(root):
+        pytest.skip("대소문자를 가리는 파일시스템 — 이름 변형이 같은 폴더가 아니다")
+    called = _no_trash(monkeypatch)
+    inner = root / "proj" / "Work" / "c"
+    inner.mkdir(parents=True)
+    monkeypatch.setenv("VT_BROWSE_ROOTS", f"{root}:{inner}")
+    r = client.post("/api/fs/delete", json={"path": str(root / "proj" / "work"), "kind": "dir"})
+    assert r.status_code == 403, r.text
+    assert called == [] and inner.is_dir()
+
+
+def test_install_and_state_dirs_and_their_ancestors_are_refused(root, monkeypatch):
+    called = _no_trash(monkeypatch)
+    inst = root / "proj" / "farshell"
+    state = root / "proj" / "st" / "vtstate"
+    (inst / "server").mkdir(parents=True)
+    state.mkdir(parents=True)
+    real = fsguard._server_dirs
+    assert (real()[0] / "server" / "fsguard.py").is_file()       # 기본값은 이 서버의 체크아웃 폴더
+    monkeypatch.setattr(fsguard, "_server_dirs", lambda: [inst, state])
+    for p in (inst, root / "proj" / "st", state, root / "proj"):
+        with pytest.raises(fs_write.WriteError) as e:
+            fs_write.delete_dir(str(p))
+        assert e.value.status == 403, p
+        with pytest.raises(fs_write.WriteError) as e:
+            fs_write.rename_dir(str(p), str(root / "moved"))
+        assert e.value.status == 403, p
+    assert called == [] and inst.is_dir() and state.is_dir() and not (root / "moved").exists()
+
+
+def test_state_dir_comes_from_vt_state_dir(root, monkeypatch):
+    called = _no_trash(monkeypatch)
+    state = root / "proj" / "vtstate"
+    state.mkdir()
+    monkeypatch.setenv("VT_STATE_DIR", str(state))
+    with pytest.raises(fs_write.WriteError) as e:
+        fs_write.delete_dir(str(state))
+    assert e.value.status == 403 and called == [] and state.is_dir()
+
+
+def test_delete_dir_containing_a_mount_is_refused(client, root, monkeypatch):
+    called = _no_trash(monkeypatch)
+    d = _tree(root)
+    monkeypatch.setattr(mounts, "_override", [mounts.Mount(path=str(d / "sub"), fstype="ext4", source="/dev/x", local=True)])
+    r = client.post("/api/fs/delete", json={"path": str(d), "kind": "dir"})
+    assert r.status_code == 400 and r.json()["error"] == "mount_point", r.text
+    assert called == [] and d.is_dir()
+
+
+def test_delete_dir_refused_when_the_mount_table_cannot_be_read(client, root, monkeypatch):
+    called = _no_trash(monkeypatch)
+    d = _tree(root)
+    monkeypatch.setattr(mounts, "current_mounts", lambda: None)
+    r = client.post("/api/fs/delete", json={"path": str(d), "kind": "dir"})
+    assert r.status_code == 409 and r.json()["error"] == "trash_unavailable", r.text
+    assert called == [] and d.is_dir()
+
+
+def test_contains_mount_matches_only_mounts_below(monkeypatch, tmp_path):
+    d = tmp_path / "Proj"
+    M = mounts.Mount
+
+    def table(*paths):
+        monkeypatch.setattr(mounts, "_override", [M(path=p, fstype="x", source="x", local=True) for p in paths])
+
+    table("/", str(d), str(tmp_path / "Proj2" / "m"), str(tmp_path))
+    assert fsguard.contains_mount(d) is False                    # 자신·형제·조상은 아래가 아니다
+    table(str(d / "a" / "b"))
+    assert fsguard.contains_mount(d) is True
+    monkeypatch.setattr(sys, "platform", "darwin")
+    table("/System/Volumes/Data" + str(d / "m"))                  # firmlink 너머로 기록된 마운트 경로
+    assert fsguard.contains_mount(d) is True
+    table(str(tmp_path / "proj" / "m"))                           # 대소문자만 다른 경로(macOS 디스크는 같은 폴더)
+    assert fsguard.contains_mount(d) is True
+
+
+def test_linux_mountinfo_bind_mount_is_found(monkeypatch, tmp_path):
+    d = tmp_path / "with space"
+    esc = str(d).replace(" ", "\\040")
+    line = f"36 35 98:0 /src {esc}/bind rw,noatime - ext4 /dev/root rw\n"
+    monkeypatch.setattr(mounts, "_override", mounts._linux_mounts(line))
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert fsguard.contains_mount(d) is True
+
+
+def test_mkdir_and_create_cannot_assemble_a_bare_git_dir(client, root):
+    x = root / "proj" / "x"
+    x.mkdir()
+    assert client.post("/api/fs/new", json={"dir": str(x), "name": "config"}).status_code == 200
+    assert client.post("/api/fs/new", json={"dir": str(x), "name": "HEAD"}).status_code == 200
+    assert client.post("/api/fs/mkdir", json={"dir": str(x), "name": "objects"}).status_code == 200
+    r = client.post("/api/fs/mkdir", json={"dir": str(x), "name": "refs"})
+    assert r.status_code == 403, r.text
+    assert not (x / "refs").exists()
+    # 다른 순서로 조립해도 마지막 조각은 거부된다 — 새 파일·저장·옮겨 오기 모두.
+    y = root / "proj" / "y"
+    (y / "objects").mkdir(parents=True)
+    (y / "refs").mkdir()
+    r = client.post("/api/fs/new", json={"dir": str(y), "name": "HEAD"})
+    assert r.status_code == 403 and not (y / "HEAD").exists()
+    (root / "proj" / "h").write_text("ref: refs/heads/main\n")
+    r = client.post("/api/fs/rename", json={"path": str(root / "proj" / "h"), "to": str(y / "HEAD")})
+    assert r.status_code == 403 and not (y / "HEAD").exists()
+    r = client.put("/api/fs/file", json={"path": str(y / "HEAD"), "content": "ref: x\n", "encoding": "utf-8",
+                                         "expected_rev": None, "save_id": "s-git-head-0001"})
+    assert r.status_code == 403 and not (y / "HEAD").exists()
+    z = root / "proj" / "z"
+    (z / "objects").mkdir(parents=True)
+    (z / "HEAD").write_text("ref: refs/heads/main\n")
+    (root / "proj" / "r").mkdir()
+    r = client.post("/api/fs/rename", json={"path": str(root / "proj" / "r"), "to": str(z / "refs"), "kind": "dir"})
+    assert r.status_code == 403 and not (z / "refs").exists()
+
+
+def test_no_writes_inside_an_existing_bare_git_dir(client, root):
+    from test_fs_write import save_body
+    g = root / "proj" / "g.git"
+    for n in ("objects", "refs", "hooks"):
+        (g / n).mkdir(parents=True)
+    (g / "HEAD").write_text("ref: refs/heads/main\n")
+    (g / "config").write_text("[core]\n")
+    r = client.put("/api/fs/file", json=save_body(g / "config", "[core]\n\tfsmonitor = touch /tmp/pwn\n"))
+    assert r.status_code == 403 and (g / "config").read_text() == "[core]\n"
+    for name in ("config2", "description"):
+        r = client.post("/api/fs/new", json={"dir": str(g), "name": name})
+        assert r.status_code == 403 and not (g / name).exists()
+    r = client.post("/api/fs/mkdir", json={"dir": str(g), "name": "info"})
+    assert r.status_code == 403 and not (g / "info").exists()
+    # 저장소 모양이 아닌 폴더의 `config`는 평범한 파일이다.
+    assert client.post("/api/fs/new", json={"dir": str(root / "proj"), "name": "config"}).status_code == 200

@@ -24,6 +24,7 @@ import logging
 import contextlib
 import os
 import re
+import sys
 import unicodedata
 from pathlib import Path
 from typing import Optional
@@ -921,7 +922,7 @@ def writes_enabled() -> bool:
 
 
 def _raw_write_path(raw_path: str) -> str:
-    """쓰기 경로의 모양 검사 — 절대경로만, `..` 조각·제어 문자 없이. 판정 전에 거른다."""
+    """쓰기 경로의 모양 검사 — 절대경로만, `..`·`.`·빈 조각, 끝의 `/`, 제어 문자 없이. 판정 전에 거른다."""
     if not isinstance(raw_path, str) or not raw_path.strip():
         raise FsDenied(tr("경로가 비었습니다"))
     if any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in raw_path):
@@ -931,6 +932,11 @@ def _raw_write_path(raw_path: str) -> str:
         raise FsDenied(tr("쓰기 경로는 절대경로여야 합니다"))
     if ".." in Path(expanded).parts:
         raise FsDenied(tr("쓰기 경로에 「..」를 쓸 수 없습니다"))
+    # 끝의 `/`, `.`·빈 조각은 `Path`가 말없이 지운다. 그런데 `os.lstat("x/link/")`·`lstat("x/link/.")`은 링크를
+    # **따라가므로** 「심링크는 옮기지 않는다」 검사를 지나 링크 대상이 옮겨지거나 휴지통에 간다. 쓰기 대상에는
+    # 이런 모양이 필요 없으니 판정 전에 거부한다(`/` 자체만 예외 — 조각이 없다).
+    if expanded != "/" and any(part in ("", ".") for part in expanded[1:].split("/")):
+        raise FsDenied(tr("쓰기 경로는 「/」로 끝나거나 「.」·빈 조각을 가질 수 없습니다"))
     return expanded
 
 
@@ -977,6 +983,99 @@ def resolve_dir_for_write(raw_path: str) -> Path:
     if is_hidden_state_dir_name(p.name):
         raise FsDenied(tr("거부된 디렉토리: {name}", name=p.name))
     return p
+
+
+def _server_dirs() -> list[Path]:
+    """옮기거나 휴지통에 넣으면 서버가 망가지는 폴더 — 이 서버의 설치(체크아웃) 폴더와 상태 폴더(`~/.vt`)."""
+    import vt_paths
+    out = [Path(__file__).resolve().parent.parent]
+    try:
+        out.append(vt_paths.state_dir())
+    except Exception:  # noqa: BLE001 — 못 구하면 그 항목만 빠진다(루트 보호는 그대로)
+        pass
+    return out
+
+
+def protected_dir_ids() -> set[tuple[int, int]]:
+    """폴더 이름 바꾸기·휴지통이 건드리면 안 되는 폴더들의 `(st_dev, st_ino)`.
+
+    열람·쓰기 루트, 설치 폴더, 상태 폴더와 **그 조상 전부**. `resolve_dir_for_write`의 루트 검사는 글자 비교라
+    대소문자·정규화만 다른 이름(루트 `~/GitHub/Work/c`의 조상을 `~/GitHub/work`로 부르기)이나 다른 경로로 닿는 같은
+    폴더를 놓친다. inode는 이름 접기와 무관하다. 호출부(`fs_write`)는 dir_fd 기준 `lstat` 결과와 비교한다."""
+    ids: set[tuple[int, int]] = set()
+    for base in (*get_roots(), *get_write_roots(), *_server_dirs()):
+        bases = [base]
+        try:
+            bases.append(base.resolve())
+        except (OSError, RuntimeError):
+            pass
+        for b in bases:
+            for d in (b, *b.parents):
+                try:
+                    st = os.stat(d)
+                except OSError:
+                    continue
+                ids.add((st.st_dev, st.st_ino))
+    return ids
+
+
+def contains_mount(path: Path) -> Optional[bool]:
+    """`path` **아래**에 다른 파일시스템이 마운트돼 있는가(바인드 마운트, 디스크 이미지 등). 마운트 표를 못 읽으면 None.
+
+    폴더를 휴지통으로 옮기면 그 아래 마운트도 함께 옮겨지고, 나중에 휴지통을 비우면 마운트된 쪽 내용까지 지워진다.
+    Linux는 `/proc/self/mountinfo`, macOS는 `getfsstat(MNT_NOWAIT)`(`resilience.mounts.current_mounts`, 캐시 없이) —
+    마운트된 파일시스템에는 닿지 않는다. macOS는 사용자 폴더가 Data 볼륨에 firmlink로 이어져 마운트 경로가
+    `/System/Volumes/Data/...`로 나올 수 있어 두 모양을 다 보고, 대소문자·정규화를 가리지 않고 비교한다(넓게 거부)."""
+    from resilience import mounts as _mounts
+    table = _mounts.current_mounts()
+    if table is None:
+        return None
+    darwin = sys.platform == "darwin"
+
+    def norm(s: str) -> str:
+        s = os.path.normpath(s)
+        return unicodedata.normalize("NFD", s).casefold() if darwin else s
+
+    bases = [norm(str(path))]
+    if darwin:
+        bases.append(norm("/System/Volumes/Data" + str(path)))
+    for m in table:
+        mp = norm(m.path)
+        for b in bases:
+            if b != "/" and mp.startswith(b.rstrip("/") + "/"):
+                return True
+    return False
+
+
+# git이 저장소 폴더(gitdir)로 알아보는 표지. `HEAD`·`objects`·`refs`가 모두 있으면 bare 저장소로 본다(`config`는
+# 없어도 된다). 그런 폴더의 `config`(`core.fsmonitor`·`core.pager` 등)는 그 안이나 아래에서 사람이 git을 돌리면 명령을
+# 실행한다 — `.git` 이름 규칙을 피해 새 폴더·새 파일만으로 저장소 모양을 조립할 수 있다.
+_GIT_DIR_CORE = ("HEAD", "objects", "refs")
+_GIT_DIR_CORE_KEYS = {write_name_key(n): n for n in _GIT_DIR_CORE}
+
+
+def _has_entry(dir_fd: int, name: str) -> bool:
+    try:
+        os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+        return True
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True                              # 확인할 수 없으면 있다고 본다(넓게 거부)
+
+
+def git_dir_refusal(dir_fd: int, name: str) -> Optional[str]:
+    """`dir_fd` 폴더에 `name`을 쓰거나 만들거나 그 이름으로 옮기면 git 저장소 모양이 되면 사유, 아니면 None.
+
+    - 폴더가 이미 저장소 모양(`HEAD`·`objects`·`refs`)이면 그 안의 어떤 이름도 쓰지 않는다(`config`·`hooks` 포함).
+    - `name`이 `HEAD`·`objects`·`refs` 중 하나이고 나머지 둘이 이미 있으면 거부한다(조립을 끝내지 못하게).
+    이름은 `write_name_key`로 비교한다(macOS의 `head`·`Objects`도 같은 항목). blocking — 쓰기 경로가 dir_fd를 연 채 부른다."""
+    if all(_has_entry(dir_fd, n) for n in _GIT_DIR_CORE):
+        return tr("git 저장소 폴더 안에는 쓸 수 없습니다")
+    me = _GIT_DIR_CORE_KEYS.get(write_name_key(name))
+    if me is not None and all(_has_entry(dir_fd, n) for n in _GIT_DIR_CORE if n != me):
+        return tr("git 저장소 모양이 되는 이름이라 만들 수 없습니다: {name}", name=name)
+    return None
 
 
 def history_source_root(raw: str) -> Path:
