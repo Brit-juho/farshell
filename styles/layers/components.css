@@ -1038,7 +1038,7 @@
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: calc(var(--spacing) * 1.5);
+    gap: 8px;                      /* 시안 O16-D 카드 간격 */
     pointer-events: none;
     /* compact — keybar(실측 --kb-height) + 하단 내비 52px 위. 폰에서 손이
      * 닿는 건 하단뿐이다(탭해서 치우려면 닿아야 한다). */
@@ -1057,35 +1057,39 @@
   @media (min-width: 720px) {
     #vt-toasts {
       left: auto;
-      right: calc(var(--spacing) * 3 + env(safe-area-inset-right, 0px));
+      right: calc(16px + env(safe-area-inset-right, 0px));
       bottom: calc(var(--statusbar-h, 0px) + 16px + env(safe-area-inset-bottom, 0px));
-      width: min(420px, 45vw);
+      width: min(340px, 45vw);
       align-items: flex-end;
     }
   }
 
+  /* 리디자인 6단계(2026-11, 시안 O16-D 「정돈」 배치) — 카드 340, 패딩 12/12/12/14, 반경 8, raised 면.
+   * [16px 아이콘] [머리(문구 · ×N) / 흐린 보조 줄 / 동작 버튼] [× 닫기]. 등급 막대 2px은 그대로. */
   .vt-toast {
     display: flex;
-    align-items: center;
-    gap: calc(var(--spacing) * 2);
-    min-height: 36px;              /* §10 — 행은 24/28/36 세 단만 */
+    align-items: flex-start;
+    gap: 10px;
+    width: 340px;
     max-width: 100%;
-    padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 3);
-    padding-left: calc(var(--spacing) * 3 + 2px);   /* 선두 막대 2px만큼 */
+    box-sizing: border-box;
+    padding: 12px 12px 12px 14px;
     border: 1px solid var(--color-line-strong);
-    border-radius: var(--radius-sm);
-    background: var(--menu);
+    border-radius: var(--radius-lg);
+    background: var(--color-bg-raised);
     box-shadow:
       inset 2px 0 0 var(--vt-toast-tone, var(--color-line-strong)),
       var(--shadow-e2);
     color: var(--color-txt);
-    font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui);
+    font: var(--weight-normal) var(--fs-sm) / 18px var(--font-ui);
     pointer-events: auto;
     cursor: pointer;               /* 탭/클릭하면 즉시 사라진다 */
     transition: opacity var(--dur-fast) var(--ease-out-quint);
   }
   /* 등장은 처음 뜰 때 한 번만(toast.js가 .entering을 120ms 뒤 뗀다). 퇴장은
    * 등장보다 조용하게 — 투명도만, 움직임 없이. */
+  /* compact — 하단 내비 위 띠라 폭을 화면에 맞춘다(340 고정은 데스크톱 카드). */
+  @media (max-width: 719px) { .vt-toast { width: auto; } }
   .vt-toast.entering { animation: vt-toast-in var(--dur-fast) var(--ease-out-quint); }
   .vt-toast.leaving  { opacity: 0; }
   @keyframes vt-toast-in {
@@ -1093,24 +1097,37 @@
     to   { opacity: 1; transform: none; }
   }
 
-  .vt-toast.err  { --vt-toast-tone: var(--color-st-error);   color: var(--err); border-color: color-mix(in srgb, var(--color-st-error) 45%, var(--color-line-strong)); }
-  .vt-toast.warn { --vt-toast-tone: var(--color-st-waiting); color: var(--color-st-waiting); }
-  .vt-toast.ok   { --vt-toast-tone: var(--color-st-working); color: var(--ok); }
-  .vt-toast.info { --vt-toast-tone: var(--color-line-strong); color: var(--color-txt); }
+  /* 색은 아이콘과 등급 막대에만 — 문구는 본문색으로 둬야 세 장이 겹쳐도 읽힌다(시안). */
+  .vt-toast.err  { --vt-toast-tone: var(--color-st-error);   border-color: color-mix(in srgb, var(--color-st-error) 35%, var(--color-line-strong)); }
+  .vt-toast.warn { --vt-toast-tone: var(--color-st-waiting); }
+  .vt-toast.ok   { --vt-toast-tone: var(--color-st-working); }
+  .vt-toast.info { --vt-toast-tone: var(--color-acc); }
+  .vt-toast-icon { flex: none; display: inline-flex; width: 16px; height: 18px; align-items: center; color: var(--vt-toast-tone, var(--color-sub)); }
+  .vt-toast-icon[hidden] { display: none; }
+  .vt-toast-icon > svg { width: 16px; height: 16px; }
+  .vt-toast-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+  .vt-toast-head { display: flex; align-items: center; gap: 6px; min-width: 0; font-weight: var(--weight-semibold); }
+  .vt-toast-detail { color: var(--color-muted); font-size: var(--fs-xs); line-height: 18px; overflow-wrap: anywhere; }
+  .vt-toast-actions { display: flex; gap: 6px; margin-top: 6px; }
+  .vt-toast-x { flex: none; margin: -3px -4px 0 auto; }
 
   /* 문구는 전용 span에 담는다 — HUD 줄에서 문구만 말줄임하고 횟수 배지는
    * 남겨야 하기 때문이다. */
-  .vt-toast-text { flex: 1 1 auto; min-width: 0; }
+  .vt-toast-text { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
   /* 같은 토스트가 반복해서 뜰 때 몇 번째인지 — 같은 문구 세 줄을 쌓는 대신
-   * (2.1.5까지의 동작) 한 줄에 횟수를 붙인다. ui/toast.js가 채운다. */
+   * (2.1.5까지의 동작) 한 줄에 횟수를 붙인다. ui/toast.js가 채운다. 카드에서는 시안의 배지(16px 알약). */
   .vt-toast-count {
     flex: none;
-    margin-left: auto;
-    padding-left: calc(var(--spacing) * 2);
     color: var(--color-muted);
     font: var(--weight-medium) var(--fs-3xs) / 1 var(--font-mono);
     font-variant-numeric: tabular-nums;
   }
+  .vt-toast .vt-toast-count {
+    min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box;
+    border-radius: var(--radius-full); text-align: center; line-height: 16px;
+    color: var(--color-txt); background: var(--color-bg-raised); box-shadow: 0 0 0 1px var(--color-line-strong);
+  }
+  #vt-hud-msg > .vt-toast-count { margin-left: auto; padding-left: calc(var(--spacing) * 2); }
 
   /* ── 상태 막대 메시지 (#vt-hud-msg) ───────────────────────────────────
    * info/success는 카드로 띄우지 않고 이 줄이 받는다. #vt-hud(상태 막대 24)는 body가

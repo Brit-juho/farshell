@@ -3,6 +3,7 @@
 // 원문을 고치면 여기 키도 같이 고친다 — scripts/check_i18n.py가 빠진 키와 남은 키를 잡는다.
 // 본문은 JSON이어야 한다(검사 스크립트와 서버가 json으로 읽는다).
 window.__VT_I18N = {
+  "알림 닫기": "Dismiss notification",
   "{tool} 프로필이 없습니다. `fsh profile create <이름> --tool {tool}`로 만드세요": "There is no {tool} profile. Create one with `fsh profile create <name> --tool {tool}`",
   "그런 프로필이 없습니다. 있는 프로필: {names}": "No such profile. Available profiles: {names}",
   "기본 프로필이 없습니다. `fsh profile default <이름>`으로 정하거나 이름을 쓰세요: {names}": "There is no default profile. Set one with `fsh profile default <name>` or give a name: {names}",
