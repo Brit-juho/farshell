@@ -459,7 +459,10 @@ and **one sidebar** beside it. The bar's top group are the activities, in this o
 - **Item** 48×44, icon 20 (stroke 1.75), name only in `aria-label` and the tooltip (`data-tip`, shown to
   the right; second line = badge count, plus the `railToggle` key on the current activity). **Active** =
   a 2px `--color-acc` bar on the left edge (10px inset top and bottom, `::before`), no fill. A badge
-  (queue waiting, open ports) is a `.vt-badge` 15px high on the icon's top-right corner.
+  (waiting sessions on 세션, queue waiting, open ports) is a `.vt-badge` 15px high on the icon's top-right
+  corner. The 세션 badge counts every waiting session — even with the 개입 필요 zone hidden — and is amber
+  (`data-state="waiting"`); the others are neutral. The rail reports the count (`onWaitingCount`); it is
+  not polled separately.
 - **Accessibility:** the top group is `role="tablist"` with `aria-orientation="vertical"`; each activity is
   `role="tab"` with `aria-selected` and roving `tabindex`. ↑↓/Home/End move focus only; Enter/Space
   (the button's own click) opens it. The bottom group is a plain `role="group"`.
@@ -483,33 +486,64 @@ and **one sidebar** beside it. The bar's top group are the activities, in this o
 ### Session view — worktree rail (`#vt-wgrail`, `shell/Rail.tsx`)
 
 A row is **one tmux session** (docs/ref/terminal.md 「Rail」). Two zones: **개입 필요**
-(waiting sessions; collapsible, and switchable on/off in 레일 설정 like VS Code's
-Open Editors) and **실행 중** (every other running session, **name order only** — no urgency
-sorting, so rows never jump). Below them, **최근 종료** (collapsible, newest N) and a one-line
-**보관함** that swaps the list in place; ended rows use the same three lines with a dashed state
-circle and a dimmed name, and only 이어서 시작 is accent-filled. There are no 묶음 / 묶지 않음 / 잠자는 중 zones. A row is three lines:
+(waiting sessions; collapsible, hideable with the eye button in its head or in 레일 설정, like VS
+Code's Open Editors) and **실행 중** (every other running session, **name order** or manual drag
+order — no urgency sorting, so rows never jump). Below them, **최근 종료** (collapsible, newest N)
+and a one-line **보관함** that swaps the list in place. There are no 묶음 / 묶지 않음 / 잠자는 중 zones.
 
-1. **State icon** (`stateIcon`; a ring around it = unseen) · agent mark · name (edited in place).
-   A small window icon at the line's end = "open in this browser tab".
-2. **Main/worktree icon** (`git-commit` = main worktree, `git-branch` = linked worktree) ·
-   branch — **main is shown too** — · change size (`+add −del`, or `파일 N`).
-3. **State keyword** · elapsed time · **origin icon** (local has none; `laptop` = created on
-   another Mac, `square-terminal` = CLI / plain tmux).
+**Header 36** (`.vt-wgrail-head`): 「세션 N」 12/600 (or the host switcher when there is more than one
+host) and four 24px icon buttons — 대화 기록 (`history`), 레일 설정 (`sliders-horizontal`), 새 세션
+(`plus`), 접기 (chevron). **Section heads 28** (`.vt-wgrail-group-head`): chevron 12 · name 12/600 ·
+count mono 11, actions on the right; 개입 필요 is amber. Grouped views use the same head with a
+`layout-panels` icon and a pencil (rename). **Footer 36**: a quiet 「+ 새 세션」 button.
 
-Only when applicable, a fourth line: the grouped view's name and a 「다른 화면 N」 badge
-(tmux clients attached beyond this browser tab's own). The state keyword is short and fixed so
-it is never truncated: 승인 요청 / 선택 요청 / 계획 확인 / 질문 for waiting (server `kind`),
-유휴 / 작업 중 (+ tool name, the one place allowed to ellipsize) / 완료 (+ 「질문 있음」 /
-「계획 있음」 from the server `badge`, which working rows show too — agy's plan badge rides a working entry). There is no left 3px status bar, repo color bar, tmux plug icon or `? question` line — state is the icon's colour **and** shape.
-A session that is not open keeps full opacity but its name steps down to `--color-sub`.
+**Row anatomy** (redesign phase 4; specimen D02): padding 6/6/6/12, a 16px icon column + 8 gap, lines
+20/18/18/18. Rows are separated by a 1px `--color-line` (not after a section head).
+
+1. **State icon** (`stateIcon` 16, in its own column; a ring around it = unseen) · agent mark 14 ·
+   **name** 13/600 (edited in place) · the delegation toggle 「위임 보고 1/2」 · **elapsed** (mono 12,
+   right) · ⋯ (shown on hover, focus or when active; always on touch).
+2. Mono 12: `WT` (separate worktree) · directory · `git-branch` + branch — **main is shown too** — ·
+   change size (`+add` in `st-working`, `−del` in `st-error`, or `파일 N`). With no context yet:
+   「정보 갱신 대기」 (`faint`).
+3. **State keyword** 12/600 · 도구: name (the one place allowed to ellipsize) · badge chip · internal
+   subagent chip (「내부 2 작업 중」, `st-working` tint) · share mark · **origin icon** (local has none;
+   `laptop` = created on another Mac, `square-terminal` = CLI / plain tmux).
+4. Only when applicable: 「다른 화면 N」 (`monitor-smartphone`) and the non-web attach count (`terminal`).
+
+The state keyword is short and fixed so it is never truncated: 승인 요청 / 선택 요청 / 계획 확인 / 질문
+for waiting (server `kind`), 유휴 / 작업 중 / 완료 (+ 「질문 있음」 / 「계획 있음」 from the server `badge`,
+which working rows show too — agy's plan badge rides a working entry). There is no left status bar, repo
+color bar, tmux plug icon or `? question` line — state is the icon's colour **and** shape.
+
+**Row surfaces.** Selected (the pane you are looking at) = `--color-acc-soft` + a 2px `--color-acc` bar
+on the left; waiting = `--color-st-waiting-tint` + a 2px `--color-st-waiting` bar (both are inset
+box-shadows, so `::before`/`::after` stay free for branch lines). **On both tints the secondary text
+steps up one level** (muted → sub, sub → txt; §2 「Tinted rows」). Idle rows step the name down to `sub`
+500; a session that is not open in this tab steps it down to `muted` 500 — never opacity.
+
+**Inline answers.** A waiting row that is open in this tab gets an answer line below its text: one 24px
+button per detected option (「1 · 예」 「3 · 아니오」, long labels ellipsize with the full text in the
+tooltip) and a quiet 「터미널로」 that opens the session. It is the same `AnswerButtons` component and the
+same `answerSessionPrompt` call (`shell/rail-fetch.ts`, with `prompt_id`) as the phone's Fleet; clicks
+never bubble to the row, and the buttons lock until the reply returns.
+
+**Delegation and subagents.** Delegated child sessions sit under their parent, indented 24 (icon at
+x=36), joined by a 1px `--color-line-strong` branch line on x=19 (the parent icon's axis); their line 3
+is the delegation state plus 「별도 터미널」. Native subagent rows (`NativeChildren.tsx`) use the same
+indent and line: state icon 16 · name 13/500 · elapsed, then 「내부 · 작업 중」 in the state colour.
+Ended rows (`StoppedRow`) use the same columns with the dashed state circle and a `sub` name; their
+action line (다시 확인 · 보관 해제 · 이어서 시작 — only 이어서 시작 is accent-filled) appears on hover or
+focus with a fine pointer and is always shown on touch.
 
 The ⋯ button and right-click open the same menu (`rowMenuItems`: 열기/닫기 · 이름 변경 ·
-맥에서 열기 · 연결된 화면 · 종료). The gear-less sliders icon in the rail header is **레일 설정** (개입 필요 on/off, show
-or hide sessions by origin — peer / external, and the 저장소 표시 list). Hiding an
-origin never hides a session that is open or waiting. The rail fills the sidebar; its width and
-collapse state belong to the workbench (above), and the header's chevron toggles the same
-collapse. Collapsed (48px), only the state icon and agent mark remain; name, branch and
-keyword move to the row tooltip.
+맥에서 열기 · 연결된 화면 · 종료). **레일 설정** (sliders) holds 개입 필요 on/off, show or hide sessions
+by origin — peer / external, and the 저장소 표시 list. Hiding an origin never hides a session that is
+open or waiting. The rail fills the sidebar; its width and collapse state belong to the workbench
+(above), and the header's chevron toggles the same collapse. **Collapsed (48px strip)**: 40×40 cells
+(radius 6) with the state icon 16 centred and the agent mark 12 in the bottom-right corner, waiting
+first on the amber tint, a 24×1 separator, then the rest; the tooltip carries name / branch · state ·
+다른 화면 N · share.
 
 ### Tool views — dock body (`#vt-dock`, `shell/Dock.tsx`)
 

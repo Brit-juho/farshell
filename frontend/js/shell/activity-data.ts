@@ -10,7 +10,7 @@ import { t } from '../core/i18n.js';
 import { SESSIONS_ACTIVITY } from './side-prefs.js';
 
 export type ActivityCap = 'ports' | 'usage';
-export type ActivityBadge = 'queue' | 'ports';
+export type ActivityBadge = 'queue' | 'ports' | 'waiting';
 
 export interface Activity {
   id: string;
@@ -27,7 +27,7 @@ export interface Activity {
 }
 
 export const ACTIVITIES: Activity[] = [
-  { id: SESSIONS_ACTIVITY, label: t('세션'), icon: 'list', panelId: null, action: null },
+  { id: SESSIONS_ACTIVITY, label: t('세션'), icon: 'list', panelId: null, action: null, badge: 'waiting' },
   { id: 'scm', label: t('변경'), icon: 'git-branch', panelId: 'vt-dock-scm', action: 'scm.show' },
   { id: 'dir', label: t('파일'), icon: 'folder', panelId: 'vt-dir', action: 'dir.show' },
   { id: 'queue', label: t('큐'), icon: 'clipboard', panelId: 'vt-queue', action: 'queue.show', badge: 'queue' },
@@ -60,6 +60,7 @@ export function activityByPanelId(panelId: string): Activity | undefined {
 /** 배지 수치의 툴팁 문구. 수치가 없으면 undefined. */
 export function badgeTip(a: Activity, n: number): string | undefined {
   if (!a.badge || !n) return undefined;
+  if (a.badge === 'waiting') return t('개입 필요 {n}', { n });
   return a.badge === 'queue' ? t('{n}개 대기', { n }) : t('{n}개 열림', { n });
 }
 

@@ -123,6 +123,32 @@ test('툴팁 — 지금 활동은 ⌘B 사이드바 토글, 설정은 ⌘,, 배�
   assert.match(tab('queue').dataset.tipSub, /3/);
   h.setBadges({ queue: 0 });
   assert.strictEqual(tab('queue').querySelector('.vt-act-badge'), null, '0이면 배지가 없다');
+  assert.strictEqual(tab('queue').dataset.tipSub, undefined);
+});
+
+test('「세션」 배지 — waiting 세션 수, 호박색(data-state=waiting), 툴팁은 「개입 필요 N」 + ⌘B', async () => {
+  const env = await fresh();
+  const root = env.document.createElement('div');
+  env.document.body.appendChild(root);
+  const h = env.mountActivityBar(root);
+  const tab = (id) => root.querySelector(`[data-activity="${id}"]`);
+  assert.strictEqual(tab('sessions').querySelector('.vt-act-badge'), null, '0이면 배지가 없다');
+  h.setBadges({ waiting: 2, queue: 1 });
+  const b = tab('sessions').querySelector('.vt-act-badge');
+  assert.strictEqual(b.textContent, '2');
+  assert.strictEqual(b.dataset.state, 'waiting');
+  assert.strictEqual(tab('queue').querySelector('.vt-act-badge').dataset.state, undefined, '다른 배지는 중립');
+  assert.strictEqual(tab('sessions').dataset.tipSub, '개입 필요 2 · ⌘B 사이드바 토글');
+  h.setBadges({ waiting: 0 });
+  assert.strictEqual(tab('sessions').querySelector('.vt-act-badge'), null);
+});
+
+test('badgeTip — 세션 활동의 waiting 배지 문구', async () => {
+  const { ACTIVITIES, badgeTip } = await fresh();
+  const sessions = ACTIVITIES.find((a) => a.id === 'sessions');
+  assert.strictEqual(sessions.badge, 'waiting');
+  assert.strictEqual(badgeTip(sessions, 3), '개입 필요 3');
+  assert.strictEqual(badgeTip(sessions, 0), undefined);
 });
 
 test('클릭과 키보드 — 클릭은 onSelect, ↑↓는 초점만 옮긴다(Enter·Space는 버튼 기본 동작)', async () => {
@@ -249,4 +275,24 @@ test('작업대 — 저장된 값이 없으면 옛 키(ui.dock.width·ui.rail.co
   const html = env.document.documentElement;
   assert.strictEqual(html.style.getPropertyValue('--vt-side-stored'), '420px');
   assert.strictEqual(html.dataset.vtSide, 'strip');
+});
+
+test('작업대 — 레일이 센 waiting 수가 활동 막대 「세션」 배지로 간다(개입 필요 구역을 숨겨도)', async () => {
+  const env = await fresh();
+  Object.defineProperty(env.window, 'innerWidth', { value: 1440, configurable: true });
+  settingsBridge(env.window, { 'ui.side.collapsed': false, 'rail.attention.show': false });
+  const status = { a: 'waiting', b: 'waiting', c: 'working' };
+  env.window.getStatus = (name) => status[name] || 'idle';
+  const root = env.document.createElement('div');
+  env.document.body.appendChild(root);
+  env.mountWorkbench(root, {
+    vtFetch: async (path) => (path === '/api/tmux/sessions' ? [{ name: 'a' }, { name: 'b' }, { name: 'c' }] : {}),
+    getAction: () => () => {},
+    keyHint: () => '',
+  });
+  const badge = () => root.querySelector('[data-activity="sessions"] .vt-act-badge');
+  for (let i = 0; i < 40 && !badge(); i += 1) await new Promise((r) => setTimeout(r, 5));
+  assert.ok(badge(), '세션 배지가 그려진다');
+  assert.strictEqual(badge().textContent, '2');
+  assert.strictEqual(badge().dataset.state, 'waiting');
 });

@@ -32,7 +32,7 @@ export {
   buildHostMenu, resolveActiveHost, hostDetail, reasonLabel, LOCAL_HOST,
 } from '../../js/shell/host-data.js';
 export {
-  deleteWorktreeRow, fetchDiffCount, diffCountStale, cachedDiffCount, createDiffWatcher, msUntilDiffRefresh,
+  deleteWorktreeRow, fetchDiffCount, diffCountStale, cachedDiffCount, createDiffWatcher, msUntilDiffRefresh, answerSessionPrompt,
 } from '../../js/shell/rail-fetch.js';
 export {
   ACTIVITIES, TOOL_ACTIVITIES, availableActivities, activityById, activityByPanelId, badgeTip, stepActivityIndex,

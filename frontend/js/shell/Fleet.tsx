@@ -23,7 +23,7 @@ import { onWorkspaceEvent } from '../core/workspace-ws.js';
 import { createPoll, isStale } from '../core/poll.js';
 // git 배지 캐시·변경 알림 구독·행 조립은 레일과 **같은 것**을 쓴다(같은 shell 청크).
 import {
-  collectSessionRows, syncAgentsFromServer, createDiffWatcher, useLayoutVersion, pollFetch, isNoResponse, type RailDeps,
+  collectSessionRows, syncAgentsFromServer, createDiffWatcher, useLayoutVersion, pollFetch, isNoResponse, answerSessionPrompt, type RailDeps,
 } from './rail-fetch.js';
 import {
   buildRailLists, splitRunning, groupSessionRows, rowMenuItems, rowSummaryDetails, runRowMenu, diffLabel, type SessionRow,
@@ -31,7 +31,7 @@ import {
 } from './rail-data.js';
 import { createRailPrefs } from './rail-prefs.js';
 import { NativeChip } from './NativeChildren.js';
-import { MenuSummary, KeywordLine, OriginMark, ScreensMark, ShareMark, LineageMark, KidsToggle } from './RailRow.js';
+import { MenuSummary, KeywordLine, OriginMark, ScreensMark, ShareMark, LineageMark, KidsToggle, AnswerButtons } from './RailRow.js';
 import { ViewGroup } from './ViewGroup.js';
 import {
   buildHostMenu, hostDetail, LOCAL_HOST,
@@ -121,21 +121,7 @@ function Row(props: {
   const [now, setNow] = createSignal(Date.now());
   const clock = setInterval(() => setNow(Date.now()), 30000);
   onCleanup(() => clearInterval(clock));
-  const hasOptions = () => props.row.status === 'waiting' && props.row.options && props.row.options.length > 0;
   const diff = () => diffLabel(props.row);
-  // P1-1(ADR-33) — 같은 화면의 이중 탭을 여기서 먼저 막는다(서버 409는
-  // 그 다음 방어선 — 다른 화면·느린 네트워크가 만드는 경쟁까지는 이걸로 못
-  // 막는다). 응답이 돌아오기 전까지 이 행의 버튼을 다시 못 누르게 한다.
-  const [answering, setAnswering] = createSignal(false);
-  const handleAnswer = async (key: string) => {
-    if (answering()) return;
-    setAnswering(true);
-    try {
-      await props.onAnswer(key);
-    } finally {
-      setAnswering(false);
-    }
-  };
 
   const longPress = useLongPress(props.onLongPress);
 
@@ -210,24 +196,7 @@ function Row(props: {
         </Show>
         {/* 열려 있지 않은 세션은 키를 보낼 곳(열린 pane)이 없다 — 인라인 승인 버튼 대신 탭해서 연다. */}
         <Show when={props.answers && props.row.status === 'waiting' && props.row.open}>
-          <div class="vt-fleet-answers" onClick={(e) => e.stopPropagation()}>
-            <Show
-              when={hasOptions()}
-              fallback={
-                <button type="button" class="vt-btn sm solid" onClick={props.onOpen}>
-                  {t('터미널로')}
-                </button>
-              }
-            >
-              <For each={props.row.options}>
-                {(opt) => (
-                  <button type="button" class="vt-btn sm" disabled={answering()} onClick={() => void handleAnswer(opt.key)}>
-                    {opt.key} · {opt.label}
-                  </button>
-                )}
-              </For>
-            </Show>
-          </div>
+          <AnswerButtons row={props.row} variant="fleet" onAnswer={props.onAnswer} onTerminal={props.onOpen} />
         </Show>
       </div>
     </div>
@@ -402,24 +371,8 @@ function Fleet(props: { deps: FleetDeps }) {
     props.deps.onOpenTerminal();
   };
 
-  const answerRow = (row: SessionRow, key: string): Promise<void> => {
-    // Codex의 y/p는 문자 선택 뒤 Enter로 확정하지만 `esc`는 문자열 "esc"가
-    // 아니라 실제 ESC 바이트여야 취소된다. 그대로 보내면 프롬프트 입력란에
-    // e·s·c가 찍히고 waiting이 풀리지 않는다.
-    const text = key === 'esc' ? '\x1b' : `${key}\r`;
-    // P1-1(ADR-33) — 토큰이 있으면 함께 보낸다. 서버가 먼저 도착한 요청만
-    // 통과시키고 나머지는 409로 떨어뜨린다. promptId가 없으면(구버전 서버 등) 필드 자체를 안 보내 기존
-    // 동작 그대로 통과한다.
-    const body: Record<string, string> = row.promptId ? { text, prompt_id: row.promptId } : { text };
-    return props.deps.vtFetch(`/api/sessions/${encodeURIComponent(row.sessionId)}/keys`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }).then(() => {}).catch(() => {
-      // 409(경쟁에서 짐)도 그 외 실패도 여기서 조용히 넘긴다 — 재시도하지
-      // 않는다. 다음 폴링(agent status)이 화면을 정정한다.
-    });
-  };
+  // 답 보내기는 데스크톱 레일과 같은 함수(rail-fetch.ts answerSessionPrompt).
+  const answerRow = (row: SessionRow, key: string): Promise<void> => answerSessionPrompt(props.deps, row, key);
 
   const seenRow = (row: SessionRow) => {
     // ackLocal — markSeen의 상위집합(unseen 해제 + done이면 idle로도 내림).

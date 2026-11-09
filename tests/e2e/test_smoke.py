@@ -637,15 +637,35 @@ def test_레일_행_레이아웃이_행_안에_갇힌다(page):
           // 2026-09-19 — 실제 행은 `vt-srow vt-wgrail-row` 두 클래스를 함께
           // 단다(RailRow.tsx). 레이아웃(display:flex 등)은 `vt-srow` 쪽이
           // 들고 있어서, 옛 이름만 붙이면 flex가 아닌 블록을 재게 된다.
-          row.className = 'vt-srow vt-wgrail-row';
+          // 2026-11(리디자인 4단계) — 아이콘 열 + 최대 4줄 + 답 버튼 줄. 개입 필요 행(틴트)이 가장 많이 싣는다.
+          row.className = 'vt-srow vt-wgrail-row is-waiting';
           row.innerHTML = `
-            <span class="vt-srow-state"><svg width="14" height="14"></svg></span>
+            <span class="vt-srow-state"><svg width="16" height="16"></svg></span>
             <div class="vt-srow-main vt-wgrail-row-main">
               <div class="vt-srow-top vt-wgrail-row-top">
-                <span class="vt-wgrail-name">feat/very-long-branch-name-that-never-wraps-anywhere-at-all</span>
-                <span class="vt-wgrail-diff">파일 7</span>
+                <span class="vt-srow-agent vt-wgrail-agent"><svg width="14" height="14"></svg></span>
+                <span class="vt-srow-name vt-wgrail-name">feat/very-long-branch-name-that-never-wraps-anywhere-at-all</span>
+                <button type="button" class="vt-srow-kids"><span>위임 보고 12/20</span></button>
+                <span class="vt-srow-elapsed">59분</span>
+                <button type="button" class="vt-icon-btn sm vt-srow-menu"><svg width="16" height="16"></svg></button>
               </div>
-              <div class="vt-srow-sub vt-wgrail-row-sub">/Users/x/GitHub/work/proj/very/long/path/that/never/wraps</div>
+              <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line2">
+                <span class="vt-srow-workspace-kind">WT</span>
+                <span class="vt-srow-directory">/Users/x/GitHub/work/proj/very/long/path/that/never/wraps</span>
+                <span class="vt-srow-branch with-ico"><span class="vt-srow-branch-ico"><svg width="12" height="12"></svg></span><span class="vt-srow-branch-name">feat/another-very-long-branch-name</span></span>
+                <span class="vt-srow-meta vt-wgrail-diff"><span class="vt-diff-add">+14200</span> <span class="vt-diff-del">−3800</span></span>
+              </div>
+              <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line3">
+                <span class="vt-srow-kw" data-state="waiting">승인 요청</span>
+                <span class="vt-srow-tool">도구: mcp__very_long_server_name__very_long_tool_name</span>
+                <span class="vt-srow-badge">계획 있음</span>
+              </div>
+              <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line4"><span class="vt-srow-screens">다른 화면 12</span></div>
+              <div class="vt-srow-answers">
+                <button type="button" class="vt-btn sm vt-srow-answer"><span class="vt-srow-answer-label">1 · Yes, and don&#39;t ask again for this command in this project directory</span></button>
+                <button type="button" class="vt-btn sm">3 · 아니오</button>
+                <button type="button" class="vt-btn sm quiet">터미널로</button>
+              </div>
             </div>`;
           list.appendChild(row);
           const c = row.getBoundingClientRect();

@@ -116,6 +116,29 @@ export async function pollFetch<T>(deps: Pick<RailDeps, 'vtFetch'>, path: string
 }
 
 /** 서버 응답이 아예 없었던 실패인가(옛 서버의 404 같은 "답은 왔다"와 구분). */
+/**
+ * 개입 필요 행의 인라인 답 버튼 — 고른 선택지 키를 그 세션의 터미널에 보낸다. 데스크톱 레일
+ * (Rail.tsx)과 폰 Fleet(Fleet.tsx)이 같은 함수를 쓴다.
+ *
+ * Codex의 y/p는 문자 선택 뒤 Enter로 확정하지만 `esc`는 문자열 "esc"가 아니라 실제 ESC
+ * 바이트여야 취소된다. 그대로 보내면 프롬프트 입력란에 e·s·c가 찍히고 waiting이 풀리지 않는다.
+ * P1-1(ADR-33) — promptId가 있으면 함께 보낸다. 서버가 먼저 도착한 요청만 통과시키고 나머지는
+ * 409로 떨어뜨린다. 없으면(구버전 서버 등) 필드 자체를 안 보내 기존 동작 그대로 통과한다.
+ * 409(경쟁에서 짐)도 그 외 실패도 조용히 넘긴다 — 재시도하지 않는다. 다음 상태 push가 화면을 정정한다.
+ */
+export function answerSessionPrompt(
+  deps: Pick<RailDeps, 'vtFetch'>, row: Pick<SessionRow, 'sessionId' | 'promptId'>, key: string,
+): Promise<void> {
+  if (!row.sessionId) return Promise.resolve();
+  const text = key === 'esc' ? '\x1b' : `${key}\r`;
+  const body: Record<string, string> = row.promptId ? { text, prompt_id: row.promptId } : { text };
+  return deps.vtFetch(`/api/sessions/${encodeURIComponent(row.sessionId)}/keys`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).then(() => {}).catch(() => {});
+}
+
 export function isNoResponse(e: unknown): boolean {
   const st = (e as { status?: number } | null)?.status;
   return !st;

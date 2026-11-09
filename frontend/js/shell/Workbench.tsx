@@ -58,6 +58,10 @@ function showMcp() {
 function Workbench(props: { deps: WorkbenchDeps }) {
   const [caps, setCaps] = createSignal<Record<string, any> | null>(null);
   const [badges, setBadges] = createSignal<Record<string, number>>({});
+  // 「세션」 배지(waiting 수)는 레일이 이미 세는 값을 받는다 — 폴링하는 큐·포트와 따로 둬야 비동기
+  // 갱신이 서로의 값을 덮지 않는다.
+  const [waitingCount, setWaitingCount] = createSignal(0);
+  const allBadges = createMemo(() => ({ ...badges(), waiting: waitingCount() }));
   // 펼쳤을 때 쓰고 싶은 폭(사용자 의도). 화면에 그리는 폭은 CSS가 창 폭으로 한 번 더 누른다.
   const [storedWidth, setStoredWidth] = createSignal(readSideWidth(_sGet, _sHas));
   const [activity, setActivity] = createSignal(readSideActivity(_sGet, _sHas));
@@ -176,7 +180,7 @@ function Workbench(props: { deps: WorkbenchDeps }) {
         items={available}
         current={current}
         shown={() => mode() !== 'closed'}
-        badges={badges}
+        badges={allBadges}
         onSelect={select}
         onMcp={showMcp}
         onSettings={() => act('settings.show')}
@@ -185,7 +189,7 @@ function Workbench(props: { deps: WorkbenchDeps }) {
       />
       <div id="vt-side" class="vt-side" ref={sideRef} role="tabpanel" aria-label={sideLabel()} hidden={mode() === 'closed'}>
         <div class="vt-side-view vt-side-sessions" hidden={current() !== SESSIONS_ACTIVITY}>
-          <Rail deps={props.deps} collapsed={() => mode() === 'strip'} onToggleCollapse={toggle} />
+          <Rail deps={props.deps} collapsed={() => mode() === 'strip'} onToggleCollapse={toggle} onWaitingCount={setWaitingCount} />
         </div>
         <div class="vt-side-view vt-side-tools" hidden={current() === SESSIONS_ACTIVITY}>
           <Dock deps={props.deps as any} active={openTool} available={available} onExternalOpen={openActivity} />

@@ -99,7 +99,8 @@ export function ActivityBar(props: ActivityBarProps) {
               >
                 <span class="vt-act-ico" innerHTML={shellIcon(a.icon, ICON, STROKE)} />
                 <Show when={badgeOf(a) > 0}>
-                  <span class="vt-badge vt-act-badge" aria-hidden="true">{badgeOf(a) > 99 ? '99+' : badgeOf(a)}</span>
+                  {/* 「세션」 배지는 waiting 세션 수라 호박색(개입 필요와 같은 색), 나머지는 중립. */}
+                  <span class="vt-badge vt-act-badge" data-state={a.badge === 'waiting' ? 'waiting' : undefined} aria-hidden="true">{badgeOf(a) > 99 ? '99+' : badgeOf(a)}</span>
                 </Show>
               </button>
             );
