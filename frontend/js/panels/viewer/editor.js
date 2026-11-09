@@ -54,7 +54,7 @@ const _THEME = EditorView.theme({
   '.cm-content': { padding: 'calc(var(--spacing) * 1.5) 0', caretColor: 'var(--txt)' },
   '.cm-line': { padding: '0 calc(var(--spacing) * 3) 0 0' },
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--txt)' },
-  '.cm-gutters': { backgroundColor: 'var(--crust)', color: 'var(--sub)', border: 'none' },
+  '.cm-gutters': { backgroundColor: 'var(--color-bg-0)', color: 'var(--sub)', border: 'none' },
   '.cm-lineNumbers .cm-gutterElement': {
     minWidth: 'var(--vt-cm-gutter-min, 44px)', padding: '0 var(--vt-cm-gutter-pad, calc(var(--spacing) * 2))',
     boxSizing: 'border-box', userSelect: 'none',

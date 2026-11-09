@@ -64,7 +64,9 @@
 .vt-vw-path::-webkit-scrollbar{ display:none; }
 .vt-vw-body{
   flex:1 1 auto; overflow:auto; overscroll-behavior:contain;
-  background:var(--crust);
+  /* 칸(pane)의 면 = bg-0. 예전에는 --crust(farshell에서 #000)라 위 크롬(bg-1)과 카드(bg-0)보다 한참 어두운 검정 띠로 보였다
+     (2026-11 실기기: 파일 트리 · 마크다운 렌더 · 원문). 사이드바·dock 본문은 80-dock.css가 bg-1로 따로 덮는다. */
+  background:var(--color-bg-0);
 }
 /* 2026-09-18(4차) — 빈 상태 문장 하나가 전부일 때는 위쪽에 붙지 않고 칸
    가운데로 온다(큐·사용량 dock 패널에서 지적된 "내용 밑에 빈 공간이 그대로
