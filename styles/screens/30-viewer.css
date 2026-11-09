@@ -769,6 +769,11 @@ body.vt-resizing #terminal-container{ transition:none; }
 .vt-vw-ss.ok{ color:var(--color-st-working); }
 .vt-vw-ss.bad{ color:var(--color-st-error); }
 .vt-vw-ss.warn{ color:var(--warn); }
+/* 저장 실패 + 원인: 한 줄을 다 차지하고(flex-wrap이라 버튼 위 줄로 올라간다), 원인만 줄임표. */
+.vt-vw-ss-fail{ flex:1 1 100%; min-width:0; max-width:100%; }
+.vt-vw-ss-fail svg{ flex:none; }
+.vt-vw-ss-head{ flex:none; white-space:nowrap; }
+.vt-vw-ss-why{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .vt-vw-cm-edit .cm-content{ caret-color:var(--color-acc); }
 .vt-vw-cm-edit .cm-gutters{ border-right:1px solid color-mix(in srgb, var(--color-st-waiting) 40%, var(--line)); }
 /* 바뀐 줄 표시(editor.js `_chgGutter`): 추가 = 초록 막대, 수정 = 파랑 막대, 삭제 = 그 줄 위(파일 끝이면 아래)의 빨강 쐐기.

@@ -85,6 +85,63 @@ export function writeErrorText(e) {
   }
 }
 
+/**
+ * 저장 실패 칩 옆에 붙일 짧은 원인(폰 한 줄용). 서버가 주는 한국어 `reason`은 그대로 쓰지 않는다 — 영어 화면에서
+ * 한국어가 섞이기 때문에 오류 코드(없으면 HTTP 상태)를 `t()` 문구로 옮긴다. 모르는 코드는 일반 문구에 코드를 붙인다.
+ */
+export function writeErrorShort(e) {
+  if (isTimeoutError(e)) return t('응답이 없습니다');
+  const d = (e && e.data) || {};
+  const code = (e && e.code) || d.error || '';
+  switch (code) {
+    case 'human_session_required': return t('브라우저 로그인이 필요합니다');
+    case 'password_required': return t('웹 로그인 비밀번호를 설정하세요');
+    case 'elevation_required': return t('비밀번호 재확인이 필요합니다');
+    case 'unauthorized': return t('로그인이 필요합니다');
+    case 'forbidden': return t('접근이 허용되지 않습니다');
+    case 'rate_limited': return t('요청이 너무 많습니다');
+    case 'audit_unavailable': return t('감사 기록을 쓸 수 없습니다');
+    case 'lease_conflict': return t('다른 세션이 쓰는 경로입니다');
+    case 'lease_unavailable': return t('lease 저장소를 읽을 수 없습니다');
+    case 'changed': return t('경로가 바뀌었습니다');
+    case 'conflict': return t('저장 전에 파일이 바뀌었습니다');
+    case 'save_id_reused': return t('저장 번호가 겹쳤습니다 — 다시 저장하세요');
+    case 'busy':
+    case 'in_progress': return t('다른 쓰기가 진행 중입니다');
+    case 'fs_unavailable': return t('파일 작업이 밀려 있습니다');
+    case 'too_large': return t('2 MB 초과');
+    case 'no_space': return t('디스크가 가득 찼습니다');
+    case 'not_writable': return t('쓸 수 없는 위치입니다');
+    case 'denied': return t('쓰기가 금지된 위치입니다');
+    case 'unencodable': return t('인코딩할 수 없는 글자가 있습니다');
+    case 'hardlinked': return t('하드 링크 파일입니다');
+    case 'not_editable': return t('편집할 수 없는 파일입니다');
+    case 'not_found': return t('파일이 없습니다');
+    case 'is_directory': return t('폴더입니다');
+    case 'not_a_file': return t('일반 파일이 아닙니다');
+    case 'is_symlink': return t('심링크입니다');
+    case 'exists': return t('같은 이름이 있습니다');
+    case 'write_failed': return t('파일을 쓰지 못했습니다');
+    case 'bad_json':
+    case 'bad_path':
+    case 'bad_rev':
+    case 'bad_save_id':
+    case 'bad_content':
+    case 'bad_encoding':
+    case 'bad_eol':
+    case 'bad_overwrite':
+    case 'bad_kind':
+    case 'bad_name': return t('잘못된 요청입니다 ({code})', { code });
+    default: break;
+  }
+  const st = e && e.status;
+  if (!code && st === 401) return t('로그인이 필요합니다');
+  if (!code && st === 403) return t('접근이 허용되지 않습니다');
+  if (!code && st === 413) return t('2 MB 초과');
+  if (!code && !st) return t('서버에 닿지 않았습니다');
+  return t('서버가 거절했습니다 ({code})', { code: code || (st ? `HTTP ${st}` : '?') });
+}
+
 function _toast(msg, kind) {
   if (typeof window.showToast === 'function') window.showToast(msg, kind);
 }
