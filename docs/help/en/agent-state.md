@@ -77,7 +77,7 @@ Change the values with `VT_AGENT_TTL_WORKING` / `_WAITING` / `_DONE` (seconds).
 
 An agent creates a child session with `spawn_session`, hands it work, and gets the result back as
 `[Delegation result …]` input. The child session starts in the default permission mode, so approval
-requests show up on your phone, and you can open that session from the rail and step in at any time.
+requests show up on your phone, and you can open that session from the sidebar's Sessions view and step in at any time.
 A child session can't create further child sessions, and each parent can have at most 3 open child
 sessions. To turn it off, set `VT_AGENT_SPAWN=0`.
 List and close: `fsh delegate ls`, `fsh delegate close <id>` (the session is kept).

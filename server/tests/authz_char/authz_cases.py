@@ -284,7 +284,7 @@ RELAY_SAMPLES = {
     r"/api/files/[^/]+/(download|path)": "/api/files/abc/download",
     r"/api/files/[^/]+/insert": "/api/files/abc/insert",
     r"/api/upload": "/api/upload",
-    r"/api/fs/(file|raw|roots|search|tree)": "/api/fs/raw?path=%2Fetc%2Fhosts",
+    r"/api/fs/(file|grep|grep/progress|raw|roots|search|tree)": "/api/fs/raw?path=%2Fetc%2Fhosts",
     r"/api/git/(status|diff|log|show)": "/api/git/status",
     r"/api/git/(stage|unstage|commit)": "/api/git/commit",
     r"/api/ports": "/api/ports",

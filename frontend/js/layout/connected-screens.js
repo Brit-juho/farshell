@@ -15,6 +15,7 @@ import { activeSessionId, getSession } from '../core/store.js';
 import { registerAction } from '../core/dom.js';
 import { mountClients } from './clients.js';
 import { t } from '../core/i18n.js';
+import { icon } from '../ui/icons.js';
 
 let _cleanup = null;
 let _onKey = null;
@@ -66,8 +67,8 @@ export function openPanel(explicitSessionId) {
   title.textContent = t('연결된 화면');
   const x = document.createElement('button');
   x.type = 'button';
-  x.className = 'vt-btn sm quiet vt-wtd-x';
-  x.textContent = '×';
+  x.className = 'vt-icon-btn vt-wtd-x';
+  x.innerHTML = icon('x', 14);
   x.setAttribute('aria-label', t('닫기'));
   x.addEventListener('click', closePanel);
   head.append(title, x);
@@ -79,6 +80,14 @@ export function openPanel(explicitSessionId) {
   backdrop.appendChild(card);
   document.body.appendChild(backdrop);
 
+  // 리디자인 6단계(시안 O12) — 상태 막대의 「화면 N」 칩이 보이면 그 칩 위로 여는 떠 있는 면이다(뒤 막 없이, 칩 왼쪽에 맞춰).
+  // 칩이 없는 자리(레일 행 메뉴 · 폰)에서 열면 예전처럼 가운데 창. 바깥을 누르면 닫히는 것은 같다.
+  const chip = document.querySelector('#vt-hud [data-chip="screens"]');
+  const r = chip?.getBoundingClientRect();
+  if (r && r.width > 0 && window.innerWidth >= 720) {
+    backdrop.classList.add('vt-screens-pop');
+    card.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - Math.min(360, window.innerWidth - 16) - 8))}px`;
+  }
   _shownSessionId = targetId;
   _cleanup = mountClients(body, tmuxName, activeSess.remote, targetId);
   _onKey = pushScope({ id: 'connected-screens', element: backdrop, modal: true, onKey: (e) => {

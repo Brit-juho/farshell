@@ -489,12 +489,18 @@ def test_raw_serves_the_image_bytes_with_nosniff(client, repo):
     assert r.content == PNG_1PX
 
 
-def test_raw_refuses_svg(client, repo):
-    """SVG는 스크립트를 품을 수 있다 — 같은 오리진에서 열면 XSS다.
-    (텍스트라 뷰어는 어차피 소스로 보여준다 — 잃는 게 없다.)"""
+def test_raw_serves_svg_only_under_a_sandbox_csp(client, repo):
+    """SVG는 스크립트를 품을 수 있다 — 같은 오리진에서 문서로 열면 XSS다. 그래서 내보낼 때 언제나 sandbox CSP를
+    붙인다(결정 D8: 화면은 `<img>`로만 그리고, 주소를 직접 열어도 스크립트가 돌지 않는다)."""
     p = repo / "icon.svg"
     p.write_text('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>')
-    assert client.get(f"/api/fs/raw?path={p}").status_code == 403
+    r = client.get(f"/api/fs/raw?path={p}")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("image/svg+xml")
+    csp = r.headers["content-security-policy"]
+    assert "sandbox" in csp and "default-src 'none'" in csp and "frame-ancestors 'none'" in csp
+    assert "allow-scripts" not in csp
+    assert r.headers["x-content-type-options"] == "nosniff"
 
 
 def test_raw_refuses_html_renamed_to_png(client, repo):
@@ -627,3 +633,41 @@ def test_upload_waits_for_the_store_lock_without_blocking_the_loop(client, file_
     r, gap = _loop_gaps_during(lambda ac: ac.post("/api/upload", files={"file": ("a.txt", b"hello")}))
     assert r.status_code == 200, r.text
     assert gap < 0.3, f"이벤트 루프가 {gap:.2f}초 멈췄다"
+
+
+# --- /api/fs/tree 페이지(계획 4.4) ------------------------------------------------------
+
+
+def test_fs_tree_pages_with_after_cursor(client, repo):
+    big = repo / "big"
+    big.mkdir()
+    for i in range(12):
+        (big / f"n{i:02d}.txt").write_text("")
+    (big / ".env").write_text("SECRET=1")
+    r = client.get("/api/fs/tree", params={"path": str(big), "limit": 5})
+    assert r.status_code == 200
+    first = r.json()
+    assert [e["name"] for e in first["entries"]] == [f"n{i:02d}.txt" for i in range(5)]
+    assert first["total"] == 12 and first["next"] and first["truncated"] is True
+    names = [e["name"] for e in first["entries"]]
+    nxt = first["next"]
+    while nxt:
+        page = client.get("/api/fs/tree", params={"path": str(big), "limit": 5, "after": nxt}).json()
+        assert all("children" not in e for e in page["entries"])
+        names += [e["name"] for e in page["entries"]]
+        nxt = page["next"]
+    assert names == [f"n{i:02d}.txt" for i in range(12)]   # 거부 이름(.env)은 어느 페이지에도 없다
+
+
+def test_fs_tree_rejects_bad_cursor_and_limit(client, repo):
+    r = client.get("/api/fs/tree", params={"path": str(repo), "after": "%%%"})
+    assert r.status_code == 400 and r.json()["error"] == "bad_cursor"
+    assert client.get("/api/fs/tree", params={"path": str(repo), "limit": 0}).status_code == 422
+    assert client.get("/api/fs/tree", params={"path": str(repo), "limit": 1001}).status_code == 422
+
+
+def test_fs_tree_cursor_does_not_bypass_path_check(client, repo):
+    import routes.files as F
+    cur = F.encode_cursor(F._sort_key(False, "a"))
+    r = client.get("/api/fs/tree", params={"path": "/etc", "after": cur})
+    assert r.status_code == 403

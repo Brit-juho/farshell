@@ -67,31 +67,24 @@ test('finished rows perform exactly three final retries and visibility pauses wo
   poll.stop(); assert.equal(timers.size, 0);
 });
 
-test('viewer renders hostile text literally and replaces temporary final answer', async () => {
+// 리디자인 6단계(시안 O15) — 따로 뜨던 「서브에이전트 기록」 창은 없어지고 기록 본체만 남았다(작업 기록 창 오른쪽이 쓴다).
+test('transcript renders hostile text literally and replaces the temporary final answer', async () => {
   const { mod, window, document } = await load('panels/subagent-viewer.js');
-  let next = { parent_id: 'parent', state: 'done', next_cursor: 'cursor', items: [], last_message: '<img src=x onerror=alert(1)>', pending: false };
+  let next = { parent_id: 'parent', state: 'done', next_cursor: 'cursor', items: [], last_message: '<img src=x onerror=alert(1)>', pending: false, label: '<b>Scout</b>' };
   window.vtFetch = async () => next;
   window.agentDetails = () => ({ sample: { subagents: { parent_id: 'parent', items: [{ id: 'child', state: 'done' }] } } });
-  mod.showSubagent({ tmuxName: 'sample', parentId: 'parent', child: { id: 'child', label: '<b>Scout</b>', state: 'done' }, host: 'local' });
+  const list = document.createElement('div'); document.body.append(list);
+  const metas = [];
+  const view = mod.mountSubagentTranscript(list, { tmuxName: 'sample', parentId: 'parent', child: { id: 'child', label: 'Scout', state: 'done' }, host: 'local', meta: (m) => metas.push(m) });
   await flush();
-  assert.equal(document.querySelector('#vt-subagent img'), null);
-  assert.equal(document.querySelector('#vt-subagent b'), null);
-  assert.match(document.querySelector('.vt-native-transcript').textContent, /<img src=x/);
+  assert.equal(list.querySelector('img'), null);
+  assert.equal(metas.at(-1).label, '<b>Scout</b>', '이름은 호출자가 textContent로 넣는다');
+  assert.match(list.textContent, /<img src=x/);
+  assert.match(list.querySelector('.vt-wl-entry-sub').textContent, /기록 반영 대기/);
   next = { ...next, items: [{ id: 'answer', kind: 'assistant', text: next.last_message }] };
-  document.querySelector('#vt-subagent .vt-native-refresh').click(); await flush();
-  assert.equal(document.querySelectorAll('.vt-native-entry').length, 1);
-  document.querySelector('#vt-subagent .vt-vw-x').click();
-  assert.equal(document.getElementById('vt-subagent'), null);
-});
-
-test('mobile child picker replaces its panel before opening the transcript', async () => {
-  const { mod, window, document } = await load('panels/subagent-viewer.js');
-  Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true });
-  window.vtFetch = async () => ({ parent_id: 'parent', state: 'done', items: [{ id: 'a', kind: 'assistant', text: 'recorded' }] });
-  mod.showSubagents({ tmuxName: 'sample', parentId: 'parent', items: [{ id: 'child', label: 'Scout', state: 'done' }], host: 'local' });
-  assert.equal(document.querySelectorAll('.vt-native-picker').length, 1);
-  document.querySelector('.vt-native-picker').click();
-  await flush();
-  assert.equal(document.querySelectorAll('.vt-native-entry').length, 1);
-  window.closePanel('vt-subagent', { history: 'replace' });
+  view.refresh(); await flush();
+  assert.equal(list.querySelectorAll('.vt-wl-entry').length, 1);
+  view.stop();
+  assert.equal(typeof mod.showSubagent, 'undefined', '예전 별도 창 진입점은 없다');
+  assert.equal(typeof mod.showSubagents, 'undefined');
 });

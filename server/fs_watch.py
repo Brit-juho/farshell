@@ -10,6 +10,10 @@
   편집기·에이전트는 대개 새 파일을 쓰고 rename으로 바꿔치기하므로 원래
   inode를 보면 첫 저장 뒤로 이벤트가 끊긴다.
 - `dir` — 디렉토리의 바로 아래 항목(비재귀). 트리의 펼친 디렉토리용.
+- `tree` — 파일 트리 루트 하나(재귀). 펼친 폴더마다 `dir`을 걸면 연결당 64개 상한에 걸리고, 폴더 하나가
+  바뀌어도 어느 폴더인지 몰라 펼친 폴더 전부를 다시 받아야 했다(루트 변경 1번에 목록 101회). 그래서 알림에
+  **바뀐 디렉토리 목록**(루트 기준 상대경로, 최대 `MAX_TREE_DIRS`개, 넘으면 `overflow`)을 붙인다. 트리가 감추는
+  폴더(`EXCLUDE_DIRS`·숨김 상태 폴더)와 거부 목록 이름은 목록에 넣지 않는다 — 이름조차 내보내지 않는다.
 - `repo` — 작업 디렉토리 전체(재귀). `.git` 안은 `index`·`HEAD`·`refs/`만
   센다 — `git status` 자신이 건드리는 `index.lock`·`objects/`에 반응하면 갱신이
   갱신을 부른다. `fsguard.EXCLUDE_DIRS`(node_modules 등) 아래 변경은 버린다.
@@ -24,7 +28,8 @@
 - 구독 경로는 전부 `fsguard.resolve_under_roots`를 통과해야 한다(AGENTS.md 계약 2 —
   경로 판정은 fsguard 한 곳). 거부 목록 이름(`.env` 등)의 변경은 알리지 않는다.
 - 알림에는 클라이언트가 보낸 구독 문자열만 되돌려준다. 바뀐 파일의 실제 경로는
-  내보내지 않는다.
+  내보내지 않는다. 예외는 `tree`의 `dirs`(바뀐 **디렉토리**의 루트 기준 상대경로)뿐이고, 그 목록은 트리 목록
+  (`/api/fs/tree`)이 보여 줄 수 있는 폴더로만 걸러진다.
 """
 
 from __future__ import annotations
@@ -39,7 +44,9 @@ import fsguard
 
 logger = logging.getLogger(__name__)
 
-KINDS = ("file", "dir", "repo")
+KINDS = ("file", "dir", "repo", "tree")
+# `tree` 알림 한 번에 실을 바뀐 디렉토리 수. 넘으면 `overflow: true` — 클라이언트가 받아 둔 목록을 전부 다시 받는다.
+MAX_TREE_DIRS = 200
 # 한 연결이 동시에 구독할 수 있는 수. 트리를 많이 펼쳐도 이 정도면 충분하다.
 MAX_SUBS_PER_CLIENT = 64
 # 편집기의 "임시 파일 쓰기 → rename" 한 번이 여러 이벤트로 오므로 묶는다.
@@ -117,9 +124,40 @@ def watch_targets(subs: Iterable[Sub]) -> tuple[frozenset[Path], frozenset[Path]
             flat.add(s.path.parent)
         elif s.kind == "dir":
             flat.add(s.path)
-        else:
+        else:   # repo · tree
             deep.add(s.path)
     return frozenset(flat), frozenset(deep)
+
+
+def _tree_visible_dir(rel: tuple[str, ...]) -> bool:
+    """루트 기준 상대 디렉토리가 트리 목록에 나올 수 있는가 — `routes/files.py` `_list_dir`가 감추는 폴더
+    (EXCLUDE_DIRS, 숨김 상태 폴더)나 거부 이름이 경로에 끼어 있으면 아니다."""
+    for part in rel:
+        if part in fsguard.EXCLUDE_DIRS or fsguard.is_hidden_state_dir_name(part) or fsguard._is_denied_name(part):
+            return False
+    return True
+
+
+def tree_dirs(sub: Sub, changed: Iterable[Path]) -> tuple[list[str], bool]:
+    """`tree` 구독에서 목록이 바뀌었을 디렉토리들(루트 기준 상대경로, 루트 자신은 "")과 넘침 여부.
+
+    바뀐 경로 하나는 **그 부모 디렉토리**의 목록을 바꾼다(추가·삭제·크기). 정렬해서 돌려준다."""
+    out: set[str] = set()
+    for cp in changed:
+        try:
+            rel = cp.parent.relative_to(sub.path).parts
+        except ValueError:
+            continue
+        if not _tree_visible_dir(rel):
+            continue
+        # 바뀐 것 자체가 감춰지는 폴더(node_modules 등)면 목록에 나오지 않으므로 알릴 것이 없다.
+        name = cp.name
+        if name in fsguard.EXCLUDE_DIRS or fsguard.is_hidden_state_dir_name(name):
+            continue
+        out.add("/".join(rel))
+        if len(out) > MAX_TREE_DIRS:
+            return [], True
+    return sorted(out), False
 
 
 def _repo_relevant(rel: tuple[str, ...]) -> bool:
@@ -146,6 +184,8 @@ def match(subs: Iterable[Sub], changed: Iterable[str]) -> list[Sub]:
                 ok = cp == s.path
             elif s.kind == "dir":
                 ok = cp.parent == s.path
+            elif s.kind == "tree":
+                ok = bool(tree_dirs(s, [cp])[0])
             else:
                 try:
                     ok = _repo_relevant(cp.relative_to(s.path).parts)
@@ -234,10 +274,21 @@ class Hub:
 
     async def _dispatch(self, changed: list[str]) -> None:
         sends = []
+        paths = [Path(p) for p in changed if not fsguard._is_denied_name(Path(p).name)]
         for send, subs in list(self._clients.values()):
             hit = match(subs, changed)
-            if hit:
-                sends.append(_safe_send(send, {"type": "changed", "subs": [s.key() for s in hit]}))
+            plain = [s for s in hit if s.kind != "tree"]
+            if plain:
+                sends.append(_safe_send(send, {"type": "changed", "subs": [s.key() for s in plain]}))
+            # `tree`는 구독마다 따로 보낸다 — `dirs`가 그 루트 기준이라 한 메시지에 섞을 수 없다.
+            for s in hit:
+                if s.kind != "tree":
+                    continue
+                dirs, overflow = tree_dirs(s, paths)
+                msg: dict = {"type": "changed", "subs": [s.key()], "dirs": dirs}
+                if overflow:
+                    msg["overflow"] = True
+                sends.append(_safe_send(send, msg))
         await asyncio.gather(*sends)
 
     async def _broadcast(self, msg: dict) -> None:

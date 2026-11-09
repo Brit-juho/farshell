@@ -37,8 +37,12 @@ registerKey('paste', (e) => {
   else pasteFromClipboard(id);
 });
 
-// 레일 토글 — 현재 Rail.tsx의 접기/펴기 버튼과 같은 경로를 쓴다.
+// 사이드바 토글(id는 옛 이름 railToggle 그대로 — 사용자 재지정이 이 id에 저장돼 있다).
+// 작업대(Workbench.tsx, 지연 청크)가 마운트되며 window.vtSideToggle을 연다. 지금 활동이
+// 세션이면 48px 띠 ↔ 펼침, 도구면 0 ↔ 펼침. 작업대가 아직 없으면(초기 로드 경합) 예전처럼
+// 레일 머리의 접기 버튼을 누른다.
 registerKey('railToggle', () => {
+  if (typeof window.vtSideToggle === 'function') { window.vtSideToggle(); return; }
   const btn = document.querySelector('#vt-wgrail .vt-wgrail-collapse');
   if (btn) btn.click();
 });

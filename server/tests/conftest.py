@@ -129,6 +129,26 @@ def _no_real_tmux_hooks(request, monkeypatch):
 
 
 
+@pytest.fixture(autouse=True)
+def _no_real_trash(monkeypatch):
+    """어떤 서버 시험도 진짜 휴지통으로 파일을 옮기지 못하게 한다.
+
+    macOS에서 `HOME`을 바꿔도 `NSFileManager trashItemAtURL`은 계정의 진짜 `~/.Trash`로 옮긴다(위 HOME 격리가
+    닿지 않는다). 그래서 기본은 휴지통 없음(`IMPL="none"` → 409 `trash_unavailable`)이고, macOS 도우미를 부르는
+    `_run_helper`는 부르면 시험이 실패한다. Linux 휴지통 경로는 `XDG_DATA_HOME`을 지워 시험 전용 HOME 아래로만 간다.
+    휴지통 동작을 보는 시험은 `IMPL`을 직접 고르고(`freedesktop` + 임시 `XDG_DATA_HOME`), macOS 쪽은 `_run_helper`를
+    가짜로 바꾼다. 진짜 도우미는 디스크 이미지 위 파일로만 돌린다(`tests/e2e`, `VT_E2E_TRASH_DIR`).
+    """
+    import fs_trash
+
+    def _refuse(*a, **k):
+        raise AssertionError("server tests must not run the real macOS trash helper — fake fs_trash._run_helper")
+    monkeypatch.setattr(fs_trash, "IMPL", "none")
+    monkeypatch.setattr(fs_trash, "_run_helper", _refuse)
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    yield
+
+
 @pytest.fixture
 def process_table():
     """실제 프로세스 표를 읽어야 하는 테스트의 환경 전제조건.

@@ -119,6 +119,18 @@ test('교체되면 기존 타이머가 갱신된다 (옛 타이머가 새 내용
   assert.strictEqual(els[0].textContent, '새것');
 });
 
+test('상태 막대 메시지 칸만 role=status + aria-live=polite (막대 전체는 아니다)', async () => {
+  const { window, showToast } = await buildWindow({ hud: true });
+  window.innerWidth = 1440;
+  showToast('복사했습니다', 'success');
+  const el = hudMsg(window);
+  assert.ok(el, '넓은 화면의 success는 상태 막대 메시지 칸으로 간다');
+  assert.strictEqual(el.getAttribute('role'), 'status');
+  assert.strictEqual(el.getAttribute('aria-live'), 'polite');
+  assert.strictEqual(window.document.getElementById('vt-hud').getAttribute('role'), null);
+  assert.ok(window.document.getElementById('vt-hud').classList.contains('vt-hud-busy'));
+});
+
 test('에러만 role=alert, 나머지는 role=status (aria-live 보완)', async () => {
   const { window, showToast } = await buildWindow();
   showToast('보통');
@@ -213,6 +225,24 @@ test('HUD 가 있어도 warn/error 는 카드로 뜬다 — 읽어야 하는 것
   assert.strictEqual(hudMsg(window), null, 'HUD 줄은 만들지도 않는다');
 });
 
+test('데스크톱 집중 모드에서 상태 막대가 숨어 있으면 info/success는 카드로 간다(보이고 낭독되게)', async () => {
+  const { window, showToast } = await buildWindow({ hud: true });
+  window.innerWidth = 1440;
+  const root = window.document.documentElement;
+  root.classList.add('vt-focus');
+  showToast('복사됨', 'success');
+  showToast('동기화 중', 'info');
+  const cards = toasts(window);
+  assert.deepStrictEqual(cards.map((e) => e.textContent), ['복사됨', '동기화 중'], '숨은(inert) 상태 막대 칸에 쓰지 않는다');
+  for (const c of cards) assert.strictEqual(c.getAttribute('role'), 'status', '카드는 낭독된다');
+  assert.strictEqual(hudMsg(window), null);
+  // 아래 가장자리로 상태 막대를 드러낸 동안은 그 칸을 쓴다.
+  root.classList.add('vt-reveal-bottom');
+  showToast('저장됨', 'success');
+  assert.strictEqual(toasts(window).length, 2);
+  assert.strictEqual(hudMsg(window).textContent, '저장됨');
+});
+
 test('HUD 줄도 같은 문구를 합쳐 횟수를 붙인다', async () => {
   const { window, showToast } = await buildWindow({ hud: true });
   showToast('클립보드 동기화됨');
@@ -233,4 +263,61 @@ test('같은 key 는 등급이 달라도 한 마디 — 진행(HUD)이 실패(�
   assert.strictEqual(hudMsg(window).hidden, true,
     '한 동작이 두 자리에서 서로 다른 말을 하면 안 된다');
   assert.deepStrictEqual(toasts(window).map((e) => e.textContent), ['이미지 업로드 실패 (500)']);
+});
+
+// 리디자인 6단계(시안 O16-D) — 카드 340: 아이콘 · 머리(문구·×N) · 보조 줄 · 동작 버튼 · × 닫기.
+test('카드는 보조 줄과 동작 버튼을 글자로만 그리고, 동작을 누르면 실행 뒤 닫힌다', async () => {
+  const { showToast } = await buildWindow({ hud: true });
+  let ran = 0;
+  const el = showToast('<b>서버 저장 실패</b>', 'error', {
+    detail: '<img src=x onerror=alert(1)>', actions: [{ label: '<i>다시 저장</i>', onClick: () => { ran++; } }],
+  });
+  assert.strictEqual(el.querySelector('b, img, i'), null, '서버 문구는 마크업으로 해석되지 않는다');
+  assert.strictEqual(el.querySelector('.vt-toast-text').textContent, '<b>서버 저장 실패</b>');
+  assert.strictEqual(el.querySelector('.vt-toast-detail').textContent, '<img src=x onerror=alert(1)>');
+  assert.ok(el.querySelector('.vt-toast-icon svg'), '경고·실패는 아이콘이 붙는다');
+  el.querySelector('.vt-toast-actions button').click();
+  assert.strictEqual(ran, 1);
+  assert.ok(el.classList.contains('leaving'), '동작을 누르면 카드가 비킨다');
+});
+
+test('동작이 있는 info는 상태 막대 칸이 아니라 카드로 간다', async () => {
+  const { window, showToast } = await buildWindow({ hud: true });
+  showToast('새 버전', 'info', { actions: [{ label: '새로고침', onClick: () => {} }] });
+  assert.strictEqual(hudMsg(window), null);
+  assert.strictEqual(toasts(window).length, 1);
+});
+
+test('× 닫기는 그 카드만 닫고, 보조 줄이 다르면 합치지 않는다', async () => {
+  const { window, showToast } = await buildWindow();
+  showToast('업로드 실패', 'error', { detail: 'a.m4a' });
+  showToast('업로드 실패', 'error', { detail: 'a.m4a' });
+  showToast('업로드 실패', 'error', { detail: 'b.m4a' });
+  const els = toasts(window);
+  assert.strictEqual(els.length, 2);
+  assert.strictEqual(els[0].querySelector('.vt-toast-count').textContent, '×2');
+  els[1].querySelector('.vt-toast-x').click();
+  assert.ok(els[1].classList.contains('leaving'));
+  assert.ok(!els[0].classList.contains('leaving'));
+});
+
+// 다운로드 진행 카드(panels/viewer/download.js)는 200ms마다 같은 key로 다시 칠해진다.
+test('같은 key로 다시 칠해도 같은 동작 단추는 그대로 두고 새 동작만 건다(누르는 사이 단추가 바뀌지 않게)', async () => {
+  const { showToast } = await buildWindow({ hud: true });
+  const ran = [];
+  const el = showToast('a 받는 중 · 10%', 'info', { key: 'dl', duration: 0, actions: [{ label: '취소', onClick: () => ran.push(1) }] });
+  const btn = el.querySelector('.vt-toast-actions button');
+  showToast('a 받는 중 · 20%', 'info', { key: 'dl', duration: 0, actions: [{ label: '취소', onClick: () => ran.push(2) }] });
+  assert.strictEqual(el.querySelector('.vt-toast-actions button'), btn, '단추 요소가 같다');
+  btn.click();
+  assert.deepStrictEqual(ran, [2], '마지막으로 건 동작이 돈다');
+});
+
+test('같은 key의 끝맺음이 상태 막대로 가면 떠 있던 진행 카드를 거둔다', async () => {
+  const { window, showToast } = await buildWindow({ hud: true });
+  const card = showToast('a 받는 중', 'info', { key: 'dl', duration: 0, actions: [{ label: '취소', onClick: () => {} }] });
+  assert.strictEqual(toasts(window).length, 1);
+  showToast('a 받음', 'success', { key: 'dl' });
+  assert.ok(card.classList.contains('leaving'), '「받는 중」 카드가 남지 않는다');
+  assert.strictEqual(hudMsg(window).hidden, false);
 });

@@ -21,7 +21,7 @@
   <title>FarShell</title>
   <link rel="icon" type="image/png" href="/static/icon-192.png">
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#131316" id="theme-color-meta">
+  <meta name="theme-color" content="#17181b" id="theme-color-meta">
   <link rel="apple-touch-icon" href="/static/icon-192.png">
   <link rel="stylesheet" href="/static/vendor/xterm.min.css">
   <!-- 2.1.6 타이포 교체: UI 한글의 정본 글꼴. 여기서 app.css보다 **먼저**
@@ -87,11 +87,13 @@
        두 번째 인자로만** 준다(farshell 기본 스킨 값). 하드코딩 hex를 규칙으로
        두면 토큰이 움직일 때 로그인 화면만 조용히 옛 색으로 남는다 —
        실제로 이전 버전이 애플 블루(#0a84ff)에 묶여 있어서, 앰버 액센트로
-       바뀐 제품에 브라우저 기본 폼처럼 생긴 로그인이 붙어 있었다. -->
+       바뀐 제품에 브라우저 기본 폼처럼 생긴 로그인이 붙어 있었다.
+       (2026-11 리디자인 3단계에서 farshell 팔레트가 파랑 액센트로 바뀌어 폴백도
+       같이 옮겼다.) -->
   <style>
     #login-gate{position:fixed;inset:0;z-index:100000;display:grid;place-items:center;
       padding:24px calc(20px + env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
-      background:var(--color-bg-0,#08090a);color:var(--color-txt,#e8e9ea);
+      background:var(--color-bg-0,#121316);color:var(--color-txt,#ecebe8);
       font-family:var(--font-ui,-apple-system,BlinkMacSystemFont,system-ui,sans-serif);
       -webkit-font-smoothing:antialiased;}
     #login-gate[hidden]{display:none;}
@@ -104,9 +106,9 @@
     #login-spinner[hidden]{display:none;}
     .login-spin-ring{width:22px;height:22px;border-radius:50%;
       border:2px solid var(--color-line-strong,rgb(255 255 255 / .14));
-      border-top-color:var(--color-acc,#f0a860);
+      border-top-color:var(--color-acc,#7aa2ff);
       animation:login-spin .7s linear infinite;}
-    #login-spin-label{margin:0;font-size:var(--fs-sm,13.5px);color:var(--color-sub,#8e9296);}
+    #login-spin-label{margin:0;font-size:var(--fs-sm,13px);color:var(--color-sub,#a9a7a2);}
     /* app.css의 vtSpin과 값이 같은 키프레임이지만, 번들 CSS 도착 전에도 돌아야
        하므로 여기 복제본을 남긴다(D6과 같은 이유). */
     @keyframes login-spin{to{transform:rotate(360deg)}}
@@ -118,25 +120,23 @@
        배경 단차를 아예 지워서 카드가 아니라 **화면 자체**가 되게 한다 —
        390px 폭에서 20px 여백 안에 카드를 또 그리면 남는 폭이 없다. */
     #login-form{width:min(380px,100%);box-sizing:border-box;
-      background:var(--color-bg-1,#0e1011);
+      background:var(--color-bg-1,#17181b);
       border:1px solid var(--color-line,rgb(255 255 255 / .07));
-      border-radius:var(--radius-lg,10px);padding:28px 24px;}
+      border-radius:var(--radius-lg,8px);padding:28px 24px;}
     #login-form[hidden]{display:none;}
-    @media (max-width:480px){
-      #login-form{background:none;border:none;border-radius:0;padding:0;}
-    }
+    /* 폰(480 아래)은 카드 그대로 위에 붙인다 — 이 style 요소 맨 끝의 리디자인 8단계 블록(뒤에 와야 아래 입력·버튼 규칙을 이긴다). */
 
     /* 제품 표식: 자물쇠가 아니라 터미널이다. 자물쇠는 "잠겼다"만 말하고 이 화면이
        무엇인지는 말하지 않는다 — 문장이 이미 잠금을 말하고 있으니 마크는 제품을
        말하게 한다. 호스트 줄은 장식이 아니라 정보다: 터널 URL이 여러 개일 때
        지금 어느 맥에 로그인하는지가 여기서만 보인다. */
-    .login-mark{display:block;color:var(--color-acc,#f0a860);margin:0 0 14px;}
-    #login-form h1{margin:0 0 6px;font-size:var(--fs-lg,20px);font-weight:var(--weight-semibold,600);
+    .login-mark{display:block;color:var(--color-acc,#7aa2ff);margin:0 0 14px;}
+    #login-form h1{margin:0 0 6px;font-size:var(--fs-lg,22px);font-weight:var(--weight-semibold,600);
       letter-spacing:var(--tracking-tight,-0.02em);line-height:var(--leading-tight,1.2);}
-    #login-form .login-sub{margin:0;font-size:var(--fs-sm,13.5px);color:var(--color-sub,#8e9296);
+    #login-form .login-sub{margin:0;font-size:var(--fs-sm,13px);color:var(--color-sub,#a9a7a2);
       line-height:var(--leading-body,1.6);}
     #login-host{margin:2px 0 0;font-family:var(--font-mono,ui-monospace,monospace);
-      font-size:var(--fs-2xs,11px);color:var(--color-faint,#5d6164);
+      font-size:var(--fs-2xs,11px);color:var(--color-faint,#706e68);
       word-break:break-all;line-height:var(--leading-row,1.35);}
     .login-fields{margin-top:22px;}
 
@@ -145,23 +145,23 @@
        그 칸이 무엇이었는지가 사라지고, OTP 단계가 열리면 칸이 둘이 된다.
        글자 16px는 취향이 아니라 iOS 대응이다 — 그보다 작으면 포커스할 때
        사파리가 화면을 확대한다. */
-    .login-label{display:block;margin:0 0 6px;font-size:var(--fs-xs,12.5px);
-      color:var(--color-sub,#8e9296);font-weight:var(--weight-medium,500);}
+    .login-label{display:block;margin:0 0 6px;font-size:var(--fs-xs,12px);
+      color:var(--color-sub,#a9a7a2);font-weight:var(--weight-medium,500);}
     #login-form input{width:100%;box-sizing:border-box;min-height:42px;
       font-family:inherit;font-size:16px;padding:10px 12px;
-      background:var(--color-bg-0,#08090a);color:var(--color-txt,#e8e9ea);
+      background:var(--color-bg-0,#121316);color:var(--color-txt,#ecebe8);
       border:1px solid var(--color-line,rgb(255 255 255 / .07));
-      border-radius:var(--radius-sm,5px);
+      border-radius:var(--radius-sm,6px);
       transition:border-color var(--dur-fast,120ms) ease;}
-    #login-form input::placeholder{color:var(--color-faint,#5d6164);}
+    #login-form input::placeholder{color:var(--color-faint,#706e68);}
     #login-form input:hover{border-color:var(--color-line-strong,rgb(255 255 255 / .14));}
-    #login-form input:focus{outline:2px solid var(--color-acc,#f0a860);outline-offset:2px;
+    #login-form input:focus{outline:2px solid var(--color-acc,#7aa2ff);outline-offset:2px;
       border-color:var(--color-line-strong,rgb(255 255 255 / .14));}
     /* type=password 대신 text+마스킹 사용 → Chrome 비밀번호 저장 제안 자체를 차단 (시각적 마스킹은 유지) */
     #login-pass{-webkit-text-security:disc;text-security:disc;}
 
-    #login-pass-state{margin:6px 0 0;font-size:var(--fs-xs,12.5px);
-      color:var(--color-st-waiting,#f0a860);line-height:var(--leading-body,1.6);}
+    #login-pass-state{margin:6px 0 0;font-size:var(--fs-xs,12px);
+      color:var(--color-st-waiting,#f2b350);line-height:var(--leading-body,1.6);}
     #login-pass-state[hidden]{display:none;}
 
     /* 기기 기억: 세 칸짜리 분절 선택. 라디오 자체는 숨기고 라벨이 칸이 된다 —
@@ -176,16 +176,16 @@
     #login-form .login-remember-opts input{position:absolute;opacity:0;width:1px;height:1px;
       min-height:0;padding:0;margin:0;border:0;}
     .login-remember-opts span{display:flex;align-items:center;justify-content:center;
-      min-height:38px;font-size:var(--fs-sm,13.5px);color:var(--color-sub,#8e9296);
+      min-height:38px;font-size:var(--fs-sm,13px);color:var(--color-sub,#a9a7a2);
       border:1px solid var(--color-line,rgb(255 255 255 / .07));
-      border-radius:var(--radius-sm,5px);
+      border-radius:var(--radius-sm,6px);
       transition:border-color var(--dur-fast,120ms) ease,color var(--dur-fast,120ms) ease;}
     .login-remember-opts label:hover span{border-color:var(--color-line-strong,rgb(255 255 255 / .14));}
-    .login-remember-opts input:checked + span{color:var(--color-txt,#e8e9ea);
-      border-color:var(--color-acc,#f0a860);}
-    .login-remember-opts input:focus-visible + span{outline:2px solid var(--color-acc,#f0a860);outline-offset:2px;}
-    #login-form .login-remember-hint{margin:8px 0 0;font-size:var(--fs-xs,12.5px);
-      color:var(--color-faint,#5d6164);line-height:var(--leading-body,1.6);}
+    .login-remember-opts input:checked + span{color:var(--color-txt,#ecebe8);
+      border-color:var(--color-acc,#7aa2ff);}
+    .login-remember-opts input:focus-visible + span{outline:2px solid var(--color-acc,#7aa2ff);outline-offset:2px;}
+    #login-form .login-remember-hint{margin:8px 0 0;font-size:var(--fs-xs,12px);
+      color:var(--color-faint,#706e68);line-height:var(--leading-body,1.6);}
 
     /* OTP는 "비밀번호 다음에 붙는 칸"이 아니라 **별도 단계**다. 선 하나로
        끊어 주지 않으면 처음 보는 기기에서 갑자기 칸이 하나 늘어난 것처럼만
@@ -193,10 +193,16 @@
     #login-otp-wrap{margin-top:18px;padding-top:18px;
       border-top:1px solid var(--color-line,rgb(255 255 255 / .07));}
     #login-otp-wrap[hidden]{display:none;}
-    #login-form .login-otp-hint{margin:0 0 10px;font-size:var(--fs-xs,12.5px);
-      color:var(--color-sub,#8e9296);line-height:var(--leading-body,1.6);}
-    #login-otp{font-family:var(--font-mono,ui-monospace,monospace);
-      letter-spacing:.34em;text-indent:.34em;text-align:center;font-variant-numeric:tabular-nums;}
+    #login-form .login-otp-hint{margin:0 0 10px;font-size:var(--fs-xs,12px);
+      color:var(--color-sub,#a9a7a2);line-height:var(--leading-body,1.6);}
+    /* 6칸(시안 M10) — 칸 높이 52, 간격 8, 숫자는 mono 22. 바탕은 입력과 같은 낮은 면. */
+    #login-otp-boxes{display:flex;gap:8px;}
+    #login-form input.login-otp-box{flex:1 1 0;min-width:0;width:0;min-height:52px;padding:0;
+      text-align:center;font-family:var(--font-mono,ui-monospace,monospace);font-size:var(--fs-lg,22px);
+      font-weight:var(--weight-medium,500);font-variant-numeric:tabular-nums;caret-color:var(--color-acc,#7aa2ff);
+      border-color:var(--color-line-strong,rgb(255 255 255 / .14));}
+    #login-form input.login-otp-box:focus{outline:none;border-color:var(--color-acc,#7aa2ff);
+      box-shadow:0 0 0 3px var(--color-acc-soft,rgb(122 162 255 / .16));}
 
     /* ── 주 액션 ──────────────────────────────────────────────────────────
        화면에 채움 버튼은 이것 하나뿐이다(DESIGN §10). hover/active를 밝기
@@ -206,20 +212,20 @@
     #login-submit,#login-retry{width:100%;margin-top:18px;min-height:42px;
       font-family:inherit;font-size:var(--fs-base,15px);font-weight:var(--weight-semibold,600);
       letter-spacing:var(--tracking-wide,0.04em);cursor:pointer;
-      background:var(--color-acc-surface,var(--color-acc,#f0a860));color:var(--color-acc-ink,#17140f);
-      border:1px solid transparent;border-radius:var(--radius-sm,5px);
+      background:var(--color-acc-surface,var(--color-acc,#7aa2ff));color:var(--color-acc-ink,#0b1020);
+      border:1px solid transparent;border-radius:var(--radius-sm,6px);
       transition:background-color var(--dur-fast,120ms) ease;}
-    #login-submit:hover:not(:disabled),#login-retry:hover{background:var(--color-acc-dim,#b3803f);}
-    #login-submit:active:not(:disabled),#login-retry:active{background:var(--color-acc-dim,#b3803f);}
-    #login-submit:focus-visible,#login-retry:focus-visible{outline:2px solid var(--color-acc,#f0a860);outline-offset:2px;}
+    #login-submit:hover:not(:disabled),#login-retry:hover{background:var(--color-acc-dim,#5b80e0);}
+    #login-submit:active:not(:disabled),#login-retry:active{background:var(--color-acc-dim,#5b80e0);}
+    #login-submit:focus-visible,#login-retry:focus-visible{outline:2px solid var(--color-acc,#7aa2ff);outline-offset:2px;}
     /* 제출 중에도 버튼은 disabled다. 투명도만 낮추면 "눌렀는데 아무 일도 없는"
        화면이 되므로, 라벨을 gate.js가 갈아끼우고 여기서 링을 붙인다. */
-    #login-submit:disabled{background:none;color:var(--color-muted,#73787c);
+    #login-submit:disabled{background:none;color:var(--color-muted,#8c8a85);
       border-color:var(--color-line-strong,rgb(255 255 255 / .14));cursor:default;}
     #login-submit[aria-busy="true"]{display:flex;align-items:center;justify-content:center;gap:8px;}
     #login-submit[aria-busy="true"]::before{content:"";width:13px;height:13px;border-radius:50%;
       border:2px solid var(--color-line-strong,rgb(255 255 255 / .14));
-      border-top-color:var(--color-muted,#73787c);
+      border-top-color:var(--color-muted,#8c8a85);
       animation:login-spin .7s linear infinite;}
 
     /* ── 오류 ─────────────────────────────────────────────────────────────
@@ -227,32 +233,48 @@
        사람이 읽어야 할 문장과 서버가 알려준 수치가 같은 무게로 붙는다.
        제목은 무슨 일인지, 보조 줄은 서버가 덧붙인 사실. */
     .login-err{display:flex;gap:9px;margin-top:16px;
-      font-size:var(--fs-sm,13.5px);line-height:var(--leading-row,1.35);}
+      font-size:var(--fs-sm,13px);line-height:var(--leading-row,1.35);}
     .login-err[hidden]{display:none;}
-    .login-err svg{flex:none;margin-top:1px;color:var(--color-st-error,#f06868);}
-    #login-err-msg{color:var(--color-txt,#e8e9ea);}
-    #login-err-detail{margin-top:3px;color:var(--color-sub,#8e9296);font-size:var(--fs-xs,12.5px);}
+    .login-err svg{flex:none;margin-top:1px;color:var(--color-st-error,#f07070);}
+    #login-err-msg{color:var(--color-txt,#ecebe8);}
+    #login-err-detail{margin-top:3px;color:var(--color-sub,#a9a7a2);font-size:var(--fs-xs,12px);}
     #login-err-detail[hidden]{display:none;}
     /* 확인 자체가 막힌 경우(서버가 연결은 받는데 답이 없음). 비밀번호 칸을 보여 주면
        "비밀번호를 넣으면 된다"로 읽히므로 폼과 따로 두고, 다시 확인하는 버튼만 단다. */
     #login-probe{width:min(380px,100%);box-sizing:border-box;}
     #login-probe[hidden]{display:none;}
     #login-probe .login-err{margin-top:0;}
-    #login-probe-msg{color:var(--color-txt,#e8e9ea);}
-    #login-probe-detail{margin-top:3px;color:var(--color-sub,#8e9296);font-size:var(--fs-xs,12.5px);}
+    #login-probe-msg{color:var(--color-txt,#ecebe8);}
+    #login-probe-detail{margin-top:3px;color:var(--color-sub,#a9a7a2);font-size:var(--fs-xs,12px);}
 
     /* ?next= 로 들어온 경우(N21 공유 링크의 device 모드). 로그인 뒤 원래 열려던
        다운로드로 돌아간다는 사실을 말해 두지 않으면, 파일을 누른 사람 눈에는
        난데없는 로그인 화면이다. */
     #login-next-note{margin:16px 0 0;padding:9px 11px;
-      border:1px solid var(--color-line,rgb(255 255 255 / .07));border-radius:var(--radius-sm,5px);
-      font-size:var(--fs-xs,12.5px);color:var(--color-sub,#8e9296);line-height:var(--leading-body,1.6);}
+      border:1px solid var(--color-line,rgb(255 255 255 / .07));border-radius:var(--radius-sm,6px);
+      font-size:var(--fs-xs,12px);color:var(--color-sub,#a9a7a2);line-height:var(--leading-body,1.6);}
     #login-next-note[hidden]{display:none;}
 
     /* DESIGN §11 — 모션을 끈 사용자에게는 링 대신 정지한 액센트 호가 남고,
        상태는 옆의 문장이 말한다. */
     @media (prefers-reduced-motion:reduce){
       .login-spin-ring,#login-submit[aria-busy="true"]::before,#login-form input{animation:none;transition:none;}
+    }
+    /* 리디자인 8단계(시안 M09 · M10) — 폰도 카드다: 위에서 112px, 좌우 16, 테두리 1px · 반경 8 · 바 면.
+       예전엔 480px 아래에서 카드를 지우고 화면 가운데에 놓았는데, 키보드가 올라오면 가운데 정렬이 입력란을
+       키보드 뒤로 밀었다 — 위에 붙여 두면 비밀번호 칸이 키보드 위에 남는다. 입력·버튼은 44px, 글자는 16px
+       (iOS는 16px 미만 입력에 초점이 가면 화면을 확대한다). 표식은 강조색 24px 칸 + 제품 이름 한 줄. */
+    @media (max-width:480px){
+      #login-gate{place-items:start center;padding-top:calc(112px + env(safe-area-inset-top));
+        padding-left:calc(16px + env(safe-area-inset-left));padding-right:calc(16px + env(safe-area-inset-right));}
+      #login-gate:has(#login-form[hidden]){place-items:center;padding-top:24px;}
+      #login-form{border-color:var(--color-line-strong,rgb(255 255 255 / .12));padding:24px 20px;}
+      .login-mark{display:inline-block;vertical-align:middle;width:24px;height:24px;padding:4px;box-sizing:border-box;
+        margin:0 8px 0 0;border-radius:var(--radius-sm,6px);
+        background:var(--color-acc-surface,var(--color-acc,#7aa2ff));color:var(--color-acc-ink,#0b1020);}
+      #login-form h1{display:inline-block;vertical-align:middle;font-size:var(--fs-lg,22px);font-weight:700;}
+      #login-form input{min-height:44px;font-size:16px;}
+      #login-submit,#login-retry{min-height:44px;}
     }
   </style>
 </head>
@@ -318,11 +340,25 @@
         <!-- OTP 단계: 처음 보는 기기에서만, 그리고 'fsh otp setup'으로 연동한 뒤에만 나타난다 -->
         <div id="login-otp-wrap" hidden>
           <p class="login-otp-hint" data-i18n>처음 접속하는 기기입니다. 인증 앱의 6자리 코드를 입력하세요.</p>
-          <label class="login-label" for="login-otp" data-i18n>인증 코드</label>
-          <input id="login-otp" type="text" name="vt-otp" autocomplete="one-time-code"
-            inputmode="numeric" pattern="[0-9]*" maxlength="6"
-            autocorrect="off" autocapitalize="off" spellcheck="false"
-            placeholder="000000" aria-label="인증 코드"  data-i18n-attr="aria-label"/>
+          <!-- 시안 M10 — 한 칸에 한 자리씩 6칸. 칸은 보이는 입력일 뿐이고, 제출하는 값은 숨은 #login-otp 하나다
+               (gate.js가 칸을 이어 붙여 채운다). 첫 칸만 autocomplete=one-time-code — 문자/인증 앱 자동 채우기가
+               여섯 자리를 그 칸에 한꺼번에 넣으면 gate.js가 나눠 담는다. 칸마다의 이름(「n번째 자리」)은 gate.js가 단다. -->
+          <span class="login-label" id="login-otp-label" data-i18n>인증 코드</span>
+          <div id="login-otp-boxes" role="group" aria-labelledby="login-otp-label">
+            <input class="login-otp-box" type="text" size="1" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code"
+              autocorrect="off" autocapitalize="off" spellcheck="false" data-otp-index="0" />
+            <input class="login-otp-box" type="text" size="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+              autocorrect="off" autocapitalize="off" spellcheck="false" data-otp-index="1" />
+            <input class="login-otp-box" type="text" size="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+              autocorrect="off" autocapitalize="off" spellcheck="false" data-otp-index="2" />
+            <input class="login-otp-box" type="text" size="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+              autocorrect="off" autocapitalize="off" spellcheck="false" data-otp-index="3" />
+            <input class="login-otp-box" type="text" size="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+              autocorrect="off" autocapitalize="off" spellcheck="false" data-otp-index="4" />
+            <input class="login-otp-box" type="text" size="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+              autocorrect="off" autocapitalize="off" spellcheck="false" data-otp-index="5" />
+          </div>
+          <input id="login-otp" type="hidden" name="vt-otp" />
         </div>
         <button type="submit" id="login-submit"><span id="login-submit-label" data-i18n>접속</span></button>
       </div>
@@ -354,19 +390,22 @@
     <button data-action="search.close" aria-label="검색 닫기" data-i18n-attr="aria-label"><svg data-icon="x" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg></button>
   </div>
 
-  <!-- 2026-11 메뉴바 — macOS 메뉴바 모양의 맨 위 한 줄(regular 이상). 예전 하단 상태바(HUD)를
-       여기로 옮겼다. 내용은 shell/Hud.tsx(Solid, 지연 로드)가 채운다: 왼쪽 FarShell 메뉴 ·
-       워크스페이스 칩(#vt-workspace-chip-slot, shell/HeaderExtras.tsx) · 칩, 오른쪽 칩(시계 포함).
-       compact(<720px)에서는 CSS로 통째로 숨는다(하단 내비가 그 자리를 쓴다).
+  <!-- 리디자인 2단계 — 제목 막대 36(regular 이상, 맨 위 전체 폭). 내용은 shell/TitleBar.tsx(Solid, 지연 로드)가
+       채운다: FarShell 메뉴 · 호스트 · 저장소 › 브랜치 › 세션 · 가운데 팔레트 입력 · 오른쪽 도구.
+       compact(<720px)에서는 CSS로 통째로 숨는다(#topbar 52가 그 자리를 쓴다). -->
+  <header id="vt-titlebar" aria-label="제목 막대" data-i18n-attr="aria-label">
+    <!-- 720px 이상에서는 #topbar를 통째로 감추고 거기 있던 신호등·키바 버튼·윈도 캡션을 이 두 자리로 옮긴다
+         (layout/menubar-slots.js). compact에서는 제자리로 돌려 놓는다. TitleBar.tsx가 마운트되면 이 두 자리를
+         막대 왼쪽 끝·오른쪽 끝으로 옮긴다(id 그대로). -->
+    <div id="vt-mb-lead"></div>
+    <div id="vt-mb-tools"></div>
+  </header>
+
+  <!-- 상태 막대 24(regular 이상, 맨 아래 전체 폭). 내용은 shell/Hud.tsx(Solid, 지연 로드)가 채운다: 맨 왼쪽
+       에이전트 칩(고정) · 토스트 메시지 칸(#vt-hud-msg, ui/toast.js) · 왼쪽 칩, 오른쪽 칩(시계 포함).
        "값이 없는 항목은 숨긴다"가 규칙이라 빈 상태에서는 아무 칩도 안 나온다.
        id·클래스가 vt-hud-*인 것은 이름만 옛것이다(토스트·테스트가 기대는 계약이라 그대로 둔다). -->
-  <div id="vt-hud" role="region" aria-label="상태" data-i18n-attr="aria-label">
-    <!-- 720px 이상에서는 #topbar를 통째로 감추고(뷰 탭 줄이 사라져 남는 게 없다) 거기 있던 신호등·키바 버튼·
-         ⌘K 버튼·윈도 캡션을 이 두 자리로 옮긴다(layout/menubar-slots.js). compact에서는 제자리로 돌려 놓는다. -->
-    <div id="vt-mb-lead"></div>
-    <div id="vt-workspace-chip-slot"></div>
-    <div id="vt-mb-tools"></div>
-  </div>
+  <div id="vt-hud" role="region" aria-label="상태 막대" data-i18n-attr="aria-label"></div>
 
   <!-- 상단 통합 바 — 720px 이상에서는 숨는다(메뉴바가 상단의 전부). compact의 세션 진입점·키바·스니펫·⌘K가 산다. -->
   <header id="topbar">
@@ -380,10 +419,7 @@
 
     <div class="spacer"></div>
 
-    <!-- L7: 마이크를 상단바에서 이관했다(accent 버튼 1개 회수, AFTER 다이어그램의
-         최종 상단바 = 탭+ +팔레트뿐). 이제 그 자리는 없고, 정적 마크업은
-         #vt-rail-mic-slot(데스크톱 홈)에 있다 — dock이 뜨면 keybar.js의
-         placeMicButton이 dock으로 옮긴다. 키바에는 두지 않는다(2026-09-29). -->
+    <!-- L7: 마이크는 상단바에 없다. 정적 마크업은 아래 #vt-mic-park이고 term/keybar.js가 보이는 자리로 옮긴다. -->
 
     <!-- L6: 커맨드 팔레트 진입점으로 재배정 — 예전엔 search.toggle(터미널 내 검색)이었다.
          팔레트가 세션·파일·명령을 아우르는 "확인" 진입점(ADR-8)이 되면서, 이 아이콘은
@@ -391,6 +427,11 @@
          목록에서 제외). 터미널 내 검색 자체는 Ctrl/Cmd+F로 그대로
          쓸 수 있다(팔레트 `/` 접두사는 60-settings-palette.md §3부터 파일 검색으로 바뀌었다) — ⋯ 메뉴의 동일 항목("터미널 내 검색"·"빠른 열기")은 L1 잔여
          항목에서 제거했다(상단바 ↔ ⋯ 중복 제거). -->
+    <!-- 리디자인 8단계 — 폰 수동 집중 모드(상단바 버튼만 — 두 손가락 두 번 탭은 핀치와 겹쳐 두지 않는다).
+         누르면 상단바·아래 탭을 숨기고 키바만 남긴다(layout/mobile-focus.js, html.vt-focus). 터미널 탭에서만 보인다(CSS). -->
+    <button id="vt-focus-btn" type="button" class="vt-icon-btn" data-action="focus.toggle" aria-label="집중 모드" aria-pressed="false" data-tip="집중 모드" data-tip-side="bottom" data-i18n-attr="aria-label,data-tip">
+      <svg data-icon="maximize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
+    </button>
     <!-- 2026-09-29 — 모바일 키바 여닫기. 키바가 있는 기기(터치)의 터미널 탭에서만
          보인다(CSS, html.vt-has-keybar). 상태는 기기별 설정 keybar.open. -->
     <button id="keybar-open-btn" type="button" class="vt-icon-btn" aria-label="특수키 바" aria-pressed="false" data-tip="특수키 바 열기/닫기" data-tip-side="bottom" data-i18n-attr="aria-label,data-tip">
@@ -410,72 +451,10 @@
     <div class="caption" aria-hidden="true"><span>&#9472;</span><span>&#9723;</span><span class="cls">&#10005;</span></div>
   </header>
 
-  <!-- L4: 좌측 rail — ADR-8("⋯ 폐지 → 좌측 rail(포인터) + 커맨드 팔레트(키보드)")의
-       포인터 경로. compact(<720px)에서는 CSS로 통째로 숨는다(팔레트 + 바텀시트가
-       대신한다). 항목 7개는 팔레트(L6)의 기본/설정 명령과 내용이 같다(문서 §3
-       "포인터 경로와 키보드 경로가 나뉘되 내용은 동일") — 파일/큐/스니펫/포트는 이미
-       있는 모달(viewer.show/queue.show/snippets.show/ports.show)을 그대로 열 뿐이고, "세션"만
-       진짜 새 임베디드 패널이다(연결된 화면 관리는 C3 의존이라 지금은 목록만).
-       사용량은 U 마일스톤 전이라 .needs-usage로 상시 숨김. -->
-  <!-- N36 §5 — 워크트리 레일 252px(Solid, 지연 로드). 2.1.0에서 기존 48px
-       아이콘 레일(아래 #vt-rail)을 시각적으로 대체한다 — #vt-rail 자체와
-       #vt-rail-panel/#vt-rail-settings-tpl(데스크톱 마이크·테마 칩이 사는
-       유일한 자리)은 DOM에서 지우지 않았다: CSS로만 숨기고, 새 레일의
-       "⋯ 더보기" 메뉴가 그 버튼들을 그대로 다시 누른다(shell/Rail.tsx). -->
-  <div id="vt-wgrail-slot"></div>
-  <nav id="vt-rail" aria-label="사이드바" data-i18n-attr="aria-label">
-    <button type="button" class="vt-rail-btn" id="vt-rail-session" data-rail="session" aria-label="세션" aria-pressed="false" data-tip="세션" data-tip-side="right" data-i18n-attr="aria-label,data-tip">
-      <svg data-icon="layout-panels" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
-      <span class="vt-rail-badge" id="vt-rail-badge-session" hidden></span>
-    </button>
-    <!-- N35 §6이 지운 폴더 트리를 dock 탭으로 되살렸다(2026-09-22, 사용자 확인
-         — N35 "코드뷰어는 dock에 안 들어간다" 결정 번복). git diff/커밋은 여기
-         없다 — 그건 소스컨트롤(vt-rail-*scm 없음, dock 첫 탭)의 몫. -->
-    <button type="button" class="vt-rail-btn" id="vt-rail-dir" data-rail="dir" data-action="dir.show" aria-label="파일" data-tip="파일" data-tip-sub="디렉토리 탐색" data-tip-side="right" data-i18n-attr="aria-label,data-tip">
-      <svg data-icon="folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
-    </button>
-    <button type="button" class="vt-rail-btn" id="vt-rail-queue" data-rail="queue" data-action="queue.show" aria-label="프롬프트 큐" data-tip="프롬프트 큐" data-tip-side="right" data-i18n-attr="aria-label,data-tip">
-      <svg data-icon="list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
-      <span class="vt-rail-badge" id="vt-rail-badge-queue" hidden></span>
-    </button>
-    <button type="button" class="vt-rail-btn" id="vt-rail-snippets" data-rail="snippets" data-action="snippets.show" aria-label="프롬프트 스니펫" data-tip="프롬프트 스니펫" data-tip-side="right" data-i18n-attr="aria-label,data-tip">
-      <svg data-icon="clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
-    </button>
-    <!-- 50-files-share.md §4 — 업로드 파일 저장소 탭. 위의 「파일」(디렉토리
-         트리)과는 다른 것이다: 그건 저장소 소스를 읽는 화면이고, 이건 업로드된
-         파일을 관리·공유하는 화면이다(dock 첨부 탭과 같은 렌더러). 이름이
-         겹치면 구분이 안 돼 「첨부」로 부른다. -->
-    <button type="button" class="vt-rail-btn" id="vt-rail-files" data-rail="files" data-action="files.show" aria-label="첨부" data-tip="첨부" data-tip-sub="저장소 · 공유 링크" data-tip-side="right" data-i18n-attr="aria-label,data-tip">
-      <svg data-icon="paperclip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
-    </button>
-    <button type="button" class="vt-rail-btn needs-ports" id="vt-rail-ports" data-rail="ports" data-action="ports.show" aria-label="포트" data-tip="포트 대시보드" data-tip-side="right" data-i18n-attr="aria-label,data-tip">
-      <svg data-icon="briefcase" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
-      <span class="vt-rail-badge" id="vt-rail-badge-ports" hidden></span>
-    </button>
-    <!-- U 마일스톤(읽기 전용 clauth 사용량) 전이라 /api/capabilities가 usage를
-         아예 안 돌려준다 — agent/status.js가 다른 needs-*와 같은 방식(가짐:
-         실패 시 기본 표시 폴백까지 동일)으로 숨긴다. 정적 hidden을 안 거는
-         이유는 그 폴백과 일관성을 맞추기 위해서다 — U가 실제로 caps.usage를
-         추가하는 순간 이 파일을 다시 안 건드려도 자동으로 나타난다. -->
-    <button type="button" class="vt-rail-btn needs-usage" id="vt-rail-usage" data-rail="usage" data-action="usage.open" aria-label="사용량" data-tip="사용량" data-tip-side="right" data-i18n-attr="aria-label,data-tip">
-      <svg data-icon="bar-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
-    </button>
-    <div class="vt-rail-spacer"></div>
-    <button type="button" class="vt-rail-btn" id="vt-rail-settings" data-rail="settings" aria-label="설정" aria-pressed="false" data-tip="설정" data-tip-side="right" data-i18n-attr="aria-label,data-tip">
-      <svg data-icon="settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
-    </button>
-  </nav>
-  <div id="vt-rail-panel" role="region" aria-label="사이드 패널" hidden data-i18n-attr="aria-label">
-    <div class="vt-rail-panel-head">
-      <div class="vt-rail-panel-title" id="vt-rail-panel-title"></div>
-      <button type="button" class="vt-icon-btn sm vt-rail-panel-close" aria-label="패널 닫기" data-i18n-attr="aria-label">
-        <svg data-icon="x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
-      </button>
-    </div>
-    <div class="vt-rail-panel-body" id="vt-rail-panel-body"></div>
-    <div class="vt-rail-resizer" id="vt-rail-resizer"></div>
-  </div>
-
+  <!-- 리디자인 1단계(2026-11) — 작업대: 활동 막대 48 + 사이드바(폭은 활동 전체가 공유).
+       세션 활동은 위 워크트리 레일(#vt-wgrail), 도구 활동은 아래 dock 본문(#vt-dock)을
+       그대로 사이드바에 띄운다(shell/Workbench.tsx, 지연 로드). -->
+  <div id="vt-workbench-slot"></div>
   <!-- 터미널 -->
   <div id="terminal-container"></div>
 
@@ -486,59 +465,15 @@
        WebGL 컨텍스트를 그 안에 계속 들고 있다, 10-shell-layout.md §1). -->
   <div id="vt-fleet-slot" hidden></div>
 
-  <!-- N35 §6 — dock 392px(Solid, 지연 로드). 탭 내용은 기존 큐·포트·사용량
-       패널 렌더러가 그대로 그린다(panels/panel.js의 dock 호스트). 2.0의 우측
-       사용량 레일(#vt-right-rail)은 이 dock의 「사용량」 탭이 대신하므로
-       CSS로만 숨긴다 — DOM은 남겨 둔다(usage.js가 id로 직접 찾는다). -->
-  <div id="vt-dock-slot"></div>
-
-  <!-- L8/U2: 우측 레일 — wide(≥1024px)에서만 상시 노출된다. 사용량의 요점이
-       "상시 노출로 신뢰감을 만든다"(60-usage-provider.md §왜 하는가)인데 패널을
-       열어야만 보이면 그 요점이 사라진다. 섹션이 하나도 없으면(=사용량 소스가
-       없으면) .needs-usage 게이팅으로 레일 자체가 사라지고 pane이 폭을 회수한다
-       (30-layout-shell.md §4 "빈 패널을 보여주지 않는다"). -->
-  <aside id="vt-right-rail" class="needs-usage" aria-label="사용량" data-i18n-attr="aria-label">
-    <div class="vt-rr-head">
-      <span class="vt-rr-title" data-i18n>사용량</span>
-      <button type="button" class="vt-icon-btn sm vt-rr-collapse" id="vt-rr-collapse" aria-label="우측 레일 접기" data-tip="우측 레일 접기" data-tip-side="left" data-i18n-attr="aria-label,data-tip">›</button>
-    </div>
-    <div class="vt-rr-body" id="vt-right-rail-body"></div>
-  </aside>
-
-  <!-- rail "설정" 패널의 정적 컨텐츠. 2026-09-18 이전에는 ⋯ 메뉴의 마지막
-       남은 그룹 전체(음성 전용 모드·테마 칩·푸시 토글·자동복사 체크박스·맥
-       자동 열기 체크박스)가 여기 있었다 — 그런데 이 패널을 열던 legacy 레일
-       (#vt-rail)의 ⚙가 새 레일(Rail.tsx)로 대체되며 display:none이 됐고,
-       그 다섯 개가 전부 화면에서 도달 불가능해졌다. 조사 결과:
-         - 테마 칩 → 설정 「모양」(appearance.js)으로 이식.
-         - 음성 전용 모드·푸시 구독 → 설정 「음성」(voice.js)으로 이식.
-         - 자동 복사 체크박스 → 이미 설정 「마우스 · 선택」에 정식 항목
-           (mouse.autocopyOnSelect)이 있었다(중복이었을 뿐이라 그냥 삭제).
-         - 맥 자동 열기 체크박스 → 설정 어디에도 없던 진짜 구멍이었다.
-           설정 「터미널」에 session.openOnMac 항목을 새로 추가했다.
-       남은 건 마이크(아래, 부팅 시 #vt-rail-mic-home로 물리 이동해 정상)와
-       이미 커맨드 팔레트로 도달 가능한 두 개(이어폰 미디어키·가이드 보기)뿐.
-       moreMenu.js/theme.js/pushui.js가 id로 직접 찾으므로 id는 그대로 유지 —
-       rail.js가 패널을 열 때 이 노드를 #vt-rail-panel-body 안으로
-       appendChild()만 한다(재생성 아님, 리스너 보존). -->
-  <div id="vt-rail-settings-tpl" hidden>
-    <!-- L7: 마이크의 데스크톱 홈 — keybar(터치 전용)가 안 보이는 환경에서도
-         음성 입력이 완전히 사라지지 않게 한다(문서에 명시적 근거는 없었으나,
-         조용히 기능이 없어지는 쪽보다 안전하다고 판단해 유지하기로 함).
-         voice.js 계약(#mic-btn-wrap + .label + .recording)은 그대로 —
-         dock이 있으면 keybar.js가 이 버튼 자체를 그리로 옮긴다(재생성 아님). -->
-    <div id="vt-rail-mic-slot">
-      <button id="mic-btn-wrap" class="vt-menu-item mi mic needs-voice vt-rail-mic-btn" data-action="voice.record" aria-label="음성 입력 (탭하여 녹음)" data-tip="음성 입력" data-tip-side="right" data-i18n-attr="aria-label,data-tip">
-        <svg data-icon="mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
-        <span class="label" data-i18n>음성 입력</span>
-      </button>
-    </div>
-    <button class="vt-menu-item mi needs-voice" id="mediakey-btn" role="menuitem" data-action="voice.mediakey-toggle" data-i18n>
-      <svg data-icon="music" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>이어폰 미디어키
-    </button>
-    <button class="vt-menu-item mi" role="menuitem" data-action="guide.show" data-i18n>
-      <svg data-icon="help-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
-      가이드 보기
+  <!-- 마이크의 대기 자리. voice.js가 `#mic-btn-wrap`을 모듈 최상위에서 한 번 캐시하므로(.label · .recording 계약)
+       노드는 하나여야 하고, 보이는 자리로는 옮기기만 한다(term/keybar.js placeMicButton): 데스크톱은 활동 막대 아래 무리
+       (#vt-activity-mic-home), 폰은 떠 있는 #vt-mic-fab, 폰 집중 모드는 키바 첫 키. 작업대(지연 청크)가 오기 전에는 여기
+       숨어 있다. 리디자인 9단계(2026-11)에서 옛 레일 설정 틀(#vt-rail-settings-tpl)을 지우며 남긴 유일한 조각이다 —
+       이어폰 미디어키·가이드 보기는 팔레트 명령(voice.mediakey-toggle · guide.show)으로 닿는다. -->
+  <div id="vt-mic-park" hidden>
+    <button id="mic-btn-wrap" class="vt-menu-item mi mic needs-voice" data-action="voice.record" aria-label="음성 입력 (탭하여 녹음)" data-tip="음성 입력" data-tip-side="right" data-i18n-attr="aria-label,data-tip">
+      <svg data-icon="mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
+      <span class="label" data-i18n>음성 입력</span>
     </button>
   </div>
 
@@ -550,32 +485,40 @@
        같은 기능의 규칙이 진입점마다 달라진다. term/upload.js가 순차로 올린다. -->
   <input type="file" id="file-input" hidden multiple onchange="uploadFile(this)" />
 
-  <!-- 음성 상태 패널: voice/status-panel.js가 기존 상태 노드를 이 안에 유지한다. -->
+  <!-- 음성 상태 패널: voice/status-panel.js가 기존 상태 노드를 이 안에 유지한다.
+       리디자인 6단계(시안 O16-F, 정돈 배치 440): 머리 48(마이크 · 제목 · 서버 상태 점 · ×), 입력 대상 줄, 음량 막대,
+       부분 결과 상자, 확인 영역, 버튼 줄(채운 버튼은 「입력」 하나, 「녹음 종료」는 위험 테두리), 아래 설정 줄. -->
   <section id="voice-status-panel" hidden role="dialog" aria-label="음성 입력 상태" data-i18n-attr="aria-label">
-    <header class="vt-voice-head"><strong data-i18n>음성 입력</strong><button type="button" class="vt-btn sm quiet" id="voice-status-close" aria-label="음성 상태 닫기" data-i18n data-i18n-attr="aria-label">닫기</button></header>
-    <div class="vt-voice-server"><strong id="voice-stt-state" data-i18n>서버 상태 확인 중</strong><span id="voice-stt-detail"></span></div>
-    <div class="vt-voice-pin">
-      <label for="voice-pin-select" data-i18n>입력 대상</label>
-      <select id="voice-pin-select" class="vt-select"></select>
+    <header class="vt-voice-head"><span class="vt-voice-ic" aria-hidden="true"></span><strong data-i18n>음성 입력</strong><span class="vt-voice-srv"><span class="vt-voice-dot" aria-hidden="true"></span><span id="voice-stt-state" data-i18n>서버 상태 확인 중</span></span><button type="button" class="vt-icon-btn vt-voice-x" id="voice-status-close" aria-label="음성 상태 닫기" data-i18n-attr="aria-label"></button></header>
+    <div class="vt-voice-body">
+      <div class="vt-voice-pin">
+        <label for="voice-pin-select" data-i18n>입력 대상</label>
+        <select id="voice-pin-select" class="vt-select"></select>
+      </div>
       <p id="voice-pin-note" class="vt-voice-meta" role="status"></p>
-    </div>
-    <div id="mic-status" role="status" aria-live="polite"></div>
-    <div id="voice-confirm" hidden>
-      <p id="voice-confirm-reason" class="vt-voice-meta" role="status"></p>
-      <label for="voice-confirm-text" data-i18n>인식 결과 — 고쳐서 입력할 수 있습니다</label>
-      <textarea id="voice-confirm-text" class="vt-input" rows="3" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"></textarea>
-      <p id="voice-confirm-msg" class="vt-voice-meta" role="alert" hidden></p>
-      <div class="vt-voice-actions">
-        <button type="button" class="vt-btn sm" id="voice-confirm-send" data-i18n>입력</button>
-        <button type="button" class="vt-btn sm quiet" id="voice-confirm-cancel" data-i18n>취소</button>
-        <button type="button" class="vt-btn sm quiet" id="voice-confirm-copy" hidden data-i18n>인식 텍스트 복사</button>
+      <p id="voice-stt-detail" class="vt-voice-meta"></p>
+      <p id="voice-record-meta" class="vt-voice-meta"></p>
+      <div id="voice-meter" class="vt-voice-meter" hidden role="meter" aria-label="입력 음량" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-i18n-attr="aria-label"></div>
+      <p id="voice-partial" class="vt-voice-partial" hidden></p>
+      <div id="mic-status" role="status" aria-live="polite"></div>
+      <div id="voice-confirm" hidden>
+        <p id="voice-confirm-reason" class="vt-voice-meta" role="status"></p>
+        <textarea id="voice-confirm-text" class="vt-input" rows="3" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"></textarea>
+        <label for="voice-confirm-text" class="vt-voice-hint" data-i18n>인식 결과 — 고쳐서 입력할 수 있습니다</label>
+        <p id="voice-confirm-msg" class="vt-voice-meta" role="alert" hidden></p>
+        <div class="vt-voice-actions">
+          <button type="button" class="vt-btn quiet" id="voice-confirm-copy" hidden data-i18n>인식 텍스트 복사</button>
+          <button type="button" class="vt-btn quiet" id="voice-confirm-cancel" data-i18n>취소</button>
+          <span class="vt-voice-gap"></span>
+          <button type="button" class="vt-btn lg solid" id="voice-confirm-send" data-i18n>입력</button>
+        </div>
+      </div>
+      <div class="vt-voice-actions vt-voice-main"><span class="vt-voice-gap"></span><button type="button" class="vt-btn lg" id="voice-panel-record" data-action="voice.record" data-i18n>녹음 시작</button></div>
+      <div class="vt-voice-foot">
+        <p class="vt-voice-help" data-i18n>녹음은 이 기기에서, 음성 인식은 서버에서 처리합니다. 인식한 문장은 입력 대상에 Enter와 함께 전송됩니다. 일반 셸이나 위험한 명령은 먼저 확인합니다.</p>
+        <button type="button" class="vt-voice-link" data-action="voice.settings" data-i18n>모델 · 음성 설정</button>
       </div>
     </div>
-    <p id="voice-record-meta" class="vt-voice-meta"></p>
-    <p id="voice-partial" class="vt-voice-partial" hidden></p>
-    <div id="voice-meter" class="vt-voice-meter" hidden role="meter" aria-label="입력 음량" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-i18n-attr="aria-label"><span class="vt-voice-meter-bar"></span></div>
-    <div class="vt-voice-actions"><button type="button" class="vt-btn sm" id="voice-panel-record" data-action="voice.record" data-i18n>녹음 시작</button><button type="button" class="vt-btn sm quiet" data-action="voice.settings" data-i18n>모델 · 음성 설정</button></div>
-    <p class="vt-voice-help" data-i18n>녹음은 이 기기에서, 음성 인식은 서버에서 처리합니다. 인식한 문장은 입력 대상에 Enter와 함께 전송됩니다. 일반 셸이나 위험한 명령은 먼저 확인합니다.</p>
   </section>
   <!-- 전송 실패 시 recording.js가 #mic-status 안으로 옮겨 붙인다(기본 숨김) -->
   <button id="mic-retry-btn" class="vt-btn solid" type="button" hidden style="font-size:13px;margin-left:6px" data-i18n>다시 보내기</button>
@@ -592,9 +535,15 @@
       <!-- Ctrl/Alt/Shift: 탭 = 다음 한 키, 한 번 더 탭 = 고정, 누르고 있는 동안 = 적용.
            스크롤로 밀려나지 않게 따로 고정한다 — 동시 입력은 늘 같은 자리여야 한다. -->
       <div id="keybar-mods">
+        <!-- 리디자인 8단계 — 폰 집중 모드에서만 마이크(#mic-btn-wrap)가 여기 첫 키로 온다(term/keybar.js placeMicButton).
+             평소에는 비어 있고 CSS로 숨는다 — 키 자리를 먹지 않는다. -->
+        <span id="keybar-mic-slot"></span>
         <button type="button" class="kb kb-mod" data-mod="ctrl" aria-pressed="false">Ctrl</button>
         <button type="button" class="kb kb-mod" data-mod="alt" aria-pressed="false">Alt</button>
         <button type="button" class="kb kb-mod" data-mod="shift" aria-pressed="false">Shift</button>
+        <!-- 켜진 수식키의 상태 문구(「Ctrl 다음 키만」·「Ctrl 잠김」, term/keybar.js _renderMods). 폰에서만 보이고
+             자리는 늘 잡아 둔다 — 글자가 생겨도 키가 밀리지 않는다(98-mobile.css). -->
+        <span id="keybar-mod-hint" aria-live="polite"></span>
       </div>
       <div id="keybar-scroll">
         <button type="button" class="kb" data-key="esc">Esc</button>
@@ -635,6 +584,10 @@
     </div>
   </div>
 
+  <!-- 리디자인 8단계 — 폰의 마이크 자리(떠 있는 56px). 비어 있는 자리이고 compact에서 #mic-btn-wrap이 여기로 온다
+       (term/keybar.js placeMicButton — voice.js가 그 id를 캐시하므로 새로 만들지 않고 옮긴다). 터미널 탭에서만 보이고,
+       아래 탭 위 16px(키바가 열려 있으면 키바 위 16px)에 뜬다. 집중 모드에서는 마이크가 키바 첫 키로 옮겨 가 비어 있다. -->
+  <div id="vt-mic-fab"></div>
   <!-- N38(70-mobile.md §1) — 하단 내비 52px 5탭. compact(<720px)에서만 보인다.
        배지는 dock 배지(shell/Dock.tsx)와 같은 소스(같은 엔드포인트)를 재사용한
        폴링이다(layout/mobile-nav.js). 「변경」·「첨부」·「설정」은 이미 있는
@@ -667,9 +620,11 @@
       <span class="vt-mnav-label" data-i18n>변경</span>
       <span class="vt-mnav-badge" id="vt-mnav-badge-changes" hidden></span>
     </button>
-    <button type="button" class="vt-mnav-btn" data-mnav="files" data-action="files.show" aria-label="첨부" aria-pressed="false" data-i18n-attr="aria-label">
-      <svg data-icon="paperclip" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
-      <span class="vt-mnav-label" data-i18n>첨부</span>
+    <!-- 파일 개편 단계 5 — 예전 「첨부」 자리. 안쪽 맨 위 「파일 | 첨부」 전환(layout/mobile-nav.js)에서 트리가 기본이고,
+         마지막에 본 쪽을 ui.mobile.filesSegment(기기 설정)가 기억한다. 올리는 중 배지는 그대로 이 탭에 붙는다. -->
+    <button type="button" class="vt-mnav-btn" data-mnav="files" data-action="mfiles.show" aria-label="파일" aria-pressed="false" data-i18n-attr="aria-label">
+      <svg data-icon="folder" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
+      <span class="vt-mnav-label" data-i18n>파일</span>
       <span class="vt-mnav-badge" id="vt-mnav-badge-files" hidden></span>
     </button>
     <button type="button" class="vt-mnav-btn" data-mnav="more" data-action="settings.show" aria-label="설정" aria-pressed="false" data-i18n-attr="aria-label">

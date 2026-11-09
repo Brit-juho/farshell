@@ -97,7 +97,7 @@ test('모든 기본 키맵은 mac과 비-mac에서 충돌 없이 자신의 액�
   for (const platform of ['MacIntel', 'Linux x86_64']) {
     const { K, window } = await load({ platform });
     const bindings = K.list();
-    assert.strictEqual(bindings.length, 12);
+    assert.strictEqual(bindings.length, 14);
     assert.deepEqual(K.conflicts(), {});
     for (const b of bindings) {
       assert.strictEqual(b.unavailable, false, `${platform}: ${b.id}가 브라우저 예약키면 안 된다`);
@@ -179,7 +179,25 @@ test('일반 입력창의 붙여넣기는 터미널 액션을 실행하지 않�
   assert.strictEqual(e.defaultPrevented, false);
 });
 
-test('사이드바 토글은 현재 레일의 접기 버튼을 누른다', async () => {
+test('사이드바 토글은 작업대가 열어 둔 vtSideToggle을 부른다(레일 버튼은 누르지 않는다)', async () => {
+  const { K, window, context, cache } = await load({ platform: 'Linux x86_64' });
+  let toggles = 0;
+  window.vtSideToggle = () => { toggles += 1; };
+  const rail = window.document.createElement('aside');
+  rail.id = 'vt-wgrail';
+  const button = window.document.createElement('button');
+  button.className = 'vt-wgrail-collapse';
+  rail.appendChild(button);
+  window.document.body.appendChild(rail);
+  let clicks = 0;
+  button.addEventListener('click', () => { clicks += 1; });
+  await importFresh(KEYMAP_ACTIONS_JS, context, cache);
+  K.handleKeydown(kd(window, { key: 'b', altKey: true, shiftKey: true }));
+  assert.strictEqual(toggles, 1);
+  assert.strictEqual(clicks, 0);
+});
+
+test('사이드바 토글 — 작업대가 아직 없으면(초기 로드 경합) 레일의 접기 버튼을 누른다', async () => {
   const { K, window, context, cache } = await load({ platform: 'Linux x86_64' });
   const rail = window.document.createElement('aside');
   rail.id = 'vt-wgrail';
@@ -389,6 +407,45 @@ test('mac 기본값은 그대로다 — Cmd 조합은 터미널과 겹치지 않
   assert.strictEqual(K.match(kd(window, { key: 'b', metaKey: true })).id, 'railToggle');
   // mac의 Ctrl+B는 여전히 터미널(tmux prefix) 몫이다.
   assert.strictEqual(K.match(kd(window, { key: 'b', ctrlKey: true })), null);
+});
+
+// 리디자인 결정 4 · 파일 개편 단계 6 — ⌘⇧F는 파일 내용 검색, 터미널 내 검색은 모든 플랫폼에서 Alt+Shift+F.
+test('⌘⇧F는 파일 내용 검색, 터미널 내 검색은 ⌥⇧F로 옮겼다(mac)', async () => {
+  const { K, window } = await load({ platform: 'MacIntel' });
+  const combo = (id) => K.normalize(K.list().find((b) => b.id === id).combo);
+  assert.strictEqual(combo('contentSearch'), 'mod+shift+f');
+  assert.strictEqual(combo('searchInPane'), 'alt+shift+f');
+  assert.strictEqual(K.match(kd(window, { key: 'f', code: 'KeyF', metaKey: true, shiftKey: true })).id, 'contentSearch');
+  // ⌥⇧F는 글자(Ï)를 만들지만 물리 키(code)로 맞춘다.
+  assert.strictEqual(K.match(kd(window, { key: 'Ï', code: 'KeyF', altKey: true, shiftKey: true })).id, 'searchInPane');
+  assert.strictEqual(Object.keys(K.conflicts()).length, 0, '기본값끼리는 겹치지 않는다');
+});
+
+test('비-mac — 내용 검색은 Ctrl+Shift+G(Ctrl+Shift+F는 스크롤백 검색 그대로), 터미널 내 검색은 Alt+Shift+F', async () => {
+  const { K, window } = await load({ platform: 'Win32' });
+  const combo = (id) => K.normalize(K.list().find((b) => b.id === id).combo);
+  assert.strictEqual(combo('contentSearch'), 'mod+shift+g');
+  assert.strictEqual(combo('search'), 'mod+shift+f');
+  assert.strictEqual(K.match(kd(window, { key: 'G', code: 'KeyG', ctrlKey: true, shiftKey: true })).id, 'contentSearch');
+  assert.strictEqual(K.match(kd(window, { key: 'F', code: 'KeyF', ctrlKey: true, shiftKey: true })).id, 'search');
+  assert.strictEqual(K.match(kd(window, { key: 'g', code: 'KeyG', ctrlKey: true })), null, 'Ctrl+G는 터미널 몫');
+  assert.strictEqual(Object.keys(K.conflicts()).length, 0);
+});
+
+test('기본값이 바뀌어도 사용자가 정한 바인딩은 그대로 남고, 같은 조합에서는 사용자 것이 이긴다', async () => {
+  const { K, window } = await load({ platform: 'MacIntel' });
+  // 예전 기본(⌘⇧F)을 터미널 내 검색에 직접 고정해 둔 사용자.
+  await K.setBinding('searchInPane', 'Mod+Shift+F');
+  const pane = K.getBinding('searchInPane');
+  assert.strictEqual(K.normalize(pane.combo), 'mod+shift+f');
+  assert.strictEqual(pane.isDefault, false);
+  assert.strictEqual(K.match(kd(window, { key: 'f', code: 'KeyF', metaKey: true, shiftKey: true })).id, 'searchInPane',
+    '사용자가 고른 조합이 새 기본값(내용 검색)을 이긴다');
+  assert.deepStrictEqual(Object.values(K.conflicts()).map((ids) => [...ids].sort()), [['contentSearch', 'searchInPane']],
+    '겹침은 설정 화면이 알릴 수 있게 드러난다');
+  // 되돌리면 새 기본값으로.
+  await K.reset('searchInPane');
+  assert.strictEqual(K.match(kd(window, { key: 'f', code: 'KeyF', metaKey: true, shiftKey: true })).id, 'contentSearch');
 });
 
 test('사용자가 바꾼 값은 플랫폼 기본값을 이긴다', async () => {

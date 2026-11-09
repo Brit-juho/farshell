@@ -1,24 +1,27 @@
 // 레일의 **행 하나와 컨텍스트 메뉴**. 목록 조립·상태 관리는 Rail.tsx.
 //
-// 행은 3줄이다(docs/ref/terminal.md 「Rail」):
-//   1줄  상태 아이콘(읽지 않음이면 둘레 링) · 에이전트 · 이름(제자리 편집)
-//   2줄  현재 디렉터리 · 브랜치(main도 항상) · 변경량
-//   3줄  상태 키워드 · 경과 시간 · 만든 곳 아이콘
-// 해당할 때만 4번째 줄에 「다른 화면 N」(묶음 제목은 ViewGroup 헤더 한 번).
-// 상태 왼쪽 막대(옛 vt-wgrail-bar)와 tmux 플러그 아이콘은 없다 — 상태는 아이콘의
-// 색+모양이 말하고, tmux라는 사실은 행마다 같아서 정보가 아니었다.
+// 행 모양(리디자인 4단계, 시안 desktop.html D02 「행 해부」) — 왼쪽 16px 열에 상태 아이콘
+// (읽지 않음이면 둘레 링), 오른쪽 열에 최대 4줄:
+//   1줄 20  에이전트 14 · 이름 13/600(제자리 편집) · 위임 토글 · 경과 mono 12 · ⋯
+//   2줄 18  WT · 디렉터리 · 브랜치(main도 항상) · 변경량 — mono 12. 정보가 없으면 「정보 갱신 대기」
+//   3줄 18  상태 키워드 12/600 · 도구 · 배지 · 내부 서브에이전트 칩 · 공유 · 만든 곳
+//   4줄 18  다른 화면 N · 웹이 아닌 터미널 연결 수(있을 때만)
+// waiting이고 열린 행이면 그 아래에 답 버튼 줄(24)이 붙는다(AnswerButtons — 폰 Fleet과 같은 것).
+// 묶음 제목은 ViewGroup 머리에 한 번만. 상태 왼쪽 막대(옛 vt-wgrail-bar)와 tmux 플러그 아이콘은
+// 없다 — 상태는 아이콘의 색+모양이 말한다. 왼쪽 2px 선은 선택(강조색)·개입 필요(호박색)만 쓴다.
 //
 // ⚠ 여기도 `shell` 지연 청크다 — core/store.js 계열을 직접 import하지 않는다
 // (Rail.tsx 머리말과 같은 이유, ADR-26/N35).
 import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 
 import { agentLabel, icon, stateIcon } from '../ui/icons.js';
+import { shellIcon } from '../ui/icons-shell.js';
 import { agentMark } from './agent-mark.js';
 import { t } from '../core/i18n.js';
 import { NativeChip } from './NativeChildren.js';
 import {
   stateKeyword, formatRelativeTime, statusSentence, diffLabel, lineageLabel,
-  ORIGIN_ICON, ORIGIN_LABEL, SHARE_MODE_LABEL, shareSentence, type SessionRow, type Origin, type ShareInfo, type RowSummaryDetails,
+  ORIGIN_ICON, ORIGIN_LABEL, ORIGIN_SHORT, SHARE_MODE_LABEL, shareSentence, type SessionRow, type Origin, type ShareInfo, type RowSummaryDetails,
 } from './rail-data.js';
 
 /** 경과 시간을 행 DOM을 다시 만들지 않고 갱신하는 시계(30초). */
@@ -29,19 +32,38 @@ function createNow() {
   return now;
 }
 
-/** 만든 곳 아이콘(local은 없다). 레일 행과 Fleet 행이 같이 쓴다. */
-export function OriginMark(props: { origin: Origin }) {
+/** 만든 곳 아이콘(local은 없다). 레일 행과 Fleet 행이 같이 쓴다.
+ * `withText`면 아이콘 뒤에 짧은 글(「다른 맥에서 만듦」·「직접 만듦」)을 붙인다 — 레일 행 3줄(시안 D02). 글이 있으면
+ * 아이콘은 장식이고 글이 읽힌다(같은 말을 두 번 읽지 않게). 툴팁은 늘 긴 문장이다. */
+export function OriginMark(props: { origin: Origin; withText?: boolean }) {
+  const short = () => ORIGIN_SHORT[props.origin as Exclude<Origin, 'local'>];
+  const ico = () => icon(ORIGIN_ICON[props.origin as Exclude<Origin, 'local'>], 12, 2);
   return (
     <Show when={props.origin !== 'local'}>
-      <span
-        class="vt-srow-origin"
-        data-origin={props.origin}
-        data-tip={ORIGIN_LABEL[props.origin]}
-        data-tip-side="right"
-        role="img"
-        aria-label={ORIGIN_LABEL[props.origin]}
-        innerHTML={icon(ORIGIN_ICON[props.origin as Exclude<Origin, 'local'>], 12, 2)}
-      />
+      <Show
+        when={props.withText}
+        fallback={
+          <span
+            class="vt-srow-origin"
+            data-origin={props.origin}
+            data-tip={ORIGIN_LABEL[props.origin]}
+            data-tip-side="right"
+            role="img"
+            aria-label={ORIGIN_LABEL[props.origin]}
+            innerHTML={ico()}
+          />
+        }
+      >
+        <span
+          class="vt-srow-origin with-text"
+          data-origin={props.origin}
+          data-tip={ORIGIN_LABEL[props.origin]}
+          data-tip-side="right"
+        >
+          <span class="vt-srow-origin-ico" aria-hidden="true" innerHTML={ico()} />
+          <span class="vt-srow-origin-text">{short()}</span>
+        </span>
+      </Show>
     </Show>
   );
 }
@@ -76,6 +98,7 @@ export function ScreensMark(props: { row: Pick<SessionRow, 'otherScreens' | 'oth
     <>
       <Show when={props.row.otherScreens > 0}>
         <span class="vt-srow-screens" data-tip={t('이 탭 말고 다른 브라우저 탭·폰에서도 열려 있음')} data-tip-side="right">
+          <span class="vt-srow-screens-ico" innerHTML={icon('monitor-smartphone', 12, 2)} />
           {t('다른 화면 {n}', { n: props.row.otherScreens })}
         </span>
       </Show>
@@ -95,8 +118,9 @@ export function ScreensMark(props: { row: Pick<SessionRow, 'otherScreens' | 'oth
   );
 }
 
-/** 키워드 줄(상태 키워드 · 도구 · 배지 · 경과). 레일과 Fleet이 같이 쓴다. */
-export function KeywordLine(props: { row: SessionRow; now: () => number }) {
+/** 키워드 줄(상태 키워드 · 도구 · 배지 · 경과). 레일과 Fleet이 같이 쓴다.
+ * 데스크톱 레일은 경과를 1줄 오른쪽에 따로 그리므로 `noSince`로 뺀다(Fleet은 아직 3줄에 둔다). */
+export function KeywordLine(props: { row: SessionRow; now: () => number; noSince?: boolean }) {
   const kw = () => stateKeyword(props.row);
   const rel = () => formatRelativeTime(props.row.since, props.now());
   return (
@@ -109,7 +133,7 @@ export function KeywordLine(props: { row: SessionRow; now: () => number }) {
       >{kw().text}</span>
       <Show when={kw().tool}><span class="vt-srow-tool">{t('도구: {tool}', { tool: kw().tool })}</span></Show>
       <Show when={kw().badge}><span class="vt-srow-badge">{kw().badge}</span></Show>
-      <Show when={rel()}><span class="vt-srow-since">{rel()}</span></Show>
+      <Show when={!props.noSince && rel()}><span class="vt-srow-since">{rel()}</span></Show>
     </>
   );
 }
@@ -148,12 +172,69 @@ export function KidsToggle(props: {
         data-tip-side="right"
         onClick={(e) => { e.stopPropagation(); props.onToggle?.(); }}
       >
+        <span class="vt-srow-kids-ico" innerHTML={shellIcon('corner-down-right', 12, 2)} />
         <Show when={props.progress} fallback={<span>{t('위임 세션 {n}', { n: props.count })}</span>}>
           {(p) => <span>{t('위임 보고 {r}/{n}', { r: p().reported, n: p().open })}</span>}
         </Show>
         <span class="vt-srow-kids-caret" innerHTML={icon('chevron-down', 11, 2)} />
       </button>
     </Show>
+  );
+}
+
+/**
+ * 개입 필요 행의 인라인 답 버튼(「1 · 예」 「3 · 아니오」 …). 데스크톱 레일 행과 폰 Fleet 행이 같이 쓴다.
+ * 선택지는 서버가 감지한 `row.options`, 보내기는 rail-fetch.ts `answerSessionPrompt` 하나다.
+ *   rail   선택지 + 항상 「터미널로」(조용한 버튼) — 선택지에 없는 답은 터미널에서 한다.
+ *   fleet  선택지(번호를 따로 그린 44px 버튼, 리디자인 8단계), 없으면 「터미널로」(채움) 하나.
+ * 열려 있지 않은 세션은 키를 보낼 곳(열린 칸)이 없다 — 부르는 쪽이 `row.open`을 보고 안 그린다.
+ */
+export function AnswerButtons(props: {
+  row: SessionRow; variant: 'rail' | 'fleet';
+  onAnswer: (key: string) => Promise<void>; onTerminal: () => void;
+}) {
+  // P1-1(ADR-33) — 같은 화면의 이중 클릭을 여기서 먼저 막는다(서버 409는 그 다음 방어선).
+  // 응답이 돌아오기 전까지 이 행의 버튼을 다시 못 누르게 한다.
+  const [answering, setAnswering] = createSignal(false);
+  const answer = async (key: string) => {
+    if (answering()) return;
+    setAnswering(true);
+    try { await props.onAnswer(key); } finally { setAnswering(false); }
+  };
+  const options = () => props.row.options || [];
+  const rail = () => props.variant === 'rail';
+  return (
+    <div
+      class={rail() ? 'vt-srow-answers' : 'vt-fleet-answers'}
+      role="group"
+      aria-label={t('{name}에 답하기', { name: props.row.name })}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      <For each={options()}>
+        {(opt) => (
+          // 선택지 글이 길면(「Yes, and don't ask again …」) 버튼이 행 폭을 넘지 않게 말줄임하고 전문은 툴팁으로.
+          <button type="button" class="vt-btn sm vt-srow-answer" disabled={answering()} onClick={() => void answer(opt.key)}
+            data-tip={`${opt.key} · ${opt.label}`} data-tip-side="bottom">
+            {/* 폰 카드(시안 M01)는 번호를 대기색으로 따로 그린다 — 「1 예」. 데스크톱 레일은 한 덩어리 「1 · 예」. */}
+            <Show when={rail()} fallback={<><span class="vt-srow-answer-key">{opt.key}</span><span class="vt-srow-answer-label">{opt.label}</span></>}>
+              <span class="vt-srow-answer-label">{opt.key} · {opt.label}</span>
+            </Show>
+          </button>
+        )}
+      </For>
+      <Show when={rail() || options().length === 0}>
+        <button
+          type="button"
+          class="vt-btn sm vt-srow-to-term"
+          classList={{ quiet: rail(), solid: !rail() }}
+          onClick={() => props.onTerminal()}
+        >
+          <Show when={rail()}><span class="vt-srow-to-term-ico" innerHTML={icon('terminal', 12, 2)} /></Show>
+          {t('터미널로')}
+        </button>
+      </Show>
+    </div>
   );
 }
 
@@ -171,17 +252,26 @@ export function Row(props: {
   onOpen: (e: MouseEvent) => void;
   /** ⋯ 버튼(좌클릭)과 우클릭이 같은 함수를 부른다 — 같은 메뉴가 같은 항목으로 열린다. */
   onContext: (e: MouseEvent) => void;
+  /** 개입 필요 행의 인라인 답(1 · 예 …). 있으면 waiting이고 열린 행에 답 버튼 줄이 붙는다. */
+  onAnswer?: (key: string) => Promise<void>;
 }) {
   const now = createNow();
   const rowName = () => props.row.name;
-  const diff = () => diffLabel(props.row);
   const branch = () => props.row.branch || '';
   const unseen = () => props.row.unseen && props.row.status !== 'idle';
+  const rel = () => formatRelativeTime(props.row.since, now());
+  const changed = () => {
+    const c = props.row.changed;
+    return c && (c.add > 0 || c.del > 0) ? c : null;
+  };
+  const diff = () => diffLabel(props.row);
+  const answers = () => !props.compact && !!props.onAnswer && props.row.status === 'waiting' && props.row.open && !!props.row.sessionId;
 
-  // 48px 접힘에서는 이름·상태 문장이 숨는다. 그 정보는 툴팁(이름 / 브랜치 · 키워드)이 맡는다.
+  // 48px 접힘에서는 이름·상태 문장이 숨는다. 그 정보는 툴팁(이름 / 브랜치 · 키워드 · 다른 화면 · 공유)이 맡는다.
   const compactSub = () => {
     if (!props.compact) return undefined;
-    return [branch(), shareSentence(props.row.share), statusSentence(props.row, now())].filter(Boolean).join(' · ') || undefined;
+    const screens = props.row.otherScreens > 0 ? t('다른 화면 {n}', { n: props.row.otherScreens }) : '';
+    return [branch(), statusSentence(props.row, now()), screens, shareSentence(props.row.share)].filter(Boolean).join(' · ') || undefined;
   };
 
   // div에 role=button만 붙이면 Enter·Space가 아무 일도 안 한다 — 직접 붙인다.
@@ -196,7 +286,13 @@ export function Row(props: {
   return (
     <div
       class="vt-srow vt-wgrail-row"
-      classList={{ active: props.active, closed: !props.row.open, kid: !!props.kid }}
+      classList={{
+        active: props.active, closed: !props.row.open, kid: !!props.kid,
+        'is-waiting': props.row.status === 'waiting',
+        // 열려 있지 않거나 유휴인 행은 이름이 한 단 물러난다(흐림이 아니다 — 대부분의 행이 이 상태다).
+        'is-quiet': props.row.status === 'idle',
+      }}
+      data-state={props.row.status}
       onClick={props.onOpen}
       onKeyDown={onKeyDown}
       onContextMenu={(e) => { e.preventDefault(); props.onContext(e); }}
@@ -212,92 +308,113 @@ export function Row(props: {
       data-tip-sub={compactSub()}
       data-tip-side="right"
     >
-      {/* 접힘 전용: 상태 아이콘 + 에이전트 마크. 펼친 상태의 둘은 아래 row-main 안에 있고
-          그 블록이 접히면 통째로 숨는다(둘이 동시에 보이는 일은 없다). */}
-      <Show when={props.compact}>
-        <span class="vt-srow-state" innerHTML={stateIcon(props.row.status, 14, unseen())} />
-        <Show when={props.row.agent}>
-          <span
-            class="vt-srow-agent vt-wgrail-agent vt-wgrail-agent-compact"
-            data-state={props.row.status}
-            innerHTML={agentMark(props.row.agent!)}
-          />
-        </Show>
-      </Show>
-      <div class="vt-srow-main vt-wgrail-row-main">
-        <div class="vt-srow-top vt-wgrail-row-top">
-          <span class="vt-srow-state" innerHTML={stateIcon(props.row.status, 14, unseen())} />
-          {/* 에이전트를 아직 모르면(agent == null) 아무것도 안 그린다 — "셸이다"와 "모른다"는 다르다. */}
-          <Show when={props.row.agent}>
-            {(a) => (
-              <span
-                class="vt-srow-agent vt-wgrail-agent"
-                data-tip={agentLabel(a())}
-                data-tip-side="right"
-                data-state={props.row.status}
-                innerHTML={agentMark(a())}
-              />
-            )}
-          </Show>
-          <Show
-            when={props.editing}
-            fallback={<span class="vt-srow-name vt-wgrail-name">{rowName()}</span>}
-          >
-            <input
-              type="text"
-              class="vt-input vt-wgrail-name-edit"
-              value={props.editingValue ?? ''}
-              ref={(el) => { queueMicrotask(() => { el.focus(); el.select(); }); }}
-              onInput={(e) => props.onEditInput?.(e.currentTarget.value)}
-              onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') { e.preventDefault(); props.onEditCommit?.(); }
-                else if (e.key === 'Escape') { e.preventDefault(); props.onEditCancel?.(); }
-              }}
-              onBlur={() => props.onEditCommit?.()}
-            />
-          </Show>
-          <KidsToggle progress={props.progress ?? null} count={props.kidsCount || 0} collapsed={!!props.kidsCollapsed}
-            name={rowName()} onToggle={props.onToggleKids} />
-        </div>
-        <Show when={!props.kid && (props.row.directory || branch() || diff() || props.row.contextStatus === 'unavailable')}>
-          <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line2">
-            <Show when={props.row.workspaceKind}><span class="vt-srow-workspace-kind" role="img" aria-label={props.row.workspaceKind === 'WT' ? t('별도 워크트리') : props.row.workspaceKind}>{props.row.workspaceKind}</span></Show>
-            <Show when={props.row.directory}><span class="vt-srow-directory" data-tip={props.row.locationTip || props.row.cwd} data-tip-side="right">{props.row.directory}</span></Show>
-            <Show when={branch()}><span class="vt-srow-branch" data-tip={t('브랜치 · {branch}', { branch: branch() })} data-tip-side="right">{branch()}</span></Show>
-            <Show when={diff()}><span class="vt-srow-meta vt-wgrail-diff">{diff()}</span></Show>
-          </div>
-          <Show when={props.row.contextStatus === 'unavailable'}><div class="vt-srow-sub">{t('정보 갱신 대기')}</div></Show>
-        </Show>
-        <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line3">
-          {/* 하위 행: 진행 중이면 에이전트 상태(작업 중·입력 대기)가 정보고, 끝났으면 위임 결과가 정보다 — 둘을 같이 쓰면
-              「보고 · 성공 완료」처럼 같은 말이 겹친다(2026-10-13 실화면). */}
-          <Show when={props.kid && props.row.lineage?.state !== 'running'} fallback={<KeywordLine row={props.row} now={now} />}>
-            <LineageMark row={props.row} />
-          </Show>
-          <NativeChip row={props.row} />
-          <ShareMark share={props.row.share} />
-          <OriginMark origin={props.row.origin} />
-        </div>
-        <Show when={props.row.otherScreens > 0 || props.row.otherClients > 0}>
-          <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line4">
-            <ScreensMark row={props.row} />
-          </div>
-        </Show>
-      </div>
-      {/* ⋯ 버튼은 우클릭과 같은 메뉴를 연다(행의 좌클릭은 열기/전환이 쓰고 있다).
-          compact(48px)에서는 숨는다 — 좁은 행에 18px가 더 끼어 가로 스크롤이 생긴
-          회귀(2026-09-22)가 있었다. 접힘에서는 우클릭이 메뉴로 가는 길이다. */}
-      <Show when={!props.compact}>
-        <button
-          type="button"
-          class="vt-icon-btn xs vt-srow-menu"
-          aria-label={t('{name} 메뉴', { name: rowName() })}
-          data-tip={t('메뉴')}
-          data-tip-side="left"
-          onClick={(e) => { e.stopPropagation(); props.onContext(e); }}
-          innerHTML={icon('more-horizontal', 14, 2)}
+      {/* 상태 아이콘은 행의 첫 열(16px)이다 — 펼침에서는 1줄 높이(20)에 맞추고, 48px 띠에서는
+          가운데에 두고 에이전트 마크를 오른쪽 아래 모서리에 얹는다. */}
+      <span class="vt-srow-state" innerHTML={stateIcon(props.row.status, 16, unseen())} />
+      <Show when={props.compact && props.row.agent}>
+        <span
+          class="vt-srow-agent vt-wgrail-agent vt-wgrail-agent-compact"
+          data-state={props.row.status}
+          innerHTML={agentMark(props.row.agent!)}
         />
+      </Show>
+      <Show when={!props.compact}>
+        <div class="vt-srow-main vt-wgrail-row-main">
+          {/* 1줄: 에이전트 14 · 이름 13/600 · 위임 토글 · 경과(mono 12) · ⋯ */}
+          <div class="vt-srow-top vt-wgrail-row-top">
+            {/* 에이전트를 아직 모르면(agent == null) 아무것도 안 그린다 — "셸이다"와 "모른다"는 다르다. */}
+            <Show when={props.row.agent}>
+              {(a) => (
+                <span
+                  class="vt-srow-agent vt-wgrail-agent"
+                  data-tip={agentLabel(a())}
+                  data-tip-side="right"
+                  data-state={props.row.status}
+                  innerHTML={agentMark(a())}
+                />
+              )}
+            </Show>
+            <Show
+              when={props.editing}
+              fallback={<span class="vt-srow-name vt-wgrail-name">{rowName()}</span>}
+            >
+              <input
+                type="text"
+                class="vt-input vt-wgrail-name-edit"
+                value={props.editingValue ?? ''}
+                ref={(el) => { queueMicrotask(() => { el.focus(); el.select(); }); }}
+                onInput={(e) => props.onEditInput?.(e.currentTarget.value)}
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); props.onEditCommit?.(); }
+                  else if (e.key === 'Escape') { e.preventDefault(); props.onEditCancel?.(); }
+                }}
+                onBlur={() => props.onEditCommit?.()}
+              />
+            </Show>
+            <KidsToggle progress={props.progress ?? null} count={props.kidsCount || 0} collapsed={!!props.kidsCollapsed}
+              name={rowName()} onToggle={props.onToggleKids} />
+            <span class="vt-srow-elapsed">{rel()}</span>
+            {/* ⋯ 버튼은 우클릭과 같은 메뉴를 연다(행의 좌클릭은 열기/전환이 쓰고 있다). */}
+            <button
+              type="button"
+              class="vt-icon-btn sm vt-srow-menu"
+              aria-label={t('{name} 메뉴', { name: rowName() })}
+              data-tip={t('메뉴')}
+              data-tip-side="left"
+              onClick={(e) => { e.stopPropagation(); props.onContext(e); }}
+              innerHTML={icon('more-horizontal', 16, 2)}
+            />
+          </div>
+          {/* 2줄(mono 12): WT · 디렉터리 · 브랜치 · 변경량. 정보가 아직 없으면 「정보 갱신 대기」. */}
+          <Show when={!props.kid && (props.row.directory || branch() || diff() || props.row.contextStatus === 'unavailable')}>
+            <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line2">
+              <Show when={props.row.workspaceKind}><span class="vt-srow-workspace-kind" data-kind={props.row.workspaceKind === 'WT' ? 'wt' : undefined} role="img" aria-label={props.row.workspaceKind === 'WT' ? t('별도 워크트리') : props.row.workspaceKind}>{props.row.workspaceKind}</span></Show>
+              <Show when={props.row.directory}><span class="vt-srow-directory" data-tip={props.row.locationTip || props.row.cwd} data-tip-side="right">{props.row.directory}</span></Show>
+              <Show when={branch()}>
+                <span class="vt-srow-branch with-ico" data-tip={t('브랜치 · {branch}', { branch: branch() })} data-tip-side="right">
+                  <span class="vt-srow-branch-ico" innerHTML={icon('git-branch', 12, 2)} />
+                  <span class="vt-srow-branch-name">{branch()}</span>
+                </span>
+              </Show>
+              <Show when={diff()}>
+                <span class="vt-srow-meta vt-wgrail-diff">
+                  <Show when={changed()} fallback={diff()}>
+                    {(c) => <>
+                      <Show when={c().add > 0}><span class="vt-diff-add">+{c().add}</span></Show>
+                      {c().add > 0 && c().del > 0 ? ' ' : ''}
+                      <Show when={c().del > 0}><span class="vt-diff-del">−{c().del}</span></Show>
+                    </>}
+                  </Show>
+                </span>
+              </Show>
+              <Show when={props.row.contextStatus === 'unavailable'}><span class="vt-srow-pending">{t('정보 갱신 대기')}</span></Show>
+            </div>
+          </Show>
+          {/* 3줄: 상태 키워드 12/600 · 도구 · 배지 · 내부 서브에이전트 · 공유 · 출처. */}
+          <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line3">
+            {/* 하위 행: 진행 중이면 에이전트 상태(작업 중·입력 대기)가 정보고, 끝났으면 위임 결과가 정보다 — 둘을 같이 쓰면
+                「보고 · 성공 완료」처럼 같은 말이 겹친다(2026-10-13 실화면). */}
+            <Show when={props.kid && props.row.lineage?.state !== 'running'} fallback={<KeywordLine row={props.row} now={now} noSince />}>
+              <LineageMark row={props.row} />
+            </Show>
+            <Show when={props.kid}>
+              <span class="vt-srow-kidnote" data-tip={t('FarShell 위임 세션')} data-tip-side="right">{t('별도 터미널')}</span>
+            </Show>
+            <NativeChip row={props.row} />
+            <ShareMark share={props.row.share} />
+            <OriginMark origin={props.row.origin} withText />
+          </div>
+          {/* 4줄(있을 때만): 다른 화면 N · 웹이 아닌 터미널 연결 수. */}
+          <Show when={props.row.otherScreens > 0 || props.row.otherClients > 0}>
+            <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line4">
+              <ScreensMark row={props.row} />
+            </div>
+          </Show>
+          <Show when={answers()}>
+            <AnswerButtons row={props.row} variant="rail" onAnswer={props.onAnswer!} onTerminal={() => props.onOpen(new MouseEvent('click'))} />
+          </Show>
+        </div>
       </Show>
     </div>
   );

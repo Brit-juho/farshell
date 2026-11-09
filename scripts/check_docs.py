@@ -419,6 +419,31 @@ def _resolve_token(css: str, name: str, depth: int = 3) -> str:
         name = ref.group(1)
     return ""
 
+def _activity_ids(activity_src: str, side_prefs_src: str = "") -> list[str]:
+    """활동 막대 위 무리의 id를 순서대로(shell/activity-data.ts의 `ACTIVITIES` 배열).
+
+    리디자인 9단계에 옛 아이콘 레일(index.html `.vt-rail-btn`)을 지우며 `rail-items`를 이것으로 바꿨다.
+    개수가 아니라 id 목록을 보는 이유: 항목을 하나 빼고 하나 넣거나 순서를 바꿔도 개수는 그대로라
+    문서가 틀린 채로 통과한다. 「세션」은 상수(`SESSIONS_ACTIVITY`, side-prefs.js)라 그 값으로 푼다.
+    배열의 항목 줄(`{ id: … }`)만 센다 — 아래 함수 본문의 `a.id` 같은 것은 대상이 아니다.
+    """
+    m = re.search(r"export const ACTIVITIES\s*:[^=]*=\s*\[(.*?)\n\];", activity_src, re.S)
+    if not m:
+        return []
+    sess = re.search(r"SESSIONS_ACTIVITY\s*=\s*['\"]([\w-]+)['\"]", side_prefs_src)
+    out: list[str] = []
+    for raw in re.findall(r"^\s*\{\s*id:\s*([^,]+),", m.group(1), re.M):
+        raw = raw.strip()
+        lit = re.fullmatch(r"['\"]([\w-]+)['\"]", raw)
+        if lit:
+            out.append(lit.group(1))
+        elif raw == "SESSIONS_ACTIVITY" and sess:
+            out.append(sess.group(1))
+        else:
+            return []  # 모르는 식이면 조용히 틀린 목록을 내지 않는다 — 행이 「없다」로 드러난다
+    return out
+
+
 def _design_expected() -> dict[str, str]:
     """코드에서 뽑은 (키 → 값). 키는 두 DESIGN 문서의 표 첫 칸과 같다."""
     out: dict[str, str] = {}
@@ -445,13 +470,12 @@ def _design_expected() -> dict[str, str]:
             if caps:
                 out["pane-cap"] = "/".join(caps)
 
-    index = ROOT / "frontend" / "index.html"
-    if index.exists():
-        # 클래스 경계까지 봐야 한다 — `class="vt-rail-btn`만 보면
-        # `vt-rail-btn-DISABLED` 같은 접두 일치까지 세어 코드 쪽 변경을 놓친다.
-        out["rail-items"] = str(
-            len(re.findall(r'class="vt-rail-btn(?=[ "])', index.read_text()))
-        )
+    acts = ROOT / "frontend" / "js" / "shell" / "activity-data.ts"
+    if acts.exists():
+        side = ROOT / "frontend" / "js" / "shell" / "side-prefs.js"
+        ids = _activity_ids(acts.read_text(), side.read_text() if side.exists() else "")
+        if ids:
+            out["activity-items"] = ", ".join(ids)
 
     st = ROOT / "server" / "agent_status.py"
     if st.exists():

@@ -44,7 +44,7 @@ fsh tunnel auto 3000 <on|off>        # turn auto re-expose on or off (credential
 | `pin` | Only people who know the access code |
 | `public` | Anyone with the URL (no auth) |
 
-`expose` asks for confirmation because it opens something to the public internet. Remote-control ports such as Chrome remote debugging (9222) open only with `--force`.
+`expose` asks for confirmation because it opens something to the public internet. Remote-control ports such as Chrome remote debugging (9222) open only with `--force`. In the web ports panel, when the server reports a dangerous port a confirmation window explains why, and the Expose button turns on only after you **type the port number exactly** (focus starts on Cancel; Esc cancels).
 For a `session` share, opening the public address directly shows only an instruction screen. Start from the "first open" link in the `expose` output (or the FarShell port panel). An exposure whose time has run out is taken down, tunnel included, within a minute.
 
 ### Auto re-expose

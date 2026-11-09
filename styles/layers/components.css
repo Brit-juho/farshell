@@ -362,28 +362,28 @@
   .vt-host-btn.open { background: var(--menu-hover); color: var(--color-txt); }
 
   /* ── 고정 사이드 패널 ─────────────────────────────────────────────────
-   * 화면 좌우 끝에 붙어 세로를 다 쓰는 패널. 레일(#vt-wgrail)과 dock(#vt-dock)이
-   * 그것인데, 2.1.6 이전에는 선언 열 개가 양쪽에 똑같이 적혀 있었다 —
+   * 화면 좌우 끝에 붙어 세로를 다 쓰는 패널. 지금은 작업대(#vt-workbench — 활동 막대 +
+   * 사이드바, 그 안에 레일·dock)가 그것이다. 2.1.6 이전에는 선언 열 개가 레일·dock 양쪽에 똑같이 적혀 있었다 —
    * position/top/bottom/z-index/display/flex-direction/flex/min-width/background/
    * transition. 다른 건 **어느 쪽 끝에 붙는가**뿐이다.
    *
    * `display:none`이 기본인 이유: 폰(<720px)에서는 둘 다 안 쓰고 하단 내비와
    * 플릿 홈이 그 역할을 한다. 켜는 것은 각 화면의 미디어쿼리 몫이다.
    *
-   * 폭은 사용자가 끄는 값이라 변수로 받는다 — 각자 자기 변수를 넘긴다
-   * (--vt-wgrail-w / --vt-dock-w). body의 padding이 같은 변수를 읽어야
-   * 본문이 패널 밑으로 흘러들지 않는다. */
+   * 폭은 사용자가 끄는 값이라 변수로 받는다(--vt-activity-w + --vt-side-w,
+   * 90-workbench.css). body의 padding이 같은 변수를 읽어야 본문이 패널 밑으로
+   * 흘러들지 않는다. 폭에는 transition을 두지 않는다 — 폭이 애니메이션되면 그
+   * 프레임마다 칸이 다시 맞춰진다(터미널 refit·SIGWINCH). */
   .vt-sidepanel {
     position: fixed;
-    top: var(--menubar-h, 0px);   /* 맨 위 전체 폭 메뉴바(#vt-hud) 아래에서 시작한다 */
-    bottom: 0;
+    top: var(--menubar-h, 0px);       /* 맨 위 전체 폭 제목 막대(#vt-titlebar) 아래에서 시작한다 */
+    bottom: var(--statusbar-h, 0px);  /* 맨 아래 전체 폭 상태 막대(#vt-hud) 위에서 끝난다 */
     z-index: 70;
     display: none;
     flex-direction: column;
     flex: none;
     min-width: 0;
     background: var(--bar);
-    transition: width var(--dur-fast) var(--ease-out-quint);
   }
   .vt-sidepanel.left  { left: 0;  border-right: 1px solid var(--color-line); }
   .vt-sidepanel.right { right: 0; border-left: 1px solid var(--color-line); }
@@ -517,6 +517,15 @@
   .vt-srow-directory + .vt-srow-branch::before { content: "· "; }
   .vt-view-group { margin: var(--spacing) 0 calc(var(--spacing) * 2); border-bottom: 1px solid var(--color-line); }
   .vt-view-group-head { display: flex; align-items: center; gap: calc(var(--spacing) * 1.5); min-width: 0; min-height: 28px; padding: 0 calc(var(--spacing) * 2.5); }
+  .vt-view-group-ico { display: inline-flex; flex: none; color: var(--color-muted); }
+  /* 묶음 접기 캐럿 — 구역 머리 캐럿과 같은 관용구(chevron-down을 돌린다). */
+  .vt-view-group-toggle { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 16px; height: 20px; padding: 0; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--color-muted); cursor: pointer; }
+  .vt-view-group-toggle svg { transition: transform var(--dur-fast) var(--ease-out-quint); }
+  .vt-view-group-toggle.collapsed svg { transform: rotate(-90deg); }
+  .vt-view-group-toggle:hover { color: var(--color-txt); }
+  .vt-view-group-toggle:focus-visible { outline: 2px solid var(--color-acc); outline-offset: 1px; }
+  @media (prefers-reduced-motion: reduce) { .vt-view-group-toggle svg { transition: none; } }
+  .vt-view-group-rename { display: inline-flex; align-items: center; justify-content: center; }
   .vt-view-group-title { flex: 1; min-width: 0; padding: 0; text-align: left; background: transparent; border: 0; color: var(--color-sub); font: var(--weight-medium) var(--fs-xs) / var(--leading-row) var(--font-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
   .vt-view-group-title:hover { color: var(--color-txt); }
   .vt-view-group-count { flex: none; color: var(--color-muted); font: var(--weight-normal) var(--fs-3xs) / 1 var(--font-mono); }
@@ -553,14 +562,57 @@
   .vt-srow-since { flex: none; font-variant-numeric: tabular-nums; }
   .vt-srow-since::before { content: "·"; margin-right: calc(var(--spacing) * 1.5); opacity: .6; }
   .vt-srow-origin { margin-left: auto; }
+  /* 만든 곳 글(시안 D02 3줄 「다른 맥에서 만듦」) — 자리가 모자라면 글이 먼저 줄고 아이콘은 남는다. */
+  .vt-srow-origin.with-text { flex: 0 1 auto; min-width: 0; align-items: center; gap: 3px; }
+  .vt-srow-origin-ico { display: inline-flex; flex: none; }
+  .vt-srow-origin-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .vt-srow-view { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* 「다른 화면 N」 — 아이콘 + 글자(시안 D02 4줄). 상자를 두르지 않는다: 줄 자체가 이 정보 하나다. */
   .vt-srow-screens {
+    display: inline-flex;
     flex: none;
-    padding: 0 calc(var(--spacing) * 1.25);
-    border: 1px solid var(--color-line);
-    border-radius: var(--radius-sm);
+    align-items: center;
+    gap: 3px;
     color: var(--color-sub);
   }
+  .vt-srow-screens-ico { display: inline-flex; flex: none; }
+
+  /* ── 리디자인 4단계 — 레일·Fleet이 같이 쓰는 행 조각 ─────────────────────
+   * 데스크톱 레일의 치수·색 단계는 screens/70-worktree-rail.css(`#vt-wgrail` 범위)가 정한다.
+   * 여기는 두 화면에 모두 나오는 조각의 뼈대만 둔다. */
+  /* 경과 시간 — 1줄 오른쪽 끝(종료 행은 레일·Fleet 모두, 실행 중 행은 레일만). */
+  .vt-srow-elapsed {
+    flex: none;
+    margin-left: auto;
+    color: var(--color-muted);
+    font: var(--weight-normal) var(--srow-meta) / 1 var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .vt-srow-elapsed:empty { display: none; }
+  .vt-srow-note { flex: none; color: var(--color-muted); }
+  /* 아이콘이 붙은 브랜치(git-branch 12 + 이름). 이름만 말줄임한다. */
+  .vt-srow-branch.with-ico { display: inline-flex; align-items: center; gap: 3px; color: var(--color-sub); }
+  .vt-srow-branch-ico { display: inline-flex; flex: none; }
+  .vt-srow-branch-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* 변경량 +추가 −삭제 — 추가는 작업색, 삭제는 오류색(터미널 diff와 같은 뜻). */
+  .vt-diff-add { color: var(--color-st-working); }
+  .vt-diff-del { color: var(--color-st-error); }
+  /* 행 아래 버튼 줄(답 버튼 · 종료 행 동작). 버튼은 `.vt-btn.sm`(24). */
+  .vt-srow-answers,
+  .vt-srow-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--spacing);
+    margin-top: var(--spacing);
+    min-width: 0;
+  }
+  .vt-srow-answers .vt-btn { max-width: 100%; min-width: 0; }
+  .vt-srow-answer-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vt-srow-to-term-ico,
+  .vt-srow-resume-ico { display: inline-flex; flex: none; }
+  .vt-srow-resume { margin-left: auto; }
 
   /* 웹이 아닌 attach(맥 터미널 등) — 「다른 화면」과 같은 줄, 아이콘 + 개수만 */
   .vt-srow-clients {
@@ -997,7 +1049,7 @@
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: calc(var(--spacing) * 1.5);
+    gap: 8px;                      /* 시안 O16-D 카드 간격 */
     pointer-events: none;
     /* compact — keybar(실측 --kb-height) + 하단 내비 52px 위. 폰에서 손이
      * 닿는 건 하단뿐이다(탭해서 치우려면 닿아야 한다). */
@@ -1010,47 +1062,45 @@
   body.vt-keyboard-open #vt-toasts {
     bottom: calc(var(--kb-overlap, 0px) + var(--kb-height, 0px) + var(--spacing) * 2);
   }
-  /* regular 이상 — 하단 우측. 프롬프트 줄(하단 좌측)을 비켜난다. 예전엔 하단 HUD 바로 위였으나
-   * HUD가 맨 위 메뉴바로 옮겨 가서(2026-11) 바닥에서 한 칸만 띄운다. 우측 오프셋은 .vt-onboarding과 **같은 티어 규칙**을 쓴다:
-   * 720~1279에서 dock은 펼쳐도 오버레이라 본문을 36px만 밀고, 1280부터는
-   * --vt-dock-w(접힘 36px / 펼침 실제 폭, Dock.tsx가 갱신)만큼 민다. */
+  /* regular 이상 — 하단 우측. 프롬프트 줄(하단 좌측)을 비켜난다. 2026-11(작업대) — 오른쪽에는
+   * 더 이상 dock이 없다(사이드바는 왼쪽 하나, 90-workbench.css). 리디자인 2단계 — HUD가 다시 아래 상태 막대
+   * 24가 돼서 그 위 16px에 뜬다(시안 spec.html 「토스트」). */
   @media (min-width: 720px) {
     #vt-toasts {
       left: auto;
-      right: calc(36px + var(--spacing) * 3 + env(safe-area-inset-right, 0px));
-      bottom: calc(var(--spacing) * 2);
-      width: min(420px, 45vw);
+      right: calc(16px + env(safe-area-inset-right, 0px));
+      bottom: calc(var(--statusbar-h, 0px) + 16px + env(safe-area-inset-bottom, 0px));
+      width: min(340px, 45vw);
       align-items: flex-end;
     }
   }
-  @media (min-width: 1280px) {
-    #vt-toasts {
-      right: calc(var(--vt-dock-w, 392px) + var(--spacing) * 3 + env(safe-area-inset-right, 0px));
-    }
-  }
 
+  /* 리디자인 6단계(2026-11, 시안 O16-D 「정돈」 배치) — 카드 340, 패딩 12/12/12/14, 반경 8, raised 면.
+   * [16px 아이콘] [머리(문구 · ×N) / 흐린 보조 줄 / 동작 버튼] [× 닫기]. 등급 막대 2px은 그대로. */
   .vt-toast {
     display: flex;
-    align-items: center;
-    gap: calc(var(--spacing) * 2);
-    min-height: 36px;              /* §10 — 행은 24/28/36 세 단만 */
+    align-items: flex-start;
+    gap: 10px;
+    width: 340px;
     max-width: 100%;
-    padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 3);
-    padding-left: calc(var(--spacing) * 3 + 2px);   /* 선두 막대 2px만큼 */
+    box-sizing: border-box;
+    padding: 12px 12px 12px 14px;
     border: 1px solid var(--color-line-strong);
-    border-radius: var(--radius-sm);
-    background: var(--menu);
+    border-radius: var(--radius-lg);
+    background: var(--color-bg-raised);
     box-shadow:
       inset 2px 0 0 var(--vt-toast-tone, var(--color-line-strong)),
       var(--shadow-e2);
     color: var(--color-txt);
-    font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui);
+    font: var(--weight-normal) var(--fs-sm) / 18px var(--font-ui);
     pointer-events: auto;
     cursor: pointer;               /* 탭/클릭하면 즉시 사라진다 */
     transition: opacity var(--dur-fast) var(--ease-out-quint);
   }
   /* 등장은 처음 뜰 때 한 번만(toast.js가 .entering을 120ms 뒤 뗀다). 퇴장은
    * 등장보다 조용하게 — 투명도만, 움직임 없이. */
+  /* compact — 하단 내비 위 띠라 폭을 화면에 맞춘다(340 고정은 데스크톱 카드). */
+  @media (max-width: 719px) { .vt-toast { width: auto; } }
   .vt-toast.entering { animation: vt-toast-in var(--dur-fast) var(--ease-out-quint); }
   .vt-toast.leaving  { opacity: 0; }
   @keyframes vt-toast-in {
@@ -1058,35 +1108,48 @@
     to   { opacity: 1; transform: none; }
   }
 
-  .vt-toast.err  { --vt-toast-tone: var(--color-st-error);   color: var(--err); border-color: color-mix(in srgb, var(--color-st-error) 45%, var(--color-line-strong)); }
-  .vt-toast.warn { --vt-toast-tone: var(--color-st-waiting); color: var(--color-st-waiting); }
-  .vt-toast.ok   { --vt-toast-tone: var(--color-st-working); color: var(--ok); }
-  .vt-toast.info { --vt-toast-tone: var(--color-line-strong); color: var(--color-txt); }
+  /* 색은 아이콘과 등급 막대에만 — 문구는 본문색으로 둬야 세 장이 겹쳐도 읽힌다(시안). */
+  .vt-toast.err  { --vt-toast-tone: var(--color-st-error);   border-color: color-mix(in srgb, var(--color-st-error) 35%, var(--color-line-strong)); }
+  .vt-toast.warn { --vt-toast-tone: var(--color-st-waiting); }
+  .vt-toast.ok   { --vt-toast-tone: var(--color-st-working); }
+  .vt-toast.info { --vt-toast-tone: var(--color-acc); }
+  .vt-toast-icon { flex: none; display: inline-flex; width: 16px; height: 18px; align-items: center; color: var(--vt-toast-tone, var(--color-sub)); }
+  .vt-toast-icon[hidden] { display: none; }
+  .vt-toast-icon > svg { width: 16px; height: 16px; }
+  .vt-toast-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+  .vt-toast-head { display: flex; align-items: center; gap: 6px; min-width: 0; font-weight: var(--weight-semibold); }
+  .vt-toast-detail { color: var(--color-muted); font-size: var(--fs-xs); line-height: 18px; overflow-wrap: anywhere; }
+  .vt-toast-actions { display: flex; gap: 6px; margin-top: 6px; }
+  .vt-toast-x { flex: none; margin: -3px -4px 0 auto; }
 
   /* 문구는 전용 span에 담는다 — HUD 줄에서 문구만 말줄임하고 횟수 배지는
    * 남겨야 하기 때문이다. */
-  .vt-toast-text { flex: 1 1 auto; min-width: 0; }
+  .vt-toast-text { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
   /* 같은 토스트가 반복해서 뜰 때 몇 번째인지 — 같은 문구 세 줄을 쌓는 대신
-   * (2.1.5까지의 동작) 한 줄에 횟수를 붙인다. ui/toast.js가 채운다. */
+   * (2.1.5까지의 동작) 한 줄에 횟수를 붙인다. ui/toast.js가 채운다. 카드에서는 시안의 배지(16px 알약). */
   .vt-toast-count {
     flex: none;
-    margin-left: auto;
-    padding-left: calc(var(--spacing) * 2);
     color: var(--color-muted);
     font: var(--weight-medium) var(--fs-3xs) / 1 var(--font-mono);
     font-variant-numeric: tabular-nums;
   }
+  .vt-toast .vt-toast-count {
+    min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box;
+    border-radius: var(--radius-full); text-align: center; line-height: 16px;
+    color: var(--color-txt); background: var(--color-bg-raised); box-shadow: 0 0 0 1px var(--color-line-strong);
+  }
+  #vt-hud-msg > .vt-toast-count { margin-left: auto; padding-left: calc(var(--spacing) * 2); }
 
-  /* ── HUD 줄 메시지 (#vt-hud-msg) ───────────────────────────────────────
-   * info/success는 카드로 띄우지 않고 이 줄이 받는다. #vt-hud는 normal flow
-   * 안의 24px 띠라 터미널을 1px도 가리지 않는다 — 터미널 메시지가 원래 있어야
-   * 할 자리다(tmux status line·vim echo area).
+  /* ── 상태 막대 메시지 (#vt-hud-msg) ───────────────────────────────────
+   * info/success는 카드로 띄우지 않고 이 줄이 받는다. #vt-hud(상태 막대 24)는 body가
+   * 그만큼 비워 둔 자리라 터미널을 1px도 가리지 않는다 — 터미널 메시지가 원래 있어야
+   * 할 자리다(tmux status line·vim echo area). 맨 왼쪽 에이전트 칩 바로 오른쪽에 선다.
    *
    * 칩을 숨기는 규칙(#vt-hud.vt-hud-busy …)은 여기 둘 수 없다 — .vt-hud-chip이
    * styles/screens/60-mobile-hud.css의 **unlayered** 규칙이라 layer는 무조건
    * 진다. 그래서 그쪽 파일에 있다(2.1.6의 CSS 레이어 함정과 같은 건이다). */
   #vt-hud-msg {
-    order: -3;                     /* 칩이 하나라도 남아도 메시지가 왼쪽 끝 */
+    order: -3;                     /* 에이전트 칩(-4, 95-bars.css) 바로 오른쪽, 다른 칩보다 왼쪽 */
     display: flex;
     align-items: center;
     gap: calc(var(--spacing) * 2);
@@ -1109,8 +1172,16 @@
   #vt-hud-msg.leaving { opacity: 0; }
   /* 띠가 좁으면 문구만 말줄임한다 — 전문은 data-tip 툴팁에 남는다. */
   #vt-hud-msg > .vt-toast-text { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  #vt-hud-msg[data-tone="ok"]   { --vt-toast-tone: var(--color-st-working); color: var(--ok); }
-  #vt-hud-msg[data-tone="info"] { --vt-toast-tone: var(--color-line-strong); }
+  /* 리디자인 6단계(시안 O16-D) — 상태 막대 칸은 등급색 옅은 면 + 1px 테두리, 글자는 본문색(막대 2px 대신). */
+  #vt-hud-msg[data-tone="ok"]   { --vt-toast-tone: var(--color-st-working); }
+  #vt-hud-msg[data-tone="info"] { --vt-toast-tone: var(--color-acc); }
+  #vt-hud-msg[data-tone] {
+    flex: 0 1 auto;                /* 글자에 맞춘 칸(시안) — 띠 전체에 테두리가 걸리지 않게 */
+    color: var(--color-txt);
+    padding-left: calc(var(--spacing) * 2);
+    background: color-mix(in srgb, var(--vt-toast-tone) 10%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--vt-toast-tone) 25%, transparent);
+  }
 
   /* 누른 자리에서 끝나는 성공 표시 — ui/okflash.js가 900ms 동안 아이콘을
    * 체크로 바꾸고 이 클래스를 얹는다. 같은 16px 상자 안이라 줄이 안 밀린다. */
@@ -1575,7 +1646,7 @@
     font-variant-numeric: tabular-nums; pointer-events: none;
   }
   .vt-authz-badge[hidden] { display: none; }
-  #vt-rail-settings, .vt-mb-menu, .vt-mnav-btn[data-mnav="more"] { position: relative; }
+  .vt-mb-menu, .vt-mnav-btn[data-mnav="more"] { position: relative; }
 
   /* 좁은 화면: 승인 모달은 하단 내비(고정 52px) 위까지만 — 아래 끝(「나중에」)이 내비에 가려지지 않게 한다. */
   @media (max-width: 719px) {
@@ -1598,106 +1669,179 @@
   }
 }
 
-/* Native CLI children share the rail's density; transcripts use the existing sheet. */
-.vt-native-children { position: relative; margin: 0 8px 6px 18px; padding-inline-start: 10px; }
-/* 부모에서 이어지는 가지: 세로 줄 하나 + 행마다 짧은 가로 갈래 */
-.vt-native-children::before { content: ""; position: absolute; inset-block: 0 14px; inset-inline-start: 0; width: 1px; background: var(--color-line-strong); }
-.vt-native-row { display: flex; align-items: center; position: relative; border-radius: var(--radius-sm); transition: background var(--dur-fast) var(--ease-out-quint); }
-.vt-native-row::before { content: ""; position: absolute; inset-inline-start: -10px; top: 50%; width: 7px; height: 1px; background: var(--color-line-strong); }
+/* 네이티브 서브에이전트 하위 행 — 세션 사이드바 행과 같은 열(리디자인 4단계, 시안 D02 「내부 서브에이전트
+ * 하위 행」): 들여쓰기 24(상태 아이콘이 x=36에서 시작) + 1px 가지선(x=19, 부모 상태 아이콘의 축).
+ * 1줄 상태 16 · 이름 13/500 · 경과 mono 12 · ⋯, 2줄 「내부 · 작업 중」 12/600(상태색). 기록은 시트로 연다. */
+.vt-native-children { position: relative; margin: 0; padding: 0; }
+.vt-native-row { display: flex; align-items: flex-start; position: relative; padding-inline-end: 6px; transition: background var(--dur-fast) var(--ease-out-quint); }
+/* 가지: 위에서 내려와 아이콘 쪽으로 꺾이는 짧은 갈래, 다음 형제가 있으면 세로선이 이어진다. */
+.vt-native-row::before { content: ""; position: absolute; left: 19px; top: 0; width: 10px; height: 16px; border-left: 1px solid var(--color-line-strong); border-bottom: 1px solid var(--color-line-strong); border-bottom-left-radius: 5px; pointer-events: none; }
+.vt-native-row:not(:last-child)::after { content: ""; position: absolute; left: 19px; top: 16px; bottom: 0; border-left: 1px solid var(--color-line-strong); pointer-events: none; }
 .vt-native-row:hover, .vt-native-row:focus-within { background: var(--color-bg-3); }
-.vt-native-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 6px 4px 6px 6px; color: var(--color-txt); background: transparent; border: 0; border-radius: var(--radius-sm); text-align: start; cursor: pointer; }
-.vt-native-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.vt-native-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.vt-native-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 500; color: var(--color-txt); }
-.vt-native-time { flex: none; font-size: 11px; color: var(--color-muted); font-variant-numeric: tabular-nums; }
-.vt-native-meta { color: var(--color-muted); font-size: 11px; }
-.vt-native-row[data-state="done"] .vt-native-name, .vt-native-row[data-state="idle"] .vt-native-name { color: var(--color-sub); font-weight: 400; }
-.vt-native-row .status-dot[data-stale] { background: transparent; box-shadow: inset 0 0 0 1.5px var(--color-st-idle); }
-.vt-native-row[data-state="working"] .status-dot { animation: vt-status-breathe 2.4s var(--ease-out-quint) infinite; }
-.vt-native-menu-btn { flex: none; margin-inline-end: 4px; opacity: 0; transition: opacity var(--dur-fast) var(--ease-out-quint); }
+.vt-native-open { flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 8px; padding: 6px 0 6px 36px; color: var(--color-txt); background: transparent; border: 0; text-align: start; cursor: pointer; }
+.vt-native-open:focus-visible { outline: 2px solid var(--color-acc); outline-offset: -2px; }
+.vt-native-state { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 20px; }
+/* 상태를 다시 확인해야 하는 하위(오래 소식 없음)는 아이콘만 한 단 흐리게 — 글자는 그대로 읽힌다. */
+.vt-native-state[data-stale] { opacity: .5; }
+.vt-native-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.vt-native-head { display: flex; align-items: center; gap: 6px; min-width: 0; height: 20px; }
+.vt-native-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--weight-medium) var(--fs-sm) / 20px var(--font-ui); color: var(--color-txt); }
+.vt-native-time { flex: none; font: var(--weight-normal) var(--fs-xs) / 1 var(--font-mono); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.vt-native-kw { display: block; height: 18px; font: var(--weight-semibold) var(--fs-xs) / 18px var(--font-ui); color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vt-native-kw[data-state="working"] { color: var(--color-st-working); }
+.vt-native-kw[data-state="done"] { color: var(--color-st-done); }
+.vt-native-kw[data-state="failed"] { color: var(--color-st-error); }
+.vt-native-meta { color: var(--color-muted); font-size: var(--fs-xs); padding: 4px 6px 6px 36px; margin: 0; }
+.vt-native-row[data-state="done"] .vt-native-name, .vt-native-row[data-state="idle"] .vt-native-name { color: var(--color-sub); }
+.vt-native-menu-btn { flex: none; margin-top: 4px; opacity: 0; transition: opacity var(--dur-fast) var(--ease-out-quint); }
 .vt-native-row:hover .vt-native-menu-btn, .vt-native-row:focus-within .vt-native-menu-btn { opacity: 1; }
-.vt-native-fold { display: block; width: 100%; background: transparent; border: 0; border-radius: var(--radius-sm); color: var(--color-sub); padding: 6px; text-align: start; cursor: pointer; font-size: 11px; }
+.vt-native-fold { display: block; width: 100%; height: 28px; background: transparent; border: 0; color: var(--color-sub); padding: 0 6px 0 36px; text-align: start; cursor: pointer; font: var(--weight-normal) var(--fs-xs) / 28px var(--font-ui); }
 .vt-native-fold:hover { background: var(--color-bg-3); color: var(--color-txt); }
-#vt-subagent .vt-viewer-card { width: min(640px, 94vw); }
-#vt-subagent-body { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
-.vt-native-notice { color: var(--color-sub); font-size: 12px; }
-.vt-native-notice:empty { display: none; }
-.vt-native-transcript { overflow: auto; min-height: 100px; display: flex; flex-direction: column; gap: 14px; }
-.vt-native-entry { padding-inline-start: 12px; border-inline-start: 2px solid transparent; }
-.vt-native-entry-label { color: var(--color-muted); font-size: 11px; font-weight: 500; margin-bottom: 4px; }
-.vt-native-entry pre { margin: 0; color: var(--color-txt); font-family: var(--font-mono); font-size: 12px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
-.vt-native-entry[data-kind="user"] { border-inline-start-color: var(--color-acc); }
-.vt-native-entry[data-kind="user"] .vt-native-entry-label { color: var(--color-acc); }
-.vt-native-entry[data-kind="tool_call"], .vt-native-entry[data-kind="tool_result"] { opacity: .8; }
-.vt-native-entry[data-fold] .vt-native-entry-label { cursor: pointer; border-radius: var(--radius-sm); }
-.vt-native-entry[data-fold] .vt-native-entry-label::after { content: ""; display: inline-block; width: 5px; height: 5px; margin-inline-start: 6px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: translateY(-2px) rotate(-45deg); transition: transform var(--dur-fast) var(--ease-out-quint); }
-.vt-native-entry[data-fold="open"] .vt-native-entry-label::after { transform: translateY(-3px) rotate(45deg); }
-.vt-native-entry[data-fold="closed"] pre { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.vt-native-head-dot { margin-inline-end: 2px; }
-@media (max-width: 719px) { #vt-subagent .vt-viewer-card { width: 100%; height: 100%; max-height: 100%; } }
 @media (pointer: coarse) {
-  .vt-native-open, .vt-native-fold, .vt-native-picker { min-height: 44px; }
+  .vt-native-open, .vt-native-fold { min-height: 44px; }
   .vt-native-menu-btn { opacity: 1; --icon-btn: 36px; }
 }
-@media (prefers-reduced-motion: reduce) { .vt-native-row[data-state="working"] .status-dot { animation: none; } }
 
-.vt-native-chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--color-line); border-radius: var(--radius-full); padding: 2px 9px 2px 7px; background: transparent; color: var(--color-muted); font-size: 11px; cursor: pointer; text-align: start; transition: background var(--dur-fast) var(--ease-out-quint), color var(--dur-fast) var(--ease-out-quint); }
+/* 행 3줄의 칩(시안 `.chip`) — 높이 18 · 반경 4 · 11/500. 작업 중인 하위가 있으면 작업색 글자 + 같은 색 옅은 틴트. */
+.vt-native-chip { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 18px; border: 1px solid var(--color-line-strong); border-radius: var(--radius-xs); padding: 0 6px; background: transparent; color: var(--color-sub); font: var(--weight-medium) var(--fs-3xs) / 1 var(--font-ui); white-space: nowrap; cursor: pointer; text-align: start; transition: background var(--dur-fast) var(--ease-out-quint), color var(--dur-fast) var(--ease-out-quint); }
 .vt-native-chip:hover { color: var(--color-txt); background: var(--color-bg-3); }
-.vt-native-chip[data-working] { color: var(--color-txt); border-color: var(--color-line-strong); }
+.vt-native-chip[data-working] { color: var(--color-st-working); border-color: color-mix(in srgb, var(--color-st-working) 30%, transparent); background: color-mix(in srgb, var(--color-st-working) 10%, transparent); }
 .vt-native-chip-icon { display: inline-flex; }
-.vt-native-picker { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 8px 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-txt); text-align: start; cursor: pointer; }
-.vt-native-picker:hover { background: var(--color-bg-3); }
-.vt-native-picker .vt-native-name { flex: 1; }
-.vt-native-row[data-state="failed"] .status-dot { background: var(--color-st-error); }
 
-/* Customization manager: one list, explicit context, detail only on demand. */
+/* Customization manager: one list, explicit context, detail only on demand.
+ * 리디자인 후속(시안 panels P09-b) — 3단계 토큰으로 안쪽을 다시 그렸다. 위 막대(관리 대상 세그먼트 · 호스트 · 세션 ·
+ * 새로고침) / 왼쪽 탐색 200 / 필터 막대 · 일괄 막대 / 행 56(이름 mono 13/500 + 태그, 원본 위치 mono 11) / 바닥 막대.
+ * 창 크기와 큰 글자(screens/50-settings-usage.css 「MCP · 스킬 · 플러그인 글자 한 단계 키움」)는 그대로다.
+ * 두 단 배치(탐색 | 내용)는 넓은 창 모달에서만 — screens/50-settings-usage.css가 #vt-mcp 범위로 건다. */
 .vt-agent-config { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.vt-agent-config .vt-chip { min-height: 28px; padding: 4px 8px; font-size: 12px; line-height: 1.4; }
-.vt-ac-top, .vt-ac-mode, .vt-ac-controls, .vt-ac-actions, .vt-ac-nav, .vt-ac-preset, .vt-ac-envrow, .vt-ac-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.vt-ac-top { justify-content: space-between; }
-.vt-ac-mode [aria-selected="true"], .vt-ac-nav [aria-current="page"] { color: var(--color-txt); background: var(--color-bg-3); border-color: var(--color-line-strong); }
-.vt-ac-field { display: flex; flex-direction: column; gap: 4px; min-width: 120px; max-width: 100%; }
-.vt-ac-field select { width: 100%; max-width: 320px; }
-.vt-ac-search { flex: 1; min-width: 160px; }
+/* 버튼 — 대화상자 버튼(28 · 반경 6 · raised · line-strong · 13/500). 선택·현재는 hover 면 + 본문색. */
+.vt-agent-config .vt-chip {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 10px;
+  border: 1px solid var(--color-line-strong); border-radius: var(--radius-sm); background: var(--color-bg-raised);
+  color: var(--color-txt); font: var(--weight-medium) var(--fs-sm) / 1.2 var(--font-ui); white-space: nowrap;
+}
+.vt-agent-config .vt-chip:hover:not(:disabled) { background: var(--color-bg-3); }
+.vt-agent-config .vt-chip:disabled { opacity: .45; }
+.vt-agent-config .vt-chip.sm { min-height: 24px; padding: 0 8px; border-radius: var(--radius-xs); font-size: var(--fs-xs); }
+.vt-ac-top, .vt-ac-mode, .vt-ac-controls, .vt-ac-actions, .vt-ac-preset, .vt-ac-envrow, .vt-ac-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.vt-ac-top { gap: 12px; }
+/* 관리 대상 — 세그먼트(바닥 bg-2 · 안쪽 칸 반경 4 · 켠 칸은 raised + line-strong 테두리). */
+.vt-ac-mode { flex-wrap: nowrap; gap: 1px; padding: 1px; border: 1px solid var(--color-line-strong); border-radius: var(--radius-sm); background: var(--color-bg-2); }
+.vt-agent-config .vt-ac-mode .vt-chip { min-height: 26px; border-color: transparent; border-radius: var(--radius-xs); background: transparent; color: var(--color-muted); font-size: var(--fs-xs); }
+.vt-agent-config .vt-ac-mode .vt-chip[aria-selected="true"] { background: var(--color-bg-raised); color: var(--color-txt); box-shadow: 0 0 0 1px var(--color-line-strong); }
+.vt-ac-target { flex: 1 1 auto; }
+.vt-ac-refresh { margin-inline-start: auto; }
+/* 필드 — 이름(12 muted)을 컨트롤 왼쪽에 둔다(28 높이 막대 한 줄). 선택 상자는 sunk 면. */
+.vt-ac-field { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+.vt-ac-field > .vt-mcp-meta { flex: none; color: var(--color-muted); font-size: var(--fs-xs); white-space: nowrap; }
+.vt-ac-field select, .vt-agent-config .vt-ac-search {
+  height: 28px; min-height: 28px; box-sizing: border-box; max-width: 240px; padding: 0 8px;
+  border: 1px solid var(--color-line-strong); border-radius: var(--radius-sm); background: var(--color-bg-2);
+  color: var(--color-txt); font: var(--weight-normal) var(--fs-sm) / 1 var(--font-ui);
+}
+.vt-ac-field select:focus-visible, .vt-agent-config .vt-ac-search:focus-visible { outline: none; border-color: var(--color-acc); box-shadow: 0 0 0 3px var(--color-acc-soft); }
+.vt-agent-config .vt-ac-search { flex: 1 1 200px; min-width: 160px; max-width: 320px; }
 .vt-ac-context, .vt-ac-notice, .vt-ac-path, .vt-ac-review { white-space: pre-wrap; overflow-wrap: anywhere; }
-.vt-ac-context { margin: 0; font-size: 12px; color: var(--color-sub); }
-.vt-ac-notice { margin: 0; padding: 10px 0; border-block: 1px solid var(--color-line); color: var(--color-txt); }
-.vt-ac-nav { flex-shrink: 0; min-height: 44px; padding-block: 8px; border-bottom: 1px solid var(--color-line); }
+.vt-ac-context { margin: 0; font: var(--weight-normal) var(--fs-xs) / 1.5 var(--font-mono); color: var(--color-sub); }
+.vt-ac-notice { margin: 0; padding: 8px 12px; border: 1px solid var(--color-line); border-radius: var(--radius-sm); background: var(--color-bg-2); color: var(--color-txt); font-size: var(--fs-sm); }
+.vt-ac-intro { display: flex; flex-direction: column; gap: 8px; }
+/* 탐색 — 항목 32 · 반경 6 · 13 sub, 현재 = hover 면 + 본문색 600, 개수 mono 11 오른쪽. 좁은 창에서는 가로 띠. */
+.vt-ac-nav { display: flex; flex-wrap: nowrap; gap: 2px; overflow-x: auto; }
+.vt-ac-navitem {
+  display: flex; align-items: center; gap: 10px; flex: none; min-height: 32px; padding: 0 10px;
+  border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-sub);
+  font: var(--weight-normal) var(--fs-sm) / 1 var(--font-ui); text-align: left; white-space: nowrap; cursor: pointer;
+}
+.vt-ac-navitem:hover { background: var(--menu-hover); color: var(--color-txt); }
+.vt-ac-navitem[aria-current="page"] { background: var(--color-bg-3); color: var(--color-txt); font-weight: var(--weight-semibold); }
+.vt-ac-navitem:focus-visible { outline: 2px solid var(--color-acc); outline-offset: -2px; }
+.vt-ac-navico { display: inline-flex; flex: none; color: var(--color-muted); }
+.vt-ac-navitem[aria-current="page"] .vt-ac-navico { color: var(--color-sub); }
+.vt-ac-navcount { margin-inline-start: auto; color: var(--color-muted); font: var(--weight-normal) var(--fs-3xs) / 1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.vt-ac-main { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.vt-ac-pane { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .vt-ac-body { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.vt-ac-filters, .vt-ac-bulk { gap: 8px 12px; }
+.vt-ac-selected { font: var(--weight-medium) var(--fs-sm) / 1 var(--font-ui); color: var(--color-txt); font-variant-numeric: tabular-nums; }
+.vt-ac-plugins { margin-inline-start: auto; }
+.vt-ac-count { margin: 0; color: var(--color-muted); font-size: var(--fs-xs); }
 .vt-ac-list { min-width: 0; }
-.vt-ac-item { border-bottom: 1px solid var(--color-line); }
-.vt-ac-entry { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; column-gap: 8px; align-items: start; border-bottom: 1px solid var(--color-line); }
-.vt-ac-entry > .vt-ac-item { grid-column: 2; grid-row: 1; border-bottom: 0; }
-.vt-ac-entry > .vt-ac-pick { grid-column: 1; grid-row: 1; min-height: 44px; font-size: 0; }
-.vt-ac-entry > .vt-ac-quick { grid-column: 3; grid-row: 1; margin-top: 8px; }
-.vt-ac-itemhead { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; cursor: pointer; padding: 12px 0; min-height: 36px; }
-.vt-ac-itemhead strong { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
-.vt-ac-status { margin-inline-start: auto; color: var(--color-sub); font-size: 11px; }
-.vt-ac-itembody { padding: 0 0 12px; }
+/* 행 — 머리 56: 고르기 · (캐럿 · 이름 줄 / 원본 줄) · 상태 · 켜기/끄기. 펼치면 아래로 자세히. */
+.vt-ac-item { border-bottom: 0; }
+.vt-ac-entry { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; column-gap: 12px; align-items: start; padding: 0 8px; border-bottom: 1px solid var(--color-line); border-radius: var(--radius-sm); }
+.vt-ac-entry:hover { background: var(--menu-hover); }
+.vt-ac-entry > .vt-ac-item { grid-column: 2; grid-row: 1; min-width: 0; }
+.vt-ac-entry > .vt-ac-pick { grid-column: 1; grid-row: 1; min-height: 56px; font-size: 0; justify-content: center; }
+.vt-ac-entry > .vt-ac-quick { grid-column: 3; grid-row: 1; margin-top: 16px; }
+.vt-ac-itemhead { display: flex; align-items: center; gap: 8px 12px; min-height: 56px; padding: 0; cursor: pointer; list-style: none; }
+.vt-ac-itemhead::-webkit-details-marker { display: none; }
+.vt-ac-itemhead:focus-visible { outline: 2px solid var(--color-acc); outline-offset: -2px; border-radius: var(--radius-sm); }
+.vt-ac-chev { display: inline-flex; flex: none; color: var(--color-muted); transition: transform var(--dur-fast) var(--ease-out-quint); }
+.vt-ac-item[open] > .vt-ac-itemhead .vt-ac-chev { transform: rotate(90deg); }
+.vt-ac-headmain { display: flex; flex-direction: column; gap: 2px; flex: 1 1 0; min-width: 0; }
+.vt-ac-line1 { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
+.vt-ac-line1 strong { font: var(--weight-medium) var(--fs-sm) / 18px var(--font-mono); color: var(--color-txt); overflow-wrap: anywhere; }
+.vt-ac-line1 .vt-mcp-meta { color: var(--color-muted); font-size: var(--fs-xs); }
+.vt-ac-line2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-muted); font: var(--weight-normal) var(--fs-3xs) / 16px var(--font-mono); }
+/* 태그 — 16 · 반경 4 · 11/500 · line-strong 테두리, 채움 없음. */
+.vt-ac-tag { display: inline-flex; align-items: center; flex: none; height: 16px; padding: 0 4px; box-sizing: border-box; border: 1px solid var(--color-line-strong); border-radius: var(--radius-xs); color: var(--color-muted); font: var(--weight-medium) var(--fs-3xs) / 1 var(--font-ui); white-space: nowrap; }
+.vt-ac-tag.mono { font-family: var(--font-mono); }
+.vt-ac-status { flex: none; margin-inline-start: auto; color: var(--color-muted); font-size: var(--fs-xs); white-space: nowrap; }
+.vt-ac-status[data-state="on"] { color: var(--color-st-working); }
+.vt-ac-itembody { padding: 0 0 12px 20px; }
 .vt-ac-itembody p { margin-block: 6px; }
-.vt-ac-path { color: var(--color-sub); font: 11px/1.5 var(--font-mono); }
+.vt-ac-path { color: var(--color-sub); font: var(--weight-normal) var(--fs-3xs) / 1.5 var(--font-mono); }
 .vt-ac-actions { padding-top: 8px; }
-.vt-ac-pick { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+.vt-ac-pick { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); cursor: pointer; }
 .vt-ac-pick input { accent-color: var(--color-acc); }
-.vt-ac-child { font-size: 12px; padding: 3px 0 3px 12px; color: var(--color-sub); }
-.vt-ac-preset, .vt-ac-envrow { padding-block: 12px; border-bottom: 1px solid var(--color-line); }
+.vt-ac-child { font-size: var(--fs-xs); padding: 3px 0 3px 12px; color: var(--color-sub); }
+.vt-ac-preset, .vt-ac-envrow { min-height: 56px; padding: 8px; box-sizing: border-box; border-bottom: 1px solid var(--color-line); }
 .vt-ac-preset strong, .vt-ac-envrow code { margin-inline-end: auto; overflow-wrap: anywhere; }
-.vt-ac-editor { display: block; width: 100%; min-height: 280px; resize: vertical; font: 12px/1.6 var(--font-mono); margin-block: 12px; }
-.vt-ac-review { flex-basis: 100%; max-height: 240px; overflow: auto; font: 12px/1.5 var(--font-mono); }
+.vt-ac-preset strong { font: var(--weight-medium) var(--fs-sm) / 18px var(--font-mono); }
+.vt-ac-editor { display: block; width: 100%; min-height: 280px; resize: vertical; font: var(--fs-xs) / 1.6 var(--font-mono); margin-block: 12px; }
+.vt-ac-review { flex-basis: 100%; max-height: 240px; overflow: auto; font: var(--fs-xs) / 1.5 var(--font-mono); }
+/* 바닥 막대 — 안내(12 muted, 왼쪽) · 재시작 · 옛 보관함(오른쪽). */
 .vt-ac-footer { padding-top: 12px; border-top: 1px solid var(--color-line); }
-.vt-ac-errors { color: var(--color-sub); font-size: 12px; }
-.vt-ac-job { font-size: 12px; }
+.vt-ac-foothelp { flex: 1 1 240px; margin: 0; color: var(--color-muted); font-size: var(--fs-xs); }
+.vt-ac-legacy { margin-inline-start: auto; }
+.vt-ac-errors { color: var(--color-sub); font-size: var(--fs-xs); }
+.vt-ac-job { display: flex; align-items: center; gap: 8px; font-size: var(--fs-xs); }
+.vt-ac-job p { margin: 0; }
+@media (prefers-reduced-motion: reduce) { .vt-ac-chev { transition: none; } }
 @media (max-width: 600px) {
   .vt-ac-entry { grid-template-columns: 44px minmax(0, 1fr) auto; }
   .vt-agent-config .vt-chip, .vt-agent-config select, .vt-ac-pick { min-height: 44px; }
   .vt-ac-controls > .vt-ac-field { flex: 1 1 120px; }
-  .vt-ac-status { flex-basis: 100%; margin-inline-start: 0; }
-  .vt-ac-nav { flex-wrap: nowrap; overflow-x: auto; }
-  .vt-ac-nav button { flex-shrink: 0; }
+  .vt-ac-field select { flex: 1; max-width: none; }
+  .vt-ac-itemhead { flex-wrap: wrap; padding-block: 8px; }
+  .vt-ac-status { flex-basis: 100%; margin-inline-start: 20px; }
   .vt-ac-top { align-items: flex-start; }
+  .vt-ac-refresh { margin-inline-start: 0; }
 }
 @media (pointer: coarse) {
   .vt-agent-config button, .vt-agent-config select, .vt-agent-config summary, .vt-ac-pick { min-height: 44px; }
+}
+/* 두 단 배치(시안 P09-b) — 넓은 창 모달에서만. 본문 여백을 걷고 위 막대(12/20, 아래 줄) · 왼쪽 탐색 200(bg-1,
+ * 오른쪽 줄) | 내용(스스로 스크롤) · 바닥 막대(12/20, 위 줄)로 창을 채운다. 옛 보관함(mcp.js)으로 넘어가면
+ * .vt-agent-config가 빠져 원래 여백으로 돌아간다. 폰·dock은 한 단 그대로. ⚠ 이 블록은 위 규칙과 같이 레이어 밖에
+ * 둔다 — screens(legacy 레이어)에 두면 레이어 밖의 위 규칙이 특이도와 무관하게 이긴다. */
+@media (min-width:720px) {
+  #vt-mcp:not(.vt-dock-panel) .vt-vw-body.vt-agent-config { padding:0; gap:0; overflow:hidden; display:flex; flex-direction:column; }
+  #vt-mcp:not(.vt-dock-panel) .vt-agent-config > .vt-ac-top { flex:none; padding:12px 20px; border-bottom:1px solid var(--color-line); }
+  #vt-mcp:not(.vt-dock-panel) .vt-agent-config > .vt-ac-main { flex:1; min-height:0; flex-direction:row; gap:0; }
+  #vt-mcp:not(.vt-dock-panel) .vt-ac-main > .vt-ac-nav {
+    flex:0 0 200px; flex-direction:column; overflow:auto; box-sizing:border-box; padding:12px 8px;
+    border-right:1px solid var(--color-line); background:var(--color-bg-1);
+  }
+  #vt-mcp:not(.vt-dock-panel) .vt-ac-main > .vt-ac-pane { flex:1; min-width:0; overflow-y:auto; gap:0; }
+  #vt-mcp:not(.vt-dock-panel) .vt-ac-pane > .vt-ac-intro { padding:12px 20px 0; }
+  #vt-mcp:not(.vt-dock-panel) .vt-ac-pane > .vt-ac-body { gap:0; padding:0 0 12px; }
+  #vt-mcp:not(.vt-dock-panel) .vt-ac-body > * { margin-inline:20px; }
+  #vt-mcp:not(.vt-dock-panel) .vt-ac-body > .vt-ac-filters { position:sticky; top:0; z-index:1; margin:0; padding:12px 20px; border-bottom:1px solid var(--color-line); background:var(--color-bg-raised); }
+  #vt-mcp:not(.vt-dock-panel) .vt-ac-body > .vt-ac-bulk { padding-block:12px 4px; }
+  #vt-mcp:not(.vt-dock-panel) .vt-ac-body > .vt-ac-list { margin-inline:12px; }
+  #vt-mcp:not(.vt-dock-panel) .vt-ac-body:not([data-section="items"]) { gap:12px; padding-top:16px; }
+  #vt-mcp:not(.vt-dock-panel) .vt-agent-config > .vt-ac-footer { flex:none; padding:12px 20px; }
 }
 
 .vt-child-heading { display: flex; flex-wrap: wrap; gap: 4px 8px; padding: 8px 4px 2px; font-size: 11px; font-weight: 600; color: var(--color-sub); }
@@ -1725,53 +1869,38 @@
 }
 
 /* ── 스니펫 패널 (snippets.js) ─────────────────────────────────────────────
- * 2026-10-23 개편. 이전에는 브라우저 기본 라디오·체크박스·textarea를 그대로 썼고
- * 규칙이 screens/30-viewer.css(legacy 레이어)에 흩어져 있었다 — 이 한 곳으로 모으고
- * 옛 규칙은 지웠다(legacy가 components를 항상 이기므로 남기면 이 규칙이 죽는다).
- *
- * 위계: 한 행의 초점은 **이름**(600), 본문은 mono·sub색의 미리보기로 물러나고, 행동은
- * 맨 아래 한 줄. 색은 의미가 있을 때만 쓴다 — 「끝에 Enter 포함」 표시만 액센트다.
- * 깊이는 테두리뿐(그림자 없음), 모서리는 radius-sm 한 단계. */
+ * 리디자인 5단계(시안 P05): 카드 대신 둥근 행 52 — 1줄 이름(13/600) · 꼬리표 · 머문 행의 아이콘 동작 넷,
+ * 2줄 본문 첫 줄(mono 12 muted). 편집(P05-b)은 같은 자리의 하위 화면이다(← 머리 + 이름 · 내용 · 이 프로젝트에만 ·
+ * 전송 방식). 색은 의미가 있을 때만 — 「끝에 Enter」 꼬리표만 액센트. */
 @layer components {
   .vt-sn-tools {
-    display: flex; flex-direction: column; gap: calc(var(--spacing) * 2);
+    display: flex; align-items: center; gap: calc(var(--spacing) * 2);
     flex: 0 0 auto;
-    padding: calc(var(--spacing) * 2.5) calc(var(--spacing) * 3);
-    border-bottom: 1px solid var(--color-line);
+    padding: calc(var(--spacing) * 3) calc(var(--spacing) * 3.5) calc(var(--spacing) * 2);
   }
-  .vt-sn-search { position: relative; display: flex; align-items: center; }
+  .vt-sn-search { position: relative; display: flex; align-items: center; flex: 1 1 auto; min-width: 0; }
   .vt-sn-search > svg {
-    position: absolute; left: calc(var(--spacing) * 2.5);
-    color: var(--color-faint); pointer-events: none;
+    position: absolute; left: calc(var(--spacing) * 2);
+    color: var(--color-muted); pointer-events: none;
   }
-  .vt-sn-search .vt-input { width: 100%; padding-left: calc(var(--spacing) * 8); }
-  /* 세그먼트 상자 — 안쪽 칸은 components의 .vt-segment. */
-  /* 2026-10-23 블록형 — 칸 사이를 선으로 가르고 켜진 칸만 액센트로 채운다.
-   * 칸마다 개수가 붙는다(명령 블록을 다루는 화면이라 "몇 개"가 먼저 궁금하다). */
-  .vt-sn-seg {
-    display: flex;
-    border: 1px solid var(--color-line); border-radius: var(--radius-sm);
-    background: var(--color-bg-0); overflow: hidden;
-  }
-  .vt-sn-seg .vt-segment { border-radius: 0; min-height: 28px; gap: calc(var(--spacing) * 1.5); }
-  .vt-sn-seg .vt-segment + .vt-segment { border-left: 1px solid var(--color-line); }
+  .vt-sn-search .vt-input { width: 100%; min-height: 28px; height: 28px; padding: 0 calc(var(--spacing) * 2) 0 calc(var(--spacing) * 7.5); font-size: var(--fs-sm); background: var(--color-bg-2); border-color: var(--color-line-strong); }
+  .vt-sn-seg .vt-segment { gap: calc(var(--spacing) * 1); }
   .vt-sn-seg .vt-segment b {
-    font: var(--weight-semibold) var(--fs-3xs) / 1 var(--font-mono);
-    font-variant-numeric: tabular-nums; opacity: .65;
+    font: var(--weight-medium) var(--fs-3xs) / 1 var(--font-mono);
+    font-variant-numeric: tabular-nums; color: var(--color-muted);
   }
 
-  /* 편집 폼 — 목록 위에 펼쳐진다. 입력은 .vt-input(inset: 주변보다 어두움). */
-  .vt-sn-editor {
-    display: flex; flex-direction: column; gap: calc(var(--spacing) * 2.5);
-    flex: 0 0 auto;
-    padding: calc(var(--spacing) * 3);
-    border-bottom: 1px solid var(--color-line);
-    background: var(--color-bg-1);
-  }
+  /* 편집 — 하위 화면. 편집 중에는 도구 줄과 목록을 숨긴다(.vt-sn-editing은 패널 루트에 붙는다). */
+  .vt-sn-editing .vt-sn-tools, .vt-sn-editing #vt-sn-body, .vt-sn-editing [id^="vt-sn-body"] { display: none; }
+  .vt-sn-editor { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: auto; background: var(--color-bg-1); }
   .vt-sn-editor[hidden] { display: none; }
+  .vt-sn-fields { display: flex; flex-direction: column; gap: calc(var(--spacing) * 3.5); padding: calc(var(--spacing) * 3.5); }
+  .vt-fld { display: flex; flex-direction: column; gap: calc(var(--spacing) * 1.5); }
+  .vt-fld-l { font: var(--weight-semibold) var(--fs-xs) / 16px var(--font-ui); color: var(--color-sub); }
+  .vt-sn-editor input.vt-input { min-height: 28px; font-size: var(--fs-sm); background: var(--color-bg-2); border-color: var(--color-line-strong); }
   .vt-sn-editor textarea.vt-input {
-    resize: vertical; min-height: 96px; max-height: 40vh;
-    font-size: var(--fs-sm); line-height: 1.6; white-space: pre-wrap; overflow: auto;
+    resize: vertical; min-height: 96px; max-height: 40vh; background: var(--color-bg-2); border-color: var(--color-line-strong);
+    font-size: var(--fs-xs); line-height: 18px; white-space: pre-wrap; overflow: auto;
     tab-size: 2;
   }
   /* 한글 지시문은 UI 글꼴(기본), 영문 명령만 고정폭 — 고정폭 글꼴에는 한글이 없어
@@ -1781,7 +1910,7 @@
   .vt-sn-preview {
     display: flex; flex-direction: column; gap: calc(var(--spacing) * 1);
     padding: calc(var(--spacing) * 2) calc(var(--spacing) * 2.5);
-    border: 1px dashed var(--color-line); border-radius: var(--radius-sm);
+    border: 1px dashed var(--color-line-strong); border-radius: var(--radius-sm);
   }
   .vt-sn-preview[hidden] { display: none; }
   .vt-sn-preview pre {
@@ -1789,7 +1918,7 @@
     font: var(--weight-normal) var(--fs-xs) / 1.7 var(--font-mono); color: var(--color-txt);
   }
   .vt-sn-preview pre.prose { font-family: var(--font-ui); }
-  .vt-sn-preview-cap { font: var(--weight-normal) var(--fs-2xs) / 1 var(--font-ui); color: var(--color-faint); }
+  .vt-sn-preview-cap { font: var(--weight-normal) var(--fs-3xs) / 1 var(--font-ui); color: var(--color-muted); }
   /* ↵ 마커 — 줄바꿈이 키보드 Enter라는 표시. 글자 옆에 붙는 작은 액센트 칩. */
   .vt-nl {
     display: inline-flex; align-items: center; vertical-align: 1px;
@@ -1797,147 +1926,156 @@
     border-radius: 3px; line-height: 1;
     color: var(--color-acc); background: color-mix(in srgb, var(--color-acc) 14%, transparent);
   }
-  .vt-sn-opts { display: flex; flex-direction: column; }
-  .vt-sn-opt {
-    display: flex; align-items: center; justify-content: space-between;
-    gap: calc(var(--spacing) * 3);
-    padding: calc(var(--spacing) * 2) 0;
-    border-top: 1px solid var(--color-line);
-  }
-  .vt-sn-opt:first-child { border-top: 0; }
+  .vt-sn-opt { display: flex; align-items: center; justify-content: space-between; gap: calc(var(--spacing) * 3); }
   .vt-sn-opt-text { display: flex; flex-direction: column; gap: calc(var(--spacing) * 0.5); min-width: 0; }
   .vt-sn-opt-text b { font: var(--weight-medium) var(--fs-sm) / var(--leading-row) var(--font-ui); color: var(--color-txt); }
-  .vt-sn-opt-text span { font: var(--weight-normal) var(--fs-xs) / 1.4 var(--font-ui); color: var(--color-sub); text-wrap: pretty; }
-  .vt-sn-editor-foot { display: flex; align-items: center; justify-content: flex-end; gap: calc(var(--spacing) * 2); }
-  .vt-sn-hint { margin-right: auto; font: var(--weight-normal) var(--fs-2xs) / 1 var(--font-mono); color: var(--color-faint); }
+  .vt-sn-opt-text span { font: var(--weight-normal) var(--fs-xs) / 1.4 var(--font-ui); color: var(--color-muted); text-wrap: pretty; }
+  /* 전송 방식 — 선택지 상자(시안 b-opt): 여백 10/12 · 반경 6, 고른 것은 액센트 테두리 + acc-soft. */
+  .vt-sn-mode {
+    display: flex; align-items: flex-start; gap: calc(var(--spacing) * 2.5);
+    padding: calc(var(--spacing) * 2.5) calc(var(--spacing) * 3); border-radius: var(--radius-sm);
+    border: 1px solid var(--color-line-strong); cursor: pointer;
+  }
+  .vt-sn-mode:has(input:checked) { border-color: color-mix(in srgb, var(--color-acc) 45%, transparent); background: var(--color-acc-soft); }
+  .vt-sn-mode input { margin: 3px 0 0; accent-color: var(--color-acc); flex: none; }
+  .vt-sn-mode > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .vt-sn-mode b { font: var(--weight-normal) var(--fs-sm) / 18px var(--font-ui); color: var(--color-txt); }
+  .vt-sn-mode em { font: var(--weight-normal) var(--fs-xs) / 16px var(--font-ui); font-style: normal; color: var(--color-muted); }
+  .vt-sn-mode:has(input:checked) em { color: var(--color-sub); }
+  .vt-sn-editor-foot { display: flex; align-items: center; justify-content: flex-end; gap: calc(var(--spacing) * 2); padding-top: calc(var(--spacing) * 1); }
+  .vt-sn-editor-foot .vt-btn[hidden] { display: none; }
+  .vt-sn-hint { margin-right: auto; font: var(--weight-normal) var(--fs-3xs) / 1 var(--font-mono); color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  #vt-sn-del + .vt-sn-hint { margin-left: auto; margin-right: 0; }
 
-  /* 한 스니펫 = 명령 블록 카드(Warp 계열): 머리줄(이름·표시) / 본문 / 행동. 모서리 한 단계. */
-  .vt-sn-list { display: flex; flex-direction: column; gap: calc(var(--spacing) * 2.5); padding: calc(var(--spacing) * 3); }
+  /* 목록 — 둥근 행 52(좌우 4px 들임). */
+  .vt-sn-list { display: flex; flex-direction: column; padding: 0 0 calc(var(--spacing) * 2); }
   .vt-sn-row {
-    display: flex; flex-direction: column;
-    border: 1px solid var(--color-line); border-radius: var(--radius-lg);
-    background: var(--color-bg-0); overflow: hidden;
-    transition: border-color var(--dur-fast) var(--ease-out-quint);
+    display: flex; flex-direction: column; justify-content: center; gap: 2px;
+    min-height: 52px; box-sizing: border-box; margin: 0 calc(var(--spacing) * 1);
+    padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2) calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5);
+    border-radius: var(--radius-sm);
   }
-  .vt-sn-row:hover, .vt-sn-row:focus-within { border-color: var(--color-line-strong); }
-  .vt-sn-head {
-    display: flex; align-items: center; gap: calc(var(--spacing) * 2); min-width: 0;
-    padding: calc(var(--spacing) * 1.75) calc(var(--spacing) * 2.5);
-    background: var(--color-bg-1); border-bottom: 1px solid var(--color-line);
-  }
+  .vt-sn-row:hover, .vt-sn-row:focus-within { background: var(--color-bg-3); }
+  .vt-sn-head { display: flex; align-items: center; gap: calc(var(--spacing) * 1.5); min-width: 0; height: 24px; }
   .vt-sn-name {
-    flex: 1 1 auto; min-width: 0;
-    font: var(--weight-semibold) var(--fs-sm) / var(--leading-row) var(--font-ui);
+    flex: 0 1 auto; min-width: 0;
+    font: var(--weight-semibold) var(--fs-sm) / 18px var(--font-ui);
     color: var(--color-txt);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .vt-sn-flags { display: inline-flex; align-items: center; gap: calc(var(--spacing) * 1.5); flex: none; }
-  .vt-sn-enter { color: var(--color-faint); font: var(--weight-medium) var(--fs-3xs) / 1 var(--font-ui); }
-  .vt-sn-enter.on { color: var(--color-acc); }
-  .vt-sn-fold { display: inline-flex; color: var(--color-faint); transition: transform var(--dur-fast) var(--ease-out-quint); }
-  .vt-sn-fold.open { transform: rotate(180deg); }
+  .vt-sn-flags { display: inline-flex; align-items: center; gap: calc(var(--spacing) * 1); flex: none; }
+  .vt-sn-enter.on { color: var(--color-acc); border-color: color-mix(in srgb, var(--color-acc) 40%, transparent); }
+  .vt-sn-acts { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; flex: none; }
+  @media (hover: hover) and (pointer: fine) {
+    .vt-sn-acts { visibility: hidden; }
+    .vt-sn-row:hover .vt-sn-acts, .vt-sn-row:focus-within .vt-sn-acts { visibility: visible; }
+  }
   .vt-sn-text {
-    display: block; width: 100%; min-width: 0; margin: 0;
-    padding: calc(var(--spacing) * 2.5);
+    display: block; width: 100%; min-width: 0; margin: 0; padding: 0;
     border: 0; background: transparent; text-align: left;
-    color: var(--color-txt);
-    font: var(--weight-normal) var(--fs-xs) / 1.7 var(--font-mono);
+    color: var(--color-muted);
   }
   /* 글꼴은 <pre>에 직접 건다 — 접히는 행은 <button> 안에 있고, 버튼은 UA/legacy 규칙이
    * font를 따로 정해서 부모의 font 선언을 이어받지 못한다. */
   .vt-sn-text pre {
-    margin: 0; white-space: pre-wrap; overflow-wrap: anywhere;
-    font: var(--weight-normal) var(--fs-xs) / 1.7 var(--font-mono);
-    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+    margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font: var(--weight-normal) var(--fs-xs) / 16px var(--font-mono);
   }
-  .vt-sn-text.open pre { display: block; -webkit-line-clamp: unset; overflow: visible; }
+  .vt-sn-text.open pre { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--color-sub); }
   /* 한글 지시문은 고정폭이 아니라 UI 글꼴 — 고정폭에서는 한글이 대체 글꼴로 떨어져 리듬이 깨진다. */
   .vt-sn-text.prose pre { font-family: var(--font-ui); }
-  .vt-sn-row.editing { border-color: var(--color-acc); }
   .vt-sn-text.foldable { cursor: pointer; }
-  .vt-sn-text.foldable:hover { color: var(--color-txt); }
-  .vt-sn-actions, .vt-sn-name-form {
+  .vt-sn-text.foldable:hover pre { color: var(--color-sub); }
+  .vt-sn-name-form {
     display: flex; align-items: center; gap: calc(var(--spacing) * 1.5);
-    padding: calc(var(--spacing) * 1.75) calc(var(--spacing) * 2.5);
-    border-top: 1px solid var(--color-line);
+    padding-top: calc(var(--spacing) * 1.5);
   }
-  .vt-sn-spacer { flex: 1 1 auto; }
-  .vt-sn-confirm { font: var(--weight-medium) var(--fs-xs) / 1 var(--font-ui); color: var(--color-st-error); }
-  .vt-sn-name-form .vt-input { flex: 1 1 auto; min-width: 0; }
-
-  .vt-sn-empty {
-    display: flex; flex-direction: column; align-items: center; gap: calc(var(--spacing) * 1.5);
-    padding: calc(var(--spacing) * 10) calc(var(--spacing) * 4);
-    color: var(--color-faint); text-align: center;
-  }
-  .vt-sn-empty p { margin: 0; font: var(--weight-medium) var(--fs-sm) / var(--leading-row) var(--font-ui); color: var(--color-sub); }
-  .vt-sn-empty .vt-sn-empty-sub { font-weight: var(--weight-normal); font-size: var(--fs-xs); color: var(--color-faint); }
+  .vt-sn-name-form .vt-input { flex: 1 1 auto; min-width: 0; min-height: 24px; height: 24px; padding: 0 calc(var(--spacing) * 2); font-size: var(--fs-xs); }
 
   @media (pointer: coarse) {
-    .vt-sn-actions .vt-btn, .vt-sn-name-form .vt-btn { --btn-h: 36px; }
-    .vt-sn-actions .vt-icon-btn { --icon-btn: 36px; }
+    .vt-sn-name-form .vt-btn { --btn-h: 36px; }
+    .vt-sn-acts .vt-icon-btn { --icon-btn: 36px; }
+    .vt-sn-head { height: auto; }
   }
 }
 
 /* ── 프롬프트 큐 패널 (queue.js) ───────────────────────────────────────────
- * 2026-10-23 — screens/30-viewer.css(legacy)에 있던 .vt-q-* 규칙을 옮겼고 스니펫과 같은
- * 명령 블록 카드로 맞췄다(옛 규칙은 지웠다 — legacy가 components를 이기므로 남기면 이 규칙이 죽는다).
- * 입력은 한글 지시문이므로 UI 글꼴(모노에는 한글이 없다). */
+ * 리디자인 5단계(시안 P03) — 작성 칸(여백 12/14) · 「대기 N」 구역 머리 · 항목은 카드가 아니라 선으로 나뉜 줄
+ * (여백 10/14): 순번 · 대상 · 상태 꼬리표 / 지시 13 / 차단 사유와 재개. 입력은 한글 지시문이라 UI 글꼴. */
 @layer components {
   .vt-q-compose {
     display: flex; flex-direction: column; gap: calc(var(--spacing) * 2);
-    flex: 0 0 auto; padding: calc(var(--spacing) * 2.5) calc(var(--spacing) * 3);
+    flex: 0 0 auto; padding: calc(var(--spacing) * 3) calc(var(--spacing) * 3.5);
     background: var(--color-bg-1); border-bottom: 1px solid var(--color-line);
   }
-  .vt-q-compose textarea { flex: 1 1 auto; resize: vertical; min-height: 56px; max-height: 160px; line-height: 1.6; font-family: var(--font-ui); }
-  .vt-q-compose-row { display: flex; gap: calc(var(--spacing) * 2); align-items: center; }
-  .vt-q-target { flex: 1 1 auto; min-width: 0; }
+  .vt-q-compose textarea { flex: 1 1 auto; resize: vertical; min-height: 72px; max-height: 160px; line-height: 18px; font-family: var(--font-ui); font-size: var(--fs-sm); }
+  .vt-q-compose-row { display: flex; gap: calc(var(--spacing) * 1.5); align-items: center; min-width: 0; }
+  .vt-q-lab { flex: none; font: var(--weight-normal) var(--fs-xs) / 1 var(--font-ui); color: var(--color-muted); }
+  .vt-q-target { flex: 1 1 auto; min-width: 0; min-height: 24px; height: 24px; padding: 0 calc(var(--spacing) * 2); font-size: var(--fs-xs); }
   .vt-q-compose-row .vt-btn { flex: 0 0 auto; }
+  .vt-q-drain { justify-content: space-between; }
+  .vt-q-auto { display: inline-flex; align-items: center; gap: calc(var(--spacing) * 1.5); font: var(--weight-normal) var(--fs-xs) / 1 var(--font-ui); color: var(--color-sub); }
+  .vt-q-auto.off { color: var(--color-st-waiting); }
 
-  .vt-q-list { display: flex; flex-direction: column; gap: calc(var(--spacing) * 2.5); padding: calc(var(--spacing) * 3); }
+  .vt-q-list { display: flex; flex-direction: column; padding-top: calc(var(--spacing) * 1); }
   .vt-q-row {
-    display: flex; flex-direction: column;
-    border: 1px solid var(--color-line); border-radius: var(--radius-lg);
-    background: var(--color-bg-0); overflow: hidden;
+    display: flex; flex-direction: column; gap: calc(var(--spacing) * 1);
+    padding: calc(var(--spacing) * 2.5) calc(var(--spacing) * 3.5);
+    border-bottom: 1px solid var(--color-line);
   }
-  .vt-q-row:hover { border-color: var(--color-line-strong); }
-  .vt-q-row.blocked { border-color: color-mix(in srgb, var(--color-st-error) 55%, var(--color-line)); }
-  .vt-q-head {
-    display: flex; align-items: center; gap: calc(var(--spacing) * 2); min-width: 0;
-    padding: calc(var(--spacing) * 1.75) calc(var(--spacing) * 2.5);
-    background: var(--color-bg-1); border-bottom: 1px solid var(--color-line);
-  }
-  .vt-q-idx { color: var(--color-acc); font: var(--weight-semibold) var(--fs-xs) / 1 var(--font-mono); font-variant-numeric: tabular-nums; }
-  .vt-q-row.blocked .vt-q-idx { color: var(--color-st-error); display: inline-flex; }
-  .vt-q-sub { margin-right: auto; min-width: 0; color: var(--color-faint); font: var(--weight-normal) var(--fs-2xs) / 1.3 var(--font-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .vt-q-row.blocked .vt-q-sub { color: var(--color-st-error); }
+  .vt-q-row:hover { background: var(--color-bg-3); }
+  .vt-q-head { display: flex; align-items: center; gap: calc(var(--spacing) * 1.5); min-width: 0; }
+  .vt-q-idx { flex: none; color: var(--color-muted); font: var(--weight-normal) var(--fs-3xs) / 1 var(--font-mono); font-variant-numeric: tabular-nums; }
+  .vt-q-tgt { display: inline-flex; align-items: center; gap: calc(var(--spacing) * 1); min-width: 0; color: var(--color-muted); }
+  .vt-q-tgt > svg { flex: none; }
+  .vt-q-tgt-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--weight-normal) var(--fs-xs) / 1 var(--font-mono); color: var(--color-txt); }
+  .vt-q-auto-lab { font: var(--weight-normal) var(--fs-xs) / 1 var(--font-ui); color: var(--color-muted); }
+  .vt-q-sub { margin-left: auto; flex: none; color: var(--color-muted); font: var(--weight-normal) var(--fs-xs) / 1 var(--font-ui); }
   .vt-q-text {
-    padding: calc(var(--spacing) * 2.5); margin: 0; color: var(--color-txt);
-    font: var(--weight-normal) var(--fs-sm) / 1.6 var(--font-ui);
+    margin: 0; color: var(--color-txt);
+    font: var(--weight-normal) var(--fs-sm) / 18px var(--font-ui);
     white-space: pre-wrap; overflow-wrap: anywhere;
   }
-  .vt-q-actions {
-    display: flex; align-items: center; justify-content: flex-end; gap: calc(var(--spacing) * 1.5);
-    padding: calc(var(--spacing) * 1.75) calc(var(--spacing) * 2.5); border-top: 1px solid var(--color-line);
+  .vt-q-actions { display: flex; align-items: center; gap: calc(var(--spacing) * 1); margin-top: calc(var(--spacing) * 1); }
+  .vt-q-why { margin-right: auto; min-width: 0; font: var(--weight-normal) var(--fs-xs) / 16px var(--font-ui); color: var(--color-muted); }
+  .vt-q-head .vt-q-rm { margin: -4px 0; }
+  @media (hover: hover) and (pointer: fine) {
+    .vt-q-head .vt-q-rm { visibility: hidden; }
+    .vt-q-row:hover .vt-q-head .vt-q-rm, .vt-q-head .vt-q-rm:focus-visible { visibility: visible; }
   }
-  @media (pointer: coarse) { .vt-q-actions .vt-btn { --btn-h: 36px; } }
+  @media (pointer: coarse) { .vt-q-actions .vt-btn { --btn-h: 36px; } .vt-q-actions .vt-icon-btn { --icon-btn: 36px; } }
 }
 
-/* ── 하단바 구성 (panels/settings/sections/hud.js) ──────────────────────────
- * 미리보기는 실제 HUD의 칩 마크업(.vt-hud-chip)을 그대로 쓴다 — 칩 모양 규칙은
- * screens/60-mobile-hud.css 한 곳에 있고 이쪽은 띠(24px)와 목록만 그린다. */
+/* ── 상태 막대 구성 (panels/settings/sections/hud.js) ───────────────────────
+ * 미리보기는 실제 상태 막대의 칩 마크업(.vt-hud-chip)을 그대로 쓴다 — 칩 모양 규칙은
+ * screens/95-bars.css 한 곳에 있고 이쪽은 띠(24px)와 목록만 그린다. */
 @layer components {
   .vt-hudcfg { display: flex; flex-direction: column; gap: calc(var(--spacing) * 4); }
+  /* 리디자인 9단계(시안 O05) — 넓은 창에서는 세 구역(왼쪽 · 오른쪽 · 사용 안 함)을 나란히, 항목은 32 높이의 낱장.
+   * 구역 하나가 260보다 좁아지면(오른쪽에 활동 막대 순서 칸이 붙은 창) 한 줄에 들어가는 만큼만 놓는다 —
+   * 셋을 억지로 나란히 두면 이름이 한 글자씩 세로로 꺾였다. */
+  @media (min-width: 720px) {
+    .vt-hudcfg { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); column-gap: 16px; row-gap: 16px; align-items: start; }
+    .vt-hudcfg > :not(.vt-hudcfg-zone) { grid-column: 1 / -1; }
+    .vt-hudcfg-list { border: 0; gap: 4px; }
+    .vt-hudcfg-item { min-height: 32px; padding: 0 6px 0 4px; gap: 8px; border: 1px solid var(--color-line); border-radius: var(--radius-sm); background: var(--color-bg-2); }
+    .vt-hudcfg-item:first-child { border-top: 1px solid var(--color-line); }
+    .vt-hudcfg-item.pinned { padding-left: calc(4px + 14px + 8px); }
+    .vt-hudcfg-item.pinned:hover { background: var(--color-bg-2); }
+    /* 설명은 좁은 구역에서 줄이 넘쳐 낱장을 키운다 — 화면에서는 감추고 보조 기술에는 남긴다. */
+    .vt-hudcfg-zone .vt-hudcfg-text span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .vt-hudcfg-zone .vt-hudcfg-text b { font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  }
   .vt-hudcfg-previewwrap { display: flex; flex-direction: column; gap: calc(var(--spacing) * 1.5); }
   .vt-hudcfg-cap { font: var(--weight-medium) var(--fs-3xs) / 1 var(--font-ui); color: var(--color-faint); letter-spacing: var(--tracking-wide); }
-  /* 글꼴은 #vt-hud(screens/60-mobile-hud.css)와 같은 값 — 칩의 라벨·값 크기가 그 상속에 기대고 있다.
-   * 칩이 많으면 줄을 바꿔 전부 보여 준다(실제 띠는 한 줄이고 자리가 모자라면 덜어 낸다 — 여기서는
+  /* 글꼴·색은 #vt-hud(screens/95-bars.css)와 같은 값 — 칩의 라벨·값 크기가 그 상속에 기대고 있다.
+   * 칩이 많으면 줄을 바꿔 전부 보여 준다(실제 막대는 한 줄이고 자리가 모자라면 덜어 낸다 — 여기서는
    * 순서를 보는 게 목적이라 덜지 않는다). */
   .vt-hudcfg-preview {
     display: flex; flex-wrap: wrap; align-items: stretch; min-height: 24px;
     border: 1px solid var(--color-line); border-radius: var(--radius-sm);
-    background: var(--color-bg-1);
-    font: var(--weight-normal) var(--fs-2xs) / 24px var(--font-mono); color: var(--color-sub);
+    background: var(--color-statusbar-bg, var(--bar));
+    font: var(--weight-normal) var(--fs-xs) / 24px var(--font-ui); color: var(--color-statusbar-fg, var(--color-sub));
     user-select: none; overflow: hidden;
     pointer-events: none;
   }
@@ -1958,6 +2096,10 @@
     background: transparent;
   }
   .vt-hudcfg-item:first-child { border-top: 0; }
+  /* 고정 칩(에이전트) — 옮길 수 없어 손잡이가 없다. 손잡이 자리(14 + 간격)만큼 들여 다른 행과 이름을 맞춘다. */
+  .vt-hudcfg-item.pinned { padding-left: calc(var(--spacing) * 3 + 14px + var(--spacing) * 2.5); }
+  .vt-hudcfg-item.pinned:hover { background: transparent; }
+  .vt-hudcfg-pin { flex: none; }
   .vt-hudcfg-item:hover { background: var(--menu-hover); }
   .vt-hudcfg-item.dragging { opacity: .4; }
   .vt-hudcfg-grip { display: inline-flex; flex: none; color: var(--color-faint); cursor: grab; }

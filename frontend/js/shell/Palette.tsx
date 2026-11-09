@@ -18,9 +18,12 @@ import { icon } from '../ui/icons.js';
 import { t } from '../core/i18n.js';
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
 import {
-  parseQuery, fuzzyMatch, PLACEHOLDER, DEFAULT_COMMANDS, SETTINGS_COMMANDS,
+  parseQuery, fuzzyMatch, PLACEHOLDER, MODE_HINT, MODE_PREFIX, DEFAULT_COMMANDS, SETTINGS_COMMANDS,
   type PaletteMode, type CommandDescriptor,
 } from './palette-data.js';
+import { GrepPalette, type GrepKeyApi } from './GrepView.js';
+import { renderAnsi, fetchPreview } from '../lib/ansi-spans.js';
+import type { GrepOptions } from './grep-data.js';
 import {
   SECTION_META, buildSettingEntries, matchSettingEntry, stepSettingValue, formatSettingValue,
 } from '../panels/settings/index-data.js';
@@ -35,9 +38,13 @@ export interface PaletteDeps {
   listSessions: () => SessionTab[];
   getSession: (id: string) => any;
   switchTo: (id: string) => void;
-  loadViewer: () => Promise<{ _loadRecent: () => string[]; _hl: (text: string, lang?: string | null) => string }>;
-  openFile: (path: string) => void;
-  openFileInPane: (path: string) => void;
+  loadViewer: () => Promise<{ _loadRecent: () => string[] }>;
+  openFile: (path: string, opts?: { line?: number; col?: number; host?: string }) => void;
+  openFileInPane: (path: string, opts?: { line?: number; col?: number }) => void;
+  /** 지금 화면이 보는 호스트(`relayHost()`) — 내용 검색 결과를 그 호스트의 파일로 연다. */
+  host?: string;
+  /** ⌥↵ — 내용 검색을 사이드바 「파일 › 내용 검색」으로 옮긴다. */
+  openSidebarSearch?: (q: string, opts: GrepOptions) => void;
   splitActivePane: (dir: string, sessionId?: string | null) => string | null;
   setPaneSession: (sessionId: string, paneId?: string) => void;
   buildSessionCard: (sess: any, onSelect: () => void) => HTMLElement;
@@ -111,7 +118,7 @@ interface PaletteBodyProps {
   query: () => string;
   wide: () => boolean;
   onRequestClose: () => void;
-  onApi: (api: { selectAndFire: (d: number) => void; openSelected: (newPane: boolean) => void; queueSelected: () => void; adjustSelected: (dir: number) => boolean }) => void;
+  onApi: (api: { selectAndFire: (d: number) => void; openSelected: (newPane: boolean) => void; queueSelected: () => void; adjustSelected: (dir: number) => boolean; grepKey: (ev: KeyboardEvent) => boolean }) => void;
 }
 
 function PaletteBody(props: PaletteBodyProps) {
@@ -162,6 +169,8 @@ function PaletteBody(props: PaletteBodyProps) {
   // 설정 값이 바뀌면(이 줄에서든 다른 화면에서든) 줄의 값 표시를 다시 읽는다.
   const [settingsRev, setSettingsRev] = createSignal(0);
   const [previewText, setPreviewText] = createSignal<string[] | null>(null);
+  // 세션 미리보기(시안 O01 · O03) — 그 세션 화면의 마지막 줄들을 터미널 색으로. null = 아직/없음.
+  const [sessionPreview, setSessionPreview] = createSignal<{ name: string; content: string | null } | null>(null);
 
   onMount(() => {
     const off = (window as any).vtSettingsSubscribe?.(() => setSettingsRev((n) => n + 1));
@@ -553,10 +562,20 @@ function PaletteBody(props: PaletteBodyProps) {
         setPreviewText(lines);
       }).catch((e: any) => setPreviewText([e.message]));
     } else if (r.preview.kind === 'session') {
-      // 라이브 프리뷰 카드가 이미 마지막 출력을 보여주므로, 별도 fetch 없이
-      // 상태 문구만 보여준다 — 카드 자체가 결과 목록에도 이미 나온다.
+      // 리디자인 6단계(시안 O01 · O03): 오른쪽에 그 세션 화면의 마지막 줄들을 터미널 색으로 그린다.
+      // tmux capture-pane -e 원문을 받아 lib/ansi-spans.js가 글자는 textContent로, 색은 term 토큰 클래스로만 넣는다.
+      // 위아래로 훑는 동안 요청이 몰리지 않게 120ms 머문 뒤에 묻고, 답이 늦게 오면 그때 고른 세션인지 다시 본다.
       const sess = r.preview.sess;
-      setPreviewText([t('세션 · {name}', { name: sess.name }), sess.command || '']);
+      const name = String(sess.name || '');
+      setPreviewText([t('세션 · {name}', { name }), sess.command || '']);
+      if (sessionPreview()?.name !== name) setSessionPreview({ name, content: null });
+      const timer = setTimeout(() => {
+        void fetchPreview(deps.vtFetch, name, { lines: 40, host: deps.host || '' }).then((content) => {
+          const cur = rows()[selected()];
+          if (cur?.preview?.kind === 'session' && String(cur.preview.sess?.name || '') === name) setSessionPreview({ name, content });
+        });
+      }, 120);
+      onCleanup(() => clearTimeout(timer));
     } else if (r.preview.kind === 'scrollback') {
       setPreviewText(null); // 스크롤백은 행 자체가 컨텍스트를 담아 별도 렌더(아래)
     }
@@ -582,7 +601,11 @@ function PaletteBody(props: PaletteBodyProps) {
   // 벌어지고 오른쪽 절반이 "미리보기 없음"으로 비어 있었다. 파일(`/`)과
   // 스크롤백(`~`)만 실제로 내용을 채운다 — 세션은 결과 줄 자체가 이미 라이브
   // 프리뷰 카드라 오른쪽에 또 그릴 것이 없다.
-  const showPreview = () => props.wide() && (parsed().mode === 'file' || parsed().mode === 'scrollback');
+  // 리디자인 6단계(시안 O01 · O03) — 세션(`@`)과 기본 모드도 미리보기 칸을 연다: 고른 세션의 화면을 터미널 색으로 보여 준다.
+  // 기본 모드는 세션 줄이 하나라도 있을 때만(명령·설정만 보이는 목록이 880으로 벌어지지 않게).
+  const showPreview = () => props.wide() && (parsed().mode === 'file' || parsed().mode === 'scrollback'
+    || parsed().mode === 'session' || (parsed().mode === 'default' && rows().some((r) => r.preview?.kind === 'session')));
+  const selectedSession = () => { const p = rows()[selected()]?.preview; return p && p.kind === 'session' ? p.sess : null; };
 
   function selectAndFire(delta: number) {
     const n = rows().length;
@@ -608,10 +631,36 @@ function PaletteBody(props: PaletteBodyProps) {
     return true;
   }
 
+  // `?` 내용 검색(파일 개편 단계 6) — 목록·키보드를 GrepView가 따로 가진다. 범위는 지금 세션의 저장소
+  // (없으면 그 세션 위치, 그것도 없으면 서버의 시작 루트 전부). 범위가 열람 경계 밖이면 GrepView가 전부로 다시 찾는다.
+  let grepApi: GrepKeyApi | null = null;
+  function grepKey(ev: KeyboardEvent): boolean {
+    return parsed().mode === 'grep' && !!grepApi?.key(ev);
+  }
+  function grepScope(): string {
+    const id = (window as any).activeSessionId?.();
+    const s = id ? tmuxByWebId()[id] : null;
+    return (s && (s.context?.root || s.contextCwd || s.cwd)) || '';
+  }
+
   // 키보드는 상위(Overlay)의 document keydown 리스너가 이 API로 위임한다.
-  props.onApi({ selectAndFire, openSelected, queueSelected, adjustSelected });
+  props.onApi({ selectAndFire, openSelected, queueSelected, adjustSelected, grepKey });
 
   return (
+    <Show when={parsed().mode !== 'grep'} fallback={
+      <div class="vt-qo-body vt-qo-grep" id="vt-qo-body">
+        <GrepPalette
+          deps={{ fetch: deps.vtFetch, openFile: deps.openFile, openFileInPane: deps.openFileInPane, host: deps.host || 'local' }}
+          query={() => parsed().query}
+          scope={grepScope}
+          scopeLabel={() => t('열람 루트 전체')}
+          wide={props.wide}
+          onClose={props.onRequestClose}
+          toSidebar={deps.openSidebarSearch}
+          onApi={(a) => { grepApi = a; }}
+        />
+      </div>
+    }>
     <div class={`vt-qo-body ${showPreview() ? 'two-col' : ''}`} id="vt-qo-body">
       <div class="vt-qo-results-pane">
         <Show when={rows().length === 0}>
@@ -685,8 +734,22 @@ function PaletteBody(props: PaletteBodyProps) {
         <div class="vt-qo-preview-pane">
           <Show when={parsed().mode === 'scrollback' && rows()[selected()]?.preview?.kind === 'scrollback'}
                 fallback={
-                  <Show when={previewText()} fallback={<div class="vt-vw-empty">{t('미리보기 없음')}</div>}>
-                    <For each={previewText() || []}>{(line) => <div class="vt-qo-preview-line">{line}</div>}</For>
+                  <Show when={selectedSession()} fallback={
+                    <Show when={previewText()} fallback={<div class="vt-vw-empty">{t('미리보기 없음')}</div>}>
+                      <For each={previewText() || []}>{(line) => <div class="vt-qo-preview-line">{line}</div>}</For>
+                    </Show>
+                  }>
+                    {(sess) => (
+                      <div class="vt-qo-term-wrap">
+                        <div class="vt-qo-preview-head"><span class="vt-qo-term-name">{sess().name}</span><span class="vt-qo-term-cmd">{sess().command || ''}</span></div>
+                        <Show when={sessionPreview()?.name === sess().name && sessionPreview()?.content != null}
+                              fallback={<div class="vt-vw-empty">{sessionPreview()?.name === sess().name && sessionPreview()?.content === null ? t('불러오는 중…') : t('미리보기 없음')}</div>}>
+                          <div class="vt-qo-term" ref={(el) => {
+                            createEffect(() => { const p = sessionPreview(); if (p && p.content != null) renderAnsi(el, p.content, { maxLines: 40 }); });
+                          }} />
+                        </Show>
+                      </div>
+                    )}
                   </Show>
                 }>
             {(() => {
@@ -704,6 +767,7 @@ function PaletteBody(props: PaletteBodyProps) {
         </div>
       </Show>
     </div>
+    </Show>
   );
 }
 
@@ -735,6 +799,9 @@ export function mountPalette(root: HTMLElement, deps: PaletteDeps): PaletteApi {
   function onKeydown(ev: KeyboardEvent) {
     if ((ev.target as Element)?.closest?.('.vt-dialog, button.card-meta')) return;
     if (ev.key === 'Escape') { ev.preventDefault(); close(); return; }
+    // `?` 내용 검색 모드는 결과 이동·열기·옵션 키(⌥C/⌥W/⌥R, ⌥↵)를 스스로 처리한다. 포함·제외 칸에 쓰는 중에도 같다.
+    if (bodyApi?.grepKey(ev)) { ev.preventDefault(); return; }
+    if ((ev.target as Element)?.closest?.('.vt-gr-glob')) return;
     if (ev.key === 'ArrowDown') { ev.preventDefault(); bodyApi?.selectAndFire(1); return; }
     if (ev.key === 'ArrowUp') { ev.preventDefault(); bodyApi?.selectAndFire(-1); return; }
     if ((ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') && !ev.metaKey && !ev.ctrlKey && !ev.altKey && !ev.shiftKey) {
@@ -751,15 +818,15 @@ export function mountPalette(root: HTMLElement, deps: PaletteDeps): PaletteApi {
     const target: PaletteMode = mode || 'default';
     if (visible() && currentMode() === target) { close(); return; }
     setCurrentMode(target);
-    if (mode) {
-      const prefixMap: Record<string, string> = { file: '/', session: '@', keymap: ':', queue: '#', port: '!', scrollback: '~', settings: '>' };
-      setQuery(prefixMap[mode] || '');
+    if (mode && mode !== 'default') {
+      // `?`는 뒤에 공백을 하나 둔다 — 시안처럼 「? 글자」로 읽히고, 「?」로 시작하는 글자를 바로 이어 쓸 수 있다.
+      setQuery(MODE_PREFIX[mode] + (mode === 'grep' ? ' ' : ''));
     } else {
       setQuery('');
     }
     setVisible(true);
     disposeKeys?.();
-    disposeKeys = pushScope({ id: 'palette', modal: true, onKey: onKeydown, allowActions: ['palette', 'search'] });
+    disposeKeys = pushScope({ id: 'palette', modal: true, onKey: onKeydown, allowActions: ['palette', 'search', 'contentSearch'] });
   }
 
   const api: PaletteApi = { open, close, isOpen: visible };
@@ -769,6 +836,7 @@ export function mountPalette(root: HTMLElement, deps: PaletteDeps): PaletteApi {
     createEffect(() => {
       if (visible()) requestAnimationFrame(() => inputEl?.focus());
     });
+    const grepMode = createMemo(() => parseQuery(query()).mode === 'grep');
     return (
       <Show when={visible()}>
         <div class="vt-viewer-backdrop vt-qo-backdrop" role="presentation" onClick={(e) => { if (e.target === e.currentTarget) close(); }}>
@@ -776,10 +844,11 @@ export function mountPalette(root: HTMLElement, deps: PaletteDeps): PaletteApi {
               공유하는데, 그쪽 치수(1100px)를 그대로 물려받아 팔레트가 화면
               절반을 덮고 있었다. 폭·행 높이·머리글은 이 클래스 안에서만
               다시 정한다(components.css). */}
-          <div class="vt-viewer-card vt-qo-card" role="dialog" aria-modal="true" aria-label={t('빠른 열기')}>
+          <div class="vt-viewer-card vt-qo-card" classList={{ 'vt-qo-card-grep': grepMode() }} role="dialog" aria-modal="true"
+            aria-label={grepMode() ? t('파일 내용 검색') : t('빠른 열기')}>
             <div class="vt-viewer-head vt-qo-head">
               <span class="vt-qo-head-mark" aria-hidden="true" innerHTML={icon('search', 14, 2)} />
-              <div class="vt-vw-title">{t('빠른 열기')}</div>
+              <div class="vt-vw-title">{grepMode() ? t('파일 내용 검색') : t('빠른 열기')}</div>
               <span class="vt-qo-head-esc" aria-hidden="true">{t('esc 닫기')}</span>
             </div>
             <input
@@ -800,9 +869,12 @@ export function mountPalette(root: HTMLElement, deps: PaletteDeps): PaletteApi {
                 고정한다 — 키 힌트와 모드 힌트를 한 줄에 같이 둔다. */}
             <div class="vt-qo-foot" aria-hidden="true">
               <span><kbd class="vt-qo-key" innerHTML={icon('arrow-up', 13, 2) + icon('arrow-down', 13, 2)} /> {t('이동')}</span>
-              <span><kbd class="vt-qo-key" innerHTML={icon('key-enter', 13, 2)} /> {t('열기')}</span>
+              <span><kbd class="vt-qo-key" innerHTML={icon('key-enter', 13, 2)} /> {grepMode() ? t('그 줄로 열기') : t('열기')}</span>
               <span><kbd class="vt-qo-key" innerHTML={deps.displayComboHtml ? deps.displayComboHtml('Mod+Enter') : '⌘↵'} /> {t('새 pane')}</span>
-              <span class="vt-qo-foot-modes">{t('/ 파일 · @ 세션 · : 명령 · # 큐 · ! 포트 · ~ 스크롤백')}</span>
+              <Show when={grepMode() && deps.openSidebarSearch}>
+                <span><kbd class="vt-qo-key" innerHTML={deps.displayComboHtml ? deps.displayComboHtml('Alt+Enter') : '⌥↵'} /> {t('사이드바 검색으로 옮기기')}</span>
+              </Show>
+              <span class="vt-qo-foot-modes">{grepMode() ? t('기본은 글자 그대로 · 정규식은 ⌥R') : MODE_HINT}</span>
             </div>
           </div>
         </div>

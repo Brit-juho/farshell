@@ -34681,7 +34681,7 @@
   "method": "DELETE",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/fs/raw?path=%2Fetc%2Fhosts",
-  "rule": "/api/fs/(file|raw|roots|search|tree)",
+  "rule": "/api/fs/(file|grep|grep/progress|raw|roots|search|tree)",
   "expected": {
    "status": 403,
    "error": "relay_forbidden",
@@ -34696,7 +34696,7 @@
   "method": "DELETE",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/fs/raw?path=%2Fetc%2Fhosts",
-  "rule": "/api/fs/(file|raw|roots|search|tree)",
+  "rule": "/api/fs/(file|grep|grep/progress|raw|roots|search|tree)",
   "expected": {
    "status": 403,
    "error": "relay_forbidden",
@@ -34711,7 +34711,7 @@
   "method": "DELETE",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/fs/raw?path=%2Fetc%2Fhosts",
-  "rule": "/api/fs/(file|raw|roots|search|tree)",
+  "rule": "/api/fs/(file|grep|grep/progress|raw|roots|search|tree)",
   "expected": {
    "status": 403,
    "error": "level_required",
@@ -34726,7 +34726,7 @@
   "method": "GET",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/fs/raw?path=%2Fetc%2Fhosts",
-  "rule": "/api/fs/(file|raw|roots|search|tree)",
+  "rule": "/api/fs/(file|grep|grep/progress|raw|roots|search|tree)",
   "expected": {
    "status": 401,
    "error": "peer_denied",
@@ -34741,7 +34741,7 @@
   "method": "GET",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/fs/raw?path=%2Fetc%2Fhosts",
-  "rule": "/api/fs/(file|raw|roots|search|tree)",
+  "rule": "/api/fs/(file|grep|grep/progress|raw|roots|search|tree)",
   "expected": {
    "status": 200,
    "error": null,
@@ -34756,7 +34756,7 @@
   "method": "GET",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/fs/raw?path=%2Fetc%2Fhosts",
-  "rule": "/api/fs/(file|raw|roots|search|tree)",
+  "rule": "/api/fs/(file|grep|grep/progress|raw|roots|search|tree)",
   "expected": {
    "status": 200,
    "error": null,
@@ -34771,7 +34771,7 @@
   "method": "GET",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/fs/raw?path=%2Fetc%2Fhosts",
-  "rule": "/api/fs/(file|raw|roots|search|tree)",
+  "rule": "/api/fs/(file|grep|grep/progress|raw|roots|search|tree)",
   "expected": {
    "status": 401,
    "error": "peer_denied",
@@ -34786,7 +34786,7 @@
   "method": "GET",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/fs/raw?path=%2Fetc%2Fhosts",
-  "rule": "/api/fs/(file|raw|roots|search|tree)",
+  "rule": "/api/fs/(file|grep|grep/progress|raw|roots|search|tree)",
   "expected": {
    "status": 403,
    "error": "level_required",
@@ -34801,7 +34801,7 @@
   "method": "PATCH",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/fs/raw?path=%2Fetc%2Fhosts",
-  "rule": "/api/fs/(file|raw|roots|search|tree)",
+  "rule": "/api/fs/(file|grep|grep/progress|raw|roots|search|tree)",
   "expected": {
    "status": 403,
    "error": "relay_forbidden",
@@ -34816,7 +34816,7 @@
   "method": "PATCH",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/fs/raw?path=%2Fetc%2Fhosts",
-  "rule": "/api/fs/(file|raw|roots|search|tree)",
+  "rule": "/api/fs/(file|grep|grep/progress|raw|roots|search|tree)",
   "expected": {
    "status": 403,
    "error": "relay_forbidden",
@@ -34831,7 +34831,7 @@
   "method": "PATCH",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/fs/raw?path=%2Fetc%2Fhosts",
-  "rule": "/api/fs/(file|raw|roots|search|tree)",
+  "rule": "/api/fs/(file|grep|grep/progress|raw|roots|search|tree)",
   "expected": {
    "status": 403,
    "error": "level_required",
@@ -34846,7 +34846,7 @@
   "method": "POST",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/fs/raw?path=%2Fetc%2Fhosts",
-  "rule": "/api/fs/(file|raw|roots|search|tree)",
+  "rule": "/api/fs/(file|grep|grep/progress|raw|roots|search|tree)",
   "expected": {
    "status": 403,
    "error": "relay_forbidden",
@@ -34861,7 +34861,7 @@
   "method": "POST",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/fs/raw?path=%2Fetc%2Fhosts",
-  "rule": "/api/fs/(file|raw|roots|search|tree)",
+  "rule": "/api/fs/(file|grep|grep/progress|raw|roots|search|tree)",
   "expected": {
    "status": 403,
    "error": "relay_forbidden",
@@ -34876,7 +34876,7 @@
   "method": "POST",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/fs/raw?path=%2Fetc%2Fhosts",
-  "rule": "/api/fs/(file|raw|roots|search|tree)",
+  "rule": "/api/fs/(file|grep|grep/progress|raw|roots|search|tree)",
   "expected": {
    "status": 403,
    "error": "level_required",
@@ -34891,7 +34891,7 @@
   "method": "PUT",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/fs/raw?path=%2Fetc%2Fhosts",
-  "rule": "/api/fs/(file|raw|roots|search|tree)",
+  "rule": "/api/fs/(file|grep|grep/progress|raw|roots|search|tree)",
   "expected": {
    "status": 403,
    "error": "relay_forbidden",
@@ -34906,7 +34906,7 @@
   "method": "PUT",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/fs/raw?path=%2Fetc%2Fhosts",
-  "rule": "/api/fs/(file|raw|roots|search|tree)",
+  "rule": "/api/fs/(file|grep|grep/progress|raw|roots|search|tree)",
   "expected": {
    "status": 403,
    "error": "relay_forbidden",
@@ -34921,7 +34921,7 @@
   "method": "PUT",
   "route": "/api/peer/relay/{rest:path}",
   "path": "/api/peer/relay/api/fs/raw?path=%2Fetc%2Fhosts",
-  "rule": "/api/fs/(file|raw|roots|search|tree)",
+  "rule": "/api/fs/(file|grep|grep/progress|raw|roots|search|tree)",
   "expected": {
    "status": 403,
    "error": "level_required",

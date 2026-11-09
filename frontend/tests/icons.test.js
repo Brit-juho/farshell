@@ -112,7 +112,7 @@ test('index.html의 svg는 data-icon 빈 자리이고, 이름이 전부 icons.js
   _doms.push(env.dom);
   const icons = await importFresh(ICONS_JS, env.context, new Map());
   const slots = [...env.dom.window.document.querySelectorAll('svg[data-icon]')];
-  assert.ok(slots.length > 20);
+  assert.ok(slots.length > 10); // 리디자인 9단계에 옛 레일·설정 틀의 자리 12개가 빠졌다(남은 것 14개)
   for (const el of slots) assert.strictEqual(el.innerHTML, '', `${el.dataset.icon} 자리에 도형이 복사돼 있다`);
   icons.hydrateIcons(env.dom.window.document);
   for (const el of slots) assert.notStrictEqual(el.innerHTML, '', `${el.dataset.icon}이 icons.js에 없다`);

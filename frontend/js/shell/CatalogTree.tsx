@@ -8,6 +8,7 @@ import { Portal } from 'solid-js/web';
 import { t } from '../core/i18n.js';
 import { confirmDialog } from '../core/dialog-lazy.js';
 import { icon } from '../ui/icons.js';
+import { shellIcon } from '../ui/icons-shell.js';
 import { Menu, type MenuItem } from './RailRow.js';
 import { pickRecentEnded, lastActiveOf, type SessionRow } from './rail-data.js';
 import {
@@ -69,34 +70,45 @@ export function StoppedRow(p: { session: any; workspaces: any[]; onOpen: () => v
       onClick={p.onOpen} onContextMenu={openMenu}
       onKeyDown={(e) => { if (e.target !== e.currentTarget) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.onOpen(); } }}
     >
+      {/* 시안 D02 「종료된 행」 — 실행 중 행과 같은 열: 점선 원 · (이름 · 경과 · ⋯) / 작업 위치 / 상태,
+          그 아래 동작 줄(다시 확인 · 보관 해제 · 이어서 시작). 채움은 이어서 시작 하나뿐이다. */}
+      <span class="vt-srow-state" aria-hidden="true" innerHTML={icon('state-stopped', 16, 1.75)} />
       <div class="vt-srow-main vt-wgrail-row-main">
         <div class="vt-srow-top vt-wgrail-row-top">
-          <span class="vt-srow-state" aria-hidden="true" innerHTML={icon('state-stopped', 14, 2)} />
           <span class="vt-srow-name vt-wgrail-name">{s().title}</span>
+          <span class="vt-srow-elapsed">{agoLabel(lastActiveOf(s()))}</span>
+          <button type="button" class="vt-icon-btn sm vt-srow-menu" aria-label={t('{name} 메뉴', { name: s().title })} data-tip={t('메뉴')} data-tip-side="left"
+            onClick={openMenu} innerHTML={icon('more-horizontal', 16, 2)} />
         </div>
         <Show when={where()}>
-          <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line2"><span class="vt-srow-branch">{where()}</span></div>
+          <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line2">
+            <span class="vt-srow-branch with-ico"><span class="vt-srow-branch-ico" innerHTML={icon('git-branch', 12, 2)} /><span class="vt-srow-branch-name">{where()}</span></span>
+          </div>
         </Show>
         <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line3">
           <span class="vt-srow-kw" title={status().hint}>{status().label}</span>
-          <Show when={legacy()}><span class="vt-srow-since">{t('연결된 대화 없음')}</span></Show>
-          <span class="vt-srow-since">{agoLabel(lastActiveOf(s()))}</span>
+          <Show when={legacy()}><span class="vt-srow-note">{t('연결된 대화 없음')}</span></Show>
         </div>
+        <Show when={status().recheck || s().archived || resumable()}>
+          <div class="vt-srow-actions" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+            <Show when={status().recheck}>
+              <button type="button" class="vt-btn sm quiet" disabled={busy()} title={status().hint}
+                onClick={() => { void recheck(); }}>{busy() ? t('확인하는 중…') : t('다시 확인')}</button>
+            </Show>
+            <Show when={s().archived}>
+              <button type="button" class="vt-btn sm quiet" disabled={busy()}
+                onClick={() => { void run(() => setSessionArchived(s(), false)); }}>{t('보관 해제')}</button>
+            </Show>
+            <Show when={resumable()}>
+              <button type="button" class="vt-btn sm solid vt-srow-resume" disabled={busy()}
+                onClick={() => { void run(() => resumeSession(s().id)); }}>
+                <span class="vt-srow-resume-ico" innerHTML={shellIcon('play', 12, 2)} />
+                {busy() ? t('시작하는 중…') : t('이어서 시작')}
+              </button>
+            </Show>
+          </div>
+        </Show>
       </div>
-      <Show when={status().recheck}>
-        <button type="button" class="vt-btn sm" disabled={busy()} title={status().hint}
-          onClick={(e) => { e.stopPropagation(); void recheck(); }}>{busy() ? t('확인하는 중…') : t('다시 확인')}</button>
-      </Show>
-      <Show when={s().archived}>
-        <button type="button" class="vt-btn sm" disabled={busy()}
-          onClick={(e) => { e.stopPropagation(); void run(() => setSessionArchived(s(), false)); }}>{t('보관 해제')}</button>
-      </Show>
-      <Show when={resumable()}>
-        <button type="button" class="vt-btn sm solid" disabled={busy()}
-          onClick={(e) => { e.stopPropagation(); void run(() => resumeSession(s().id)); }}>{busy() ? t('시작하는 중…') : t('이어서 시작')}</button>
-      </Show>
-      <button type="button" class="vt-icon-btn xs vt-srow-menu" aria-label={t('{name} 메뉴', { name: s().title })} data-tip={t('메뉴')} data-tip-side="left"
-        onClick={openMenu} innerHTML={icon('more-horizontal', 14, 2)} />
     </div>
     <Show when={menuAt()}>{(m) => <Portal><Menu x={m().x} y={m().y} onClose={() => setMenuAt(null)} items={items()} /></Portal>}</Show>
     <Show when={error()}><p role="status" class="vt-wgrail-note">{error()}</p></Show>

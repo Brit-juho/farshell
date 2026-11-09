@@ -294,3 +294,16 @@ test('대기 목록: 모든 종류가 한 목록에 종류·요청 문장·상�
   assert.ok(t.modal());
   assert.match(t.text(), /메시지를 보내려 합니다/);
 });
+
+// 리디자인 6단계(시안 O11 「정돈」 배치) — 채운 버튼이 없고, 바닥 줄은 왼쪽 거부 · 오른쪽 한 번만 · 이 세션 동안 · 나중에.
+test('정돈 배치: 채운 버튼이 하나도 없고 바닥 줄 순서는 거부 | 한 번만 · 이 세션 동안 · 나중에', async () => {
+  const t = await setup();
+  t.entry.setPending([item('r1', 'share', { reason: '두 파일만 고칩니다' })]);
+  assert.strictEqual(t.modal().querySelector('.vt-btn.solid'), null);
+  const foot = t.modal().querySelector('.vt-authz-foot');
+  assert.ok(foot, '바닥 줄');
+  assert.deepStrictEqual([...foot.querySelectorAll('button')].map((b) => b.textContent.trim()), ['거부', '한 번만', '이 세션 동안', '나중에']);
+  assert.ok(t.modal().querySelector('.vt-viewer-head svg'), '머리에 방패 아이콘');
+  assert.match(t.modal().querySelector('.vt-authz-reason-box').textContent, /두 파일만 고칩니다/);
+  assert.strictEqual(t.document.activeElement, t.act('deny'));
+});

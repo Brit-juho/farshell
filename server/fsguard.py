@@ -24,6 +24,8 @@ import logging
 import contextlib
 import os
 import re
+import sys
+import unicodedata
 from pathlib import Path
 from typing import Optional
 from i18n import tr
@@ -555,9 +557,10 @@ def _is_within(p: Path, root: Path) -> bool:
 #
 # 화이트리스트인 이유가 핵심이다. 이 서버는 공개 터널로 나가고, 여기서 내보낸
 # 바이트는 브라우저가 **이 오리진의 리소스로** 해석한다. 그래서:
-#   - SVG는 뺀다. SVG는 스크립트를 품을 수 있어 같은 오리진에서 열면 XSS다
-#     (SVG는 텍스트라 뷰어가 어차피 소스로 보여준다 — 잃는 게 없다).
-#   - HTML·PDF도 뺀다. 같은 이유(스크립트/임베드).
+#   - HTML·PDF는 뺀다. 같은 오리진에서 문서로 열리면 스크립트/임베드가 돈다(PDF는 다운로드만, 결정 D8).
+#   - SVG는 따로(`SVG_TYPE`) 다룬다. SVG는 스크립트를 품을 수 있어, `/api/fs/raw`는 SVG를 낼 때 응답에
+#     `RAW_CSP`(sandbox)를 붙이고 화면은 `<img>`로만 그린다(`<img>` 안의 SVG는 스크립트를 돌리지 않고,
+#     주소를 직접 열어도 sandbox가 스크립트를 막는다 — 결정 D8).
 #   - 확장자만 믿지 않고 매직 바이트로 한 번 더 확인한다 — `.png`로 이름만 바꾼
 #     HTML을 image/png로 내보내면 브라우저가 스니핑으로 되살릴 여지를 준다.
 IMAGE_TYPES = {
@@ -598,6 +601,73 @@ def image_type(path, head: bytes) -> str | None:
     if declared == "image/webp" and head[:4] == b"RIFF" and head[8:12] == b"WEBP":
         return declared
     return None
+
+
+SVG_TYPE = "image/svg+xml"
+
+# 동영상·소리(파일 개편 계획 4.6). 이미지처럼 확장자와 매직 바이트가 **둘 다** 맞아야 내보낸다.
+MEDIA_TYPES = {
+    ".mp4": "video/mp4",
+    ".webm": "video/webm",
+    ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
+    ".wav": "audio/wav",
+}
+
+# `/api/fs/raw`·`/api/fs/download` 응답의 CSP. 주소를 직접 열어 문서로 열려도(SVG) 스크립트·외부 불러오기가
+# 돌지 않고(sandbox, default-src 'none'), 다른 사이트가 끼워 넣지 못한다(frame-ancestors). SVG 안의 인라인
+# 스타일만 허용한다(그림이 깨지지 않게). 계획 7.3의 정책에 frame-ancestors를 더한 것 — 앱 기본 헤더
+# (security_headers.py)는 이미 CSP를 낸 응답을 덮어쓰지 않으므로 여기서 함께 적는다.
+RAW_CSP = "sandbox; default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"
+
+
+def _looks_svg(head: bytes) -> bool:
+    """머리가 XML/SVG 문서로 시작하고 `<svg` 요소가 있다. 바이너리(NUL)는 아니다."""
+    if b"\x00" in head:
+        return False
+    text = head.decode("utf-8", "ignore").lstrip("\ufeff \t\r\n").lower()
+    return text.startswith("<") and "<svg" in text
+
+
+def svg_type(path, head: bytes) -> str | None:
+    from pathlib import Path as _P
+
+    if _P(str(path)).suffix.lower() != ".svg":
+        return None
+    return SVG_TYPE if _looks_svg(head) else None
+
+
+def media_type(path, head: bytes) -> str | None:
+    """동영상·소리 — 확장자와 매직 바이트가 같은 형식을 가리킬 때만."""
+    from pathlib import Path as _P
+
+    declared = MEDIA_TYPES.get(_P(str(path)).suffix.lower())
+    if not declared:
+        return None
+    if declared in ("video/mp4", "audio/mp4"):
+        ok = head[4:8] == b"ftyp"
+    elif declared == "video/webm":
+        ok = head.startswith(b"\x1a\x45\xdf\xa3")
+    elif declared == "audio/mpeg":
+        ok = head.startswith(b"ID3") or (len(head) >= 2 and head[0] == 0xFF and (head[1] & 0xE0) == 0xE0)
+    else:   # audio/wav
+        ok = head[:4] == b"RIFF" and head[8:12] == b"WAVE"
+    return declared if ok else None
+
+
+def raw_type(path, head: bytes) -> str | None:
+    """`/api/fs/raw`가 원본 바이트로 내보내도 되는 타입(이미지·SVG·동영상·소리). 아니면 None."""
+    return image_type(path, head) or svg_type(path, head) or media_type(path, head)
+
+
+def raw_types() -> frozenset:
+    """`raw_type`이 낼 수 있는 Content-Type 전부 — 호스트 중계의 응답 허용 목록(relay_policy)이 쓴다."""
+    return frozenset({*IMAGE_TYPES.values(), SVG_TYPE, *MEDIA_TYPES.values()})
+
+
+def is_capped_preview(mime: str) -> bool:
+    """크기 상한(`MAX_IMAGE_BYTES`)이 걸리는 타입 — 한 번에 통째로 받는 그림. 동영상·소리는 Range로 나눠 받는다."""
+    return mime in IMAGE_TYPES.values() or mime == SVG_TYPE
 
 
 def looks_binary(head: bytes) -> bool:
@@ -740,36 +810,272 @@ def open_resolved(path: Path) -> int:
     return result
 
 
-# --- 쓰기 정책 (쓰기 API가 생길 때까지 닫혀 있다) ----------------------------------
+# --- 쓰기 정책 (편집·저장, files-overhaul 단계 8) ---------------------------------------
 # 읽어도 되는 파일이 원격에서 덮어써도 되는 파일은 아니다. 아래는 읽기 허용 점 디렉토리
 # (ALLOWED_DOT_DIRS) 중 **실행 설정**이 되는 것들이다 — CI 워크플로, 훅 관리자, 개발 컨테이너,
 # 편집기 작업 정의. 쓰기에서는 경로의 어느 조각에 있어도 거부한다. 읽기 거부 목록과 점 디렉토리
 # 규칙은 쓰기에도 그대로 걸린다(`resolve_for_write`가 `resolve_under_roots`를 먼저 부른다).
 WRITE_DENY_DIR_PARTS = frozenset({
     ".github", ".gitlab", ".husky", ".devcontainer", ".vscode", ".circleci",
+    # Storybook의 `main.js`·`preview.js`는 `storybook dev`·빌드가 그대로 실행한다.
+    ".storybook",
 })
 
-# 쓰기 API는 아직 없다. 쓰기 경계(읽기 경계와 따로 둘 설정 값)와 승격 요구를 정하는 단계에서 이 값을 연다.
-# 그 전까지 `resolve_for_write`는 판정을 다 한 뒤에도 거부한다 — 쓰기 라우트가 먼저 생겨도 열리지 않게.
-WRITES_ENABLED = False
+# 쓰기에서만 거부하는 **이름**(경로의 어느 조각이든). `.git` 디렉토리는 점 디렉토리 규칙이 이미 닫지만, `.git`
+# **파일**(gitfile, `gitdir: <경로>`)은 점 파일이라 읽기가 열려 있다. 그 파일을 쓰면 git이 다른 저장소의 설정·훅
+# (`core.fsmonitor`, `core.hooksPath`)을 쓰게 되어 다음 git 명령에서 임의 명령이 돈다 — 실행 설정이다.
+WRITE_DENY_NAMES = frozenset({
+    ".git",
+    # 훅·설치 설정 파일 — 다음 `git commit`·`npm install`이 그 안의 명령을 돌린다. 저장소 꼭대기에 흩어져 있어
+    # 폴더 규칙으로는 닫히지 않는다. `.npmrc`는 읽기 거부 목록에도 있다(토큰) — 여기서는 쓰기 쪽 이유를 명시한다.
+    ".npmrc", ".pre-commit-config.yaml", ".pre-commit-config.yml",
+    "lefthook.yml", "lefthook.yaml", ".lefthook.yml", ".lefthook.yaml",
+    "lefthook-local.yml", "lefthook-local.yaml", ".lefthook-local.yml", ".lefthook-local.yaml",
+})
+
+# 이름 비교 전에 지우는 **기본 무시 코드 포인트**(Unicode Default_Ignorable_Code_Point). HFS+는 이 중 일부
+# (U+200C–U+200F, U+202A–U+202E, U+206A–U+206F, U+FEFF)를 이름에서 무시해 `.g<U+200C>it`이 `.git`과 같은 항목이 된다.
+# 집합을 넓게 잡는다 — 쓰기 거부 판정과 이름 잠금에만 쓰므로 넓어도 정상 이름을 막지 않는다.
+_IGNORABLE_RANGES = (
+    (0x00AD, 0x00AD), (0x034F, 0x034F), (0x061C, 0x061C), (0x115F, 0x1160), (0x17B4, 0x17B5),
+    (0x180B, 0x180F), (0x200B, 0x200F), (0x202A, 0x202E), (0x2060, 0x206F), (0x3164, 0x3164),
+    (0xFE00, 0xFE0F), (0xFEFF, 0xFEFF), (0xFFA0, 0xFFA0), (0xFFF0, 0xFFF8), (0x1BCA0, 0x1BCA3),
+    (0x1D173, 0x1D17A), (0xE0000, 0xE0FFF),
+)
+
+
+def _ignorable(ch: str) -> bool:
+    o = ord(ch)
+    return any(lo <= o <= hi for lo, hi in _IGNORABLE_RANGES)
+
+
+def write_name_key(name: str) -> str:
+    """쓰기 거부 목록·이름 잠금이 비교하는 이름 모양: 기본 무시 코드 포인트를 빼고 NFD로 풀고 casefold.
+
+    macOS 파일시스템은 대소문자를 가리지 않고(APFS·HFS+ 기본), 정규화를 가리지 않으며(APFS는 정규화 무관,
+    HFS+는 NFD로 저장), HFS+는 무시 코드 포인트까지 지운다. 그래서 `.GIT`, `.g<U+200C>it`, 조합형·분해형이 같은 항목이다."""
+    stripped = "".join(ch for ch in name if not _ignorable(ch))
+    return unicodedata.normalize("NFD", stripped).casefold()
+
+
+_WRITE_DENY_DIR_KEYS = frozenset(write_name_key(n) for n in WRITE_DENY_DIR_PARTS)
+_WRITE_DENY_NAME_KEYS = frozenset(write_name_key(n) for n in WRITE_DENY_NAMES)
+
+
+def write_denied_part(part: str) -> Optional[str]:
+    """경로 조각 하나가 쓰기 거부 대상이면 사유, 아니면 None."""
+    key = write_name_key(part)
+    if key in _WRITE_DENY_DIR_KEYS:
+        return tr("쓰기가 금지된 디렉토리: {name}", name=part)
+    if key in _WRITE_DENY_NAME_KEYS:
+        return tr("쓰기가 금지된 이름: {name}", name=part)
+    return None
+
+
+def write_denied_alias_at(dir_fd: int, name: str) -> Optional[str]:
+    """`dir_fd` 안의 `name`이 **같은 폴더의 쓰기 거부 항목과 같은 inode**면 사유, 아니면 None.
+
+    이름 정규화가 놓치는 파일시스템 고유의 이름 접기에 대비한 두 번째 줄 — `.git`(파일이든 폴더든)·훅 설정과
+    같은 항목을 가리키는 이름은 쓰지 않는다. `name`이 아직 없으면 None. blocking — 쓰기 경로가 dir_fd를 연 채 부른다."""
+    try:
+        st = os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+    except OSError:
+        return None
+    for denied in sorted(WRITE_DENY_NAMES | WRITE_DENY_DIR_PARTS):
+        try:
+            dst = os.stat(denied, dir_fd=dir_fd, follow_symlinks=False)
+        except OSError:
+            continue
+        if (dst.st_dev, dst.st_ino) == (st.st_dev, st.st_ino):
+            return tr("쓰기가 금지된 이름: {name}", name=denied)
+    return None
+
+# 쓰기 경계 `VT_WRITE_ROOTS`(결정 D3). 비우면 열람 경계와 같다(`get_roots()`). `off`면 쓰기를 모두 닫는다.
+# 값을 주면 그 루트들만 — 열람 경계 밖의 루트는 `resolve_under_roots`가 먼저 막으므로 넓어지지 않는다(쓰기 ⊆ 읽기).
+WRITE_ROOTS_OFF = ("off", "none", "0", "false")
+
+
+def get_write_roots() -> list[Path]:
+    """쓰기 허용 경계. 빈 목록이면 쓰기가 닫힌 것이다(`writes_enabled()`)."""
+    raw = os.environ.get("VT_WRITE_ROOTS", "").strip()
+    if not raw:
+        return get_roots()
+    if raw.lower() in WRITE_ROOTS_OFF:
+        return []
+    roots = []
+    for chunk in raw.split(":"):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        try:
+            p = Path(chunk).expanduser().resolve()
+        except (OSError, RuntimeError):
+            continue
+        if p.is_dir():
+            roots.append(p)
+    return roots
+
+
+def writes_enabled() -> bool:
+    """쓰기가 정책으로 열려 있는가(옛 상수 `WRITES_ENABLED`, 항상 꺼짐을 대신한다)."""
+    return bool(get_write_roots())
+
+
+def _raw_write_path(raw_path: str) -> str:
+    """쓰기 경로의 모양 검사 — 절대경로만, `..`·`.`·빈 조각, 끝의 `/`, 제어 문자 없이. 판정 전에 거른다."""
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        raise FsDenied(tr("경로가 비었습니다"))
+    if any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in raw_path):
+        raise FsDenied(tr("경로에 제어 문자가 있습니다"))
+    expanded = os.path.expanduser(raw_path)
+    if not os.path.isabs(expanded):
+        raise FsDenied(tr("쓰기 경로는 절대경로여야 합니다"))
+    if ".." in Path(expanded).parts:
+        raise FsDenied(tr("쓰기 경로에 「..」를 쓸 수 없습니다"))
+    # 끝의 `/`, `.`·빈 조각은 `Path`가 말없이 지운다. 그런데 `os.lstat("x/link/")`·`lstat("x/link/.")`은 링크를
+    # **따라가므로** 「심링크는 옮기지 않는다」 검사를 지나 링크 대상이 옮겨지거나 휴지통에 간다. 쓰기 대상에는
+    # 이런 모양이 필요 없으니 판정 전에 거부한다(`/` 자체만 예외 — 조각이 없다).
+    if expanded != "/" and any(part in ("", ".") for part in expanded[1:].split("/")):
+        raise FsDenied(tr("쓰기 경로는 「/」로 끝나거나 「.」·빈 조각을 가질 수 없습니다"))
+    return expanded
 
 
 def resolve_for_write(raw_path: str) -> Path:
     """쓰기 대상 경로를 판정한다 — 쓰기 경로의 **유일한** 판정 지점(AGENTS.md 계약 2).
 
-    1. `resolve_under_roots`: 열람 경계, 읽기 거부 목록, 점 디렉토리 규칙.
-    2. `WRITE_DENY_DIR_PARTS`: 실행 설정 폴더는 읽을 수는 있어도 쓸 수 없다.
-    3. `WRITES_ENABLED`가 꺼져 있으면(지금) 거부한다.
+    1. 모양: 절대경로, `..` 조각·제어 문자 없음.
+    2. `resolve_under_roots`: 열람 경계, 읽기 거부 목록, 점 디렉토리 규칙.
+    3. `WRITE_DENY_DIR_PARTS`·`WRITE_DENY_NAMES`: 실행 설정은 읽을 수는 있어도 쓸 수 없다. `write_name_key`로
+       비교한다 — 대소문자·정규화(NFC/NFD)·기본 무시 코드 포인트를 가리지 않는다(macOS 파일시스템은 `.GitHub`,
+       분해형, HFS+에서는 `.g<U+200C>it`까지 같은 항목으로 본다). 쓰기 경로(`fs_write`)는 여기에 더해 dir_fd
+       기준으로 `write_denied_alias_at`(같은 inode) 검사를 한다.
+    4. 쓰기 경계(`get_write_roots`) 안이어야 한다. `VT_WRITE_ROOTS=off`면 모두 거부.
 
     통과한 경로는 `open_resolved_parent`로 연다(판정 뒤 바꿔치기 방어). 실패는 `FsDenied`.
     """
-    p = resolve_under_roots(raw_path)
+    p = resolve_under_roots(_raw_write_path(raw_path))
     for part in p.parts:
-        if part in WRITE_DENY_DIR_PARTS:
-            raise FsDenied(tr("쓰기가 금지된 디렉토리: {name}", name=part))
-    if not WRITES_ENABLED:
-        raise FsDenied(tr("파일 쓰기는 지원하지 않습니다"))
+        reason = write_denied_part(part)
+        if reason:
+            raise FsDenied(reason)
+    roots = get_write_roots()
+    if not roots:
+        raise FsDenied(tr("파일 쓰기가 꺼져 있습니다 (VT_WRITE_ROOTS=off)"))
+    if not any(_is_within(p, root) for root in roots):
+        raise FsDenied(tr("쓰기 허용 경계 밖의 경로입니다 (VT_WRITE_ROOTS)"))
     return p
+
+
+def resolve_dir_for_write(raw_path: str) -> Path:
+    """**폴더** 쓰기(새 폴더·폴더 이름 바꾸기·폴더 휴지통)의 판정. `resolve_for_write`의 모든 규칙에 더해:
+
+    - 열람 루트·쓰기 루트 **자신**과 루트를 품는 폴더는 거부한다 — 루트를 옮기거나 휴지통에 넣으면 경계 자체가
+      사라진다. `resolve_for_write`는 루트 자신을 허용한다(파일 쓰기에는 해가 없다).
+    - 마지막 이름이 숨은 상태 폴더 이름(`.sometool` 등 허용 목록 밖의 점 폴더)이면 거부한다. 읽기 규칙은 **이미 있는**
+      폴더만 보므로, 새로 만들거나 그 이름으로 옮기는 폴더는 여기서 막는다(만들면 트리에서 보이지도 않는다).
+
+    조상·자신이 실행 설정 폴더(`.github` 등)인 경우와 경계 밖은 `resolve_for_write`가 이미 거부한다. 심링크 폴더 거부와
+    「자기 안으로 옮기기」 거부는 dir_fd로 확인하는 `fs_write`가 한다."""
+    p = resolve_for_write(raw_path)
+    for root in (*get_roots(), *get_write_roots()):
+        if _is_within(root, p):
+            raise FsDenied(tr("루트 폴더 자체는 바꾸거나 옮길 수 없습니다"))
+    if is_hidden_state_dir_name(p.name):
+        raise FsDenied(tr("거부된 디렉토리: {name}", name=p.name))
+    return p
+
+
+def _server_dirs() -> list[Path]:
+    """옮기거나 휴지통에 넣으면 서버가 망가지는 폴더 — 이 서버의 설치(체크아웃) 폴더와 상태 폴더(`~/.vt`)."""
+    import vt_paths
+    out = [Path(__file__).resolve().parent.parent]
+    try:
+        out.append(vt_paths.state_dir())
+    except Exception:  # noqa: BLE001 — 못 구하면 그 항목만 빠진다(루트 보호는 그대로)
+        pass
+    return out
+
+
+def protected_dir_ids() -> set[tuple[int, int]]:
+    """폴더 이름 바꾸기·휴지통이 건드리면 안 되는 폴더들의 `(st_dev, st_ino)`.
+
+    열람·쓰기 루트, 설치 폴더, 상태 폴더와 **그 조상 전부**. `resolve_dir_for_write`의 루트 검사는 글자 비교라
+    대소문자·정규화만 다른 이름(루트 `~/GitHub/Work/c`의 조상을 `~/GitHub/work`로 부르기)이나 다른 경로로 닿는 같은
+    폴더를 놓친다. inode는 이름 접기와 무관하다. 호출부(`fs_write`)는 dir_fd 기준 `lstat` 결과와 비교한다."""
+    ids: set[tuple[int, int]] = set()
+    for base in (*get_roots(), *get_write_roots(), *_server_dirs()):
+        bases = [base]
+        try:
+            bases.append(base.resolve())
+        except (OSError, RuntimeError):
+            pass
+        for b in bases:
+            for d in (b, *b.parents):
+                try:
+                    st = os.stat(d)
+                except OSError:
+                    continue
+                ids.add((st.st_dev, st.st_ino))
+    return ids
+
+
+def contains_mount(path: Path) -> Optional[bool]:
+    """`path` **아래**에 다른 파일시스템이 마운트돼 있는가(바인드 마운트, 디스크 이미지 등). 마운트 표를 못 읽으면 None.
+
+    폴더를 휴지통으로 옮기면 그 아래 마운트도 함께 옮겨지고, 나중에 휴지통을 비우면 마운트된 쪽 내용까지 지워진다.
+    Linux는 `/proc/self/mountinfo`, macOS는 `getfsstat(MNT_NOWAIT)`(`resilience.mounts.current_mounts`, 캐시 없이) —
+    마운트된 파일시스템에는 닿지 않는다. macOS는 사용자 폴더가 Data 볼륨에 firmlink로 이어져 마운트 경로가
+    `/System/Volumes/Data/...`로 나올 수 있어 두 모양을 다 보고, 대소문자·정규화를 가리지 않고 비교한다(넓게 거부)."""
+    from resilience import mounts as _mounts
+    table = _mounts.current_mounts()
+    if table is None:
+        return None
+    darwin = sys.platform == "darwin"
+
+    def norm(s: str) -> str:
+        s = os.path.normpath(s)
+        return unicodedata.normalize("NFD", s).casefold() if darwin else s
+
+    bases = [norm(str(path))]
+    if darwin:
+        bases.append(norm("/System/Volumes/Data" + str(path)))
+    for m in table:
+        mp = norm(m.path)
+        for b in bases:
+            if b != "/" and mp.startswith(b.rstrip("/") + "/"):
+                return True
+    return False
+
+
+# git이 저장소 폴더(gitdir)로 알아보는 표지. `HEAD`·`objects`·`refs`가 모두 있으면 bare 저장소로 본다(`config`는
+# 없어도 된다). 그런 폴더의 `config`(`core.fsmonitor`·`core.pager` 등)는 그 안이나 아래에서 사람이 git을 돌리면 명령을
+# 실행한다 — `.git` 이름 규칙을 피해 새 폴더·새 파일만으로 저장소 모양을 조립할 수 있다.
+_GIT_DIR_CORE = ("HEAD", "objects", "refs")
+_GIT_DIR_CORE_KEYS = {write_name_key(n): n for n in _GIT_DIR_CORE}
+
+
+def _has_entry(dir_fd: int, name: str) -> bool:
+    try:
+        os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+        return True
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True                              # 확인할 수 없으면 있다고 본다(넓게 거부)
+
+
+def git_dir_refusal(dir_fd: int, name: str) -> Optional[str]:
+    """`dir_fd` 폴더에 `name`을 쓰거나 만들거나 그 이름으로 옮기면 git 저장소 모양이 되면 사유, 아니면 None.
+
+    - 폴더가 이미 저장소 모양(`HEAD`·`objects`·`refs`)이면 그 안의 어떤 이름도 쓰지 않는다(`config`·`hooks` 포함).
+    - `name`이 `HEAD`·`objects`·`refs` 중 하나이고 나머지 둘이 이미 있으면 거부한다(조립을 끝내지 못하게).
+    이름은 `write_name_key`로 비교한다(macOS의 `head`·`Objects`도 같은 항목). blocking — 쓰기 경로가 dir_fd를 연 채 부른다."""
+    if all(_has_entry(dir_fd, n) for n in _GIT_DIR_CORE):
+        return tr("git 저장소 폴더 안에는 쓸 수 없습니다")
+    me = _GIT_DIR_CORE_KEYS.get(write_name_key(name))
+    if me is not None and all(_has_entry(dir_fd, n) for n in _GIT_DIR_CORE if n != me):
+        return tr("git 저장소 모양이 되는 이름이라 만들 수 없습니다: {name}", name=name)
+    return None
 
 
 def history_source_root(raw: str) -> Path:

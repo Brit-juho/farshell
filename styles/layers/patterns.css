@@ -88,13 +88,11 @@
   .vt-wtd-section-title { font-size: var(--fs-3xs); }
 
   /* ── 드래그 손잡이(리사이저) ──────────────────────────────────────────
-   * 레일·dock·패널의 폭을 끄는 6px 띠. 보이지 않지만 잡히는 넓이가 있어야
+   * 사이드바·패널의 폭을 끄는 6px 띠. 보이지 않지만 잡히는 넓이가 있어야
    * 한다 — 1px 선 위에 정확히 올리는 건 마우스로 못 한다.
    * 2.1.6 이전에는 세 벌이었고 선언 여섯이 전부 같았다. */
   .vt-resizer,
-  .vt-rail-resizer,
-  .vt-wgrail-resizer,
-  .vt-dock-resizer {
+  .vt-side-resizer {
     position: absolute;
     top: 0;
     bottom: 0;
@@ -126,7 +124,6 @@
   .vt-vw-empty,
   .vt-vw-loading,
   .vt-session-empty,
-  .vt-rail-session-empty,
   .vt-usage-empty,
   .vt-usage-none {
     padding: calc(var(--spacing) * 8) calc(var(--spacing) * 4);

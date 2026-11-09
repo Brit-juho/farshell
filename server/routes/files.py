@@ -13,6 +13,8 @@ preview.py:91-93 에 같은 교훈이 있다 — 동기 호출 하나가 터미�
 from __future__ import annotations
 
 import asyncio
+import base64
+import bisect
 import errno
 import json
 import logging
@@ -27,10 +29,12 @@ from authz import leases as authz_leases
 import file_store
 import fs_watch
 import fs_read
+import fs_stream
 import fsguard
 import tmux_target
 from i18n import tr
-from resilience import fsops, scan as res_scan
+import fs_grep
+from resilience import breaker as res_breaker, fsops, pools as res_pools, scan as res_scan
 from resilience.scan_worker import fuzzy_score as _fuzzy_score
 
 logger = logging.getLogger(__name__)
@@ -55,14 +59,53 @@ async def fs_roots():
 # --- 트리 --------------------------------------------------------------------
 
 
-def _list_dir(p: Path) -> dict:
-    entries = []
-    truncated = False
+# 페이지 하나의 크기(기본·최대)와 한 디렉토리에서 스캔하는 상한(계획 4.4). 예전에는 scandir 앞 1000개를 **먼저 자르고
+# 나서** 정렬해, 1000개를 넘는 폴더는 어느 1000개가 보일지가 디스크 순서에 달렸고 나머지를 볼 길이 없었다.
+# 지금은 전체(상한 5만)를 이름만으로 모아 정렬한 뒤 페이지를 자른다. 크기(`stat`)는 그 페이지 항목에만 부른다.
+PAGE_ENTRIES = fsguard.MAX_ENTRIES
+MAX_SCAN_ENTRIES = 50_000
+_CURSOR_MAX = 2048
+
+
+class BadCursor(ValueError):
+    pass
+
+
+def _sort_key(is_dir: bool, name: str) -> tuple:
+    # 폴더 먼저, 그다음 대소문자 무시 이름순, 같으면 원래 이름(커서가 항목 하나를 정확히 가리키게).
+    return (0 if is_dir else 1, name.casefold(), name)
+
+
+def encode_cursor(key: tuple) -> str:
+    raw = json.dumps([key[0], key[1], key[2]], ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def decode_cursor(cursor: str) -> tuple:
+    """`after=` 값 → 정렬 키. 모양이 틀리면 BadCursor(400). 커서는 이름만 담는다 — 경로 판정과 무관하다."""
+    if not cursor or len(cursor) > _CURSOR_MAX:
+        raise BadCursor("after is malformed")
+    try:
+        raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
+        v = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        raise BadCursor("after is malformed") from None
+    if (not isinstance(v, list) or len(v) != 3 or v[0] not in (0, 1)
+            or not isinstance(v[1], str) or not isinstance(v[2], str)):
+        raise BadCursor("after is malformed")
+    return (v[0], v[1], v[2])
+
+
+def _list_dir(p: Path, after: tuple | None = None, limit: int = PAGE_ENTRIES) -> dict:
+    """디렉토리 한 페이지. 응답: `entries`(이 페이지), `total`(스캔한 보이는 항목 수), `next`(다음 페이지 커서 또는
+    None), `capped`(스캔 상한에 닿음), `truncated`(이 응답 밖에 항목이 더 있다 — 옛 클라이언트용 뜻 그대로)."""
+    found: list[tuple[tuple, os.DirEntry]] = []
+    capped = False
     try:
         with os.scandir(p) as it:
             for de in it:
-                if len(entries) >= fsguard.MAX_ENTRIES:
-                    truncated = True
+                if len(found) >= MAX_SCAN_ENTRIES:
+                    capped = True
                     break
                 name = de.name
                 if fsguard.is_managed_profile_path(Path(de.path)):
@@ -77,17 +120,38 @@ def _list_dir(p: Path) -> dict:
                 # 거부 대상은 목록에서도 감춘다. 이름만으로도 정보가 되기 때문.
                 if not is_dir and fsguard._is_denied_name(name):
                     continue
-                try:
-                    size = de.stat(follow_symlinks=False).st_size if not is_dir else 0
-                except OSError:
-                    size = 0
-                entries.append({"name": name, "dir": is_dir, "size": size})
+                found.append((_sort_key(is_dir, name), de))
     except PermissionError:
         raise fsguard.FsDenied(tr("읽기 권한이 없습니다"))
 
-    # 디렉토리 우선, 그다음 이름순 — 파일 탐색기의 보편적 정렬.
-    entries.sort(key=lambda e: (not e["dir"], e["name"].lower()))
-    return {"path": str(p), "entries": entries, "truncated": truncated}
+    found.sort(key=lambda x: x[0])
+    start = 0
+    if after is not None:
+        start = bisect.bisect_right([k for k, _ in found], after)
+    page = found[start:start + limit]
+    entries = []
+    for key, de in page:
+        is_dir = key[0] == 0
+        size = 0
+        mtime = None
+        if not is_dir:
+            try:
+                st = de.stat(follow_symlinks=False)
+                size = st.st_size
+                mtime = st.st_mtime_ns // 1_000_000
+            except OSError:
+                pass
+        e = {"name": de.name, "dir": is_dir, "size": size}
+        if mtime is not None:
+            e["mtime"] = mtime
+        entries.append(e)
+    more = start + len(page) < len(found)
+    return {
+        "path": str(p), "entries": entries,
+        "truncated": more or capped,
+        "total": len(found), "next": encode_cursor(page[-1][0]) if more and page else None,
+        "capped": capped,
+    }
 
 
 # --- 파일명 검색 (N5/N40, 60-settings-palette.md §3 `/` 모드) ----------------
@@ -174,18 +238,96 @@ async def fs_search(q: str = Query(...), path: str = Query("")):
         return fsops.unavailable_response(e)
 
 
+# --- 파일 내용 검색 (파일 개편 단계 6) -----------------------------------------------
+
+# 요청이 끊겼는지 보는 간격. 끊기면 자식 프로세스 그룹을 바로 죽인다.
+GREP_POLL = 0.25
+
+
+def _grep_unavailable(error: str, reason: str, retry: int = 5) -> JSONResponse:
+    return JSONResponse({"error": error, "reason": reason, "retry_after": retry}, status_code=503,
+                        headers={"Retry-After": str(retry)})
+
+
+def _grep(path: str, spec: dict, token) -> dict:
+    # 건너뛸 경로(위험 마운트·격리·관리 경로) 계산도 resolve를 부르므로 스레드 안에서 한다.
+    return fs_grep.search(path, spec, res_scan.skip_prefixes(_managed_skip_prefixes()), token)
+
+
+@router.get("/api/fs/grep/progress")
+async def fs_grep_progress(request: Request, sid: str = Query("")):
+    """돌고 있는 내용 검색의 진행 — 같은 클라이언트(자격 + `sid`)의 것만 보인다(계약은 API.md). 검색 풀을 쓰지 않고
+    자리(`fs_grep.SLOTS`)에 적힌 숫자 두 개만 읽는다."""
+    p = fs_grep.SLOTS.progress(fs_grep.client_key(request, sid))
+    if p is None:
+        return {"running": False}
+    return {"running": True, "total": p["total"], "searched": p["searched"]}
+
+
+@router.get("/api/fs/grep")
+async def fs_grep_route(request: Request, q: str = Query(""), path: str = Query(""),
+                        mode: str = Query("literal"), case: bool = Query(False), word: bool = Query(False),
+                        glob: str = Query(""), sid: str = Query("")):
+    """파일 **내용** 검색 — 팔레트 `?` 모드와 사이드바 「파일 › 내용 검색」(계약은 API.md, 규칙은 `fs_grep.py`).
+
+    `path`가 없으면 시작 루트 전부. 질의가 비면 빈 결과. 검색은 `grep` 풀의 스레드가 자식 프로세스를 기다리며
+    하고, 이 코루틴은 그동안 요청이 끊겼는지 본다 — 끊기면 취소한다(자식 프로세스 그룹 종료)."""
+    try:
+        spec = fs_grep.build_spec(q, mode, case, word, glob)
+    except fs_grep.BadQuery as e:
+        return JSONResponse(e.body(), status_code=400)
+    if spec is None:
+        return {"results": [], "files": 0, "truncated": False, "timeout": False}
+    key = fs_grep.client_key(request, sid)
+    try:
+        res_breaker.check(path or str(Path.home()))
+        token = fs_grep.SLOTS.acquire(key)
+    except fs_grep.Busy:
+        return _grep_unavailable("grep_busy", tr("다른 내용 검색이 돌고 있습니다 — 잠시 뒤 다시 시도하세요"), 2)
+    except fsops.UNAVAILABLE as e:
+        return fsops.unavailable_response(e)
+    task = asyncio.ensure_future(res_pools.run(
+        "grep", _grep, path, spec, token,
+        op="fs.grep", key=path or "~", timeout=fs_grep.TIMEOUT + 10))
+    try:
+        while not task.done():
+            await asyncio.wait({task}, timeout=GREP_POLL)
+            if not task.done() and await request.is_disconnected():
+                token.cancel()
+        out = task.result()
+    except fsguard.FsDenied as e:
+        return _denied(e.reason)
+    except fs_grep.NotADirectory:
+        return JSONResponse({"error": "not a directory"}, status_code=404)
+    except res_scan.ScanUnavailable:
+        return _grep_unavailable("grep_unavailable", tr("검색 프로세스를 띄우지 못했습니다 — 잠시 뒤 다시 시도하세요"))
+    except fsops.UNAVAILABLE as e:
+        return fsops.unavailable_response(e)
+    except RuntimeError as e:
+        logger.warning(f"[grep] 실패: {e}")
+        return _grep_unavailable("grep_failed", tr("검색이 실패했습니다 — 잠시 뒤 다시 시도하세요"))
+    finally:
+        if not task.done():
+            token.cancel()
+        fs_grep.SLOTS.release(key, token)
+    if out.get("cancelled"):
+        # 같은 화면의 새 검색이 이 검색을 밀어냈거나 연결이 끊겼다. 받을 쪽이 없거나 새 결과를 기다린다.
+        return JSONResponse({"error": "cancelled", "reason": tr("새 검색이 이전 검색을 취소했습니다")}, status_code=409)
+    return out
+
+
 # 미리 펼쳐 두는 하위 목록의 상한 — 큰 저장소에서 첫 응답이 커지지 않게 자른다.
 MAX_PREFETCH_DEPTH = 2
 MAX_PREFETCH_DIRS = 150
 MAX_PREFETCH_CHILD_ENTRIES = 200
 
 
-def _list_dir_deep(p: Path, depth: int) -> dict:
+def _list_dir_deep(p: Path, depth: int, limit: int = PAGE_ENTRIES) -> dict:
     """_list_dir + 하위 디렉토리 목록을 depth 단계까지 `children` 에 미리 담는다.
 
     권한 없는 하위 디렉토리는 조용히 건너뛰고(펼칠 때 일반 조회가 오류를 보여준다),
     총 디렉토리 수와 항목 수 상한을 넘으면 그 아래는 미리 담지 않는다."""
-    root = _list_dir(p)
+    root = _list_dir(p, None, limit)
     budget = [MAX_PREFETCH_DIRS]
 
     def fill(listing: dict, base: Path, left: int) -> None:
@@ -200,7 +342,7 @@ def _list_dir_deep(p: Path, depth: int) -> dict:
                 sub = _list_dir(child)
             except (fsguard.FsDenied, OSError):
                 continue
-            if len(sub["entries"]) > MAX_PREFETCH_CHILD_ENTRIES:
+            if sub["total"] > MAX_PREFETCH_CHILD_ENTRIES:
                 continue
             e["children"] = sub
             fill(sub, child, left - 1)
@@ -209,19 +351,27 @@ def _list_dir_deep(p: Path, depth: int) -> dict:
     return root
 
 
-def _tree(path: str, depth: int):
+def _tree(path: str, depth: int, after: tuple | None = None, limit: int = PAGE_ENTRIES):
     p = fsguard.resolve_under_roots(path)
     if not p.is_dir():
         return None
-    return _list_dir_deep(p, depth) if depth else _list_dir(p)
+    # 다음 페이지(`after`)에는 미리 받기를 붙이지 않는다 — 미리 받기는 처음 열 때만 쓴다(계획 4.4).
+    if after is not None or not depth:
+        return _list_dir(p, after, limit)
+    return _list_dir_deep(p, depth, limit)
 
 
 @router.get("/api/fs/tree")
-async def fs_tree(path: str = Query(...), depth: int = Query(0, ge=0, le=MAX_PREFETCH_DEPTH)):
+async def fs_tree(path: str = Query(...), depth: int = Query(0, ge=0, le=MAX_PREFETCH_DEPTH),
+                  after: str | None = Query(None), limit: int = Query(PAGE_ENTRIES, ge=1, le=PAGE_ENTRIES)):
     # 경로 검증(resolve)부터 목록까지 전부 `fs` 풀에서 기한을 두고 한다 — 예전엔 resolve·is_dir 를
     # 이벤트 루프 위에서 불러, NFS 경로 하나가 서버 전체를 멈출 수 있었다.
     try:
-        out = await fsops.call(_tree, path, depth, path=path, op="fs.tree")
+        cursor = decode_cursor(after) if after is not None else None
+    except BadCursor as e:
+        return JSONResponse({"error": "bad_cursor", "reason": str(e)}, status_code=400)
+    try:
+        out = await fsops.call(_tree, path, depth, cursor, limit, path=path, op="fs.tree")
     except fsguard.FsDenied as e:
         return _denied(e.reason)
     except fsops.UNAVAILABLE as e:
@@ -320,61 +470,138 @@ async def fs_file(request: Request, path: str = Query(...), offset: str | None =
     return JSONResponse(out["body"], headers=_file_headers(out["etag"]))
 
 
-def _raw_image(path: str):
-    p = fsguard.resolve_under_roots(path)
-    if not p.is_file():
-        return ("missing",)
-    size = p.stat().st_size
-    with open(p, "rb") as f:
-        head = f.read(fsguard.SNIFF_BYTES)
-        mime = fsguard.image_type(p, head)
-        if not mime:
-            return ("not_image",)
-        if size > fsguard.MAX_IMAGE_BYTES:
-            return ("too_large",)
-        return ("ok", head + f.read(), mime)
+def _raw_headers(mime: str, etag: str) -> dict:
+    return {
+        "Content-Type": mime,
+        "Content-Disposition": "inline",
+        "X-Content-Type-Options": "nosniff",
+        # SVG를 주소로 직접 열어도 스크립트가 돌지 않게(결정 D8). 이미지·미디어에는 해가 없다.
+        "Content-Security-Policy": fsguard.RAW_CSP,
+        "Cache-Control": "no-store",
+        "Accept-Ranges": "bytes",
+        "ETag": etag,
+    }
+
+
+def _open_failure(e: BaseException, name: str) -> JSONResponse:
+    """`fs_stream.open_for`가 던진 것 → 응답. `_file`과 같은 규칙: 없는 파일·바뀐 링크는 404, 권한은 403."""
+    if isinstance(e, fsguard.FsDenied):
+        return _denied(e.reason)
+    if isinstance(e, fsops.UNAVAILABLE):
+        return fsops.unavailable_response(e)
+    if isinstance(e, fsguard.NotRegularFile):
+        return JSONResponse({"error": "not found"}, status_code=404)
+    if isinstance(e, PermissionError):
+        return _denied(tr("읽기 권한이 없습니다"))
+    if isinstance(e, OSError) and e.errno in (errno.ENOENT, errno.ENOTDIR, errno.ELOOP):
+        # 판정 뒤 경로의 어느 조각이 심링크로 바뀐 경우(ELOOP/ENOTDIR)도 — 경계 밖을 열지 않고 「없음」.
+        return JSONResponse({"error": "not found"}, status_code=404)
+    logger.warning(f"{name} 실패: {e}")
+    return JSONResponse({"error": "read failed"}, status_code=500)
+
+
+_OPEN_ERRORS = (fsguard.FsDenied, OSError, *fsops.UNAVAILABLE)
 
 
 @router.get("/api/fs/raw")
-async def fs_raw(path: str = Query(...)):
-    """[T3] 이미지 원본 바이트 — 인라인 미리보기 전용.
+async def fs_raw(request: Request, path: str = Query(...)):
+    """[T3] 원본 바이트 — 뷰어의 인라인 미리보기(이미지·SVG)와 동영상·소리 재생 전용.
 
-    **이미지가 아니면 아무것도 안 준다.** 열람 경계(fsguard)는 `/api/fs/file`과
-    같은 것을 쓰고, 그 위에 타입 화이트리스트를 하나 더 얹는다: 여기서 나간
-    바이트는 브라우저가 이 오리진의 리소스로 해석하므로 SVG·HTML을 내보내면
-    그 자체가 XSS다(fsguard.IMAGE_TYPES 주석 참고).
+    **허용 타입이 아니면 아무것도 안 준다.** 열람 경계(fsguard)는 `/api/fs/file`과 같은 것을 쓰고, 그 위에
+    타입 화이트리스트(`fsguard.raw_type` — 확장자와 매직 바이트가 둘 다 맞아야 한다)를 하나 더 얹는다: 여기서
+    나간 바이트는 브라우저가 이 오리진의 리소스로 해석하므로 HTML·PDF를 내보내면 그 자체가 XSS다. SVG는 응답에
+    `sandbox` CSP를 붙여 직접 열어도 스크립트가 돌지 않고, 화면은 `<img>`로만 그린다(결정 D8).
 
-    `Content-Disposition: inline` + `X-Content-Type-Options: nosniff`로 "이건
-    이 타입이고 다른 걸로 스니핑하지 말라"를 못 박는다.
+    Range(계획 4.6): 단일·끝에서 센 구간 → 206 + `Content-Range`, 파일 밖 → 416, 여러 구간 → 200 전체,
+    `If-Range`가 지금 ETag와 다르면 200 전체. 판정한 fd에서 조각으로 보내고, 보내는 도중 바뀌면 끊는다.
     """
     try:
-        out = await fsops.call(_raw_image, path, path=path, op="fs.raw")
-    except fsguard.FsDenied as e:
-        return _denied(e.reason)
-    except fsops.UNAVAILABLE as e:
-        return fsops.unavailable_response(e)
-    except PermissionError:
-        return _denied(tr("읽기 권한이 없습니다"))
-    except OSError as e:
-        logger.warning(f"fs_raw 실패: {e}")
-        return JSONResponse({"error": "read failed"}, status_code=500)
-    kind = out[0]
-    if kind == "missing":
-        return JSONResponse({"error": "not found"}, status_code=404)
-    if kind == "not_image":
-        return _denied(tr("이미지 파일이 아닙니다"))
-    if kind == "too_large":
+        out = await fs_stream.open_for("raw", path)
+    except _OPEN_ERRORS as e:
+        return _open_failure(e, "fs_raw")
+    if not isinstance(out, fs_stream.Opened):
+        if out[0] == "too_large":
+            return JSONResponse(
+                {"error": "too_large",
+                 "reason": tr("이미지가 너무 큽니다 (최대 {max}MB)", max=fsguard.MAX_IMAGE_BYTES // (1024*1024))},
+                status_code=413,
+            )
+        return _denied(tr("미리 볼 수 있는 파일이 아닙니다"))
+    try:
+        return _raw_response(request, out, path)
+    except BaseException:
+        # 응답을 넘기기 전에 무엇이 터지든(헤더 해석·취소) 연 fd를 닫는다 — 남기면 요청마다 fd가 새어 서버가 멈춘다.
+        fs_stream.close(out)
+        raise
+
+
+def _raw_response(request: Request, out: "fs_stream.Opened", path: str) -> Response:
+    etag = fs_stream.raw_etag(out.rev)
+    headers = _raw_headers(out.mime, etag)
+    try:
+        rng = fs_stream.parse_range(request.headers.get("range"), out.size)
+        if rng is not None and not fs_stream.if_range_matches(request.headers.get("if-range"), etag):
+            rng = None
+    except fs_stream.Unsatisfiable:
+        fs_stream.close(out)
+        return Response(status_code=416, headers={**headers, "Content-Range": f"bytes */{out.size}"})
+    start, end = rng if rng is not None else (0, out.size - 1)
+    length = max(0, end - start + 1)
+    headers["Content-Length"] = str(length)
+    status = 200
+    if rng is not None:
+        status = 206
+        headers["Content-Range"] = f"bytes {start}-{end}/{out.size}"
+    if length == 0:
+        fs_stream.close(out)
+        return Response(status_code=status, headers=headers)
+    return fs_stream.FdStreamingResponse(out, start, length, path=path, op="fs.raw.read",
+                                         status_code=status, headers=headers, media_type=out.mime)
+
+
+@router.get("/api/fs/download")
+async def fs_download(path: str = Query(...), rev: str | None = Query(None)):
+    """탐색 중인 실제 파일 내려받기(계획 4.7, 결정 D4 — 1회용 티켓 없이 인증된 GET).
+
+    - 판정과 열기는 `/api/fs/file`과 같다(`resolve_under_roots` + `open_resolved`). 노출 범위가 지금 읽기와 같고
+      크기만 크다. 내용 타입은 언제나 `application/octet-stream` + `attachment` + `nosniff` — 브라우저가 문서로
+      열지 않는다.
+    - `rev`를 주었는데 지금 판과 다르면 409 `changed`(본 것과 다른 파일을 받지 않게).
+    - 상한은 `VT_MAX_UPLOAD_MB`(업로드와 같은 값) — 넘으면 413.
+    - **이 서버의 파일만**(결정 D7). 호스트 중계 허용 목록(`relay_policy.py`)에 없어 원격 호스트로는 닿지 않는다.
+    """
+    if rev is not None and (not rev or len(rev) > fs_read.MAX_REV_LEN):
+        return JSONResponse({"error": "bad_rev", "reason": "rev is malformed"}, status_code=400)
+    cap = file_store.MAX_UPLOAD_BYTES
+    try:
+        out = await fs_stream.open_for("download", path, rev=rev, cap=cap)
+    except _OPEN_ERRORS as e:
+        return _open_failure(e, "fs_download")
+    if not isinstance(out, fs_stream.Opened):
+        if out[0] == "changed":
+            return _changed(out[1])
         return JSONResponse(
-            {"error": "too_large",
-             "reason": tr("이미지가 너무 큽니다 (최대 {max}MB)", max=fsguard.MAX_IMAGE_BYTES // (1024*1024))},
-            status_code=413,
-        )
-    _, data, mime = out
-    return Response(content=data, media_type=mime, headers={
-        "Content-Disposition": "inline",
-        "X-Content-Type-Options": "nosniff",
-        "Cache-Control": "no-store",
-    })
+            {"error": "too_large", "size": out[1], "max": cap,
+             "reason": tr("파일이 너무 커서 받을 수 없습니다 (최대 {max}MB)", max=cap // (1024 * 1024))},
+            status_code=413, headers={"Cache-Control": "no-store"})
+    try:
+        headers = {
+            "Content-Disposition": fs_stream.content_disposition("attachment", Path(path).name),
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": fsguard.RAW_CSP,
+            "Cache-Control": "no-store",
+            "Content-Length": str(out.size),
+            "ETag": fs_stream.raw_etag(out.rev),
+            "X-FS-Rev": out.rev,
+        }
+        if out.size == 0:
+            fs_stream.close(out)
+            return Response(status_code=200, headers=headers, media_type="application/octet-stream")
+        return fs_stream.FdStreamingResponse(out, 0, out.size, path=path, op="fs.download.read",
+                                             headers=headers, media_type="application/octet-stream")
+    except BaseException:
+        fs_stream.close(out)       # fs_raw와 같다 — 응답을 넘기기 전 실패에도 fd를 남기지 않는다
+        raise
 
 
 async def _read_json_body(request: Request) -> dict:

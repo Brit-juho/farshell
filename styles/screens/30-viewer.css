@@ -64,7 +64,9 @@
 .vt-vw-path::-webkit-scrollbar{ display:none; }
 .vt-vw-body{
   flex:1 1 auto; overflow:auto; overscroll-behavior:contain;
-  background:var(--crust);
+  /* 칸(pane)의 면 = bg-0. 예전에는 --crust(farshell에서 #000)라 위 크롬(bg-1)과 카드(bg-0)보다 한참 어두운 검정 띠로 보였다
+     (2026-11 실기기: 파일 트리 · 마크다운 렌더 · 원문). 사이드바·dock 본문은 80-dock.css가 bg-1로 따로 덮는다. */
+  background:var(--color-bg-0);
 }
 /* 2026-09-18(4차) — 빈 상태 문장 하나가 전부일 때는 위쪽에 붙지 않고 칸
    가운데로 온다(큐·사용량 dock 패널에서 지적된 "내용 밑에 빈 공간이 그대로
@@ -113,9 +115,21 @@
 /* [T3] 인라인 이미지 미리보기. 페인 안에 갇혀야 한다(밖으로 새면 표면 레이어의
    터미널 위를 덮는다 — 실브라우저 스모크가 그 규칙을 지킨다). 체커보드 배경은
    투명 PNG의 알파를 눈으로 구분하기 위한 것. */
-.vt-vw-image{ display:flex; flex-direction:column; min-width:0; overflow:auto; }
+.vt-vw-image{ display:flex; flex-direction:column; min-width:0; }
+/* 맞춤 / 100% 전환(시안 F07-C, preview.js mountImageView). 100%에서는 그림이 칸보다 크면 칸(.vt-vw-zoom-box)이 스크롤한다.
+   핀치는 이 칸이 직접 받는다(touch-action) — 한 손가락 끌기는 스크롤 그대로. */
+.vt-vw-zoom-bar{
+  display:flex; align-items:center; gap:calc(var(--spacing) * 2.5);
+  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3); border-bottom:1px solid var(--line);
+  background:var(--bar); color:var(--sub); font:400 var(--fs-xs) var(--ui);
+}
+.vt-vw-zoom-pct{ font-family:var(--mono); color:var(--txt); font-variant-numeric:tabular-nums; }
+.vt-vw-zoom-hint{ margin-left:auto; color:var(--color-faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vt-vw-zoom-box{ min-width:0; overflow:auto; touch-action:pan-x pan-y; }
+.vt-vw-image[data-zoom="actual"] .vt-vw-zoom-box img{ max-width:none; }
+@media (max-width:719px){ .vt-vw-zoom-hint{ display:none; } }
 .vt-vw-image img{
-  max-width:100%; height:auto; align-self:flex-start;
+  max-width:100%; height:auto; align-self:flex-start; display:block;
   background-image:
     linear-gradient(45deg, var(--color-bg-2) 25%, transparent 25%, transparent 75%, var(--color-bg-2) 75%),
     linear-gradient(45deg, var(--color-bg-2) 25%, transparent 25%, transparent 75%, var(--color-bg-2) 75%);
@@ -135,196 +149,179 @@
 .vt-vw-name{
   flex:1;
 }
-.vt-vw-size{ color:var(--sub); font:400 var(--fs-2xs) var(--mono); flex:0 0 auto; }
 
-/* 줄 단위 행(diff). 파일 본문은 아래 「코드 뷰어 본문 — CodeMirror 6」. */
-.vt-vw-dl{ display:flex; align-items:flex-start; white-space:pre; }
-.vt-vw-no{
-  flex:0 0 auto; min-width:44px; padding:0 calc(var(--spacing) * 2); text-align:right;
-  color:var(--sub); user-select:none;
-  /* opacity 로 --sub 를 한 번 더 흐리면 --crust 배경 대비가 2:1 밑으로 떨어져 뺐다. */
+/* 줄 단위 행(diff) — 리디자인 5단계(시안 P01-b). 줄 20px · 번호 열 하나 36 · 부호 열 14 · 본문.
+   줄 글자는 term-fg(기본 글자색)이고, 초록·빨강은 부호와 바뀐 낱말(<mark class="vt-vw-chg">)에만 쓴다 —
+   줄 전체를 상태색 글자로 그리면 notepad·vscode 틴트 위에서 4.5:1을 못 맞춘다(DESIGN.md §2).
+   파일 본문은 아래 「코드 뷰어 본문 — CodeMirror 6」. */
+.vt-vw-dl{
+  display:flex; align-items:flex-start; white-space:pre; position:relative;
+  font:400 var(--fs-xs)/20px var(--font-mono); color:var(--color-term-fg);
 }
-.vt-vw-sign{ flex:0 0 auto; width:14px; text-align:center; user-select:none; color:var(--sub); font-weight:600; }
-.vt-vw-dl.add .vt-vw-sign{ color:var(--ok); }
-.vt-vw-dl.del .vt-vw-sign{ color:var(--err); }
+.vt-vw-no{
+  flex:0 0 auto; width:36px; box-sizing:border-box; padding-right:calc(var(--spacing) * 2); text-align:right;
+  color:var(--color-faint); user-select:none; font-variant-numeric:tabular-nums;
+}
+.vt-vw-sign{ flex:0 0 auto; width:14px; text-align:center; user-select:none; color:var(--color-faint); }
+.vt-vw-dl.add .vt-vw-sign{ color:var(--color-term-green); }
+.vt-vw-dl.del .vt-vw-sign{ color:var(--color-term-red); }
 .vt-vw-tx{ flex:1 1 auto; padding-right:calc(var(--spacing) * 3); }
 
 /* diff */
-.vt-vw-dfile{ border-bottom:1px solid var(--line); width:max-content; min-width:100%; }
+.vt-vw-dfile{ width:max-content; min-width:100%; padding-bottom:calc(var(--spacing) * 1.5); }
+.vt-vw-dfile + .vt-vw-dfile{ border-top:1px solid var(--color-line); }
 .vt-vw-dhead{
-  display:flex; min-width:0; align-items:center; gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3);
-  background:var(--bar); position:sticky; top:0; z-index:1;
-  border-bottom:1px solid var(--line);
+  display:flex; min-width:0; align-items:center; gap:calc(var(--spacing) * 2); height:32px; box-sizing:border-box;
+  padding:0 calc(var(--spacing) * 3); background:var(--color-bg-1); position:sticky; top:0; z-index:1;
+  border-bottom:1px solid var(--color-line);
 }
 .vt-vw-dpath{
   flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-  font:600 var(--fs-xs) var(--mono);
+  font:500 var(--fs-xs) var(--font-mono); color:var(--color-txt);
 }
-.vt-vw-dstat{ font:600 var(--fs-2xs) var(--mono); flex:0 0 auto; }
-.vt-vw-dstat .add{ color:var(--ok); }
-.vt-vw-dstat .del{ color:var(--err); }
+.vt-vw-dstat{ font:400 var(--fs-3xs) var(--font-mono); flex:0 0 auto; }
+.vt-vw-dstat .add{ font-weight:400; color:var(--color-st-working); }
+.vt-vw-dstat .del{ font-weight:400; color:var(--color-st-error); }
 .vt-vw-hunk{
-  padding:calc(var(--spacing) * 1) calc(var(--spacing) * 3); font:400 var(--fs-2xs) var(--mono); color:var(--sub);
-  background:color-mix(in srgb, var(--acc) 10%, transparent);
+  margin-top:calc(var(--spacing) * 1.5);
+  padding:calc(var(--spacing) * 1) calc(var(--spacing) * 3); font:400 var(--fs-xs)/16px var(--font-mono); color:var(--color-muted);
+  background:var(--color-acc-soft);
 }
-.vt-vw-dl{ font:400 var(--fs-xs)/1.55 var(--mono); border-left:3px solid transparent; }
-.vt-vw-dl.add{
-  background:color-mix(in srgb, var(--ok) 22%, transparent);
-  border-left-color:var(--ok);
-}
-.vt-vw-dl.del{
-  background:color-mix(in srgb, var(--err) 22%, transparent);
-  border-left-color:var(--err);
-}
-.vt-vw-dl.meta{ color:var(--sub); font-style:italic; }
-/* add/del 배경 위에서는 하이라이팅 색(특히 문자열=--ok)이 배경과 겹쳐 안 보인다 —
-   diff 라인 안에서는 하이라이팅을 끄고 본문 색만 쓴다. */
-.vt-vw-dl.add .vt-vw-tx *,.vt-vw-dl.del .vt-vw-tx *{ color:inherit; font-style:normal; font-weight:normal; }
+.vt-vw-dl.add{ background:var(--color-term-add-bg); }
+.vt-vw-dl.del{ background:var(--color-term-del-bg); }
+.vt-vw-dl.meta{ color:var(--color-muted); font-style:italic; }
+/* 바뀐 낱말 — 같은 상태색을 한 겹 더(글자는 그대로 term-fg). */
+.vt-vw-chg{ color:inherit; border-radius:2px; padding:0 1px; margin:0 -1px; }
+.vt-vw-dl.add .vt-vw-chg{ background:color-mix(in srgb, var(--color-term-green) 30%, transparent); box-shadow:inset 0 -1px 0 var(--color-term-green); }
+.vt-vw-dl.del .vt-vw-chg{ background:color-mix(in srgb, var(--color-term-red) 30%, transparent); box-shadow:inset 0 -1px 0 var(--color-term-red); }
+/* add/del 배경 위에서는 하이라이팅 색이 배경과 겹친다 — diff.js가 바뀐 줄은 하이라이트 없이 그린다. */
+.vt-vw-dl.add .vt-vw-tx *,.vt-vw-dl.del .vt-vw-tx *{ font-style:normal; font-weight:normal; }
 
-/* diff 줄 클릭 → 큐에 주석 추가(C). add/del 줄은 이미 색 배경이 있어 일반
-   hover 배경으로는 안 보이므로, 배경과 무관하게 드러나는 안쪽 테두리로 신호를 준다. */
+/* diff 줄 클릭 → 큐에 주석 추가. 머문 줄은 왼쪽 2px 액센트 막대와 오른쪽 「이 줄에 지시…」 꼬리표. */
 .vt-vw-dl{ cursor:pointer; }
-.vt-vw-dl:hover{ box-shadow:inset 0 0 0 1px var(--acc); }
+.vt-vw-dl:hover, .vt-vw-dl.on{ box-shadow:inset 2px 0 0 var(--color-acc); }
+@media (hover:hover) and (pointer:fine){
+  .vt-vw-dl:hover::after{
+    content:attr(data-hint); position:sticky; right:calc(var(--spacing) * 2); margin-left:auto; align-self:center;
+    height:20px; padding:0 calc(var(--spacing) * 2); border-radius:var(--radius-xs);
+    background:var(--color-bg-raised); border:1px solid var(--color-line-strong); box-shadow:var(--shadow-e2);
+    font:500 var(--fs-3xs)/18px var(--font-ui); color:var(--color-txt); white-space:nowrap; pointer-events:none;
+  }
+}
 .vt-vw-annotate{
-  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 2.5); background:var(--menu);
-  border-top:1px dashed var(--line); border-bottom:1px dashed var(--line);
+  margin:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5) calc(var(--spacing) * 2) 36px;
+  padding:calc(var(--spacing) * 2.5); border-radius:var(--radius-sm);
+  border:1px solid color-mix(in srgb, var(--color-acc) 45%, transparent); background:var(--color-bg-2);
+  display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5); white-space:normal; box-sizing:border-box;
+  width:calc(100cqw - 46px);   /* 줄은 max-content 폭이라 100%가 아니라 보이는 칸 폭(컨테이너 단위)을 쓴다 */
+  position:sticky; left:36px;
 }
-.vt-vw-annotate-input{
-  width:100%; box-sizing:border-box; font:400 var(--fs-sm) var(--ui);
-  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2); border:1px solid var(--line); border-radius:var(--trad);
-  background:var(--win); color:var(--txt); resize:vertical;
-}
-.vt-vw-annotate-row{ display:flex; justify-content:flex-end; gap:calc(var(--spacing) * 1.5); margin-top:calc(var(--spacing) * 1.5); }
-
-/* highlight.js — 테마 CSS 대신 스킨 토큰으로 직접 매핑.
-   하이라이터 기본 팔레트를 쓰면 notepad(라이트)에서 대비가 무너진다. */
-.vt-vw-tx .hljs-keyword,.vt-vw-tx .hljs-built_in,
-.vt-vw-tx .hljs-literal,.vt-vw-tx .hljs-type{ color:var(--acc); }
-.vt-vw-tx .hljs-string,.vt-vw-tx .hljs-regexp{ color:var(--ok); }
-.vt-vw-tx .hljs-number{ color:var(--warn); }
-.vt-vw-tx .hljs-comment,.vt-vw-tx .hljs-quote{ color:var(--sub); font-style:italic; }
-.vt-vw-tx .hljs-title,.vt-vw-tx .hljs-name,
-.vt-vw-tx .hljs-function .hljs-title,.vt-vw-tx .hljs-section{ color:var(--info); }
-.vt-vw-tx .hljs-attr,.vt-vw-tx .hljs-attribute,
-.vt-vw-tx .hljs-variable,.vt-vw-tx .hljs-property{ color:var(--txt); }
-.vt-vw-tx .hljs-meta,.vt-vw-tx .hljs-doctag{ color:var(--sub); }
-.vt-vw-tx .hljs-deletion{ color:var(--err); }
-.vt-vw-tx .hljs-addition{ color:var(--ok); }
-.vt-vw-tx .hljs-emphasis{ font-style:italic; }
-.vt-vw-tx .hljs-strong{ font-weight:600; }
+.vt-vw-body:has(.vt-vw-dfile){ container-type:inline-size; }
+.vt-vw-annotate-cap{ font:400 var(--fs-3xs)/16px var(--font-ui); color:var(--color-muted); }
+.vt-vw-annotate-input{ width:100%; box-sizing:border-box; min-height:56px; resize:vertical; font-family:var(--font-ui); }
+.vt-vw-annotate-row{ display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); margin-top:calc(var(--spacing) * 0.5); }
+.vt-vw-annotate-row .sp{ flex:1 1 auto; }
+.vt-vw-annotate-lab{ font:400 var(--fs-3xs)/1 var(--font-ui); color:var(--color-muted); }
+.vt-vw-annotate-target{ min-height:24px; height:24px; padding:0 calc(var(--spacing) * 1.5); max-width:140px; font:400 var(--fs-3xs) var(--font-mono); }
+/* 가상 목록(파일 개편 단계 9, diff.js 「가상 목록」) — 줄 영역은 높이·폭을 JS가 정하고, 보이는 행만 절대 위치로
+   그린다. 행 높이는 diff.js의 LINE_H(20)·HUNK_H(30 = 24 + 위 간격 6)와 같아야 한다. 폭의 `ch`가 줄 글꼴을 따르도록
+   영역에도 같은 글꼴을 준다. */
+.vt-vw-dlines{ position:relative; font:400 var(--fs-xs)/20px var(--font-mono); }
+.vt-vw-dlines > .vt-vw-dl,
+.vt-vw-dlines > .vt-vw-hunk,
+.vt-vw-dlines > .vt-vw-annot-slot{ position:absolute; left:0; right:0; }
+.vt-vw-dlines > .vt-vw-dl{ height:20px; }
+.vt-vw-dlines > .vt-vw-hunk{ height:24px; box-sizing:border-box; white-space:pre; }
+/* 바닥 줄 「이 diff에서 큐에 넣은 지시 N」 — 화면 아래에 붙어 따라온다. */
+.vt-vw-dqueued{ position:sticky; bottom:0; left:0; height:36px; border-top:1px solid var(--color-line); background:var(--color-bg-1); }
+.vt-vw-dqueued[hidden]{ display:none; }
+.vt-vw-dqueued > svg{ color:var(--color-muted); }
 
 /* 코드 뷰어 본문 — CodeMirror 6, 읽기 전용(panels/viewer/editor.js).
    편집기 틀(줄 번호 칸·찾기 창·일치 표시)은 editor.js의 _THEME이 토큰 변수로 정한다 — CM 기본 테마는 @layer
    밖이라 이 파일(@layer legacy)의 규칙이 명시도와 무관하게 진다. 여기는 CM이 건드리지 않는 것만 둔다:
-   글자 크기, 하이라이트 색(tok-*, 위 hljs 매핑과 같은 짝 — 파일 보기와 diff의 색이 같아야 한다), 호스트.
+   글자 크기, 하이라이트 색(tok-* — diff 문맥 줄(.vt-vw-tx)도 같은 규칙을 쓴다, 단계 9), 호스트.
    스크롤은 바깥 상자(.vt-vw-body·페인 본문)가 하고 편집기는 내용만큼 늘어난다. 호스트가 overflow:auto면
    찾기 창(sticky)이 호스트에 묶여 화면 밖으로 밀려나므로 편집기가 든 호스트는 visible로 둔다. 가로 스크롤은
    편집기 안(.cm-scroller)에서 하고 줄 번호 칸은 그 안에서 왼쪽에 붙어 있다. */
 .vt-vw-code-pane.vt-vw-cm{ overflow:visible; }
 .vt-vw-cm .cm-editor{ font:400 var(--fs-xs)/1.55 var(--mono); }
 .vt-vw-cm .tok-keyword,.vt-vw-cm .tok-bool,.vt-vw-cm .tok-atom,
-.vt-vw-cm .tok-literal,.vt-vw-cm .tok-typeName{ color:var(--acc); }
-.vt-vw-cm .tok-string,.vt-vw-cm .tok-string2{ color:var(--ok); }
-.vt-vw-cm .tok-number{ color:var(--warn); }
-.vt-vw-cm .tok-comment{ color:var(--sub); font-style:italic; }
+.vt-vw-cm .tok-literal,.vt-vw-cm .tok-typeName,
+.vt-vw-tx .tok-keyword,.vt-vw-tx .tok-bool,.vt-vw-tx .tok-atom,
+.vt-vw-tx .tok-literal,.vt-vw-tx .tok-typeName{ color:var(--acc); }
+.vt-vw-cm .tok-string,.vt-vw-cm .tok-string2,.vt-vw-tx .tok-string,.vt-vw-tx .tok-string2{ color:var(--ok); }
+.vt-vw-cm .tok-number,.vt-vw-tx .tok-number{ color:var(--warn); }
+.vt-vw-cm .tok-comment,.vt-vw-tx .tok-comment{ color:var(--sub); font-style:italic; }
 .vt-vw-cm .tok-className,.vt-vw-cm .tok-definition,.vt-vw-cm .tok-macroName,
-.vt-vw-cm .tok-labelName,.vt-vw-cm .tok-heading{ color:var(--info); }
-.vt-vw-cm .tok-propertyName,.vt-vw-cm .tok-variableName{ color:var(--txt); }
-.vt-vw-cm .tok-meta{ color:var(--sub); }
-.vt-vw-cm .tok-deleted,.vt-vw-cm .tok-invalid{ color:var(--err); }
-.vt-vw-cm .tok-inserted{ color:var(--ok); }
-.vt-vw-cm .tok-link,.vt-vw-cm .tok-url{ color:var(--info); text-decoration:underline; }
-.vt-vw-cm .tok-emphasis{ font-style:italic; }
-.vt-vw-cm .tok-strong,.vt-vw-cm .tok-heading{ font-weight:600; }
+.vt-vw-cm .tok-labelName,.vt-vw-cm .tok-heading,
+.vt-vw-tx .tok-className,.vt-vw-tx .tok-definition,.vt-vw-tx .tok-macroName,
+.vt-vw-tx .tok-labelName,.vt-vw-tx .tok-heading{ color:var(--info); }
+.vt-vw-cm .tok-propertyName,.vt-vw-cm .tok-variableName,.vt-vw-tx .tok-propertyName,.vt-vw-tx .tok-variableName{ color:var(--txt); }
+.vt-vw-cm .tok-meta,.vt-vw-tx .tok-meta{ color:var(--sub); }
+.vt-vw-cm .tok-deleted,.vt-vw-cm .tok-invalid,.vt-vw-tx .tok-deleted,.vt-vw-tx .tok-invalid{ color:var(--err); }
+.vt-vw-cm .tok-inserted,.vt-vw-tx .tok-inserted{ color:var(--ok); }
+.vt-vw-cm .tok-link,.vt-vw-cm .tok-url,.vt-vw-tx .tok-link,.vt-vw-tx .tok-url{ color:var(--info); text-decoration:underline; }
+.vt-vw-cm .tok-emphasis,.vt-vw-tx .tok-emphasis{ font-style:italic; }
+.vt-vw-cm .tok-strong,.vt-vw-cm .tok-heading,.vt-vw-tx .tok-strong,.vt-vw-tx .tok-heading{ font-weight:600; }
 /* 편집기 청크를 못 받았을 때의 대체 표시(일반 텍스트). */
 .vt-vw-plain{
   margin:0; padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3);
   font:400 var(--fs-xs)/1.55 var(--mono); color:var(--txt); white-space:pre;
 }
 
-/* git status / stage / commit — D16 */
-.vt-vw-git{ display:flex; flex-direction:column; }
-.vt-vw-gsec + .vt-vw-gsec{ border-top:1px solid var(--line); }
-.vt-vw-ghead{
-  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+/* 소스컨트롤(시안 P01) — 행·구역 머리·하위 머리 모양은 80-dock.css의 패널 키트(.vt-prow·.vt-psec·.vt-psub)가
+   맡고, 여기는 이 화면에만 있는 조각만 둔다. */
+.vt-vw-git{ display:flex; flex-direction:column; padding-bottom:calc(var(--spacing) * 2); }
+.vt-vw-gsec{ display:flex; flex-direction:column; }
+.vt-vw-gsec + .vt-vw-gsec, .vt-vw-gsec + .vt-vw-glog{ margin-top:calc(var(--spacing) * 1); }
+.vt-vw-grow{ cursor:pointer; }
+.vt-vw-grow > svg{ color:var(--color-muted); }
+/* 본문 첫 줄 — 브랜치 칩 · upstream · ↑↓ · ± */
+.vt-scm-line{ min-height:24px; }
+.vt-scm-line .sp{ flex:1 1 auto; }
+.vt-scm-line .vt-scm-branch{
+  display:inline-flex; align-items:center; gap:calc(var(--spacing) * 1.5); height:24px; padding:0 calc(var(--spacing) * 2);
+  min-width:0; max-width:55%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:0 1 auto;
+  border:1px solid var(--color-line-strong); border-radius:var(--radius-sm); background:var(--color-bg-raised);
+  font:400 var(--fs-xs)/1 var(--font-mono); color:var(--color-txt);
 }
-.vt-vw-grow{
-  display:flex; align-items:center; gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3);
-  cursor:pointer; font:400 var(--fs-xs) var(--mono);
-}
-.vt-vw-grow:hover{ background:var(--menu-hover); }
-.vt-vw-gstat{
-  flex:0 0 auto; width:20px; text-align:center; font:700 var(--fs-2xs) var(--mono); color:var(--color-acc);
-}
-.vt-vw-grow .vt-vw-name{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-
-/* 2026-09-17 — 행 액션(+/− 스테이지 · 「뷰어」)은 hover/focus에서만 드러난다.
-   이전에는 둘 다 상시 노출이었는데, 변경 파일이 60개면 목록에 버튼이 120개라
-   정작 읽어야 하는 파일 이름보다 버튼 테두리가 먼저 보였다.
-   ⚠ display:none이 아니라 visibility다 — 숨길 때 자리까지 사라지면 hover로
-   버튼이 들어오는 순간 파일 이름이 옆으로 밀려 목록 전체가 출렁인다.
-   키보드 경로는 :focus-within이 맡는다 — Tab으로 버튼에 들어가면 그 버튼은
-   행 안에 있으므로 같이 드러난다(보이지 않는 것에 포커스가 가 있는 상태를
-   만들지 않는다). 별도의 "활성 행" 상태는 이 렌더러에 없다 — 행을 누르면
-   목록이 그 파일의 diff 화면으로 통째 바뀐다(git.js의 onFile). */
-.vt-vw-gact, .vt-vw-gopen{ flex:0 0 auto; visibility:hidden; }
-.vt-vw-grow:hover .vt-vw-gact,
-.vt-vw-grow:hover .vt-vw-gopen,
-.vt-vw-grow:focus-within .vt-vw-gact,
-.vt-vw-grow:focus-within .vt-vw-gopen{ visibility:visible; }
-/* 터치 기기에는 hover가 없다 — 이 분기가 빠지면 폰에서 스테이지 버튼을 아예
-   누를 수 없다(첫 탭이 hover로 먹힌다는 보장도 없다). 그래서 상시 노출로
-   되돌린다 — 시각 소음보다 닿지 않는 버튼이 더 큰 문제다. */
-@media (hover: none){
-  .vt-vw-gact, .vt-vw-gopen{ visibility:visible; }
-}
-/* 사각 아이콘 버튼만큼의 치수 보정. 모양·색·hover는 전부 components.css의
-   .vt-btn이 정한다 — legacy는 @layer 밖이라 여기서 색을 다시 쓰면 컴포넌트를
-   무조건 이겨버린다(그래서 옛 .vt-vw-gact/.vt-vw-gopen 규칙은 지웠다). */
-.vt-vw-gact{ width:24px; padding:0; font-family:var(--mono); }
-.vt-vw-gcommit{
-  display:flex; flex-direction:column; gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 3);
-  border-top:1px solid var(--line); background:var(--bar);
-}
-.vt-vw-gmsg{
-  resize:vertical; min-height:44px; padding:calc(var(--spacing) * 2); border-radius:var(--radius-sm);
-  border:1px solid var(--line); background:var(--panel-bg,transparent);
-  color:var(--txt); font:400 var(--fs-xs) var(--ui);
-}
-.vt-vw-gmsg:disabled{ opacity:.5; }
-/* 2.1.6 — 모양은 `.vt-btn.solid`가 맡는다(값이 완전히 같았다). 이 클래스에
-   남은 역할은 **자리**와 **JS가 찾는 이름**뿐이다 — git.js가 셀렉터로 쓴다. */
-.vt-vw-gcommit-btn{ align-self:flex-end; }
+.vt-scm-line .vt-scm-branch > svg{ flex:none; color:var(--color-muted); }
+.vt-scm-line .vt-scm-upstream{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:400 var(--fs-xs)/1 var(--font-mono); color:var(--color-muted); }
+.vt-scm-stat{ flex:none; font:400 var(--fs-xs)/1 var(--font-mono); white-space:nowrap; }
+.vt-scm-stat .vt-scm-add{ font:inherit; color:var(--color-st-working); }
+.vt-scm-stat .vt-scm-del{ font:inherit; color:var(--color-st-error); }
+.vt-vw-gcommit{ display:flex; flex-direction:column; gap:calc(var(--spacing) * 2); }
+.vt-vw-gmsg{ resize:vertical; min-height:64px; font-family:var(--font-ui); line-height:18px; }
+.vt-vw-gmsg:disabled{ opacity:.6; }
+/* 2.1.6 — 모양은 `.vt-btn.solid`가 맡는다. 이 클래스는 **자리**(폭 전체)와 JS가 찾는 이름이다. */
+.vt-vw-gcommit-btn{ width:100%; }
+.vt-vw-gcommit-btn .k{ margin-left:calc(var(--spacing) * 0.5); }
 
 /* 커밋 기록 / 커밋 diff (git log · git show) */
-.vt-vw-glog{ border-top:1px solid var(--line); }
-.vt-vw-crow .vt-vw-gstat{ width:auto; color:var(--sub); }
-.vt-vw-glog .vt-btn{ margin:calc(var(--spacing) * 2) calc(var(--spacing) * 3); align-self:flex-start; }
-.vt-vw-cbar{
-  position:sticky; top:0; z-index:2; height:36px; box-sizing:border-box;
-  display:flex; align-items:center; padding:0 calc(var(--spacing) * 3);
-  background:var(--bar); border-bottom:1px solid var(--line);
+.vt-vw-glog{ display:flex; flex-direction:column; }
+.vt-vw-glog .vt-psec .vt-vw-gbranch{
+  min-height:24px; height:24px; max-width:160px; padding:0 calc(var(--spacing) * 1.5);
+  font:400 var(--fs-3xs) var(--font-mono); background:var(--color-bg-raised);
 }
+.vt-vw-crow{ gap:calc(var(--spacing) * 2); padding-left:calc(var(--spacing) * 1); }
+.vt-vw-csha{ flex:0 0 auto; width:56px; font:400 var(--fs-xs)/1 var(--font-mono); color:var(--color-acc); }
+.vt-vw-crow .vt-vw-name{ flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:400 var(--fs-sm)/1.35 var(--font-ui); }
+.vt-vw-ctime{ flex:none; font:400 var(--fs-3xs)/1 var(--font-mono); color:var(--color-muted); }
+.vt-vw-gref{ max-width:30%; overflow:hidden; text-overflow:ellipsis; }
+.vt-vw-glog .vt-vw-glog-more{ align-self:flex-start; margin:calc(var(--spacing) * 1) calc(var(--spacing) * 2.5); }
 .vt-vw-cbar ~ .vt-vw-dfile .vt-vw-dhead{ top:36px; }
-.vt-vw-gbranch{
-  margin-left:calc(var(--spacing) * 2); max-width:60%; font:600 var(--fs-2xs) var(--mono);
-  background:var(--bar); color:var(--txt); border:1px solid var(--line); border-radius:6px;
-  padding:2px calc(var(--spacing) * 1.5);
-}
-.vt-vw-graph{ flex:0 0 auto; display:block; width:var(--vt-graph-w, auto); }
-.vt-vw-crow{ gap:calc(var(--spacing) * 1.5); padding-top:0; padding-bottom:0; min-height:24px; }
-.vt-vw-gref{
-  flex:0 0 auto; max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-  font:600 var(--fs-2xs) var(--mono); padding:0 5px; border-radius:4px;
-  color:var(--acc); border:1px solid color-mix(in srgb, var(--acc) 45%, transparent);
-}
-.vt-vw-cmeta{ padding:calc(var(--spacing) * 3); border-bottom:1px solid var(--line); }
-.vt-vw-cmeta-subject{ font:600 var(--fs-sm) var(--ui); margin-bottom:calc(var(--spacing) * 1); }
+.vt-vw-cbar .vt-vw-csha{ width:auto; }
+.vt-psub-file{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:400 var(--fs-xs)/1 var(--font-mono); color:var(--color-txt); }
+.vt-psub-lab{ flex:none; font:400 var(--fs-3xs)/1 var(--font-ui); color:var(--color-muted); }
+.vt-psub .vt-vw-dstat{ font-size:var(--fs-3xs); }
+.vt-vw-graph{ flex:0 0 auto; display:block; width:var(--vt-graph-w, auto); align-self:stretch; height:36px; }
+.vt-vw-cmeta{ padding:calc(var(--spacing) * 3.5) calc(var(--spacing) * 3.5) calc(var(--spacing) * 3); }
+.vt-vw-cmeta-subject{ font:var(--weight-semibold) var(--fs-base)/20px var(--font-ui); color:var(--color-txt); }
+.vt-vw-cmeta-info{ margin-top:calc(var(--spacing) * 1.5); font:400 var(--fs-xs)/16px var(--font-ui); color:var(--color-muted); }
 .vt-vw-cmeta-body{
-  font:400 var(--fs-xs) var(--mono); color:var(--sub); white-space:pre-wrap;
-  margin-bottom:calc(var(--spacing) * 1.5);
+  margin-top:calc(var(--spacing) * 2.5); font:400 var(--fs-sm)/18px var(--font-ui); color:var(--color-sub); white-space:pre-wrap;
 }
-.vt-vw-cmeta-info{ font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
 
 /* 모바일 — 바텀시트. #vt-guide도 openPanel()로 이 backdrop/card 클래스를
    그대로 쓰므로(D6) 별도 규칙 없이 여기 물린다. */
@@ -341,71 +338,16 @@
     animation:vtSheetIn .18s ease-out;
     padding-bottom:env(safe-area-inset-bottom,0px);
   }
-  .vt-vw-dl,.vt-vw-cm .cm-editor,.vt-vw-plain{ font-size:var(--fs-2xs); }
+  .vt-vw-dl,.vt-vw-dlines,.vt-vw-cm .cm-editor,.vt-vw-plain{ font-size:var(--fs-2xs); }
   .vt-vw-no{ min-width:32px; padding:0 calc(var(--spacing) * 1); }
   .vt-vw-cm{ --vt-cm-gutter-min:32px; --vt-cm-gutter-pad:calc(var(--spacing) * 1); }
 }
 
-/* -------------------------------------------------------------------------
-   코드 뷰어 표시 모드 — sheet(기본, 위 규칙 그대로) / dock(사이드 도킹) / full(전체화면).
-   모드는 #vt-viewer 에 .mode-dock / .mode-full 클래스로 반영된다(viewer.js).
-   ------------------------------------------------------------------------- */
+/* 옛 모달 뷰어(#vt-viewer)의 dock/full 표시 모드 규칙은 파일 개편 단계 9에서 지웠다 — 그 요소를 만드는 코드가
+   N35 §6 뒤로 없다. 표면은 아래 오버레이(sheet/float)와 페인이다. */
 
-/* dock — 배경을 덮지 않는다. 터미널이 카드 바깥에서 그대로 클릭/타이핑된다.
-   topbar(38px) 아래에만 걸쳐서 상단바 버튼도 계속 쓸 수 있다. */
-#vt-viewer.mode-dock{
-  inset:calc(var(--menubar-h) + var(--topbar-h)) 0 0 0; padding:0; background:transparent;
-  justify-content:flex-end; pointer-events:none;
-}
-#vt-viewer.mode-dock .vt-viewer-card{
-  pointer-events:auto; position:relative;
-  width:var(--vt-dock-w, 420px); max-width:92vw; max-height:none; height:100%;
-  border-radius:0; border-top:none; border-right:none; border-bottom:none;
-  box-shadow:-16px 0 32px rgba(0,0,0,.35);
-}
-.vt-vw-resizer{ display:none; }
-#vt-viewer.mode-dock .vt-vw-resizer{
-  display:block; position:absolute; left:-4px; top:0; bottom:0; width:8px;
-  cursor:col-resize; touch-action:none;
-}
-#vt-viewer.mode-dock .vt-vw-resizer:hover,
-#vt-viewer.mode-dock .vt-vw-resizer.dragging{
-  background:color-mix(in srgb, var(--acc) 30%, transparent);
-}
-
-/* full — 화면 대부분을 차지하는 모달. 배경 dim은 sheet와 동일하게 유지한다 —
-   여기서는 화면 자체가 콘텐츠라 도킹처럼 터미널이 비쳐 보일 필요가 없다. */
-#vt-viewer.mode-full .vt-viewer-card{
-  width:98vw; max-width:none; height:92vh; max-height:none;
-}
-
-/* 도킹으로 좁아진 만큼 터미널이 리플로우할 공간. JS가 --vt-dock-w 를 갱신한다. */
-body.vt-docked #terminal-container{ margin-right:var(--vt-dock-w, 420px); transition:margin-right .18s ease; }
 /* 리사이즈 드래그 중엔 transition을 끈다 — 매 프레임 지연이 그대로 체감된다. */
 body.vt-resizing #terminal-container{ transition:none; }
-
-/* 모바일은 표시 모드 선택과 무관하게 항상 바텀시트 — dock 폭 자체가 성립하지 않는다. */
-@media (max-width:560px){
-  #vt-viewer.mode-dock, #vt-viewer.mode-full{
-    inset:0; padding:0; align-items:flex-end; justify-content:center;
-    background:color-mix(in srgb, var(--crust) 62%, transparent); pointer-events:auto;
-  }
-  /* 폰에서는 시트를 화면 전체로 편다. 92vh + height:auto 였을 때는 내용이 짧으면
-     카드가 더 작게 잡혀 세로의 절반만 쓰고, 코드를 읽을 줄 수가 그만큼 줄었다.
-     dvh 를 먼저 두고 vh 로 폴백한다 — 주소창이 접히고 펴지는 모바일 브라우저에서
-     vh 는 실제 보이는 높이보다 크게 잡혀 하단이 잘린다. */
-  #vt-viewer.mode-dock .vt-viewer-card, #vt-viewer.mode-full .vt-viewer-card{
-    width:100%; height:100vh; height:100dvh; max-height:none;
-    border-radius:0; border:none;
-    box-shadow:none;
-  }
-  #vt-viewer.mode-dock .vt-vw-resizer{ display:none; }
-  body.vt-docked #terminal-container{ margin-right:0; }
-}
-
-/* 2.1.6 — 코드 뷰어 모드 전환(.vt-vw-modes + .vt-vw-mode-btn)은 **통째로 죽어
-   있었다**: 컨테이너도 버튼도 DOM에 붙이는 코드가 없다(전수 grep). 뷰어가 pane
-   리프로 다시 쓰이면서 모드 개념 자체가 사라졌고 CSS만 남았다. 지운다. */
 
 /* -------------------------------------------------------------------------
    ADR-44 — 파일 뷰어 오버레이(panels/viewer/overlay.js). #terminal-container 안에
@@ -414,7 +356,7 @@ body.vt-resizing #terminal-container{ transition:none; }
    만들지 않는다 — 그게 이 작업이 없애려는 리플로우 자체다.
    z-index 20: 컨테이너 안 기존 최고값(드롭 오버레이 9) 위, body의 fixed 레이어 아래.
    ------------------------------------------------------------------------- */
-.vt-file-overlay{ position:absolute; inset:0 var(--vt-file-inset-r, 0px) 0 0; z-index:20; pointer-events:none; }
+.vt-file-overlay{ position:absolute; inset:0; z-index:20; pointer-events:none; }
 .vt-file-overlay > .vt-viewer-card{
   position:absolute; pointer-events:auto;
   max-height:none; box-shadow:var(--shadow-e2);
@@ -484,279 +426,153 @@ body.vt-resizing #terminal-container{ transition:none; }
   }
 }
 
-/* -------------------------------------------------------------------------
-   계층 트리 + 2단 분할 (dock/full 전용) — 좌측 트리, 우측 코드/diff가 동시에 보인다.
-   sheet(폰)는 폭이 없어 트리 → 코드 전환 방식을 그대로 쓴다(분할 안 함).
-   ------------------------------------------------------------------------- */
-/* #vt-vw-body 자체가 flex 컨테이너가 된다(.split 부여 시) — 트리·코드 각자
-   독립적으로 스크롤해야 해서 body 공통 overflow:auto(app.css:549 부근) 대신
-   여기서 overflow:hidden 으로 덮고 각 pane이 자기 몫만 스크롤한다. */
-.vt-vw-body.split{ display:flex; overflow:hidden; padding:0; }
-.vt-vw-tree-pane{
-  flex:0 0 auto; width:230px; overflow-y:auto; border-right:1px solid var(--line);
-  background:var(--crust);
-}
+/* 파일 본문 칸(layout/panes.js의 뷰어 페인, 오버레이 본문). 옛 트리 + 2단 분할 규칙은 단계 9에서 지웠다. */
 .vt-vw-code-pane{ flex:1 1 auto; min-width:0; overflow:auto; }
 
-/* sheet(기본): data-active 로 트리/코드 중 한쪽만 전체 폭에 노출 — 기존 "탐색→열람 전환" 그대로. */
-.vt-vw-body.split[data-active="tree"] .vt-vw-code-pane{ display:none; }
-.vt-vw-body.split[data-active="tree"] .vt-vw-tree-pane{ flex:1 1 auto; width:auto; border-right:none; }
-.vt-vw-body.split[data-active="code"] .vt-vw-tree-pane{ display:none; }
-
-/* dock/full: 폭이 있으니 data-active와 무관하게 항상 둘 다 보인다(IDE 2단 분할).
-   폭은 --vt-tree-w(기본 230px) — 리사이저로 드래그해 바꾸고 localStorage에 남는다(viewer.js). */
-#vt-viewer.mode-dock .vt-vw-body.split .vt-vw-tree-pane,
-#vt-viewer.mode-full .vt-vw-body.split .vt-vw-tree-pane{
-  display:block; flex:0 0 auto; width:var(--vt-tree-w, 230px); border-right:1px solid var(--line);
-}
-#vt-viewer.mode-dock .vt-vw-body.split .vt-vw-code-pane,
-#vt-viewer.mode-full .vt-vw-body.split .vt-vw-code-pane{ display:block; }
-
-/* 트리 폭 리사이저 — dock/full에서만 트리·코드 경계에 나타난다. */
-.vt-vw-tree-resizer{ display:none; }
-#vt-viewer.mode-dock .vt-vw-body.split .vt-vw-tree-resizer,
-#vt-viewer.mode-full .vt-vw-body.split .vt-vw-tree-resizer{
-  display:block; flex:0 0 auto; width:6px; margin:0 calc(-1 * calc(var(--spacing) * 1)); cursor:col-resize;
-  touch-action:none; position:relative; z-index:1;
-}
-#vt-viewer.mode-dock .vt-vw-body.split .vt-vw-tree-resizer:hover,
-#vt-viewer.mode-full .vt-vw-body.split .vt-vw-tree-resizer:hover,
-.vt-vw-tree-resizer.dragging{
-  background:color-mix(in srgb, var(--acc) 30%, transparent);
-}
-
-/* 트리 접기 — #vt-viewer.tree-collapsed일 때 트리 패널·리사이저를 숨기고 코드가 전체 폭을 쓴다. */
-#vt-viewer.tree-collapsed .vt-vw-body.split .vt-vw-tree-pane,
-#vt-viewer.tree-collapsed .vt-vw-body.split .vt-vw-tree-resizer{ display:none; }
-
-.vt-vw-code-empty{
-  display:flex; align-items:center; justify-content:center; height:100%;
-  color:var(--sub); font:400 var(--fs-sm) var(--ui); text-align:center; padding:calc(var(--spacing) * 4);
-}
-
-/* 트리 행 — 깊이는 padding-left로만 표현. 4단계부터는 증가폭을 줄여 폰 폭에서도
-   이름이 안 밀려나게 한다(들여쓰기 클램프). */
-.vt-vw-trow{
-  display:flex; align-items:center; gap:calc(var(--spacing) * 1); cursor:pointer;
-  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2) calc(var(--spacing) * 1.5) calc(calc(var(--spacing) * 2) + min(var(--d, 0), 4) * calc(var(--spacing) * 3.5) + max(var(--d, 0) - 4, 0) * calc(var(--spacing) * 1.5));
-  font:400 var(--fs-sm) var(--ui); border-bottom:1px solid var(--line);
-  touch-action:manipulation; white-space:nowrap;
-}
-.vt-vw-trow:hover{ background:var(--menu-hover); }
-.vt-vw-trow:active{ background:color-mix(in srgb, var(--acc) 16%, var(--menu-hover)); }
-.vt-vw-trow.active{ background:color-mix(in srgb, var(--acc) 14%, transparent); }
-.vt-vw-trow.dir .vt-vw-name{ color:var(--txt); font-weight:600; }
-.vt-vw-chev{
-  flex:0 0 auto; width:14px; height:14px; color:var(--sub);
-  transition:transform .12s ease; transform:rotate(0deg);
-}
-.vt-vw-trow.dir.open .vt-vw-chev{ transform:rotate(90deg); }
-.vt-vw-trow:not(.dir) .vt-vw-chev{ visibility:hidden; }   /* 파일도 자리는 차지 — 이름 정렬 유지 */
-.vt-vw-trow .vt-vw-name{ overflow:hidden; text-overflow:ellipsis; }
-/* L2: 파일 행마다 있는 "터미널에 경로 삽입" 버튼 — 터치 기기는 hover가 없어서
-   항상 보이게 두되, 크기/색을 낮춰 파일명·크기보다 시각적으로 물러나게 한다. */
-.vt-vw-trow-spin{
-  flex:0 0 auto; width:12px; height:12px; border-radius:50%;
-  border:2px solid var(--line); border-top-color:var(--acc);
-  animation:vtSpin .6s linear infinite;
-}
-@keyframes vtSpin{ to{ transform:rotate(360deg); } }
-
-/* 상위 디렉토리로 이동하는 ".." 행 — 파일/디렉토리와 구분되게 흐리고 기울인다.
-   .dir 이 아니므로 위 :not(.dir) 규칙이 셰브런을 숨기는데, 여기선 위쪽 화살표로 보여야 한다. */
-.vt-vw-trow.vt-vw-up .vt-vw-name{ color:var(--sub); font-style:italic; }
-.vt-vw-trow.vt-vw-up .vt-vw-chev{ visibility:visible; transform:rotate(-90deg); }
-
-/* 트리 안의 안내문(빈 디렉토리/잘림/에러)은 중앙정렬 모달 메시지가 아니라
-   해당 깊이의 행처럼 왼쪽 정렬로 — 트리 흐름을 안 끊는다. */
-.vt-vw-tree-pane .vt-vw-note,
-.vt-vw-tree-pane .vt-vw-empty{
-  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2) calc(var(--spacing) * 1.5) calc(calc(var(--spacing) * 2) + min(var(--d, 0), 4) * calc(var(--spacing) * 3.5) + max(var(--d, 0) - 4, 0) * calc(var(--spacing) * 1.5));
-  text-align:left; border-top:none; border-bottom:1px solid var(--line);
-}
-
-/* dock/full은 트리·코드가 동시에 보이니 "트리로" 버튼이 의미가 없다 — sheet 전용. */
-#vt-viewer.mode-dock .vt-vw-back,
-#vt-viewer.mode-full .vt-vw-back{ display:none; }
-
-/* 포트 대시보드 (ports.js) — P3.
-   패널 껍데기(.vt-viewer-backdrop/.vt-viewer-card)는 코드 뷰어와 공유한다. */
-/* U3: 내 서버 / 보호됨(시스템) 구분 헤더 — 두 그룹이 섞여 있을 때만 렌더된다. */
-.vt-pt-section{
-  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3) calc(var(--spacing) * 1);
-}
-/* U4/D4: 행 높이 24px 고정(단일 줄) — cmd/pid/uptime/mem/cpu를 두 줄로 쌓던
-   레이아웃을 한 줄로 합쳤다(.vt-pt-meta가 flex 컨테이너가 되면서 자식이
-   나란히 배치된다). 병합된 pid 그룹의 하위 포트는 .vt-pt-row-sub로 들여쓴다. */
+/* 포트 대시보드 (ports.js) — 리디자인 5단계(시안 P06).
+   패널 껍데기는 코드 뷰어와 공유한다. 행 36(공개 중이면 48), 열 = 포트 52 · 프로세스 · 가동 44 · 메모리 48 —
+   칸이 넓어지면(칸에 띄운 패널) PID · CPU 열이 다시 나온다. 구역 머리는 패널 키트(.vt-psec). */
+.vt-pt-section{ margin-top:calc(var(--spacing) * 1); }
+/* U4/D4: 같은 pid 그룹의 나머지 포트는 .vt-pt-row-sub로 들여쓴다. */
 .vt-pt-row{
   display:flex; align-items:center; gap:calc(var(--spacing) * 2.5);
-  height:24px; padding:0 calc(var(--spacing) * 3); border-bottom:1px solid var(--line);
-  font:400 var(--fs-sm) var(--ui);
+  min-height:36px; padding:0 calc(var(--spacing) * 3);
+  font:400 var(--fs-sm) var(--font-ui);
 }
-.vt-pt-row:hover{ background:var(--menu-hover); }
-.vt-pt-row:active{ background:color-mix(in srgb, var(--acc) 12%, var(--menu-hover)); }
+.vt-pt-row:hover{ background:var(--color-bg-3); }
+.vt-pt-row:active{ background:color-mix(in srgb, var(--color-acc) 12%, var(--color-bg-3)); }
+.vt-pt-row.exposed{ min-height:48px; }
 
 /* U4/D4: 같은 pid의 대표 포트가 아닌 나머지 — 들여쓰고 톤을 낮춘다. */
-.vt-pt-row-sub .vt-pt-cmd{ color:var(--sub); }
+.vt-pt-row-sub .vt-pt-cmd{ color:var(--color-muted); }
 
 /* U5/L6: 스와이프-종료(터치 전용). row는 뷰포트, inner가 실제 카드로 그 위를 덮어
    kill 버튼을 가린다 — 왼쪽으로 밀면 inner가 물러나며 버튼이 드러난다. */
 .vt-pt-row.swipeable{ position:relative; overflow:hidden; padding:0; touch-action:pan-y; height:auto; }
 .vt-pt-row-inner{
   display:flex; align-items:center; gap:calc(var(--spacing) * 2.5); width:100%;
-  height:24px; padding:0 calc(var(--spacing) * 3); background:var(--win);
+  min-height:36px; padding:0 calc(var(--spacing) * 3); background:var(--color-bg-1);
   transition:transform .18s ease; will-change:transform;
 }
 .vt-pt-swipe-kill{
   position:absolute; top:0; right:0; bottom:0; width:76px;
-  background:var(--err); color:var(--color-on-solid); border:0;
-  font:600 var(--fs-sm) var(--ui); cursor:pointer;
+  background:var(--color-st-error); color:var(--color-on-solid); border:0;
+  font:600 var(--fs-sm) var(--font-ui); cursor:pointer;
 }
 .vt-pt-port{
-  flex:0 0 auto; min-width:56px;
-  font:600 var(--fs-sm) var(--mono); color:var(--txt);
+  flex:0 0 auto; min-width:52px;
+  font:var(--weight-semibold) var(--fs-sm) var(--font-mono); color:var(--color-txt);
   font-variant-numeric:tabular-nums;
 }
-.vt-pt-actions{ flex:0 0 auto; display:flex; gap:calc(var(--spacing) * 1.5); align-items:center; }
+.vt-pt-cmd{ font:400 var(--fs-xs) var(--font-mono); color:var(--color-txt); }
+.vt-pt-namecell{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+.vt-pt-exposed{ font:400 var(--fs-3xs)/14px var(--font-ui); color:var(--color-st-working); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vt-pt-actions{ flex:0 0 auto; display:flex; gap:2px; align-items:center; }
 
-/* 2026-09-17 — 액션을 행 **위로** 띄운다.
-   392px dock에서 포트 + 이름 + 수치 + 태그 + 버튼 둘이 24px 한 줄에 다 들어가지
-   않아, 실측하면 **명령 이름 칸이 0px**이었다. 이름이 아예 안 보이는데 버튼 두
-   개가 자리를 지키고 있었던 셈이다. 띄우면 그 95px이 통째로 이름에 간다.
-   테두리 상자도 뗀다(.quiet) — 33행 × 2개 = 66개의 상자가 목록에서 가장 눈에
-   띄는 요소였다. 「화면당 채움 버튼 1개」(20-design-system.md §3)의 취지와 어긋난다.
-
+/* 2026-09-17 — 액션을 행 **위로** 띄운다(좁은 dock에서 이름 칸이 0px이 되던 문제).
    ⚠ 포인터가 있는 기기에서만 숨긴다. 터치엔 hover가 없어 영영 못 찾는다 —
    그쪽은 지금처럼 항상 보이고, 종료는 이미 스와이프로 분리돼 있다(U5/L6).
-   ⚠ 「보호됨」(.vt-pt-lock)은 동작이 아니라 **설명**이다("왜 종료 버튼이 없는가").
-   숨기면 그 행이 이유 없이 비어 보이므로 제외한다. */
+   ⚠ 「보호됨」(.vt-pt-lock)은 동작이 아니라 **설명**이다("왜 종료 버튼이 없는가"). */
 @media (hover:hover) and (pointer:fine) {
   .vt-pt-row{ position:relative; }
-  /* ⚠ `.vt-pt-actions`는 터널 줄(.vt-pt-tunnel-row)도 쓴다. 거기까지 숨기면
-     [복사]·[해제]를 드러낼 hover 규칙이 없어 **영영 안 보인다**. 포트 행으로 한정한다. */
+  /* ⚠ `.vt-pt-actions`는 터널 카드(.vt-pt-tunnel-row)도 쓴다 — 포트 행으로 한정한다. */
   .vt-pt-row .vt-pt-actions:not(:has(.vt-pt-lock)){
-    position:absolute; top:0; bottom:0; right:calc(var(--spacing) * 3);
+    position:absolute; top:0; bottom:0; right:calc(var(--spacing) * 2);
     padding-left:calc(var(--spacing) * 5);
-    /* 아래 글자를 덮어야 하므로 불투명해야 한다. 행 배경(--bar) 위에 행 hover
-       틴트를 **같은 순서로** 한 번 더 쌓아야 액션 밑만 색이 튀지 않는다. */
-    background:linear-gradient(to right, transparent, var(--menu-hover) calc(var(--spacing) * 5)),
-               linear-gradient(to right, transparent, var(--bar) calc(var(--spacing) * 5));
+    /* 아래 글자를 덮어야 하므로 불투명해야 한다 — 머문 행 바탕(bg-3)으로 끝나는 그라데이션. */
+    background:linear-gradient(to right, transparent, var(--color-bg-3) calc(var(--spacing) * 5));
     opacity:0; pointer-events:none;
     transition:opacity var(--dur-fast) var(--ease-out-quint);
   }
   .vt-pt-row:hover .vt-pt-actions,
   .vt-pt-row:focus-within .vt-pt-actions{ opacity:1; pointer-events:auto; }
 }
-.vt-pt-lock{ display:inline-flex; vertical-align:-1px; margin-right:calc(var(--spacing) * 1.5); color:var(--sub); cursor:help; }
-/* 2.1.6 — .vt-pt-btn(큐·스니펫·포트·diff·git 로그·파일 공유, 6개 파일 19곳)은
-   components.css의 `.vt-btn` / `.vt-btn.danger`로 대체했다. 이름이 "pt"(패널
-   텍스트)였지만 하는 일은 그냥 버튼이었고, 컴포넌트와 별개로 한 벌 더 있었다.
-   diff.js는 이 이름을 **JS 셀렉터**(`.vt-pt-btn:last-child`)로도 쓰고 있어서
-   함께 바꿨다 — 이름만 바꾸면 그 조회가 조용히 null이 되어 「추가」 버튼이
-   중복 제출을 막지 못한다.
+.vt-pt-lock{ display:inline-flex; vertical-align:-1px; margin-right:calc(var(--spacing) * 1.5); color:var(--color-faint); cursor:help; }
+/* 2.1.6 — .vt-pt-btn은 components.css의 `.vt-btn` / `.vt-btn.danger`로 대체했다.
+   터치: `touch-action:manipulation`은 유지한다(더블탭 확대 지연 제거). */
+.vt-pt-list .vt-btn, .vt-pt-actions .vt-btn, .vt-pt-actions .vt-icon-btn { touch-action:manipulation; }
 
-   D3의 판단(파괴적 버튼은 글자를 읽기 전에 형태로 먼저 들어와야 한다)은
-   `.vt-btn.danger`가 그대로 잇는다 — 거기는 테두리까지 에러색이다.
-
-   터치: 옛 규칙의 min-height:30px은 `.vt-btn`의 28px로 2px 줄었다. 그 대신
-   `touch-action:manipulation`은 아래에서 유지한다(더블탭 확대 지연 제거). */
-.vt-pt-list .vt-btn, .vt-pt-actions .vt-btn { touch-action:manipulation; }
-
-/* N22(50-files-share.md §5) — 포트 목록 아래 "노출 중" 요약. 헤더는 .vt-pt-section을
-   그대로 재사용, 행/버튼은 .vt-pt-row·.vt-pt-btn을 재사용하되 이름/URL 두 칸만 새로 둔다. */
-.vt-pt-tunnel-section{ border-top:1px solid var(--line); margin-top:calc(var(--spacing) * 1); }
+/* 터널 카드(시안 P06 · P06-f) — 여백 10/12 · 반경 6 · 상태 점 8. 목록 위에 쌓인다. */
+.vt-pt-tunnel-section{ display:flex; flex-direction:column; gap:calc(var(--spacing) * 2); padding:calc(var(--spacing) * 3) calc(var(--spacing) * 3.5) calc(var(--spacing) * 1); }
 .vt-pt-tunnel-row{
   display:flex; align-items:center; gap:calc(var(--spacing) * 2.5);
-  min-height:30px; padding:calc(var(--spacing) * 1) calc(var(--spacing) * 3);
-  border-bottom:1px solid var(--line); font:400 var(--fs-sm) var(--ui);
+  padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 2) calc(var(--spacing) * 2.5) calc(var(--spacing) * 3);
+  border:1px solid var(--color-line); border-radius:var(--radius-sm); font:400 var(--fs-sm) var(--font-ui);
 }
-.vt-pt-tunnel-label{ flex:0 0 auto; color:var(--sub); font:400 var(--fs-3xs) var(--mono); }
+.vt-pt-tunnel-row.broken{ border-color:color-mix(in srgb, var(--color-st-error) 40%, transparent); }
+.vt-pt-tdot{ flex:none; width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-st-working); }
+.vt-pt-tdot[data-state="waiting"]{ background:var(--color-st-waiting); }
+.vt-pt-tdot[data-state="error"]{ background:var(--color-st-error); }
+.vt-pt-tmain{ flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.vt-pt-tline{ display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-width:0; }
+.vt-pt-tunnel-row .vt-pt-port{ min-width:0; font-size:var(--fs-xs); }
+.vt-pt-tunnel-label{
+  flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font:var(--weight-semibold) var(--fs-xs)/16px var(--font-ui); color:var(--color-txt);
+}
+.vt-pt-tunnel-url{ font:400 var(--fs-3xs)/16px var(--font-mono); color:var(--color-muted); }
+.vt-pt-tunnel-row.paused .vt-pt-tunnel-url{ font-family:var(--font-ui); }
+.vt-pt-chips{ flex:0 0 auto; display:flex; gap:calc(var(--spacing) * 1); }
+
+/* 관리 시트 — 메뉴 항목 28(시안 P06-c), 구역 이름 11/600. */
+.vt-pt-menu{ display:flex; flex-direction:column; gap:2px; min-width:240px; }
+.vt-pt-menu-label{ padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2) calc(var(--spacing) * 1); color:var(--color-muted); font:600 var(--fs-3xs)/1.3 var(--font-ui); }
+.vt-pt-menu-item{
+  display:flex; justify-content:space-between; align-items:center; gap:calc(var(--spacing) * 3);
+  width:100%; min-height:28px; padding:calc(var(--spacing) * 1) calc(var(--spacing) * 2); border:0; border-radius:var(--radius-xs);
+  background:transparent; color:var(--color-txt); font:400 var(--fs-sm) var(--font-ui); text-align:left; cursor:pointer;
+}
+.vt-pt-menu-item:hover{ background:var(--color-bg-3); }
+.vt-pt-menu-item.current{ background:var(--color-acc-soft); }
+.vt-pt-menu-item em{ color:var(--color-muted); font:400 var(--fs-3xs) var(--font-ui); font-style:normal; }
 
 /* 포트 표 — 열을 맞춘다. 숫자(PID·기간·메모리·CPU)는 칸 하나씩이라 값이 바뀌어도 위아래가 정렬된다.
-   좁은 dock에서는 덜 중요한 열(기간 → CPU)부터 접는다 — 이름이 먼저 잘리지 않게. */
-.vt-pt-table{ container-type:inline-size; --pt-pad:calc(var(--spacing) * 4); }
+   사이드바 폭(≤ 480)에서는 시안 P06의 넷(포트 · 프로세스 · 가동 · 메모리)만, 칸에 띄워 넓어지면 PID · CPU도. */
+.vt-pt-table{ container-type:inline-size; --pt-pad:calc(var(--spacing) * 3.5); }
 .vt-pt-table .vt-pt-row:not(.swipeable), .vt-pt-table .vt-pt-row-inner{
   display:grid; align-items:center; column-gap:calc(var(--spacing) * 2);
-  grid-template-columns:56px minmax(0, 1fr) 46px 54px 40px 38px;
+  grid-template-columns:52px minmax(0, 1fr) 54px 44px 48px 40px;
   padding:0 var(--pt-pad);
 }
+.vt-pt-table .vt-pt-row:not(.swipeable){ margin:0 calc(var(--spacing) * 1); padding:0 calc(var(--pt-pad) - var(--spacing)); border-radius:var(--radius-sm); }
 .vt-pt-table .vt-pt-row.swipeable{ padding:0; }
 .vt-pt-table .vt-pt-cmd{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .vt-pt-num{
-  text-align:right; white-space:nowrap; color:var(--sub);
-  font:400 var(--fs-2xs) var(--mono); font-variant-numeric:tabular-nums;
+  text-align:right; white-space:nowrap; color:var(--color-muted);
+  font:400 var(--fs-3xs) var(--font-mono); font-variant-numeric:tabular-nums;
 }
 .vt-pt-thead{
-  height:22px; background:var(--bar); color:var(--sub);
-  font:600 var(--fs-3xs) var(--ui); letter-spacing:.03em;
+  min-height:0; height:auto; padding-top:calc(var(--spacing) * 2) !important; padding-bottom:calc(var(--spacing) * 1) !important;
+  background:transparent;
 }
-.vt-pt-thead:hover{ background:var(--bar); }
-.vt-pt-thead .vt-pt-port, .vt-pt-thead .vt-pt-cmd, .vt-pt-thead .vt-pt-num{ font:600 var(--fs-3xs) var(--ui); color:var(--sub); }
-@container (max-width:360px){
-  .vt-pt-table .vt-pt-row:not(.swipeable), .vt-pt-table .vt-pt-row-inner{ grid-template-columns:56px minmax(0, 1fr) 46px 54px 40px; }
-  .vt-pt-num-cpu{ display:none; }
+.vt-pt-thead:hover{ background:transparent; }
+.vt-pt-thead .vt-pt-port, .vt-pt-thead .vt-pt-cmd, .vt-pt-thead .vt-pt-num{ font:400 var(--fs-3xs)/16px var(--font-ui); color:var(--color-muted); }
+@container (max-width:480px){
+  .vt-pt-table .vt-pt-row:not(.swipeable), .vt-pt-table .vt-pt-row-inner{ grid-template-columns:52px minmax(0, 1fr) 44px 48px; }
+  .vt-pt-num-pid, .vt-pt-num-cpu{ display:none; }
 }
-@container (max-width:300px){
-  .vt-pt-table .vt-pt-row:not(.swipeable), .vt-pt-table .vt-pt-row-inner{ grid-template-columns:56px minmax(0, 1fr) 46px 40px; }
+@container (max-width:280px){
+  .vt-pt-table .vt-pt-row:not(.swipeable), .vt-pt-table .vt-pt-row-inner{ grid-template-columns:52px minmax(0, 1fr) 48px; }
   .vt-pt-num-uptime{ display:none; }
 }
 /* 터치 기기는 동작 버튼이 행 안에 항상 보인다 — 칸을 하나 더 둔다. */
 @media (hover:none), (pointer:coarse){
   .vt-pt-table .vt-pt-row:not(.swipeable):not(.vt-pt-thead), .vt-pt-table .vt-pt-row-inner{
-    grid-template-columns:56px minmax(0, 1fr) 46px 54px 40px 38px auto;
+    grid-template-columns:52px minmax(0, 1fr) 54px 44px 48px 40px auto;
   }
 }
 /* 같은 pid의 나머지 포트 — 대표 행에서 이어지는 연결선으로 묶임을 보여 준다. */
 .vt-pt-row-sub, .vt-pt-row-sub .vt-pt-row-inner{ position:relative; }
-.vt-pt-row-sub .vt-pt-port{ padding-left:calc(var(--spacing) * 3.5); }
+.vt-pt-row-sub .vt-pt-port{ padding-left:calc(var(--spacing) * 3.5); font-weight:400; }
 .vt-pt-row-sub::before{
-  content:''; position:absolute; left:calc(var(--pt-pad) + 4px); top:0; bottom:0;
-  border-left:1px solid color-mix(in srgb, var(--sub) 45%, transparent); pointer-events:none;
+  content:''; position:absolute; left:calc(var(--pt-pad) + 0px); top:0; bottom:0;
+  border-left:1px solid var(--color-line-strong); pointer-events:none;
 }
 .vt-pt-row-sub::after{
-  content:''; position:absolute; left:calc(var(--pt-pad) + 4px); top:50%; width:7px;
-  border-top:1px solid color-mix(in srgb, var(--sub) 45%, transparent); pointer-events:none;
+  content:''; position:absolute; left:calc(var(--pt-pad) + 0px); top:50%; width:7px;
+  border-top:1px solid var(--color-line-strong); pointer-events:none;
 }
 .vt-pt-row-sub:not(:has(+ .vt-pt-row-sub))::before{ bottom:50%; }
-
-/* 노출 중 — 주소는 [주소] 버튼 하나, 부가 동작은 행에 올렸을 때만. */
-.vt-pt-tunnel-row{
-  display:flex; align-items:center; gap:calc(var(--spacing) * 2);
-  min-height:32px; padding:calc(var(--spacing) * 1) var(--pt-pad, calc(var(--spacing) * 4));
-  border-bottom:1px solid var(--line); font:400 var(--fs-sm) var(--ui);
-}
-.vt-pt-tunnel-row:hover{ background:var(--menu-hover); }
-.vt-pt-tunnel-row.paused .vt-pt-port, .vt-pt-tunnel-row.paused .vt-pt-tunnel-label{ opacity:.6; }
-.vt-pt-tunnel-row .vt-pt-port{ min-width:48px; }
-.vt-pt-tunnel-label{
-  flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-  color:var(--sub); font:400 var(--fs-3xs) var(--mono);
-}
-.vt-pt-chips{ flex:0 0 auto; display:flex; gap:calc(var(--spacing) * 1); }
-.vt-pt-chip{
-  padding:0 calc(var(--spacing) * 1.5); border:1px solid var(--line); border-radius:var(--radius-full, 999px);
-  color:var(--sub); font:500 var(--fs-3xs)/16px var(--ui); white-space:nowrap;
-}
-.vt-pt-chip.warn{ color:var(--warn); border-color:color-mix(in srgb, var(--warn) 45%, transparent); }
-.vt-pt-open{ flex:0 0 auto; display:inline-flex; align-items:center; gap:calc(var(--spacing) * 1); }
-.vt-pt-tunnel-row .vt-pt-actions{ gap:calc(var(--spacing) * 0.5); }
-@media (hover:hover) and (pointer:fine){
-  .vt-pt-tunnel-row .vt-pt-actions{ opacity:0; transition:opacity var(--dur-fast) var(--ease-out-quint); }
-  .vt-pt-tunnel-row:hover .vt-pt-actions,
-  .vt-pt-tunnel-row:focus-within .vt-pt-actions{ opacity:1; }
-}
-
-/* 관리 시트 */
-.vt-pt-menu{ display:flex; flex-direction:column; gap:2px; min-width:240px; }
-.vt-pt-menu-label{ padding:calc(var(--spacing) * 2) calc(var(--spacing) * 1) calc(var(--spacing) * 0.5); color:var(--sub); font:600 var(--fs-3xs) var(--ui); letter-spacing:.03em; }
-.vt-pt-menu-item{
-  display:flex; justify-content:space-between; align-items:center; gap:calc(var(--spacing) * 3);
-  width:100%; padding:calc(var(--spacing) * 2) calc(var(--spacing) * 2.5); border:0; border-radius:8px;
-  background:transparent; color:var(--txt); font:500 var(--fs-sm) var(--ui); text-align:left; cursor:pointer;
-}
-.vt-pt-menu-item:hover{ background:var(--menu-hover); }
-.vt-pt-menu-item.current{ background:color-mix(in srgb, var(--acc) 12%, transparent); }
-.vt-pt-menu-item em{ color:var(--sub); font:400 var(--fs-3xs) var(--ui); font-style:normal; }
 
 /* U4/D4: 행이 한 줄(24px)로 고정된 뒤로는 좁은 화면에서도 줄바꿈이 필요 없다 —
    cmd가 ellipsis로 줄어들 뿐. 예전엔 두 줄 stacking이라 wrap이 필요했다. */
@@ -772,31 +588,6 @@ body.vt-resizing #terminal-container{ transition:none; }
 
 /* 사용 불가 상태의 메뉴 항목 (P5 푸시 등) — 숨기지 않고 이유를 보여준다 */
 .mi.disabled{ opacity:.5; }
-
-/* 최근 연 파일 — 트리 최상단. 루트가 ~/GitHub 이라 실제 파일까지 매번 네다섯 단계를
-   내려가야 했고, 폰에서는 그 동선 자체가 뷰어를 안 쓰게 되는 이유였다. */
-.vt-vw-recent{ border-bottom:1px solid var(--line); padding-bottom:calc(var(--spacing) * 1); margin-bottom:calc(var(--spacing) * 1); }
-.vt-vw-recent-head{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5) calc(var(--spacing) * 1);
-}
-.vt-vw-recent-clear{
-  appearance:none; background:transparent; border:0; cursor:pointer;
-  padding:2px calc(var(--spacing) * 1.5); border-radius:6px;
-  font:500 var(--fs-2xs) var(--mono); color:var(--sub);
-}
-.vt-vw-recent-clear:hover{ background:var(--menu-hover); color:var(--txt); }
-.vt-vw-recent-row{ flex-direction:column; align-items:flex-start; gap:calc(var(--spacing) * 0.25); }
-.vt-vw-recent-row .vt-vw-name{ flex:0 0 auto; width:100%; }
-.vt-vw-recent-dir{
-  font:400 var(--fs-3xs) var(--mono);
-  color:var(--sub);
-  width:100%;
-  direction:rtl;
-  text-align:left;
-}
 
 /* 빠른 열기 (Quick open, D) — 세션·최근 파일·명령 통합 검색.
    2026-09-23(2.1 D6, 실기기 확인된 회귀) — 이 body는 코드 뷰어의
@@ -874,4 +665,158 @@ body.vt-resizing #terminal-container{ transition:none; }
 @media (max-width:899px){
   .vt-qo-preview-pane{ display:none; }
   .vt-qo-results-pane{ border-right:none; }
+}
+
+/* ── 미리보기(파일 개편 단계 7, panels/viewer/preview.js·markdown.js, 시안 F07) ─────────────────────────
+   렌더/원문 전환은 위 띠(.vt-vw-bar) 안의 두 칸 단추. 색은 토큰 별칭만(계약 9). */
+.vt-vw-seg{ display:inline-flex; border:1px solid var(--line); border-radius:var(--radius-sm); overflow:hidden; }
+.vt-vw-seg .vt-vw-seg-btn{ border:0; border-radius:0; background:transparent; color:var(--sub); }
+.vt-vw-seg .vt-vw-seg-btn + .vt-vw-seg-btn{ border-left:1px solid var(--line); }
+.vt-vw-seg .vt-vw-seg-btn[aria-pressed="true"]{ background:var(--color-acc-soft); color:var(--txt); }
+
+/* 마크다운 렌더 — 본문 14/22, 최대 폭 720(시안 F07). 폰은 15/24(M-F4). */
+.vt-md{
+  max-width:720px; padding:calc(var(--spacing) * 6) calc(var(--spacing) * 10);
+  font:400 14px/22px var(--ui); color:var(--txt); overflow-wrap:anywhere;
+}
+.vt-md > :first-child{ margin-top:0; }
+.vt-md h1,.vt-md h2,.vt-md h3,.vt-md h4,.vt-md h5,.vt-md h6{
+  font-weight:var(--weight-semibold); line-height:var(--leading-tight); margin:1.4em 0 .6em; color:var(--txt);
+}
+.vt-md h1{ font-size:var(--fs-lg); letter-spacing:var(--tracking-tight); }
+.vt-md h2{ font-size:var(--fs-md); padding-bottom:.3em; border-bottom:1px solid var(--line); }
+.vt-md h3{ font-size:var(--fs-base); }
+.vt-md h4,.vt-md h5,.vt-md h6{ font-size:var(--fs-sm); color:var(--sub); }
+.vt-md p,.vt-md ul,.vt-md ol,.vt-md blockquote,.vt-md table,.vt-md pre{ margin:0 0 1em; }
+.vt-md ul,.vt-md ol{ padding-left:1.5em; }
+.vt-md li > input[type="checkbox"]{ margin:0 .4em 0 0; vertical-align:middle; }
+.vt-md a{ color:var(--acc); text-decoration:underline; text-underline-offset:2px; }
+.vt-md a:not([href]){ color:var(--txt); text-decoration:none; }
+.vt-md code{ font:400 .92em var(--mono); background:var(--color-bg-2); border-radius:var(--radius-xs); padding:.1em .35em; }
+.vt-md pre{
+  font:400 var(--fs-xs)/1.55 var(--mono); background:var(--color-bg-2); border:1px solid var(--line);
+  border-radius:var(--radius-sm); padding:calc(var(--spacing) * 3); overflow:auto; white-space:pre;
+}
+.vt-md pre code{ background:none; padding:0; font-size:inherit; }
+.vt-md blockquote{ border-left:3px solid var(--line); padding:0 0 0 1em; color:var(--sub); }
+.vt-md hr{ border:0; border-top:1px solid var(--line); margin:1.5em 0; }
+.vt-md table{ border-collapse:collapse; display:block; overflow:auto; max-width:100%; }
+.vt-md th,.vt-md td{ border:1px solid var(--line); padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3); }
+.vt-md th{ background:var(--bar); font-weight:var(--weight-semibold); }
+.vt-md img{ max-width:100%; height:auto; }
+/* 막은 외부 이미지 — 점선 자리표시 56(시안 F07). 주소는 글자로만, 복사 단추. */
+.vt-md-blocked{
+  display:flex; flex-wrap:wrap; align-items:center; gap:calc(var(--spacing) * 2); min-height:56px;
+  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3); margin:0 0 1em;
+  border:1px dashed var(--line); border-radius:var(--radius-sm); color:var(--sub); font:400 var(--fs-xs) var(--ui);
+}
+.vt-md-blocked-url{ font-family:var(--mono); color:var(--color-faint); overflow-wrap:anywhere; flex:1 1 160px; }
+@media (max-width:719px){
+  .vt-md{ padding:calc(var(--spacing) * 4); font-size:15px; line-height:24px; }
+}
+
+/* CSV 표 — 텍스트로만 그리는 가상 표(머리 고정, 숫자 오른쪽 맞춤 · --color-term-amber). */
+/* 표가 든 칸은 내용만큼 늘어나고 스크롤은 바깥 상자(.vt-vw-body·페인 본문)가 한다 — 편집기 칸(.vt-vw-cm)과 같은 이유.
+   칸이 overflow:auto면 칸 자체가 스크롤 상자로 잡혀 높이가 표 전체가 되고, 가상 스크롤이 모든 행을 그린다. */
+.vt-vw-code-pane:has(> .vt-csv){ overflow:visible; }
+.vt-csv{ overflow-x:auto; background:var(--term); }
+.vt-csv-table{ border-collapse:collapse; font:400 var(--fs-xs) var(--mono); color:var(--txt); min-width:100%; }
+.vt-csv-table th,.vt-csv-table td{
+  height:24px; padding:0 calc(var(--spacing) * 3); white-space:nowrap; text-align:left;
+  border-bottom:1px solid var(--line); max-width:480px; overflow:hidden; text-overflow:ellipsis;
+}
+.vt-csv-table thead th{ position:sticky; top:0; background:var(--bar); color:var(--sub); font-weight:var(--weight-semibold); z-index:1; }
+.vt-csv-table .n{ text-align:right; color:var(--color-term-amber); }
+.vt-csv-table .ix{ color:var(--color-faint); text-align:right; }
+.vt-csv-table tr.vt-csv-pad td,.vt-csv-table tr.vt-csv-pad{ padding:0; border:0; height:auto; }
+
+/* 동영상·소리. */
+.vt-vw-media{ display:flex; justify-content:center; align-items:center; padding:calc(var(--spacing) * 3); }
+.vt-vw-media.video{ background:var(--crust); }
+.vt-vw-media video{ max-width:100%; max-height:70vh; }
+.vt-vw-media audio{ width:min(100%, 560px); }
+
+/* SVG는 <img>로만 — 위 .vt-vw-image의 체크무늬를 그대로 쓴다. */
+.vt-vw-svg img{ min-width:64px; }
+
+/* 빈 상태(PDF·바이너리·재생 실패) — 이유 + 다운로드. 이 화면의 채운 단추는 다운로드 하나(시안 F07-H). */
+.vt-vw-preview-empty{
+  display:flex; flex-direction:column; align-items:center; gap:calc(var(--spacing) * 2); text-align:center;
+  padding:calc(var(--spacing) * 8) calc(var(--spacing) * 4); color:var(--sub); font:400 var(--fs-xs)/1.5 var(--ui);
+}
+.vt-vw-preview-empty b{ color:var(--txt); font-weight:var(--weight-semibold); font-size:var(--fs-sm); }
+.vt-vw-preview-empty span{ max-width:360px; }
+.vt-vw-preview-acts{ display:flex; gap:calc(var(--spacing) * 2); margin-top:calc(var(--spacing) * 1); }
+.vt-vw-dl-btn{ display:inline-flex; align-items:center; gap:calc(var(--spacing) * 1.5); }
+.vt-vw-dl-btn svg{ width:14px; height:14px; }
+
+/* 편집 모드(파일 개편 단계 8, 시안 F05 · F05-C · F05-D · F05-D2 · M-F5). 색은 토큰 별칭만(계약 9).
+   편집 조작은 위 띠 오른쪽. 편집 중에는 띠가 스크롤 상자 위에 붙는다 — 폰 화상 키보드가 올라와도 저장이 보인다. */
+.vt-vw-edit-tools{ display:inline-flex; flex-wrap:wrap; align-items:center; gap:calc(var(--spacing) * 1.5); margin-left:auto; }
+.vt-vw-bar-btn{ display:inline-flex; align-items:center; gap:calc(var(--spacing) * 1); }
+.vt-vw-bar-btn svg{ width:14px; height:14px; flex:none; }
+.vt-vw-bar-btn[aria-disabled="true"]{ opacity:.5; cursor:not-allowed; }
+.vt-vw-bar-btn.ghost{ background:transparent; color:var(--sub); }
+.vt-vw-bar-btn.ghost:hover{ color:var(--txt); }
+.vt-vw-bar-btn.danger{ color:var(--color-st-error); border-color:color-mix(in srgb, var(--color-st-error) 45%, var(--line)); }
+.vt-vw-bar-btn.primary{ background:var(--color-acc); color:var(--color-acc-ink); border-color:var(--color-acc); font-weight:var(--weight-semibold); }
+.vt-vw-bar-btn.primary:hover{ background:var(--color-acc-dim); }
+.vt-vw-bar-btn kbd{ font:400 var(--fs-xs) var(--mono); opacity:.75; }
+.vt-vw-bar.vt-vw-bar-editing{ position:sticky; top:0; z-index:3; }
+.vt-vw-ss{ display:inline-flex; align-items:center; gap:calc(var(--spacing) * 1); font:500 var(--fs-xs) var(--ui); }
+.vt-vw-ss svg{ width:14px; height:14px; }
+.vt-vw-ss.dirty{ color:var(--color-st-waiting); }
+.vt-vw-ss.dirty::before{ content:""; width:8px; height:8px; border-radius:50%; background:var(--color-st-waiting); }
+.vt-vw-ss.ing{ color:var(--sub); }
+.vt-vw-ss.ok{ color:var(--color-st-working); }
+.vt-vw-ss.bad{ color:var(--color-st-error); }
+.vt-vw-ss.warn{ color:var(--warn); }
+/* 저장 실패 + 원인: 한 줄을 다 차지하고(flex-wrap이라 버튼 위 줄로 올라간다), 원인만 줄임표. */
+.vt-vw-ss-fail{ flex:1 1 100%; min-width:0; max-width:100%; }
+.vt-vw-ss-fail svg{ flex:none; }
+.vt-vw-ss-head{ flex:none; white-space:nowrap; }
+.vt-vw-ss-why{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-vw-cm-edit .cm-content{ caret-color:var(--color-acc); }
+.vt-vw-cm-edit .cm-gutters{ border-right:1px solid color-mix(in srgb, var(--color-st-waiting) 40%, var(--line)); }
+/* 바뀐 줄 표시(editor.js `_chgGutter`): 추가 = 초록 막대, 수정 = 파랑 막대, 삭제 = 그 줄 위(파일 끝이면 아래)의 빨강 쐐기.
+ * 막대는 색 말고 모양으로도 갈린다 — 추가는 꽉 찬 막대, 수정은 점선 막대, 삭제는 쐐기. */
+.cm-vt-chg-gutter .cm-gutterElement{ position:relative; width:4px; padding:0; }
+.cm-vt-chg{ position:absolute; inset:0 0 0 1px; display:block; }
+.cm-vt-chg.add{ background:var(--color-vw-chg-add); }
+.cm-vt-chg.mod{ background:repeating-linear-gradient(to bottom, var(--color-vw-chg-mod) 0 3px, transparent 3px 5px); }
+.cm-vt-chg.del::before, .cm-vt-chg.del-below::before{
+  content:""; position:absolute; left:0; width:0; height:0;
+  border-left:5px solid var(--color-vw-chg-del); border-top:4px solid transparent; border-bottom:4px solid transparent;
+}
+.cm-vt-chg.del::before{ top:-4px; }
+.cm-vt-chg.del-below::before{ bottom:-4px; }
+
+.vt-vw-conflict{
+  display:flex; flex-wrap:wrap; align-items:flex-start; gap:calc(var(--spacing) * 2);
+  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3); font:400 var(--fs-xs) var(--ui); color:var(--sub);
+  background:color-mix(in srgb, var(--color-st-error) 10%, var(--bar));
+  border-bottom:1px solid color-mix(in srgb, var(--color-st-error) 40%, var(--line));
+}
+.vt-vw-conflict-tx{ flex:1 1 240px; min-width:0; }
+.vt-vw-conflict-tx b{ color:var(--txt); font-weight:var(--weight-semibold); }
+.vt-vw-conflict-acts{ display:inline-flex; flex-wrap:wrap; gap:calc(var(--spacing) * 1.5); }
+.vt-vw-compare{ border-bottom:1px solid var(--line); background:var(--crust); max-height:50vh; overflow:auto; }
+.vt-vw-compare-head{
+  display:flex; justify-content:space-between; gap:calc(var(--spacing) * 2); position:sticky; top:0;
+  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3); font:500 var(--fs-xs) var(--ui); color:var(--sub);
+  background:var(--bar); border-bottom:1px solid var(--line);
+}
+.vt-vw-compare-grid{ font:400 var(--fs-xs)/1.6 var(--mono); }
+.vt-vw-cmp-row{ display:grid; grid-template-columns:48px 16px minmax(0, 1fr); white-space:pre; color:var(--txt); }
+.vt-vw-cmp-row .ln{ text-align:right; padding-right:calc(var(--spacing) * 2); color:var(--sub); user-select:none; }
+.vt-vw-cmp-row .sg{ user-select:none; }
+.vt-vw-cmp-row .tx{ overflow:hidden; text-overflow:ellipsis; }
+.vt-vw-cmp-row.add{ background:var(--color-term-add-bg); }
+.vt-vw-cmp-row.add .sg{ color:var(--color-term-green); }
+.vt-vw-cmp-row.del{ background:var(--color-term-del-bg); }
+.vt-vw-cmp-row.del .sg{ color:var(--color-term-red); }
+.vt-vw-cmp-row.gap{ display:block; padding:calc(var(--spacing) * 1) calc(var(--spacing) * 3); color:var(--sub); font-family:var(--ui); background:var(--bar); }
+@media (pointer: coarse){
+  .vt-vw-conflict .vt-vw-bar-btn, .vt-vw-edit-tools .vt-vw-bar-btn{ min-height:44px; }
+  .vt-vw-bar-btn kbd{ display:none; }   /* 화상 키보드에는 ⌘S가 없다 */
 }

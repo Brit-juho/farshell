@@ -89,10 +89,8 @@ export const SCHEMA = {
   // action id(레이블 아님 — 레이블은 바뀔 수 있다) 배열을 최신순 JSON
   // 문자열로 저장한다. 기기마다 쓰는 기능이 달라 device 스코프다.
   'palette.recentCommands': { type: 'str', def: '[]', scope: 'device' },
-  // L8: 우측 레일(사용량) 접힘 상태. 폭은 지금 섹션이 하나뿐이라 고정으로 두고,
-  // 섹션이 늘어나면(변경 파일·최근 diff) 그때 폭도 설정으로 뺀다.
-  // 문서 §1 표: "ui.rail.collapsed/width · ui.dock.* → device"와 같은 부류.
-  'rightRail.collapsed':    { type: 'bool', def: false, scope: 'device' },
+  // (리디자인 9단계 — 2.0의 우측 사용량 레일과 그 접힘 키 `rightRail.collapsed`를 지웠다. 저장된 값이 남아
+  // 있어도 아래 ADR-43 키와 같은 이유로 무해하다.)
   // ADR-43(2.3.0) — 옵트인 스크롤백 영속화 자체를 없앴다(한 번도 켜진 적
   // 없어 위험만 있고 값어치가 없었다). 스키마에서 뺐다 — 이미 이 키를 저장한
   // workspace.json이 있어도 무해하다(서버는 값의 의미를 모르고 보관만 하고,
@@ -107,6 +105,17 @@ export const SCHEMA = {
   'ui.dock.collapsed':      { type: 'bool', def: false, migrate: 'vt-dock-collapsed', parse: (v) => v === '1', scope: 'device' },
   'ui.dock.width':          { type: 'int',  def: 392, min: 320, max: 560, migrate: 'vt-dock-w', scope: 'device' },
   'ui.dock.tab':            { type: 'str',  def: 'scm', migrate: 'vt-dock-tab', scope: 'device' },
+  // 리디자인 1단계(작업대) — 사이드바 하나. 폭은 **활동 전체가 공유**한다(활동을 바꿔도 칸 크기가
+  // 그대로라 터미널 refit이 없다). 기본값·폴백(새 키 → ui.dock.width → ui.rail.width, 접힘은
+  // ui.rail.collapsed → 티어 기본)은 shell/side-prefs.js가 읽을 때 적용한다 — 옛 키를 옮겨 쓰지
+  // 않으므로 migrate가 없다. 위 ui.rail.*·ui.dock.*는 그 폴백 때문에 스키마에 남는다.
+  // 활동 값 목록은 shell/activity-data.ts의 ACTIVITIES와 같아야 한다(테스트가 대조).
+  'ui.side.width':          { type: 'int',  def: 360, min: 240, max: 480, scope: 'device' },
+  'ui.side.activity':       { type: 'enum', def: 'sessions', values: ['sessions', 'scm', 'dir', 'queue', 'files', 'snippets', 'ports', 'usage', 'system'], scope: 'device' },
+  'ui.side.collapsed':      { type: 'bool', def: false, scope: 'device' },
+  // 리디자인 9단계 — 오른쪽 고정 사이드바의 패널 id(''이면 없음). 값 목록은 도구 활동의 panelId와 같아야 한다
+  // (shell/activity-data.ts, 테스트가 대조). 폭은 300 고정이라 키가 없다(shell/side-prefs.js).
+  'ui.side.pinned':         { type: 'enum', def: '', values: ['', 'vt-dock-scm', 'vt-dir', 'vt-queue', 'vt-files', 'vt-snippets', 'vt-ports', 'vt-usage', 'vt-system'], scope: 'device' },
 
   // N38(70-mobile.md §1) — compact 하단 내비의 시작 탭. 기기 스코프인 이유는
   // rail/dock 폭과 같다: 폰에서 고른 첫 화면이 맥 터미널 시작 화면에 새면 안 된다.
@@ -114,6 +123,8 @@ export const SCHEMA = {
   // 키보드가 떠도 저절로 열지 않는다 — 사용자 결정). 기본은 닫힘.
   'keybar.open':            { type: 'bool', def: false, scope: 'device' },
   'ui.mobile.home':         { type: 'enum', def: 'fleet', values: ['fleet', 'terminal'], scope: 'device' },
+  // 파일 개편 단계 5 — 폰 아래 탭 「파일」 안의 「파일 | 첨부」 전환. 마지막에 본 쪽을 이 기기에서 다시 연다.
+  'ui.mobile.filesSegment': { type: 'enum', def: 'tree', values: ['tree', 'attach'], scope: 'device' },
 
   // ADR-44 — 파일 뷰어 표면. `pane`은 2.2.0까지의
   // 동작(터미널 옆을 쪼갠다)이라 값으로 남긴다. 표면·높이·창 위치가 폰과 맥 사이에 새면
@@ -123,6 +134,9 @@ export const SCHEMA = {
   'viewer.surface':         { type: 'enum', def: 'sheet', values: ['sheet', 'float', 'pane'], scope: 'device' },
   'viewer.sheet.height':    { type: 'int',  def: 45, min: 20, max: 85, scope: 'device' },
   'viewer.float.rect':      { type: 'str',  def: '{}', scope: 'device' },
+  // 파일 트리 행 높이 — 끄면 28px(기본), 켜면 22px(사용자 선택 4 「가」). 폰은 이 값과 무관하게 44px.
+  // 화면 밀도는 기기마다 다르므로 device.
+  'files.tree.dense':       { type: 'bool', def: false, scope: 'device' },
 
   // C1(80-multihost-agents.md §1) — 레일이 지금 보고 있는 호스트. **device 스코프**인
   // 이유가 이 파일의 존재 이유 그 자체다: `/api/workspace`는 모든 기기가 공유하는
@@ -150,6 +164,18 @@ export const SCHEMA = {
   // 비어 있으면 shell/hud-data.ts의 DEFAULT_HUD_LAYOUT. 폰에는 HUD가 없고 기기마다 화면 폭이
   // 달라 device 스코프다.
   'ui.hud.layout': { type: 'str', def: '', scope: 'device' },
+  // 활동 막대 순서·숨김(설정 › 상태 막대 · 활동 막대). 형식·규칙은 shell/activity-layout.js.
+  'ui.activity.layout': { type: 'str', def: '', scope: 'device' },
+  // 리디자인 7단계 — 데스크톱 집중 모드(layout/focus.js, shell/Focus.tsx). 범위는 이 기기(시안 spec 「집중 모드 규칙」).
+  // `active`는 **저장하지 않는다**(persist:false — 이 탭의 메모리에만 있다). 새로고침하면 막대가 다시 보이는
+  // 평소 화면으로 돌아온다: 숨긴 막대를 어떻게 되돌리는지 잊은 채 다시 열었을 때 빈 화면처럼 보이지 않게 하려는 것이고,
+  // 다른 탭·다른 창이 같은 기기 설정을 읽어 따라 숨지 않게 하려는 것이다. 나머지 넷은 기기 설정으로 저장한다.
+  // hintCount는 들어올 때 안내를 본 횟수 — 3번 본 뒤에는 생략한다.
+  'ui.focus.active':     { type: 'bool', def: false, scope: 'device', persist: false },
+  'ui.focus.edgeReveal': { type: 'bool', def: true, scope: 'device' },
+  'ui.focus.pill':       { type: 'bool', def: true, scope: 'device' },
+  'ui.focus.edgeDelay':  { type: 'enum', def: '250', values: ['0', '250', '500'], scope: 'device' },
+  'ui.focus.hintCount':  { type: 'int',  def: 0, min: 0, max: 3, scope: 'device' },
   'rail.order':   { type: 'str', def: '' },
   'rail.lineage': { type: 'str', def: '', scope: 'device' },
   'rail.view':    { type: 'str', def: '', scope: 'device' },
@@ -157,6 +183,13 @@ export const SCHEMA = {
 
 function _scopeOf(key) {
   return SCHEMA[key]?.scope === 'device' ? 'device' : 'global';
+}
+
+// `persist: false` — 값은 이 탭의 메모리에만 둔다(캐시·서버에 쓰지 않고, 서버 값도 받지 않는다).
+// 구독·설정 화면·팔레트는 다른 키와 똑같이 쓴다. 스코프(배지)는 스키마의 scope 그대로다.
+const _volatile = {};
+function _isVolatile(key) {
+  return SCHEMA[key]?.persist === false;
 }
 
 // 스코프 하나의 상태 뭉치. 두 스코프가 "값 보관 + 캐시 키 + 엔드포인트"라는
@@ -201,6 +234,7 @@ export function get(key) {
     console.warn(`[settings] 알 수 없는 키: ${key}`);
     return undefined;
   }
+  if (_isVolatile(key)) return key in _volatile ? _volatile[key] : spec.def;
   const values = _stores[_scopeOf(key)].values;
   return key in values ? values[key] : spec.def;
 }
@@ -209,6 +243,7 @@ export function get(key) {
 // 있는 항목(모바일 폰트 12 vs 데스크톱 14)에서 "설정 없음"과 "설정이 기본값과
 // 같음"을 구분해야 해서 필요하다.
 export function has(key) {
+  if (_isVolatile(key)) return key in _volatile;
   return key in _stores[_scopeOf(key)].values;
 }
 
@@ -259,6 +294,12 @@ export function set(key, value) {
   if (!spec) { console.warn(`[settings] 알 수 없는 키: ${key}`); return Promise.resolve(false); }
   const v = _coerce(key, value);
   if (v === undefined) { console.warn(`[settings] ${key}에 맞지 않는 값: ${value}`); return Promise.resolve(false); }
+  if (_isVolatile(key)) {
+    if (get(key) === v) return Promise.resolve(true);
+    _volatile[key] = v;
+    _notify({ [key]: v });
+    return Promise.resolve(true);
+  }
   if (has(key) && get(key) === v && !(key in _pending[_scopeOf(key)])) return Promise.resolve(true);
   const scope = _scopeOf(key);
   _stores[scope].values[key] = v;
@@ -341,6 +382,7 @@ function _applyRemote(scope, remote, revision) {
   const next = {};
   for (const [k, v] of Object.entries(remote)) {
     if (_scopeOf(k) !== scope) continue;   // 스키마가 다른 스코프로 옮긴 키 방어
+    if (_isVolatile(k)) continue;           // 저장하지 않는 키는 서버에 남은 값도 받지 않는다
     const c = _coerce(k, v);
     if (c !== undefined) next[k] = c;
   }

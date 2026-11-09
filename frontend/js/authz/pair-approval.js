@@ -65,13 +65,14 @@ export function pairBodyHTML(req, ticks, errorMsg) {
     ${phrasesHTML(req)}
     ${elevatedHTML(req, ticks)}
     <div class="vt-authz-err" role="alert">${vtEsc(errorMsg || '')}</div>
-    <div class="vt-dialog-actions vt-authz-acts vt-pair-acts">
-      <button type="button" class="vt-btn lg vt-authz-act" data-act="deny">${t('거부')}</button>
-      <button type="button" class="vt-btn lg vt-authz-act vt-pair-allow" data-act="allow">${vtEsc(pairAllowLabel(req, [...ticks]))}</button>
-    </div>
     <p class="vt-authz-note">${vtEsc((req.pair && req.pair.note) || t('승인하면 이 묶음 안에서 두 역할 중 하나를 각자 갖습니다. 나중에 권한을 넓히려면 새로 승인해야 합니다.'))}</p>
     <p class="vt-authz-note">${t('허용한 권한은 설정의 「권한」에서 언제든 회수할 수 있습니다.')}</p>
-    <div class="vt-authz-later"><button type="button" class="vt-btn quiet vt-authz-snooze">${t('나중에')}</button></div>`;
+    <div class="vt-dialog-actions vt-authz-acts vt-authz-foot vt-pair-acts">
+      <button type="button" class="vt-btn lg vt-authz-act" data-act="deny">${t('거부')}</button>
+      <span class="vt-authz-gap"></span>
+      <button type="button" class="vt-btn lg vt-authz-act vt-pair-allow" data-act="allow">${vtEsc(pairAllowLabel(req, [...ticks]))}</button>
+      <button type="button" class="vt-btn lg quiet vt-authz-snooze">${t('나중에')}</button>
+    </div>`;
 }
 
 /** 체크 박스를 묶는다 — 체크가 바뀌면 허용 버튼 글자(= 무엇을 주는지)를 바로 고친다. */

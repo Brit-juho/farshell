@@ -548,12 +548,59 @@ def test_open_resolved_parent_refuses_parent_swapped_to_symlink(sandbox):
 
 @pytest.fixture
 def writes_on(monkeypatch):
-    monkeypatch.setattr(fsguard, "WRITES_ENABLED", True)
+    """`VT_WRITE_ROOTS`를 비우면 쓰기 경계 = 열람 경계(결정 D3)."""
+    monkeypatch.delenv("VT_WRITE_ROOTS", raising=False)
 
 
-def test_resolve_for_write_is_closed_until_writes_are_enabled(sandbox):
+def test_resolve_for_write_is_closed_when_write_roots_are_off(sandbox, monkeypatch):
+    monkeypatch.setenv("VT_WRITE_ROOTS", "off")
+    assert not fsguard.writes_enabled()
     with pytest.raises(fsguard.FsDenied):
         fsguard.resolve_for_write(str(sandbox["root"] / "proj" / "main.py"))
+
+
+def test_write_roots_default_to_browse_roots(sandbox, writes_on):
+    assert fsguard.get_write_roots() == fsguard.get_roots()
+    assert fsguard.writes_enabled()
+
+
+def test_write_roots_narrow_the_browse_boundary(sandbox, monkeypatch):
+    root = sandbox["root"]
+    (root / "other").mkdir()
+    (root / "other" / "a.txt").write_text("x")
+    monkeypatch.setenv("VT_WRITE_ROOTS", str(root / "proj"))
+    assert fsguard.resolve_for_write(str(root / "proj" / "main.py"))
+    with pytest.raises(fsguard.FsDenied):
+        fsguard.resolve_for_write(str(root / "other" / "a.txt"))     # 읽기는 되지만 쓰기 경계 밖
+    assert fsguard.resolve_under_roots(str(root / "other" / "a.txt"))
+
+
+def test_write_roots_cannot_widen_past_the_browse_boundary(sandbox, monkeypatch):
+    monkeypatch.setenv("VT_WRITE_ROOTS", str(sandbox["outside"]))
+    with pytest.raises(fsguard.FsDenied):
+        fsguard.resolve_for_write(str(sandbox["outside"] / "secret.txt"))
+
+
+@pytest.mark.parametrize("raw", ["relative/main.py", "{root}/proj/../proj/main.py", "{root}/proj/ma\x00in.py",
+                                 "{root}/proj/a\nb.py", "",
+                                 # 끝의 `/`·`.`, 빈 조각 — `Path`가 지워 링크를 따라간 대상이 판정된다
+                                 "{root}/proj/", "{root}/proj/.", "{root}/proj/./main.py", "{root}//proj/main.py",
+                                 "{root}/proj/main.py/", "{root}/proj/main.py/."])
+def test_resolve_for_write_refuses_odd_shapes(sandbox, writes_on, raw):
+    with pytest.raises(fsguard.FsDenied):
+        fsguard.resolve_for_write(raw.format(root=sandbox["root"]))
+
+
+def test_raw_write_path_allows_plain_paths_and_the_filesystem_root():
+    assert fsguard._raw_write_path("/") == "/"
+    assert fsguard._raw_write_path("/a/b.c/.d") == "/a/b.c/.d"
+
+
+@pytest.mark.parametrize("name", [".git", ".GIT", ".GitHub/ci.yml", ".VSCODE/tasks.json"])
+def test_resolve_for_write_refuses_gitfile_and_any_case(sandbox, writes_on, name):
+    """`.git` 파일(gitdir 지시)도 실행 설정이고, 대소문자를 바꿔도 같은 폴더다(macOS)."""
+    with pytest.raises(fsguard.FsDenied):
+        fsguard.resolve_for_write(str(sandbox["root"] / "proj" / name))
 
 
 def test_resolve_for_write_allows_a_normal_file_when_enabled(sandbox, writes_on):

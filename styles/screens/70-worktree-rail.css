@@ -13,39 +13,35 @@
  * 옮긴 자리의 옛 규칙은 반드시 지우고 가야 한다.
  */
 
-/* ── N36 §5 — 워크트리 레일 252px (2.1.0은 세션을 임시로 그린다, ADR-10) ──
-   기존 48px 아이콘 레일(#vt-rail)을 시각적으로 대체한다. **#vt-rail-panel/
-   #vt-rail-settings-tpl은 안 건드린다** — 데스크톱 마이크·테마 칩이 그 안에만
-   살아서, "⋯ 더보기" 메뉴가 숨은 #vt-rail-settings 버튼을 그대로 다시 누르면
-   그 플라이아웃이 예전과 똑같이 열려야 한다(Rail.tsx 주석 참고). 아이콘
-   스트립(#vt-rail) 자신만 지운다 — 그게 차지하던 자리는 이제 없으므로, 그
-   자리를 전제로 한 body 고정 패딩(48px)도 함께 무효화한다. 새 레일의 폭은
-   아래 @media 블록에서 --vt-wgrail-w로 다시 민다(같은 specificity, 파일
-   뒤쪽이라 이긴다 — !important 불필요. 패널이 열렸을 때의 추가 패딩 규칙은
-   더 구체적인 셀렉터라 그대로 이긴다). compact(<720px)에서는 이 레일도 하단
-   내비에 자리를 내주므로 통째로 숨는다(70-mobile.md 전까지는 안 보이는
-   것으로 충분). */
-#vt-rail { display:none !important; }
+/* ── N36 §5 — 워크트리 레일(2.1.0) ── 리디자인 9단계(2026-11)에 옛 48px 아이콘 레일(#vt-rail)·설정 플라이아웃
+   (#vt-rail-panel · #vt-rail-settings-tpl)을 DOM째 지웠다. compact(<720px)에서는 하단 내비가 대신한다. */
 @media (min-width:720px) {
   body { padding-left:env(safe-area-inset-left); }
 }
 
-#vt-wgrail-slot { display:contents; }
-/* 2.1.6 — 프레임(고정 배치·배경·전이·접힘 방향)은 components.css의
-   `.vt-sidepanel.left`가 맡는다. 여기 남는 건 이 패널의 폭뿐이다. */
-#vt-wgrail { width:var(--vt-wgrail-w, 252px); }
-#vt-wgrail.collapsed { width:48px !important; }
-@media (min-width:720px) {
-  #vt-wgrail { display:flex; }
-  body { padding-left:calc(env(safe-area-inset-left) + var(--vt-wgrail-w, 252px)) !important; }
-}
+/* 2026-11(리디자인 1단계) — 레일은 작업대 사이드바의 「세션」 보기다. 고정 배치·배경·
+   body padding은 작업대(`#vt-workbench.vt-sidepanel.left`, 90-workbench.css)가 맡고,
+   레일은 사이드바 폭(--vt-side-w, 활동 전체가 공유)을 그대로 채운다. 접힘(48px 띠)도
+   사이드바 폭이 48이 되는 것이라 여기서 폭을 따로 정하지 않는다. */
+#vt-wgrail { display:flex; flex-direction:column; flex:1; min-height:0; min-width:0; width:100%; }
 
+/* 머리 36(리디자인 4단계, 시안 `.sb-h`): 「세션 N」 12/600 · 아이콘 버튼 24 넷(대화 기록 · 레일 설정 ·
+   새 세션 · 접기). 대문자 라벨(patterns.css의 eyebrow)이 아니라 글자 그대로 쓴다. */
 .vt-wgrail-head {
-  display:flex; align-items:center; justify-content:space-between;
-  height:28px; padding:0 calc(var(--spacing) * 2.5); flex:none;
-  border-bottom:1px solid var(--line);
+  display:flex; align-items:center; gap:2px;
+  height:36px; padding:0 calc(var(--spacing) * 1.5) 0 calc(var(--spacing) * 3); flex:none;
+  border-bottom:1px solid var(--color-line);
 }
-.vt-wgrail-title { }
+.vt-wgrail-title {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-width:0;
+  color:var(--color-sub); font:var(--weight-semibold) var(--fs-xs) / 1 var(--font-ui);
+  letter-spacing:.02em; text-transform:none;
+}
+.vt-wgrail-title-count { color:var(--color-muted); font:var(--weight-normal) var(--fs-xs) / 1 var(--font-mono); letter-spacing:0; }
+.vt-wgrail-head .vt-icon-btn { color:var(--color-muted); }
+.vt-wgrail-head .vt-icon-btn:hover, .vt-wgrail-head .vt-icon-btn:focus-visible { color:var(--color-txt); }
+.vt-wgrail-head .vt-icon-btn[disabled] { color:var(--color-faint); cursor:not-allowed; }
+#vt-wgrail.collapsed .vt-wgrail-head { justify-content:center; padding:0; }
 /* C1(80 §1) — 호스트 스위처 칩. 제목 자리를 그대로 쓴다(호스트가 둘 이상일
    때만 렌더되므로 둘이 같이 보이는 일은 없다). 원격을 보고 있을 때만 강조색을
    주고, 오프라인이면 흐리게 — "지금 보고 있는 게 내 맥이 아니다"를 한눈에. */
@@ -109,16 +105,14 @@
 }
 /* ⚙(저장소 표시 설정)은 2026-09-18부터 그룹 머리가 아니라 레일 헤더줄
    (.vt-wgrail-head-actions)에 산다 — 이유는 Rail.tsx의 그 자리 주석. */
-.vt-wgrail-head-actions { display:flex; align-items:center; gap:calc(var(--spacing) * 0.5); flex:none; }
-.vt-wgrail-settings { opacity:.65; }
-.vt-wgrail-settings:hover, .vt-wgrail-settings:focus-visible { opacity:1; }
+.vt-wgrail-head-actions { display:flex; align-items:center; gap:2px; flex:none; margin-left:auto; }
+#vt-wgrail.collapsed .vt-wgrail-head-actions { margin-left:0; }
 /* 2026-09-21(사용자 요청) — 이름변경·재우기·완전종료 메뉴가 우클릭 전용이던
    것을 좌클릭으로도 열게 한다(RailRow.tsx). 행 자체의 좌클릭은 이미
-   열기/전환을 쓰므로 이 버튼이 유일한 진입점이다 — 위 그룹 ⚙·연필과 같은
-   옅음→호버 관용구를 그대로 쓴다. `.vt-srow`가 align-items:stretch라
-   align-self:center로 세로 중앙에 고정한다. */
-.vt-srow-menu { flex:none; align-self:center; opacity:.45; }
-.vt-srow-menu:hover, .vt-srow-menu:focus-visible { opacity:1; }
+   열기/전환을 쓰므로 이 버튼이 유일한 진입점이다. 폰 Fleet의 종료 행도 같은 버튼을 쓴다.
+   데스크톱 레일에서는 행에 마우스를 올리거나 초점이 있을 때만 드러난다(아래 「세션 행」). */
+.vt-srow-menu { flex:none; color:var(--color-muted); }
+.vt-srow-menu:hover, .vt-srow-menu:focus-visible { color:var(--color-txt); }
 /* 제자리 편집 입력 — window.prompt 대신(네이티브 다이얼로그를 안 쓴다).
    토글 버튼 자리를 그대로 대신하므로 크기·글꼴을 맞춘다. */
 .vt-wgrail-group-edit {
@@ -150,19 +144,18 @@
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-btn`이 맡는다. 빈 레일의 "워크트리 만들기" */
 
 /* 열려 있지 않은 세션은 이름이 한 단 물러난다(흐림 처리가 아니다 — 대부분의 행이 이 상태라
-   전부 흐리면 목록이 죽는다). 열림은 1줄 끝의 작은 창 아이콘과 이 색 차이로 읽는다.
+   전부 흐리면 목록이 죽는다). 폰 Fleet도 같은 규칙. 데스크톱 레일의 단계는 아래 「세션 행」.
    ⚠ screens 레이어라 components의 `.vt-srow-name`보다 이긴다 — 활성 행(열림이 전제)은 이
    규칙에 안 걸리게 `.closed`로만 건다. */
 .vt-srow.closed .vt-srow-name { color:var(--color-sub); }
-/* 종료된 세션 행 — 실행 중 행과 같은 3줄 구조. 점선 원과 흐린 이름이 "지금 안 돌아간다"를 말하고,
-   강조색 채움은 주 동작(이어서 시작) 하나뿐이다. */
+/* 종료된 세션 행 — 실행 중 행과 같은 열. 점선 원과 흐린 이름이 "지금 안 돌아간다"를 말하고,
+   강조색 채움은 주 동작(이어서 시작) 하나뿐이다. 동작 줄은 행 아래(.vt-srow-actions). */
 .vt-catalog-stopped.is-busy { opacity:.6; }
 .vt-srow.stopped { cursor:pointer; }
 .vt-srow.stopped .vt-srow-state { color:var(--color-sub); }
 .vt-srow.stopped .vt-srow-name { color:var(--color-sub); }
 .vt-srow.stopped[data-tone="warn"] .vt-srow-kw { color:var(--color-st-waiting); }
 .vt-srow.stopped[data-tone="bad"] .vt-srow-kw { color:var(--color-st-error); }
-.vt-srow.stopped > .vt-btn { flex:none; margin-right:calc(var(--spacing) * 1); }
 /* 「N개 더 보기」·보관함 진입·보관함 머리의 되돌아가기 — 글자 버튼, 테두리 없음. */
 .vt-catalog-more-link, .vt-catalog-archive-link, .vt-catalog-back {
   display:flex; align-items:center; gap:calc(var(--spacing) * 1.5);
@@ -180,50 +173,49 @@
   padding:calc(var(--spacing) * 4) calc(var(--spacing) * 2.5); text-align:center;
   color:var(--sub); font:400 var(--fs-sm) var(--mono); display:flex; flex-direction:column; gap:calc(var(--spacing) * 2); align-items:center;
 }
-/* 접힘(48px): 상태 아이콘 + 에이전트 마크만 — 이름·키워드·구역 머리는 숨긴다. 이름과
-   브랜치·키워드는 행의 툴팁이 돌려준다(RailRow.tsx의 compactSub). */
-#vt-wgrail.collapsed .vt-wgrail-row { padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 1); justify-content:center; gap:calc(var(--spacing) * 1.5); }
-#vt-wgrail.collapsed .vt-wgrail-row-main { display:none; }
-#vt-wgrail.collapsed .vt-wgrail-row > .vt-srow-state { margin-left:0; }
-.vt-wgrail-agent-compact { align-items:center; }
+/* 접힘(48px 띠, 시안 D02 「접힘 48」): 칸 40×40(반경 6) 가운데 상태 아이콘 16, 오른쪽 아래 모서리에
+   에이전트 마크 12. 개입 필요가 위(옅은 호박 바탕), 경계선 24×1, 나머지가 아래. 이름 · 브랜치 · 상태 ·
+   다른 화면 · 공유는 행의 툴팁이 돌려준다(RailRow.tsx의 compactSub). */
+#vt-wgrail.collapsed .vt-wgrail-body { display:flex; flex-direction:column; align-items:center; gap:2px; padding-top:calc(var(--spacing) * 2); }
+#vt-wgrail.collapsed .vt-wgrail-row {
+  position:relative; flex:none; width:40px; height:40px; padding:0; gap:0;
+  align-items:center; justify-content:center; border-radius:var(--radius-sm); box-shadow:none;
+}
+#vt-wgrail.collapsed .vt-wgrail-row.is-waiting { background:var(--color-st-waiting-tint); box-shadow:none; }
+#vt-wgrail.collapsed .vt-wgrail-row.active { background:var(--color-acc-soft); box-shadow:none; }
+#vt-wgrail.collapsed .vt-wgrail-row:hover { background:var(--color-bg-3); }
+#vt-wgrail.collapsed .vt-wgrail-row > .vt-srow-state { width:auto; height:auto; }
+.vt-wgrail-agent-compact { position:absolute; right:2px; bottom:2px; align-items:center; color:var(--color-muted); pointer-events:none; }
+.vt-wgrail-agent-compact svg { width:12px; height:12px; }
 .vt-wgrail-agent[data-state="working"] { color:var(--color-st-working); }
 .vt-wgrail-agent[data-state="waiting"] { color:var(--color-st-waiting); }
 .vt-wgrail-agent[data-state="done"] { color:var(--color-st-done); }
 
-/* 접힘에서 구역 라벨 대신 남는 경계선(Rail.tsx의 group-sep). 첫 그룹 위에는
-   머리 밑줄이 이미 있어 겹치므로 그 하나는 그리지 않는다. */
-.vt-wgrail-group-sep { height:1px; margin:calc(var(--spacing) * 1.5) calc(var(--spacing) * 1.5); background:var(--line); }
+/* 접힘에서 구역 라벨 대신 남는 경계선(Rail.tsx의 group-sep). */
+.vt-wgrail-group-sep { flex:none; width:24px; height:1px; margin:calc(var(--spacing) * 1.5) 0; background:var(--color-line-strong); }
 .vt-wgrail-body > .vt-wgrail-group-sep:first-child { display:none; }
 
+/* 바닥 36: 「+ 새 세션」 조용한 버튼(시안 `.sb-f`). 접힘에서는 40×32 「+」 하나. */
 .vt-wgrail-footer {
-  display:flex; align-items:stretch; border-top:1px solid var(--line); flex:none;
+  display:flex; align-items:center; height:36px; padding:0 calc(var(--spacing) * 1.5);
+  border-top:1px solid var(--color-line); flex:none;
 }
 .vt-wgrail-new {
-  flex:1;
-  display:flex;
-  align-items:center;
-  gap:calc(var(--spacing) * 2);
-  height:32px;
-  padding:0 calc(var(--spacing) * 2.5);
-  background:transparent;
-  border:0;
-  color:var(--sub);
-  font:500 var(--fs-xs) var(--mono);
-  text-align:left;
-  cursor:pointer;
-  min-width:0;
+  flex:1; min-width:0;
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5);
+  height:28px; padding:0 calc(var(--spacing) * 2);
+  background:transparent; border:0; border-radius:var(--radius-sm);
+  color:var(--color-sub); font:var(--weight-medium) var(--fs-sm) / 1 var(--font-ui);
+  text-align:left; cursor:pointer;
 }
-.vt-wgrail-new:hover { background:var(--menu-hover); color:var(--txt); }
-/* 2026-09-18(2차) — 설정·마이크가 dock으로 옮겨가며 이 푸터엔 「+」 하나만
-   남는다(styles/screens/80-dock.css에 그 자리 규칙이 있다). */
-#vt-wgrail.collapsed .vt-wgrail-new { justify-content:center; padding:0; }
+.vt-wgrail-new:hover { background:var(--color-bg-3); color:var(--color-txt); }
+.vt-wgrail-new:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
+#vt-wgrail.collapsed .vt-wgrail-footer { justify-content:center; padding:0; }
+#vt-wgrail.collapsed .vt-wgrail-new { flex:none; width:40px; height:32px; justify-content:center; padding:0; }
 .vt-wgrail-new-mark { display:inline-flex; flex:none; }
+.vt-wgrail-new-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
-.vt-wgrail-resizer {
-  right:-3px;
-}
-#vt-wgrail.collapsed .vt-wgrail-resizer { display:none; }
-.vt-wgrail-resizer.dragging { background:var(--acc); opacity:.4; }
+/* 폭 리사이저는 레일이 아니라 사이드바 하나에 있다(90-workbench.css `.vt-side-resizer`). */
 
 /* ── N44 — 워크트리 만들기 다이얼로그(30-worktree.md §3) ────────────────────
    껍데기는 .vt-viewer-backdrop/.vt-viewer-card(코드 뷰어·가이드·pane picker와
@@ -449,3 +441,174 @@ label.vt-railset-row { cursor:pointer; }
 .vt-fleet-edit-btn.active { color:var(--acc); background:var(--menu-hover); }
 .vt-fleet-order { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5); }
 .vt-fleet-group-head-sort .vt-rail-sort-opt { min-height:28px; padding:0 calc(var(--spacing) * 2.5); font-size:var(--fs-2xs); }
+
+/* ── 세션 행 · 구역 머리(리디자인 4단계, 2026-11) ────────────────────────────
+   시안 desktop.html D01 · D02 「행 해부」, spec.html 「세션 행」. 데스크톱 레일(`#vt-wgrail`) 안에서만 —
+   폰 Fleet(같은 `.vt-srow` · `.vt-lin`)은 8단계에서 바꾼다.
+     행    패딩 6/6/6/12 · 아이콘 열 16 + 간격 8 · 줄 20/18/18/18 · 이름 13/600 · 메타 12
+     구역  머리 28 · 12/600 · 셰브런 12 · 개수 mono 11
+     하위  들여쓰기 +24(아이콘이 x=36) · 1px 가지선 x=19(부모 상태 아이콘의 축)
+     답    버튼 24(1 · 예 / 3 · 아니오 / 터미널로)
+   선택 행 = --color-acc-soft + 왼쪽 2px 강조선, 개입 필요 행 = waiting 틴트 + 왼쪽 2px 호박선. 두 틴트
+   위에서는 보조 글자를 한 단 올린다(muted → sub, sub → txt — DESIGN.md §2 「Tinted rows」). 왼쪽 선과
+   행 사이 구분선은 box-shadow라 ::before/::after(가지선)와 겹치지 않는다. */
+
+/* 구역 머리 — 개입 필요 · 실행 중 · 최근 종료 · 보관함. */
+#vt-wgrail .vt-wgrail-group-head {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5);
+  height:28px; padding:0 calc(var(--spacing) * 1.5) 0 calc(var(--spacing) * 2); margin-top:var(--spacing);
+  background:transparent; color:var(--color-sub);
+  font:var(--weight-semibold) var(--fs-xs) / 1 var(--font-ui); letter-spacing:0; text-transform:none;
+}
+#vt-wgrail .vt-wgrail-body > .vt-wgrail-group-head:first-child { margin-top:0; }
+#vt-wgrail .vt-wgrail-group-toggle { flex:1; gap:calc(var(--spacing) * 1.5); height:100%; }
+#vt-wgrail .vt-wgrail-group-caret { color:var(--color-muted); }
+#vt-wgrail .vt-wgrail-group-count { opacity:1; color:var(--color-muted); font:var(--weight-medium) var(--fs-3xs) / 1 var(--font-mono); }
+/* 캐럿 없는 머리(실행 중)도 글자 줄을 캐럿 있는 머리와 맞춘다(캐럿 12 + 간격 6). */
+#vt-wgrail .vt-wgrail-group-head > .vt-wgrail-group-label:first-child { padding-left:18px; }
+#vt-wgrail .vt-wgrail-group-head.is-wait,
+#vt-wgrail .vt-wgrail-group-head.is-wait .vt-wgrail-group-count { color:var(--color-st-waiting); }
+#vt-wgrail .vt-wgrail-group-act { margin-left:auto; color:var(--color-muted); }
+#vt-wgrail .vt-wgrail-group-act:hover, #vt-wgrail .vt-wgrail-group-act:focus-visible { color:var(--color-txt); }
+
+/* 정렬 전환(이름순 · 수동) — 높이 20 세그먼트. */
+#vt-wgrail .vt-rail-sort {
+  height:20px; padding:1px; gap:1px; box-sizing:border-box;
+  border:1px solid var(--color-line-strong); border-radius:var(--radius-sm); background:var(--color-bg-2);
+}
+#vt-wgrail .vt-rail-sort-opt {
+  min-height:0; height:16px; padding:0 calc(var(--spacing) * 2); border-radius:var(--radius-xs);
+  color:var(--color-muted); font:var(--weight-normal) var(--fs-xs) / 16px var(--font-ui);
+}
+#vt-wgrail .vt-rail-sort-opt[aria-checked="true"] { background:var(--color-bg-raised); color:var(--color-txt); box-shadow:0 0 0 1px var(--color-line-strong); }
+
+/* 묶음 뷰 머리 — 구역 머리와 같은 줄(묶음 아이콘 · 제목 · 개수 · 연필). */
+#vt-wgrail .vt-view-group { margin:0; border-bottom:0; }
+#vt-wgrail .vt-view-group-head {
+  height:28px; min-height:28px; margin-top:var(--spacing); gap:calc(var(--spacing) * 1.5);
+  padding:0 calc(var(--spacing) * 1.5) 0 calc(var(--spacing) * 2);
+}
+#vt-wgrail .vt-view-group-ico { margin-left:18px; }
+#vt-wgrail .vt-view-group-title { flex:0 1 auto; color:var(--color-sub); font:var(--weight-semibold) var(--fs-xs) / 1 var(--font-ui); }
+#vt-wgrail .vt-view-group-count { color:var(--color-muted); font:var(--weight-medium) var(--fs-3xs) / 1 var(--font-mono); }
+#vt-wgrail .vt-view-group-rename { margin-left:auto; width:24px; height:24px; min-height:24px; padding:0; color:var(--color-muted); }
+
+/* 행 — 왼쪽 16px 아이콘 열 + 오른쪽 줄 묶음. */
+#vt-wgrail .vt-srow {
+  position:relative; display:flex; align-items:flex-start; gap:calc(var(--spacing) * 2);
+  padding:6px 6px 6px 12px; border-bottom:0; background:transparent; z-index:auto;
+  box-shadow:inset 0 1px 0 var(--color-line);
+}
+/* 구역 머리 바로 아래 첫 행에는 구분선을 긋지 않는다(시안: 행과 행 사이에만). */
+#vt-wgrail .vt-wgrail-body > .vt-srow:first-child,
+#vt-wgrail .vt-wgrail-group-head + .vt-srow,
+#vt-wgrail .vt-wgrail-group-head + .vt-lin > .vt-srow,
+#vt-wgrail .vt-wgrail-group-head + .vt-catalog-stopped > .vt-srow,
+#vt-wgrail .vt-view-group-head + .vt-srow { box-shadow:none; }
+#vt-wgrail .vt-srow:hover { background:var(--color-bg-3); }
+#vt-wgrail .vt-srow:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
+#vt-wgrail .vt-srow.active { background:var(--color-acc-soft); box-shadow:inset 2px 0 0 var(--color-acc); }
+#vt-wgrail .vt-srow.is-waiting { background:var(--color-st-waiting-tint); box-shadow:inset 2px 0 0 var(--color-st-waiting); }
+#vt-wgrail .vt-srow > .vt-srow-state { flex:none; width:16px; height:20px; margin:0; justify-content:center; }
+#vt-wgrail .vt-srow-main { gap:2px; }
+
+/* 1줄 20 — 에이전트 14 · 이름 13/600 · 위임 토글 · 경과 mono 12 · ⋯ 24. */
+#vt-wgrail .vt-srow-top { height:20px; gap:calc(var(--spacing) * 1.5); }
+#vt-wgrail .vt-srow-agent { color:var(--color-muted); }
+#vt-wgrail .vt-srow-agent svg { width:14px; height:14px; }
+#vt-wgrail .vt-srow-name {
+  flex:0 1 auto; color:var(--color-txt);
+  font:var(--weight-semibold) var(--fs-sm) / 20px var(--font-ui);
+}
+#vt-wgrail .vt-srow.active .vt-srow-name { color:var(--color-txt); }
+/* 유휴 행은 이름이 sub · 500, 칸에 없는 행은 muted · 500 — 흐림(opacity)이 아니라 글자 단계로. */
+#vt-wgrail .vt-srow.is-quiet .vt-srow-name { color:var(--color-sub); font-weight:var(--weight-medium); }
+#vt-wgrail .vt-srow.closed .vt-srow-name { color:var(--color-muted); font-weight:var(--weight-medium); }
+#vt-wgrail .vt-srow.stopped .vt-srow-name { color:var(--color-sub); font-weight:var(--weight-medium); }
+#vt-wgrail .vt-srow-elapsed { font-size:var(--fs-xs); }
+#vt-wgrail .vt-srow-menu { margin:-2px -2px -2px 0; display:none; }
+#vt-wgrail .vt-srow:hover .vt-srow-menu,
+#vt-wgrail .vt-srow:focus-within .vt-srow-menu,
+#vt-wgrail .vt-srow.active .vt-srow-menu { display:inline-flex; }
+@media (hover:none) { #vt-wgrail .vt-srow-menu { display:inline-flex; } }
+#vt-wgrail .vt-wgrail-name-edit { height:20px; font:var(--weight-semibold) var(--fs-sm) / 1 var(--font-ui); }
+
+/* 부모 행의 「위임 보고 1/2」 토글(시안 `.dlg-t`). */
+#vt-wgrail .vt-srow-kids {
+  min-height:0; height:18px; gap:3px; padding:0 calc(var(--spacing) * 1);
+  border:1px solid var(--color-line-strong); border-radius:var(--radius-xs);
+  color:var(--color-sub); font:var(--weight-medium) var(--fs-3xs) / 16px var(--font-ui);
+}
+.vt-srow-kids-ico { display:inline-flex; flex:none; }
+
+/* 2~4줄 18 — 메타 12. 2줄만 mono. */
+#vt-wgrail .vt-srow-line2,
+#vt-wgrail .vt-srow-line3,
+#vt-wgrail .vt-srow-line4 {
+  height:18px; gap:calc(var(--spacing) * 1.5); overflow:hidden;
+  color:var(--color-muted); font:var(--weight-normal) var(--fs-xs) / 18px var(--font-ui);
+}
+#vt-wgrail .vt-srow-line2 { font-family:var(--font-mono); }
+#vt-wgrail .vt-srow-line2 .vt-srow-branch { flex:0 0 auto; max-width:60%; }   /* 브랜치 먼저 온전히, 모자라면 디렉터리가 줄임표 */
+#vt-wgrail .vt-srow-directory { flex:0 1 auto; }
+#vt-wgrail .vt-srow-directory + .vt-srow-branch::before { content:none; }
+/* 작업 공간 종류 — 별도 워크트리(WT)만 강조 상자, 메인 체크아웃은 보조 글자 그대로(행마다 상자가 생기지 않게). */
+#vt-wgrail .vt-srow-workspace-kind { color:inherit; font-family:var(--font-ui); }
+#vt-wgrail .vt-srow-workspace-kind[data-kind="wt"] {
+  color:var(--color-acc); font:var(--weight-semibold) var(--fs-3xs) / 14px var(--font-mono);
+  border:1px solid color-mix(in srgb, var(--color-acc) 45%, transparent); border-radius:3px; padding:0 3px;
+}
+#vt-wgrail .vt-wgrail-diff { font:inherit; color:var(--color-muted); }
+#vt-wgrail .vt-srow-pending { font-family:var(--font-ui); color:var(--color-faint); }
+#vt-wgrail .vt-srow-kw { font-weight:var(--weight-semibold); }
+#vt-wgrail .vt-srow-tool { color:var(--color-sub); }
+#vt-wgrail .vt-srow-badge {
+  display:inline-flex; align-items:center; height:18px; padding:0 6px; box-sizing:border-box;
+  border:1px solid var(--color-line-strong); border-radius:var(--radius-xs);
+  color:var(--color-sub); font:var(--weight-medium) var(--fs-3xs) / 1 var(--font-ui);
+}
+#vt-wgrail .vt-srow-kidnote { flex:none; color:var(--color-muted); }
+#vt-wgrail .vt-srow-share { color:var(--color-sub); }
+#vt-wgrail .vt-srow-share[data-mode="readwrite"] { color:var(--color-st-waiting); }
+
+/* 틴트 행(선택 · 개입 필요) — 보조 글자 한 단 올림. 키워드의 상태색은 그대로 둔다(개입 필요의
+   호박 키워드는 components.css가 본문색으로 바꾼다 — 같은 색상각 틴트 위라 대비가 떨어진다). */
+#vt-wgrail .vt-srow.active :is(.vt-srow-line2, .vt-srow-line3, .vt-srow-line4, .vt-srow-elapsed, .vt-srow-agent, .vt-wgrail-diff, .vt-srow-kidnote),
+#vt-wgrail .vt-srow.is-waiting :is(.vt-srow-line2, .vt-srow-line3, .vt-srow-line4, .vt-srow-elapsed, .vt-srow-agent, .vt-wgrail-diff, .vt-srow-kidnote) { color:var(--color-sub); }
+#vt-wgrail .vt-srow.active :is(.vt-srow-branch, .vt-srow-tool, .vt-srow-screens, .vt-srow-clients, .vt-srow-badge, .vt-srow-share:not([data-mode="readwrite"])),
+#vt-wgrail .vt-srow.is-waiting :is(.vt-srow-branch, .vt-srow-tool, .vt-srow-screens, .vt-srow-clients, .vt-srow-badge, .vt-srow-share:not([data-mode="readwrite"])) { color:var(--color-txt); }
+#vt-wgrail .vt-srow.active.closed .vt-srow-name,
+#vt-wgrail .vt-srow.is-waiting.closed .vt-srow-name { color:var(--color-sub); }
+#vt-wgrail .vt-srow.is-waiting .vt-srow-pending,
+#vt-wgrail .vt-srow.active .vt-srow-pending { color:var(--color-muted); }
+
+/* 답 버튼 줄(24). 행을 누른 것과 따로 — 버튼 줄의 클릭은 행으로 올라가지 않는다(AnswerButtons). */
+#vt-wgrail .vt-srow-answers .vt-btn,
+#vt-wgrail .vt-srow-actions .vt-btn { --btn-h:24px; padding:0 calc(var(--spacing) * 2); border-radius:var(--radius-xs); font-size:var(--fs-xs); gap:calc(var(--spacing) * 1); }
+#vt-wgrail .vt-srow-answers .vt-btn.quiet,
+#vt-wgrail .vt-srow-actions .vt-btn.quiet { color:var(--color-sub); }
+
+/* 종료 행 — 동작 줄은 마우스를 올리거나 초점이 있을 때만(시안 사이드바의 종료 행은 2줄). 터치는 늘 보인다. */
+@media (hover:hover) and (pointer:fine) {
+  #vt-wgrail .vt-srow.stopped .vt-srow-actions { display:none; }
+  #vt-wgrail .vt-srow.stopped:hover .vt-srow-actions,
+  #vt-wgrail .vt-srow.stopped:focus-within .vt-srow-actions { display:flex; }
+}
+
+/* 위임 하위 행 — 부모 아이콘 축(x=19)에서 내려오는 1px 가지선. 폰 Fleet의 색 레인(.vt-lin-fleet)은 그대로 둔다.
+   부모 행은 아이콘 아래(6 + 20 + 2 = y 28)부터 선을 내리고, 하위 행은 위에서 아이콘 가운데(y 16)까지 와서 꺾인다. */
+#vt-wgrail .vt-lin.has-kids > .vt-srow::after {
+  left:19px; top:28px; bottom:0; width:0; border:0; border-left:1px solid var(--color-line-strong); border-radius:0;
+}
+#vt-wgrail .vt-lin-kid > .vt-srow { padding-left:36px; }
+#vt-wgrail .vt-lin-kid::before {
+  left:19px; top:0; width:10px; height:16px; z-index:1;
+  border:0; border-left:1px solid var(--color-line-strong); border-bottom:1px solid var(--color-line-strong); border-bottom-left-radius:5px;
+}
+#vt-wgrail .vt-lin-kid:not(.last)::after {
+  left:19px; top:16px; width:0; z-index:1; background:none; border-left:1px solid var(--color-line-strong);
+}
+#vt-wgrail .vt-lin-fold { min-height:28px; padding-left:30px; }
+#vt-wgrail .vt-lin-fold-btn { color:var(--color-muted); font:var(--weight-normal) var(--fs-xs) / 1 var(--font-ui); }
+/* 하위 행의 줄은 구분선 대신 가지선이 묶는다. */
+#vt-wgrail .vt-lin-kid > .vt-srow:not(.active):not(.is-waiting) { box-shadow:none; }

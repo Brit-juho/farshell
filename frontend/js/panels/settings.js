@@ -26,6 +26,7 @@ import { renderHudSection } from './settings/sections/hud.js';
 import { getAction } from '../core/dom.js';
 import { subscribePersistence } from '../core/settings.js';
 import { t } from '../core/i18n.js';
+import { icon } from '../ui/icons.js';
 
 const PANEL_ID = 'vt-settings';
 
@@ -93,9 +94,12 @@ function renderSearch() {
     const query = input.value.trim().toLocaleLowerCase();
     results.innerHTML = '';
     if (!query) { results.hidden = true; return; }
+    // 폰에서 안 보이는 섹션(상태 막대 · 활동 막대)의 항목은 검색에도 안 나온다.
+    const shown = shownSections();
     const matches = SEARCH_ITEMS.filter((item) => {
-      const section = SECTIONS.find((s) => s.id === item.sectionId);
-      return `${item.label} ${SEARCH_ALIASES[item.label] || ''} ${section?.label || ''} ${section?.description || ''}`.toLocaleLowerCase().includes(query);
+      const section = shown.find((s) => s.id === item.sectionId);
+      if (!section) return false;
+      return `${item.label} ${SEARCH_ALIASES[item.label] || ''} ${section.label} ${section.description || ''}`.toLocaleLowerCase().includes(query);
     });
     results.hidden = false;
     if (!matches.length) {
@@ -205,7 +209,8 @@ export function showSettings(section) {
   const panel = openPanel({
     id: PANEL_ID,
     ariaLabel: t('설정'),
-    headHTML: `<div class="vt-vw-title">${t('설정')}</div><div class="vt-set-save" id="vt-set-save" role="status" aria-live="polite" data-state="saved">${t('변경 사항 자동 저장')}</div>`,
+    // 머리: 톱니 16 + 「설정」 15/600, 오른쪽에 자동 저장 상태(리디자인 9단계, 시안 O04).
+    headHTML: `<div class="vt-vw-title">${icon('settings', 16)}${t('설정')}</div><div class="vt-set-save" id="vt-set-save" role="status" aria-live="polite" data-state="saved">${t('변경 사항 자동 저장')}</div>`,
     bodyId: 'vt-set-body',
     extraClass: 'vt-settings vt-wide',
     onClose: () => { cleanupVoiceClients(); disposePreview(); if (_persistenceUnsub) { _persistenceUnsub(); _persistenceUnsub = null; } },

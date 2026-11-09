@@ -1,0 +1,189 @@
+/* 제목 막대 36 · 상태 막대 24 (리디자인 2단계, 2026-11)
+ *
+ * 시안: docs/local의 redesign-2026-11 specimen(desktop.html D01/D04, overlays.html O05/O07, spec.html 「제목 막대」
+ * 「상태 막대」). 높이는 10-shell.css의 --titlebar-h / --statusbar-h(compact는 0)이고 body padding이 그만큼 비운다.
+ *
+ *   #vt-titlebar  shell/TitleBar.tsx — FarShell 메뉴 · 호스트 · 저장소 › 브랜치 › 세션 · 가운데 팔레트 입력 · 도구
+ *   #vt-hud       shell/Hud.tsx      — 에이전트 칩(고정) · 토스트 메시지 칸 · 왼쪽 칩 ── 오른쪽 칩(시계)
+ *
+ * 색은 3단계가 들여오는 크롬 토큰을 먼저 읽고, 아직 없으면 지금 토큰으로 떨어진다(이 단계는 tokens.css·skins.css를
+ * 건드리지 않는다). 사이드바(.vt-sidepanel)와 같은 --bar가 기본이라 세 면이 한 판으로 읽힌다.
+ *
+ * ⚠ 높이·폭·padding에 transition을 두지 않는다 — 두 막대의 높이는 칸 크기를 정한다(터미널 refit·SIGWINCH).
+ * ⚠ 이 파일은 main.css에서 `layer(legacy)`로, screens 가운데 마지막에 import된다. */
+
+#vt-titlebar, #vt-hud { display:none; }   /* compact — #topbar 52 · 하단 내비 52가 그 자리를 쓴다 */
+
+@media (min-width:720px) {
+  /* ── 제목 막대 36 ───────────────────────────────────────────────────────── */
+  #vt-titlebar {
+    position:fixed; top:env(safe-area-inset-top,0px); left:0; right:0; z-index:75;
+    height:var(--titlebar-h);
+    /* 가운데 팔레트 입력을 창 가운데에 두는 세 칸. 양옆이 1fr씩이라 왼쪽이 길어져도 입력이 밀리지 않고,
+       좁아지면 양옆(호스트·경로)이 먼저 줄어든다. */
+    display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:center;
+    column-gap:calc(var(--spacing) * 3);
+    padding:0 calc(var(--spacing) * 2);   /* 좌우 같게 — 1fr 두 칸이 같아야 입력이 정확히 가운데 */
+    background:var(--color-titlebar-bg, var(--bar));
+    box-shadow:inset 0 -1px var(--line);
+    font:var(--weight-normal) var(--fs-sm) var(--font-ui); color:var(--sub);
+    user-select:none; overflow:hidden;
+  }
+  /* 마운트 전(정적 마크업만 있을 때) — 신호등은 왼쪽 끝, 도구는 오른쪽 끝. 마운트 뒤에는 막대 안 자리로 옮겨 간다. */
+  #vt-titlebar > #vt-mb-lead { grid-column:1; justify-self:start; }
+  #vt-titlebar > #vt-mb-tools { grid-column:3; justify-self:end; }
+
+  .vt-tb-left, .vt-tb-right { display:flex; align-items:center; gap:calc(var(--spacing) * .5); min-width:0; }
+  .vt-tb-left { grid-column:1; overflow:hidden; }
+  .vt-tb-right { grid-column:3; justify-content:flex-end; }
+  .vt-tb-home { display:contents; }
+  .vt-tb-ico { display:inline-flex; flex:none; }
+  .vt-tb-ico svg { display:block; }
+
+  #vt-mb-lead { display:flex; align-items:center; flex:none; }
+  #vt-mb-tools { display:flex; align-items:center; gap:calc(var(--spacing) * .5); flex:none; }
+  #vt-titlebar .traffic { padding:0 calc(var(--spacing) * 2) 0 calc(var(--spacing) * 1.5); }
+  #vt-titlebar .traffic i { width:12px; height:12px; }
+  #vt-titlebar #keybar-open-btn { width:28px; height:28px; flex:none; }
+  #vt-titlebar #keybar-open-btn svg { width:16px; height:16px; }
+  #vt-titlebar .caption { margin-left:calc(var(--spacing) * 1); margin-right:calc(var(--spacing) * -2); }
+  #vt-titlebar .caption span { height:var(--titlebar-h); width:44px; }
+
+  /* FarShell 메뉴 — 첫 칸. 이름은 굵게, 아이콘은 강조색. 승인 대기 배지(.vt-authz-badge)가 모서리에 붙는다. */
+  .vt-mb-menu {
+    position:relative;
+    display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); flex:none;
+    height:28px; padding:0 calc(var(--spacing) * 2); cursor:pointer;
+    border:0; border-radius:var(--radius-sm); background:transparent;
+    color:var(--txt); font:var(--weight-semibold) var(--fs-sm) var(--font-ui);
+  }
+  .vt-mb-menu > .vt-tb-ico:first-child { color:var(--acc); }
+  .vt-mb-menu > .vt-tb-ico:last-child { color:var(--color-muted); }
+  .vt-mb-menu .vt-authz-badge { top:-2px; right:-4px; }
+  .vt-mb-menu:hover, .vt-mb-menu[aria-expanded="true"] { background:var(--menu-hover); }
+  .vt-mb-menu:focus-visible { outline:2px solid var(--acc); outline-offset:-2px; }
+
+  /* 호스트 — 이 화면이 보는 맥. 맥이 둘 이상일 때만 버튼(▾)이고, 아니면 같은 모양의 이름표다. */
+  .vt-tb-host-wrap { display:flex; align-items:center; min-width:0; flex:0 1 auto; }
+  .vt-tb-host {
+    display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-width:0;
+    height:28px; padding:0 calc(var(--spacing) * 2);
+    border:0; border-radius:var(--radius-sm); background:transparent;
+    color:var(--txt); font:var(--weight-medium) var(--fs-sm) var(--font-ui); white-space:nowrap;
+  }
+  .vt-tb-host > .vt-tb-ico { color:var(--sub); }
+  .vt-tb-host > .vt-tb-ico:last-child { color:var(--color-muted); }
+  .vt-tb-host .vt-workspace-host { min-width:0; overflow:hidden; text-overflow:ellipsis; color:inherit; }
+  /* 다른 맥을 보고 있다 — 레일 스위처(.vt-wgrail-host.remote)와 같은 강조색. */
+  .vt-tb-host.remote, .vt-tb-host.remote > .vt-tb-ico { color:var(--acc); }
+  button.vt-tb-host { cursor:pointer; }
+  button.vt-tb-host:hover, button.vt-tb-host.open { background:var(--menu-hover); }
+  button.vt-tb-host:focus-visible { outline:2px solid var(--acc); outline-offset:-2px; }
+
+  /* 저장소 › 브랜치 › 세션 — 마지막 조각(지금 칸의 세션)만 본문 색. 넘치면 앞 조각부터 줄인다. */
+  .vt-tb-crumb {
+    display:flex; align-items:center; gap:calc(var(--spacing) * 1); min-width:0; flex:0 1 auto;
+    padding-left:calc(var(--spacing) * 1.5); margin-left:calc(var(--spacing) * .5);
+    box-shadow:inset 1px 0 var(--line);
+    color:var(--color-muted); font:var(--weight-normal) var(--fs-sm) var(--font-ui); white-space:nowrap;
+  }
+  .vt-tb-crumb-part { min-width:0; overflow:hidden; text-overflow:ellipsis; color:var(--sub); font-weight:var(--weight-medium); }
+  .vt-tb-crumb-part.repo, .vt-tb-crumb-part.branch { flex:0 1 auto; max-width:200px; }
+  .vt-tb-crumb-part.cur { color:var(--txt); flex:0 0 auto; max-width:240px; }
+  .vt-tb-crumb-part.branch { font-family:var(--font-mono); font-size:var(--fs-xs); }
+  .vt-tb-crumb-sep { display:inline-flex; flex:none; }
+
+  /* 팔레트 입력 — 진짜 입력란이 아니라 팔레트(⌘K)를 여는 버튼. 360×24, regular는 280. */
+  .vt-tb-palette {
+    grid-column:2;
+    display:flex; align-items:center; gap:calc(var(--spacing) * 2);
+    width:360px; height:24px; padding:0 calc(var(--spacing) * 1.5) 0 calc(var(--spacing) * 2.5);
+    border:1px solid var(--color-line-strong); border-radius:var(--radius-sm);
+    background:var(--color-bg-0); color:var(--color-muted); cursor:pointer;
+    font:var(--weight-normal) var(--fs-xs) var(--font-ui); text-align:left;
+  }
+  .vt-tb-palette-ph { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .vt-tb-kbd {
+    flex:none; padding:0 calc(var(--spacing) * 1.25); border-radius:var(--radius-sm);
+    background:var(--menu-hover); color:var(--sub);
+    font:var(--weight-medium) var(--fs-3xs) / 16px var(--font-mono);
+  }
+  .vt-tb-palette:hover { border-color:color-mix(in srgb, var(--acc) 40%, var(--color-line-strong)); color:var(--sub); }
+  .vt-tb-palette:focus-visible { outline:2px solid var(--acc); outline-offset:1px; }
+
+  /* ── 상태 막대 24 ───────────────────────────────────────────────────────── */
+  #vt-hud {
+    position:fixed; bottom:env(safe-area-inset-bottom,0px); left:0; right:0; z-index:75;
+    height:var(--statusbar-h);
+    display:flex; align-items:center; gap:0;
+    padding:0 calc(var(--spacing) * 1);
+    background:var(--color-statusbar-bg, var(--bar));
+    box-shadow:inset 0 1px var(--line);
+    font:var(--weight-normal) var(--fs-xs) var(--font-ui); color:var(--color-statusbar-fg, var(--sub));
+    /* 좁아지면 Hud.tsx fitChips가 순위 낮은 칩부터 접는다. 그래도 하나가 안 들어가는 극단의 바닥이 가로 스크롤이다. */
+    overflow-x:auto; overflow-y:hidden; scrollbar-width:none; user-select:none; white-space:nowrap;
+  }
+  #vt-hud::-webkit-scrollbar { display:none; }
+}
+
+/* 칩 — 상태 막대(Hud.tsx)와 설정 「상태 막대」 미리보기(sections/hud.js)가 같은 마크업을 쓴다. 미리보기는 compact에서
+   숨으므로(설정 섹션 desktopOnly) 미디어쿼리 밖에 둔다. */
+.vt-hud-spacer { flex:1; min-width:0; }
+.vt-hud-chip {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.25); flex:none;
+  height:var(--statusbar-h, 24px); padding:0 calc(var(--spacing) * 2); white-space:nowrap;
+}
+/* 맨 왼쪽 고정 — 에이전트 칩(-4) · 토스트 메시지 칸(-3, components.css) · 나머지(0). */
+.vt-hud-chip[data-chip="agents"] { order:-4; color:var(--txt); }
+.vt-hud-chip[data-chip="agents"].tone-warn { background:color-mix(in srgb, var(--warn) 10%, transparent); }
+.vt-hud-label { color:var(--sub); }
+.vt-hud-value { color:var(--txt); font-weight:var(--weight-semibold); font-variant-numeric:tabular-nums; }
+.vt-hud-hint  { color:var(--color-muted); }
+.vt-hud-chip.tone-ok    .vt-hud-value { color:var(--ok); }
+.vt-hud-chip.tone-warn  .vt-hud-value { color:var(--warn); }
+.vt-hud-chip.tone-err   .vt-hud-value { color:var(--err); }
+.vt-hud-dot { background:var(--ok); }
+.vt-hud-chip.tone-warn .vt-hud-dot { background:var(--warn); }
+.vt-hud-chip.tone-err  .vt-hud-dot { background:var(--err); }
+.vt-hud-chip.clickable { cursor:pointer; }
+.vt-hud-chip.clickable:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-hud-chip.clickable:focus-visible { outline:2px solid var(--acc); outline-offset:-2px; }
+/* Hud.tsx의 fitChips가 폭이 모자랄 때 순위가 낮은 칩부터 붙인다. Solid <For>가 관리하는 노드라 DOM에서 빼지 않고
+   클래스로만 감춘다. */
+.vt-hud-chip.overflow-hidden { display:none; }
+/* info/success 토스트가 메시지 칸(#vt-hud-msg)을 띄우는 동안(toast.js가 .vt-hud-busy) 다른 칩은 비켜선다.
+   에이전트 칩은 남는다 — 개입이 필요한 세션이 있다는 사실은 토스트 몇 초 동안에도 가려지면 안 된다. 칩은 DOM에서
+   빼지 않고 숨기기만 한다(Solid <For>의 노드를 뒤에서 지우면 실제 DOM과 어긋난다). */
+#vt-hud.vt-hud-busy .vt-hud-chip:not([data-chip="agents"]),
+#vt-hud.vt-hud-busy .vt-hud-spacer,
+#vt-hud.vt-hud-busy .vt-hud-stale { display:none; }
+
+/* FarShell 메뉴 드롭다운 — body로 꺼내 그린다(Portal). 위치는 버튼 아래로 JS가 잡는다. */
+.vt-mb-pop {
+  position:fixed; z-index:620; min-width:240px; max-width:min(360px, calc(100vw - 16px));
+  padding:calc(var(--spacing) * 1.5); border-radius:var(--radius-lg);
+  background:var(--menu); color:var(--txt); border:1px solid var(--line); box-shadow:var(--shadow-e2);
+  font:var(--weight-normal) var(--fs-xs) var(--font-ui);
+}
+.vt-mb-item {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 2.5); width:100%;
+  height:28px; padding:0 calc(var(--spacing) * 2); border:0; border-radius:var(--radius-sm);
+  background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer;
+}
+.vt-mb-item svg { width:14px; height:14px; flex:none; color:var(--sub); }
+.vt-mb-item:hover, .vt-mb-item:focus-visible { background:var(--menu-hover); outline:none; }
+.vt-mb-item[disabled] { opacity:.45; cursor:default; }
+.vt-mb-item .vt-mb-label { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-mb-item .vt-mb-keys { color:var(--color-muted); font:var(--weight-normal) var(--fs-3xs) var(--font-mono); }
+.vt-mb-sep { height:1px; margin:calc(var(--spacing) * 1) calc(var(--spacing) * 1); background:var(--line); }
+
+/* regular(720~1279) — 경로는 숨기고 팔레트 입력은 280으로 줄인다(시안 D04). */
+@media (min-width:720px) and (max-width:1279.98px) {
+  .vt-tb-crumb { display:none; }
+  .vt-tb-palette { width:280px; }
+}
+/* regular 아래쪽(~900) — 팔레트 입력의 안내 문구를 빼고 ⌘K만 남긴다. 양옆이 쓸 폭을 돌려준다. */
+@media (min-width:720px) and (max-width:899.98px) {
+  .vt-tb-palette { width:auto; min-width:120px; }
+  .vt-tb-palette-ph { display:none; }
+}

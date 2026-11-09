@@ -185,6 +185,16 @@ export function setPlacement(nextMap) {
 
 export function beginDrag() { _gate.beginDrag(); }
 export function endDrag() { _gate.endDrag(); }
+// 지연 청크(shell — 작업대 사이드바 리사이저)가 쓰는 브리지. 그 청크는 이 파일을 정적
+// import 하면 게이트 상태(_gate)가 청크 안에 복제돼 앱의 게이트와 다른 객체가 된다(ADR-26).
+// 'begin'이면 그때부터 크기 변화의 fit을 미루고, 'end'면 미룬 세션만 한 번씩 fit한다 —
+// 폭을 끄는 동안 매 프레임 refit·SIGWINCH가 나가지 않게.
+if (typeof window !== 'undefined') {
+  window.vtSurfaceDrag = (phase) => {
+    if (phase === 'begin') _gate.beginDrag();
+    else if (phase === 'end') _gate.endDrag();
+  };
+}
 // N43 §8 — 리사이즈 오버레이가 "나머지 N개 유예" 문구를 그릴지 판단하는 데 쓴다.
 // 실제 게이트 상태를 그대로 읽으므로, 게이트 동작이 바뀌면 문구도 저절로 맞는다.
 export function pendingCount() { return _gate.pendingSize(); }

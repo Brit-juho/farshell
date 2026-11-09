@@ -1,7 +1,9 @@
 // ADR-44 — 파일 뷰어 오버레이. pane 트리 밖에 있어서
 // 열고 닫아도 터미널 cols×rows가 바뀌지 않는다(fit도 SIGWINCH도 안 일어난다).
 import { openPanel, closePanel } from '../panel.js';
-import { renderFile, refreshFile, refreshGap, jumpToLine, disposeViewer } from './file.js';
+import { renderFile, refreshFile, refreshGap, jumpToLine, disposeViewer, downloadFsPath, viewerRev } from './file.js';
+import { downloadBlockedReason } from './download.js';
+import { confirmLeave, dirtyEditors } from './edit.js';
 import { isCrossHost } from './file-load.js';
 import { watchPath, coalesce } from '../../shell/fs-watch.js';
 import { _viewerState, _shareFile } from './state.js';
@@ -63,6 +65,7 @@ function _surface() {
 function _headHTML() {
   return '<div class="vt-file-title"><span class="vt-file-name"></span><span class="vt-file-dir"></span></div>'
     + `<button type="button" class="vt-icon-btn vt-file-refresh" aria-label="${t('새로고침')}" data-tip="${t('새로고침')}">${icon('refresh-cw', 14)}</button>`
+    + `<button type="button" class="vt-icon-btn vt-file-download" aria-label="${t('다운로드')}" data-tip="${t('다운로드')}">${icon('download', 14)}</button>`
     + `<button type="button" class="vt-icon-btn vt-file-share" aria-label="${t('공유 링크 만들기')}" data-tip="${t('공유 링크 만들기')}">${icon('link', 14)}</button>`
     + `<button type="button" class="vt-icon-btn vt-file-float" aria-pressed="false">${icon('app-window', 14)}</button>`
     + `<button type="button" class="vt-icon-btn vt-file-topane" aria-label="${t('페인으로 열기')}" data-tip="${t('페인으로 열기')}">${icon('columns-2', 14)}</button>`;
@@ -157,6 +160,11 @@ function _setFile(el, path, opts = {}) {
   const cross = isCrossHost(fileHost);
   el.querySelector('.vt-file-share').hidden = cross;
   el.querySelector('.vt-file-topane').hidden = cross;
+  // 다운로드는 이 컴퓨터의 파일만(결정 D7) — 원격이면 숨기지 않고 흐리게 두고 이유를 툴팁에 적는다(시안 F02-C).
+  const dl = el.querySelector('.vt-file-download');
+  const blocked = downloadBlockedReason(fileHost);
+  if (blocked) dl.setAttribute('aria-disabled', 'true'); else dl.removeAttribute('aria-disabled');
+  dl.dataset.tip = blocked || t('다운로드');
   // 요청마다 새 호스트에 그린다. 늦게 도착한 이전 파일은 떨어져 나간 호스트에 그려져 무해하다.
   const host = document.createElement('div');
   host.className = 'vt-vw-code-pane';
@@ -174,20 +182,9 @@ function _setRect(el, r) {
   for (const k of ['x', 'y', 'w', 'h']) el.style.setProperty(`--vt-file-${k}`, `${Math.round(r[k])}px`);
 }
 
-// 좁은 화면에서는 dock이 터미널을 밀지 않고 위에 덮인다. 그때 오버레이가 dock 밑으로
-// 파고들어 코드가 가려지므로, 겹친 폭만큼 오른쪽을 비운다(밀리는 폭에서는 0).
-function _dockInset(mount) {
-  const dock = document.getElementById('vt-dock');
-  if (!dock || !mount) return 0;
-  const d = dock.getBoundingClientRect();
-  const m = mount.getBoundingClientRect();
-  if (d.width === 0) return 0;
-  return Math.max(0, Math.round(m.right - d.left));
-}
-
-function _syncDockInset(el) {
-  el.style.setProperty('--vt-file-inset-r', `${_dockInset(_container())}px`);
-}
+// 2026-11(작업대) — 예전엔 regular 폭에서 오른쪽 dock이 터미널 위에 덮여, 오버레이가 그 밑으로
+// 파고들지 않게 겹친 폭만큼 오른쪽을 비웠다(--vt-file-inset-r). 이제 사이드바는 왼쪽 하나이고
+// 언제나 칸을 민다 — 터미널 영역을 덮는 패널이 없어 비울 자리도 없다.
 
 // 머리줄의 「떠 있는 창 ↔ 위쪽에 붙이기」 버튼 — 지금 표면에 맞춰 이름과 눌림 상태를 맞춘다.
 function _syncSurfaceBtn(el, surface) {
@@ -202,7 +199,6 @@ function _syncSurfaceBtn(el, surface) {
 function _applyGeometry(el) {
   const surface = _surface();
   _syncSurfaceBtn(el, surface);
-  _syncDockInset(el);
   _repaintTerminals();
   el.classList.toggle('surface-sheet', surface === 'sheet');
   el.classList.toggle('surface-float', surface === 'float');
@@ -212,7 +208,7 @@ function _applyGeometry(el) {
   }
   const c = _container();
   if (!c) return;
-  const cw = c.clientWidth - _dockInset(c);
+  const cw = c.clientWidth;
   const ch = c.clientHeight;
   _setRect(el, clampRect(parseRect(get('viewer.float.rect')) || defaultRect(cw, ch), cw, ch));
 }
@@ -281,7 +277,16 @@ function _escClosesOnlyWhenFocused() {
 export function openFileOverlay(path, opts = {}) {
   if (!path) return;
   const existing = document.getElementById(PANEL_ID);
-  if (existing) { _setFile(existing, path, opts); return; }
+  if (existing) {
+    // 다른 파일로 바꾸기 전에 고친 편집을 묻는다(저장 / 버리기 / 취소). 같은 파일이면 줄 이동만 한다.
+    const other = existing.dataset.viewerFile !== path || (existing._vtHost || null) !== (opts.host || null);
+    if (other && dirtyEditors(existing).length) {
+      confirmLeave(existing).then((ok) => { if (ok && existing.isConnected) _setFile(existing, path, opts); }).catch(() => {});
+      return;
+    }
+    _setFile(existing, path, opts);
+    return;
+  }
 
   // 폰에서는 표면 설정과 무관하게 전체화면 시트 + 뒤로가기 닫기(panel.js의 mobile route).
   const compact = isCompactMode();
@@ -295,6 +300,11 @@ export function openFileOverlay(path, opts = {}) {
     bodyId: 'vt-file-body',
     extraClass: compact ? 'vt-file-compact' : '',
     ...(mount ? { mount, modal: false, onKey: _escClosesOnlyWhenFocused } : {}),
+    // 고친 편집이 있으면 닫기 전에 묻는다(X · Esc · 배경 · 폰 뒤로가기). 없으면 바로 닫는다.
+    beforeClose: () => {
+      const cur = document.getElementById(PANEL_ID);
+      return !cur || !dirtyEditors(cur).length ? true : confirmLeave(cur);
+    },
     onClose: () => {
       _repaintTerminals();
       if (tick) { clearInterval(tick); tick = null; }
@@ -308,13 +318,17 @@ export function openFileOverlay(path, opts = {}) {
 
   el.querySelector('.vt-file-refresh').addEventListener('click', () => { _refresh(el); });
   el.querySelector('.vt-file-share').addEventListener('click', () => { _shareFile(el.dataset.viewerFile); });
+  el.querySelector('.vt-file-download').addEventListener('click', () => {
+    const file = el.dataset.viewerFile;
+    if (file) downloadFsPath(file, { host: el._vtHost || null, rev: viewerRev(el.querySelector('.vt-vw-body')) });
+  });
   const floatBtn = el.querySelector('.vt-file-float');
   // 폰(compact)은 설정과 무관하게 전체 화면 시트라 옮길 곳이 없다.
   if (!mount) floatBtn.hidden = true;
   floatBtn.addEventListener('click', () => set('viewer.surface', _surface() === 'float' ? 'sheet' : 'float'));
   el.querySelector('.vt-file-topane').addEventListener('click', () => {
     const file = el.dataset.viewerFile;
-    closePanel(el);
+    closePanel(el, { force: true });   // 표면 이동 — 고친 편집은 보관했다가 페인에서 이어 연다(묻지 않는다)
     if (file) openViewerPane(file);
   });
 
@@ -330,16 +344,13 @@ export function openFileOverlay(path, opts = {}) {
     _wireFloatDrag(el, corner, 'resize');
     _applyGeometry(el);
     tick = _startRepaintTick();
-    // dock·레일을 접고 펴도 컨테이너 폭이 바뀐다 — 창 크기 이벤트만으로는 못 잡는다.
+    // 사이드바를 접고 펴도 컨테이너 폭이 바뀐다 — 창 크기 이벤트만으로는 못 잡는다.
     if (typeof window.ResizeObserver === 'function') {
       ro = new window.ResizeObserver(() => {
-        _syncDockInset(el);
         if (!el.classList.contains('surface-float') || !el._vtRect) return;
-        _setRect(el, clampRect(el._vtRect, mount.clientWidth - _dockInset(mount), mount.clientHeight));
+        _setRect(el, clampRect(el._vtRect, mount.clientWidth, mount.clientHeight));
       });
       ro.observe(mount);
-      const dockEl = document.getElementById('vt-dock');
-      if (dockEl) ro.observe(dockEl);
     }
     // 키보드로 바로 스크롤하고 Esc로 닫을 수 있게. 닫으면 panel.js가 열기 전 포커스(터미널)로 돌려준다.
     body.tabIndex = -1;
@@ -356,7 +367,7 @@ subscribe((changed) => {
   if (!el || el.classList.contains('vt-file-compact')) return;
   if (changed['viewer.surface'] === 'pane' && !isCrossHost(el._vtHost)) {
     const file = el.dataset.viewerFile;
-    closePanel(el);
+    closePanel(el, { force: true });
     if (file) openViewerPane(file);
     return;
   }
@@ -372,7 +383,7 @@ if (_compactMq && typeof _compactMq.addEventListener === 'function') {
     if (!el) return;
     const file = el.dataset.viewerFile;
     const fileHost = el._vtHost || null;
-    closePanel(el, { history: 'replace' });
+    closePanel(el, { history: 'replace', force: true });
     if (file) openFileOverlay(file, { host: fileHost });
   });
 }

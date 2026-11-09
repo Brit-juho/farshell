@@ -14,6 +14,8 @@
 // - 실행마다 새 탭을 연다(캐시·힙이 이전 실행에 섞이지 않게). 결과는 중앙값과 p95(가장 가까운 순위).
 //
 // 화면 CSS 는 `frontend/dist/app.css`(npm run build 결과)를 쓴다. 없으면 경고하고 CSS 없이 잰다.
+// 파일 트리(frontend/js/files/, Solid + TS)는 원본 그대로 못 읽으므로 시작할 때 tree-entry.js를 vite로 한 번 묶어
+// 임시 폴더에 두고 `/perf-build/*`로 내준다(묶지 못하면 옛 트리 경로로 잰다 — 경고를 남긴다).
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -38,7 +40,7 @@ const ONLY = opt('only', '').split(',').filter(Boolean);
 const OUT = opt('out', '');
 const CHROME = opt('chrome', process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
 
-const SCENARIOS = ['open-512k', 'open-4m', 'open-12m', 'long-line-1m', 'concurrent-3', 'diff-5000', 'tree',
+const SCENARIOS = ['open-512k', 'open-4m', 'open-12m', 'long-line-1m', 'concurrent-3', 'diff-5000', 'tree', 'tree-5k',
   'live-10s', 'live-same-10s', 'live-4m-10s', 'live-grow-4m-10s'];
 
 // 시나리오별 측정 시간 제한(ms) — live 는 10초를 돈다.
@@ -56,6 +58,7 @@ const MAX_ENTRIES = 1000;
 const MAX_PREFETCH_DIRS = 150;
 const MAX_PREFETCH_CHILD_ENTRIES = 200;
 const TREE_ROOT = '/bench/tree';
+const BIG_DIR = '/bench/big';   // 파일 5,000개짜리 폴더 하나(tree-5k)
 
 const FILES = new Map([
   ['/bench/code-512k.js', genCode(512 * 1024, 11)],
@@ -70,6 +73,7 @@ const FILES = new Map([
 const BYTES = new Map([...FILES].map(([k, v]) => [k, Buffer.from(v, 'utf8')]));
 const DIFF = genDiff(5000, 15);
 const TREE = genTree(TREE_ROOT);
+TREE.set(BIG_DIR, Array.from({ length: 5000 }, (_, i) => ({ name: `entry-${String(i).padStart(4, '0')}.ts`, dir: false, size: 100 + i })));
 let liveTick = 0;
 
 // `/api/fs/file` 흉내. 범위 인자가 없으면 옛 모양(앞 512KB, truncated), 있으면 2판(API.md): 1MB 구간을 창 안의
@@ -151,16 +155,34 @@ function fileResponse(path, q, ifNoneMatch) {
     next_offset: eof ? null : end, eof, line_truncated: lineTruncated, truncated: !eof } };
 }
 
-function listDir(path) {
+// 서버(routes/files.py `_list_dir`)와 같은 정렬 `(파일 여부, casefold, 이름)`과 페이지(`after` 커서, `limit` 1~1000).
+// 커서는 마지막 키의 base64url(JSON). `after`가 없으면 첫 페이지 — 옛 클라이언트에는 예전처럼 앞 1000개와 `truncated`다.
+const sortKey = (e) => [e.dir ? 0 : 1, e.name.toLowerCase(), e.name];
+function cmpKey(a, b) {
+  for (let i = 0; i < 3; i += 1) { if (a[i] < b[i]) return -1; if (a[i] > b[i]) return 1; }
+  return 0;
+}
+function listDir(path, q = new URLSearchParams()) {
   const all = TREE.get(path);
   if (!all) return null;
-  const entries = all.slice(0, MAX_ENTRIES).map((e) => ({ ...e }));
-  return { path, entries, truncated: all.length > MAX_ENTRIES };
+  const sorted = all.slice().sort((a, b) => cmpKey(sortKey(a), sortKey(b)));
+  const limit = Math.min(MAX_ENTRIES, Math.max(1, parseInt(q.get('limit') || String(MAX_ENTRIES), 10) || MAX_ENTRIES));
+  let start = 0;
+  const after = q.get('after');
+  if (after) {
+    const key = JSON.parse(Buffer.from(after, 'base64url').toString('utf8'));
+    start = sorted.findIndex((e) => cmpKey(sortKey(e), key) > 0);
+    if (start < 0) start = sorted.length;
+  }
+  const page = sorted.slice(start, start + limit).map((e) => ({ ...e }));
+  const more = start + page.length < sorted.length;
+  const next = more ? Buffer.from(JSON.stringify(sortKey(page[page.length - 1]))).toString('base64url') : null;
+  return { path, entries: page, truncated: more, total: sorted.length, next, capped: false };
 }
 
 // routes/files.py `_list_dir_deep` 와 같은 순서·예산으로 미리 받기를 채운다.
-function listDeep(path, depth) {
-  const root = listDir(path);
+function listDeep(path, depth, q) {
+  const root = listDir(path, q);
   if (!root || !depth) return root;
   const budget = [MAX_PREFETCH_DIRS];
   const fill = (listing, base, left) => {
@@ -216,6 +238,25 @@ function serveBench(res) {
   res.end(html);
 }
 
+let PERF_BUILD = '';
+async function buildTreeBundle() {
+  try {
+    const { build } = await import('vite');
+    const solid = (await import('vite-plugin-solid')).default;
+    const out = mkdtempSync(join(tmpdir(), 'fsh-perf-build-'));
+    await build({
+      configFile: false, root: resolve(FRONTEND, '..'), logLevel: 'warn', plugins: [solid()],
+      build: {
+        outDir: out, emptyOutDir: true, minify: false, sourcemap: false,
+        lib: { entry: join(HERE, 'tree-entry.js'), formats: ['es'], fileName: () => 'tree-bench.js' },
+      },
+    });
+    PERF_BUILD = out;
+  } catch (e) {
+    console.warn(`경고: 파일 트리 묶음을 만들지 못해 옛 트리로 잽니다: ${e.message}`);
+  }
+}
+
 const counts = new Map();
 function count(key) { counts.set(key, (counts.get(key) || 0) + 1); }
 
@@ -252,7 +293,7 @@ const server = createServer((req, res) => {
   if (p === '/__live-big-reset') { liveBigBase = Date.now(); return sendJson(res, 200, {}); }
   if (p === '/api/fs/tree') {
     count('tree');
-    const out = listDeep(url.searchParams.get('path') || '', parseInt(url.searchParams.get('depth') || '0', 10));
+    const out = listDeep(url.searchParams.get('path') || '', parseInt(url.searchParams.get('depth') || '0', 10), url.searchParams);
     return out ? sendJson(res, 200, out) : sendJson(res, 404, { error: 'not a directory' });
   }
   if (p === '/api/fs/roots') return sendJson(res, 200, { roots: [TREE_ROOT] });
@@ -261,6 +302,10 @@ const server = createServer((req, res) => {
   if (p === '/__reset') { counts.clear(); return sendJson(res, 200, {}); }
   if (p.startsWith('/static/')) return serveStatic(res, FRONTEND, p.slice('/static/'.length));
   if (p === '/perf/bench.html') return serveBench(res);
+  if (p.startsWith('/perf-build/')) {
+    if (!PERF_BUILD) return sendJson(res, 404, { error: 'no build' });
+    return serveStatic(res, PERF_BUILD, p.slice('/perf-build/'.length));
+  }
   if (p.startsWith('/perf/')) return serveStatic(res, HERE, p.slice('/perf/'.length));
   if (p.startsWith('/node_modules/')) return serveStatic(res, NODE_MODULES, p.slice('/node_modules/'.length));
   return sendJson(res, 404, { error: 'not found' });
@@ -390,6 +435,8 @@ const COLS = [
   ['reloadMs', '변경 1회 다시 그리기(ms)'],
   ['reloadLongTaskSum', '다시 그리기 long task(ms)'],
   ['reloadRequests', '다시 그리기 요청(회)'],
+  ['rowsShown', 'DOM 행(개)'],
+  ['loadAllMs', '5,000개 다 받기(ms)'],
   ['loadedKB', '받은 본문(KB)'],
   ['fetchedKB', '내려받은 본문 합(KB)'],
   ['liveKB', '연속 변경 중 내려받은 본문(KB)'],
@@ -424,6 +471,7 @@ async function main() {
   if (!existsSync(join(FRONTEND, 'dist', 'app.css'))) {
     console.warn('경고: frontend/dist/app.css 가 없어 CSS 없이 잽니다(레이아웃 비용이 실제와 다르다). 먼저 npm run build.');
   }
+  if (!ONLY.length || ONLY.some((n) => n.startsWith('tree'))) await buildTreeBundle();
   await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
   const base = `http://127.0.0.1:${server.address().port}`;
   const { cdp, stop } = await launchChrome();
@@ -455,6 +503,7 @@ async function main() {
   } finally {
     stop();
     server.close();
+    if (PERF_BUILD) try { rmSync(PERF_BUILD, { recursive: true, force: true }); } catch { /* 남아도 임시 폴더다 */ }
   }
 }
 

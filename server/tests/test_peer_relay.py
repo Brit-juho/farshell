@@ -8,6 +8,7 @@ peer 서명이 그 자리를 대신하는지가 요점이다. A 쪽은 A와 B를
 from __future__ import annotations
 
 import hashlib
+import json
 import importlib
 import time
 
@@ -31,6 +32,8 @@ import relay_policy
     ("GET", "/api/files/abc/download"),
     ("POST", "/api/upload"),
     ("GET", "/api/fs/raw"),
+    ("GET", "/api/fs/grep"),
+    ("GET", "/api/fs/grep/progress"),                   # 내용 검색 진행(같은 sid의 것만 보인다)
     ("GET", "/api/git/status"),
     ("POST", "/api/queue"),
     ("GET", "/api/capabilities"),
@@ -57,9 +60,17 @@ def test_policy_allows_host_scoped_apis(method, path):
     ("POST", "/api/agent/event"),
     ("POST", "/api/tmux/open-on-mac"),
     ("POST", "/api/capabilities"),                       # 읽기 전용은 GET만
+    ("POST", "/api/fs/grep"),
+    ("POST", "/api/fs/grep/progress"),
     ("GET", "/api/files/../auth"),
     ("GET", "/api//files"),
     ("GET", "/api/unknown"),
+    ("GET", "/api/fs/download"),                         # 경로 기반 다운로드는 로컬 전용(D7)
+    ("PUT", "/api/fs/file"),                             # 쓰기는 로컬 전용(D7) — 읽기 GET만 중계
+    ("POST", "/api/fs/new"),
+    ("POST", "/api/fs/mkdir"),
+    ("POST", "/api/fs/rename"),
+    ("POST", "/api/fs/delete"),
 ])
 def test_policy_refuses_everything_else(method, path):
     assert not relay_policy.http_allowed(method, path)
@@ -167,6 +178,7 @@ def test_relay_requires_control_level(b_env):
 
 @pytest.mark.parametrize("target", [
     "/api/auth/status", "/api/devices", "/api/hosts", "/api/peer/ping",
+    "/api/fs/download",                                  # B도 스스로 거절한다(경로 기반 다운로드는 로컬 전용, D7)
 ])
 def test_relay_refuses_paths_outside_the_allowlist(b_env, target):
     client, hs, secret = b_env
@@ -360,7 +372,6 @@ def test_host_relay_drops_b_csp_frame_ancestors_and_reporting(a_env, monkeypatch
     ("/api/workspace", "text/html"),
     ("/api/workspace", "text/html; charset=utf-8"),
     ("/api/fs/tree", "application/xhtml+xml"),
-    ("/api/fs/raw", "image/svg+xml"),
     ("/api/fs/raw", "text/xml"),
     ("/api/fs/raw", "text/html"),
     ("/api/fs/raw", "application/javascript"),
@@ -498,10 +509,76 @@ def test_host_relay_fs_raw_image_end_to_end(a_env, tmp_path, monkeypatch):
     assert r.headers["content-disposition"] == "inline"
     assert r.headers["cache-control"] == "no-store"
     _assert_a_policy(r)
-    # SVG 는 B 자신이 거절한다(JSON 오류) — 그 오류도 JSON 그대로 온다.
-    (root / "b.svg").write_bytes(b"<svg xmlns='http://www.w3.org/2000/svg'/>")
+    # SVG(결정 D8): 그림으로는 지나가되 A의 sandbox CSP가 붙는다 — A의 출처에서 직접 열어도 스크립트가 돌지 않는다.
+    svg = b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>"
+    (root / "b.svg").write_bytes(svg)
     r = client.get("/api/hosts/m5/relay/api/fs/raw", params={"path": str(root / "b.svg")})
+    assert r.status_code == 200 and r.content == svg
+    assert r.headers["content-type"] == "image/svg+xml"
+    assert "sandbox" in r.headers["content-security-policy"]
+    _assert_a_policy(r)
+    # 이름만 .svg인 HTML은 B 자신이 거절한다(JSON 오류) — 그 오류도 JSON 그대로 온다.
+    (root / "c.svg").write_bytes(b"just text, not svg")
+    r = client.get("/api/hosts/m5/relay/api/fs/raw", params={"path": str(root / "c.svg")})
     assert r.status_code == 403 and r.headers["content-type"] == "application/json"
+
+
+def test_host_relay_b_svg_cannot_escape_the_sandbox(a_env, monkeypatch):
+    """털린 B가 SVG에 스크립트를 넣고 자기 CSP를 풀어 보내도, A는 B의 CSP를 버리고 sandbox를 붙인다(계획 7.3·3.4)."""
+    client, _ = a_env
+    _mock_b(monkeypatch, content=b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>",
+            headers={"content-type": "image/svg+xml", "content-security-policy": "script-src *",
+                     "content-disposition": "attachment"})
+    r = client.get("/api/hosts/m5/relay/api/fs/raw?path=x.svg")
+    assert r.status_code == 200
+    assert r.headers.get_list("content-security-policy") == [relay_policy.RELAY_CSP]
+    assert r.headers["content-disposition"] == "inline"
+    _assert_a_policy(r)
+
+
+def test_host_relay_refuses_path_download_before_calling_out(a_env, monkeypatch):
+    """경로 기반 다운로드는 이 서버 파일만(결정 D7) — A가 B로 보내기 전에 거절한다."""
+    client, _ = a_env
+    called = []
+
+    async def handler(request):
+        called.append(request.url)
+        return httpx.Response(200, content=b"x")
+
+    import routes.host_relay as hr
+    monkeypatch.setattr(hr, "_client", httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    r = client.get("/api/hosts/m5/relay/api/fs/download", params={"path": "/etc/hosts"})
+    assert r.status_code == 403 and r.json()["error"] == "relay_forbidden"
+    assert called == []
+
+
+@pytest.mark.parametrize("method,target", [("PUT", "/api/fs/file"), ("POST", "/api/fs/new"), ("POST", "/api/fs/mkdir"),
+                                           ("POST", "/api/fs/rename"), ("POST", "/api/fs/delete")])
+def test_host_relay_refuses_file_writes_before_calling_out(a_env, monkeypatch, method, target):
+    """파일 쓰기는 이 맥의 파일만(결정 D7) — 다른 호스트로는 보내지도 않는다."""
+    client, _ = a_env
+    called = []
+
+    async def handler(request):
+        called.append(request.url)
+        return httpx.Response(200, json={"ok": True})
+
+    import routes.host_relay as hr
+    monkeypatch.setattr(hr, "_client", httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    r = client.request(method, "/api/hosts/m5/relay" + target, json={"path": "/tmp/x", "content": "x"})
+    assert r.status_code == 403 and r.json()["error"] == "relay_forbidden"
+    assert called == []
+
+
+@pytest.mark.parametrize("method,target", [("PUT", "/api/fs/file"), ("POST", "/api/fs/delete"), ("POST", "/api/fs/mkdir")])
+def test_peer_relay_refuses_file_writes_even_when_signed(b_env, method, target):
+    """B도 스스로 거절한다 — 서명이 맞아도 쓰기 라우트는 중계 허용 목록에 없다."""
+    client, hs, secret = b_env
+    path = "/api/peer/relay" + target
+    body = json.dumps({"path": "/tmp/x", "content": "x"}).encode()
+    r = client.request(method, path, content=body, headers={**_signed(hs, secret, method, path, body),
+                                                              "Content-Type": "application/json"})
+    assert r.status_code == 403 and r.json()["error"] == "relay_forbidden"
 
 
 @pytest.mark.parametrize("name,expect_type", [
@@ -546,3 +623,24 @@ def test_host_relay_fs_file_keeps_etag_304_range_and_409(a_env, tmp_path, monkey
     r = client.get(url, params={"path": str(root / "a.txt"), "offset": "4", "expected_rev": "0:0:0:0"})
     assert r.status_code == 409
     assert r.json()["error"] == "changed" and r.json()["rev"] == d["rev"]
+
+
+def test_host_relay_fs_grep_end_to_end(a_env, tmp_path, monkeypatch):
+    """내용 검색도 읽기 기능이라 원격에서 된다(D7). 경계·거부 규칙은 B(상대)가 자기 것으로 판정한다."""
+    client, _ = a_env
+    root = (tmp_path / "grep-root").resolve()
+    root.mkdir()
+    monkeypatch.setenv("VT_BROWSE_ROOTS", str(root))
+    (root / "a.txt").write_text("one\nneedle here\n")
+    (root / ".env").write_text("needle=secret\n")
+    url = "/api/hosts/m5/relay/api/fs/grep"
+    r = client.get(url, params={"q": "needle", "path": str(root), "sid": "tab1"})
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"] == "application/json"
+    d = r.json()
+    assert [(x["rel"], x["line"], x["col"], x["path"]) for x in d["results"]] == [("a.txt", 2, 1, str(root / "a.txt"))]
+    _assert_a_policy(r)
+    r = client.get(url, params={"q": "needle", "path": "/etc"})
+    assert r.status_code == 403 and r.json()["error"] == "denied"
+    r = client.get(url, params={"q": "(", "mode": "regex", "path": str(root)})
+    assert r.status_code == 400 and r.json()["error"] == "bad_regex"

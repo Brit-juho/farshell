@@ -537,12 +537,15 @@ def _collect_commit_meta(repo: Path, sha: str) -> dict | None:
     rc, out = _git(repo, "show", "-s", f"--format={_LOG_FMT}%x1f%b", "--date=iso-strict", sha)
     if rc != 0 or not out.strip():
         return None
-    parts = out.rstrip("\n").split(_LOG_FIELD_SEP, 5)
-    if len(parts) < 5:
+    # _LOG_FMT은 7칸(H h an ad P D s)이고 본문(%b)이 구분자 하나 뒤에 붙는다 — 앞 7칸 + 본문으로 자른다.
+    # (예전에는 5칸으로 잘라 제목 자리에 부모 해시가, 본문 자리에 ref·제목·본문이 섞여 들어갔다.)
+    parts = out.rstrip("\n").split(_LOG_FIELD_SEP, 7)
+    if len(parts) < 7:
         return None
-    h, short, author, date, subject = parts[:5]
-    body = parts[5].strip() if len(parts) > 5 else ""
+    h, short, author, date, parents, _refs, subject = parts[:7]
+    body = parts[7].strip() if len(parts) > 7 else ""
     return {"hash": h, "short": short, "author": author, "date": date,
+            "parents": parents.split() if parents.strip() else [],
             "subject": subject, "body": body}
 
 

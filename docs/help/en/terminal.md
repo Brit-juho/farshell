@@ -34,7 +34,7 @@ fsh terminal unset            # back to automatic selection
 
 ## Saved sessions and conversation archives
 
-The rail browses repositories → workspaces → sessions, with All sessions and Session archive views.
+The sidebar's Sessions view browses repositories → workspaces → sessions, with All sessions and Session archive views.
 Closing a view keeps its execution running. Task history shows the logical task name and execution history.
 Stop an execution explicitly before archiving it; independently running child sessions are not stopped together.
 
@@ -61,7 +61,11 @@ Supported messages following oversized records remain indexed, with progress pre
 History deletion can target this host alone or include approved replicas.
 It hides records and prevents reimport; it does not erase CLI source files or archived raw bytes on disk.
 Deletion acknowledgments from offline replica hosts complete after reconnection.
-FarShell delegation links open separate task records and remain distinct from agent-internal children.
+**Task history** is one window. The left side is the session (status, resume, stop, rename, archive, linked
+conversations, delegation, internal subagents, run history); the right side is the record of the internal subagent or
+delegated session you pick (prompts, answers, tool calls, tool results). A child row's **View transcript** and
+**View report** and the internal chip open the same window with the right side preselected. Picking the
+parent in the delegation list moves the window to that session's record.
 
 ## tmux config (`fsh tmux`)
 

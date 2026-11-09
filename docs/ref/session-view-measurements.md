@@ -130,7 +130,7 @@ Real-CLI checks need a pane on that tmux socket **and** an attached PTY (WebSock
 
 ## 7. File viewer render baseline
 
-Tool: `frontend/tests/perf/` (not in CI). `npm run build` first (the page loads `frontend/dist/app.css`), then `node frontend/tests/perf/run.mjs` (`--runs N`, `--only a,b`, `--profile desktop|mobile`, `--out file.json`, `--chrome path` or `CHROME`). It serves the **unbundled** viewer modules (`viewer/file.js` `renderFile`/`refreshFile`, `viewer/diff.js` `_renderDiffDOM`, `viewer/tree.js` `showTree`) from a fake server on 127.0.0.1 that mimics `/api/fs/file` (512 KiB cap, `truncated`), `/api/fs/tree` (1000 entries, depth-2 prefetch budget) and `/api/fs/roots`; inputs come from `gen.mjs` (seeded synthetic JS, minified line, diff, 50 x 100 folder tree), never real code or paths. The file-watch WebSocket is a page-side fake so the tree scenario can send one "changed". Headless Chrome is driven over CDP (no dependency), a new tab per run. Measured: request start → next paint, including HTTP + JSON; **not** measured: lazy-chunk download and hljs script download (preloaded), real devices.
+Tool: `frontend/tests/perf/` (not in CI). `npm run build` first (the page loads `frontend/dist/app.css`), then `node frontend/tests/perf/run.mjs` (`--runs N`, `--only a,b`, `--profile desktop|mobile`, `--out file.json`, `--chrome path` or `CHROME`). It serves the **unbundled** viewer modules (`viewer/file.js` `renderFile`/`refreshFile`, `viewer/diff.js` `_renderDiffDOM`; the file tree since §7.5 from `files/mount.tsx`, bundled once per run by `run.mjs` with vite + `vite-plugin-solid` and served as `/perf-build/tree-bench.js`) from a fake server on 127.0.0.1 that mimics `/api/fs/file` (512 KiB cap, `truncated`), `/api/fs/tree` (pages of 1000 with `after=` cursors, `total`/`next`, depth-2 prefetch budget) and `/api/fs/roots`; inputs come from `gen.mjs` (seeded synthetic JS, minified line, diff, 50 x 100 folder tree), never real code or paths. The file-watch WebSocket is a page-side fake so the tree scenario can send one "changed". Headless Chrome is driven over CDP (no dependency), a new tab per run. Measured: request start → next paint, including HTTP + JSON; **not** measured: lazy-chunk download (the editor module and the JS language pack are preloaded; until §7.7 the hljs script was too), real devices.
 
 Scenarios: `open-512k`, `open-4m` and `long-line-1m` (both cut to 512 KiB by the server today), `concurrent-3` (three viewers at once), `diff-5000`, `tree` (open, expand 100 folders, one change on the root), `live-10s` (a change every 200 ms for 10 s through `coalesce` + `refreshFile`, as auto-refresh does). Long tasks are the browser's >50 ms tasks; p95 over 10 runs is the nearest rank (the slowest run).
 
@@ -209,3 +209,55 @@ Change ([files.md](./files.md) 「A big view refreshes only what grew」): with 
 - Not measured: real devices, a real server and network (the fake answers in well under a millisecond), the tail view (same path; covered by `viewer-file.test.js`).
 
 Initial payload (app.js + core.js): 327,810 B (cap 358,400; `layout/panes.js` disposes viewer editors).
+
+### 7.5 File tree: virtual rows, paging and the `tree` watch (2026-11-09)
+
+Change ([files.md](./files.md) 「File tree」): the 파일 tree is `frontend/js/files/` (flattened rows, virtual scroll, per-folder row cache keyed by `(host, path)`), folders page by 1000 (`/api/fs/tree` `after=`), and one `tree` subscription on the root re-reads only the folders a notice lists. Same tool; two changes to it: the tree scenarios mount the bundled tree (expanding calls `store.toggle` — off-screen rows are not in the DOM to click), and a new scenario `tree-5k` opens a single folder of 5,000 files (first page, then 「더 불러오기」 to the end, then one change notice on that folder). The change notice is `{kind:"tree", dirs:[""]}` (the root folder) instead of a `dir` notice. "Before" is the old `viewer/tree.js` measured with the same bench right before the change (5 runs); "after" 10 runs. Median / p95.
+
+| Scenario | Profile | Paint ms | Expand 100 folders ms | One change: requests | One change: redraw ms (long tasks) | DOM rows | DOM nodes |
+|---|---|---|---|---|---|---|---|
+| tree (50 × 100 folders) | desktop | 35 → 16 | 182 → 327 | 101 → 1 | 153 (117) → 6 (0) | 5,251 → 34 | 28,099 → 791 |
+| tree | phone (4x CPU) | 86 → 38 | 1,111 → 295 | 101 → 1 | 638 (508) → 4 (0) | 5,251 → 28 | 28,099 → 292 |
+| tree-5k (5,000 files) | desktop | 79 (56 long) → 15 (0) | — | 1 → 5 | 69 (67) → 9 (0) | 1,001 → 34 | 14,036 → 831 |
+| tree-5k | phone (4x CPU) | 325 (313 long) → 34 (0) | — | 1 → 5 | 250 (246) → 16 (0) | 1,001 → 28 | 14,036 → 292 |
+
+- The target of the plan (a folder change: one request, only changed rows redrawn) holds: the root change is 1 request instead of 101, and since the root's listing is unchanged no row is redrawn (the redraw time is the request). On the phone profile that is 638 ms → 4 ms.
+- `tree-5k`: the old tree showed the first 1,000 entries in disk order and could not reach the rest; now all 5,000 are reachable (「더 불러오기」 × 4: 21 ms desktop, 84 ms phone in total) while the DOM keeps about 30 rows. The change notice re-reads the 5 loaded pages (5 requests, 9 / 16 ms).
+- Expanding 100 folders on the desktop profile is slower (182 → 327 ms summed, about 1.5 ms per folder). Part is the measurement: the new number runs until the last request ends (a re-read whose rows did not change leaves the DOM alone), the old one until the last DOM change. Part is the flatten of a 5,000-row list per expand; the per-folder cache (`FlattenCache`, `expandVer`) cut it from about 2.3 ms to about 0.6 ms per call. The phone profile, where the old tree paid for creating DOM rows, is 3.8x faster.
+- Not measured: real devices, a real server and the native file watcher (the fake answers in well under a millisecond; the server side is covered by `server/tests/test_fs_watch_tree.py` with the polling backend), the name filter on a large tree.
+
+Initial payload (app.js + core.js): 333,040 B on top of redesign phase 2 (329,732 B before; cap 358,400; +3,308 B from the phone 「파일 | 첨부」 segment and the two device settings). The tree is the lazy `files` chunk (60,398 B, about 16 KB gzip); `panels.js` 158,584 → 149,037 B, `shell.js` 330,715 → 331,857 B.
+
+### 7.6 File content search (`/api/fs/grep`, 2026-11-09)
+
+Change ([files.md](./files.md) 「Content search」): one engine in the `scan_worker` child process (git candidate list → deny rules → read and match), the palette `?` mode and the sidebar 「내용 검색」. Measured on the repository itself (a detached checkout of the branch under `/tmp`, 1,201 candidate files from `git ls-files`, 103 binaries, 4 deny-listed) through an isolated server on this Mac (M1 Pro, APFS), `curl` total time over loopback, 6 runs each. "Cold" is the first request after the server started (first worker spawn); the files had just been checked out, so the page cache was warm in every run — a truly cold disk was not measured (`purge` needs root).
+
+| Query | Results / files | Files read | Cold ms | Warm ms (median of 5) |
+|---|---|---|---|---|
+| rare literal `groupByFile` | 9 / 4 | 1,201 | 179 | 189 |
+| common literal `function` (stops at the 500-line cap) | 500 / 69 | 137 | 126 | 117 |
+| regex `def \w+_grep` | 2 / 2 | 1,201 | 169 | 179 |
+| literal `fsguard`, `glob=server/**,!**/tests/**` | 452 / 63 | 308 (893 excluded) | 124 | 115 |
+| no match | 0 / 0 | 1,201 | 158 | 179 |
+
+- A whole-repository search costs about 150–190 ms end to end, of which the server reports 150–195 ms (`elapsed_ms`): a Python child process start, `git ls-files` and reading every candidate (not broken down further). Cold and warm are the same within noise because nothing is cached between searches by design (each search is a fresh process so the deadline can kill it).
+- Hitting the 500-line cap stops reading early (137 of 1,201 files), so common words answer faster than rare ones. Include/exclude globs cut the read set before any file is opened.
+- In the browser (headless Chromium, same server) typing `? groupByFile` showed 9 results in 4 groups with the preview at the first match; ↓ then Enter opened `GrepView.tsx` at its second match (line 44) in the viewer; ⌘⇧F opened the sidebar search with the tree root as scope. Korean and English (`VT_LANG=en`) both checked.
+- Not measured: a cold disk, very large trees (the 10 s deadline, 200 MB read cap and 200,000-file list cap are covered by `server/tests/test_fs_grep.py` with lowered limits), a remote host through the relay (covered end to end in `test_peer_relay.py`), phones.
+
+Initial payload (app.js + core.js): 334,755 B (333,040 B before; cap 358,400; +1,715 B for the `contentSearch` key, the palette entry's sidebar hand-off and the one-time move toast). The search screen is in the lazy `shell` chunk (331,965 → 370,704 B, +38,739) — the palette and the sidebar share it; `files.js` 60,398 → 63,618 B for the 「트리 | 내용 검색」 segment.
+
+### 7.7 Diff: virtual list, lezer highlighting, hljs removed (2026-11-09)
+
+Change ([files.md](./files.md) 「Diff」): `viewer/diff.js` draws only the visible rows of each file (fixed row heights, absolute placement, ± 600px), context lines are highlighted by the file view's CodeMirror language packs (`editor.js` `highlighterFor`) instead of highlight.js, and `vendor/highlight.min.js` is gone. `diff-5000` now waits for the highlighted rows before taking the paint (the old hljs path was synchronous, the new one goes through the preloaded language chunk) and fails if no context line was highlighted. Same tool and machine; "before" is the `redesign` branch measured right before the change in the same session (10 runs each), so it differs from the 2026-11-07 baseline above (295 / 1213 ms, an older checkout and Chrome session). Median / p95.
+
+| Scenario | Profile | Paint ms before → after | Long tasks ms | Longest task ms | DOM nodes | DOM rows |
+|---|---|---|---|---|---|---|
+| diff-5000 (one file, 50-line hunks) | desktop | 184 / 205 → 32 / 42 | 180 / 201 → 0 / 0 | 99 → 0 | 30,023 → 728 | every line → 63 |
+| diff-5000 | phone (4x CPU) | 852 / 876 → 119 / 123 | 845 / 867 → 91 / 95 | 505 → 91 | 30,023 → 776 | every line → 68 |
+
+- The 2026-11-07 baseline (desktop 295 ms, phone 1213 ms) is now 32 / 119 ms. What is left on the phone profile is mostly the JSON parse and diff parse of the 5,000-line text and the first visible rows; hunks below the screen are not parsed for highlighting until they are drawn.
+- A diff of at most 400 rows is still drawn whole (browser find and copy cover it); the bench diff is far above that.
+- Not measured: scrolling through the list (rows are created per frame for the newly visible range), real devices, a real server.
+
+Bundles (raw bytes, `npm run build`): initial payload (app.js + core.js) unchanged at 345,311 B (cap 358,400). `panels.js` 223,374 → 230,716 B (+7,342, the virtual list; 63 KB gzip); `editor.js` 650,390 → 651,601 B (+1,211, `highlighterFor`; 160 KB gzip). `frontend/vendor/highlight.min.js` (127,496 B, 43 KB gzip) is deleted and out of `sw.js` PRECACHE (`vt-static-v11`). Opening a diff now fetches the `editor` chunk plus the file's language chunk (for example `editor-js` 86.6 KB) instead of hljs, usually already cached by a file view.

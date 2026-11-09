@@ -56,10 +56,12 @@ function _tone(pct, warn, err) {
 
 function _row(label, valueHtml, subHtml, pct, tone, sparkHtml) {
   const bar = pct == null ? '' : `<div class="vt-sys-bar" role="progressbar" aria-valuenow="${Math.round(pct)}" aria-valuemin="0" aria-valuemax="100" aria-label="${vtEsc(label)}"><div class="vt-sys-fill ${tone}" style="width:${Math.max(0, Math.min(100, pct))}%"></div></div>`;
-  return `<section class="vt-sys-card">`
+  // 시안 P08 순서: 이름(12/600) … 값(18/500 mono) / 보조 정보(11 muted) / 막대 4px / 스파크라인 36.
+  return `<section class="vt-sys-card vt-pcard">`
     + `<div class="vt-sys-head"><span class="vt-sys-label">${vtEsc(label)}</span><span class="vt-sys-value ${tone}">${valueHtml}</span></div>`
+    + `<div class="vt-sys-sub">${subHtml}</div>`
     + bar + sparkHtml
-    + `<div class="vt-sys-sub">${subHtml}</div></section>`;
+    + `</section>`;
 }
 
 export function renderStats(d) {
@@ -86,7 +88,7 @@ export function renderStats(d) {
   if (d.ram) {
     parts.push(_row('RAM', `${Math.round(d.ram.pct)}%`,
       vtEsc(`${fmtBytes(d.ram.used)} / ${fmtBytes(d.ram.total)}`),
-      d.ram.pct, _tone(d.ram.pct, 80, 90), _spark(_hist.ram, 100)));
+      d.ram.pct, _tone(d.ram.pct, 75, 90), _spark(_hist.ram, 100)));
   }
   if (d.net) {
     // 받기·보내기는 같은 눈금으로 겹쳐 그린다 — 따로 맞추면 작은 쪽이 커 보인다.
@@ -115,7 +117,7 @@ export function showSystem(opts = {}) {
     paneId: opts.paneId || null,
     id: PANEL_ID,
     ariaLabel: t('시스템'),
-    headHTML: `<div class="vt-vw-title">${t('시스템')}</div>`,
+    headHTML: `<div class="vt-vw-title">${t('시스템')}</div><span class="vt-ph-ctx">${t('2초마다')}</span>`,
     bodyId: 'vt-system-body',
     extraClass: 'vt-system',
   });

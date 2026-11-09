@@ -17,7 +17,8 @@
 //     링크는 복사해서 보내면 되는 값이다 — 모바일 QR은 `fsh mobile`이 이미
 //     서버 쪽에서 만든다.
 import { openPanel, closePanel, setPanelPoll } from '../panel.js';
-import { errorState } from '../../ui/empty.js';
+import { errorState, emptyState } from '../../ui/empty.js';
+import { pIcon } from '../panel-icons.js';
 import { vtFetch, vtEsc, vtUrl } from '../../core/api.js';
 import { showToast } from '../../ui/toast.js';
 import { icon } from '../../ui/icons.js';
@@ -147,15 +148,24 @@ function showFiles(opts = {}) {
     paneHost: opts.paneHost || null,
     paneId: opts.paneId || null,
     id: 'vt-files',
-    ariaLabel: t('파일'),
+    ariaLabel: t('첨부'),
+    // 리디자인 5단계(시안 P04): 머리 = 「첨부」 + 용량(사용/한도) + 「올리기」. 위 칸 = [전체|공유 중|만료 임박] · 「선택」,
+    // 그 아래 용량 막대. 선택 모드에서는 필터 줄 자리에 「전체 선택 · N개 선택 · 삭제 · 완료」가 들어선다.
     headHTML: `
-      <div class="vt-vw-title" id="vt-fl-title">${t('파일')}</div>
-      <button class="vt-btn sm quiet" id="vt-fl-select-toggle" title="${t('여러 개 골라 한 번에 정리')}" aria-pressed="false">${t('선택')}</button>
-      <button class="vt-btn sm vt-vw-diff" id="vt-fl-upload" title="${t('파일 올리기')}">${t('올리기')}</button>
+      <div class="vt-vw-title" id="vt-fl-title">${t('첨부')}</div>
+      <span class="vt-ph-ctx" id="vt-fl-ctx"></span>
+      <button type="button" class="vt-btn sm" id="vt-fl-upload" title="${t('파일 올리기')}">${pIcon('upload', 12)}${t('올리기')}</button>
     `,
     extraHTML: `
-      <div class="vt-fl-chips" id="vt-fl-chips" role="tablist"></div>
-      <div class="vt-fl-selectbar" id="vt-fl-selectbar" hidden></div>
+      <div class="vt-ppad vt-fl-top">
+        <div class="vt-prow-h vt-fl-filterrow">
+          <div class="vt-fl-chips vt-pseg" id="vt-fl-chips" role="tablist"></div>
+          <span class="sp"></span>
+          <button type="button" class="vt-btn sm quiet" id="vt-fl-select-toggle" title="${t('여러 개 골라 한 번에 정리')}" aria-pressed="false">${t('선택')}</button>
+        </div>
+        <div class="vt-fl-selectbar vt-prow-h" id="vt-fl-selectbar" hidden></div>
+        <div class="vt-fl-footer" id="vt-fl-quota"></div>
+      </div>
     `,
     bodyId: 'vt-fl-body',
   });
@@ -235,7 +245,7 @@ function renderChips(inst) {
     b.setAttribute('aria-selected', String(inst.filter === f.id));
     const n = f.id === 'shared' ? inst.lastItems.filter((x) => (x.shares || []).length).length
       : f.id === 'expiring' ? inst.lastItems.filter((x) => x.expiring_soon).length
-        : 0;
+        : inst.lastItems.length;
     b.textContent = n ? `${f.label} ${n}` : f.label;
     b.addEventListener('click', () => { inst.filter = f.id; renderChips(inst); refreshFiles(inst); });
     host.appendChild(b);
@@ -260,12 +270,15 @@ async function refreshFiles(inst) {
   // 칩의 개수는 **전체 기준**이라 필터가 'all'일 때만 갱신한다 — 'shared'로
   // 걸러진 응답으로 개수를 세면 "공유 중 2"가 필터를 누르는 순간 자기 자신을
   // 세어 항상 전체 개수와 같아진다.
-  if (inst.filter === 'all') { inst.lastItems = items; renderChips(inst); }
+  if (inst.filter === 'all') { inst.lastItems = items; inst._allLoaded = true; renderChips(inst); }
 
   const quota = data?.quota || {};
-  const title = inst.ctx.byId('vt-fl-title');
-  if (title) {
-    title.textContent = t('파일 · {n}개', { n: items.length }) + (quota.used != null ? ` · ${fmtBytes(quota.used)}` : '');
+  // 머리의 맥락 = 용량(사용 / 한도). 제목은 「첨부」로 고정 — 개수는 필터 칸 「전체 N」이 말한다.
+  const ctxEl = inst.ctx.byId('vt-fl-ctx');
+  if (ctxEl) {
+    ctxEl.textContent = quota.used != null
+      ? (quota.max ? `${fmtBytes(quota.used)} / ${fmtBytes(quota.max)}` : fmtBytes(quota.used))
+      : '';
   }
 
   inst._items = items;
@@ -293,28 +306,39 @@ function _paintBody(inst) {
   body.innerHTML = '';
   for (const row of uploadingRows) body.appendChild(row);
   if (!items.length && !uploadingRows.length) {
-    const empty = document.createElement('div');
-    empty.className = 'vt-vw-loading';
-    empty.textContent = inst.filter === 'all'
-      ? t('저장된 파일이 없습니다. 「올리기」 또는 터미널에 이미지 붙여넣기로 추가됩니다.')
-      : t('해당하는 파일이 없습니다.');
-    body.appendChild(empty);
+    body.appendChild(inst.filter === 'all'
+      ? emptyState({
+        icon: 'paperclip',
+        title: t('올린 파일이 없습니다'),
+        desc: inst._quota && inst._quota.ttl_days
+          ? t('파일을 칸에 끌어 놓거나 붙여 넣으면 여기에 쌓입니다. {n}일 뒤 자동 삭제됩니다.', { n: inst._quota.ttl_days })
+          : t('파일을 칸에 끌어 놓거나 붙여 넣으면 여기에 쌓입니다.'),
+        action: { label: t('올리기'), onClick: () => document.getElementById('file-input')?.click() },
+      })
+      : emptyState({ icon: 'paperclip', title: t('해당하는 파일이 없습니다.') }));
   } else {
     for (const item of items) body.appendChild(renderRow(item, inst));
   }
-  body.appendChild(renderFooter(inst._quota || {}));
+  if (!inst.selectMode) {
+    const issued = _issuedSection(inst);
+    if (issued) body.appendChild(issued);
+  }
+  const quotaHost = inst.ctx.byId('vt-fl-quota');
+  // 자리(#vt-fl-quota)는 그대로 두고 속만 갈아 끼운다 — 칸(pane) 인스턴스는 id에 접미사가 붙어 있어 새로 만든
+  // 요소로 바꾸면 다음 그리기에서 못 찾는다.
+  if (quotaHost) quotaHost.replaceChildren(...renderFooter(inst._quota || {}).childNodes);
   _renderSelectBar(inst);
 }
 
 // 업로드 중인 행 — 아직 서버 레코드가 없으니 삭제·공유 같은 동작은 없고
-// 진행률 바 + 취소뿐이다. 기존 용량 게이지(.vt-fl-gauge)와 같은 클래스를
-// 재사용한다(새 토큰 없음). 2026-09-23 — 상태의 주인이 term/upload.js로
+// 진행률 바 + 취소뿐이다. 2026-09-23 — 상태의 주인이 term/upload.js로
 // 옮겨가며(설계 2번) job.phase를 세 단계로 그대로 보여준다: 대기 중 · 업로드
 // 중 · 서버 저장 중(이 단계는 취소를 끈다 — 바이트가 이미 다 넘어가 서버가
 // 파일을 만들고 있을 수 있는 구간이라, 취소를 받아 주면 화면·서버가 어긋난다).
 function renderUploadingRow(job) {
   const row = document.createElement('div');
-  row.className = 'vt-fl-row vt-fl-row-uploading';
+  row.className = 'vt-fl-row vt-prow two vt-fl-row-uploading';
+  row.insertAdjacentHTML('beforeend', pIcon(_fileIcon(job.name), 16));
 
   const main = document.createElement('div');
   main.className = 'vt-fl-row-main';
@@ -327,14 +351,11 @@ function renderUploadingRow(job) {
     : job.phase === 'saving' ? t('서버 저장 중')
       : t('업로드 중 · {loaded} / {size}', { loaded: fmtBytes(job.loaded), size: fmtBytes(job.size) });
   const sub = document.createElement('div');
-  sub.className = 'vt-fl-sub';
+  sub.className = 'vt-fl-meta';
   sub.textContent = label;
   const bar = document.createElement('div');
-  bar.className = 'vt-fl-gauge vt-fl-row-progress';
-  const fill = document.createElement('div');
-  fill.className = 'vt-fl-gauge-fill';
-  fill.style.width = (job.phase === 'queued' ? 0 : pct) + '%';
-  bar.appendChild(fill);
+  bar.className = 'vt-pbar vt-fl-row-progress';
+  bar.innerHTML = `<i class="vt-fl-gauge-fill" style="width:${job.phase === 'queued' ? 0 : pct}%"></i>`;
 
   main.appendChild(name);
   main.appendChild(sub);
@@ -343,7 +364,7 @@ function renderUploadingRow(job) {
 
   const acts = document.createElement('div');
   acts.className = 'vt-fl-acts';
-  const cancelBtn = iconBtn('x', t('취소'), 'rm', () => window.vtCancelUpload?.(job.clientId));
+  const cancelBtn = iconBtn('x', t('업로드 취소'), 'rm', () => window.vtCancelUpload?.(job.clientId));
   if (job.phase === 'saving') {
     cancelBtn.disabled = true;
     cancelBtn.title = t('서버가 저장하는 중이라 취소할 수 없습니다');
@@ -351,6 +372,82 @@ function renderUploadingRow(job) {
   acts.appendChild(cancelBtn);
   row.appendChild(acts);
   return row;
+}
+
+/** 파일 이름 → 행 아이콘(그림 / 글 / 그 밖). */
+function _fileIcon(name) {
+  const ext = String(name || '').toLowerCase().split('.').pop();
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'heic', 'avif'].includes(ext)) return 'image';
+  if (['txt', 'log', 'md', 'csv', 'json', 'yaml', 'yml', 'xml', 'html', 'pdf'].includes(ext)) return 'file-text';
+  return 'file';
+}
+
+// 「발급된 링크 N」(시안 P04) — 공유가 걸린 파일들의 링크를 한곳에 모은다. 주소는 이 세션에서 **방금 발급한**
+// 것만 안다(토큰을 서버가 보관하지 않는다 — _issuedTokens 주석). 그래서 [복사]는 그때만 켜지고, [취소]는 언제나 된다.
+function _issuedSection(inst) {
+  const rows = [];
+  for (const item of inst._items || []) {
+    for (const s of (item.shares || [])) if (s && typeof s === 'object') rows.push({ item, s });
+  }
+  if (!rows.length) return null;
+  const sec = document.createElement('div');
+  sec.className = 'vt-fl-issued-sec';
+  sec.innerHTML = `<div class="vt-psec gap"><span>${vtEsc(t('발급된 링크'))}</span><span class="n">${rows.length}</span></div>`;
+  for (const { item, s } of rows) {
+    const row = document.createElement('div');
+    row.className = 'vt-prow two vt-fl-linkrow';
+    row.innerHTML = icon('link', 14);
+    const main = document.createElement('div');
+    main.className = 'vt-fl-row-main';
+    const nm = document.createElement('div');
+    nm.className = 'vt-fl-name';
+    nm.textContent = item.name;
+    const meta = document.createElement('div');
+    meta.className = 'vt-fl-meta';
+    const left = Math.max(0, Math.round((s.exp - Date.now() / 1000) / 3600));
+    meta.textContent = [s.mode === 'pin' ? t('PIN 보호') : t('내 기기만'), s.once ? t('1회용') : '',
+      t('{n}시간 남음', { n: left })].filter(Boolean).join(' · ');
+    main.append(nm, meta);
+    row.appendChild(main);
+    const acts = document.createElement('span');
+    acts.className = 'r';
+    const token = _issuedTokens.get(s.shareId);
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'vt-btn sm quiet';
+    copy.innerHTML = `${icon('clipboard-copy', 12)}<span>${vtEsc(t('복사'))}</span>`;
+    copy.disabled = !token;
+    copy.title = token ? t('링크 복사') : t('이 링크의 주소는 발급한 그 순간에만 알 수 있습니다(서버가 보관하지 않음) — 필요하면 취소 후 새로 발급하세요');
+    copy.addEventListener('click', async () => {
+      if (!token) return;
+      try { await navigator.clipboard.writeText(absoluteShareUrl(`/s/${token}`)); okFlash(copy); }
+      catch (err) { showToast(t('복사 실패: {msg}', { msg: err.message }), 'error'); }
+    });
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'vt-btn sm quiet';
+    cancel.textContent = t('취소');
+    cancel.title = t('공유 취소');
+    cancel.addEventListener('click', () => _revokeShare(item, s.shareId));
+    acts.append(copy, cancel);
+    row.appendChild(acts);
+    sec.appendChild(row);
+  }
+  return sec;
+}
+
+async function _revokeShare(item, shareId) {
+  const del = () => vtFetch(`/api/files/${encodeURIComponent(item.id)}/share/${encodeURIComponent(shareId)}`, { method: 'DELETE' });
+  try {
+    await del();
+    showToast(t('취소됨 — 링크가 즉시 404가 됩니다'), 'success');
+  } catch (e) {
+    if (/elevation_required|401/.test(e.message || '') && await elevate()) {
+      try { await del(); showToast(t('취소됨 — 링크가 즉시 404가 됩니다'), 'success'); }
+      catch (e2) { showToast(t('취소 실패: {msg}', { msg: e2.message }), 'error'); }
+    } else { showToast(t('취소 실패: {msg}', { msg: e.message }), 'error'); }
+  }
+  refreshAllFiles();
 }
 
 // ── 일괄 선택/삭제 (2026-09-23, 설계 4번 — 첨부 파일 정리. 30일 자동 정리와
@@ -375,6 +472,8 @@ function _visibleSelectableIds(inst) {
 function _renderSelectBar(inst) {
   const bar = inst.ctx.byId('vt-fl-selectbar');
   if (!bar) return;
+  // 선택 모드(시안 P04-c)에서는 필터 줄 자리에 이 줄이 들어선다: [전체 선택] N개 선택 … [삭제] [완료].
+  bar.closest('.vt-fl-top')?.classList.toggle('selecting', inst.selectMode);
   if (!inst.selectMode) { bar.hidden = true; bar.innerHTML = ''; return; }
   bar.hidden = false;
   const visible = _visibleSelectableIds(inst);
@@ -409,15 +508,15 @@ function _renderSelectBar(inst) {
   const deleteBtn = document.createElement('button');
   deleteBtn.type = 'button';
   deleteBtn.className = 'vt-btn sm danger';
-  deleteBtn.textContent = t('삭제');
+  deleteBtn.innerHTML = `${icon('trash-2', 12)}<span>${vtEsc(t('삭제'))}</span>`;
   deleteBtn.disabled = inst.selected.size === 0;
   deleteBtn.addEventListener('click', () => bulkDeleteSelected(inst));
   bar.appendChild(deleteBtn);
 
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
-  cancelBtn.className = 'vt-btn sm quiet';
-  cancelBtn.textContent = t('취소');
+  cancelBtn.className = 'vt-btn sm';
+  cancelBtn.textContent = t('완료');
   cancelBtn.addEventListener('click', () => _toggleSelectMode(inst));
   bar.appendChild(cancelBtn);
 }
@@ -463,17 +562,26 @@ async function bulkDeleteSelected(inst) {
 function iconBtn(iconName, title, cls, onClick) {
   const b = document.createElement('button');
   b.type = 'button';
-  b.className = 'vt-icon-btn vt-fl-act ' + cls;
-  b.innerHTML = icon(iconName, 15);
+  b.className = 'vt-icon-btn sm vt-fl-act ' + cls;
+  b.innerHTML = icon(iconName, 14);
   b.title = title;
   b.setAttribute('aria-label', title);
   b.addEventListener('click', onClick);
   return b;
 }
 
+/** 「7일 후 자동 삭제」·「고정됨」·「공유 중」 — fmtRemaining의 값을 문장으로. */
+function _remainingPhrase(item) {
+  const r = fmtRemaining(item);
+  if (!item.pin && item.expires_at && item.expires_at > Date.now() / 1000) return t('{rem} 후 자동 삭제', { rem: r });
+  return r === '—' ? '' : r;
+}
+
+// 행 48(시안 P04): [아이콘 16] 이름(mono 12) [링크·고정 표시] / 크기 · 남은 기간 · 올린 시각(11 muted).
+// 머문 행에서 다운로드 · 경로 복사 · 터미널에 삽입 · 링크 발급 · 고정 · 삭제, 그 밖에는 「만료 임박」 꼬리표.
 export function renderRow(item, inst) {
   const row = document.createElement('div');
-  row.className = 'vt-fl-row';
+  row.className = 'vt-fl-row vt-prow two';
   row.dataset.id = item.id;
 
   // 선택 모드(설계 4번)에서는 행 앞에 체크박스가 붙고, 동작 버튼(다운로드·
@@ -490,40 +598,65 @@ export function renderRow(item, inst) {
     row.classList.add('vt-fl-row-selectable');
     if (cb.checked) row.classList.add('selected');
   }
+  row.insertAdjacentHTML('beforeend', pIcon(_fileIcon(item.name), 16));
 
   const main = document.createElement('div');
   main.className = 'vt-fl-row-main';
-  const name = document.createElement('div');
+  const line1 = document.createElement('div');
+  line1.className = 'vt-fl-line1';
+  const name = document.createElement('span');
   name.className = 'vt-fl-name';
   name.textContent = item.name;
   name.title = item.name;
+  line1.appendChild(name);
+  // 공유 중이면 링크 표시 + 모드(내 기기 · PIN), 고정이면 핀 — 색만이 아니라 모양·낱말로.
+  const shares = shareLabel(item);
+  if (shares) {
+    const s = document.createElement('span');
+    s.className = 'vt-fl-shared';
+    s.innerHTML = icon('link', 12);
+    s.appendChild(document.createTextNode(shares));
+    s.title = t('공유 중');
+    line1.appendChild(s);
+  }
+  if (item.pin) {
+    const p = document.createElement('span');
+    p.className = 'vt-fl-pinned';
+    p.innerHTML = icon('pin', 12);
+    p.title = t('고정됨');
+    line1.appendChild(p);
+  }
 
-  // 2026-09-22 — 항상 2줄 구조로 고정한다(사용자 확정). 예전엔 한 줄에 공유
-  // 라벨·용량·날짜시각·남은기간을 전부 점으로 이어붙여서, 공유 없는 파일은
-  // 1줄인데 공유 중인 파일만 줄바꿈되어 행 높이가 들쑥날쑥했다. "지금 상태"
-  // (용량·남은기간)와 "상세 기록"(공유 여부·업로드 시각)을 애초에 다른 줄로
-  // 나누면 내용과 무관하게 항상 2줄이고, 위계도 굵기/색으로 또렷해진다.
-  const meta = document.createElement('div');
+  // 2026-09-22 — 항상 2줄 구조로 고정한다(사용자 확정). 2줄 = "지금 상태"(용량·남은기간) + "상세 기록"(올린 시각).
+  const line2 = document.createElement('div');
+  line2.className = 'vt-fl-line2';
+  const meta = document.createElement('span');
   meta.className = 'vt-fl-meta';
-  meta.textContent = [fmtBytes(item.size), fmtRemaining(item)].filter(Boolean).join(' · ');
+  meta.textContent = [fmtBytes(item.size), _remainingPhrase(item)].filter(Boolean).join(' · ');
   if (item.expiring_soon) meta.classList.add('warn');
-
-  const sub = document.createElement('div');
+  const sub = document.createElement('span');
   sub.className = 'vt-fl-sub';
-  sub.textContent = [shareLabel(item), fmtUploadDate(item)].filter(Boolean).join(' · ');
+  sub.textContent = fmtUploadDate(item);
   if (item.created) sub.title = new Date(item.created * 1000).toLocaleString();
+  line2.append(meta, sub);
 
-  main.appendChild(name);
-  main.appendChild(meta);
-  main.appendChild(sub);
+  main.appendChild(line1);
+  main.appendChild(line2);
   row.appendChild(main);
 
   if (!inst || !inst.selectMode) {
+    if (item.expiring_soon) {
+      const tag = document.createElement('span');
+      tag.className = 'vt-ptag unhov';
+      tag.dataset.tone = 'wait';
+      tag.textContent = t('만료 임박');
+      row.appendChild(tag);
+    }
     const acts = document.createElement('div');
-    acts.className = 'vt-fl-acts';
+    acts.className = 'vt-fl-acts hov';
     acts.appendChild(iconBtn('download', t('다운로드'), 'dl', () => downloadFile(item)));
     acts.appendChild(iconBtn('clipboard-copy', t('경로 복사'), 'copy', (e) => copyPath(item, e.currentTarget)));
-    acts.appendChild(iconBtn('keyboard', t('터미널에 삽입'), 'ins', () => insertFile(item)));
+    acts.appendChild(iconBtn('corner-down-left', t('터미널에 삽입'), 'ins', () => insertFile(item)));
     acts.appendChild(iconBtn('link', t('링크 발급'), 'share', () => openShareDialog(item)));
     const pinTitle = item.pin ? t('고정 해제') : t('고정 (자동 삭제 안 함)');
     const pinBtn = iconBtn('pin', pinTitle, 'pin', (e) => togglePin(item, e.currentTarget));
@@ -535,22 +668,32 @@ export function renderRow(item, inst) {
   return row;
 }
 
+// 용량 막대(시안 P04) — 4px 막대 + 「N 사용 … 한도」. 90%를 넘으면 경고색.
 function renderFooter(quota) {
   const foot = document.createElement('div');
   foot.className = 'vt-fl-footer';
   const used = Number(quota.used || 0), max = Number(quota.max || 0);
   const pct = max ? Math.min(100, Math.round((used / max) * 100)) : 0;
   const bar = document.createElement('div');
-  bar.className = 'vt-fl-gauge';
-  const fill = document.createElement('div');
-  fill.className = 'vt-fl-gauge-fill' + (pct >= 90 ? ' warn' : '');
+  bar.className = 'vt-pbar vt-fl-gauge';
+  bar.setAttribute('role', 'progressbar');
+  bar.setAttribute('aria-valuenow', String(pct));
+  bar.setAttribute('aria-valuemin', '0');
+  bar.setAttribute('aria-valuemax', '100');
+  bar.setAttribute('aria-label', t('저장 공간'));
+  const fill = document.createElement('i');
+  fill.className = 'vt-fl-gauge-fill' + (pct >= 90 ? ' err' : pct >= 75 ? ' warn' : '');
   fill.style.width = pct + '%';
   bar.appendChild(fill);
   const text = document.createElement('div');
   text.className = 'vt-fl-footer-text';
-  text.textContent = max
-    ? `${fmtBytes(used)} / ${fmtBytes(max)}${quota.ttl_days ? ` · ${t('{n}일 후 자동 삭제', { n: quota.ttl_days })}` : ''}`
-    : `${fmtBytes(used)}`;
+  const a = document.createElement('span');
+  a.textContent = t('{n} 사용', { n: fmtBytes(used) });
+  const b = document.createElement('span');
+  b.textContent = max
+    ? `${fmtBytes(max)}${quota.ttl_days ? ` · ${t('{n}일 후 자동 삭제', { n: quota.ttl_days })}` : ''}`
+    : '';
+  text.append(a, b);
   foot.appendChild(bar);
   foot.appendChild(text);
   return foot;
@@ -895,4 +1038,5 @@ async function renderShareList(item, wrap) {
   }
 }
 
-export { showFiles, closeFiles };
+// wireFileDrop은 「드롭 한 번 = 업로드 한 번」 단위 테스트(files-panel.test.js)용으로 내보낸다.
+export { showFiles, closeFiles, wireFileDrop };

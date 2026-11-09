@@ -49,7 +49,13 @@ const ACTIONS = [
   // searchAddon)는 `searchInPane`(Mod+Shift+F)으로 내려갔다 — R7: 근육기억이
   // 걸린 재배선이라 palette-lazy.js가 최초 1회 토스트를 띄운다.
   { id: 'search',       def: 'Mod+F',        defNonMac: 'Ctrl+Shift+F', label: t('스크롤백 검색') },
-  { id: 'searchInPane', def: 'Mod+Shift+F',  defNonMac: 'Alt+Shift+F',  label: t('터미널 내 검색') },
+  // 리디자인 결정 4 · 파일 개편 단계 6(2026-11) — `Mod+Shift+F`(mac ⌘⇧F)는 파일 **내용 검색**(사이드바 「파일 ›
+  // 내용 검색」)으로 넘어갔다. 그 자리에 있던 터미널 내 검색은 비-mac에서 이미 쓰던 `Alt+Shift+F`로 모든 플랫폼을
+  // 맞췄다. 사용자가 직접 정한 바인딩은 그대로다(재정의는 id별로 저장되고, `match`가 재정의를 기본값보다 먼저 본다).
+  // 비-mac의 `Mod+Shift+F`(Ctrl+Shift+F)는 스크롤백 검색이 쓰고 있어, 내용 검색은 `Ctrl+Shift+G`(grep)다 —
+  // 터미널이 만들 수 없는 조합이고 브라우저 예약도 아니다.
+  { id: 'searchInPane', def: 'Alt+Shift+F',  label: t('터미널 내 검색') },
+  { id: 'contentSearch', def: 'Mod+Shift+F', defNonMac: 'Ctrl+Shift+G', label: t('파일 내용 검색') },
   { id: 'palette',    def: 'Mod+K',        defNonMac: 'Ctrl+Shift+K', label: t('커맨드 팔레트') },
   { id: 'viewer',     def: 'Ctrl+Shift+E', label: t('코드 뷰어') },
   { id: 'paste',      def: 'Ctrl+Shift+V', label: t('붙여넣기') },
@@ -69,6 +75,10 @@ const ACTIONS = [
   // 자리를 먼저 먹는다(mac `Cmd+Shift+N`, 비-mac `Ctrl+Shift+N`) — paneClose와
   // 같은 이유로 갈라 둔다.
   { id: 'worktreeNew', def: 'Ctrl+Shift+N', defNonMac: 'Alt+Shift+N',  label: t('워크트리 만들기') },
+  // 리디자인 결정 4 — 집중 모드(layout/focus.js). mac은 ⌘.(브라우저·터미널 어느 쪽도 쓰지 않는다), 그 밖은
+  // `Alt+Shift+.` — 비-mac의 Ctrl+.는 터미널 앱이 받을 수 있는 조합이라 피한다. Shift를 누르면 `.`이 `>`로 바뀌므로
+  // 글자가 아니라 **물리 키(Period)**로 맞춘다(keyKind 'code', core/keyboard-event.js physicalKey).
+  { id: 'focusMode',  def: 'Mod+.',        defNonMac: 'Alt+Shift+.',  label: t('집중 모드') },
 ];
 
 const BY_ID = new Map(ACTIONS.map((a) => [a.id, a]));
@@ -100,6 +110,12 @@ function _defaultCombo(spec) {
   return (!IS_MAC && spec.defNonMac) || spec.def;
 }
 
+// 조합의 마지막 키를 무엇으로 맞출지. 글자·숫자·`.`은 물리 키(code) — Option/Shift가 글자를 바꿔도(⌥⇧F → Ï,
+// ⇧. → >) 같은 키로 잡힌다. 나머지 기호는 배열의 논리 문자(key)다.
+function keyKindOf(combo) {
+  return /^[a-z0-9.]$/i.test(normalize(combo).split('+').at(-1)) ? 'code' : 'key';
+}
+
 // { binding?: string, passthrough?: boolean } 형태의 사용자 재정의
 export function getBinding(id) {
   const spec = BY_ID.get(id);
@@ -112,8 +128,9 @@ export function getBinding(id) {
     combo: ov.binding || def,
     passthrough: ov.delivery === 'app-and-terminal' || (ov.delivery == null && (ov.passthrough ?? false)),
     delivery: ov.delivery || (ov.passthrough ? 'app-and-terminal' : 'app'),
-    keyKind: ov.keyKind || (/^[a-z0-9]$/i.test(normalize(ov.binding || def).split('+').at(-1)) ? 'code' : 'key'),
+    keyKind: ov.keyKind || keyKindOf(ov.binding || def),
     isDefault: !ov.binding && ov.passthrough === undefined && !ov.delivery,
+    customCombo: !!ov.binding,
     // 일반 브라우저 탭에서 이 조합이 가로채지지 않는다면 그 사실을 함께 알린다.
     unavailable: isBrowserReserved(ov.binding || def),
   };
@@ -140,7 +157,7 @@ export function conflicts() {
 export function setBinding(id, combo, keyKind) {
   if (!BY_ID.has(id)) return Promise.resolve(false);
   const ov = { ..._overrides() };
-  ov[id] = { ...(ov[id] || {}), binding: combo || undefined, keyKind: keyKind || (/^[a-z0-9]$/i.test(normalize(combo).split('+').at(-1)) ? 'code' : 'key') };
+  ov[id] = { ...(ov[id] || {}), binding: combo || undefined, keyKind: keyKind || keyKindOf(combo) };
   if (!combo) delete ov[id].binding;
   return saveOverrides(ov);
 }
@@ -205,11 +222,16 @@ export function comboFromEvent(e, keyKind = 'code') {
 }
 
 // 눌린 키가 어떤 액션인지. 없으면 null.
+// 사용자가 직접 정한 조합이 기본 조합보다 먼저다 — 기본값이 바뀌어(예: `Mod+Shift+F`가 내용 검색으로 넘어감) 사용자가
+// 다른 동작에 묶어 둔 같은 조합과 겹쳐도 사용자의 선택이 이긴다.
 export function match(e) {
   if (isComposingKey(e) || e.getModifierState?.('AltGraph') || e.altGraph) return null;
-  for (const b of list()) {
-    if (b.unavailable) continue;      // 일반 탭에서 못 잡는 조합은 매칭도 안 한다
-    if (normalize(b.combo) === comboFromEvent(e, b.keyKind)) return b;
+  const all = list();
+  for (const pass of [true, false]) {
+    for (const b of all) {
+      if (b.unavailable || b.customCombo !== pass) continue;      // 일반 탭에서 못 잡는 조합은 매칭도 안 한다
+      if (normalize(b.combo) === comboFromEvent(e, b.keyKind)) return b;
+    }
   }
   return null;
 }

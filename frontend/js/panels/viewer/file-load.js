@@ -94,6 +94,7 @@ function _meta(d, mode, requested) {
     image: !!d.image,
     binary: !!d.binary,
     mime: d.mime,
+    media: d.media === 'video' || d.media === 'audio' ? d.media : null,   // 동영상·소리 — /api/fs/raw(Range)로 재생
     tooLarge: !!d.too_large,
     requested: requested || 'auto',
     encoding: d.encoding || null,

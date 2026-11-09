@@ -200,9 +200,18 @@ _ROWS: tuple = (
 # --- routes/files.py
     ("GET", "/api/fs/roots", auth()),
     ("GET", "/api/fs/search", auth()),
+    ("GET", "/api/fs/grep", auth()),
+    ("GET", "/api/fs/grep/progress", auth()),
     ("GET", "/api/fs/tree", auth()),
     ("GET", "/api/fs/file", auth()),
     ("GET", "/api/fs/raw", auth()),
+    ("GET", "/api/fs/download", auth()),
+# --- routes/fs_write.py (쓰기: 사람 세션 + 승격, 결정 D1 · 이 맥만, 결정 D7)
+    ("PUT", "/api/fs/file", human(elevated=True)),
+    ("POST", "/api/fs/new", human(elevated=True)),
+    ("POST", "/api/fs/mkdir", human(elevated=True)),
+    ("POST", "/api/fs/rename", human(elevated=True)),
+    ("POST", "/api/fs/delete", human(elevated=True)),
     ("WS", "/ws-fs-watch", auth()),
     ("GET", "/api/files", auth()),
     ("GET", "/api/files/{file_id}/download", auth()),

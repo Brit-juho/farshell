@@ -61,13 +61,13 @@ test('fuzzyMatch — 빈 질의는 항상 매치, 대소문자 무시 부분 문
   assert.strictEqual(fuzzyMatch('Hello World', 'zzz'), false);
 });
 
-test('DEFAULT_COMMANDS — 패널 명령(.show/.open) 6개가 rail과 짝지을 action을 갖는다', async () => {
+test('DEFAULT_COMMANDS — 패널 명령(.show/.open) 8개가 활동 막대의 도구 활동과 짝지을 action을 갖는다', async () => {
   const { DEFAULT_COMMANDS, panelCommands } = await mod();
   // vm 모듈이 만든 배열은 이 realm의 Array와 생성자가 달라 deepStrictEqual이
   // "구조는 같은데 참조가 다르다"로 실패한다(cross-realm, hud.test.js의 ids()
   // 헬퍼와 같은 문제) — 이 realm 배열로 복사한다.
   const panels = Array.from(panelCommands(DEFAULT_COMMANDS), (c) => c.action).sort();
-  assert.deepStrictEqual(panels, ['dir.show', 'files.show', 'ports.show', 'queue.show', 'snippets.show', 'usage.open'].sort());
+  assert.deepStrictEqual(panels, ['dir.show', 'files.show', 'ports.show', 'queue.show', 'scm.show', 'snippets.show', 'system.open', 'usage.open'].sort());
 });
 
 // ── 2부: mountPalette() DOM 마운트 ──────────────────────────────────────
@@ -89,7 +89,7 @@ function fakeDeps(doc, overrides = {}) {
     listSessions: overrides.listSessions || (() => []),
     getSession: overrides.getSession || (() => null),
     switchTo: (id) => calls.switchTo.push(id),
-    loadViewer: overrides.loadViewer || (async () => ({ _loadRecent: () => [], _hl: (t) => t })),
+    loadViewer: overrides.loadViewer || (async () => ({ _loadRecent: () => [] })),
     openFile: (p) => calls.openFile.push(p),
     openFileInPane: (p) => calls.openFileInPane.push(p),
     splitActivePane: overrides.splitActivePane || (() => 'pane-2'),
@@ -222,6 +222,30 @@ test('`@` 접두사 — 세션이 tmux 라이브 프리뷰 후보면 카드로 �
   assert.ok(card, '라이브 프리뷰 카드가 나와야 한다');
 });
 
+// 리디자인 6단계(시안 O01 · O03) — `@`에서 고른 세션의 화면을 오른쪽 칸에 터미널 색 클래스로 그린다(글자는 textContent).
+test('`@` 접두사 — 고른 세션 화면을 터미널 색으로 미리 보이고, 화면 글자는 마크업으로 해석되지 않는다', async () => {
+  const { mountPalette, document, window, root } = await mountFresh();
+  window.allSessions = () => ({ a: { tmuxName: 'dev' } });
+  const asked = [];
+  const deps = fakeDeps(document, {
+    listSessions: () => [{ id: 'a', name: 'dev' }],
+    vtFetch: async (path) => {
+      if (path.includes('/api/tmux/sessions')) return [{ name: 'dev', command: 'claude' }];
+      if (path.includes('/api/tmux/preview/')) { asked.push(path); return { available: true, content: '\x1b[32m✓ 42 passed\x1b[0m\n\x1b[31m<b>x</b>\x1b[0m' }; }
+      return {};
+    },
+  });
+  const api = mountPalette(root, deps);
+  api.open('session');
+  const term = await waitFor(() => document.querySelector('.vt-qo-preview-pane .vt-qo-term .ta-green'));
+  assert.strictEqual(term.textContent, '✓ 42 passed');
+  assert.match(asked[0], /^\/api\/tmux\/preview\/dev\?lines=40&ansi=1$/);
+  const pane = document.querySelector('.vt-qo-preview-pane');
+  assert.strictEqual(pane.querySelector('b'), null);
+  assert.strictEqual(pane.querySelector('.ta-red').textContent, '<b>x</b>');
+  api.close();
+});
+
 test('명령을 실행하면 「최근 사용 기능」으로 기본 화면 위에 올라온다', async () => {
   // window.vtSettingsGet/Set은 core/settings.js가 앱 부팅 시 공개하는
   // 브리지다(테스트는 solid-env가 만든 jsdom window를 직접 스텁한다).
@@ -247,7 +271,7 @@ test('명령을 실행하면 「최근 사용 기능」으로 기본 화면 위�
 test('`/` 접두사 — 최근 파일 + 서버 검색 결과(디바운스 후)', async () => {
   const { mountPalette, document, root } = await mountFresh();
   const deps = fakeDeps(document, {
-    loadViewer: async () => ({ _loadRecent: () => ['/repo/old.py'], _hl: (t) => t }),
+    loadViewer: async () => ({ _loadRecent: () => ['/repo/old.py'] }),
     vtFetch: async (path) => {
       if (path.includes('/api/fs/search')) return { results: [{ path: '/repo/src/needle.py', name: 'needle.py' }] };
       return {};
@@ -414,7 +438,7 @@ test('Tab — 파일/스크롤백 결과를 큐로 보낸다', async () => {
   const { mountPalette, document, window, root } = await mountFresh();
   const queuePosts = [];
   const deps = fakeDeps(document, {
-    loadViewer: async () => ({ _loadRecent: () => ['/repo/notes.md'], _hl: (t) => t }),
+    loadViewer: async () => ({ _loadRecent: () => ['/repo/notes.md'] }),
     vtFetch: async (path, opts) => {
       if (opts && opts.method === 'POST' && path.includes('/api/queue')) {
         queuePosts.push(JSON.parse(opts.body));
@@ -444,7 +468,7 @@ async function openFileRow(mods) {
   const { mountPalette, document, window, root } = await mountFresh();
   const splits = [];
   const deps = fakeDeps(document, {
-    loadViewer: async () => ({ _loadRecent: () => ['/repo/notes.md'], _hl: (t) => t }),
+    loadViewer: async () => ({ _loadRecent: () => ['/repo/notes.md'] }),
     splitActivePane: (dir) => { splits.push(dir); return 'pane-2'; },
   });
   const api = mountPalette(root, deps);

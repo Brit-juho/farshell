@@ -161,6 +161,24 @@ function schedule(trigger) {
   else openTimer = setTimeout(() => show(trigger), OPEN_DELAY);
 }
 
+/**
+ * 지연 로드(ui/tooltip-lazy.js)가 본체를 받기 전에 들어온 첫 트리거를 넘겨받는다. 그 사이 포인터가 이미
+ * 떠났으면(:hover가 아니면) 띄우지 않는다 — pointerout은 본체가 오기 전이라 못 들었다.
+ */
+export function adoptTrigger(trigger, type) {
+  if (!(trigger instanceof Element) || !trigger.isConnected) return;
+  if (type === 'focusin') {
+    let visible = false;
+    try { visible = trigger.matches(':focus-visible') && trigger.contains(document.activeElement); } catch (_) {}
+    if (visible) show(trigger);
+    return;
+  }
+  let hovered = false;
+  try { hovered = trigger.matches(':hover'); } catch (_) {}
+  if (!hovered || trigger.getAttribute('aria-disabled') === 'true' || trigger.disabled) return;
+  schedule(trigger);
+}
+
 export function initTooltips() {
   if (wired) return;
   wired = true;

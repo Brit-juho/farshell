@@ -44,7 +44,7 @@ Each link in that chain has its own guard:
 
 ## Pieces
 
-**`pools`.** Pool sizes: `fs` 4, `git` 6, `proc` 6, `net` 8, `slow` 3. `VT_POOL_<NAME>_SIZE` overrides a
+**`pools`.** Pool sizes: `fs` 4, `git` 6, `proc` 6, `net` 8, `slow` 3, `grep` 2 (file content search waits on its child process here so a 10 s search never holds an `fs` worker). `VT_POOL_<NAME>_SIZE` overrides a
 size; `default` uses the stdlib formula.
 - Admission is capped at size × 5. Beyond that the call raises `Busy` immediately instead of queueing
   behind a stuck pool.
@@ -100,6 +100,11 @@ deadline and the breaker instead.
   The last `enter` is quarantined for 6 h (`$VT_STATE_DIR/scan-quarantine.json`) and tripped in the breaker.
 - Later scans skip risky mounts, quarantined paths and blocked paths.
 - `fuzzy_score` lives in `scan_worker.py` and `routes/files.py` imports it.
+- File content search (`grep` mode, `fs_grep.py`) uses `scan.stream` instead of `scan.run`: the worker sends each
+  file's hits as it finds them, so at the 10 s deadline the parent kills it and keeps what arrived. A `scan.Cancel`
+  token kills the process group from another thread (client disconnected, or the same client started a newer
+  search). A content-search timeout is about the amount of work, not a hung mount, so nothing is quarantined or
+  tripped, and when the worker cannot be spawned the route answers 503 rather than searching in-process.
 
 **`watch`.**
 - `SIGUSR1` appends every thread's Python stack to `$VT_RUN_DIR/stacks.log` (faulthandler). Use

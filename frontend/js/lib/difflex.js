@@ -46,6 +46,9 @@
   // type: 'ctx' | 'add' | 'del' | 'meta'
   function parse(diffText) {
     var lines = normalize(diffText).split('\n');
+    // 원문이 줄바꿈으로 끝나면 split이 끝에 빈 문자열 하나를 남긴다. diff의 빈 문맥 줄은
+    // 항상 공백 한 칸(" ")이라 이 빈 문자열은 줄이 아니다 — 남겨 두면 끝에 번호 붙은 빈 줄이 생긴다.
+    if (lines.length && lines[lines.length - 1] === '') lines.pop();
     var files = [];
     var cur = null;
     var hunk = null;
@@ -119,9 +122,8 @@
     return { add: add, del: del };
   }
 
-  // 확장자 → highlight.js 언어명. 모르면 null(=plaintext 폴백).
-  // 하이라이터가 예외를 던지면 뷰어 전체가 죽으므로, 호출부는 반드시 이 값이
-  // null일 때 하이라이팅을 건너뛰어야 한다.
+  // 확장자 → 언어 이름. 모르면 null(=일반 텍스트). 이름은 옛 highlight.js 이름을 그대로 쓴다 —
+  // 편집기(editor-text.js editorLangKey)가 이 이름을 CodeMirror 언어 팩 키로 바꾼다(hljs는 단계 9에서 지웠다).
   var EXT_LANG = {
     py: 'python', pyi: 'python',
     js: 'javascript', mjs: 'javascript', cjs: 'javascript', jsx: 'javascript',

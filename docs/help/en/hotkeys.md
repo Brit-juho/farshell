@@ -15,10 +15,18 @@
 |---|---|
 | Click the mic button | Toggle recording |
 | Click the voice-only button | Switch UI mode (hides the terminal) |
-| Click the earphone button | Turn the media-key trigger on/off |
+| Palette `>` 「Earphone media keys」 | Turn the media-key trigger on/off (off again after a reload) |
 | Earphone Play/Pause | Toggle recording (when the earphone trigger is on) |
-| `Cmd+F` / `Ctrl+Shift+F` | Scrollback search (in-terminal search is `Cmd+Shift+F` / `Alt+Shift+F`) |
-| `⋯` on a rail row, or right-click | Session menu (open/close, rename, open on Mac, connected screens, kill) |
+| `Cmd+F` / `Ctrl+Shift+F` | Scrollback search |
+| `Alt+Shift+F` | In-terminal search (also on Mac — formerly `Cmd+Shift+F`) |
+| `Cmd+Shift+F` / `Ctrl+Shift+G` | File content search — the sidebar 「Files › Search contents」. In the palette, the `?` prefix |
+| `Cmd+S` / `Ctrl+S` (while editing in the viewer) | Save the file — the first save asks for your web login password once (kept 15 minutes). There is no autosave |
+| `Cmd+.` / `Alt+Shift+.` | Focus mode on/off — hides every bar so the panes reach the window edges (rebind it in Settings → Keymap) |
+| `⌥C` · `⌥W` · `⌥R` in the palette `?` mode | Toggle match case · whole word · regex (`⌥Enter` moves the search to the sidebar) |
+| `Cmd+B` / `Alt+Shift+B` | Collapse/expand the sidebar (「Toggle sidebar」 under Settings → Keymap) |
+| `Cmd+K` | Quick open (palette) |
+| `Cmd+,` | Settings |
+| `⋯` on a row in the sidebar's Sessions view, or right-click | Session menu (open/close, rename, open on Mac, connected screens, kill) |
 
 ## Change a hotkey
 
@@ -72,7 +80,7 @@ Examples:
 To stop the earphone Play/Pause from triggering voice input:
 
 ### Mobile (browser)
-Tap the 🎵 earphone button on the voice bar. When it's off, the OS keeps its default media controls (music play/pause works normally).
+Toggle it from the palette (`Cmd+K`) with `>` 「Earphone media keys」. When it's off, the OS keeps its default media controls (music play/pause works normally). Every page load starts with it off.
 
 ### Desktop (`~/.vt.env`)
     VT_VOICE_MEDIA_KEYS="off"

@@ -37,8 +37,24 @@ import { vtFetch } from '../core/api.js';
 // N35 §6 — 뷰어 leaf의 내용은 지연 청크가 그린다(정적 import 금지, ADR-26).
 import { loadViewer } from '../panels/viewer-lazy.js';
 import * as surface from './surface.js';
-import { beginResizeOverlay, endResizeOverlay } from './resize-overlay.js';
+// 리사이즈 캡션 본체는 첫 드래그 때 받는다(vite.config.js 'resize-overlay' 청크 — 초기 페이로드 여유, 리디자인 9단계).
+// 받는 동안 드래그가 끝났으면 띄우지 않는다.
+let _resizeOverlay = null;
+let _resizeOverlayWanted = false;
+function beginResizeOverlay() {
+  _resizeOverlayWanted = true;
+  if (_resizeOverlay) { _resizeOverlay.beginResizeOverlay(); return; }
+  import('./resize-overlay.js').then((m) => {
+    _resizeOverlay = m;
+    if (_resizeOverlayWanted) m.beginResizeOverlay();
+  }).catch((e) => console.error('[FarShell resize-overlay]', e));
+}
+function endResizeOverlay() {
+  _resizeOverlayWanted = false;
+  _resizeOverlay?.endResizeOverlay();
+}
 import { t } from '../core/i18n.js';
+import { isRelayed } from '../core/host-route.js';
 
 export { canSplit };
 
@@ -105,8 +121,8 @@ function _paneSessionId(paneId) {
 // (워크트리가 하나뿐이면 구분할 게 없으니 칩 자체가 안 보여야 한다).
 // 지도 자체는 layout/branch-chips.js가 갖는다(뷰 탭 툴팁과 공유).
 
-export function setBranchChipMap(map) {
-  setBranchChips(map);
+export function setBranchChipMap(map, repos) {
+  setBranchChips(map, repos);
   _paintAllChips();
 }
 
@@ -502,6 +518,19 @@ function _renderViewerBody(bodyEl, file) {
     if (f) import('../panels/files/files.js').then((m) => m.shareFsPath(f)).catch((e) => console.error('[FarShell share]', e));
   });
   tools.appendChild(shareBtn);
+  // 다운로드(파일 개편 단계 7) — 이 컴퓨터의 파일만이라 원격 호스트를 보는 중이면 흐리게 두고 이유를 단다(렌더러가 거절도 한다).
+  const dlBtn = document.createElement('button');
+  dlBtn.type = 'button';
+  dlBtn.className = 'vt-icon-btn xs vt-pane-refresh vt-pane-download';
+  dlBtn.setAttribute('aria-label', t('다운로드'));
+  dlBtn.dataset.tip = isRelayed() ? t('다운로드는 이 컴퓨터의 파일만 됩니다 — 원격 호스트 파일은 받을 수 없습니다') : t('다운로드');
+  if (isRelayed()) dlBtn.setAttribute('aria-disabled', 'true');
+  dlBtn.innerHTML = icon('download', 13);
+  dlBtn.addEventListener('click', () => {
+    const f = bodyEl.dataset.viewerFile;
+    if (f) loadViewer().then((v) => v.downloadFsPath(f, { rev: v.viewerRev(bodyEl) })).catch(() => {});
+  });
+  tools.appendChild(dlBtn);
   const host = document.createElement('div');
   host.className = 'vt-vw-code-pane';
   bodyEl.append(tools, host);

@@ -12,9 +12,9 @@ const flush = async () => { for (let i = 0; i < 6; i++) await new Promise((r) =>
 async function build({ missing = false, remote = false, failure = false } = {}) {
   const env = createDomEnv(html); doms.push(env.dom);
   const w = env.window;
-  // 마이크 버튼은 index.html에서 hidden 템플릿 안에 있다(실제 앱에서는 dock으로 옮겨 붙는다). jsdom 30부터는
+  // 마이크 버튼은 index.html의 숨은 대기 자리(#vt-mic-park)에 있다(실제 앱에서는 활동 막대로 옮겨 붙는다). jsdom 30부터는
   // 렌더되지 않는 요소의 focus()를 명세대로 무시하므로, 실제처럼 보이는 상태로 만들어 둔다.
-  w.document.getElementById('vt-rail-settings-tpl')?.removeAttribute('hidden');
+  w.document.getElementById('vt-mic-park')?.removeAttribute('hidden');
   w.API_BASE = w.location.origin;
   w.vtRelayHost = () => remote ? 'peer' : 'local';
   const actions = {}; w.registerAction = (name, fn) => { actions[name] = fn; };
@@ -174,4 +174,27 @@ test('부분 결과는 녹음·인식 중에만 흐리게 보이고, 끝나면 �
   assert.equal(el.hidden, false);                                  // 인식 중에도 유지
   stage('done'); await flush();
   assert.equal(el.hidden, true); assert.equal(el.textContent, '');
+});
+
+// 리디자인 6단계(시안 O16-F) — 채운 버튼은 「입력」 하나, 「녹음 종료」는 위험 테두리, 막대 24개, 머리의 서버 점.
+test('정돈 배치: 녹음 중 버튼은 위험 테두리, 막대 24개가 값을 밀어 넣고, 머리 점이 서버 상태를 따른다', async () => {
+  const { w } = await build({ missing: true });
+  const doc = w.document;
+  const record = doc.getElementById('voice-panel-record');
+  const head = doc.querySelector('#voice-status-panel .vt-voice-head');
+  assert.equal(head.dataset.voiceState, 'setup');
+  assert.ok(head.querySelector('.vt-voice-ic svg'), '머리 마이크 아이콘');
+  assert.ok(doc.getElementById('voice-status-close').querySelector('svg'), '닫기는 × 아이콘');
+  assert.equal(doc.querySelectorAll('#voice-status-panel .vt-btn.solid').length, 1, '채운 버튼은 하나뿐');
+  assert.equal(doc.querySelector('#voice-status-panel .vt-btn.solid').id, 'voice-confirm-send');
+  const stage = (phase, target) => w.dispatchEvent(new w.CustomEvent('vt:voice-stage', { detail: { phase, target } }));
+  stage('recording', '작업'); await flush();
+  assert.equal(record.classList.contains('danger'), true);
+  const bars = [...doc.querySelectorAll('#voice-meter .vt-voice-bar')];
+  assert.equal(bars.length, 24);
+  w.dispatchEvent(new w.CustomEvent('vt:voice-level', { detail: { level: 0.8, clip: false } }));
+  assert.equal(bars[23].style.transform, 'scaleY(0.80)');
+  assert.equal(bars[0].style.transform, 'scaleY(0.10)');
+  stage('processing'); await flush();
+  assert.equal(record.classList.contains('danger'), false);
 });

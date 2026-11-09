@@ -69,7 +69,7 @@ test('열기 — 섹션 목록과 첫 섹션이 그려진다', async () => {
   assert.ok(document.getElementById('vt-settings'), '패널이 열려야 한다');
   assert.deepEqual(
     Array.from(document.querySelectorAll('.vt-set-navitem')).map((b) => b.textContent),
-    ['터미널', '음성 및 알림', '에이전트', '키맵', '모양', '메뉴바', '권한', '계정 및 보안', '정보 및 진단'],
+    ['터미널', '음성 및 알림', '에이전트', '키맵', '모양', '상태 막대 · 활동 막대', '권한', '계정 및 보안', '정보 및 진단'],
   );
   assert.ok(rowByLabel(document, '글자 크기'), '첫 섹션(터미널)이 그려져야 한다');
 });
@@ -176,7 +176,7 @@ test('검색은 사용자가 흔히 쓰는 동의어도 찾고 해당 행으로 
   assert.strictEqual(document.activeElement, rowByLabel(document, '글자 크기').querySelector('.vt-set-label'));
 });
 
-test('compact — 더보기 첫 화면에 도구와 설정 진입점이 나온다 (메뉴바는 HUD가 없어 뺀다)', async () => {
+test('compact — 더보기 첫 화면에 도구와 설정 진입점이 나온다 (상태 막대는 HUD가 없어 뺀다)', async () => {
   const { document, P } = await build({ compact: true });
   P.showSettings();
   const links = Array.from(document.querySelectorAll('.vt-set-mobile-link strong')).map((e) => e.textContent);
@@ -261,9 +261,10 @@ test('키맵 — 재바인딩: 버튼을 누르고 조합을 입력하면 저장
   const btn = rowByLabel(document, '스크롤백 검색').querySelector('.vt-set-combo');
   btn.click();
   assert.ok(btn.classList.contains('recording'), '녹화 상태가 보여야 한다');
-  document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'g', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }));
+  // 비어 있는 조합으로 고른다 — Ctrl+Shift+G는 이제 비-mac의 「파일 내용 검색」 기본값이라 겹침으로 거절된다.
+  document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'y', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }));
   await flush();
-  assert.strictEqual(K.normalize(K.list().find((b) => b.id === 'search').combo), 'mod+shift+g');
+  assert.strictEqual(K.normalize(K.list().find((b) => b.id === 'search').combo), 'mod+shift+y');
 });
 
 test('키맵 — 수식키만 누르면 확정되지 않는다', async () => {
@@ -447,7 +448,7 @@ test('음성 — 웹 푸시 테스트 발송 버튼이 실호출 + 토스트를 
 });
 
 test('음성 — 구독 켜기/끄기 버튼(#push-btn)이 이식됐고 pushui.js 계약 id를 유지한다', async () => {
-  // 2026-09-18 — 이 버튼은 legacy rail 플라이아웃(#vt-rail-panel) 안에만
+  // 2026-09-18 — 이 버튼은 legacy rail 플라이아웃(옛 레일 설정 패널, 9단계에 삭제) 안에만
   // 있다가, 그 플라이아웃을 열던 ⚙가 새 레일로 대체되며 화면에서 완전히
   // 도달 불가능해졌다. 이 섹션으로 이식한 게 유일한 복구 경로다.
   const { document, P } = await build({});
@@ -745,58 +746,67 @@ test('전용 숫자 스피너는 저장·슬라이더·기본값 복원과 동�
   assert.ok(!spinner.querySelector('.up').disabled);
 });
 
-// ── 메뉴바(HUD) 구성 — 2026-10-23 ───────────────────────────────────────────
+// ── 상태 막대(HUD) 구성 — 2026-10-23, 리디자인 2단계에서 메뉴바 → 상태 막대 ─────────────────────────────
 // 규칙(parse/move/step)은 hud.test.js가 잠근다. 여기서는 화면이 그 규칙을 부르고 저장하는지만 본다.
+// 에이전트 칩은 맨 왼쪽 고정(세대 3) — 「왼쪽」 맨 위에 손잡이·선택·버튼 없는 고정 행으로만 나온다.
 
 const hudItem = (document, kind) => document.querySelector(`.vt-hudcfg-item[data-kind="${kind}"]`);
 const hudZone = (document, zone) => Array.from(document.querySelectorAll(`.vt-hudcfg-zone[data-zone="${zone}"] .vt-hudcfg-item`))
   .map((li) => li.dataset.kind);
 const layoutOf = (S) => JSON.parse(S.get('ui.hud.layout'));
+const previewKinds = (document) => Array.from(document.querySelectorAll('.vt-hudcfg-preview .vt-hud-chip')).map((c) => c.dataset.chip);
 
-test('메뉴바 — 기본 배치가 구역별 목록과 미리보기로 그려진다 (서버는 사용 안 함)', async () => {
+test('상태 막대 — 기본 배치가 구역별 목록과 미리보기로 그려진다 (에이전트 고정, 서버는 사용 안 함)', async () => {
   const { document, P } = await build();
   P.showSettings();
-  sectionButton(document, '메뉴바').click();
-  assert.deepEqual(hudZone(document, 'left'), ['agents', 'screens', 'e2e', 'safe-mode']);
+  sectionButton(document, '상태 막대 · 활동 막대').click();
+  assert.deepEqual(hudZone(document, 'left'), ['agents', 'e2e', 'safe-mode', 'screens']);
   assert.deepEqual(hudZone(document, 'right'), ['cpu', 'gpu', 'ram', 'net', 'usage', 'push', 'version', 'clock']);
   assert.deepEqual(hudZone(document, 'off'), ['server']);
-  assert.strictEqual(document.querySelectorAll('.vt-hudcfg-preview .vt-hud-chip').length, 12, '미리보기는 켜진 칩만 그린다');
+  const pinned = hudItem(document, 'agents');
+  assert.ok(pinned.classList.contains('pinned'));
+  assert.strictEqual(pinned.querySelector('select'), null, '고정 칩은 구역을 바꿀 수 없다');
+  assert.strictEqual(pinned.querySelectorAll('.vt-icon-btn').length, 0, '고정 칩은 순서 버튼이 없다');
+  assert.strictEqual(pinned.draggable, false, '고정 칩은 끌 수 없다');
+  assert.strictEqual(pinned.querySelector('.vt-hudcfg-pin').textContent, '고정');
+  assert.strictEqual(previewKinds(document).length, 12, '미리보기는 켜진 칩만 그린다');
+  assert.strictEqual(previewKinds(document)[0], 'agents', '미리보기도 에이전트가 맨 왼쪽');
+  assert.strictEqual(document.querySelector('.vt-hudcfg-preview').getAttribute('aria-label'), '상태 막대 미리보기');
   assert.strictEqual(document.querySelector('.vt-hudcfg-foot .vt-btn').disabled, true, '기본이면 되돌릴 게 없다');
 });
 
-test('메뉴바 — 구역 선택을 바꾸면 저장되고 목록·미리보기가 즉시 바뀐다', async () => {
+test('상태 막대 — 구역 선택을 바꾸면 저장되고 목록·미리보기가 즉시 바뀐다', async () => {
   const { document, P, S } = await build();
   P.showSettings();
-  sectionButton(document, '메뉴바').click();
+  sectionButton(document, '상태 막대 · 활동 막대').click();
   const sel = hudItem(document, 'server').querySelector('select');
   sel.value = 'left';
   sel.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
-  assert.deepEqual(hudZone(document, 'left'), ['agents', 'screens', 'e2e', 'safe-mode', 'server']);
-  assert.deepEqual(layoutOf(S).left, ['agents', 'screens', 'e2e', 'safe-mode', 'server']);
-  assert.strictEqual(document.querySelectorAll('.vt-hudcfg-preview .vt-hud-chip').length, 13);
+  assert.deepEqual(hudZone(document, 'left'), ['agents', 'e2e', 'safe-mode', 'screens', 'server']);
+  assert.deepEqual(layoutOf(S).left, ['e2e', 'safe-mode', 'screens', 'server'], '저장값에는 고정 칩이 없다');
+  assert.strictEqual(layoutOf(S).v, 3);
+  assert.strictEqual(previewKinds(document).length, 13);
 });
 
-test('메뉴바 — 위/아래 버튼은 같은 구역 안에서 한 칸 옮기고 끝에서는 눌리지 않는다', async () => {
+test('상태 막대 — 위/아래 버튼은 같은 구역 안에서 한 칸 옮기고 끝에서는 눌리지 않는다(고정 칩 위로는 못 간다)', async () => {
   const { document, P, S } = await build();
   P.showSettings();
-  sectionButton(document, '메뉴바').click();
-  const [up, down] = hudItem(document, 'e2e').querySelectorAll('.vt-icon-btn');
+  sectionButton(document, '상태 막대 · 활동 막대').click();
+  const [up, down] = hudItem(document, 'safe-mode').querySelectorAll('.vt-icon-btn');
   assert.strictEqual(up.disabled, false);
   up.click();
-  assert.deepEqual(hudZone(document, 'left'), ['agents', 'e2e', 'screens', 'safe-mode']);
-  assert.deepEqual(layoutOf(S).left, ['agents', 'e2e', 'screens', 'safe-mode']);
-  hudItem(document, 'e2e').querySelectorAll('.vt-icon-btn')[0].click();
-  assert.deepEqual(hudZone(document, 'left'), ['e2e', 'agents', 'screens', 'safe-mode']);
-  const [firstUp] = hudItem(document, 'e2e').querySelectorAll('.vt-icon-btn');
-  assert.strictEqual(firstUp.disabled, true, '맨 위 칩의 위로 버튼은 비활성');
+  assert.deepEqual(hudZone(document, 'left'), ['agents', 'safe-mode', 'e2e', 'screens']);
+  assert.deepEqual(layoutOf(S).left, ['safe-mode', 'e2e', 'screens']);
+  const [firstUp] = hudItem(document, 'safe-mode').querySelectorAll('.vt-icon-btn');
+  assert.strictEqual(firstUp.disabled, true, '고정 칩 바로 아래(배치의 맨 위)에서는 위로 버튼이 비활성');
   assert.ok(down);
   assert.strictEqual(hudItem(document, 'server').querySelectorAll('.vt-icon-btn').length, 0, '사용 안 함 칩에는 순서 버튼이 없다');
 });
 
-test('메뉴바 — 기본값으로 버튼은 저장값을 비우고 기본 배치로 돌린다', async () => {
+test('상태 막대 — 기본값으로 버튼은 저장값을 비우고 기본 배치로 돌린다', async () => {
   const { document, P, S } = await build();
   P.showSettings();
-  sectionButton(document, '메뉴바').click();
+  sectionButton(document, '상태 막대 · 활동 막대').click();
   hudItem(document, 'cpu').querySelectorAll('.vt-icon-btn')[1].click();
   assert.notStrictEqual(S.get('ui.hud.layout'), '');
   const reset = document.querySelector('.vt-hudcfg-foot .vt-btn');
@@ -806,18 +816,126 @@ test('메뉴바 — 기본값으로 버튼은 저장값을 비우고 기본 배�
   assert.deepEqual(hudZone(document, 'right'), ['cpu', 'gpu', 'ram', 'net', 'usage', 'push', 'version', 'clock']);
 });
 
-test('메뉴바 — 모든 칩을 꺼도 화면이 죽지 않고 빈 상태를 알린다', async () => {
+test('상태 막대 — 옮길 수 있는 칩을 모두 꺼도 화면이 죽지 않고, 에이전트 칩만 남는다', async () => {
   const { document, P, S } = await build();
   P.showSettings();
-  sectionButton(document, '메뉴바').click();
-  S.set('ui.hud.layout', JSON.stringify({ left: [], right: [] }));
+  sectionButton(document, '상태 막대 · 활동 막대').click();
+  S.set('ui.hud.layout', JSON.stringify({ v: 3, left: [], right: [] }));
   sectionButton(document, '모양').click();
-  sectionButton(document, '메뉴바').click();
-  assert.ok(document.querySelector('.vt-hudcfg-empty-bar'));
-  assert.strictEqual(hudZone(document, 'off').length, 13);
+  sectionButton(document, '상태 막대 · 활동 막대').click();
+  assert.deepEqual(previewKinds(document), ['agents']);
+  assert.deepEqual(hudZone(document, 'left'), ['agents']);
+  assert.strictEqual(hudZone(document, 'off').length, 12);
+  assert.ok(document.querySelector('.vt-hudcfg-zone[data-zone="right"] .vt-hudcfg-empty'), '빈 구역은 끌어 놓으라고 알린다');
 });
 
-test('메뉴바 — 배치는 이 기기에만 저장된다(device 스코프)', async () => {
+test('상태 막대 — 배치는 이 기기에만 저장된다(device 스코프)', async () => {
   const { S } = await build();
   assert.strictEqual(S.scopeOf('ui.hud.layout'), 'device');
+});
+
+// ── 활동 막대 순서(시안 O05 오른쪽 칸) ─────────────────────────────────────────
+// 규칙(parse/move/step/hidden)은 activity-layout.test.js가 잠근다. 여기서는 편집기가 그 규칙을 부르고 저장하는지,
+// 같은 편집기가 오른쪽 칸(넓은 창)과 구역 아래(좁은 창) 두 자리에 그려지고 서로 맞는지만 본다.
+
+const actItems = (root, group) => Array.from(root.querySelectorAll(`.vt-actcfg-list[data-group="${group}"] .vt-actcfg-item`))
+  .map((li) => li.dataset.activity);
+const sideEditor = (document) => document.querySelector('.vt-set-side-actcfg .vt-actcfg');
+const inlineEditor = (document) => document.querySelector('.vt-hudcfg .vt-actcfg-inline');
+
+test('활동 막대 순서 — 오른쪽 칸과 구역 아래에 같은 목록, 세션은 고정·숨김 단추 없음, 아래쪽은 순서만', async () => {
+  const { document, P } = await build();
+  P.showSettings();
+  sectionButton(document, '상태 막대 · 활동 막대').click();
+  const side = sideEditor(document);
+  const inline = inlineEditor(document);
+  assert.ok(side && inline, '두 자리 모두 그린다(보이는 쪽은 CSS가 고른다)');
+  const all = ['sessions', 'scm', 'dir', 'queue', 'files', 'snippets', 'ports', 'usage', 'system'];
+  assert.deepEqual(actItems(side, 'order'), all);
+  assert.deepEqual(actItems(inline, 'order'), all);
+  assert.deepEqual(actItems(side, 'bottom'), ['mcp', 'mic', 'settings']);
+  const sessions = side.querySelector('.vt-actcfg-item[data-activity="sessions"]');
+  assert.ok(sessions.classList.contains('pinned'));
+  assert.strictEqual(sessions.draggable, false);
+  assert.strictEqual(sessions.querySelectorAll('button').length, 0, '고정 행에는 단추가 없다');
+  assert.strictEqual(sessions.querySelector('.vt-actcfg-tag').textContent, '맨 위 고정');
+  const mcp = side.querySelector('.vt-actcfg-item[data-activity="mcp"]');
+  assert.strictEqual(mcp.querySelector('[aria-pressed]'), null, '아래쪽은 숨김 단추가 없다');
+  assert.strictEqual(mcp.querySelectorAll('button').length, 2, '↑↓만');
+  assert.strictEqual(side.querySelector('.vt-actcfg-reset').disabled, true, '기본이면 되돌릴 게 없다');
+  assert.strictEqual(document.querySelector('.vt-set-side-actcfg').getAttribute('aria-label'), '활동 막대 순서');
+});
+
+test('활동 막대 순서 — 숨기기·↑↓가 저장되고 두 자리가 함께 바뀐다, 기본값으로는 저장값을 비운다', async () => {
+  const { document, P, S } = await build();
+  P.showSettings();
+  sectionButton(document, '상태 막대 · 활동 막대').click();
+  const item = (root, id) => root.querySelector(`.vt-actcfg-item[data-activity="${id}"]`);
+  const hide = item(sideEditor(document), 'queue').querySelector('[aria-pressed]');
+  assert.strictEqual(hide.getAttribute('aria-pressed'), 'false');
+  assert.strictEqual(hide.getAttribute('aria-label'), '큐 활동 막대에서 숨기기');
+  hide.click();
+  assert.deepEqual(JSON.parse(S.get('ui.activity.layout')).hidden, ['queue']);
+  assert.ok(item(sideEditor(document), 'queue').classList.contains('off'));
+  assert.ok(item(inlineEditor(document), 'queue').classList.contains('off'), '다른 자리도 따라 바뀐다');
+  assert.strictEqual(item(sideEditor(document), 'queue').querySelector('[aria-pressed]').getAttribute('aria-pressed'), 'true');
+  // ↑ — 세션 바로 아래(변경)는 위로 단추가 비활성.
+  const [up] = item(sideEditor(document), 'scm').querySelectorAll('button:not([aria-pressed])');
+  assert.strictEqual(up.disabled, true);
+  item(inlineEditor(document), 'dir').querySelectorAll('button:not([aria-pressed])')[0].click();
+  assert.deepEqual(actItems(sideEditor(document), 'order').slice(0, 3), ['sessions', 'dir', 'scm']);
+  item(sideEditor(document), 'settings').querySelectorAll('button')[0].click();
+  assert.deepEqual(JSON.parse(S.get('ui.activity.layout')).bottom, ['mcp', 'settings', 'mic']);
+  const reset = sideEditor(document).querySelector('.vt-actcfg-reset');
+  assert.strictEqual(reset.disabled, false);
+  reset.click();
+  assert.strictEqual(S.get('ui.activity.layout'), '');
+  assert.deepEqual(actItems(inlineEditor(document), 'order'), ['sessions', 'scm', 'dir', 'queue', 'files', 'snippets', 'ports', 'usage', 'system']);
+});
+
+test('활동 막대 순서 — 섹션을 떠나면 오른쪽 칸이 사라지고, 떨어져 나간 구역 아래 사본은 다시 그리지 않는다', async () => {
+  const { document, P, S } = await build();
+  P.showSettings();
+  sectionButton(document, '상태 막대 · 활동 막대').click();
+  const oldInline = inlineEditor(document);
+  sectionButton(document, '모양').click();
+  assert.strictEqual(sideEditor(document), null);
+  S.set('ui.activity.layout', JSON.stringify({ v: 1, hidden: ['ports'] }));
+  assert.ok(!oldInline.querySelector('.vt-actcfg-item.off'), '떨어져 나간 사본은 다시 그리지 않는다');
+});
+
+test('설정 검색 — 「활동 막대 순서」로 상태 막대 · 활동 막대 섹션을 찾는다', async () => {
+  const { document, P } = await build();
+  P.showSettings();
+  const input = document.querySelector('.vt-set-search-input');
+  input.value = '활동 막대 순서';
+  input.dispatchEvent(new document.defaultView.Event('input'));
+  const hit = document.querySelector('.vt-set-search-result');
+  assert.ok(hit && hit.textContent.includes('상태 막대 · 활동 막대'));
+});
+
+// ── 모양 › 집중 모드 미리보기(시안 O04-B 오른쪽) ─────────────────────────────
+
+test('집중 모드 미리보기 — 가장자리 띠와 알약이 토글을 따르고 설명이 바뀐다', async () => {
+  const { document, P, S } = await build();
+  P.showSettings();
+  sectionButton(document, '모양').click();
+  const fm = document.querySelector('.vt-set-preview .vt-setpv-focus');
+  assert.ok(fm, '스킨 미리보기 아래에 집중 모드 미리보기');
+  const edges = () => Array.from(fm.querySelectorAll('.vt-setpv-fm-edge')).filter((e) => !e.hidden).map((e) => e.dataset.side);
+  const pill = () => fm.querySelector('.vt-setpv-fm-pill');
+  const foot = () => fm.querySelector('.vt-setpv-foot').textContent;
+  assert.deepEqual(edges(), ['left', 'top', 'bottom']);
+  assert.strictEqual(pill().hidden, false);
+  assert.strictEqual(pill().textContent, '개입 1');
+  assert.match(foot(), /250ms 머무르면/);
+  S.set('ui.focus.edgeDelay', '0');
+  assert.match(foot(), /닿는 즉시/);
+  S.set('ui.focus.edgeReveal', false);
+  assert.deepEqual(edges(), []);
+  assert.match(foot(), /가장자리에서 막대가 나오지 않습니다/);
+  S.set('ui.focus.pill', false);
+  assert.strictEqual(pill().hidden, true);
+  assert.match(foot(), /알약을 띄우지 않습니다/);
+  assert.strictEqual(fm.querySelector('.vt-setpv-fm').getAttribute('role'), 'img');
 });

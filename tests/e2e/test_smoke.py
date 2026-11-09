@@ -150,10 +150,22 @@ def _isolated_env(port: int, token: str, tmp: Path) -> dict:
         # (~/GitHub)은 CI에 없고 로컬에선 사람마다 달라 결과가 흔들린다. 열람은
         # 읽기 전용이고 경계도 여기로 좁아진다.
         # 둘째 경계는 뷰어 시험 파일(큰 파일·CP949·긴 한 줄 — `_make_viewer_files`)을 두는 임시 폴더다.
-        VT_BROWSE_ROOTS=f"{ROOT}:{tmp / 'browse'}",
+        VT_BROWSE_ROOTS=f"{ROOT}:{tmp / 'browse'}" + (f":{_trash_dir()}" if _trash_dir() else ""),
+        # 쓰기(파일 개편 단계 8)는 시험 파일 폴더에만 — 기본값(= 열람 경계)이면 이 저장소 자신도 쓰기 경계가 된다.
+        VT_WRITE_ROOTS=f"{tmp / 'browse'}" + (f":{_trash_dir()}" if _trash_dir() else ""),
+        # Linux 휴지통(freedesktop)은 XDG_DATA_HOME을 따른다 — 사용자의 진짜 휴지통에 넣지 않게.
+        XDG_DATA_HOME=str(tmp / "xdg"),
         PYTHONUNBUFFERED="1",
     )
     return env
+
+
+def _trash_dir():
+    """휴지통 시험 파일을 둘 폴더. macOS는 HOME을 바꿔도 시동 볼륨 파일이 사용자의 진짜 ~/.Trash로 간다
+    (NSFileManager가 HOME을 보지 않는다) — 그래서 **다른 볼륨**(디스크 이미지)의 폴더를 `VT_E2E_TRASH_DIR`로
+    줄 때만 그 시험을 돌린다. 그 볼륨의 휴지통은 `<볼륨>/.Trashes/<uid>`다. Linux는 XDG_DATA_HOME으로 격리한다."""
+    v = os.environ.get("VT_E2E_TRASH_DIR", "").strip()
+    return v or None
 
 
 def _tmux_socket(port: int) -> str:
@@ -326,6 +338,27 @@ def _make_viewer_files(d: Path) -> Path:
     (d / "mixed.txt").write_bytes(b"a\r\nb\nc\r\n")
     # 1.5MB 한 줄(minified 모양) — 첫 구간이 line_truncated, 다음 구간이 같은 줄을 잇는다.
     (d / "long.min.js").write_text("".join(f"var a{i}=function(b){{return b+{i % 97}}};" for i in range(60000))[: 1536 * 1024])
+    # 단계 7 — 미리보기·다운로드. 마크다운에는 XSS 시도를 넣는다(원문 HTML·javascript: 링크·onerror·외부 이미지).
+    import shutil
+    (d / "pics").mkdir(exist_ok=True)
+    shutil.copy(ROOT / "frontend" / "icon-192.png", d / "pics" / "icon.png")
+    (d / "notes.md").write_text(
+        "# 미리보기 시험\n\n"
+        "<script>window.__vtXss = 1</script>\n\n"
+        "<img src=x onerror=\"window.__vtXss = 2\">\n\n"
+        "[js](javascript:window.__vtXss=3) [ok](https://example.com/) [아래](#끝)\n\n"
+        "![local](pics/icon.png) ![ext](https://example.com/track.png)\n\n"
+        "- [x] 됨\n- [ ] 안 됨\n\n| a | b |\n|---|--:|\n| x | 1 |\n\n## 끝\n"
+    )
+    (d / "evil.svg").write_text(
+        "<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' onload='window.__vtXss = 4'>"
+        "<script>window.__vtXss = 5; document.title = 'pwned'</script><rect width='40' height='40' fill='red'/></svg>"
+    )
+    (d / "table.csv").write_text("name,count\n" + "".join(f"row{i},{i}\n" for i in range(5000)))
+    (d / "doc.pdf").write_bytes(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj<</JS(app.alert(1))>>endobj\ntrailer<<>>\n%%EOF\n")
+    (d / "clip.mp4").write_bytes(b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom" + bytes(range(256)) * 64)
+    (d / "보고서 1.txt").write_text("다운로드 시험 내용\n")
+    (d / "edit.txt").write_text("alpha\nbeta\n")          # 단계 8 — 편집·저장
     return d
 
 
@@ -465,7 +498,7 @@ def isolated_page(_pw, server):
 def _boot(pg, url: str) -> None:
     """부팅이 **끝날 때까지** 기다린다.
 
-    `#vt-rail`이 보이는 걸 기다리면 안 된다 — index.html의 정적 마크업이라
+    정적 마크업(예전 `#vt-rail`)이 보이는 걸 기다리면 안 된다 — 그런 요소는
     요소는 있고 리스너는 아직 없는 창이 있다. 실제로 그 창에 클릭이 들어가
     아무 일도 안 일어났다. sleep으로 덮으면 CI에서 플레이키해지므로
     `main.js`가 세우는 완료 마커를 본다.
@@ -484,14 +517,16 @@ def _boot(pg, url: str) -> None:
 
 
 def _dock_tab(pg, label: str):
-    """dock 탭 하나. 탭은 **아이콘만** 그려서 텍스트가 없다(2026-10-15, 이름은 aria-label·툴팁에 있다)."""
-    return pg.locator(f'#vt-dock .vt-dock-tab[aria-label^="{label}"]').first
+    """활동 막대의 활동 버튼 하나(2026-11 작업대 — 옛 dock 탭 줄이 활동 막대로 옮겨 갔다).
+    버튼은 **아이콘만** 그려서 텍스트가 없다 — 이름은 aria-label·툴팁에 있다."""
+    return pg.locator(f'#vt-activitybar [role="tab"][aria-label^="{label}"]').first
 
 
 def _open_dock(pg, label: str) -> None:
-    """dock 탭을 연다 — **이미 그 탭이 열려 있으면 클릭하지 않는다.**
-    같은 탭 재클릭은 접기라서, 앞 테스트가 남긴 상태(dock은 활성 탭·접힘을
-    localStorage에 저장한다) 위에서 무조건 클릭하면 닫아버린다.
+    """도구 활동을 사이드바에 연다 — **이미 그 활동이 펼쳐져 있으면 클릭하지 않는다.**
+    펼친 활동 재클릭은 접기라서, 앞 테스트가 남긴 상태(사이드바는 활동·접힘을
+    기기 설정에 저장한다) 위에서 무조건 클릭하면 닫아버린다. 활성 표시(.active)는
+    「지금 활동이고 사이드바가 보인다」일 때만 붙는다.
 
     선택자를 `:has-text()`로 쓰지 않는 이유: 그건 playwright 전용 문법이라
     `page.evaluate` 안의 querySelector에서는 SyntaxError가 난다(실측). 클릭은
@@ -503,9 +538,9 @@ def _open_dock(pg, label: str) -> None:
     항상 이미 로드돼 있었고, 그래서 이 함수가 패널을 안 기다려도 통과했다.
     청크가 진짜로 지연되자 그 의존이 드러났다 — 여기서 같이 기다린다.
     """
-    pg.wait_for_selector("#vt-dock .vt-dock-tab", timeout=10000)
+    pg.wait_for_selector('#vt-activitybar [role="tab"]', timeout=10000)
     is_active = (
-        "(label) => [...document.querySelectorAll('#vt-dock .vt-dock-tab')]"
+        "(label) => [...document.querySelectorAll('#vt-activitybar [role=tab]')]"
         ".some((t) => (t.getAttribute('aria-label') || '').startsWith(label) && t.classList.contains('active'))"
     )
     if not pg.evaluate(is_active, label):
@@ -635,15 +670,35 @@ def test_레일_행_레이아웃이_행_안에_갇힌다(page):
           // 2026-09-19 — 실제 행은 `vt-srow vt-wgrail-row` 두 클래스를 함께
           // 단다(RailRow.tsx). 레이아웃(display:flex 등)은 `vt-srow` 쪽이
           // 들고 있어서, 옛 이름만 붙이면 flex가 아닌 블록을 재게 된다.
-          row.className = 'vt-srow vt-wgrail-row';
+          // 2026-11(리디자인 4단계) — 아이콘 열 + 최대 4줄 + 답 버튼 줄. 개입 필요 행(틴트)이 가장 많이 싣는다.
+          row.className = 'vt-srow vt-wgrail-row is-waiting';
           row.innerHTML = `
-            <span class="vt-srow-state"><svg width="14" height="14"></svg></span>
+            <span class="vt-srow-state"><svg width="16" height="16"></svg></span>
             <div class="vt-srow-main vt-wgrail-row-main">
               <div class="vt-srow-top vt-wgrail-row-top">
-                <span class="vt-wgrail-name">feat/very-long-branch-name-that-never-wraps-anywhere-at-all</span>
-                <span class="vt-wgrail-diff">파일 7</span>
+                <span class="vt-srow-agent vt-wgrail-agent"><svg width="14" height="14"></svg></span>
+                <span class="vt-srow-name vt-wgrail-name">feat/very-long-branch-name-that-never-wraps-anywhere-at-all</span>
+                <button type="button" class="vt-srow-kids"><span>위임 보고 12/20</span></button>
+                <span class="vt-srow-elapsed">59분</span>
+                <button type="button" class="vt-icon-btn sm vt-srow-menu"><svg width="16" height="16"></svg></button>
               </div>
-              <div class="vt-srow-sub vt-wgrail-row-sub">/Users/x/GitHub/work/proj/very/long/path/that/never/wraps</div>
+              <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line2">
+                <span class="vt-srow-workspace-kind">WT</span>
+                <span class="vt-srow-directory">/Users/x/GitHub/work/proj/very/long/path/that/never/wraps</span>
+                <span class="vt-srow-branch with-ico"><span class="vt-srow-branch-ico"><svg width="12" height="12"></svg></span><span class="vt-srow-branch-name">feat/another-very-long-branch-name</span></span>
+                <span class="vt-srow-meta vt-wgrail-diff"><span class="vt-diff-add">+14200</span> <span class="vt-diff-del">−3800</span></span>
+              </div>
+              <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line3">
+                <span class="vt-srow-kw" data-state="waiting">승인 요청</span>
+                <span class="vt-srow-tool">도구: mcp__very_long_server_name__very_long_tool_name</span>
+                <span class="vt-srow-badge">계획 있음</span>
+              </div>
+              <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line4"><span class="vt-srow-screens">다른 화면 12</span></div>
+              <div class="vt-srow-answers">
+                <button type="button" class="vt-btn sm vt-srow-answer"><span class="vt-srow-answer-label">1 · Yes, and don&#39;t ask again for this command in this project directory</span></button>
+                <button type="button" class="vt-btn sm">3 · 아니오</button>
+                <button type="button" class="vt-btn sm quiet">터미널로</button>
+              </div>
             </div>`;
           list.appendChild(row);
           const c = row.getBoundingClientRect();
@@ -672,7 +727,7 @@ def test_열린_표면의_내용이_그_표면을_넘지_않는다(page):
     page.wait_for_timeout(300)
     bad = page.evaluate(
         """() => {
-          const surfaces = ['#vt-wgrail', '#vt-dock', '.vt-onboarding', '#topbar'];
+          const surfaces = ['#vt-workbench', '#vt-activitybar', '#vt-side', '#vt-dock', '.vt-onboarding', '#topbar'];
           const out = [];
           for (const sel of surfaces) {
             const host = document.querySelector(sel);
@@ -707,18 +762,19 @@ def test_가로_스크롤이_생기지_않는다(page, viewport):
 
 # ── 반응형 구간 ───────────────────────────────────────────────────────────
 
-def test_레일과_dock은_compact에서_숨고_그_위에서_보인다(page):
-    """N35·N36 — 티어 표(10 §3): compact는 레일·dock 둘 다 없다(하단 내비가
-    자리를 쓴다), regular부터 둘 다 보인다."""
+def test_작업대는_compact에서_숨고_그_위에서_보인다(page):
+    """티어 표(DESIGN.md §3): compact는 작업대(활동 막대·사이드바)가 없다(하단 내비가
+    자리를 쓴다), regular부터 활동 막대가 보이고 세션 활동이면 레일(펼침 또는 48px 띠)이 보인다."""
     page.set_viewport_size(COMPACT)
     page.wait_for_timeout(300)
+    assert not page.locator("#vt-workbench").is_visible(), "compact에서는 하단 내비가 대신한다"
     assert not page.locator("#vt-wgrail").is_visible(), "compact에서는 팔레트·바텀시트가 대신한다"
-    assert not page.locator("#vt-dock").is_visible(), "compact에서는 하단 내비가 대신한다"
 
     page.set_viewport_size(REGULAR)
     page.wait_for_timeout(300)
+    assert page.locator("#vt-activitybar").is_visible()
     assert page.locator("#vt-wgrail").is_visible()
-    assert page.locator("#vt-dock").is_visible()
+    assert not page.locator("#vt-dock").is_visible(), "세션 활동에서 dock 본문은 hidden이다"
 
 
 # ── 스킨 ──────────────────────────────────────────────────────────────────
@@ -746,11 +802,11 @@ def test_테마_칩이_서로_다른_색을_보인다(page):
     # 열지 않으면 DOM에 아예 없으므로 먼저 연다.
     # 액션(`settings.show`)은 지연 청크(panels/settings-lazy.js)가 등록하므로
     # 로드 전에는 `getAction`이 undefined다 — 실제 버튼을 눌러 그 청크까지
-    # 받아오게 한다(메뉴바의 FarShell 메뉴 → 설정, `_open_dock`과 같은 이유).
+    # 받아오게 한다(제목 막대의 FarShell 메뉴 → 설정, `_open_dock`과 같은 이유).
     page.wait_for_selector(".vt-mb-menu", timeout=10000)
     page.locator(".vt-mb-menu").click()
     # 메뉴 항목의 접근 이름에는 단축키 글자(`Ctrl+,`)가 붙는다 — exact 일치가 아니라 앞부분으로 고른다.
-    # 「메뉴바 설정」은 `^설정`에 걸리지 않는다.
+    # 「상태 막대 설정」은 `^설정`에 걸리지 않는다.
     page.get_by_role("menuitem", name=re.compile(r"^설정")).click()
     # 설정은 섹션 하나만 그린다(기본 「터미널」) — 「모양」으로 옮겨야 칩이 생긴다.
     page.wait_for_selector("#vt-settings .vt-set-navitem", timeout=15000)
@@ -824,17 +880,17 @@ def test_온보딩이_레일과_dock을_덮지_않는다(page):
     page.wait_for_timeout(300)
     hit = page.evaluate(
         """() => {
-          const top = (x, y) => document.elementFromPoint(x, y)?.closest('#vt-wgrail, #vt-dock, .vt-onboarding')?.id || 'onboarding';
+          const top = (x, y) => document.elementFromPoint(x, y)?.closest('#vt-wgrail, #vt-activitybar, .vt-onboarding')?.id || 'onboarding';
           const rail = document.getElementById('vt-wgrail').getBoundingClientRect();
-          const dock = document.getElementById('vt-dock').getBoundingClientRect();
+          const bar = document.getElementById('vt-activitybar').getBoundingClientRect();
           return {
             rail: top(rail.left + rail.width / 2, 400),
-            dock: top(dock.left + dock.width / 2, 400),
+            bar: top(bar.left + bar.width / 2, 100),
           };
         }"""
     )
     assert hit["rail"] == "vt-wgrail", f"온보딩이 레일을 덮었다: {hit}"
-    assert hit["dock"] == "vt-dock", f"온보딩이 dock을 덮었다: {hit}"
+    assert hit["bar"] == "vt-activitybar", f"온보딩이 활동 막대를 덮었다: {hit}"
 
 
 def test_온보딩이_모바일_하단_내비를_덮지_않는다(page):
@@ -996,7 +1052,7 @@ def test_떠_있는_창은_헤더로_옮겨지고_화면_밖으로_안_나간다
         saved = page.evaluate("() => JSON.parse(window.vtSettingsGet('viewer.float.rect'))")
         assert round(saved["x"]) == round(far["x"] - c["x"]), (saved, far, c)
     finally:
-        page.evaluate("() => { const el = document.getElementById('vt-file'); if (el) window.closePanel(el); }")
+        page.evaluate("() => { const el = document.getElementById('vt-file'); if (el) window.closePanel(el, { force: true }); }")
         page.evaluate("() => window.vtSettingsSet('viewer.surface', 'sheet')")
         page.evaluate("() => window.vtSettingsSet('viewer.float.rect', '{}')")
         page.wait_for_timeout(300)
@@ -1034,7 +1090,7 @@ def _open_overlay(page, path, opts=None):
 
 
 def _close_overlay(page):
-    page.evaluate("() => { const el = document.getElementById('vt-file'); if (el) window.closePanel(el); }")
+    page.evaluate("() => { const el = document.getElementById('vt-file'); if (el) window.closePanel(el, { force: true }); }")
 
 
 _DOC = "document.querySelector('#vt-file .vt-vw-code-pane')._vtEditor.view.state.doc"
@@ -1106,6 +1162,187 @@ def test_인코딩을_모르면_이유를_띄우고_고르면_다시_연다(page
         assert "줄 끝(LF·CRLF)이 섞여" in page.locator("#vt-file .vt-vw-bar").inner_text()
     finally:
         _close_overlay(page)
+
+
+_SAVE_KEY = "Meta+s" if sys.platform == "darwin" else "Control+s"
+_EDOC = "document.querySelector('#vt-file .vt-vw-code-pane')._vtEditor.view"
+
+
+def _type_at_end(page, text):
+    page.evaluate(f"() => {{ const v = {_EDOC}; v.focus(); v.dispatch({{ selection: {{ anchor: v.state.doc.length }} }}); }}")
+    page.keyboard.type(text)
+
+
+def test_편집_저장은_비밀번호를_묻고_바꾸며_바깥_변경은_따라가거나_충돌로_알린다(page):
+    """파일 개편 단계 8(시안 F05 · F05-B · F05-D) — 「편집」 → 입력 → ⌘S/Ctrl+S → 승격(웹 로그인 비밀번호) →
+    디스크에 저장. 고친 것이 없을 때의 바깥 변경은 따라가고, 고친 채 바뀌면 충돌 배너 → 비교 → 내 것으로 덮어쓰기."""
+    target = _viewer_file("edit.txt")
+    Path(target).write_text("alpha\nbeta\n")
+    try:
+        _open_overlay(page, target)
+        btn = page.locator("#vt-file .vt-vw-edit-btn")
+        btn.wait_for(timeout=10000)
+        assert btn.get_attribute("aria-disabled") is None, btn.get_attribute("title")
+        btn.click()
+        page.wait_for_selector("#vt-file .vt-vw-cm-edit", timeout=5000)
+        _type_at_end(page, "gamma\n")
+        expect(page.locator("#vt-file .vt-vw-ss")).to_contain_text("저장 안 됨", timeout=5000)
+        page.keyboard.press(_SAVE_KEY)
+        pw = page.locator(".vt-dialog-input")
+        pw.wait_for(timeout=10000)
+        assert pw.get_attribute("type") == "password"
+        pw.fill(E2E_PASSWORD)
+        page.locator(".vt-dialog-ok").click()
+        expect(page.locator("#vt-file .vt-vw-ss")).to_contain_text("저장됨", timeout=10000)
+        assert Path(target).read_text() == "alpha\nbeta\ngamma\n"
+        assert not [x for x in os.listdir(Path(target).parent) if x.startswith(".fsh-")]
+
+        # 고친 것이 없을 때의 바깥 변경 — 조용히 따라간다(감시 알림 → 다시 읽기).
+        time.sleep(0.05)
+        Path(target).write_text("alpha\nBETA\ngamma\n")
+        page.wait_for_function(f"() => {_EDOC}.state.doc.toString() === 'alpha\\nBETA\\ngamma\\n'", timeout=10000)
+
+        # 고친 채 바깥에서 바뀌면 충돌 배너. 내 글은 그대로다.
+        _type_at_end(page, "mine\n")
+        time.sleep(0.2)
+        Path(target).write_text("other editor\n")
+        ban = page.locator("#vt-file .vt-vw-conflict")
+        ban.wait_for(timeout=10000)
+        assert "다른 곳에서 이 파일이 바뀌었습니다" in ban.inner_text()
+        assert page.evaluate(f"() => {_EDOC}.state.doc.toString()").endswith("mine\n")
+        ban.locator("button", has_text="비교").click()
+        cmp = page.locator("#vt-file .vt-vw-compare")
+        cmp.wait_for(timeout=5000)
+        assert "other editor" in cmp.inner_text() and "mine" in cmp.inner_text()
+        ban.locator("button", has_text="내 것으로 덮어쓰기").click()
+        page.locator(".vt-dialog-ok", has_text="덮어쓰기").click()
+        page.wait_for_selector("#vt-file .vt-vw-conflict", state="detached", timeout=10000)
+        expect(page.locator("#vt-file .vt-vw-ss")).to_contain_text("저장됨", timeout=10000)
+        assert Path(target).read_text() == "alpha\nBETA\ngamma\nmine\n"
+    finally:
+        _close_overlay(page)
+
+
+def test_새_파일_이름_바꾸기_휴지통은_승격과_경계를_지킨다(page, server):
+    """파일 개편 단계 8 — 쓰기 라우트는 승격 없이 401, 교차 출처 403, 경계 밖 403. 새 파일은 덮어쓰지 않고, 이름 바꾸기는
+    같은 이름이 있으면 409. 휴지통: Linux는 격리한 XDG_DATA_HOME의 freedesktop 휴지통, macOS는 다른 볼륨
+    (`VT_E2E_TRASH_DIR`)에서만 시험한다 — 시동 볼륨 파일은 사용자의 진짜 휴지통으로 가기 때문이다."""
+    base, _ = server
+    req = page.context.request
+    browse = Path(_viewer_file("edit.txt")).parent
+    j = {"Content-Type": "application/json"}
+    r = req.post(f"{base}/api/fs/new", data=json.dumps({"dir": str(browse), "name": "made.txt"}), headers=j)
+    assert r.status == 401, r.text()
+    assert req.post(f"{base}/api/auth/elevate", data={"password": E2E_PASSWORD}).ok
+    r = req.post(f"{base}/api/fs/new", data=json.dumps({"dir": str(browse), "name": "made.txt"}), headers={**j, "Origin": "https://evil.example"})
+    assert r.status == 403
+    r = req.post(f"{base}/api/fs/new", data=json.dumps({"dir": str(ROOT), "name": "made.txt"}), headers=j)
+    assert r.status == 403 and not (ROOT / "made.txt").exists()      # 저장소 자신은 열람 경계지만 쓰기 경계 밖
+    r = req.post(f"{base}/api/fs/new", data=json.dumps({"dir": str(browse), "name": "made.txt"}), headers=j)
+    assert r.status == 200, r.text()
+    assert req.post(f"{base}/api/fs/new", data=json.dumps({"dir": str(browse), "name": "made.txt"}), headers=j).status == 409
+    r = req.post(f"{base}/api/fs/rename", data=json.dumps({"path": str(browse / "made.txt"), "to": str(browse / "rows.txt")}), headers=j)
+    assert r.status == 409
+    r = req.post(f"{base}/api/fs/rename", data=json.dumps({"path": str(browse / "made.txt"), "to": str(browse / "renamed.txt")}), headers=j)
+    assert r.status == 200 and (browse / "renamed.txt").exists() and not (browse / "made.txt").exists()
+    if sys.platform == "darwin":
+        tdir = _trash_dir()
+        if not tdir:
+            pytest.skip("macOS 휴지통 시험은 다른 볼륨(VT_E2E_TRASH_DIR)에서만 — 진짜 ~/.Trash를 쓰지 않는다")
+        victim = Path(tdir) / "trash-me.txt"
+        victim.write_text("put back me\n")
+        r = req.post(f"{base}/api/fs/delete", data=json.dumps({"path": str(victim)}), headers=j)
+        assert r.status == 200, r.text()
+        assert not victim.exists()
+        vol = Path(tdir)
+        while vol.parent != vol and os.stat(vol.parent).st_dev == os.stat(tdir).st_dev:
+            vol = vol.parent
+        trash = vol / ".Trashes" / str(os.getuid())
+        name = r.json()["trash_name"]
+        assert (trash / name).read_text() == "put back me\n"
+        # Finder 「되돌리기」가 읽는 원래 위치(ptbL)·이름(ptbN)이 휴지통 .DS_Store에 남았다.
+        ds = (trash / ".DS_Store").read_bytes()
+        assert b"ptbL" in ds and b"ptbN" in ds and "trash-me.txt".encode("utf-16-be") in ds
+    else:
+        r = req.post(f"{base}/api/fs/delete", data=json.dumps({"path": str(browse / "renamed.txt")}), headers=j)
+        assert r.status == 200, r.text()
+        xdg = browse.parent / "xdg" / "Trash"
+        assert (xdg / "files" / "renamed.txt").exists()
+        assert f"Path={browse / 'renamed.txt'}" in (xdg / "info" / "renamed.txt.trashinfo").read_text()
+
+
+def test_고친_채_닫으면_저장_버리기_취소를_묻고_거터에_바뀐_줄을_표시한다(page):
+    """파일 개편 후속 — 편집 중 거터에 추가 줄 표시, 고친 채 × 를 누르면 「저장 / 버리기 / 취소」. Esc는 취소(뷰어가
+    남는다), 버리기는 닫고 디스크를 건드리지 않는다."""
+    target = _viewer_file("unsaved.txt")
+    Path(target).write_text("one\ntwo\n")
+    try:
+        _open_overlay(page, target)
+        page.locator("#vt-file .vt-vw-edit-btn").click()
+        page.wait_for_selector("#vt-file .vt-vw-cm-edit", timeout=5000)
+        _type_at_end(page, "three\n")
+        # 거터의 첫 칸은 폭을 잡는 숨은 자리표시(spacer)다 — 보이는 표식만 센다.
+        page.wait_for_function(
+            "() => [...document.querySelectorAll('#vt-file .cm-vt-chg-gutter .cm-vt-chg.add')]"
+            ".some((e) => e.getBoundingClientRect().height > 0 && getComputedStyle(e).visibility !== 'hidden')",
+            timeout=5000,
+        )
+        expect(page.locator("#vt-file .vt-vw-ss")).to_contain_text("저장 안 됨", timeout=5000)
+        page.locator("#vt-file .vt-vw-x").click()
+        dlg = page.locator(".vt-dialog", has_text="저장하지 않은 편집")
+        dlg.wait_for(timeout=5000)
+        assert page.evaluate("() => document.activeElement?.classList.contains('vt-dialog-cancel')")
+        page.keyboard.press("Escape")
+        dlg.wait_for(state="detached", timeout=5000)
+        assert page.locator("#vt-file").count() == 1, "취소면 뷰어가 남는다"
+        page.locator("#vt-file .vt-vw-x").click()
+        page.locator(".vt-dialog-discard").click()
+        page.wait_for_selector("#vt-file", state="detached", timeout=5000)
+        assert Path(target).read_text() == "one\ntwo\n"
+    finally:
+        _close_overlay(page)
+
+
+def test_폴더_만들기_이름_바꾸기_휴지통은_경계와_덮어쓰기_금지를_지킨다(page, server):
+    """파일 개편 후속(D2) — 새 폴더, kind=dir 이름 바꾸기(같은 이름이면 빈 폴더라도 409, 자기 안으로 400), 루트·경계 밖 403.
+    폴더 휴지통은 파일과 같은 이유로 macOS는 다른 볼륨(`VT_E2E_TRASH_DIR`)에서만."""
+    base, _ = server
+    req = page.context.request
+    browse = Path(_viewer_file("edit.txt")).parent
+    j = {"Content-Type": "application/json"}
+    post = lambda path, body, **h: req.post(f"{base}{path}", data=json.dumps(body), headers={**j, **h})  # noqa: E731
+    assert req.post(f"{base}/api/auth/elevate", data={"password": E2E_PASSWORD}).ok
+    assert post("/api/fs/mkdir", {"dir": str(browse), "name": "dir-a"}).status == 200
+    assert post("/api/fs/mkdir", {"dir": str(browse), "name": "dir-b"}).status == 200
+    assert post("/api/fs/mkdir", {"dir": str(browse), "name": ".github"}).status == 403
+    assert post("/api/fs/mkdir", {"dir": str(ROOT), "name": "dir-x"}).status == 403 and not (ROOT / "dir-x").exists()
+    (browse / "dir-a" / "inner.txt").write_text("in a\n")
+    r = post("/api/fs/rename", {"path": str(browse / "dir-a"), "to": str(browse / "dir-b"), "kind": "dir"})
+    assert r.status == 409 and (browse / "dir-a" / "inner.txt").exists() and (browse / "dir-b").is_dir()
+    r = post("/api/fs/rename", {"path": str(browse / "dir-a"), "to": str(browse / "dir-a" / "x"), "kind": "dir"})
+    assert r.status == 400 and r.json()["error"] == "into_itself"
+    assert post("/api/fs/rename", {"path": str(browse / "dir-a"), "to": str(browse / "dir-c")}).status == 400  # kind 없음
+    r = post("/api/fs/rename", {"path": str(browse / "dir-a"), "to": str(browse / "dir-c"), "kind": "dir"})
+    assert r.status == 200 and (browse / "dir-c" / "inner.txt").read_text() == "in a\n"
+    assert post("/api/fs/delete", {"path": str(browse), "kind": "dir"}).status == 403      # 쓰기 루트 자신
+    if sys.platform == "darwin":
+        tdir = _trash_dir()
+        if not tdir:
+            pytest.skip("macOS 휴지통 시험은 다른 볼륨(VT_E2E_TRASH_DIR)에서만 — 진짜 ~/.Trash를 쓰지 않는다")
+        victim = Path(tdir) / "trash-dir"
+        victim.mkdir(exist_ok=True)
+        (victim / "f.txt").write_text("folder trash\n")
+        r = post("/api/fs/delete", {"path": str(victim), "kind": "dir"})
+        assert r.status == 200, r.text()
+        assert not victim.exists()
+        vol = Path(tdir)
+        while vol.parent != vol and os.stat(vol.parent).st_dev == os.stat(tdir).st_dev:
+            vol = vol.parent
+        assert (vol / ".Trashes" / str(os.getuid()) / r.json()["trash_name"] / "f.txt").read_text() == "folder trash\n"
+    else:
+        r = post("/api/fs/delete", {"path": str(browse / "dir-c"), "kind": "dir"})
+        assert r.status == 200, r.text()
+        assert (browse.parent / "xdg" / "Trash" / "files" / "dir-c" / "inner.txt").exists()
 
 
 def test_줄_이동은_그_줄로_옮기고_표시한다(page):
@@ -1188,6 +1425,213 @@ def test_터미널의_경로_줄_링크는_그_줄로_연다(isolated_page):
         page.evaluate("(id) => window.removeSession && window.removeSession(id)", sid)
 
 
+def test_마크다운은_정화되어_렌더되고_원문으로_바꿀_수_있다(page):
+    """파일 개편 단계 7 — 실브라우저에서 원문 HTML·onerror·javascript: 링크가 실행되지 않고, 상대 이미지는 /api/fs/raw로
+    실제로 그려지고, 외부 이미지는 자리표시가 된다. 「원문」으로 바꾸면 CodeMirror가 뜬다."""
+    target = _viewer_file("notes.md")
+    dialogs = []
+    page.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
+    try:
+        page.evaluate("(p) => window.openFile(p)", target)
+        page.wait_for_selector("#vt-file .vt-md h1", timeout=15000)
+        page.wait_for_function(
+            "() => [...document.querySelectorAll('#vt-file .vt-md img')].some((i) => i.naturalWidth > 0)", timeout=10000)
+        got = page.evaluate("""() => {
+          const md = document.querySelector('#vt-file .vt-md');
+          const bad = [...md.querySelectorAll('*')].flatMap((el) => el.getAttributeNames()
+            .filter((n) => /^on/i.test(n) || ['id', 'style', 'srcset'].includes(n)).map((n) => el.tagName + ' ' + n));
+          return {
+            xss: window.__vtXss || 0,
+            scripts: md.querySelectorAll('script, iframe, svg').length,
+            bad,
+            links: [...md.querySelectorAll('a')].map((a) => [a.textContent, a.getAttribute('href'), a.getAttribute('rel')]),
+            imgs: [...md.querySelectorAll('img')].map((i) => new URL(i.src).pathname),
+            blocked: md.querySelectorAll('.vt-md-blocked').length,
+            boxes: [...md.querySelectorAll('input')].map((i) => [i.type, i.disabled, i.checked]),
+            text: md.textContent,
+          };
+        }""")
+        assert got["xss"] == 0 and not dialogs, got
+        assert got["scripts"] == 0 and got["bad"] == [], got
+        assert "<script>" in got["text"], "원문 HTML은 글자로 보인다"
+        links = {t: (h, r) for t, h, r in got["links"]}
+        assert links["js"][0] is None
+        assert links["ok"] == ("https://example.com/", "noopener noreferrer")
+        assert links["아래"][0] in ("#끝", "#%EB%81%9D")   # marked가 주소를 퍼센트 인코딩한다 — 클릭 처리가 푼다
+        assert got["imgs"] == ["/api/fs/raw"] and got["blocked"] == 1, got
+        assert got["boxes"] == [["checkbox", True, True], ["checkbox", True, False]]
+        page.locator("#vt-file .vt-vw-seg button", has_text="원문").click()
+        page.wait_for_selector("#vt-file .cm-line", timeout=15000)
+        assert page.locator("#vt-file .vt-md").count() == 0
+        page.locator("#vt-file .vt-vw-seg button", has_text="렌더").click()
+        page.wait_for_selector("#vt-file .vt-md h1", timeout=15000)
+    finally:
+        _close_overlay(page)
+
+
+def test_SVG는_그림으로만_그려지고_주소를_직접_열어도_스크립트가_돌지_않는다(page, server):
+    """결정 D8 — 뷰어는 <img>로만 그리고, /api/fs/raw의 sandbox CSP 때문에 주소를 문서로 열어도 스크립트가 돌지 않는다."""
+    base, _ = server
+    target = _viewer_file("evil.svg")
+    try:
+        page.evaluate("(p) => window.openFile(p)", target)
+        page.wait_for_selector("#vt-file .vt-vw-svg img", timeout=15000)
+        page.wait_for_function("() => document.querySelector('#vt-file .vt-vw-svg img').naturalWidth > 0", timeout=10000)
+        assert page.evaluate("() => window.__vtXss || 0") == 0
+        assert "sandbox" in page.locator("#vt-file .vt-vw-bar").inner_text()
+    finally:
+        _close_overlay(page)
+    raw = page.context.new_page()
+    try:
+        from urllib.parse import quote
+        resp = raw.goto(f"{base}/api/fs/raw?path={quote(target)}")
+        assert resp.status == 200
+        assert "sandbox" in resp.headers["content-security-policy"]
+        raw.wait_for_timeout(300)
+        assert raw.evaluate("() => window.__vtXss || 0") == 0
+        assert raw.title() != "pwned"
+    finally:
+        raw.close()
+
+
+def test_CSV는_표로_PDF는_다운로드만_동영상은_Range로_받는다(page, server):
+    base, _ = server
+    try:
+        page.evaluate("(p) => window.openFile(p)", _viewer_file("table.csv"))
+        page.wait_for_selector("#vt-file .vt-csv-table tbody tr td", timeout=15000)
+        rows = page.evaluate("() => document.querySelectorAll('#vt-file .vt-csv-table tbody tr').length")
+        assert 0 < rows < 200, f"보이는 행만 그린다: {rows}"
+        page.evaluate("(p) => window.openFile(p)", _viewer_file("doc.pdf"))
+        page.wait_for_selector("#vt-file .vt-vw-preview-empty", timeout=15000)
+        assert "PDF는 미리 보지 않습니다" in page.locator("#vt-file .vt-vw-preview-empty").inner_text()
+        assert page.locator("#vt-file iframe, #vt-file embed, #vt-file object").count() == 0
+        page.evaluate("(p) => window.openFile(p)", _viewer_file("clip.mp4"))
+        # 시험 파일은 머리만 mp4라 디코드되지 않는다 — 재생기가 붙었다가 오류로 「재생하지 못했습니다」가 될 수 있다.
+        # 어느 쪽이든 재생기 경로(<video> + /api/fs/raw)를 탔다는 뜻이다.
+        page.wait_for_function(
+            "() => !!document.querySelector('#vt-file .vt-vw-media video')"
+            " || /동영상을 재생하지 못했습니다/.test(document.querySelector('#vt-file .vt-vw-preview-empty')?.textContent || '')",
+            timeout=15000)
+    finally:
+        _close_overlay(page)
+    from urllib.parse import quote
+    r = page.context.request.get(f"{base}/api/fs/raw?path={quote(_viewer_file('clip.mp4'))}", headers={"Range": "bytes=0-15"})
+    assert r.status == 206 and r.headers["content-range"].startswith("bytes 0-15/")
+    assert r.body()[4:8] == b"ftyp"
+
+
+def test_뷰어_머리줄에서_내려받으면_같은_이름과_내용이_저장된다(page):
+    """D4 — 인증된 GET 다운로드. 한글 이름이 그대로 남고, 내용은 디스크와 같다."""
+    target = _viewer_file("보고서 1.txt")
+    try:
+        _open_overlay(page, target)
+        with page.expect_download(timeout=15000) as info:
+            page.locator("#vt-file .vt-file-download").click()
+        dl = info.value
+        assert dl.suggested_filename == "보고서 1.txt"
+        assert Path(dl.path()).read_text() == "다운로드 시험 내용\n"
+    finally:
+        _close_overlay(page)
+
+
+def test_다운로드는_동시에_3개까지_넷째는_대기하고_취소하면_요청하지_않는다(page):
+    """시안 F08 — 넷째부터는 「대기 중」 카드(취소 가능)로 줄을 선다. 응답 머리를 붙잡아 셋이 받는 중인 상태를 만든다."""
+    names = ["rows.txt", "k949.txt", "mixed.txt", "보고서 1.txt"]
+    held = []
+    page.route("**/api/fs/download?**", lambda route: held.append(route))
+    try:
+        for n in names:
+            _open_overlay(page, _viewer_file(n))
+            page.locator("#vt-file .vt-file-download").click()
+        page.wait_for_function("() => [...document.querySelectorAll('#vt-toasts .vt-toast')]"
+                               ".some((t) => t.textContent.includes('대기 중'))", timeout=5000)
+        page.wait_for_timeout(200)
+        assert len(held) == 3, f"넷째는 요청하지 않는다: {len(held)}"
+        card = page.locator("#vt-toasts .vt-toast", has_text="대기 중")
+        assert "동시에 3개까지" in card.inner_text()
+        card.locator(".vt-toast-actions button", has_text="취소").click()
+        page.wait_for_function("() => /받기를 취소했습니다/.test(document.body.textContent)", timeout=5000)
+        got = []
+        page.on("download", lambda d: got.append(d.suggested_filename))
+        for r in held:
+            r.continue_()
+        deadline = time.time() + 10
+        while len(got) < 3 and time.time() < deadline:
+            page.wait_for_timeout(100)
+        page.wait_for_timeout(500)
+        assert sorted(got) == sorted(names[:3]), got
+        assert len(held) == 3, "취소한 넷째는 끝내 요청하지 않았다"
+    finally:
+        page.unroute("**/api/fs/download?**")
+        _close_overlay(page)
+
+
+def test_이미지는_맞춤과_100퍼센트를_오가고_100퍼센트에서_확대된다(page):
+    """시안 F07-C — 맞춤은 원래보다 키우지 않고, 100%는 원래 크기, ⌘/Ctrl + 휠로 확대하면 그림 칸이 스크롤하되 카드를 넘지 않는다."""
+    try:
+        page.evaluate("(p) => window.openFile(p)", _viewer_file("pics/icon.png"))
+        page.wait_for_selector("#vt-file .vt-vw-image .vt-vw-zoom-bar", timeout=15000)
+        page.wait_for_function("() => document.querySelector('#vt-file .vt-vw-image img').naturalWidth > 0", timeout=10000)
+        page.wait_for_function("() => document.querySelector('#vt-file .vt-vw-zoom-pct').textContent === '맞춤 · 100%'",
+                               timeout=5000)
+        page.locator("#vt-file .vt-vw-zoom-bar .vt-vw-seg-btn", has_text="100%").click()
+        assert page.locator("#vt-file .vt-vw-zoom-pct").inner_text() == "100%"
+        assert page.evaluate("() => document.querySelector('#vt-file .vt-vw-image img').getBoundingClientRect().width") == 192
+        page.locator("#vt-file .vt-vw-zoom-box").hover()
+        page.keyboard.down("Control")
+        for _ in range(4):
+            page.mouse.wheel(0, -120)
+        page.keyboard.up("Control")
+        page.wait_for_function("() => document.querySelector('#vt-file .vt-vw-image img').getBoundingClientRect().width > 192 * 3",
+                               timeout=5000)
+        geo = page.evaluate(
+            """() => {
+              const box = document.querySelector('#vt-file .vt-vw-zoom-box');
+              const card = document.querySelector('#vt-file .vt-viewer-card') || document.getElementById('vt-file');
+              const b = box.getBoundingClientRect(), c = card.getBoundingClientRect();
+              return { scrolls: box.scrollWidth > box.clientWidth || box.scrollHeight > box.clientHeight,
+                       out: Math.round(b.right - c.right), pct: document.querySelector('#vt-file .vt-vw-zoom-pct').textContent };
+            }"""
+        )
+        assert geo["out"] <= 1 and geo["pct"].endswith("%") and int(geo["pct"][:-1]) > 300, geo
+        page.locator("#vt-file .vt-vw-zoom-bar .vt-vw-seg-btn", has_text="맞춤").click()
+        assert page.evaluate("() => document.querySelector('#vt-file .vt-vw-image img').getBoundingClientRect().width") == 192
+    finally:
+        _close_overlay(page)
+
+
+def test_사이드바_내용_검색은_진행을_보이고_범위_안_변경에_결과가_오래됨을_띄운다(page):
+    """시안 F06-C — 결과가 온 뒤 트리 감시가 그 폴더의 변경을 알리면 「결과가 오래됨 · 다시 찾기」, 누르면 새 결과로 바꾼다."""
+    d = Path(_viewer_file("grepdir"))
+    d.mkdir(exist_ok=True)
+    (d / "a.txt").write_text("stale-needle one\n")
+    (d / "b.txt").unlink(missing_ok=True)
+    page.evaluate("() => window.getAction('dir.show')()")
+    try:
+        path = page.locator(".vt-ft-path")
+        path.wait_for(timeout=15000)
+        path.fill(str(d))
+        path.press("Enter")
+        page.wait_for_function("(p) => document.querySelector('.vt-ft-path')?.value === p", arg=str(d), timeout=5000)
+        page.locator(".vt-fs-seg .vt-segment", has_text="내용 검색").click()
+        q = page.locator(".vt-gr.side .vt-gr-q input")
+        q.fill("stale-needle")
+        page.wait_for_function("() => document.querySelectorAll('.vt-gr.side .vt-gr-row').length === 1", timeout=10000)
+        assert page.locator(".vt-gr.side .vt-gr-stale").count() == 0
+        (d / "b.txt").write_text("stale-needle two\n")
+        page.wait_for_selector(".vt-gr.side .vt-gr-stale", timeout=10000)
+        banner = page.locator(".vt-gr.side .vt-gr-stale")
+        assert "결과가 오래됨" in banner.inner_text()
+        banner.locator("button", has_text="다시 찾기").click()
+        page.wait_for_function("() => document.querySelectorAll('.vt-gr.side .vt-gr-row').length === 2", timeout=10000)
+        assert page.locator(".vt-gr.side .vt-gr-stale").count() == 0
+        # 진행 조회 경로 — 이 화면의 sid로 묻는다(돌고 있는 검색이 없으면 running:false).
+        r = page.evaluate("() => window.vtFetch('/api/fs/grep/progress?sid=none')")
+        assert r == {"running": False}
+    finally:
+        page.evaluate("() => { const el = document.getElementById('vt-dir'); if (el) window.closePanel(el); }")
+
+
 def test_레일_파일_버튼은_사라지고_팔레트가_그_자리다(page):
     """§6 — 「파일」 진입점은 팔레트로 옮겨갔다. 옛 rail 버튼이 남아 있으면
     누를 대상이 없는 버튼이 된다."""
@@ -1199,17 +1643,16 @@ def test_레일_파일_버튼은_사라지고_팔레트가_그_자리다(page):
 
 # ── N3(60-settings-palette.md §1) 기기 스코프 설정 ─────────────────────────
 
-def test_레일_폭이_기기_설정으로_저장되고_새로고침에도_유지된다(page, server):
-    """N3 — Rail.tsx/Dock.tsx가 localStorage 대신 /api/device-settings로
-    옮겨갔는지 실제 새로고침으로 확인한다(재부팅 없이는 캐시만으로도 통과
-    하는 버그를 놓친다)."""
+def test_사이드바_폭이_기기_설정으로_저장되고_새로고침에도_유지된다(page, server):
+    """사이드바 폭(`ui.side.width`, 활동 전체가 공유)이 /api/device-settings에 저장되고
+    실제 새로고침 뒤에도 돌아오는가(재부팅 없이는 캐시만으로도 통과하는 버그를 놓친다)."""
     base, token = server
-    page.evaluate("() => window.vtSettingsSet('ui.rail.width', 300)")
+    page.evaluate("() => { window.vtSettingsSet('ui.side.collapsed', false); window.vtSettingsSet('ui.side.width', 300); }")
     page.wait_for_timeout(400)
     # 저장 위치는 OS별 프로필(mac/windows/linux/mobile)이라 호스트마다 다르다 — 어느 프로필이든
     # 이 값이 서버에 있으면 된다. 프로필 없는 조회는 다른 저장소(기기 id)를 본다.
     saved = [
-        page.request.get(f"{base}/api/device-settings", params={"profile": prof}).json()["settings"].get("ui.rail.width")
+        page.request.get(f"{base}/api/device-settings", params={"profile": prof}).json()["settings"].get("ui.side.width")
         for prof in ("mac", "windows", "linux", "mobile")
     ]
     assert 300 in saved, saved
@@ -1218,21 +1661,18 @@ def test_레일_폭이_기기_설정으로_저장되고_새로고침에도_유�
     page.wait_for_function(
         "() => document.documentElement.dataset.appBooted === 'true'", timeout=20000
     )
-    page.wait_for_timeout(500)
-    # 2026-09-19 — `--vt-wgrail-w`는 이제 **원시 px이 아니라 식**이다:
-    # `min(<저장값>px, 40vw)` (Rail.tsx의 applyCssVar — 창을 좁히면 레일이
-    # 화면의 40%에서 걸리되 저장값 자체는 안 지운다). 커스텀 속성은 계산된
-    # px으로 내려오지 않으므로 문자열 비교는 그 식을 그대로 받는다. 이
-    # 테스트가 지키려는 것은 표기가 아니라 **복원된 폭**이므로 실제로 그려진
-    # 폭을 잰다. 뷰포트는 WIDE(1440)라 40vw=576px, 즉 min은 300px이다.
+    page.wait_for_function("() => document.documentElement.dataset.vtSide === 'open'", timeout=10000)
+    page.wait_for_timeout(300)
+    # `--vt-side-w`는 식(min(저장 폭, 40vw))이라 px로 내려오지 않는다. 저장값 변수와 실제로
+    # 그려진 폭을 본다. 뷰포트는 WIDE(1440)라 40vw=576px, 즉 min은 300px이다.
     var = page.evaluate(
-        "() => getComputedStyle(document.documentElement).getPropertyValue('--vt-wgrail-w')"
+        "() => document.documentElement.style.getPropertyValue('--vt-side-stored')"
     )
-    assert "300px" in var, f"저장값이 CSS 변수에 안 들어왔다: {var}"
+    assert var == "300px", f"저장값이 CSS 변수에 안 들어왔다: {var}"
     got = page.evaluate(
-        "() => Math.round(document.getElementById('vt-wgrail').getBoundingClientRect().width)"
+        "() => Math.round(document.getElementById('vt-side').getBoundingClientRect().width)"
     )
-    assert got == 300, f"새로고침 후 레일 폭이 안 돌아왔다: {got}px (변수 {var})"
+    assert abs(got - 300) <= 1, f"새로고침 후 사이드바 폭이 안 돌아왔다: {got}px (변수 {var})"
 
 
 # ── N43 §8 리사이즈 오버레이 ────────────────────────────────────────────────
@@ -1506,12 +1946,18 @@ def test_파일을_터미널_칸에_끌어다_놓으면_경로가_꽂힌다(isol
         # 그다음 **경로가 꽂혔는지**. DOM이 아니라 xterm 버퍼를 읽는다 —
         # 렌더러가 WebGL이라 화면은 캔버스고 `.xterm-screen`의 textContent는 비어
         # 있다(실측으로 한 번 헛다리를 짚었다).
+        # 줄바꿈으로 접힌 줄(isWrapped)은 이어 붙인다 — 경로가 칸 폭보다 길면 파일 이름이 두 줄에
+        # 걸쳐 그려지고, 줄마다 '\n'을 끼우면 이름이 끊겨 못 찾는다(칸 폭에 따라 결과가 갈렸다).
         read_buf = """() => {
           const s = Object.values(window.allSessions())[0];
           const b = s && s.term && s.term.buffer && s.term.buffer.active;
           if (!b) return '';
           let out = '';
-          for (let i = 0; i < b.length; i++) out += (b.getLine(i)?.translateToString(true) || '') + '\\n';
+          for (let i = 0; i < b.length; i++) {
+            const line = b.getLine(i);
+            if (!line) continue;
+            out += (line.isWrapped ? '' : '\\n') + line.translateToString(true);
+          }
           return out;
         }"""
         page.wait_for_function(
@@ -1528,36 +1974,145 @@ def test_파일을_터미널_칸에_끌어다_놓으면_경로가_꽂힌다(isol
         page.wait_for_timeout(300)
 
 
+# ── 리디자인 6단계(2026-11) — 오버레이(시안 overlays.html) ─────────────────────
+# 합성된 결과(실제 폭·위치·초점)만 본다. 마크업·안전성(글자로만 넣기)은 jsdom 테스트가 본다.
+
+_APPROVAL = {
+    "id": "e2e-a1", "kind": "share", "state": "pending",
+    "subject": {"kind": "agent", "id": "agent:local/$1:1", "name": "agent-a"},
+    "resource": {"id": "session:local/$2:2", "label": "build"},
+    "scopes": ["session.read", "session.view"], "conds": {}, "preset": {"id": "view", "label": "보기", "exact": True},
+    "elevated": [], "lineage": None, "created": 1, "expires": 99999, "age": 120, "expiresIn": 3600,
+    "reason": "두 파일만 고칩니다",
+}
+
+
+def test_경고_토스트는_340_카드로_상태_막대_위_16에_뜬다(page):
+    page.evaluate("() => showToast('업로드 실패', 'error', { detail: 'a.m4a', duration: 0, actions: [{ label: '다시', onClick: () => {} }] })")
+    page.wait_for_timeout(300)   # 등장 애니메이션(translateY 4px, 120ms)이 끝난 자리를 잰다
+    box = page.evaluate("""() => {
+      const el = document.querySelector('#vt-toasts .vt-toast');
+      const r = el.getBoundingClientRect();
+      const hud = document.getElementById('vt-hud').getBoundingClientRect();
+      return { w: Math.round(r.width), right: Math.round(innerWidth - r.right), gap: Math.round(hud.top - r.bottom),
+               btn: !!el.querySelector('.vt-toast-actions button'), x: !!el.querySelector('.vt-toast-x'),
+               radius: getComputedStyle(el).borderTopLeftRadius };
+    }""")
+    assert box["w"] == 340 and box["right"] == 16 and box["gap"] == 16, box
+    assert box["btn"] and box["x"] and box["radius"] == "8px", box
+
+
+def test_승인_창은_채운_버튼_없이_거부에_초점을_두고_바닥_줄이_창_안에_보인다(page):
+    page.route("**/api/authz/approvals", lambda r: r.fulfill(status=200, content_type="application/json",
+                                                              body=json.dumps({"approvals": [_APPROVAL]})))
+    page.reload(wait_until="load")
+    page.wait_for_selector(".vt-authz-approval .vt-authz-foot", timeout=15000)
+    st = page.evaluate("""() => {
+      const card = document.querySelector('.vt-authz-approval .vt-viewer-card');
+      const foot = card.querySelector('.vt-authz-foot').getBoundingClientRect();
+      const c = card.getBoundingClientRect();
+      const solid = [...card.querySelectorAll('.vt-btn')].filter((b) => {
+        const bg = getComputedStyle(b).backgroundColor; return !/rgba\\(0, 0, 0, 0\\)|transparent/.test(bg) && b.classList.contains('solid');
+      }).length;
+      return { w: Math.round(c.width), solid, focus: document.activeElement && document.activeElement.dataset.act,
+               footInside: foot.bottom <= c.bottom + 1 && foot.top >= c.top, head: Math.round(card.querySelector('.vt-viewer-head').getBoundingClientRect().height) };
+    }""")
+    assert st["w"] == 560 and st["solid"] == 0 and st["focus"] == "deny", st
+    assert st["footInside"] and st["head"] == 48, st
+
+
+def test_음성_패널은_440으로_마이크_옆에_열리고_화면_밖으로_안_나간다(page):
+    # 음성 상태 패널은 인증 뒤 지연 청크(voice-status)가 액션을 등록한다 — 등록을 기다린 뒤 연다.
+    page.wait_for_function("() => !!(window.getAction && window.getAction('voice.status'))", timeout=15000)
+    page.evaluate("() => window.getAction('voice.status')()")
+    page.wait_for_selector("#voice-status-panel:not([hidden])", timeout=5000)
+    page.evaluate("""() => {
+      window.dispatchEvent(new CustomEvent('vt:voice-stage', { detail: { phase: 'recording', target: 'x' } }));
+      window.dispatchEvent(new CustomEvent('vt:voice-partial', { detail: { text: '부분 결과 '.repeat(20), clipped: false } }));
+    }""")
+    g = page.evaluate("""() => {
+      const p = document.getElementById('voice-status-panel').getBoundingClientRect();
+      const m = document.getElementById('mic-btn-wrap').getBoundingClientRect();
+      return { w: Math.round(p.width), left: Math.round(p.left), micRight: Math.round(m.right), bottom: p.bottom, h: innerHeight,
+               bars: document.querySelectorAll('#voice-meter .vt-voice-bar').length };
+    }""")
+    # 마이크가 보이면(음성 기능이 켜진 서버) 그 바로 오른쪽, 아니면(격리 서버의 음성 게이트) 화면 왼쪽 12.
+    assert g["w"] == 440 and g["left"] == (g["micRight"] + 8 if g["micRight"] else 12), g
+    assert g["bottom"] <= g["h"] and g["bars"] == 24, g
+
+
 # ── N35 §6 dock ───────────────────────────────────────────────────────────
 
-def test_dock_탭_행이_문서대로_그려진다(page):
-    """소스컨트롤 | 큐 | 포트 | 사용량 — capability가 없는 탭은 아예 없다."""
-    page.wait_for_selector("#vt-dock .vt-dock-tab", timeout=10000)
-    labels = [t.get_attribute("aria-label") for t in page.locator("#vt-dock .vt-dock-tab").all()]
-    assert labels[:1] == ["소스컨트롤"], f"첫 탭이 소스컨트롤이 아니다: {labels}"
-    assert "큐" in labels, labels
-
-
-def test_dock은_wide에서_접힘이_기본이고_본문_패딩이_접힘을_따라간다(page):
-    """§5에서 실제로 났던 버그의 dock 판: 접었는데 body padding이 펼친 폭
-    그대로 남으면 화면 오른쪽에 빈 띠가 생긴다. 두 값을 같이 본다."""
-    page.set_viewport_size(WIDE)   # 1440 — xwide(1600) 미만이라 접힘 기본
-    page.wait_for_timeout(300)
-    got = page.evaluate(
-        """() => ({
-             collapsed: document.getElementById('vt-dock').classList.contains('collapsed'),
-             dockW: Math.round(document.getElementById('vt-dock').getBoundingClientRect().width),
-             padR: getComputedStyle(document.body).paddingRight,
-           })"""
+def test_활동_막대가_문서대로_그려진다(page):
+    """세션 | 변경 | 파일 | 큐 | 첨부 | 스니펫 | (포트) | (사용량) | 시스템 — capability가 없는 활동은
+    아예 없다. 세로 탭 목록이고, 아래 무리(MCP · 음성 · 설정)는 탭이 아니다."""
+    page.wait_for_selector('#vt-activitybar [role="tab"]', timeout=10000)
+    shape = page.evaluate(
+        """() => {
+          const list = document.querySelector('#vt-activitybar [role="tablist"]');
+          const bar = document.getElementById('vt-activitybar').getBoundingClientRect();
+          const tabs = [...list.querySelectorAll('[role="tab"]')];
+          return {
+            orient: list.getAttribute('aria-orientation'),
+            labels: tabs.map((t) => t.getAttribute('aria-label')),
+            barW: Math.round(bar.width),
+            itemH: Math.round(tabs[0].getBoundingClientRect().height),
+            tabsInBottom: document.querySelectorAll('.vt-act-bottom [role="tab"]').length,
+            settings: !!document.querySelector('.vt-act-bottom .vt-act-settings'),
+          };
+        }"""
     )
-    assert got["collapsed"], f"wide에서는 접힘이 기본이어야 한다: {got}"
-    assert got["dockW"] == 36, got
-    assert got["padR"] == "36px", f"본문 패딩이 접힘 폭을 안 따라간다: {got}"
+    assert shape["orient"] == "vertical", shape
+    assert shape["labels"][:4] == ["세션", "변경", "파일", "큐"], shape
+    assert shape["labels"][-1] == "시스템", shape
+    assert shape["barW"] == 48 and shape["itemH"] == 44, shape
+    assert shape["tabsInBottom"] == 0 and shape["settings"], shape
+
+
+def test_작업대_기본_폭과_본문_패딩이_티어와_접힘을_따라간다(page):
+    """§5에서 실제로 났던 버그의 작업대 판: 접거나 폭이 바뀌었는데 body padding이 옛 폭 그대로면
+    화면에 빈 띠가 생기거나 칸이 사이드바 밑으로 들어간다. 저장값이 없는 기기에서
+    wide(1440)는 펼침 360, 접으면 세션 48px 띠, regular(900)는 min(저장 폭, 260, 40vw)."""
+    page.set_viewport_size(WIDE)
+    page.wait_for_function("() => document.documentElement.dataset.vtSide === 'open'", timeout=10000)
+    page.wait_for_timeout(200)
+    measure = """() => ({
+        mode: document.documentElement.dataset.vtSide,
+        side: Math.round(document.getElementById('vt-side').getBoundingClientRect().width),
+        wb: Math.round(document.getElementById('vt-workbench').getBoundingClientRect().width),
+        padL: getComputedStyle(document.body).paddingLeft,
+        padR: getComputedStyle(document.body).paddingRight,
+      })"""
+    got = page.evaluate(measure)
+    assert got["wb"] == 48 + 360, got
+    assert got["padL"] == "408px", f"본문 패딩이 사이드바 폭을 안 따라간다: {got}"
+    assert got["padR"] == "0px", f"오른쪽 dock 자리가 남았다: {got}"
+
+    _dock_tab(page, "세션").click()   # 펼친 세션 재클릭 = 48px 띠
+    page.wait_for_function("() => document.documentElement.dataset.vtSide === 'strip'", timeout=5000)
+    got = page.evaluate(measure)
+    assert got["wb"] == 96 and got["padL"] == "96px", got
+
+    _dock_tab(page, "세션").click()
+    page.wait_for_function("() => document.documentElement.dataset.vtSide === 'open'", timeout=5000)
+    page.set_viewport_size(REGULAR)
+    page.wait_for_timeout(300)
+    got = page.evaluate(measure)
+    assert got["wb"] == 48 + 260 and got["padL"] == "308px", f"regular 상한 260이 안 걸렸다: {got}"
+
+
+def test_regular는_저장값이_없으면_사이드바가_접힌_채로_시작한다(page):
+    page.set_viewport_size(REGULAR)
+    page.reload()
+    page.wait_for_function("() => !!document.documentElement.dataset.vtSide", timeout=20000)
+    page.wait_for_timeout(200)
+    mode = page.evaluate("() => document.documentElement.dataset.vtSide")
+    assert mode == "strip", f"regular는 저장값이 없으면 접힘(세션 띠)으로 시작해야 한다: {mode}"
 
 
 def test_dock_탭을_누르면_그_패널이_dock_안에_마운트된다(page):
-    """모달 backdrop이 아니라 dock 본문에 들어가는가(패널 렌더러 재사용의 핵심).
-    같은 탭을 다시 누르면 접힌다 — 진입점을 이중화하지 않기 위한 규칙."""
+    """모달 backdrop이 아니라 사이드바의 dock 본문에 들어가는가(패널 렌더러 재사용의 핵심).
+    같은 활동을 다시 누르면 접힌다(도구는 0) — 진입점을 이중화하지 않기 위한 규칙."""
     _open_dock(page, "큐")
     got = page.evaluate(
         """() => {
@@ -1573,10 +2128,10 @@ def test_dock_탭을_누르면_그_패널이_dock_안에_마운트된다(page):
     assert not got["backdrop"], "dock 안인데 모달 backdrop 클래스가 붙었다"
     assert got["inside"], f"패널이 dock 폭을 넘는다: {got}"
 
-    # 같은 탭 재클릭 = 접기
+    # 같은 활동 재클릭 = 접기(도구는 0)
     _dock_tab(page, "큐").click()
     page.wait_for_function(
-        "() => document.getElementById('vt-dock').classList.contains('collapsed')", timeout=5000
+        "() => document.documentElement.dataset.vtSide === 'closed'", timeout=5000
     )
     assert page.evaluate("() => !document.getElementById('vt-queue')"), "접었는데 패널이 남았다"
 
@@ -1618,7 +2173,7 @@ def test_dock_탭을_페인으로_끌어내면_그_칸이_패널_칸이_되고_d
             // 분할이면 패널 칸이 **오른쪽**에 와야 한다.
             isRightmost: panes.every((p) => p.getBoundingClientRect().left <= pr.left + 1),
             head: pane.querySelector('.vt-pane-name')?.textContent.trim(),
-            dockCollapsed: document.getElementById('vt-dock').classList.contains('collapsed'),
+            dockCollapsed: document.documentElement.dataset.vtSide === 'closed',
             stillInDock: !!document.querySelector('#vt-dock .vt-dock-body #vt-queue'),
             overflow: [...root.querySelectorAll('*')].filter((el) => {
               const r = el.getBoundingClientRect();
@@ -1640,7 +2195,7 @@ def test_dock_탭을_페인으로_끌어내면_그_칸이_패널_칸이_되고_d
 
 def test_dock_소스컨트롤_탭이_저장소_상태를_읽어온다(page):
     """40 §3 — 머리말(저장소·브랜치)과 목록이 실제 API 응답으로 채워지는가."""
-    _open_dock(page, "소스컨트롤")
+    _open_dock(page, "변경")
     page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=15000)
     # 머리말(status)과 커밋 기록(log)은 **서로 다른 요청**이라 따로 도착한다.
     # 패널이 진짜 지연 청크가 된 뒤로는 둘 사이 간격이 눈에 띄게 벌어져서,
@@ -1663,7 +2218,7 @@ def test_dock_소스컨트롤_탭이_저장소_상태를_읽어온다(page):
 def test_dock_소스컨트롤_stage_commit은_실동작하고_push_PR은_렌더되지_않는다(page):
     """40 §5 · ADR-27 — 2.1.1: stage/unstage/커밋은 ambient git로 실제 동작.
     push·PR/MR 버튼과 계정 칩은 렌더 자체가 없다(disabled로도 남기지 않는다)."""
-    _open_dock(page, "소스컨트롤")
+    _open_dock(page, "변경")
     page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=15000)
     # 머리말(status)과 커밋 기록(log)은 **서로 다른 요청**이라 따로 도착한다.
     # 패널이 진짜 지연 청크가 된 뒤로는 둘 사이 간격이 눈에 띄게 벌어져서,
@@ -1695,7 +2250,7 @@ def test_dock_소스컨트롤_stage_commit은_실동작하고_push_PR은_렌더�
 def test_dock_소스컨트롤_파일_클릭시_뷰어로_연다(page):
     """40 §5 — 파일 행의 「뷰어」 버튼이 파일을 연다. ADR-44부터 표면 설정을 따르므로
     기본값(sheet)에서는 오버레이로 열린다. 변경된 파일이 없으면 건너뛴다."""
-    _open_dock(page, "소스컨트롤")
+    _open_dock(page, "변경")
     page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=15000)
     # 머리말(status)과 커밋 기록(log)은 **서로 다른 요청**이라 따로 도착한다.
     # 패널이 진짜 지연 청크가 된 뒤로는 둘 사이 간격이 눈에 띄게 벌어져서,
@@ -1716,7 +2271,7 @@ def test_dock_소스컨트롤_파일_클릭시_뷰어로_연다(page):
 def test_dock_소스컨트롤_diff_줄에서_큐_코멘트가_열린다(page):
     """40 §3의 「줄 클릭 → 큐에 코멘트」. 2.0 뷰어의 같은 코드를 dock에서
     그대로 쓰는지 실제 클릭으로 확인한다 — 변경된 파일이 없으면 건너뛴다."""
-    _open_dock(page, "소스컨트롤")
+    _open_dock(page, "변경")
     page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=15000)
     # 머리말(status)과 커밋 기록(log)은 **서로 다른 요청**이라 따로 도착한다.
     # 패널이 진짜 지연 청크가 된 뒤로는 둘 사이 간격이 눈에 띄게 벌어져서,
@@ -1734,20 +2289,517 @@ def test_dock_소스컨트롤_diff_줄에서_큐_코멘트가_열린다(page):
     page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=15000)
 
 
-def test_dock_폭_리사이저가_범위를_지킨다(page):
-    """320~560. 드래그로 그 밖으로 못 나간다 — 나가면 pane이 죽거나 dock이 빈다."""
+def test_도구_패널이_정돈_치수를_쓴다(page):
+    """리디자인 5단계(시안 panels.html) — 모든 도구 패널이 같은 머리 40, 구역 머리 28, 행 36을 쓰고
+    본문 바탕이 사이드바와 같은 bg-1이다. 캐스케이드(legacy가 components를 이김)가 실제로 합성된 결과라
+    토큰 계산 테스트로는 못 본다."""
+    def measure(sel):
+        return page.evaluate(
+            """(sel) => {
+              const root = document.querySelector(sel);
+              if (!root) return null;
+              const h = (q) => { const e = root.querySelector(q); return e ? Math.round(e.getBoundingClientRect().height) : null; };
+              const body = root.querySelector('.vt-vw-body');
+              // 사이드바 바탕 = bg-1(#vt-side 자신은 투명하고 안쪽 면이 칠한다) — 토큰 값을 그대로 잰다.
+              const probe = document.createElement('i');
+              probe.style.background = 'var(--color-bg-1)';
+              document.body.appendChild(probe);
+              const sideBg = getComputedStyle(probe).backgroundColor;
+              probe.remove();
+              return { head: h('.vt-viewer-head'), sec: h('.vt-psec'), row: h('.vt-prow'),
+                       bodyBg: body && getComputedStyle(body).backgroundColor, sideBg };
+            }""", sel)
+
+    _open_dock(page, "변경")
+    page.wait_for_selector("#vt-dock-scm .vt-vw-crow", timeout=15000)
+    got = measure("#vt-dock-scm")
+    assert got["head"] == 40, got
+    assert got["sec"] == 28, got
+    assert got["row"] == 36, got
+    assert got["bodyBg"] == got["sideBg"], f"패널 본문 바탕이 사이드바와 다르다: {got}"
+    # 커밋 행은 해시(acc mono) · 제목 · 시각 — 시각 칸이 행 안에 남아 있어야 한다(꼬리표가 밀어내지 않는다).
+    fits = page.evaluate(
+        """() => {
+          const row = document.querySelector('#vt-dock-scm .vt-vw-crow');
+          const t = row.querySelector('.vt-vw-ctime');
+          return !!t && t.getBoundingClientRect().right <= row.getBoundingClientRect().right + 1;
+        }""")
+    assert fits, "커밋 행의 시각이 행 밖으로 밀렸다"
+    for label, sel in (("큐", "#vt-queue"), ("첨부", "#vt-files"), ("스니펫", "#vt-snippets"), ("시스템", "#vt-system")):
+        _open_dock(page, label)
+        page.wait_for_selector(f"#vt-dock {sel} .vt-viewer-head", timeout=15000)
+        got = measure(sel)
+        assert got["head"] == 40, (label, got)
+
+
+def test_dock_소스컨트롤_diff_줄_글자는_기본색이고_부호만_상태색이다(page):
+    """DESIGN.md §2 — diff 줄 글자는 term-fg, 초록·빨강은 +/− 부호(와 바뀐 낱말)에만. 줄 전체를 상태색 글자로
+    그리면 notepad·vscode 틴트 위에서 4.5:1을 못 맞춘다. 작업 트리가 깨끗하면 건너뛴다."""
+    _open_dock(page, "변경")
+    page.wait_for_selector("#vt-dock-scm .vt-vw-crow", timeout=15000)
+    rows = page.locator("#vt-dock-scm .vt-vw-gsec .vt-vw-grow")
+    if rows.count() == 0:
+        pytest.skip("작업 트리가 깨끗해 diff를 열 파일이 없다")
+    rows.first.click()
+    page.wait_for_selector("#vt-dock-scm .vt-vw-dl", timeout=15000)
+    got = page.evaluate(
+        """() => {
+          const probe = document.createElement('span');
+          probe.style.color = 'var(--color-term-fg)';
+          document.body.appendChild(probe);
+          const fg = getComputedStyle(probe).color;
+          probe.remove();
+          const line = document.querySelector('#vt-dock-scm .vt-vw-dl.add, #vt-dock-scm .vt-vw-dl.del');
+          if (!line) return null;
+          return { fg, tx: getComputedStyle(line.querySelector('.vt-vw-tx')).color,
+                   sign: getComputedStyle(line.querySelector('.vt-vw-sign')).color,
+                   nums: line.querySelectorAll('.vt-vw-no').length };
+        }""")
+    if got is None:
+        pytest.skip("추가·삭제 줄이 없는 diff다")
+    assert got["tx"] == got["fg"], got
+    assert got["sign"] != got["fg"], got
+    assert got["nums"] == 1, f"줄 번호 열은 하나다: {got}"
+
+
+def test_dock_소스컨트롤_큰_diff는_보이는_줄만_그리고_스크롤해도_지시_상자가_남는다(page):
+    """파일 개편 단계 9 — diff 가상 목록. 400행이 넘는 diff는 보이는 줄만 DOM에 있고, 스크롤하면 그 자리의 줄이
+    그려지며, 열어 둔 「이 줄에 지시…」 상자는 그 줄이 화면 밖으로 나가도 쓰던 글자와 함께 남는다. 문맥 줄은 lezer
+    `tok-*`로 칠해진다(hljs 제거). 작업 트리에 400행 넘는 diff가 없으면 건너뛴다."""
+    _open_dock(page, "변경")
+    page.wait_for_selector("#vt-dock-scm .vt-vw-crow", timeout=15000)
+    rows = page.locator("#vt-dock-scm .vt-vw-gsec .vt-vw-grow")
+    if rows.count() == 0:
+        pytest.skip("작업 트리가 깨끗해 diff를 열 파일이 없다")
+    rows.first.click()
+    page.wait_for_selector("#vt-dock-scm .vt-vw-dlines .vt-vw-dl", timeout=15000)
+    info = page.evaluate(
+        """() => {
+          const box = document.querySelector('#vt-dock-scm .vt-vw-dlines');
+          return { h: parseFloat(box.style.height), drawn: box.querySelectorAll('.vt-vw-dl, .vt-vw-hunk').length };
+        }""")
+    if info["h"] <= 400 * 20:
+        pytest.skip(f"diff가 작아 전부 그린다: {info}")
+    assert info["drawn"] < 200, f"큰 diff인데 행을 너무 많이 그렸다: {info}"
+    # 스크롤만으로(다른 신호 없이) 그 자리의 줄이 그려진다 — 스크롤 상자는 diff를 그린 칸(.vt-vw-body) 자신이다.
+    scroll_to = """async (where) => {
+          const box = document.querySelector('#vt-dock-scm .vt-vw-dlines');
+          const sc = box.closest('.vt-vw-body');
+          sc.scrollTop = where === 'end' ? sc.scrollHeight : 0;
+          await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+          const tops = [...box.querySelectorAll('.vt-vw-dl, .vt-vw-hunk')].map((e) => parseFloat(e.style.top));
+          return { h: parseFloat(box.style.height), minTop: Math.min(...tops), maxTop: Math.max(...tops),
+                   drawn: box.querySelectorAll('.vt-vw-dl, .vt-vw-hunk').length,
+                   annot: box.querySelector('.vt-vw-annotate textarea')?.value ?? null };
+        }"""
+    got = page.evaluate(scroll_to, "end")
+    assert got["maxTop"] >= got["h"] - 100, f"스크롤한 자리의 줄이 그려지지 않았다: {got}"
+    assert got["minTop"] > 1000, f"화면 밖 위쪽 줄이 DOM에 남아 있다: {got}"
+    assert got["drawn"] < 200, got
+    # 보이는 마지막 줄에 지시 상자를 열고 글자를 쓴다(playwright click은 행 가운데로 가로 스크롤하므로 DOM click).
+    page.evaluate("() => { const r = [...document.querySelectorAll('#vt-dock-scm .vt-vw-dlines .vt-vw-dl')]; "
+                  "r.sort((a, b) => parseFloat(b.style.top) - parseFloat(a.style.top)); r[5].click(); }")
+    ta = page.locator("#vt-dock-scm .vt-vw-annotate textarea")
+    ta.fill("가상 목록 확인")
+    # 맨 위로 — 그 줄은 화면 밖으로 나가 지워지지만 상자는 쓰던 글자와 함께 남는다.
+    got = page.evaluate(scroll_to, "top")
+    assert got["minTop"] == 0, f"맨 위 줄이 그려지지 않았다: {got}"
+    assert got["annot"] == "가상 목록 확인", f"화면 밖으로 나간 줄의 지시 상자가 사라졌다: {got}"
+    # 문맥 줄 하이라이트(편집기 청크의 언어 팩) — 언어를 아는 파일일 때만 본다.
+    path = page.locator("#vt-dock-scm .vt-psub-file").first.get_attribute("title") or ""
+    if path.rsplit(".", 1)[-1] in ("js", "py", "ts", "tsx", "css", "json", "md", "go", "java"):
+        page.wait_for_function(
+            "() => !!document.querySelector('#vt-dock-scm .vt-vw-dl:not(.add):not(.del) .vt-vw-tx [class^=\"tok-\"]')",
+            timeout=15000)
+
+
+def test_사이드바_폭_리사이저가_범위를_지킨다(page):
+    """240~480. 드래그로 그 밖으로 못 나간다 — 나가면 칸이 죽거나 사이드바가 빈다."""
     _open_dock(page, "큐")
-    box = page.locator("#vt-dock .vt-dock-resizer").bounding_box()
+    box = page.locator("#vt-side .vt-side-resizer").bounding_box()
     assert box, "리사이저가 렌더되지 않았다"
-    for dx in (-600, 900):   # 넓히는 쪽 · 좁히는 쪽 둘 다 끝까지
+    for dx in (900, -600):   # 넓히는 쪽 · 좁히는 쪽 둘 다 끝까지
         page.mouse.move(box["x"] + 3, box["y"] + 200)
         page.mouse.down()
         page.mouse.move(box["x"] + 3 + dx, box["y"] + 200, steps=8)
         page.mouse.up()
         page.wait_for_timeout(150)
-        w = page.evaluate("() => Math.round(document.getElementById('vt-dock').getBoundingClientRect().width)")
-        assert 320 <= w <= 560, f"dock 폭이 범위를 벗어났다: {w}px (dx={dx})"
-        box = page.locator("#vt-dock .vt-dock-resizer").bounding_box()
+        w = page.evaluate("() => Math.round(document.getElementById('vt-side').getBoundingClientRect().width)")
+        assert 239 <= w <= 481, f"사이드바 폭이 범위를 벗어났다: {w}px (dx={dx})"
+        box = page.locator("#vt-side .vt-side-resizer").bounding_box()
+
+
+# 리디자인 1단계 — 폭을 끄는 동안 터미널 fit을 미루는가(옛 레일·dock 리사이저는 onStart가 비어 있어
+# 매 프레임 refit·WS resize가 나갔다), 활동을 바꿔도 칸 크기가 그대로인가(폭 공유).
+# WS resize는 페이지의 WebSocket.send를 감싸 `{"type":"resize"}` 프레임만 소켓 URL별로 센다.
+_WS_RESIZE_SPY = """
+(() => {
+  if (window.__vtResizeSpy) return;
+  const counts = {};
+  window.__vtResizeSpy = counts;
+  const send = WebSocket.prototype.send;
+  WebSocket.prototype.send = function (data) {
+    try {
+      if (typeof data === 'string' && data.includes('"resize"')) {
+        const m = JSON.parse(data);
+        if (m && m.type === 'resize') counts[this.url] = (counts[this.url] || 0) + 1;
+      }
+    } catch (_) {}
+    return send.call(this, data);
+  };
+})();
+"""
+
+
+def _resize_counts(page) -> dict:
+    return page.evaluate("() => ({ ...(window.__vtResizeSpy || {}) })")
+
+
+def _open_terminal_with_spy(page):
+    """세션 하나를 칸에 올리고 첫 fit이 끝날 때까지 기다린다. 반환: 만든 세션 id들."""
+    page.evaluate(_WS_RESIZE_SPY)
+    page.evaluate("() => window.createSession && window.createSession()")
+    page.wait_for_selector(".vt-pane .vt-pane-body .xterm", timeout=15000)
+    page.wait_for_function("() => Object.keys(window.__vtResizeSpy || {}).length > 0", timeout=15000)
+    page.wait_for_timeout(800)   # PTY 연결 + 첫 fit + 부팅 뒤 늦은 배치가 가라앉을 때까지
+    return page.evaluate("() => Object.keys(window.allSessions())")
+
+
+def _cleanup_sessions(page, session_ids):
+    for sid in session_ids:
+        page.evaluate("(id) => window.removeSession && window.removeSession(id)", sid)
+    page.wait_for_timeout(300)
+
+
+def test_사이드바_폭을_끌어도_칸마다_WS_resize는_놓은_뒤_한_번이다(isolated_page):
+    page = isolated_page
+    page.wait_for_function("() => document.documentElement.dataset.vtSide === 'open'", timeout=10000)
+    session_ids = _open_terminal_with_spy(page)
+    try:
+        before = _resize_counts(page)
+        box = page.locator("#vt-side .vt-side-resizer").bounding_box()
+        assert box, "리사이저가 없다"
+        page.mouse.move(box["x"] + 3, box["y"] + 300)
+        page.mouse.down()
+        # 20px씩 6프레임 — 매 프레임 fit하던 옛 동작이면 칸마다 여러 번 나간다.
+        for i in range(1, 7):
+            page.mouse.move(box["x"] + 3 - 20 * i, box["y"] + 300)
+            page.wait_for_timeout(40)
+        during = _resize_counts(page)
+        page.mouse.up()
+        page.wait_for_timeout(700)
+        after = _resize_counts(page)
+        panes = page.evaluate("() => document.querySelectorAll('.vt-pane .vt-pane-body .xterm').length")
+        sent = {u: after.get(u, 0) - before.get(u, 0) for u in after}
+        assert during == before, f"끄는 동안 resize가 나갔다: {before} → {during}"
+        assert all(n <= 1 for n in sent.values()), f"칸마다 최대 1번이어야 한다: {sent}"
+        assert sum(sent.values()) >= 1, f"폭이 120px 줄었는데 resize가 한 번도 안 나갔다: {sent}"
+        assert len([n for n in sent.values() if n]) <= panes, (sent, panes)
+        print(f"WS resize(드래그): {sent}, 칸 {panes}")
+    finally:
+        _cleanup_sessions(page, session_ids)
+
+
+def test_도구를_오른쪽에_고정하고_풀면_칸마다_WS_resize는_한_번씩이다(isolated_page):
+    """리디자인 9단계 — 오른쪽 고정 사이드바. wide에서 300을 차지하고(body padding-right), 고정·해제는 패널을
+    다시 열지 않고 옮기며, 칸 폭이 바뀌는 두 번 모두 칸마다 resize가 최대 한 번이어야 한다(refit 게이트)."""
+    page = isolated_page
+    page.wait_for_function("() => document.documentElement.dataset.vtSide === 'open'", timeout=10000)
+    session_ids = _open_terminal_with_spy(page)
+    try:
+        _open_dock(page, "변경")
+        page.wait_for_selector("#vt-dock-scm .vt-dock-pin", timeout=10000)
+        before = _resize_counts(page)
+        page.click("#vt-dock-scm .vt-dock-pin")
+        page.wait_for_function("() => document.querySelector('#vt-side-right:not([hidden]) #vt-dock-scm')", timeout=10000)
+        page.wait_for_timeout(700)
+        mid = _resize_counts(page)
+        state = page.evaluate("""() => ({
+          w: Math.round(document.getElementById('vt-side-right').getBoundingClientRect().width),
+          pad: getComputedStyle(document.body).paddingRight,
+          pin: document.documentElement.dataset.vtPin,
+          dot: document.querySelector('#vt-activitybar [data-activity="scm"]').classList.contains('pinned'),
+          left: !document.querySelector('.vt-side-sessions').hidden,
+        })""")
+        assert state["w"] == 300, state
+        assert state["pad"] == "300px", state
+        assert state["pin"] == "scm" and state["dot"] and state["left"], state
+        sent_pin = {u: mid.get(u, 0) - before.get(u, 0) for u in mid}
+        assert all(n <= 1 for n in sent_pin.values()), f"고정: 칸마다 최대 1번이어야 한다: {sent_pin}"
+        assert sum(sent_pin.values()) >= 1, f"칸이 300px 줄었는데 resize가 없다: {sent_pin}"
+
+        page.click("#vt-dock-scm .vt-dock-pin")
+        page.wait_for_function("() => document.getElementById('vt-side-right').hidden", timeout=10000)
+        page.wait_for_timeout(700)
+        after = _resize_counts(page)
+        sent_unpin = {u: after.get(u, 0) - mid.get(u, 0) for u in after}
+        assert all(n <= 1 for n in sent_unpin.values()), f"해제: 칸마다 최대 1번이어야 한다: {sent_unpin}"
+        assert page.evaluate("() => !!document.querySelector('#vt-side .vt-dock-body #vt-dock-scm')"), "해제하면 왼쪽으로 돌아온다"
+        print(f"WS resize(고정 {sent_pin}, 해제 {sent_unpin})")
+    finally:
+        page.evaluate("() => window.vtSettingsSet && window.vtSettingsSet('ui.side.pinned', '')")
+        _cleanup_sessions(page, session_ids)
+
+
+def test_활동을_바꿔도_사이드바_폭이_같아_WS_resize가_없다(isolated_page):
+    page = isolated_page
+    page.wait_for_function("() => document.documentElement.dataset.vtSide === 'open'", timeout=10000)
+    session_ids = _open_terminal_with_spy(page)
+    try:
+        before = _resize_counts(page)
+        widths = []
+        for label in ("큐", "변경", "첨부", "세션", "시스템", "세션"):
+            _dock_tab(page, label).click()
+            page.wait_for_timeout(250)
+            widths.append(page.evaluate("() => Math.round(document.getElementById('vt-side').getBoundingClientRect().width)"))
+        page.wait_for_timeout(500)
+        after = _resize_counts(page)
+        sent = {u: after.get(u, 0) - before.get(u, 0) for u in after}
+        assert len(set(widths)) == 1, f"활동마다 사이드바 폭이 달랐다: {widths}"
+        assert sum(sent.values()) == 0, f"활동 전환에 resize가 나갔다: {sent}"
+        print(f"WS resize(활동 전환 6회): {sent}, 폭 {widths}")
+    finally:
+        _cleanup_sessions(page, session_ids)
+
+
+# ── 리디자인 7단계 — 데스크톱 집중 모드(시안 D05 · D05-B · D05-C) ────────────────────────────────
+#
+# 들어가고 나올 때 body padding이 **한 번** 바뀌어 칸마다 WS resize가 정확히 한 번이고, 가장자리 노출은 막대가
+# fixed로 떠오를 뿐이라 resize가 0이어야 한다. 키는 실제 단축키(⌘.)로 누른다 — 라우터 · 키맵 · 스위치를 다 지난다.
+_FOCUS_KEY = "Meta+Period" if sys.platform == "darwin" else "Alt+Shift+Period"
+
+_FOCUS_SHAPE = """() => {
+  const r = (el) => { const b = el.getBoundingClientRect(); return { left: Math.round(b.left), top: Math.round(b.top), width: Math.round(b.width), height: Math.round(b.height) }; };
+  const vis = (id) => { const s = getComputedStyle(document.getElementById(id)); return s.visibility === 'visible' && Number(s.opacity) > 0.9; };
+  const root = document.documentElement;
+  return {
+    on: root.classList.contains('vt-focus'),
+    reveal: [...root.classList].filter((c) => c.startsWith('vt-reveal-')),
+    term: r(document.getElementById('terminal-container')),
+    vw: innerWidth, vh: innerHeight,
+    title: vis('vt-titlebar'), status: vis('vt-hud'), wb: vis('vt-workbench'),
+    inert: ['vt-workbench-slot', 'vt-titlebar', 'vt-hud'].map((id) => document.getElementById(id).hasAttribute('inert')),
+    wbWidth: Math.round(document.getElementById('vt-workbench').getBoundingClientRect().width),
+  };
+}"""
+
+
+def _two_visible_panes(page):
+    """세션 둘을 한 화면에 나란히(분할) 올리고 첫 fit이 가라앉을 때까지 기다린다. 반환: 세션 id들."""
+    page.evaluate(_WS_RESIZE_SPY)
+    page.evaluate("() => window.createSession && window.createSession()")
+    page.wait_for_selector(".vt-pane .vt-pane-body .xterm", timeout=15000)
+    page.wait_for_timeout(500)
+    page.evaluate("() => window.splitActivePane && window.splitActivePane('row')")
+    page.wait_for_selector(".vt-split-resizer", timeout=10000)
+    page.evaluate("() => window.createSession && window.createSession({ place: 'pane' })")
+    page.wait_for_function("() => document.querySelectorAll('.vt-pane .vt-pane-body .xterm').length >= 2", timeout=15000)
+    page.wait_for_function("() => Object.keys(window.__vtResizeSpy || {}).length >= 2", timeout=15000)
+    page.wait_for_timeout(1000)
+    return page.evaluate("() => Object.keys(window.allSessions())")
+
+
+def _press_focus(page):
+    # 키는 터미널이 받는 자리에서 누른다(평소 쓰는 그대로). 라우터가 앱 동작으로 먹는다.
+    page.locator(".vt-pane .xterm").first.click()
+    page.keyboard.press(_FOCUS_KEY)
+
+
+def test_집중_모드는_들어가고_나올_때_보이는_칸마다_WS_resize가_한_번이다(isolated_page):
+    page = isolated_page
+    session_ids = _two_visible_panes(page)
+    try:
+        panes = page.evaluate("() => document.querySelectorAll('.vt-pane .vt-pane-body .xterm').length")
+        assert panes == 2, panes
+        normal = page.evaluate(_FOCUS_SHAPE)
+        assert not normal["on"] and normal["title"] and normal["status"] and normal["wb"], normal
+
+        before = _resize_counts(page)
+        _press_focus(page)
+        page.wait_for_timeout(900)
+        s = page.evaluate(_FOCUS_SHAPE)
+        mid = _resize_counts(page)
+        sent_in = {u: mid.get(u, 0) - before.get(u, 0) for u in mid}
+        assert s["on"], s
+        # 칸이 창 네 변 끝까지 — 막대 넷이 사라지고 inert가 걸린다.
+        assert s["term"] == {"left": 0, "top": 0, "width": s["vw"], "height": s["vh"]}, s
+        assert not s["title"] and not s["status"] and not s["wb"], s
+        assert s["inert"] == [True, True, True], s
+        assert s["wbWidth"] == normal["wbWidth"], f"숨은 작업대도 제 폭을 지킨다: {normal['wbWidth']} → {s['wbWidth']}"
+        assert sorted(sent_in.values()) == [1, 1], f"들어갈 때 칸마다 한 번: {sent_in}"
+
+        _press_focus(page)
+        page.wait_for_timeout(900)
+        back = page.evaluate(_FOCUS_SHAPE)
+        after = _resize_counts(page)
+        sent_out = {u: after.get(u, 0) - mid.get(u, 0) for u in after}
+        assert not back["on"] and back["title"] and back["status"] and back["wb"], back
+        assert back["term"] == normal["term"], (normal["term"], back["term"])
+        assert back["inert"] == [False, False, False], back
+        assert sorted(sent_out.values()) == [1, 1], f"나올 때 칸마다 한 번: {sent_out}"
+        print(f"WS resize(집중 모드 들어감): {sent_in}, (나옴): {sent_out}, 칸 {panes}")
+    finally:
+        _cleanup_sessions(page, session_ids)
+
+
+def test_집중_모드_가장자리_노출은_칸_크기를_바꾸지_않아_WS_resize가_없다(isolated_page):
+    page = isolated_page
+    session_ids = _two_visible_panes(page)
+    try:
+        _press_focus(page)
+        page.wait_for_function("() => document.documentElement.classList.contains('vt-focus')", timeout=5000)
+        page.wait_for_selector("#vt-focus-ui .vt-focus-strip", timeout=10000)
+        page.wait_for_timeout(900)
+        base = page.evaluate(_FOCUS_SHAPE)
+        before = _resize_counts(page)
+        seen = {}
+        # 왼쪽 → 작업대(뒤가 어두워진다), 위 → 제목 막대, 아래 → 상태 막대. 250ms 머무르면 드러나고, 벗어나고 400ms 뒤 닫힌다.
+        for edge, (x, y), chrome, inert_idx in (
+            ("left", (3, 450), "wb", 0), ("top", (720, 3), "title", 1), ("bottom", (720, base["vh"] - 3), "status", 2),
+        ):
+            page.mouse.move(x, y)
+            page.wait_for_timeout(500)
+            s = page.evaluate(_FOCUS_SHAPE)
+            assert s["reveal"] == [f"vt-reveal-{edge}"], (edge, s)
+            assert s[chrome], f"{edge}: 막대가 보여야 한다 {s}"
+            assert s["inert"][inert_idx] is False and sum(s["inert"]) == 2, (edge, s)
+            assert s["term"] == base["term"], f"{edge}: 칸 자리가 바뀌었다 {base['term']} → {s['term']}"
+            if edge == "left":
+                assert page.locator(".vt-focus-scrim").count() == 1
+            page.mouse.move(720, 450)
+            page.wait_for_timeout(800)
+            closed = page.evaluate(_FOCUS_SHAPE)
+            assert closed["reveal"] == [] and not closed[chrome], (edge, closed)
+            seen[edge] = True
+        after = _resize_counts(page)
+        sent = {u: after.get(u, 0) - before.get(u, 0) for u in after}
+        assert sum(sent.values()) == 0, f"가장자리 노출에 resize가 나갔다: {sent}"
+        # Esc로 바로 닫힌다. 포커스가 터미널에 있으면 Esc는 막대만 닫고 그대로 터미널(→ PTY)로 간다
+        # (vim 등이 Esc 하나를 잃지 않게). 포커스를 가진 칸의 xterm onData(= WS로 보낼 바이트)에서 \x1b를 센다.
+        page.locator(".vt-pane .xterm").first.click()
+        page.evaluate("""() => {
+          window.__vtEscData = 0;
+          const a = document.activeElement;
+          for (const s of Object.values(window.allSessions())) {
+            if (s && s.term && s.term.element && s.term.element.contains(a)) {
+              s.term.onData((d) => { if (d === '\\x1b') window.__vtEscData++; });
+            }
+          }
+        }""")
+        page.mouse.move(3, 450)
+        page.wait_for_timeout(500)
+        assert page.evaluate(_FOCUS_SHAPE)["reveal"] == ["vt-reveal-left"]
+        assert page.evaluate("() => !!document.activeElement.closest('.xterm')"), "포커스는 터미널에 있다"
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(50)
+        assert page.evaluate(_FOCUS_SHAPE)["reveal"] == []
+        assert page.evaluate("() => window.__vtEscData") == 1, "터미널 포커스의 Esc는 PTY로 가야 한다"
+        print(f"WS resize(가장자리 노출 {list(seen)}): {sent}")
+    finally:
+        page.evaluate("() => window.vtSettingsSet && window.vtSettingsSet('ui.focus.active', false)")
+        _cleanup_sessions(page, session_ids)
+
+
+def test_집중_모드_개입_알약을_누르면_기다리는_세션으로_간다(isolated_page):
+    page = isolated_page
+    page.evaluate("() => window.createSession && window.createSession()")
+    page.wait_for_selector(".vt-pane .vt-pane-body .xterm", timeout=15000)
+    page.wait_for_timeout(400)
+    first = page.evaluate("() => Object.keys(window.allSessions())[0]")
+    # 기다리는 쪽은 tmux 세션이어야 한다 — 에이전트 상태의 열쇠가 tmux 이름이다.
+    page.evaluate("() => window.createTmuxSession()")
+    page.wait_for_function("() => Object.keys(window.allSessions()).length >= 2", timeout=15000)
+    page.wait_for_timeout(500)
+    ids = page.evaluate("() => Object.keys(window.allSessions())")
+    try:
+        assert len(ids) == 2, ids
+        second = next(i for i in ids if i != first)
+        page.evaluate("(id) => window.revealSession(id)", first)
+        page.wait_for_function("(id) => window.activeSessionId() === id", arg=first, timeout=5000)
+        tmux = page.evaluate("(id) => { const s = window.allSessions()[id]; return s.tmuxName || s.tmux_name; }", second)
+        page.evaluate("() => window.vtSettingsSet('ui.focus.active', true)")
+        page.wait_for_function("() => document.documentElement.classList.contains('vt-focus')", timeout=5000)
+        page.wait_for_selector("#vt-focus-ui", state="attached", timeout=10000)
+        assert not page.locator("#vt-focus-pill").is_visible(), "waiting이 없으면 데스크톱 알약은 숨는다"
+        # 서버 감지 결과 대신 같은 모양의 스냅샷을 넣는다(agent/state.js applySnapshot). 레일의 상태 조회가 같은
+        # 다리로 서버 스냅샷을 다시 넣어 지우지 않도록, 그 다리에도 이 엔트리를 섞어 둔다.
+        page.evaluate(
+            """(name) => {
+              const fake = { e2e: { tmux_session: name, status: 'waiting', kind: 'approval', since: Date.now() / 1000 } };
+              const orig = window.vtApplyAgentSnapshot;
+              window.__vtOrigApplySnapshot = orig;
+              window.vtApplyAgentSnapshot = (all) => orig({ ...(all || {}), ...fake });
+              orig(fake);
+            }""",
+            tmux,
+        )
+        page.wait_for_selector("#vt-focus-pill", state="visible", timeout=5000)
+        pill = page.evaluate("""() => { const p = document.getElementById('vt-focus-pill'); const b = p.getBoundingClientRect();
+          return { text: p.textContent, right: Math.round(innerWidth - b.right), top: Math.round(b.top), height: Math.round(b.height) }; }""")
+        assert "개입 1" in pill["text"] and "승인 요청" in pill["text"] and "끝내기" in pill["text"], pill
+        assert pill["right"] == 12 and pill["top"] == 40 and pill["height"] == 28, pill
+        page.locator("#vt-focus-pill .vt-focus-pill-go").click()
+        page.wait_for_function("(id) => window.activeSessionId() === id", arg=second, timeout=5000)
+        assert page.evaluate("() => document.documentElement.classList.contains('vt-focus')"), "이동해도 집중 모드는 그대로"
+        page.locator("#vt-focus-pill .vt-focus-pill-exit").click()
+        page.wait_for_function("() => !document.documentElement.classList.contains('vt-focus')", timeout=5000)
+    finally:
+        page.evaluate("() => { if (window.__vtOrigApplySnapshot) { window.vtApplyAgentSnapshot = window.__vtOrigApplySnapshot; window.vtApplyAgentSnapshot({}); } }")
+        page.evaluate("() => window.vtSettingsSet && window.vtSettingsSet('ui.focus.active', false)")
+        _cleanup_sessions(page, ids)
+
+
+def test_집중_모드를_켠_채_창_폭이_720을_넘나들면_끝나고_막대가_돌아온다(isolated_page):
+    """스위치는 하나(layout/focus.js)다. 데스크톱 집중 모드(막대 넷 숨김)와 폰 집중 모드(상단바 · 아래 탭 숨김)는 숨기는
+    막대가 달라, 켠 채 폭이 바뀌면 끝낸다 — 다른 쪽 화면이 막대 없이 시작하지 않게."""
+    page = isolated_page
+    page.wait_for_selector("#vt-tb-focus", timeout=10000)
+    page.evaluate("() => window.vtSettingsSet('ui.focus.active', true)")
+    page.wait_for_function("() => document.documentElement.classList.contains('vt-focus')", timeout=5000)
+    assert page.evaluate("() => document.getElementById('vt-titlebar').hasAttribute('inert')")
+    page.set_viewport_size(COMPACT)   # 데스크톱 → 폰
+    page.wait_for_function("() => !document.documentElement.classList.contains('vt-focus')", timeout=5000)
+    got = page.evaluate("""() => ({
+      inert: ['vt-workbench-slot', 'vt-titlebar', 'vt-hud'].some((id) => document.getElementById(id).hasAttribute('inert')),
+      active: window.vtSettingsGet('ui.focus.active'),
+      topbar: getComputedStyle(document.getElementById('topbar')).display,
+      btn: document.getElementById('vt-focus-btn').getAttribute('aria-pressed'),
+    })""")
+    assert got == {"inert": False, "active": False, "topbar": got["topbar"], "btn": "false"} and got["topbar"] != "none", got
+    # 폰에서 켠 채 넓히면 → 끝나고 데스크톱 막대가 그대로 보인다.
+    page.evaluate("() => window.vtSettingsSet('ui.focus.active', true)")
+    page.wait_for_function("() => document.documentElement.classList.contains('vt-focus')", timeout=5000)
+    page.set_viewport_size(WIDE)
+    page.wait_for_function("() => !document.documentElement.classList.contains('vt-focus')", timeout=5000)
+    page.wait_for_timeout(300)
+    s = page.evaluate(_FOCUS_SHAPE)
+    assert s["title"] and s["status"] and s["wb"] and s["inert"] == [False, False, False], s
+
+
+def test_집중_모드_버튼과_메뉴가_제목_막대에_있고_새로고침하면_꺼진다(isolated_page):
+    page = isolated_page
+    page.wait_for_selector("#vt-tb-focus-slot #vt-tb-focus", timeout=10000)
+    btn = page.locator("#vt-tb-focus")
+    assert btn.get_attribute("aria-pressed") == "false"
+    btn.click()
+    page.wait_for_function("() => document.documentElement.classList.contains('vt-focus')", timeout=5000)
+    # 위 가장자리로 제목 막대를 띄우면 같은 버튼이 「끝내기」(눌림)로 보이고, 누르면 끝난다.
+    page.wait_for_selector("#vt-focus-ui .vt-focus-strip", timeout=10000)
+    page.mouse.move(720, 200)
+    page.mouse.move(720, 3)
+    page.wait_for_timeout(500)
+    assert btn.get_attribute("aria-pressed") == "true"
+    btn.click()
+    page.wait_for_function("() => !document.documentElement.classList.contains('vt-focus')", timeout=5000)
+    # FarShell 메뉴 「집중 모드」.
+    page.locator(".vt-mb-menu").click()
+    page.locator(".vt-mb-pop .vt-mb-item", has_text="집중 모드").click()
+    page.wait_for_function("() => document.documentElement.classList.contains('vt-focus')", timeout=5000)
+    # 켜짐은 저장하지 않는다 — 새로고침하면 평소 화면으로 돌아온다.
+    page.reload(wait_until="load")
+    page.wait_for_function("() => document.documentElement.dataset.appBooted === 'true'", timeout=15000)
+    page.wait_for_timeout(500)
+    assert not page.evaluate("() => document.documentElement.classList.contains('vt-focus')")
 
 
 # ── 2.1.2: 화면(뷰) · dock 파일 탭(50 §4) — 뷰 탭 줄은 2026-11에 없어졌다 ────────────────────────
@@ -1758,24 +2810,141 @@ def test_dock_폭_리사이저가_범위를_지킨다(page):
 # CI에서 한 번도 실행되지 못한 사이(setup-python 캐시 에러로 10일간 막혀 있었다)
 # 테스트만 옛 이름에 남아 있었다. 탭의 DOM 구조 자체는 그대로다.
 
-def test_뷰_탭_줄은_없고_상단은_메뉴바_하나다(page):
-    """2026-11 — 뷰 탭 줄(#vt-wtabs)을 없앴다. 레일이 이미 세션·묶음 전환과 이름·닫기를 하고 있었다.
-    넓은 화면(>=720px)에서 #topbar는 숨고, 거기 있던 ⌘K 버튼은 메뉴바 오른쪽 도구 자리로 옮겨 앉는다."""
+_BARS_SHAPE = """() => {
+  const r = (el) => { const b = el.getBoundingClientRect(); return { top: Math.round(b.top), bottom: Math.round(b.bottom), left: Math.round(b.left), width: Math.round(b.width), height: Math.round(b.height) }; };
+  const pal = document.getElementById('vt-tb-palette');
+  const crumb = document.querySelector('#vt-titlebar .vt-tb-crumb');
+  const cs = getComputedStyle(document.body);
+  return {
+    vw: window.innerWidth, vh: window.innerHeight,
+    title: r(document.getElementById('vt-titlebar')),
+    status: r(document.getElementById('vt-hud')),
+    wb: r(document.getElementById('vt-workbench')),
+    term: r(document.getElementById('terminal-container')),
+    pal: pal ? r(pal) : null,
+    crumb: crumb ? getComputedStyle(crumb).display : null,
+    padTop: cs.paddingTop, padBottom: cs.paddingBottom,
+    topbar: getComputedStyle(document.getElementById('topbar')).display,
+    paletteToggleIn: document.getElementById('palette-toggle').parentElement.id,
+    menuIn: document.querySelector('.vt-mb-menu')?.closest('#vt-titlebar, #vt-hud')?.id || null,
+    leadIn: document.getElementById('vt-mb-lead').closest('#vt-titlebar')?.id || null,
+    toolsIn: document.getElementById('vt-mb-tools').closest('#vt-titlebar')?.id || null,
+    transitions: [document.getElementById('vt-titlebar'), document.getElementById('vt-hud')]
+      .map((el) => getComputedStyle(el).transitionProperty + ' ' + getComputedStyle(el).transitionDuration),
+  };
+}"""
+
+
+def _wait_bars(page):
+    page.wait_for_selector("#vt-titlebar .vt-mb-menu", timeout=10000)
+    page.wait_for_selector("#vt-titlebar #vt-tb-palette", timeout=10000)
+
+
+def test_뷰_탭_줄은_없고_위는_제목_막대_아래는_상태_막대다(page):
+    """2026-11 — 뷰 탭 줄(#vt-wtabs)을 없앴다. 리디자인 2단계 — 넓은 화면(>=720px)의 맨 위는 제목 막대 36(FarShell 메뉴 ·
+    호스트 · 경로 · 가운데 팔레트 입력 360), 맨 아래는 상태 막대 24(#vt-hud)다. #topbar는 숨고 ⌘K 버튼은 팔레트 입력이
+    대신해 옮겨 오지 않는다. 작업대·본문은 두 막대 사이에만 걸린다."""
     assert page.evaluate("() => document.getElementById('vt-wtabs')") is None
-    shape = page.evaluate(
-        """() => {
-          const bar = document.getElementById('vt-hud').getBoundingClientRect();
-          return {
-            top: Math.round(bar.top), height: Math.round(bar.height), width: Math.round(bar.width),
-            topbar: getComputedStyle(document.getElementById('topbar')).display,
-            paletteIn: document.getElementById('palette-toggle').parentElement.id,
-            vw: window.innerWidth,
-          };
-        }"""
-    )
-    assert shape["topbar"] == "none", shape
-    assert shape["top"] == 0 and shape["height"] == 28 and shape["width"] == shape["vw"], shape
-    assert shape["paletteIn"] == "vt-mb-tools", shape
+    _wait_bars(page)
+    s = page.evaluate(_BARS_SHAPE)
+    assert s["topbar"] == "none", s
+    assert s["title"]["top"] == 0 and s["title"]["height"] == 36 and s["title"]["width"] == s["vw"], s
+    assert s["status"]["bottom"] == s["vh"] and s["status"]["height"] == 24 and s["status"]["width"] == s["vw"], s
+    assert s["padTop"] == "36px" and s["padBottom"] == "24px", s
+    assert s["wb"]["top"] == 36 and s["wb"]["bottom"] == s["vh"] - 24, f"작업대가 두 막대 사이에 있지 않다: {s}"
+    assert s["term"]["top"] >= 36 and s["term"]["bottom"] <= s["vh"] - 24, s
+    assert s["pal"]["width"] == 360 and s["pal"]["height"] == 24, s
+    assert abs((s["pal"]["left"] + s["pal"]["width"] / 2) - s["vw"] / 2) <= 1, f"팔레트 입력이 가운데가 아니다: {s}"
+    assert s["paletteToggleIn"] == "topbar", s
+    assert s["menuIn"] == "vt-titlebar" and s["leadIn"] == "vt-titlebar" and s["toolsIn"] == "vt-titlebar", s
+    # 막대 높이는 칸 크기를 정한다 — transition이 걸리면 그 프레임마다 refit·SIGWINCH가 난다.
+    assert all(t.endswith(" 0s") for t in s["transitions"]), s
+
+
+def test_regular_폭에서는_팔레트_입력이_280이고_경로가_숨는다(page):
+    """시안 D04(1024×768) — 경로는 숨기고 팔레트 입력은 280. 상태 막대는 그대로 맨 아래 24."""
+    page.set_viewport_size({"width": 1024, "height": 768})
+    _wait_bars(page)
+    page.wait_for_timeout(150)
+    s = page.evaluate(_BARS_SHAPE)
+    assert s["pal"]["width"] == 280, s
+    assert abs((s["pal"]["left"] + s["pal"]["width"] / 2) - s["vw"] / 2) <= 1, s
+    assert s["crumb"] in (None, "none"), s
+    assert s["title"]["height"] == 36 and s["status"]["height"] == 24 and s["status"]["bottom"] == 768, s
+
+
+def test_compact에서는_제목_막대도_상태_막대도_없다(page):
+    """compact(<720)는 그대로 — #topbar 52 + 하단 내비 52. 두 막대는 display:none이고 막대 높이 변수도 0이다."""
+    page.set_viewport_size(COMPACT)
+    page.wait_for_timeout(200)
+    got = page.evaluate("""() => ({
+      title: getComputedStyle(document.getElementById('vt-titlebar')).display,
+      status: getComputedStyle(document.getElementById('vt-hud')).display,
+      topbar: getComputedStyle(document.getElementById('topbar')).display,
+      palette: document.getElementById('palette-toggle').parentElement.id,
+      vars: ['--titlebar-h', '--statusbar-h', '--menubar-h'].map((v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim()),
+    })""")
+    assert got["title"] == "none" and got["status"] == "none", got
+    assert got["topbar"] != "none" and got["palette"] == "topbar", got
+    assert got["vars"] == ["0px", "0px", "0px"], got
+
+
+def test_상태_막대는_에이전트_칩이_맨_왼쪽이고_토스트_메시지가_그_오른쪽에_뜬다(page):
+    """info/success 토스트는 상태 막대의 메시지 칸(#vt-hud-msg, role=status)에 뜬다. 에이전트 칩은 그동안에도 남는다.
+    실제 에이전트 칩은 에이전트 상태가 있어야 생기므로 같은 마크업의 칩을 하나 꽂아 배치 규칙(CSS order)만 본다."""
+    _wait_bars(page)
+    page.evaluate("""() => {
+      const chip = document.createElement('span');
+      chip.className = 'vt-hud-chip'; chip.dataset.chip = 'agents'; chip.textContent = '개입 1';
+      document.getElementById('vt-hud').appendChild(chip);
+    }""")
+    page.evaluate("() => window.showToast('복사했습니다', 'success')")
+    page.wait_for_selector("#vt-hud-msg:not([hidden])", timeout=5000)
+    got = page.evaluate("""() => {
+      const msg = document.getElementById('vt-hud-msg');
+      const agents = document.querySelector('#vt-hud .vt-hud-chip[data-chip="agents"]');
+      return { role: msg.getAttribute('role'), live: msg.getAttribute('aria-live'),
+               agentsShown: getComputedStyle(agents).display !== 'none',
+               agentsRight: agents.getBoundingClientRect().right, msgLeft: msg.getBoundingClientRect().left,
+               barRole: document.getElementById('vt-hud').getAttribute('role') };
+    }""")
+    assert got["role"] == "status" and got["live"] == "polite" and got["barRole"] == "region", got
+    assert got["agentsShown"], f"토스트가 에이전트 칩을 가렸다: {got}"
+    assert got["agentsRight"] <= got["msgLeft"] + 1, f"메시지가 에이전트 칩 오른쪽이 아니다: {got}"
+
+
+def test_제목_막대와_상태_막대를_써도_칸_크기가_그대로라_WS_resize가_없다(isolated_page):
+    """리디자인 2단계 — 두 막대의 높이는 CSS(--titlebar-h/--statusbar-h)로 정해져 지연 청크가 늦게 와도 칸이 다시 맞춰지지
+    않는다. 첫 fit 뒤에 막대를 쓰는 동작(상태 막대 메시지, FarShell 메뉴 열고 닫기, 팔레트 입력으로 팔레트 열고 닫기,
+    상태 막대 설정 열고 닫기)이 칸 크기를 바꾸지 않는지 — WS resize 0번, 칸 사각형 그대로 — 를 본다."""
+    page = isolated_page
+    _wait_bars(page)
+    session_ids = _open_terminal_with_spy(page)
+    try:
+        rect = ("() => { const b = document.querySelector('.vt-pane .vt-pane-body').getBoundingClientRect();"
+                " return [b.top, b.left, b.width, b.height].map(Math.round); }")
+        before, r0 = _resize_counts(page), page.evaluate(rect)
+        page.evaluate("() => window.showToast('복사했습니다', 'success')")
+        page.wait_for_timeout(200)
+        page.locator("#vt-titlebar .vt-mb-menu").click()
+        page.wait_for_selector(".vt-mb-pop", timeout=5000)
+        page.keyboard.press("Escape")
+        page.locator("#vt-tb-palette").click()
+        page.wait_for_timeout(400)
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(200)
+        page.locator("#vt-titlebar .vt-mb-menu").click()
+        page.get_by_role("menuitem", name="상태 막대 설정").click()
+        page.wait_for_selector("#vt-settings .vt-hudcfg", timeout=15000)
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(600)
+        after, r1 = _resize_counts(page), page.evaluate(rect)
+        sent = {u: after.get(u, 0) - before.get(u, 0) for u in after}
+        assert r1 == r0, f"칸 크기가 바뀌었다: {r0} → {r1}"
+        assert sum(sent.values()) == 0, f"막대를 썼는데 resize가 나갔다: {sent}"
+        print(f"WS resize(막대 사용): {sent}, 칸 {r0}")
+    finally:
+        _cleanup_sessions(page, session_ids)
 
 
 def test_뷰는_탭_줄_없이도_열리고_자기_pane_트리를_가진다(page):
@@ -1821,7 +2990,19 @@ def test_파일을_패널에_끌어다_놓으면_올라간다(page):
     # 업로드 탭은 「첨부」다(4039376에서 「파일」은 디렉토리 트리로 넘어갔다).
     _open_dock(page, "첨부")
     page.wait_for_selector("#vt-dock #vt-files", timeout=15000)
-    before = page.evaluate("() => document.querySelectorAll('#vt-dock .vt-fl-row').length")
+    # `before`는 **서버 저장소**에서 센다. 목록은 패널이 뜬 뒤 비동기로 그려지므로
+    # 패널이 보이자마자 DOM 행을 세면 첫 목록이 오기 전의 0을 읽는다 — 앞 테스트
+    # (터미널 칸 드롭)가 올린 파일이 그 뒤에 그려져 "행 2개"로 오판했다(실측: 목록
+    # 응답을 0.8초 늦추면 매번 재현). 화면이 그 수를 다 그린 뒤에 드롭한다.
+    count_store = """async () => {
+      const r = await fetch('/api/files?filter=all', { credentials: 'same-origin' });
+      return ((await r.json()).items || []).map((f) => f.name || '');
+    }"""
+    before = len(page.evaluate(count_store))
+    page.wait_for_function(
+        "(n) => document.querySelectorAll('#vt-dock .vt-fl-row').length === n",
+        arg=before, timeout=15000,
+    )
 
     name = f"e2e-drop-{int(time.time())}.txt"
     page.evaluate(
@@ -1857,6 +3038,10 @@ def test_파일을_패널에_끌어다_놓으면_올라간다(page):
         }""",
         name,
     )
+    # 드롭 한 번 = 업로드 한 번 — 화면이 아니라 저장소로도 본다(두 번 올라가면 이름이 같은 레코드가 둘 생긴다).
+    stored = page.evaluate(count_store)
+    assert stored.count(name) == 1, f"드롭 한 번에 한 번만 올라가야 한다: {stored}"
+    assert len(stored) == before + 1, f"저장소에 하나만 늘어야 한다: {stored}"
     assert got["rows"] == before + 1, f"행이 하나 늘어야 한다: {got}"
     assert "7B" in got["sub"], f"크기가 안 맞는다(내용 'drop me' = 7바이트): {got}"
 
@@ -1902,7 +3087,7 @@ def test_모바일_플릿_홈에_호스트_스위처가_있다(page):
     # 연 테스트가 `collapsed=false`를 남기면, compact에서 그 탭이 자동으로
     # 열리면서 풀스크린 시트(panel.js는 compact에서 backdrop으로 폴백한다)가
     # 플릿 홈을 통째로 덮는다. 폰의 기본 상태를 명시해 그 전이를 끊는다.
-    page.evaluate("() => window.vtSettingsSet('ui.dock.collapsed', true)")
+    page.evaluate("() => window.vtSettingsSet('ui.side.collapsed', true)")
     page.wait_for_timeout(300)
     page.set_viewport_size(COMPACT)
     page.reload(wait_until="load")
@@ -1943,7 +3128,7 @@ def _open_legacy_mcp_workspace(page, root="#vt-mcp"):
 
 def test_mcp_workspace_tabs_fit_desktop_and_mobile(page):
     """실제 브라우저에서 세 탭과 보관함 미리보기 진입면의 가로 넘침을 잡는다."""
-    page.locator(".vt-dock-mcp-btn").click()
+    page.locator("#vt-activitybar .vt-act-mcp").click()
     _open_legacy_mcp_workspace(page)
     assert page.locator("#vt-mcp .vt-mcp-worktab").all_text_contents() == [
         "보관함", "도구 설정", "현재 세션"]
@@ -1971,3 +3156,857 @@ def test_mcp_workspace_tabs_fit_desktop_and_mobile(page):
     }""")
     assert layout["scrollWidth"] <= layout["clientWidth"] + 1, layout
     assert layout["cardBottom"] <= layout["navTop"] + 1, layout
+
+
+# ── 파일 개편 단계 5 — 사이드바 「파일」 트리(files/FileTree.tsx) ─────────────────────────────
+
+
+def _tree_dir(name: str) -> Path:
+    """격리 서버의 둘째 열람 경계 아래 트리 시험 폴더. 외부 서버면 건너뛴다."""
+    d = Path(_viewer_file(name))
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _open_tree_at(page, d: Path) -> None:
+    """「파일」 활동을 열고 트리 최상단을 d로 옮긴다(경로 입력 + Enter)."""
+    _open_dock(page, "파일")
+    page.wait_for_selector("#vt-dock #vt-dir .vt-ft-path", timeout=15000)
+    inp = page.locator("#vt-dir .vt-ft-path")
+    inp.fill(str(d))
+    inp.press("Enter")
+    page.wait_for_function(
+        # 경로는 앞을 말줄임(rtl)하므로 LRM(‎)으로 감싸 그린다 — 그 문자를 빼고 비교한다.
+        "(p) => document.querySelector('#vt-dir .vt-ft-host-p')?.textContent.replace(/\\u200e/g, '') === p",
+        arg=str(d), timeout=10000)
+
+
+def test_파일_트리는_보이는_행만_그리고_페이지와_aria_tree와_키보드가_된다(page):
+    d = _tree_dir("tree-big")
+    for i in range(1500):
+        (d / f"n{i:04d}.txt").write_text("x")
+    _open_tree_at(page, d)
+    page.wait_for_function(
+        "() => document.querySelector('#vt-dir .vt-ft-spacer')?.style.height === '" + f"{1001 * 28}px" + "'", timeout=10000)
+    shape = page.evaluate("""() => {
+      const tree = document.querySelector('#vt-dir .vt-ft-scroll');
+      return { role: tree.getAttribute('role'), rows: tree.querySelectorAll('.vt-ft-row').length,
+        height: tree.querySelector('.vt-ft-spacer').style.height,
+        setsize: tree.querySelector('.vt-ft-row.k-file').getAttribute('aria-setsize'),
+        rowH: Math.round(tree.querySelector('.vt-ft-row').getBoundingClientRect().height) };
+    }""")
+    assert shape["role"] == "tree", shape
+    assert shape["rows"] <= 80, f"보이는 구간만 DOM에 있어야 한다: {shape}"
+    assert shape["height"] == f"{1001 * 28}px", shape   # 첫 페이지 1000개 + 「더 불러오기」
+    assert shape["setsize"] == "1500" and shape["rowH"] == 28, shape
+    # 「더 불러오기」 — 끝까지 스크롤해(가상 행이라 그때 DOM에 생긴다) 누른다.
+    page.evaluate("() => { const t = document.querySelector('#vt-dir .vt-ft-scroll'); t.scrollTop = t.scrollHeight; }")
+    page.wait_for_selector("#vt-dir .vt-ft-row.k-more", timeout=5000)
+    page.locator("#vt-dir .vt-ft-row.k-more").click()
+    page.wait_for_function(
+        "() => document.querySelector('#vt-dir .vt-ft-spacer').style.height === '" + f"{1500 * 28}px" + "'", timeout=10000)
+    # 키보드 — 초점은 스크롤 상자가 갖고 aria-activedescendant가 행을 가리킨다.
+    tree = page.locator("#vt-dir .vt-ft-scroll")
+    tree.focus()
+    tree.press("Home")
+    tree.press("ArrowDown")
+    active = lambda: page.evaluate(  # noqa: E731
+        "() => { const t = document.querySelector('#vt-dir .vt-ft-scroll');"
+        " const id = t.getAttribute('aria-activedescendant'); return id ? document.getElementById(id)?.dataset.key : null; }")
+    assert active().endswith("/n0001.txt"), active()
+    tree.press("End")
+    page.wait_for_function(
+        "() => { const t = document.querySelector('#vt-dir .vt-ft-scroll'); const id = t.getAttribute('aria-activedescendant');"
+        " return id && document.getElementById(id)?.dataset.key.endsWith('/n1499.txt'); }", timeout=5000)
+    # 이름 필터.
+    page.locator("#vt-dir .vt-ft-filter input").fill("n0042")
+    page.wait_for_function("() => document.querySelectorAll('#vt-dir .vt-ft-row').length === 1", timeout=5000)
+    assert page.locator("#vt-dir .vt-ft-cnt").inner_text() == "1개"
+    # 행 메뉴 — 오른쪽 클릭. 다운로드는 단계 7, 새 파일·이름 바꾸기·휴지통은 단계 8에서 더했다.
+    page.locator("#vt-dir .vt-ft-row.k-file").click(button="right")
+    page.wait_for_selector('.vt-ft-menu[role="menu"]', timeout=5000)
+    labels = page.locator('.vt-ft-menu [role="menuitem"] .vt-ft-mi-l').all_text_contents()
+    assert labels == ["열기", "터미널에 경로 삽입", "경로 복사", "다운로드", "공유 링크 만들기…",
+                      "이 폴더에 새 파일…", "이름 바꾸기…", "휴지통으로 이동…", "새로고침"], labels
+    page.keyboard.press("Escape")
+    page.wait_for_function("() => !document.querySelector('.vt-ft-menu')", timeout=5000)
+
+
+def test_파일_트리는_루트_감시_하나로_바뀐_폴더만_다시_받고_바뀜_점을_찍는다(page):
+    d = _tree_dir("tree-watch")
+    for i in range(5):
+        (d / f"sub{i}").mkdir(exist_ok=True)
+        (d / f"sub{i}" / "a.txt").write_text("1")
+    _open_tree_at(page, d)
+    for i in range(5):
+        page.locator(f'#vt-dir .vt-ft-row.k-dir[data-key$="/sub{i}"]').click()
+    page.wait_for_function("() => document.querySelectorAll('#vt-dir .vt-ft-row.k-dir.open').length === 5", timeout=10000)
+    page.wait_for_timeout(1500)   # 감시가 자리를 잡고(구독 왕복) 위 생성 이벤트가 가라앉게
+    seen: list[str] = []
+    page.on("request", lambda r: seen.append(r.url) if "/api/fs/tree" in r.url else None)
+    (d / "sub3" / "new.txt").write_text("hello")
+    page.wait_for_selector('#vt-dir .vt-ft-row[data-key$="/sub3/new.txt"] .vt-ft-chg', timeout=15000)
+    page.wait_for_timeout(800)
+    assert len(seen) == 1, f"바뀐 폴더 하나만 다시 받아야 한다: {seen}"
+    assert "depth=0" in seen[0] and "sub3" in seen[0], seen
+    # 조상 폴더는 빈 원(안쪽에 바뀐 것이 있다).
+    assert page.locator('#vt-dir .vt-ft-row.k-dir[data-key$="/sub3"] .vt-ft-chg.ring').count() == 1
+    # 열면 점이 사라진다.
+    page.locator('#vt-dir .vt-ft-row[data-key$="/sub3/new.txt"]').click()
+    page.wait_for_function(
+        "() => !document.querySelector('#vt-dir .vt-ft-row[data-key$=\"/sub3/new.txt\"] .vt-ft-chg')", timeout=5000)
+
+
+def test_폰_파일_탭은_트리가_기본이고_파일_첨부를_오가며_길게_누르면_시트(page):
+    d = _tree_dir("tree-phone")
+    (d / "a.txt").write_text("1")
+    (d / "b.txt").write_text("2")
+    page.set_viewport_size(COMPACT)
+    tab = page.locator('#vt-mnav-bottom [data-mnav="files"]')
+    assert tab.get_attribute("aria-label") == "파일"
+    assert page.locator("#vt-mnav-bottom #vt-mnav-badge-files").count() == 1
+    tab.click()
+    page.wait_for_selector("#vt-dir.vt-mobile-route .vt-mfiles-seg", timeout=15000)
+    sel = page.locator('#vt-dir .vt-mfiles-seg [role="tab"][aria-selected="true"]').inner_text()
+    assert sel.strip() == "파일"
+    inp = page.locator("#vt-dir .vt-ft-path")
+    inp.fill(str(d))
+    inp.press("Enter")
+    page.wait_for_selector('#vt-dir .vt-ft-row[data-key$="/a.txt"]', timeout=10000)
+    h = page.evaluate("() => Math.round(document.querySelector('#vt-dir .vt-ft-row').getBoundingClientRect().height)")
+    assert h == 44, h
+    # 길게 누르면 아래 시트(항목 44).
+    page.evaluate("""() => {
+      const r = document.querySelector('#vt-dir .vt-ft-row[data-key$="/a.txt"]');
+      const b = r.getBoundingClientRect();
+      r.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch', clientX: b.left + 40, clientY: b.top + 10 }));
+    }""")
+    page.wait_for_selector(".vt-ft-menu.sheet", timeout=3000)
+    ih = page.evaluate("() => Math.round(document.querySelector('.vt-ft-menu.sheet [role=menuitem]').getBoundingClientRect().height)")
+    assert ih == 44, ih
+    page.locator(".vt-ft-menu-cancel").click()
+    # 「첨부」로 바꾸면 첨부 화면, 탭을 다시 누르면 마지막에 본 쪽(첨부)이 열린다.
+    page.locator('#vt-dir .vt-mfiles-seg [data-seg="attach"]').click()
+    page.wait_for_selector("#vt-files.vt-mobile-route .vt-mfiles-seg", timeout=15000)
+    assert page.locator("#vt-dir").count() == 0
+    page.locator('#vt-mnav-bottom [data-mnav="fleet"]').click()
+    tab.click()
+    page.wait_for_selector("#vt-files.vt-mobile-route", timeout=15000)
+    page.locator('#vt-files .vt-mfiles-seg [data-seg="tree"]').click()
+    page.wait_for_selector("#vt-dir.vt-mobile-route", timeout=15000)
+
+
+# ── 리디자인 8단계 — 폰(390×844, is_mobile · 터치) ────────────────────────────────
+PHONE = {"width": 390, "height": 844}
+
+
+@pytest.fixture
+def phone_page(browser, server):
+    """진짜 폰처럼 — 모바일 뷰포트 · 터치 · 굵은 포인터(키바가 붙는다). `page`와 같은 초기화를 쓴다."""
+    base, token = server
+    _reset_saved_layout(base, token)
+    ctx = browser.new_context(viewport=PHONE, is_mobile=True, has_touch=True)
+    _login(ctx, base)
+    pg = ctx.new_page()
+    _boot(pg, f"{base}/")
+    before = set(pg.evaluate("() => Object.keys(window.allSessions())"))
+    yield pg
+    # 이 테스트가 만든 세션은 닫기 버튼과 같은 경로로 지운다 — 다음 테스트의 「세션 0개」 전제를 지킨다.
+    try:
+        for sid in set(pg.evaluate("() => Object.keys(window.allSessions())")) - before:
+            pg.evaluate("(id) => window.removeSession && window.removeSession(id)", sid)
+    except PlaywrightError:
+        pass
+    ctx.close()
+    _reset_saved_layout(base, token)
+
+
+def _phone_terminal(pg) -> None:
+    """터미널 탭 · 세션 하나 · 키바 닫힘에서 시작한다."""
+    if pg.evaluate("() => Object.keys(window.allSessions?.() || {}).length") == 0:
+        pg.evaluate("() => window.createTmuxSession?.()")
+        pg.wait_for_selector(".vt-pane .xterm", timeout=15000)
+    pg.evaluate("() => window.vtSettingsSet('keybar.open', false)")
+    pg.locator('#vt-mnav-bottom [data-mnav="terminal"]').click()
+    pg.wait_for_function("() => document.documentElement.dataset.mobileTab === 'terminal'")
+    pg.wait_for_timeout(300)
+
+
+def _rect(pg, sel):
+    return pg.evaluate("(s) => { const r = document.querySelector(s)?.getBoundingClientRect();"
+                       " return r ? { x: r.x, y: r.y, w: r.width, h: r.height, b: r.bottom, r: r.right } : null; }", sel)
+
+
+def test_폰_마이크는_떠_있는_56이고_아래_탭이나_키바_위_16에_뜬다(phone_page):
+    pg = phone_page
+    _phone_terminal(pg)
+    assert pg.evaluate("() => document.getElementById('mic-btn-wrap').parentElement.id") == "vt-mic-fab"
+    if not pg.locator("#mic-btn-wrap").is_visible():
+        pytest.skip("이 서버에는 음성 기능이 없어 마이크가 숨는다(.needs-voice)")
+    fab, nav = _rect(pg, "#mic-btn-wrap"), _rect(pg, "#vt-mnav-bottom")
+    assert (round(fab["w"]), round(fab["h"])) == (56, 56), fab
+    assert round(nav["y"] - fab["b"]) == 16, (fab, nav)
+    assert round(PHONE["width"] - fab["r"]) == 16
+    pg.locator("#keybar-open-btn").click()
+    pg.wait_for_function("() => !document.getElementById('keybar').classList.contains('closed')")
+    pg.wait_for_timeout(200)
+    fab, kb = _rect(pg, "#mic-btn-wrap"), _rect(pg, "#keybar")
+    assert round(kb["y"] - fab["b"]) == 16, (fab, kb)
+    assert round(kb["h"]) in (90, 91), kb   # 키 36×2 + 간격 6 + 패딩 6×2 (+ 위 테두리 1)
+    # 다른 탭에서는 안 보인다.
+    pg.locator('#vt-mnav-bottom [data-mnav="fleet"]').click()
+    pg.wait_for_timeout(200)
+    assert not pg.locator("#mic-btn-wrap").is_visible()
+
+
+def test_폰_집중_모드는_상단바_버튼으로_들어가고_끌어내리기로_나온다(phone_page):
+    pg = phone_page
+    _phone_terminal(pg)
+    btn = pg.locator("#vt-focus-btn")
+    assert btn.is_visible()
+    assert (round(_rect(pg, "#vt-focus-btn")["w"]), round(_rect(pg, "#topbar")["h"])) == (44, 52)
+    btn.click()
+    pg.wait_for_function("() => document.documentElement.classList.contains('vt-focus')")
+    assert not pg.locator("#topbar").is_visible()
+    assert not pg.locator("#vt-mnav-bottom").is_visible()
+    assert pg.locator("#keybar").is_visible(), "닫혀 있던 키바도 집중 모드에서는 보인다"
+    assert round(PHONE["height"] - _rect(pg, "#keybar")["b"]) == 0
+    assert pg.evaluate("() => document.getElementById('mic-btn-wrap').parentElement.id") == "keybar-mic-slot"
+    pill = _rect(pg, "#vt-focus-pill")
+    assert round(pill["h"]) == 28, pill
+    edge = _rect(pg, "#vt-focus-edge")
+    assert round(edge["h"]) == 24
+    # 덜 끌면 제자리(마우스 포인터로 끌어도 같은 pointer 이벤트다).
+    pg.mouse.move(195, 8)
+    pg.mouse.down()
+    pg.mouse.move(195, 50, steps=4)
+    pg.mouse.up()
+    assert pg.evaluate("() => document.documentElement.classList.contains('vt-focus')")
+    pg.mouse.move(195, 8)
+    pg.mouse.down()
+    pg.mouse.move(195, 90, steps=6)
+    assert pg.locator("#vt-focus-hint").is_visible()
+    pg.mouse.up()
+    pg.wait_for_function("() => !document.documentElement.classList.contains('vt-focus')")
+    assert pg.locator("#topbar").is_visible() and pg.locator("#vt-mnav-bottom").is_visible()
+    assert pg.evaluate("() => document.getElementById('mic-btn-wrap').parentElement.id") == "vt-mic-fab"
+    # 알약의 나가기로도 나간다.
+    btn.click()
+    pg.wait_for_function("() => document.documentElement.classList.contains('vt-focus')")
+    pg.locator("#vt-focus-pill .vt-focus-pill-exit").click()
+    pg.wait_for_function("() => !document.documentElement.classList.contains('vt-focus')")
+
+
+def test_폰_세션_카드는_두_줄_64이고_개입_카드의_답_버튼은_44다(phone_page):
+    pg = phone_page
+    _phone_terminal(pg)
+    name = pg.evaluate("() => { const s = Object.values(window.allSessions())[0]; return s && (s.tmuxName || s.tmux_name) || null; }")
+    pg.locator('#vt-mnav-bottom [data-mnav="fleet"]').click()
+    pg.wait_for_selector("#vt-fleet .vt-fleet-row", timeout=15000)
+    h = pg.evaluate("() => Math.round(document.querySelector('#vt-fleet .vt-fleet-row').getBoundingClientRect().height)")
+    assert h == 64, h
+    if not name:
+        return
+    pg.evaluate("""(n) => window.vtApplyAgentSnapshot({ e2e: { tmux_session: n, session_id: 'e2e-w', status: 'waiting',
+      kind: 'approval', question: 'npm test', options: [{ key: '1', label: '예' }, { key: '3', label: '아니요' }] } })""", name)
+    pg.wait_for_selector("#vt-fleet .vt-fleet-card .vt-fleet-answers .vt-btn", timeout=5000)
+    hs = pg.evaluate("() => [...document.querySelectorAll('#vt-fleet .vt-fleet-card .vt-fleet-answers .vt-btn')]"
+                     ".map(b => Math.round(b.getBoundingClientRect().height))")
+    assert hs and all(x == 44 for x in hs), hs
+    badge = pg.locator("#vt-mnav-badge-waiting")
+    assert badge.is_visible() and badge.inner_text().strip() == "1"
+
+
+# ── 리디자인 후속(셸) — 활동 막대 순서 · 집중 모드 미리보기 · 레일 접기 · MCP 관리 창 ─────────────────────
+# 스크린샷은 /tmp/fua-shots/에 남긴다(검증 기록용, 단언과 무관).
+
+_SHOTS = Path("/tmp/fua-shots")
+
+
+def _shot(pg, name: str, **kw) -> None:
+    _SHOTS.mkdir(parents=True, exist_ok=True)
+    pg.screenshot(path=str(_SHOTS / f"{name}.png"), **kw)
+
+
+def _open_settings_section(pg, label: str) -> None:
+    pg.locator("#vt-activitybar .vt-act-settings").click(timeout=15000)
+    pg.wait_for_selector("#vt-settings .vt-set-navitem", timeout=10000)
+    pg.locator("#vt-settings .vt-set-navitem", has_text=label).first.click()
+
+
+def test_활동_막대_순서_설정이_막대에_바로_반영되고_숨긴_활동은_팔레트로_열린다(page):
+    _open_settings_section(page, "상태 막대 · 활동 막대")
+    side = page.locator("#vt-settings .vt-set-side-actcfg")
+    expect(side).to_be_visible()
+    assert page.locator("#vt-settings .vt-actcfg-inline").is_hidden(), "넓은 창에서는 오른쪽 칸만 보인다"
+    _shot(page, "o05-activity-order")
+    # 큐 숨기기 → 활동 막대에서 바로 빠진다(새로고침 없음).
+    side.locator('.vt-actcfg-item[data-activity="queue"] [aria-pressed]').click()
+    page.wait_for_function("() => !document.querySelector('#vt-activitybar [data-activity=\"queue\"]')", timeout=5000)
+    # 시스템을 맨 위(세션 바로 아래)로 — ↑ 여러 번.
+    for _ in range(8):
+        up = side.locator('.vt-actcfg-item[data-activity="system"] button[aria-label$="위로"]')
+        if up.is_disabled():
+            break
+        up.click()
+    ids = page.evaluate("() => [...document.querySelectorAll('#vt-activitybar [role=\"tab\"]')].map((b) => b.dataset.activity)")
+    assert ids[:2] == ["sessions", "system"] and "queue" not in ids, ids
+    # 아래 무리: 설정을 맨 위로.
+    side.locator('.vt-actcfg-item[data-activity="settings"] button[aria-label$="위로"]').click()
+    side.locator('.vt-actcfg-item[data-activity="settings"] button[aria-label$="위로"]').click()
+    order = page.evaluate("""() => {
+      const y = (s) => document.querySelector(s).getBoundingClientRect().top;
+      return [y('#vt-activitybar .vt-act-settings'), y('#vt-activitybar .vt-act-mcp')];
+    }""")
+    assert order[0] < order[1], order
+    _shot(page, "o05-activity-order-changed")
+    # 좁은 창(1099 이하): 오른쪽 칸 대신 구역 아래 사본이 보인다.
+    page.set_viewport_size({"width": 1024, "height": 800})
+    page.wait_for_timeout(200)
+    assert page.locator("#vt-settings .vt-set-side-actcfg").is_hidden()
+    expect(page.locator("#vt-settings .vt-actcfg-inline")).to_be_visible()
+    page.locator("#vt-settings .vt-actcfg-inline").scroll_into_view_if_needed()
+    _shot(page, "o05-activity-order-1024")
+    page.set_viewport_size(WIDE)
+    page.locator("#vt-settings .vt-vw-x").click()
+    # 숨긴 큐는 팔레트로 열리고 사이드바에 뜬다.
+    page.evaluate("window.openPalette()")
+    page.locator("#vt-qo-input").fill("프롬프트 큐")
+    page.get_by_text("프롬프트 큐", exact=True).first.click()
+    page.wait_for_selector("#vt-side .vt-side-tools:not([hidden]) #vt-queue", timeout=10000)
+    # 되돌리기(다음 테스트에 남지 않게 — 기기 설정은 테스트 정리가 지우지만 명시적으로).
+    page.evaluate("() => window.vtSettingsSet('ui.activity.layout', '')")
+    page.wait_for_selector('#vt-activitybar [data-activity="queue"]', timeout=5000)
+
+
+def test_집중_모드_미리보기가_토글을_따른다(page):
+    _open_settings_section(page, "모양")
+    fm = page.locator("#vt-settings .vt-setpv-focus")
+    fm.scroll_into_view_if_needed()
+    expect(fm).to_be_visible()
+    box = page.evaluate("""() => {
+      const r = document.querySelector('#vt-settings .vt-setpv-fm').getBoundingClientRect();
+      const p = document.querySelector('#vt-settings .vt-set-preview').getBoundingClientRect();
+      return { h: Math.round(r.height), inside: r.right <= p.right + 0.5 && r.left >= p.left - 0.5 };
+    }""")
+    assert box["h"] == 170 and box["inside"], box
+    _shot(page, "o04b-focus-preview")
+    page.evaluate("() => { window.vtSettingsSet('ui.focus.edgeReveal', false); window.vtSettingsSet('ui.focus.pill', false); }")
+    page.wait_for_timeout(100)
+    assert page.locator("#vt-settings .vt-setpv-fm-edge").first.is_hidden()
+    assert page.locator("#vt-settings .vt-setpv-fm-pill").is_hidden()
+    _shot(page, "o04b-focus-preview-off")
+    page.evaluate("() => { window.vtSettingsSet('ui.focus.edgeReveal', true); window.vtSettingsSet('ui.focus.pill', true); }")
+
+
+def test_레일_실행_중_구역과_묶음을_접고_새로고침에도_유지된다(isolated_page):
+    page = isolated_page
+    page.evaluate("() => window.createSession && window.createSession()")
+    page.wait_for_selector(".vt-pane .vt-pane-body", timeout=15000)
+    page.wait_for_timeout(500)
+    page.evaluate("() => window.splitActivePane && window.splitActivePane('row')")
+    page.wait_for_selector(".vt-split-resizer", timeout=10000)
+    page.evaluate("() => window.createSession && window.createSession({ place: 'pane' })")
+    session_ids = []
+    try:
+        page.wait_for_function("() => Object.keys(window.allSessions()).length === 2", timeout=10000)
+        session_ids = page.evaluate("() => Object.keys(window.allSessions())")
+        page.evaluate("() => window.vtSettingsSet('ui.side.activity', 'sessions')")
+        page.wait_for_selector("#vt-wgrail .vt-view-group .vt-view-group-toggle", timeout=15000)
+        _shot(page, "d02-rail-expanded")
+        grp = page.locator("#vt-wgrail .vt-view-group").first
+        rows_before = grp.locator(".vt-srow").count()
+        assert rows_before == 2, rows_before
+        grp.locator(".vt-view-group-toggle").click()
+        expect(grp.locator(".vt-view-group-toggle")).to_have_attribute("aria-expanded", "false")
+        assert grp.locator(".vt-srow").count() == 0
+        _shot(page, "d02-rail-group-collapsed")
+        head = page.locator("#vt-wgrail .vt-wgrail-group-toggle", has_text="실행 중")
+        head.click()
+        expect(head).to_have_attribute("aria-expanded", "false")
+        assert page.locator("#vt-wgrail .vt-view-group").count() == 0
+        _shot(page, "d02-rail-running-collapsed")
+        # 기기 설정이라 새로고침해도 남는다(저장은 비동기 PUT — 잠깐 기다린다).
+        page.wait_for_timeout(600)
+        page.reload()
+        page.wait_for_function("() => document.documentElement.dataset.appReady === 'true'", timeout=20000)
+        head = page.locator("#vt-wgrail .vt-wgrail-group-toggle", has_text="실행 중")
+        expect(head).to_have_attribute("aria-expanded", "false", timeout=15000)
+        head.click()
+        page.wait_for_selector("#vt-wgrail .vt-view-group .vt-view-group-toggle[aria-expanded='false']", timeout=10000)
+        page.locator("#vt-wgrail .vt-view-group-toggle").first.click()
+        page.wait_for_selector("#vt-wgrail .vt-view-group .vt-srow", timeout=5000)
+    finally:
+        session_ids = session_ids or page.evaluate("() => Object.keys(window.allSessions())")
+        for sid in session_ids:
+            page.evaluate("(id) => window.removeSession && window.removeSession(id)", sid)
+        page.evaluate("() => window.vtSettingsSet('rail.view', '')")
+        page.wait_for_timeout(300)
+
+
+def test_레일_행_3줄에_만든_곳_글이_보인다(page, server):
+    """CLI로 만든(직접 만든) tmux 세션은 3줄에 아이콘 + 「직접 만듦」."""
+    base, token = server
+    if os.environ.get("VT_E2E_URL"):
+        pytest.skip("격리 서버에서만 tmux 소켓을 직접 만진다")
+    sock = _tmux_socket(int(base.rsplit(":", 1)[1]))
+    subprocess.run(["tmux", "-L", sock, "new-session", "-d", "-s", "fua-ext"], check=True)
+    try:
+        page.evaluate("() => window.vtSettingsSet('ui.side.activity', 'sessions')")
+        sel = "#vt-wgrail .vt-srow-line3 .vt-srow-origin.with-text"
+        page.wait_for_selector(sel, timeout=20000)
+        el = page.locator(sel).first
+        assert el.locator(".vt-srow-origin-text").inner_text() == "직접 만듦"
+        geo = page.evaluate("""(s) => {
+          const o = document.querySelector(s).getBoundingClientRect();
+          const row = document.querySelector(s).closest('.vt-srow').getBoundingClientRect();
+          return { inside: o.right <= row.right + 0.5 && o.left >= row.left, h: Math.round(o.height) };
+        }""", sel)
+        assert geo["inside"], geo
+        _shot(page, "d02-rail-origin")
+    finally:
+        subprocess.run(["tmux", "-L", sock, "kill-session", "-t", "fua-ext"], check=False)
+
+
+def test_MCP_관리_창이_P09b_치수를_따른다(page):
+    """창 크기(1240)와 큰 글자는 그대로, 안쪽만 P09-b 배치: 위 막대 · 왼쪽 탐색 200 · 행 머리 56 · 바닥 막대.
+    옛 보관함으로 넘어가면 두 단 배치가 걷히고 원래 여백(20)으로 돌아간다."""
+    page.locator("#vt-activitybar .vt-act-mcp").click()
+    page.wait_for_selector("#vt-mcp .vt-agent-config .vt-ac-nav", timeout=30000)
+    page.wait_for_selector("#vt-mcp .vt-ac-entry", timeout=30000)
+    page.wait_for_timeout(300)
+    _shot(page, "p09b-mcp-window")
+    geo = page.evaluate("""() => {
+      const q = (s) => document.querySelector(s);
+      const r = (s) => q(s).getBoundingClientRect();
+      const body = q('#vt-mcp .vt-vw-body');
+      return {
+        card: Math.round(r('#vt-mcp .vt-viewer-card').width),
+        nav: Math.round(r('#vt-mcp .vt-ac-nav').width),
+        navLeftOfPane: r('#vt-mcp .vt-ac-nav').right <= r('#vt-mcp .vt-ac-pane').left + 0.5,
+        head: Math.round(r('#vt-mcp .vt-ac-itemhead').height),
+        current: q('#vt-mcp .vt-ac-navitem[aria-current="page"]').textContent,
+        footerInCard: r('#vt-mcp .vt-ac-footer').bottom <= r('#vt-mcp .vt-viewer-card').bottom + 0.5,
+        bodyFits: body.scrollHeight <= body.clientHeight + 1,
+        padTop: getComputedStyle(body).paddingTop,
+      };
+    }""")
+    assert geo["card"] == 1240, geo
+    assert geo["nav"] == 200 and geo["navLeftOfPane"], geo
+    assert geo["head"] == 56, geo
+    assert geo["current"].startswith("목록·분류"), geo
+    assert geo["footerInCard"] and geo["bodyFits"], geo
+    assert geo["padTop"] == "0px", geo
+    page.locator("#vt-mcp .vt-ac-itemhead").first.click()
+    _shot(page, "p09b-mcp-row-open")
+    page.locator("#vt-mcp .vt-ac-navitem", has_text="프리셋").click()
+    _shot(page, "p09b-mcp-presets")
+    page.get_by_role("button", name="기존 MCP 보관함·상세 관리").click(timeout=10000)
+    page.wait_for_selector("#vt-mcp .vt-mcp-worktabs", timeout=30000)
+    pad = page.evaluate("() => getComputedStyle(document.querySelector('#vt-mcp .vt-vw-body')).paddingTop")
+    assert pad == "20px", pad
+    _shot(page, "p09b-mcp-legacy")
+    page.locator("#vt-mcp .vt-vw-x").click()
+    # 폰 — 한 단, 탐색은 가로 띠, 가로 넘침 없음.
+    page.set_viewport_size(COMPACT)
+    page.evaluate("window.openPalette()")
+    page.locator("#vt-qo-input").fill("MCP · 스킬")
+    page.get_by_text("MCP · 스킬 관리", exact=True).click()
+    page.wait_for_selector("#vt-mcp .vt-agent-config .vt-ac-entry", timeout=30000)
+    page.wait_for_timeout(300)
+    _shot(page, "p09b-mcp-phone")
+    m = page.evaluate("""() => {
+      const body = document.querySelector('#vt-mcp .vt-vw-body');
+      return { sw: body.scrollWidth, cw: body.clientWidth };
+    }""")
+    assert m["sw"] <= m["cw"] + 1, m
+
+
+# ── 폰 후속(미룬 항목) — 키바 수식키 문구 · OTP 6칸 · 설정 상세 · 파일 편집 키 줄 ─────────────────────
+# 스크린샷은 /tmp/fud-shots/에 남긴다(검증 기록용, 단언과 무관).
+_FUD_SHOTS = Path("/tmp/fud-shots")
+
+
+def _fud_shot(pg, name):
+    try:
+        _FUD_SHOTS.mkdir(parents=True, exist_ok=True)
+        pg.screenshot(path=str(_FUD_SHOTS / f"e2e-{name}.png"))
+    except (OSError, PlaywrightError):
+        pass
+
+
+def test_폰_키바_수식키_문구는_다음_키만과_잠김을_말하고_키를_밀지_않는다(phone_page):
+    pg = phone_page
+    _phone_terminal(pg)
+    pg.locator("#keybar-open-btn").click()
+    pg.wait_for_function("() => !document.getElementById('keybar').classList.contains('closed')")
+    keys = ("() => [...document.querySelectorAll('#keybar-mods .kb, #keybar-arrows .kb')].map(b => {"
+            " const r = b.getBoundingClientRect(); return [Math.round(r.x), Math.round(r.y), Math.round(r.width)]; })")
+    hint = "() => document.getElementById('keybar-mod-hint').textContent"
+    before, height = pg.evaluate(keys), _rect(pg, "#keybar")["h"]
+    assert pg.evaluate(hint) == ""
+    ctrl = pg.locator('#keybar .kb-mod[data-mod="ctrl"]')
+    ctrl.tap()
+    assert pg.evaluate(hint) == "Ctrl 다음 키만"
+    _fud_shot(pg, "keybar-once")
+    ctrl.tap()
+    assert pg.evaluate(hint) == "Ctrl 잠김"
+    _fud_shot(pg, "keybar-locked")
+    assert pg.evaluate(keys) == before, "문구가 생겨도 키 자리가 그대로다"
+    assert _rect(pg, "#keybar")["h"] == height
+    box = _rect(pg, "#keybar-mod-hint")
+    assert box["w"] > 100 and box["h"] <= 36, box
+    ctrl.tap()
+    assert pg.evaluate(hint) == ""
+
+
+def test_폰_OTP는_6칸이고_붙여넣기와_Backspace가_칸을_넘나든다(browser, server):
+    base, _ = server
+    ctx = browser.new_context(viewport=PHONE, is_mobile=True, has_touch=True)
+    posts = []
+
+    def fake_auth(route):
+        body = route.request.post_data_json or {}
+        posts.append(body.get("otp"))
+        if "otp" not in body:
+            route.fulfill(status=401, json={"error": "otp_required"})
+        else:
+            route.fulfill(status=401, json={"error": "otp_invalid", "remaining": 4})
+    try:
+        pg = ctx.new_page()
+        pg.route("**/api/auth", fake_auth)
+        pg.goto(f"{base}/")
+        pg.wait_for_selector("#login-pass", state="visible", timeout=10000)
+        pg.fill("#login-pass", "whatever")
+        pg.click("#login-submit")
+        pg.wait_for_function("() => !document.getElementById('login-otp-wrap').hidden")
+        boxes = pg.locator("#login-otp-boxes .login-otp-box")
+        assert boxes.count() == 6
+        form, last = _rect(pg, "#login-form"), _rect(pg, "#login-otp-boxes .login-otp-box:last-child")
+        assert last["r"] <= form["r"] and form["r"] <= PHONE["width"], (form, last)
+        assert round(last["h"]) == 52
+        pg.wait_for_function("() => document.activeElement?.dataset?.otpIndex === '0'")
+        pg.keyboard.type("1234")
+        val = "() => document.getElementById('login-otp').value"
+        assert pg.evaluate(val) == "1234"
+        _fud_shot(pg, "otp-typed")
+        pg.keyboard.press("Backspace")
+        assert pg.evaluate(val) == "123"
+        assert pg.evaluate("() => document.activeElement.dataset.otpIndex") == "3"
+        pg.evaluate("""() => { const dt = new DataTransfer(); dt.setData('text', '246 813');
+            document.activeElement.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); }""")
+        assert pg.evaluate(val) == "246813"
+        pg.click("#login-submit")
+        expect(pg.locator("#login-err-msg")).to_contain_text("인증 코드가 올바르지 않습니다")
+        assert pg.evaluate(val) == ""
+        assert posts == [None, "246813"]
+        _fud_shot(pg, "otp-invalid")
+    finally:
+        ctx.close()
+
+
+def test_폰_설정_상세는_행_56에_컨트롤을_오른쪽에_두고_모든_항목이_그려진다(phone_page):
+    pg = phone_page
+
+    def open_home():
+        pg.locator("#vt-mnav-bottom button").nth(4).click()
+        pg.wait_for_timeout(150)
+        if not pg.locator(".vt-set-mobile-link").first.is_visible():
+            pg.locator(".vt-set-back").click()
+        pg.wait_for_selector(".vt-set-mobile-link", timeout=5000)
+
+    open_home()
+    names = pg.evaluate("() => [...document.querySelectorAll('.vt-set-mobile-link strong')].map(e => e.textContent)")
+    sections = names[names.index("터미널"):] if "터미널" in names else names
+    assert len(sections) >= 6, names
+    for i, name in enumerate(sections):
+        if i:
+            open_home()
+        pg.locator(".vt-set-mobile-link", has_text=name).first.click()
+        pg.wait_for_selector(".vt-set-intro .vt-set-title", timeout=5000)
+        expect(pg.locator(".vt-set-intro .vt-set-title")).to_have_text(name)
+        intro = _rect(pg, ".vt-set-intro")
+        assert round(intro["h"]) == 48, (name, intro)
+        over = pg.evaluate("() => [...document.querySelectorAll('#vt-set-body *')].filter(e => {"
+                           " const r = e.getBoundingClientRect(); return r.width && r.right > innerWidth + 1; }).length")
+        assert over == 0, f"{name}: 가로로 넘친 요소 {over}개"
+        _fud_shot(pg, f"settings-{i:02d}")
+        if name == "터미널":
+            row = pg.evaluate("""() => { const t = document.querySelector('.vt-set-row > .vt-toggle'); const r = t.closest('.vt-set-row');
+                const a = t.getBoundingClientRect(), m = r.querySelector('.vt-set-meta').getBoundingClientRect(), rr = r.getBoundingClientRect();
+                return { dir: getComputedStyle(r).flexDirection, h: rr.height, right: a.left > m.left + 100,
+                         track: getComputedStyle(t, '::before').width }; }""")
+            assert row["dir"] == "row" and row["right"] and row["h"] >= 56 and row["track"] == "40px", row
+
+
+def test_폰_파일_편집은_아래_탭을_숨기고_키_줄로_고치고_저장한다(phone_page):
+    pg = phone_page
+    target = _viewer_file("phone-edit.txt")
+    Path(target).write_text("alpha\nbeta\n")
+    try:
+        _open_overlay(pg, target)
+        pg.locator("#vt-file .vt-vw-edit-btn").click()
+        pg.wait_for_selector("#vt-edit-keys:not([hidden])", timeout=5000)
+        assert pg.evaluate("() => document.documentElement.classList.contains('vt-mobile-editing')")
+        assert not pg.locator("#vt-mnav-bottom").is_visible()
+        row = _rect(pg, "#vt-edit-keys")
+        assert round(row["b"]) == PHONE["height"] and 44 <= round(row["h"]) <= 46, row
+        labels = pg.locator("#vt-edit-keys button").all_inner_texts()
+        assert labels == ["Tab", "←", "→", "↑", "↓", "Esc", "저장"], labels
+        card = _rect(pg, "#vt-file .vt-viewer-card")
+        assert card["b"] <= row["y"] + 1, (card, row)
+        pg.evaluate(f"() => {{ const v = {_EDOC}; v.focus(); v.dispatch({{ selection: {{ anchor: 0 }} }}); }}")
+        pg.locator('#vt-edit-keys [data-key="ArrowDown"]').tap()
+        pg.locator('#vt-edit-keys [data-key="Tab"]').tap()
+        assert pg.evaluate(f"() => {_EDOC}.state.doc.toString()") != "alpha\nbeta\n"
+        _fud_shot(pg, "edit-row")
+        pg.locator("#vt-edit-keys .vt-edit-keys-save").tap()
+        pw = pg.locator(".vt-dialog-input")
+        pw.wait_for(timeout=10000)
+        assert not pg.locator("#vt-edit-keys").is_visible(), "대화상자 위에는 키 줄을 걷는다"
+        pw.fill(E2E_PASSWORD)
+        pg.locator(".vt-dialog-ok").click()
+        expect(pg.locator("#vt-file .vt-vw-ss")).to_contain_text("저장됨", timeout=10000)
+        saved = Path(target).read_text()
+        assert saved != "alpha\nbeta\n" and saved.startswith("alpha\n"), saved
+        pg.locator("#vt-file .vt-vw-edit-tools button", has_text="편집 끝내기").click()
+        pg.wait_for_function("() => !document.documentElement.classList.contains('vt-mobile-editing')")
+        assert not pg.locator("#vt-edit-keys").is_visible()
+    finally:
+        _close_overlay(pg)
+    pg.wait_for_timeout(200)
+    assert pg.locator("#vt-mnav-bottom").is_visible()
+
+
+# ── 후속: 위험 포트 번호 확인(P06-d) · windows/vscode 각진 컨트롤 ──────────────────
+
+_FUP_SHOTS = Path("/tmp/fup-shots")
+# port_share_store.danger_reason 이 위험하다고 보는 포트 중 이 기계에서 비어 있을 법한 것들(ngrok · cloudflared · Docker · 프록시 범위).
+_DANGER_CANDIDATES = [4043, 4042, 4041, 20245, 20244, 20243, 2376, 2375] + list(range(7899, 7849, -1))
+
+
+def _fup_shot(pg, name: str, **kw) -> None:
+    _FUP_SHOTS.mkdir(parents=True, exist_ok=True)
+    pg.screenshot(path=str(_FUP_SHOTS / f"{name}.png"), **kw)
+
+
+def _listen_on_danger_port():
+    """위험 목록 안의 빈 포트 하나에 진짜 리스너를 띄운다(포트 패널은 lsof 로 본 것만 보인다). (proc, port)."""
+    for p in _DANGER_CANDIDATES:
+        s = socket.socket()
+        try:
+            s.bind(("127.0.0.1", p))
+        except OSError:
+            continue
+        finally:
+            s.close()
+        proc = subprocess.Popen([sys.executable, "-m", "http.server", str(p), "--bind", "127.0.0.1"],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd="/tmp")
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            try:
+                with socket.create_connection(("127.0.0.1", p), timeout=0.3):
+                    return proc, p
+            except OSError:
+                time.sleep(0.1)
+        proc.kill()
+    pytest.skip("위험 목록 안에 빈 포트가 없다")
+
+
+def test_위험_포트_공개는_포트_번호를_그대로_입력해야_켜진다(page, server):
+    """서버가 409 dangerous_port 로 거부하면 확인 창이 뜨고, 정확한 번호를 입력해야 「공개」가 켜진다.
+    취소하면 force 요청이 안 나가고, 확인하면 그때만 force_danger:true 로 다시 보낸다. 이 격리 서버는
+    VT_NETWORK_MODE=localhost 라 그 다시 보낸 요청도 network_mode 409 로 끝난다 — 터널은 열리지 않는다."""
+    base, _ = server
+    assert page.context.request.post(f"{base}/api/auth/elevate", data={"password": E2E_PASSWORD}).ok
+    proc, port = _listen_on_danger_port()
+    sent: list[dict] = []
+    page.on("request", lambda r: sent.append(json.loads(r.post_data or "{}"))
+            if r.method == "POST" and f"/api/ports/{port}/expose" in r.url else None)
+    try:
+        _open_dock(page, "포트")
+        row = page.locator(f'#vt-dock .vt-pt-row[data-pk^="{port}:"]').first
+        row.wait_for(timeout=20000)
+
+        def open_danger_dialog():
+            row.hover()
+            row.locator('button[aria-label="공개"]').click()
+            page.locator(".vt-dialog .vt-dialog-ok").last.click()          # 일반 공개 창의 「공개」
+            page.wait_for_selector(".vt-pt-danger-dialog .vt-pt-danger-input", timeout=10000)
+            return page.locator(".vt-pt-danger-dialog")
+
+        dlg = open_danger_dialog()
+        ok = dlg.locator(".vt-dialog-ok")
+        assert sent == [{"confirm": True, "mode": "session", "ttl": 3600, "auto_renew": False}], sent
+        expect(ok).to_be_disabled()
+        assert page.evaluate("() => document.activeElement.classList.contains('vt-dialog-cancel')"), "기본 초점은 취소"
+        inp = dlg.locator(".vt-pt-danger-input")
+        inp.fill(str(port)[:-1])
+        expect(ok).to_be_disabled()
+        inp.fill(str(port) + "0")
+        expect(ok).to_be_disabled()
+        inp.fill(str(port))
+        expect(ok).to_be_enabled()
+        page.keyboard.press("Escape")
+        expect(page.locator(".vt-pt-danger-dialog")).to_have_count(0)
+        page.wait_for_timeout(300)
+        assert len(sent) == 1, f"취소하면 force 요청이 없다: {sent}"
+
+        dlg = open_danger_dialog()
+        ok = dlg.locator(".vt-dialog-ok")
+        inp = dlg.locator(".vt-pt-danger-input")
+        inp.fill(str(port + 1))
+        expect(ok).to_be_disabled()
+        inp.fill(str(port))
+        page.wait_for_timeout(150)
+        _fup_shot(page, "p06d-danger-confirm-farshell")
+        ok.click()
+        expect(page.locator(".vt-pt-danger-dialog")).to_have_count(0)
+        deadline = time.time() + 10
+        while len(sent) < 3 and time.time() < deadline:
+            page.wait_for_timeout(100)
+        assert len(sent) == 3, sent
+        assert "force_danger" not in sent[1], sent
+        assert sent[2].get("force_danger") is True, sent
+    finally:
+        proc.kill()
+        proc.wait(timeout=5)
+
+
+@pytest.mark.parametrize("skin", ["windows", "vscode"])
+def test_windows_vscode_스킨은_컨트롤이_2px로_각진다(page, skin):
+    """두 스킨에서 --radius-xs/--radius-sm 이 2px(버튼·입력이 각짐), 큰 틀 --radius-lg 는 8px 그대로. 기본 스킨은 6px."""
+    page.set_viewport_size(WIDE)
+    page.evaluate("(s) => document.documentElement.setAttribute('data-skin', s)", skin)
+    _open_dock(page, "포트")
+    page.wait_for_timeout(300)
+    r = page.evaluate("""() => {
+      const cs = getComputedStyle(document.documentElement);
+      const b = document.createElement('button'); b.className = 'vt-btn'; b.textContent = 'x';
+      const i = document.createElement('input'); i.className = 'vt-dialog-input';
+      document.body.append(b, i);
+      const out = { xs: cs.getPropertyValue('--radius-xs').trim(), sm: cs.getPropertyValue('--radius-sm').trim(),
+                    lg: cs.getPropertyValue('--radius-lg').trim(), btn: getComputedStyle(b).borderTopLeftRadius,
+                    inp: getComputedStyle(i).borderTopLeftRadius };
+      b.remove(); i.remove();
+      return out;
+    }""")
+    assert r == {"xs": "2px", "sm": "2px", "lg": "8px", "btn": "2px", "inp": "2px"}, r
+    _fup_shot(page, f"skin-{skin}-1440x900")
+    page.evaluate("window.openPalette()")
+    page.wait_for_timeout(300)
+    _fup_shot(page, f"skin-{skin}-palette-1440x900")
+    page.keyboard.press("Escape")
+    page.evaluate("() => document.documentElement.setAttribute('data-skin', 'farshell')")
+    assert page.evaluate("() => getComputedStyle(document.documentElement).getPropertyValue('--radius-sm').trim()") == "6px"
+
+
+# ── 실기기 지적(2026-11) — 모바일 세션 카드 · 파일 면 ──
+
+def _dfx_shot(pg, name: str) -> None:
+    """화면 증거 — E2E_SHOT_DIR이 있을 때만 남긴다(기본은 저장하지 않는다)."""
+    d = os.environ.get("E2E_SHOT_DIR")
+    if d:
+        Path(d).mkdir(parents=True, exist_ok=True)
+        pg.screenshot(path=str(Path(d) / f"{name}.png"))
+
+
+def _mobile_ctx(browser, base):
+    ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True, device_scale_factor=2)
+    _login(ctx, base)
+    return ctx
+
+
+def _git_repo(path: Path, branch: str) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", "-q", "-b", branch, str(path)], check=True)
+    return path
+
+
+def test_모바일_세션_카드_2줄은_브랜치를_온전히_보이고_디렉터리만_줄임표로_줄인다(browser, server):
+    """실기기: 「유휴 메인 demo-app /m… +1」 — 브랜치가 `/m…`로 잘려 어느 브랜치인지 알 수 없었다.
+    원인: 기본 규칙의 `.vt-srow-branch{flex:1}`(basis 0) + `.vt-srow-directory{flex:1 1 auto}`가 남는 폭을 나눠
+    칸이 넉넉한데도 브랜치 폭이 0~절반이 됐다. 브랜치가 들어갈 만하면 말줄임이 없어야 하고, 모자랄 때는 디렉터리가 줄어야 한다."""
+    if _BROWSE_DIR is None:
+        pytest.skip("외부 서버(VT_E2E_URL)에서는 시험 저장소를 만들 수 없다")
+    base, token = server
+    deep = _git_repo(_BROWSE_DIR / "client-projects" / "acme-platform" / "services" / "api-gateway-long-directory-name", "feat/auth")
+    short = _git_repo(_BROWSE_DIR / "demo-app", "master")
+    made = []
+    ctx = None
+    try:
+        for name, cwd in (("dfx-deep", deep), ("dfx-short", short)):
+            made.append(_api(base, token, "POST", "/api/tmux/create", {"name": name, "cwd": str(cwd)})["id"])
+        _reset_saved_layout(base, token)
+        ctx = _mobile_ctx(browser, base)
+        pg = ctx.new_page()
+        _boot(pg, f"{base}/")
+        pg.wait_for_selector(".vt-fleet-loc .vt-srow-branch", state="attached", timeout=20000)   # 잘못되면 폭 0이라 visible이 아니다
+        pg.wait_for_timeout(500)
+        rows = pg.evaluate("""() => [...document.querySelectorAll('.vt-fleet-loc')].map((l) => {
+          const q = (s) => l.querySelector(s);
+          const m = (el) => el && { text: el.textContent, cw: el.clientWidth, sw: el.scrollWidth };
+          const line = l.closest('.vt-fleet-line2').getBoundingClientRect();
+          return { dir: m(q('.vt-srow-directory')), br: m(q('.vt-srow-branch')), loc: m(l), lineW: Math.round(line.width) };
+        })""")
+        by = {r["br"]["text"]: r for r in rows if r["br"]}
+        assert {"feat/auth", "master"} <= set(by), rows
+        for text, r in by.items():
+            # 브랜치는 잘리지 않는다 — 보이는 폭이 내용 폭과 같다.
+            assert r["br"]["sw"] <= r["br"]["cw"] + 1, f"브랜치 {text}가 잘렸다: {r}"
+            assert r["br"]["cw"] > 20, r
+        # 짧은 디렉터리(demo-app)는 이 폭에서 아무것도 안 잘린다.
+        assert by["master"]["dir"]["sw"] <= by["master"]["dir"]["cw"] + 1, by["master"]
+        # 긴 디렉터리는 줄임표로 줄되(브랜치를 위해) 칸 밖으로 넘치지 않는다.
+        deep_row = by["feat/auth"]
+        assert deep_row["loc"]["sw"] <= deep_row["loc"]["cw"] + 1, deep_row
+        _dfx_shot(pg, "dfx-fleet-390")
+    finally:
+        if ctx is not None:
+            ctx.close()
+        for sid in made:
+            try:
+                _api(base, token, "DELETE", f"/api/sessions/{sid}")
+            except Exception:
+                pass
+        _reset_saved_layout(base, token)
+
+
+def test_모바일_파일_트리와_뷰어_본문은_칸_면_bg0이고_검정이_아니다(browser, server):
+    """실기기: 파일 트리 · 마크다운 렌더 · 원문 영역이 위 크롬보다 훨씬 어두운 #000이었다 — `.vt-vw-body{background:var(--crust)}`
+    (farshell 스킨에서 #000)와 편집기 줄 번호 칸이 `--crust`였다. 칸 면(`--color-bg-0`)으로 맞춘다."""
+    if _BROWSE_DIR is None:
+        pytest.skip("외부 서버(VT_E2E_URL)에서는 시험 파일을 열 수 없다")
+    base, token = server
+    ctx = _mobile_ctx(browser, base)
+    try:
+        pg = ctx.new_page()
+        _boot(pg, f"{base}/")
+        probe = """() => {
+          const t = document.createElement('i'); t.style.background = 'var(--color-bg-0)'; document.body.append(t);
+          const bg0 = getComputedStyle(t).backgroundColor; t.remove();
+          const bgOf = (sel) => { const e = document.querySelector(sel); return e ? getComputedStyle(e).backgroundColor : null; };
+          return { bg0, body: bgOf('#vt-file-body'), md: bgOf('#vt-file .vt-md'), gut: bgOf('#vt-file .cm-gutters'), dir: bgOf('#vt-dir-body') };
+        }"""
+        pg.click('#vt-mnav-bottom .vt-mnav-btn[data-mnav="files"]')
+        pg.wait_for_selector("#vt-dir-body .vt-ft", timeout=15000)
+        pg.wait_for_timeout(500)
+        r = pg.evaluate(probe)
+        assert r["dir"] == r["bg0"], f"파일 트리 본문이 칸 면이 아니다: {r}"
+        _dfx_shot(pg, "dfx-files-390")
+        pg.evaluate("(p) => window.openFile(p)", _viewer_file("notes.md"))
+        pg.wait_for_selector("#vt-file .vt-md h1", timeout=15000)
+        r = pg.evaluate(probe)
+        assert r["body"] == r["bg0"] and r["body"] != "rgb(0, 0, 0)", f"마크다운 렌더 본문: {r}"
+        _dfx_shot(pg, "dfx-md-390")
+        for b in pg.query_selector_all("#vt-file button, #vt-file [role=tab]"):
+            if (b.inner_text() or "").strip() == "원문":
+                b.click()
+                break
+        pg.wait_for_selector("#vt-file .cm-editor", timeout=15000)
+        pg.wait_for_timeout(400)
+        r = pg.evaluate(probe)
+        assert r["body"] == r["bg0"] and r["gut"] == r["bg0"], f"원문 본문·줄 번호 칸: {r}"
+        _dfx_shot(pg, "dfx-raw-390")
+    finally:
+        ctx.close()

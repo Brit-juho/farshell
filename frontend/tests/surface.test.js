@@ -200,3 +200,23 @@ test('pendingSize: 드래그 중 유예된 세션 수를 그대로 센다', asyn
   assert.strictEqual(gate.pendingSize(), 0, '드래그가 끝나면 비운다');
   assert.deepStrictEqual(fits.sort(), ['a', 'b']);
 });
+
+// 리디자인 1단계 — 작업대 사이드바 리사이저(지연 청크)는 surface.js를 import 하지 못한다(ADR-26).
+// 그래서 window.vtSurfaceDrag 브리지로 앱의 그 게이트를 세운다. 드래그 동안은 유예, 끝에 한 번.
+test('vtSurfaceDrag 브리지 — begin 동안은 fit을 미루고 end에 한 번만 낸다', async () => {
+  const { ns, window } = await loadWithPanes();
+  assert.strictEqual(typeof window.vtSurfaceDrag, 'function');
+  window.vtSurfaceDrag('begin');
+  assert.strictEqual(ns.pendingCount(), 0);
+  // 배치는 즉시 실측(report)한다 — 드래그 중이면 유예 집합에 들어간다.
+  const a = window.document.getElementById('body-a');
+  const el = window.document.createElement('div');
+  window.sessions.x = { wrapper: el };
+  ns.adoptWrapper('x', el);
+  ns.setPlacement(new Map([['x', a]]));
+  assert.strictEqual(ns.pendingCount(), 1, '드래그 중 바뀐 크기는 유예된다');
+  window.vtSurfaceDrag('end');
+  assert.strictEqual(ns.pendingCount(), 0, 'end가 유예분을 비운다');
+  window.vtSurfaceDrag('bogus');   // 모르는 값은 무시
+  assert.strictEqual(ns.pendingCount(), 0);
+});

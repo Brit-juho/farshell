@@ -1,6 +1,7 @@
 // app.js 쪽 상태 UI. voice.js와는 DOM/이벤트로만 연결한다(공유 store 복제 금지).
 import { vtFetch } from '../core/api.js';
 import { t } from '../core/i18n.js';
+import { icon } from '../ui/icons.js';
 import { bindPinSelect, fillPinSelect, getPin, resolveInputTarget, pinMissingMessage, onPinChange } from './target-pin.js';
 
 export function describeStt(status, catalog) {
@@ -34,6 +35,18 @@ export function mountVoiceStatus() {
   // 별도 버튼은 두지 않는다 — 마이크 버튼이 녹음 토글이면서 상태 점(data-voice-state)을 겸하고,
   // 길게 누르기·우클릭·팔레트(voice.status)로 이 패널을 연다.
   if (mic) mic.setAttribute('aria-controls', panel.id);
+  // 머리 아이콘(마이크)과 닫기(×) — 고정 path라 innerHTML로 넣는다(사용자 글자는 들어가지 않는다).
+  const headIc = panel.querySelector('.vt-voice-ic');
+  if (headIc && !headIc.firstChild) headIc.innerHTML = icon('mic', 16);
+  if (close && !close.firstChild) close.innerHTML = icon('x', 14);
+  const head = panel.querySelector('.vt-voice-head');
+  // 음량 막대 24개(시안 O16-F). 값은 아래 paintMeter가 오래된 것부터 밀어 넣는다.
+  const BARS = 24;
+  const levels = new Array(BARS).fill(0);
+  if (meter && !meter.querySelector('.vt-voice-bar')) {
+    for (let i = 0; i < BARS; i++) { const b = document.createElement('i'); b.className = 'vt-voice-bar'; meter.appendChild(b); }
+  }
+  const bars = meter ? [...meter.querySelectorAll('.vt-voice-bar')] : [];
   let openedFrom = null;
   let pending = false;
   let refreshAgain = false;
@@ -46,11 +59,13 @@ export function mountVoiceStatus() {
   const remote = () => window.vtRelayHost?.() && window.vtRelayHost() !== 'local';
   // 마이크 버튼의 상태 점: '' 정상 · busy 진행 중 · setup 준비 필요 · error 실패.
   function paintMic() {
-    if (!mic) return;
     let v = '';
     if (phase === 'error' || failed || resolveInputTarget().missing) v = 'error';
     else if (['preparing', 'starting', 'processing'].includes(phase)) v = 'busy';
     else if (phase !== 'recording' && !usable && !remote()) v = 'setup';
+    // 패널 머리의 서버 점도 같은 값 — 초록 준비 · 호박 준비 필요 · 빨강 실패(색만이 아니라 옆 글자가 상태를 말한다).
+    if (head) { if (v) head.dataset.voiceState = v; else delete head.dataset.voiceState; }
+    if (!mic) return;
     if (v) mic.dataset.voiceState = v; else delete mic.dataset.voiceState;
   }
   // 입력 대상 고정: 선택 목록·안내·마이크 버튼 표시. 목록이 같으면 DOM을 건드리지 않는다(fillPinSelect).
@@ -78,21 +93,37 @@ export function mountVoiceStatus() {
   function position() {
     if (panel.hidden) return;
     const rect = mic?.getBoundingClientRect();
-    const width = Math.min(360, Math.max(0, window.innerWidth - 24));
-    // 보이는 마이크 바로 아래. dock이 숨은 모바일에서는 화면 아래에 둔다.
+    const width = Math.min(440, Math.max(0, window.innerWidth - 24));
+    // 보이는 마이크 옆. dock이 숨은 모바일에서는 화면 아래에 둔다.
     const anchored = window.innerWidth >= 720 && rect?.width > 0 && rect?.height > 0;
     panel.style.width = `${width}px`;
-    let left = anchored ? Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12)) : 12;
-    let top = anchored ? Math.max(12, Math.min(rect.bottom + 8, window.innerHeight - panel.offsetHeight - 12)) : null;
-    // 입력 대상·확인 영역이 붙어 패널이 커지면 마이크 아래에 다 들어가지 않아 위로 밀리며 마이크를 덮는다.
-    // 그러면 다시 눌러 녹음을 끝낼 수 없으므로, 마이크 옆(왼쪽)으로 비켜 놓는다.
-    if (anchored && top < rect.bottom + 8 && rect.left - width - 8 >= 12) left = rect.left - width - 8;
+    let left = 12;
+    let top = null;
+    let bottom = null;
+    if (anchored) {
+      const h = panel.offsetHeight;
+      if (rect.left + rect.width / 2 < window.innerWidth / 2 && rect.right + 8 + width <= window.innerWidth - 12) {
+        // 활동 막대(왼쪽 세로 막대)의 마이크 — 바로 오른쪽에, 아래 끝을 마이크 아래 끝에 맞춘다(시안 O16-F).
+        // top이 아니라 bottom으로 붙인다: 녹음 중 부분 결과·확인 영역이 붙어 패널이 커지면 위로 자라야 화면 밖으로 안 나간다.
+        left = rect.right + 8;
+        bottom = Math.max(12, window.innerHeight - rect.bottom);
+      } else {
+        left = Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12));
+        top = Math.max(12, Math.min(rect.bottom + 8, window.innerHeight - h - 12));
+        // 입력 대상·확인 영역이 붙어 패널이 커지면 마이크 아래에 다 들어가지 않아 위로 밀리며 마이크를 덮는다.
+        // 그러면 다시 눌러 녹음을 끝낼 수 없으므로, 마이크 옆(왼쪽)으로 비켜 놓는다.
+        if (top < rect.bottom + 8 && rect.left - width - 8 >= 12) left = rect.left - width - 8;
+      }
+    }
     panel.style.left = `${left}px`;
     panel.style.top = top === null ? '' : `${top}px`;
+    panel.style.bottom = bottom === null ? '' : `${bottom}px`;
     panel.classList.toggle('vt-voice-mobile', !anchored);
   }
   function paintRecord() {
     record.disabled = phase !== 'recording' && (!usable || ['preparing', 'starting', 'processing'].includes(phase));
+    // 녹음 중에는 위험 테두리(시안: 「녹음 종료」는 빨간 테두리, 채운 버튼은 「입력」 하나뿐).
+    record.classList.toggle('danger', phase === 'recording');
     record.textContent = phase === 'recording' ? t('녹음 종료') : phase === 'processing' ? t('인식 중') : phase === 'preparing' ? t('모델 준비 중') : phase === 'starting' ? t('마이크 확인 중') : state.textContent === t('모델 준비 필요') ? t('모델 준비') : t('녹음 시작');
     const shown = targetName && getPin() === targetName ? t('{name} (고정)', { name: targetName }) : targetName;
     meta.textContent = targetName
@@ -100,7 +131,7 @@ export function mountVoiceStatus() {
         ? t('입력 대상: {name} · {sec}초 / 60초', { name: shown, sec: Math.min(60, Math.floor((Date.now() - startedAt) / 1000)) })
         : t('입력 대상: {name}', { name: shown }))
       : '';
-    if (meter) { meter.hidden = phase !== 'recording'; if (meter.hidden) paintMeter(0, false); }
+    if (meter) { meter.hidden = phase !== 'recording'; if (meter.hidden) { levels.fill(0); paintMeter(0, false); } }
   }
   // 음량 미터 — 값은 voice 번들(meter.js)이 계산해 'vt:voice-level'로 보낸다. 여기서는 그리기만 한다.
   // prefers-reduced-motion이면 5단계로 끊고 초당 4번만 갱신한다.
@@ -109,7 +140,11 @@ export function mountVoiceStatus() {
   function paintMeter(level, clip) {
     if (!meter) return;
     const v = Math.max(0, Math.min(1, Number(level) || 0));
-    meter.style.setProperty('--lv', String(reduceMotion() ? Math.round(v * 5) / 5 : v.toFixed(2)));
+    const shown = reduceMotion() ? Math.round(v * 5) / 5 : Number(v.toFixed(2));
+    meter.style.setProperty('--lv', String(reduceMotion() ? shown : v.toFixed(2)));
+    // 막대: 가장 새 값이 오른쪽 끝. 높이는 transform으로만 바꾼다(레이아웃을 다시 잡지 않는다).
+    levels.shift(); levels.push(shown);
+    for (let i = 0; i < bars.length; i++) bars[i].style.transform = `scaleY(${Math.max(0.1, levels[i]).toFixed(2)})`;
     meter.setAttribute('aria-valuenow', String(Math.round(v * 100)));
     if (clip) meter.dataset.clip = '1'; else delete meter.dataset.clip;
   }

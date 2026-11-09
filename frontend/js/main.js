@@ -25,27 +25,29 @@ hydrateIcons();
 // N34 — HUD(지연 청크)에 넘겨줄 것들. 위 부수효과 import와 같은 모듈 인스턴스라
 // 여기서 이름으로 한 번 더 가져와도 중복 평가는 없다(ES 모듈 캐시).
 import { vtFetch } from './core/api.js';
-import { getSession, activeSessionId, allSessions } from './core/store.js';
-import { allStatuses, agentDetails, isUnseen, onStatusChange } from './agent/state.js';
+import { getSession, activeSessionId, sessionDisplayName, subscribe as storeSubscribe } from './core/store.js';
+import { onLayoutChange } from './layout/store.js';
+import { branchOf, repoOf, onBranchChips } from './layout/branch-chips.js';
+import { allStatuses, isUnseen, onStatusChange } from './agent/state.js';
 import { copyToClipboard } from './term/clipboard.js';
 import { lang } from './core/i18n.js';
 import { isMac } from './core/env.js';
 import { getAction, registerAction } from './core/dom.js';
 import { E2E_ENABLED } from './term/e2e.js';
-import { get as settingGet, subscribe as settingSubscribe } from './core/settings.js';  // S2 — 설정 스토어(모듈 평가 시점에 캐시+마이그레이션 동기 적용)
-import './core/keymap.js';    // S3 — 키맵 레지스트리(각 모듈이 register()로 액션을 붙인다)
+import { setFocusUiLoader, isFocusActive, jumpToWaiting, FOCUS_EVENT } from './layout/focus.js';  // 리디자인 7단계 — 집중 모드 스위치(지연 UI는 아래)
+import { get as settingGet, set as settingSet, subscribe as settingSubscribe } from './core/settings.js';  // S2 — 설정 스토어(모듈 평가 시점에 캐시+마이그레이션 동기 적용)
+import { getBinding, displayCombo } from './core/keymap.js';    // S3 — 키맵 레지스트리(각 모듈이 register()로 액션을 붙인다)
 import './core/dom.js';
 import { showToast } from './ui/toast.js';   // F5 — showToast/dismissToast. 다른 모듈이 참조하므로 먼저.
 import { prefetchUpload } from './term/upload-lite.js';  // 업로드 본체는 upload 청크 — 유휴 시간에 미리 받는다
 import { prefetchDialogs } from './core/dialog-lazy.js';  // 확인·입력·알림 대화상자 본체는 panel 청크
 import { watchSelects } from './ui/select-lazy.js';  // 기본 <select> 팝업 대신 FarShell 드롭다운(모든 select에 자동) — 본체는 select 청크
-import { initTooltips } from './ui/tooltip.js';  // 2026-09-18 — 네이티브 title 대체(data-tip)
+import { initTooltips } from './ui/tooltip-lazy.js';  // 2026-09-18 — 네이티브 title 대체(data-tip). 본체는 첫 사용 때(리디자인 9단계)
 import './theme.js';      // F5 — classic script에서 전환. term/xterm-setup.js가 이걸 import한다.
 import './lib/ansilex.js';
 import './lib/keyseq.js';
 import './panels/settings-lazy.js';  // S4 — 설정 화면(Mod+, / rail ⚙)
 import './panels/usage-badge.js';     // U2 — 사용량 게이지(rail 「사용량」 + 우측 레일)
-import './layout/right-rail.js';// L8 — 우측 레일 접기/펴기
 import './ui/favicon.js';
 import './push/swreg.js';
 
@@ -60,7 +62,7 @@ import './layout/panes.js';   // L3 1단계 — 분할 pane 렌더러. session.j
 // term/touch.js는 부수효과가 없는 함수 모듈이고 xterm-setup.js가 터치 기기에서만 import()한다 — 여기서 정적 import하지 않는다.
 import './term/links.js';
 import './layout/view-actions.js';  // 뷰(탭마다 pane 트리)의 window 브리지 — 탭 줄 UI는 없다
-import './layout/menubar-slots.js'; // 720px 이상: #topbar의 남은 버튼을 메뉴바로 옮긴다
+import './layout/menubar-slots.js'; // 720px 이상: #topbar의 남은 버튼을 제목 막대로 옮긴다
 import('./term/tab-worktree.js');  // 현재 작업 정보 조회는 셸 UI와 함께 지연 로딩
 import './term/remote.js';   // N7/N39 3단계 — 원격 세션 attach(window 브리지 등록)
 import './term/selection.js';
@@ -77,6 +79,10 @@ import './term/guide.js';
 // 마운트. term/session.js(switchTo) 이후 — 직접 참조는 안 하지만(window
 // 브리지로 대신 받는 shell/Fleet.tsx 쪽), 같은 부팅 단계에 두는 게 자연스럽다.
 import './layout/mobile-nav.js';
+// 리디자인 8단계 — 폰 수동 집중 모드(상단바 버튼 · 개입 알약 · 위 가장자리 끌어내리기). focus.toggle 액션의 compact 몫.
+import './layout/mobile-focus.js';
+// 폰 파일 편집(시안 M-F5) — 편집 중엔 아래 탭을 숨기고 키보드 위에 Tab·화살표·Esc·저장 줄을 띄운다.
+import './layout/mobile-edit.js';
 import './layout/env-chip.js'; // N45 — 모바일 헤더 환경 칩
 import { bootApp } from './term/boot.js';
 // F4 — grid.js(382줄)를 agent/{badges,status,preview}.js 3개로 분할.
@@ -167,26 +173,14 @@ try {
     }
     return { waiting, working, done };
   };
-  // 가장 오래 기다린 입력 대기 세션으로 이동한다. since를 모르는 항목은 맨 뒤로 보낸다.
-  registerAction('agents.jump', () => {
-    const details = agentDetails();
-    const sinceOf = (name) => {
-      const v = details[name] && details[name].since;
-      const n = typeof v === 'number' ? v : Date.parse(v);
-      return Number.isFinite(n) ? n : Infinity;
-    };
-    const waiting = [...allStatuses()].filter(([, st]) => st === 'waiting').map(([name]) => name);
-    if (!waiting.length) return;
-    waiting.sort((a, b) => sinceOf(a) - sinceOf(b));
-    const tmuxName = waiting[0];
-    const sessions = allSessions();
-    const sessionId = Object.keys(sessions).find((id) => {
-      const s = sessions[id];
-      return s && (s.tmuxName || s.tmux_name) === tmuxName && !s.remote;
-    }) || null;
-    const open = window.vtOpenSessionFromRail;
-    if (typeof open === 'function') open({ sessionId, tmuxName });
-  });
+  // 가장 오래 기다린 입력 대기 세션으로 이동한다. 고르는 규칙은 layout/focus.js 한 곳 — 집중 모드의 개입 알약도
+  // 같은 세션을 가리킨다.
+  registerAction('agents.jump', () => jumpToWaiting());
+  // 키맵 id → 표시용 조합. core/keymap.js는 지연 청크가 직접 못 읽으므로 여기서 넘긴다.
+  const keyHint = (id) => {
+    const b = getBinding(id);
+    return b && !b.unavailable ? displayCombo(b.combo) : '';
+  };
   // 푸시 구독 상태. 이 브라우저가 못 쓰면(비보안 컨텍스트·미지원) 칩 자체를 안 그린다.
   const pushState = async () => {
     const P = window.VTPush;
@@ -200,8 +194,7 @@ try {
       .then(({ mountHud }) => mountHud(hudRoot, {
         vtFetch, activeTmuxName, activeClientsPath, getAction, e2eEnabled: E2E_ENABLED,
         agentCounts, subscribeAgents: onStatusChange, pushState,
-        copyText: copyToClipboard, toast: showToast,
-        locale: () => (lang() === 'en' ? 'en-US' : 'ko-KR'), isMac,
+        locale: () => (lang() === 'en' ? 'en-US' : 'ko-KR'),
         // 배치(ui.hud.layout)는 설정 화면에서 바뀐다 — core/settings.js는 지연 청크가 직접 못 읽으므로 여기서 넘긴다.
         getLayout: () => settingGet('ui.hud.layout'),
         subscribeLayout: (fn) => settingSubscribe((changed) => {
@@ -212,42 +205,63 @@ try {
       .catch((e) => console.error('[FarShell HUD]', e)); // HUD는 부가 정보 — 실패해도 앱은 계속
   }
 
-  // N37 §4 — 워크스페이스 칩 + 연결된 화면. 같은 지연 청크(shell.js)를 공유하므로
-  // HUD와 별도 import()를 또 부르지 않는다(모듈 캐시로 중복 다운로드는 안
-  // 생기지만, 굳이 두 번 요청할 이유가 없다).
-  const chipRoot = document.getElementById('vt-workspace-chip-slot');
-  if (chipRoot) {
-    import('./shell/HeaderExtras.tsx')
-      .then(({ mountWorkspaceChip }) => {
-        const deps = { vtFetch, activeTmuxName, getAction };
-        if (chipRoot) mountWorkspaceChip(chipRoot, deps);
-      })
-      .catch((e) => console.error('[FarShell header]', e));
+  // 리디자인 2단계 — 제목 막대 36(FarShell 메뉴 · 호스트 · 저장소 › 브랜치 › 세션 · 팔레트 입력 · 도구).
+  // 옛 워크스페이스 칩(HeaderExtras.tsx)과 메뉴바의 FarShell 메뉴가 여기로 왔다. 같은 지연 청크(shell.js).
+  // 경로는 활성 칸의 세션에서 읽는다 — 브랜치·저장소 지도는 칸 머리 브랜치 칩과 같은 출처(layout/branch-chips.js).
+  const titleRoot = document.getElementById('vt-titlebar');
+  if (titleRoot) {
+    const crumb = () => {
+      const sid = activeSessionId();
+      const s = sid ? getSession(sid) : null;
+      if (!s) return {};
+      const tmux = s.tmuxName || s.tmux_name || '';
+      return { repo: repoOf(tmux), branch: branchOf(tmux), session: sessionDisplayName(sid) || tmux || null };
+    };
+    const subscribeCrumb = (fn) => {
+      const offs = [storeSubscribe(fn), onLayoutChange(fn), onBranchChips(fn)];
+      return () => { for (const off of offs) if (typeof off === 'function') off(); };
+    };
+    import('./shell/TitleBar.tsx')
+      .then(({ mountTitleBar }) => mountTitleBar(titleRoot, {
+        vtFetch, getAction, isMac, copyText: copyToClipboard, toast: showToast, crumb, subscribeCrumb,
+        keyHint, focusActive: isFocusActive, focusEvent: FOCUS_EVENT,
+      }))
+      .catch((e) => console.error('[FarShell title bar]', e));
   }
 
-  // N36 §5 — 워크트리 레일. 같은 지연 청크(shell.js)를 공유한다.
-  const railRoot = document.getElementById('vt-wgrail-slot');
-  if (railRoot) {
-    import('./shell/Rail.tsx')
-      .then(({ mountRail }) => mountRail(railRoot, { vtFetch, getAction }))
-      .catch((e) => console.error('[FarShell rail]', e));
+  // 리디자인 1단계 — 작업대(활동 막대 + 사이드바). 사이드바 안에 워크트리 레일(N36 §5)과
+  // dock 본문(N35 §6)이 함께 마운트된다. 같은 지연 청크(shell.js)를 공유한다. dock은 부팅 시
+  // 펼친 도구 활동의 패널 렌더러(queue.js 등)를 곧바로 부르므로 그 액션들이 registerAction으로
+  // 등록돼 있어야 한다(정적 import가 위에서 이미 끝났으므로 이 시점엔 전부 등록돼 있다).
+  const workbenchRoot = document.getElementById('vt-workbench-slot');
+  if (workbenchRoot) {
+    import('./shell/Workbench.tsx')
+      .then(({ mountWorkbench }) => mountWorkbench(workbenchRoot, {
+        vtFetch, getAction,
+        // 활동 막대 툴팁의 단축키.
+        keyHint,
+      }))
+      .catch((e) => console.error('[FarShell workbench]', e));
   }
-  // N35 §6 — dock. 같은 지연 청크(shell.js)를 공유한다. 레일 뒤에 마운트하는
-  // 이유는 dock이 부팅 시 활성 탭의 패널 렌더러(queue.js 등)를 곧바로 부르기
-  // 때문이다 — 그 액션들이 registerAction으로 등록돼 있어야 한다(정적 import가
-  // 위에서 이미 끝났으므로 이 시점엔 전부 등록돼 있다).
-  const dockRoot = document.getElementById('vt-dock-slot');
-  if (dockRoot) {
-    import('./shell/Dock.tsx')
-      .then(({ mountDock }) => mountDock(dockRoot, { vtFetch, getAction }))
-      .catch((e) => console.error('[FarShell dock]', e));
-  }
+
+  // 리디자인 7단계 — 데스크톱 집중 모드의 떠 있는 부분(가장자리 노출 · 들어올 때 안내 · 터치용 끝내기)은 처음 켤 때
+  // 같은 지연 청크(shell.js)에서 불러온다. 스위치는 core(layout/focus.js), 개입 알약은 두 폭 공용(layout/mobile-focus.js).
+  setFocusUiLoader(() => import('./shell/Focus.tsx').then(({ mountFocus }) => {
+    const host = document.createElement('div');
+    host.id = 'vt-focus-ui';
+    document.body.appendChild(host);
+    return mountFocus(host, {
+      getAction, keyHint,
+      active: isFocusActive, focusEvent: FOCUS_EVENT,
+      getSetting: settingGet, setSetting: settingSet, subscribeSettings: settingSubscribe,
+    });
+  }));
 
   // 부팅 완료 표시. `appBootFailed`(아래)와 짝이다 — 지금까지 실패만 표시하고
   // 성공은 표시하지 않아서, 밖에서는 "아직 부팅 중"과 "부팅 끝"을 구분할 수 없었다.
   //
   // 필요해진 계기: 실브라우저 스모크(E1)가 rail 버튼을 클릭했는데 아무 일도
-  // 안 일어났다. `#vt-rail`은 index.html의 **정적 마크업**이라 그게 보인다고
+  // 안 일어났다. 옛 레일은 index.html의 **정적 마크업**이라 그게 보인다고
   // 배선이 끝난 게 아니다 — 요소는 있고 리스너는 아직 없는 창이 존재한다.
   // sleep으로 덮으면 느려지고 CI에서 플레이키해진다. 앱이 직접 말하는 게 맞다.
   document.documentElement.dataset.appBooted = 'true';

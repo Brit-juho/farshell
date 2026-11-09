@@ -2,6 +2,7 @@ import { vtSkins, vtSkinLabel, getVtSkin } from '../../../theme.js';
 import { renderItems, group, row, toast } from '../controls.js';
 import { icon } from '../../../ui/icons.js';
 import { t, lang } from '../../../core/i18n.js';
+import { FOCUS_ITEMS } from '../index-data.js';
 import { timedFetch } from '../../../core/api.js';
 
 // 화면 언어 — 서버 전역 값(VT_LANG, server/i18n.py)이라 설정 스토어 스키마가 아니다.
@@ -107,7 +108,13 @@ export function renderAppearanceSection() {
     { key: 'viewer.surface', label: t('파일 뷰어 표시 방식'), kind: 'select',
       labels: { sheet: t('상단 시트'), float: t('떠 있는 창'), pane: t('페인 (터미널 옆을 쪼갬)') },
       help: t('파일을 열었을 때 어디에 띄울지 고릅니다. 시트와 창은 터미널 크기를 바꾸지 않습니다.') },
+    { key: 'files.tree.dense', label: t('파일 트리 촘촘하게'), kind: 'bool',
+      help: t('트리 행 높이를 28px에서 22px로 줄입니다. 폰은 터치를 위해 늘 44px입니다.') },
   ] })));
+
+  // 리디자인 7단계 — 집중 모드(시안 O04-B). 막대를 숨기는 건 데스크톱(720px 이상)뿐이라 폰에서는 이 묶음을 뺀다.
+  const desktop = typeof window.matchMedia === 'function' ? window.matchMedia('(min-width: 720px)').matches : true;
+  if (desktop) frag.appendChild(group(t('집중 모드'), renderItems({ items: FOCUS_ITEMS })));
 
   return frag;
 }

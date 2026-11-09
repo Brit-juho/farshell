@@ -264,17 +264,17 @@ test('상태 dot에는 색 말고 모양 채널이 있다 (reduced-motion 대체
     'reduced-motion에서 outline 대체가 사라졌다');
 });
 
-test('rail 활성 표시가 색 단독이 아니다 (막대가 있어야 한다)', () => {
+// 리디자인 9단계 — 옛 아이콘 레일(.vt-rail-btn)을 지우고 활동 막대(.vt-act, 90-workbench.css)로 대상을 옮겼다.
+test('활동 막대의 활성 표시가 색 단독이 아니다 (2px 강조선이 있어야 한다)', () => {
   const legacy = readScreens();
-  assert.match(legacy, /\.vt-rail-btn\.active::before\s*\{[^}]*background:var\(--color-acc\)/,
-    'rail 활성 막대가 사라졌다 — 배경 단차만으로는 1.13~1.37:1이라 색 단독 신호가 된다');
+  assert.match(legacy, /\.vt-act\.active::before\s*\{[^}]*width:2px;[^}]*background:var\(--color-acc\)/,
+    '활성 강조선이 사라졌다 — 배경 단차만으로는 1.13~1.37:1이라 색 단독 신호가 된다');
 });
 
-test('rail 활성 배경이 hover와 다른 토큰을 쓴다', () => {
+test('활동 막대의 활성 항목이 hover와 같은 배경으로 표시되지 않는다', () => {
   const legacy = readScreens();
-  const active = legacy.match(/\.vt-rail-btn\.active\s*\{([^}]*)\}/);
-  assert.ok(active, '.vt-rail-btn.active 규칙이 없다');
-  assert.match(active[1], /background:var\(--color-surface-active\)/);
+  const active = legacy.match(/\.vt-act\.active\s*\{([^}]*)\}/);
+  assert.ok(active, '.vt-act.active 규칙이 없다');
   assert.doesNotMatch(active[1], /background:var\(--menu-hover\)/,
     'hover와 같은 배경이면 포인터 장치에서 활성 항목과 구분이 안 된다');
 });
@@ -341,4 +341,172 @@ test('개입 필요 행의 보조 글자는 muted 가 아니라 sub 로 올라�
   const m = components.match(/\.vt-srow\.is-waiting \.vt-srow-meta,[^{]*\{([^}]*)\}/);
   assert.ok(m, '보조 글자 승격 규칙이 없다');
   assert.match(m[1], /color:\s*var\(--color-sub\)/);
+});
+
+// ── 2026-11 리디자인 3단계: 새 토큰(raised·term-*·크롬 막대·scrim·acc-soft) ──
+//
+// 위 loadSkins()는 hex로 풀리는 토큰만 남긴다. 반투명 막대(macos 제목 막대)와
+// color-mix 틴트까지 보려면 원문 표가 필요하다.
+function loadRawSkins() {
+  const tokens = stripComments(fs.readFileSync(TOKENS, 'utf8'));
+  const skinsCss = stripComments(fs.readFileSync(SKINS, 'utf8'));
+  const base = readRaw(tokens);
+  const raw = { farshell: { ...base } };
+  const re = /html\[data-skin="(\w+)"\]\s*\{([\s\S]*?)\n\s*\}/g;
+  let m;
+  while ((m = re.exec(skinsCss))) raw[m[1]] = { ...base, ...readRaw(m[2]) };
+  return raw;
+}
+const RAW = loadRawSkins();
+
+/** 토큰 하나를 [r,g,b,a](0~255, a 0~1)로. var() 별칭과 color-mix(…, transparent) 틴트를 푼다. */
+function rgbaOf(table, name, depth = 6) {
+  let v = table[name];
+  for (let i = 0; i < depth && v; i += 1) {
+    const ref = v.match(/^var\(\s*(--[\w-]+)\s*\)$/);
+    if (!ref) break;
+    v = table[ref[1]];
+  }
+  if (!v) return undefined;
+  if (v.startsWith('#')) return [...hexToRgb(v), 1];
+  const fn = v.match(/^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)\s*(?:[/,]\s*([\d.]+)(%?))?\s*\)$/);
+  if (fn) {
+    const a = fn[4] === undefined ? 1 : parseFloat(fn[4]) / (fn[5] ? 100 : 1);
+    return [parseFloat(fn[1]), parseFloat(fn[2]), parseFloat(fn[3]), a];
+  }
+  const mix = v.match(/^color-mix\(in srgb,\s*var\((--[\w-]+)\)\s+(?:var\((--[\w-]+)\)|([\d.]+)%),\s*transparent\)$/);
+  if (mix) {
+    const c = rgbaOf(table, mix[1]);
+    const pct = mix[2] ? parseFloat(table[mix[2]]) : parseFloat(mix[3]);
+    if (!c || Number.isNaN(pct)) return undefined;
+    return [c[0], c[1], c[2], pct / 100];
+  }
+  return undefined;
+}
+
+/** 면의 실제 색 — 반투명이면 under(기본 bg-0) 위에 합성한다. */
+function solidOf(table, name, under = '--color-bg-0') {
+  const c = rgbaOf(table, name);
+  if (!c) return undefined;
+  if (c[3] >= 1) return c.slice(0, 3);
+  const base = solidOf(table, under);
+  return base && blend(c.slice(0, 3), base, c[3]);
+}
+
+const NEW_TOKENS = [
+  '--color-bg-raised',
+  '--color-term-bg', '--color-term-fg', '--color-term-bright', '--color-term-dim',
+  '--color-term-red', '--color-term-green', '--color-term-amber', '--color-term-blue',
+  '--color-term-mag', '--color-term-cyan',
+  '--color-term-add-bg', '--color-term-del-bg', '--color-term-sel', '--color-term-hl',
+  '--color-titlebar-bg', '--color-statusbar-bg', '--color-statusbar-fg', '--color-activity-bg',
+  '--color-scrim', '--color-acc-soft',
+];
+
+test('새 토큰(raised·term-*·크롬 막대·scrim·acc-soft)이 9스킨 전부에서 색으로 풀린다', () => {
+  const fails = [];
+  for (const skin of Object.keys(RAW)) {
+    for (const t of NEW_TOKENS) if (!rgbaOf(RAW[skin], t)) fails.push(`${skin} ${t}`);
+  }
+  assert.strictEqual(Object.keys(RAW).length, 9);
+  assert.deepStrictEqual(fails, [], `못 푼 토큰:\n  ${fails.join('\n  ')}`);
+});
+
+function ratioOn(table, fg, bg, under) {
+  return contrast(solidOf(table, fg), solidOf(table, bg, under));
+}
+
+test('텍스트 램프 4단이 떠 있는 면(bg-raised)에서도 바탕과 같은 기준을 넘는다', () => {
+  const bars = { '--color-txt': 8.5, '--color-sub': 6.0, '--color-muted': 4.2, '--color-faint': 3.0 };
+  const fails = [];
+  for (const [skin, t] of Object.entries(RAW)) {
+    for (const [fg, min] of Object.entries(bars)) {
+      const r = ratioOn(t, fg, '--color-bg-raised');
+      if (r < min) fails.push(`${skin} ${fg}/bg-raised = ${r.toFixed(2)} < ${min}`);
+    }
+  }
+  assert.deepStrictEqual(fails, [], fails.join('\n'));
+});
+
+test('크롬 막대: 상태 막대 글자 4.5, 제목·활동 막대 위 txt 8.5 · sub 6.0', () => {
+  const fails = [];
+  for (const [skin, t] of Object.entries(RAW)) {
+    const r = ratioOn(t, '--color-statusbar-fg', '--color-statusbar-bg');
+    if (r < 4.5) fails.push(`${skin} statusbar-fg/bg = ${r.toFixed(2)}`);
+    for (const bar of ['--color-titlebar-bg', '--color-activity-bg']) {
+      for (const [fg, min] of [['--color-txt', 8.5], ['--color-sub', 6.0]]) {
+        const q = ratioOn(t, fg, bar);
+        if (q < min) fails.push(`${skin} ${fg}/${bar} = ${q.toFixed(2)} < ${min}`);
+      }
+    }
+  }
+  assert.deepStrictEqual(fails, [], fails.join('\n'));
+});
+
+test('터미널 색(term-*)이 터미널 바탕에서 4.5(dim은 3.0)를 넘는다', () => {
+  const fails = [];
+  const strong = ['fg', 'bright', 'red', 'green', 'amber', 'blue', 'mag', 'cyan'];
+  for (const [skin, t] of Object.entries(RAW)) {
+    for (const k of strong) {
+      const r = ratioOn(t, `--color-term-${k}`, '--color-term-bg');
+      if (r < 4.5) fails.push(`${skin} term-${k} = ${r.toFixed(2)}`);
+    }
+    const d = ratioOn(t, '--color-term-dim', '--color-term-bg');
+    if (d < 3.0) fails.push(`${skin} term-dim = ${d.toFixed(2)}`);
+    // diff 줄 글자는 term-fg, 초록·빨강은 +/- 표시·바뀐 낱말(3.0). 선택·검색 강조 위 글자.
+    for (const [fg, bg, min] of [
+      ['--color-term-fg', '--color-term-add-bg', 4.5], ['--color-term-fg', '--color-term-del-bg', 4.5],
+      ['--color-term-green', '--color-term-add-bg', 3.0], ['--color-term-red', '--color-term-del-bg', 3.0],
+      ['--color-term-fg', '--color-term-sel', 4.5], ['--color-term-bright', '--color-term-hl', 4.5],
+    ]) {
+      const r = ratioOn(t, fg, bg, '--color-term-bg');
+      if (r < min) fails.push(`${skin} ${fg}/${bg} = ${r.toFixed(2)} < ${min}`);
+    }
+  }
+  assert.deepStrictEqual(fails, [], fails.join('\n'));
+});
+
+test('틴트 행(waiting·선택)에서 한 단계 올라간 글자가 그 자리의 기준을 넘는다', () => {
+  // muted 자리에 sub, sub 자리에 txt가 온다 → txt ≥ 6.0 · sub ≥ 4.5 · muted ≥ 3.0.
+  const fails = [];
+  let checked = 0;
+  for (const [skin, t] of Object.entries(RAW)) {
+    for (const tint of ['--color-st-waiting-tint', '--color-acc-soft']) {
+      for (const bg of FAINT_BACKGROUNDS) {
+        for (const [fg, min] of [['--color-txt', 6.0], ['--color-sub', 4.5], ['--color-muted', 3.0]]) {
+          const r = ratioOn(t, fg, tint, bg);
+          if (r < min) fails.push(`${skin} ${fg} on ${tint}(${bg}) = ${r.toFixed(2)} < ${min}`);
+          checked += 1;
+        }
+      }
+    }
+  }
+  assert.strictEqual(checked, 9 * 2 * 3 * 3);
+  assert.deepStrictEqual(fails, [], fails.join('\n'));
+});
+
+// CIE76 ΔE — 나란히 두면 누구나 다른 색이라 말하는 거리(≥ 15).
+function lab(rgb) {
+  const lin = rgb.map((v) => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+  const xyz = [
+    (0.4124 * lin[0] + 0.3576 * lin[1] + 0.1805 * lin[2]) / 0.95047,
+    0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2],
+    (0.0193 * lin[0] + 0.1192 * lin[1] + 0.9505 * lin[2]) / 1.08883,
+  ];
+  const f = xyz.map((t) => (t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116));
+  return [116 * f[1] - 16, 500 * (f[0] - f[1]), 200 * (f[1] - f[2])];
+}
+function deltaE(a, b) {
+  const [p, q] = [lab(a), lab(b)];
+  return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+}
+
+test('done 점이 강조색과 다른 색이다 (ΔE ≥ 15, 9스킨)', () => {
+  assert.ok(deltaE([0, 0, 0], [255, 255, 255]) > 99, 'ΔE 계산 검산');
+  const fails = [];
+  for (const [skin, t] of Object.entries(RAW)) {
+    const d = deltaE(solidOf(t, '--color-st-done'), solidOf(t, '--color-acc'));
+    if (d < 15) fails.push(`${skin} ΔE(done, acc) = ${d.toFixed(1)}`);
+  }
+  assert.deepStrictEqual(fails, [], fails.join('\n'));
 });

@@ -1,0 +1,172 @@
+/* 파일 내용 검색 — 팔레트 `?` 모드와 사이드바 「파일 › 내용 검색」(파일 개편 단계 6, 2026-11)
+ *
+ * shell/GrepView.tsx가 그린다. 시안: docs/local의 redesign-2026-11 specimen final/files.html F06(팔레트 1100×720,
+ * 옵션 줄 40 · 토글 24 · glob 28, 진행 28 · 2px 막대, 파일 머리 28 mono 12/500, 결과 줄 24 · 줄 번호 36, 미리보기 460),
+ * F06-B(상태: 한도 · 기한 · 정규식 오류 · 없음 · 503), F06-C(사이드바: 질의 28 · 옵션 20, 결과 머리 32, 들여쓰기 28).
+ *
+ * 색은 토큰만(계약 9). 줄 미리보기는 터미널 글자색(`--color-term-fg`/`-dim`), 일치는 `--color-term-hl`(시안의 「일치
+ * --term-hl」). 움직이는 것은 진행 막대 하나다(DESIGN.md 「한 화면에 움직이는 것 하나」) — 아이콘은 돌지 않는다. */
+
+/* ── 팔레트 카드 크기: 내용 검색일 때만 넓힌다 ─────────────────────────────────── */
+.vt-qo-backdrop .vt-viewer-card.vt-qo-card-grep { width:min(1100px, 100%); height:min(720px, 88vh); max-height:min(720px, 88vh); }
+.vt-qo-body.vt-qo-grep { display:flex; flex-direction:column; overflow:hidden; padding:0; }
+@media (max-width:719.98px){
+  .vt-qo-backdrop .vt-viewer-card.vt-qo-card-grep { width:100%; height:100vh; height:100dvh; max-height:none; }
+}
+
+.vt-gr { display:flex; flex-direction:column; flex:1; min-height:0; min-width:0; font:400 var(--fs-sm) var(--ui); color:var(--txt); }
+.vt-gr-sp { flex:1; }
+
+/* ── 옵션 줄 40(팔레트) ─────────────────────────────────────────────────────── */
+.vt-gr-opts {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); flex:none; min-width:0;
+  min-height:40px; padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 4); border-bottom:1px solid var(--line);
+  flex-wrap:wrap;
+}
+.vt-gr-sep { width:1px; height:16px; background:var(--line); margin:0 calc(var(--spacing) * 1); }
+.vt-gr-opt {
+  display:inline-flex; align-items:center; justify-content:center; flex:none;
+  width:24px; height:24px; padding:0; border:1px solid transparent; border-radius:var(--radius-sm);
+  background:transparent; color:var(--sub); cursor:pointer;
+}
+.vt-gr-opt.small { width:20px; height:20px; }
+.vt-gr-opt:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-gr-opt[aria-pressed="true"] { border-color:var(--acc); color:var(--acc); background:color-mix(in srgb, var(--acc) 12%, transparent); }
+.vt-gr-opt:focus-visible { outline:1px solid var(--acc); outline-offset:1px; }
+
+.vt-gr-glob {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-width:0; flex:0 1 240px;
+  height:28px; padding:0 calc(var(--spacing) * 2); border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--menu);
+}
+.vt-gr-glob:focus-within { border-color:var(--acc); }
+.vt-gr-gl { flex:none; font-size:var(--fs-2xs); color:var(--sub); }
+.vt-gr-glob input {
+  flex:1; min-width:0; height:100%; padding:0; border:0; background:transparent; color:var(--txt);
+  font:400 var(--fs-xs) var(--mono); outline:none;
+}
+.vt-gr-glob input::placeholder { color:var(--sub); opacity:.7; }
+.vt-gr-scope { display:inline-flex; color:var(--sub); flex:none; }
+.vt-gr-scope-tx { font-size:var(--fs-xs); color:var(--sub); max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* ── 진행 줄 28 · 2px 막대 ───────────────────────────────────────────────────── */
+.vt-gr-prog {
+  position:relative; display:flex; align-items:center; gap:calc(var(--spacing) * 2); flex:none; min-width:0;
+  min-height:28px; padding:0 calc(var(--spacing) * 4); border-bottom:1px solid var(--line);
+  font-size:var(--fs-xs); color:var(--sub);
+}
+.vt-gr-prog.warn { color:var(--warn); }
+.vt-gr-prog.err { color:var(--err); }
+.vt-gr-prog b { color:var(--txt); font-weight:var(--weight-semibold); }
+.vt-gr-prog-ic { display:inline-flex; flex:none; }
+.vt-gr-prog-tx { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-gr-cancel { height:24px; gap:calc(var(--spacing) * 1); font-size:var(--fs-xs); }
+.vt-gr-cancel span { display:inline-flex; }
+.vt-gr-bar {
+  position:absolute; left:0; bottom:-1px; height:2px; width:30%; background:var(--acc);
+  animation:vtGrepBar 1.2s ease-in-out infinite;
+}
+@keyframes vtGrepBar { from { transform:translateX(-100%); } to { transform:translateX(340%); } }
+@media (prefers-reduced-motion: reduce) { .vt-gr-bar { animation:none; width:100%; opacity:.5; } }
+/* 서버가 후보 수를 알려 주면 채워지는 막대(GET /api/fs/grep/progress) — 폭은 인라인(읽은 수 / 후보 수). */
+.vt-gr-bar.det { animation:none; transform:none; opacity:1; transition:width var(--dur-fast) linear; }
+/* 「결과가 오래됨」 — 결과 머리 아래 한 줄(시안 F06-C). 경고색은 글자에만, 바탕은 칠하지 않는다. */
+.vt-gr-stale {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 2); flex:none; min-width:0;
+  min-height:32px; padding:0 calc(var(--spacing) * 2) 0 calc(var(--spacing) * 3); border-bottom:1px solid var(--line);
+  font-size:var(--fs-xs); color:var(--warn);
+}
+.vt-gr-stale .vt-gr-cancel { margin-left:auto; color:var(--txt); }
+
+/* ── 결과 ─────────────────────────────────────────────────────────────────── */
+.vt-gr-main { display:flex; flex:1; min-height:0; }
+.vt-gr-res { flex:1; min-width:0; overflow:auto; overscroll-behavior:contain; padding:calc(var(--spacing) * 1) 0 calc(var(--spacing) * 2); }
+.vt-gr-file {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); height:28px; min-width:0;
+  padding:0 calc(var(--spacing) * 4); cursor:pointer;
+  font:var(--weight-medium) var(--fs-xs) var(--mono); color:var(--txt);
+}
+.vt-gr-file:hover { background:var(--menu-hover); }
+.vt-gr-cv, .vt-gr-fic { display:inline-flex; flex:none; color:var(--sub); }
+.vt-gr-fn { flex:none; white-space:nowrap; }
+.vt-gr-fd { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--sub); font-weight:400; }
+.vt-gr-n {
+  margin-left:auto; flex:none; padding:0 calc(var(--spacing) * 1.5); border-radius:var(--radius-sm);
+  font:400 var(--fs-2xs) var(--mono); color:var(--sub); background:var(--menu);
+}
+.vt-gr-row {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 2); height:24px; min-width:0;
+  padding:0 calc(var(--spacing) * 4) 0 calc(var(--spacing) * 6); cursor:pointer;
+  font:400 var(--fs-xs) var(--mono); color:var(--color-term-fg);
+}
+.vt-gr-row:hover { background:var(--menu-hover); }
+.vt-gr-row.on { background:color-mix(in srgb, var(--acc) 14%, transparent); box-shadow:inset 2px 0 0 var(--acc); }
+.vt-gr-ln { flex:none; width:36px; text-align:right; color:var(--color-term-dim); font-variant-numeric:tabular-nums; }
+.vt-gr-tx { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:pre; }
+.vt-gr-tx mark { background:var(--color-term-hl); color:var(--color-term-bright); border-radius:2px; }
+.vt-gr-skip {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-height:28px;
+  padding:calc(var(--spacing) * 1) calc(var(--spacing) * 4); font-size:var(--fs-xs); color:var(--sub);
+}
+.vt-gr-skip span { display:inline-flex; flex:none; }
+.vt-gr-empty {
+  display:flex; flex-direction:column; align-items:flex-start; gap:calc(var(--spacing) * 1.5);
+  padding:calc(var(--spacing) * 3) calc(var(--spacing) * 4); font-size:var(--fs-xs); line-height:1.45; color:var(--sub);
+}
+.vt-gr-empty b { color:var(--txt); font-weight:var(--weight-semibold); }
+
+/* ── 미리보기 460 ──────────────────────────────────────────────────────────── */
+.vt-gr-pv { flex:0 0 460px; min-width:0; display:flex; flex-direction:column; border-left:1px solid var(--line); background:var(--color-term-bg); }
+.vt-gr-pv-head {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); flex:none; height:36px; min-width:0;
+  padding:0 calc(var(--spacing) * 3); border-bottom:1px solid var(--line); font:400 var(--fs-xs) var(--mono); color:var(--txt);
+}
+.vt-gr-pv-head span:first-child { display:inline-flex; color:var(--sub); }
+.vt-gr-pv-body { flex:1; min-height:0; overflow:auto; padding:calc(var(--spacing) * 1) 0; font:400 var(--fs-xs)/18px var(--mono); }
+.vt-gr-pv-row { display:flex; gap:calc(var(--spacing) * 2); min-width:max-content; padding-right:calc(var(--spacing) * 3); color:var(--color-term-fg); }
+.vt-gr-pv-row .vt-gr-tx { overflow:visible; }
+.vt-gr-pv-row.on { background:var(--color-term-sel); }
+.vt-gr-pv-empty { padding:calc(var(--spacing) * 3); font-size:var(--fs-xs); color:var(--sub); }
+@media (max-width:899px){ .vt-gr-pv { display:none; } }
+
+/* ── 사이드바(F06-C) ──────────────────────────────────────────────────────── */
+.vt-fs-side { display:flex; flex-direction:column; flex:1; min-height:0; min-width:0; }
+.vt-fs-seg {
+  display:flex; flex:none; margin:calc(var(--spacing) * 2) calc(var(--spacing) * 3) 0;
+  border:1px solid var(--line); border-radius:var(--radius-sm); overflow:hidden;
+}
+.vt-fs-seg .vt-segment { border-radius:0; min-height:28px; gap:calc(var(--spacing) * 1.5); }
+.vt-fs-seg .vt-segment + .vt-segment { border-left:1px solid var(--line); }
+.vt-fs-seg-ic { display:inline-flex; }
+.vt-fs-seg-key { font:400 var(--fs-2xs) var(--mono); opacity:.7; margin-left:calc(var(--spacing) * 1); }
+@media (pointer:coarse), (max-width:719px) { .vt-fs-seg-key { display:none; } }
+.vt-fs-pane { display:flex; flex-direction:column; flex:1; min-height:0; min-width:0; }
+.vt-fs-pane[hidden] { display:none; }
+
+.vt-gr.side .vt-gr-form {
+  display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5); flex:none;
+  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3); border-bottom:1px solid var(--line);
+}
+.vt-gr-q {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1); height:28px; min-width:0;
+  padding:0 calc(var(--spacing) * 1) 0 calc(var(--spacing) * 2); border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--menu);
+}
+.vt-gr-q:focus-within { border-color:var(--acc); }
+.vt-gr-q-ic { display:inline-flex; color:var(--sub); flex:none; }
+.vt-gr-q input { flex:1; min-width:0; height:100%; padding:0; border:0; background:transparent; color:var(--txt); font:400 var(--fs-xs) var(--mono); outline:none; }
+.vt-gr-q input::placeholder { color:var(--sub); font-family:var(--ui); }
+.vt-gr-glob.row { flex:none; }
+.vt-gr-glob.row .vt-gr-gl { min-width:28px; }
+.vt-gr-scope-line { display:flex; align-items:center; gap:calc(var(--spacing) * 1); min-width:0; font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
+.vt-gr-scope-line span:first-child { display:inline-flex; flex:none; }
+.vt-gr-scope-p { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left; }
+.vt-gr-head { display:flex; align-items:stretch; flex:none; min-width:0; border-bottom:1px solid var(--line); min-height:32px; }
+.vt-gr-head .vt-gr-prog { flex:1; border-bottom:0; padding:0 calc(var(--spacing) * 2) 0 calc(var(--spacing) * 3); min-height:32px; }
+.vt-gr-acts { display:flex; align-items:center; gap:calc(var(--spacing) * 0.5); padding-right:calc(var(--spacing) * 2); margin-left:auto; }
+.vt-gr.side .vt-gr-file { padding:0 calc(var(--spacing) * 2.5); }
+.vt-gr.side .vt-gr-row { padding-left:28px; margin:0 calc(var(--spacing) * 1); padding-right:calc(var(--spacing) * 2); border-radius:var(--radius-sm); }
+.vt-gr.side .vt-gr-ln { width:30px; }
+.vt-gr.side .vt-gr-skip, .vt-gr.side .vt-gr-empty { padding-left:calc(var(--spacing) * 3.5); padding-right:calc(var(--spacing) * 3); }
+@media (max-width:719.98px){
+  .vt-gr.side .vt-gr-row { height:36px; }
+  .vt-gr.side .vt-gr-file { height:36px; }
+}

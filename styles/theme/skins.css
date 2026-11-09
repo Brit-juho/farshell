@@ -37,10 +37,26 @@
     --color-st-idle: #83838b;
     --color-st-working: #32d74b;
     --color-st-waiting: #ffd60a;
-    --color-st-done: #0a84ff;
+    /* 2026-11 — done이 액센트(#0a84ff)와 같은 색이라 「끝난 세션」 점이 선택
+     * 표시와 구분되지 않았다(ΔE 0). 같은 시스템 팔레트의 청록(터미널 cyan)으로. */
+    --color-st-done: #5ac8fa;
     --color-st-error: #ff453a;
+    /* 2026-11 리디자인 3단계 — 메뉴·대화상자·떠 있는 면. */
+    --color-bg-raised: #2c2c2e;
+    /* 터미널 색 — theme.js VT_XTERM_THEMES.macos에서 가져온 값(tokens.css 주석의 규칙). */
     --color-term-bg: #101012;
     --color-term-fg: #e6e6ea;
+    --color-term-bright: #ffffff;
+    --color-term-dim: #626268;
+    --color-term-red: #ff453a;
+    --color-term-green: #32d74b;
+    --color-term-amber: #ffd60a;
+    --color-term-blue: #0a84ff;
+    --color-term-mag: #bf5af2;
+    --color-term-cyan: #5ac8fa;
+    --color-term-sel: rgba(10,132,255,0.32);
+    /* 제목 막대만 반투명(블러는 그 막대 하나에만 — 마크업 쪽에서 건다). */
+    --color-titlebar-bg: rgb(44 44 46 / .72);
     /* T3 — hover 오버레이(알파 0.09)의 2배. 근거는 tokens.css 주석 참고. */
     --color-surface-active: rgb(255 255 255 / .18);
   }
@@ -69,8 +85,23 @@
     --color-st-waiting: #f9e2af;
     --color-st-done: #89b4fa;
     --color-st-error: #f38ba8;
+    /* 2026-11 리디자인 3단계 — 메뉴·대화상자·떠 있는 면. */
+    --color-bg-raised: #313244;
+    /* 터미널 색 — theme.js VT_XTERM_THEMES.catppuccin에서 가져온 값(tokens.css 주석의 규칙). */
     --color-term-bg: #1e1e2e;
     --color-term-fg: #cdd6f4;
+    --color-term-bright: #a6adc8;
+    --color-term-dim: #6c7086;
+    --color-term-red: #f38ba8;
+    --color-term-green: #a6e3a1;
+    --color-term-amber: #f9e2af;
+    --color-term-blue: #89b4fa;
+    --color-term-mag: #f5c2e7;
+    --color-term-cyan: #94e2d5;
+    --color-term-sel: rgba(88,91,112,0.55);
+    /* 파스텔 노랑(#f9e2af)을 35% 깔면 면이 너무 밝아져 bright(#a6adc8) 글자가
+     * 2.66:1로 떨어진다 — 이 스킨만 틴트를 낮춘다. */
+    --color-term-hl: color-mix(in srgb, var(--color-term-amber) 12%, transparent);
     /* T3 — hover 오버레이(알파 0.08)의 2배. 근거는 tokens.css 주석 참고. */
     --color-surface-active: rgb(255 255 255 / .16);
   }
@@ -81,6 +112,11 @@
      * bg-0(#0c0c0c)/bg-1(#1a1a1a) 두 앵커를 기준으로 farshell과 같은 4단
      * 순서(bg-0 < bg-2 < bg-1 < bg-3)로 다시 세웠다 — bg-2/bg-3는 그
      * 두 앵커 사이·바깥 간격을 그대로 비례 적용한 값(0.5×·2× 델타). */
+    /* 2026-11-09 — 각진 컨트롤(impl-plan 결정 8). Windows Terminal·VS Code의 버튼·입력·칩은 거의 각져 있다.
+     * 작은 단계(xs·sm — 칩·메뉴 항목·버튼·입력·선택 상자)만 2px로 깎고, 큰 틀(lg — 메뉴·대화상자·카드·시트)과
+     * 창 모서리(--wrad)는 그대로 둔다. DESIGN.md §2 「Radius」. */
+    --radius-xs: 2px;
+    --radius-sm: 2px;
     --color-bg-0: #0c0c0c;
     --color-bg-1: #1a1a1a;
     --color-bg-2: #131313;
@@ -101,8 +137,20 @@
     --color-st-waiting: #f9f1a5;
     --color-st-done: #3b78ff;
     --color-st-error: #e74856;
+    /* 2026-11 리디자인 3단계 — 메뉴·대화상자·떠 있는 면. */
+    --color-bg-raised: #1a1a1a;
+    /* 터미널 색 — theme.js VT_XTERM_THEMES.windows에서 가져온 값(tokens.css 주석의 규칙). */
     --color-term-bg: #0c0c0c;
     --color-term-fg: #cccccc;
+    --color-term-bright: #f2f2f2;
+    --color-term-dim: #767676;
+    --color-term-red: #e74856; /* red는 바탕 대비 미달 → brightRed */
+    --color-term-green: #13a10e;
+    --color-term-amber: #c19c00;
+    --color-term-blue: #3b78ff; /* blue 미달 → brightBlue */
+    --color-term-mag: #e000c4; /* magenta 미달 → brightMagenta */
+    --color-term-cyan: #3a96dd;
+    --color-term-sel: rgba(255,255,255,0.28);
     /* T3 — hover 오버레이(알파 0.10)의 2배. 근거는 tokens.css 주석 참고. */
     --color-surface-active: rgb(255 255 255 / .20);
   }
@@ -112,6 +160,11 @@
      * 더 가깝게(기존 #2d2d2d는 과장돼 있었다). bg-2/bg-3는 bg-0/bg-1 델타를
      * 그대로 비례 적용(windows와 같은 방식) — 기존 bg-2 값(#252526)이 이번
      * bg-1 신값과 우연히 같아져서 자리를 바꿨다. */
+    /* 2026-11-09 — 각진 컨트롤(impl-plan 결정 8). Windows Terminal·VS Code의 버튼·입력·칩은 거의 각져 있다.
+     * 작은 단계(xs·sm — 칩·메뉴 항목·버튼·입력·선택 상자)만 2px로 깎고, 큰 틀(lg — 메뉴·대화상자·카드·시트)과
+     * 창 모서리(--wrad)는 그대로 둔다. DESIGN.md §2 「Radius」. */
+    --radius-xs: 2px;
+    --radius-sm: 2px;
     --color-bg-0: #1e1e1e;
     --color-bg-1: #252526;
     --color-bg-2: #222222;
@@ -133,8 +186,23 @@
     --color-st-waiting: #cca700;
     --color-st-done: #3794ff;
     --color-st-error: #f14c4c;
+    /* 2026-11 리디자인 3단계 — 메뉴·대화상자·떠 있는 면. */
+    --color-bg-raised: #252526;
+    /* 터미널 색 — theme.js VT_XTERM_THEMES.vscode에서 가져온 값(tokens.css 주석의 규칙). */
     --color-term-bg: #1e1e1e;
     --color-term-fg: #cccccc;
+    --color-term-bright: #e5e5e5;
+    --color-term-dim: #6b6b6b;
+    --color-term-red: #f14c4c; /* red는 바탕 대비 미달 → brightRed */
+    --color-term-green: #0dbc79;
+    --color-term-amber: #e5e510;
+    --color-term-blue: #3b8eea; /* blue 미달 → brightBlue */
+    --color-term-mag: #d670d6; /* magenta 미달 → brightMagenta */
+    --color-term-cyan: #11a8cd;
+    --color-term-sel: rgba(38,79,120,0.60);
+    /* VS Code의 파란 상태 막대 — 흰 글자 4.6:1. */
+    --color-statusbar-bg: var(--acc-vscode);
+    --color-statusbar-fg: #ffffff;
     /* T3 — hover 오버레이(알파 0.08)의 2배. 근거는 tokens.css 주석 참고. */
     --color-surface-active: rgb(255 255 255 / .16);
   }
@@ -176,8 +244,21 @@
     --color-st-waiting: #b3730a;
     --color-st-done: #0060df;
     --color-st-error: #d93025;
+    /* 2026-11 리디자인 3단계 — 메뉴·대화상자·떠 있는 면. */
+    --color-bg-raised: #ffffff;
+    /* 터미널 색 — theme.js VT_XTERM_THEMES.notepad에서 가져온 값(tokens.css 주석의 규칙). */
     --color-term-bg: #fffefb;
     --color-term-fg: #2b2a25;
+    --color-term-bright: #2b2a25;
+    --color-term-dim: #6a737d; /* brightBlack 미달 → white */
+    --color-term-red: #d73a49;
+    --color-term-green: #22863a;
+    --color-term-amber: #917000;
+    --color-term-blue: #0366d6;
+    --color-term-mag: #5a32a3;
+    --color-term-cyan: #047e9c;
+    --color-term-sel: rgba(0,96,223,0.18);
+    --color-scrim: rgb(43 42 37 / .32);
     /* T3 — 유일한 라이트 스킨이라 오버레이가 검정이고, 같은 배수(0.055x2=0.11)로는
      * 다크 스킨만큼 안 벌어진다(실측 hover 대비 1.13:1 vs 다크 1.31~1.39:1).
      * 0.18로 올려 1.35:1을 맞춘다 — 배수가 아니라 결과를 맞추는 게 기준이다. */
@@ -220,8 +301,20 @@
     --color-st-waiting: #ffb37a;
     --color-st-done: #7fdcff;
     --color-st-error: #ff6b81;
+    /* 2026-11 리디자인 3단계 — 메뉴·대화상자·떠 있는 면. */
+    --color-bg-raised: #1d1828;
+    /* 터미널 색 — theme.js VT_XTERM_THEMES.warp에서 가져온 값(tokens.css 주석의 규칙). */
     --color-term-bg: #0d0b14;
     --color-term-fg: #f3f1fb;
+    --color-term-bright: #ffffff;
+    --color-term-dim: #8078a0;
+    --color-term-red: #ff6b81;
+    --color-term-green: #5be3a8;
+    --color-term-amber: #ffb37a;
+    --color-term-blue: #7fdcff;
+    --color-term-mag: #c4a6ff;
+    --color-term-cyan: #7fdcff;
+    --color-term-sel: rgba(196,166,255,0.28);
     --color-surface-active: rgb(196 166 255 / .18);
   }
 
@@ -247,10 +340,23 @@
     --color-st-idle: #767a82;
     --color-st-working: #4cb782;
     --color-st-waiting: #e0a72e;
-    --color-st-done: var(--acc-linear);
+    /* 2026-11 — 액센트와 같았던 done(ΔE 0)을 터미널 cyan으로 뗐다. */
+    --color-st-done: #4fc8e0;
     --color-st-error: #e5484d;
+    /* 2026-11 리디자인 3단계 — 메뉴·대화상자·떠 있는 면. */
+    --color-bg-raised: #141518;
+    /* 터미널 색 — theme.js VT_XTERM_THEMES.linear에서 가져온 값(tokens.css 주석의 규칙). */
     --color-term-bg: #08090a;
     --color-term-fg: #f2f3f5;
+    --color-term-bright: #ffffff;
+    --color-term-dim: #767a82;
+    --color-term-red: #e5484d;
+    --color-term-green: #4cb782;
+    --color-term-amber: #e0a72e;
+    --color-term-blue: #6e79f2;
+    --color-term-mag: #c168e0;
+    --color-term-cyan: #4fc8e0;
+    --color-term-sel: rgba(110,121,242,0.28);
     --color-surface-active: rgb(255 255 255 / .12);
   }
 
@@ -275,10 +381,23 @@
     --color-st-idle: #7a7a7a;
     --color-st-working: #17c964;
     --color-st-waiting: #f5a524;
-    --color-st-done: var(--acc-vercel);
+    /* 2026-11 — 액센트와 같았던 done(ΔE 0)을 터미널 cyan으로 뗐다. */
+    --color-st-done: #17c1c9;
     --color-st-error: #f31260;
+    /* 2026-11 리디자인 3단계 — 메뉴·대화상자·떠 있는 면. */
+    --color-bg-raised: #111111;
+    /* 터미널 색 — theme.js VT_XTERM_THEMES.vercel에서 가져온 값(tokens.css 주석의 규칙). */
     --color-term-bg: #000000;
     --color-term-fg: #ffffff;
+    --color-term-bright: #ffffff;
+    --color-term-dim: #7a7a7a;
+    --color-term-red: #f31260;
+    --color-term-green: #17c964;
+    --color-term-amber: #f5a524;
+    --color-term-blue: #0084ff;
+    --color-term-mag: #9750dd;
+    --color-term-cyan: #17c1c9;
+    --color-term-sel: rgba(0,132,255,0.28);
     --color-surface-active: rgb(255 255 255 / .16);
   }
 }

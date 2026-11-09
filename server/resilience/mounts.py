@@ -183,6 +183,22 @@ def _norm(path: str) -> str:
     return os.path.abspath(os.path.expanduser(str(path)))
 
 
+def current_mounts() -> Optional[list[Mount]]:
+    """캐시 없이 지금 마운트 표. 읽지 못하면 None(지원하지 않는 OS는 빈 목록). 쓰기 판정(`fsguard.contains_mount`)용
+    — 30초 캐시로는 방금 건 마운트를 놓친다."""
+    if _override is not None:
+        return list(_override)
+    try:
+        if sys.platform == "darwin":
+            return _darwin_mounts()
+        if sys.platform.startswith("linux"):
+            return _linux_mounts()
+        return []
+    except Exception as e:  # noqa: BLE001 — 판별 실패는 None(호출부가 거부로 다룬다)
+        logger.debug(f"마운트 표 읽기 실패: {e}")
+        return None
+
+
 def _within(path: str, prefix: str) -> bool:
     if prefix == "/":
         return True

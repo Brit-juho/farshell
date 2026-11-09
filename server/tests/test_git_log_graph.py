@@ -52,3 +52,13 @@ def test_branches_listed(repo):
 def test_unknown_ref_rejected(repo, bad):
     d = _collect_log(repo, "", 0, 20, bad)
     assert d["commits"] == [] and d.get("error")
+
+
+def test_commit_meta_fields_line_up(repo):
+    """커밋 상세(`/api/git/show`)의 제목·본문·부모가 제자리에 들어간다 — 예전에는 제목에 부모 해시가 들어갔다."""
+    from routes.git import _collect_commit_meta
+    _run(repo, "commit", "--allow-empty", "-m", "subject line", "-m", "body text")
+    m = _collect_commit_meta(repo, "HEAD")
+    assert m["subject"] == "subject line"
+    assert m["body"] == "body text"
+    assert len(m["parents"]) == 1 and len(m["parents"][0]) == 40

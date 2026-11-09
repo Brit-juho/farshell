@@ -13,6 +13,8 @@
 // §4 12항 취지상 문서화하고 진행).
 import { openPanel, setPanelPoll } from './panels/panel.js';
 import { icon } from './ui/icons.js';
+import { pIcon } from './panels/panel-icons.js';
+import { emptyState } from './ui/empty.js';
 import { vtFetch, vtEsc } from './core/api.js';
 import { isMac } from './core/env.js';
 import { t } from './core/i18n.js';
@@ -54,18 +56,25 @@ export function showQueue(opts = {}) {
         paneId: opts.paneId || null,
         id: 'vt-queue',
         ariaLabel: t('프롬프트 큐'),
+        // 리디자인 5단계(시안 P03): 머리 = 제목 + 「N건 대기」. 작성 칸 = 지시 · [대상 ▾][추가 ⌘↵] · 자동 투입 상태와
+        // 「지금 실행」. 자동 투입은 서버 설정(VT_QUEUE_AUTODRAIN)이라 여기서는 켜고 끄지 않고 상태만 말한다.
         headHTML: `
           <div class="vt-vw-title">${t('프롬프트 큐')}</div>
-          <button class="vt-btn sm vt-vw-diff" id="vt-q-run" title="${t('한 건 지금 투입')}">${t('지금 실행')}</button>
+          <span class="vt-ph-ctx" id="vt-q-ctx"></span>
         `,
         extraHTML: `
           <div class="vt-q-compose">
-            <textarea id="vt-q-input" class="vt-input lg" rows="2" placeholder="${t('작업이 끝나면 실행할 지시… ({key}+Enter로 추가)', { key: isMac ? 'Cmd' : 'Ctrl' })}"></textarea>
+            <textarea id="vt-q-input" class="vt-input lg" rows="3" placeholder="${t('작업이 끝나면 실행할 지시… ({key}+Enter로 추가)', { key: isMac ? 'Cmd' : 'Ctrl' })}"></textarea>
             <div class="vt-q-compose-row">
+              <span class="vt-q-lab">${t('대상')}</span>
               <select id="vt-q-target" class="vt-input vt-q-target" title="${t('대상 세션 — 비워두면 음성과 같은 자동 타깃 규칙을 따릅니다')}">
                 <option value="">${t('자동 (음성 타깃 규칙)')}</option>
               </select>
-              <button class="vt-btn" id="vt-q-add">${t('추가')}</button>
+              <button type="button" class="vt-btn sm solid" id="vt-q-add">${t('추가')}<span class="k">${isMac ? '⌘↵' : 'Ctrl+↵'}</span></button>
+            </div>
+            <div class="vt-q-compose-row vt-q-drain">
+              <span class="vt-q-auto" id="vt-q-auto"></span>
+              <button type="button" class="vt-btn sm quiet" id="vt-q-run" title="${t('한 건 지금 투입')}">${pIcon('play', 12)}${t('지금 실행')}</button>
             </div>
           </div>
         `,
@@ -156,52 +165,83 @@ export function showQueue(opts = {}) {
       _updateAutoTargetLabel(ctx, d.auto_target, d.auto_target_mode);
 
       syncRunButton(ctx, d.items.length);
+      const ctxEl = ctx.byId('vt-q-ctx');
+      if (ctxEl) ctxEl.textContent = t('{n}건 대기', { n: d.pending ?? d.items.length });
+      const auto = ctx.byId('vt-q-auto');
+      if (auto) {
+        auto.classList.toggle('off', !d.autodrain);
+        auto.innerHTML = d.autodrain
+          ? `<span class="status-dot" data-state="working"></span>${vtEsc(t('자동 투입 켜짐'))}`
+          : `${icon('pause', 12)}${vtEsc(t('자동 투입 꺼짐'))}`;
+        auto.title = d.autodrain
+          ? t('작업 중인 세션이 끝나면 넣어 둔 지시를 차례로 보냅니다')
+          : t('자동 투입 꺼짐(VT_QUEUE_AUTODRAIN=0) — 「지금 실행」으로 한 건씩 보냅니다');
+      }
 
       if (!d.items.length) {
         // 「지금 실행」이 방금 비활성이 됐으므로 그쪽을 가리키지 않는다 —
         // 못 누르는 버튼을 쓰라고 안내하면 그게 더 헷갈린다.
-        body.innerHTML = `<div class="vt-vw-empty">${t('큐가 비어 있습니다.')}<br>`
-          + `${d.autodrain ? t('작업이 끝나면 자동으로 투입됩니다.') : t('자동 투입이 꺼져 있습니다 — 항목을 추가한 뒤 「지금 실행」으로 투입하세요.')}</div>`;
+        body.innerHTML = '';
+        body.appendChild(emptyState({
+          icon: 'list',
+          title: t('큐가 비어 있습니다'),
+          desc: d.autodrain
+            ? t('작업 중인 세션이 끝나면 넣어 둔 지시를 차례로 보냅니다.')
+            : t('자동 투입이 꺼져 있습니다 — 항목을 추가한 뒤 「지금 실행」으로 투입하세요.'),
+        }));
         return;
       }
 
       const list = document.createElement('div');
       list.className = 'vt-q-list';
+      const sec = document.createElement('div');
+      sec.className = 'vt-psec';
+      sec.innerHTML = `<span>${vtEsc(t('대기'))}</span><span class="n">${d.items.length}</span>`
+        + `<span class="note">${vtEsc(d.autodrain ? t('끝나는 순서대로 전송') : t('「지금 실행」으로 전송'))}</span>`;
+      list.appendChild(sec);
       d.items.forEach((it, i) => {
         const row = document.createElement('div');
         row.className = 'vt-q-row' + (it.status === 'blocked' ? ' blocked' : '');
 
-        // 머리줄: 순번(또는 멈춤 아이콘) · 상태 한 줄 · [대상 세션 칩]
+        // 머리줄: 순번 · 대상(고정 핀 / 「자동 →」) … 상태 꼬리표(전송 중 · 차단됨 · 대기)
         const head = document.createElement('div');
         head.className = 'vt-q-head';
         const idx = document.createElement('span');
         idx.className = 'vt-q-idx';
-        // blocked는 숫자 자리에 '멈춤' 아이콘을 넣는다. 이모지(⏸)는 플랫폼마다
-        // 모양이 갈리고 currentColor를 안 따라 상태색과 어긋났다.
-        if (it.status === 'blocked') idx.innerHTML = icon('pause', 12);
-        else idx.textContent = `#${i + 1}`;
+        idx.textContent = String(i + 1);
         head.appendChild(idx);
 
-        const sub = document.createElement('span');
-        sub.className = 'vt-q-sub';
-        if (it.blocked_reason) sub.textContent = blockedLine(it);
-        else if (it.status === 'sending') sub.textContent = t('전송 중');
-        head.appendChild(sub);
-
         // [대상 워크트리 칩](60 §4) — target.session만 실제로 채워진다(2.1.0엔
-        // 워크트리 모델이 없다, ADR-20). target.worktree는 2.1.1에서 레일이
-        // 실제 워크트리를 그리기 시작하면 여기 표시가 늘어날 자리다.
+        // 워크트리 모델이 없다, ADR-20). 대상이 없으면 「자동 →」(음성과 같은 자동 타깃 규칙).
         const targetSession = it.target && it.target.session;
         const targetHost = it.target && it.target.host;
+        const tgt = document.createElement('span');
+        tgt.className = 'vt-q-tgt';
         if (targetSession) {
-          const chip = document.createElement('span');
-          chip.className = 'vt-tag';
-          chip.textContent = targetHost ? `${targetSession} · ${targetHost}` : targetSession;
-          chip.title = targetHost
+          tgt.innerHTML = icon('pin', 12);
+          const nm = document.createElement('span');
+          nm.className = 'vt-q-tgt-name';
+          nm.textContent = targetHost ? `${targetSession} · ${targetHost}` : targetSession;
+          tgt.appendChild(nm);
+          tgt.title = targetHost
             ? t('대상: {host} 호스트의 {session} 세션', { host: targetHost, session: targetSession })
             : t('대상 세션: {session}', { session: targetSession });
-          head.appendChild(chip);
+        } else {
+          tgt.innerHTML = `<span class="vt-q-auto-lab">${vtEsc(t('자동 →'))}</span>`;
+          tgt.title = t('대상 세션 — 비워두면 음성과 같은 자동 타깃 규칙을 따릅니다');
         }
+        head.appendChild(tgt);
+
+        const st = document.createElement('span');
+        st.className = 'vt-q-sub';
+        if (it.status === 'blocked') {
+          st.innerHTML = `<span class="vt-ptag" data-tone="err">${vtEsc(t('차단됨'))}</span>`;
+        } else if (it.status === 'sending') {
+          st.innerHTML = `<span class="vt-ptag" data-tone="acc">${icon('refresh-cw', 12)}${vtEsc(t('전송 중'))}</span>`;
+        } else {
+          st.textContent = t('대기');
+        }
+        head.appendChild(st);
         row.appendChild(head);
 
         const txt = document.createElement('div');
@@ -211,33 +251,37 @@ export function showQueue(opts = {}) {
 
         const act = document.createElement('div');
         act.className = 'vt-q-actions';
+        if (it.blocked_reason) {
+          const why = document.createElement('span');
+          why.className = 'vt-q-why';
+          why.textContent = blockedLine(it);
+          act.appendChild(why);
+        }
         if (it.status === 'blocked') {
           const ub = document.createElement('button');
+          ub.type = 'button';
           ub.className = 'vt-btn sm';
           ub.textContent = t('재개');
           ub.onclick = () => unblockQueueItem(ctx, it.id);
           act.appendChild(ub);
         }
         // 전송 중인 항목은 서버가 삭제를 거부한다(409 item_sending) — 버튼도 안 그린다.
+        // 막힌 항목은 사유·재개 옆에, 나머지는 머리줄 끝(머문 줄에서 드러남)에 둔다 — 줄 높이가 출렁이지 않게.
         if (it.status !== 'sending') {
           const rm = document.createElement('button');
-          rm.className = 'vt-btn sm danger';
-          rm.textContent = t('삭제');
+          rm.type = 'button';
+          rm.className = 'vt-icon-btn sm danger vt-q-rm';
+          rm.setAttribute('aria-label', t('삭제'));
+          rm.dataset.tip = t('삭제');
+          rm.innerHTML = icon('trash-2', 14);
           rm.onclick = () => removeQueueItem(ctx, it.id);
-          act.appendChild(rm);
+          (it.status === 'blocked' ? act : head).appendChild(rm);
         }
         if (act.childElementCount) row.appendChild(act);
         list.appendChild(row);
       });
       body.innerHTML = '';
       body.appendChild(list);
-
-      const foot = document.createElement('div');
-      foot.className = 'vt-vw-note';
-      foot.textContent = d.autodrain
-        ? t('{n}건 대기 — 에이전트 작업이 끝나면 순서대로 투입됩니다', { n: d.pending })
-        : t('{n}건 대기 — 자동 투입 꺼짐(VT_QUEUE_AUTODRAIN=0)', { n: d.pending });
-      body.appendChild(foot);
     }
 
     async function addQueueItem(ctx) {

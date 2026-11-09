@@ -41,7 +41,7 @@
  * components 뒤에 와야 컴포넌트 기본값을 덮을 수 있다. */
 @import "./layers/patterns.css";
 
-/* 자동 스캐너가 서드파티 번들(highlight.js 등)의 문자열까지 훑어 "invisible"
+/* 자동 스캐너가 서드파티 번들(xterm 등)의 문자열까지 훑어 "invisible"
  * 같은 우연한 단어 일치로 유틸리티를 만드는 걸 막는다. 실제 DOM에 그 클래스를
  * 붙인 곳이 없어 위험하진 않았지만(레이어 밖 legacy.css가 항상 이기므로),
  * 벤더 코드는 스캔 대상이 아니어야 한다는 게 맞다. */
@@ -49,7 +49,7 @@
 @source not "../frontend/dist/**";
 
 /* 화면별 레거시 CSS — 2.1.6에서 legacy.css(2927줄 한 파일)를 섹션 경계 그대로
- * 9개로 쪼갰다. **내용은 한 줄도 안 바꿨고 순서도 원본 그대로**라 컴파일된
+ * 9개로 쪼갰다(지금은 작업대 파일 90-까지 10개). **내용은 한 줄도 안 바꿨고 순서도 원본 그대로**라 컴파일된
  * 규칙 시퀀스가 동일하다(scripts/check_css_order.py가 검증한다).
  *
  * 순서가 곧 우선순위이므로 아래 줄 순서를 바꾸면 화면이 바뀐다. 새 파일을
@@ -62,8 +62,22 @@
 @import "./screens/10-shell.css"          layer(legacy);
 @import "./screens/20-overlay.css"        layer(legacy);
 @import "./screens/30-viewer.css"         layer(legacy);
-@import "./screens/40-rail-legacy.css"    layer(legacy);
 @import "./screens/50-settings-usage.css" layer(legacy);
 @import "./screens/60-mobile-hud.css"     layer(legacy);
 @import "./screens/70-worktree-rail.css"  layer(legacy);
 @import "./screens/80-dock.css"           layer(legacy);
+/* 리디자인 1단계(2026-11) — 작업대(활동 막대 + 사이드바). 70(레일)·80(dock)의 프레임을 덮으므로 마지막. */
+@import "./screens/90-workbench.css"      layer(legacy);
+/* 리디자인 2단계(2026-11) — 제목 막대 36 · 상태 막대 24. 작업대 프레임(90)의 위·아래 끝을 정하므로 그 뒤. */
+@import "./screens/95-bars.css"           layer(legacy);
+/* 파일 개편 단계 5(2026-11) — 사이드바 「파일」 트리(files/FileTree.tsx)와 폰 「파일 | 첨부」 전환. 막대(95) 뒤. */
+@import "./screens/96-files-tree.css"     layer(legacy);
+/* 파일 개편 단계 6(2026-11) — 파일 내용 검색(팔레트 `?` 모드 + 사이드바 「파일 › 내용 검색」). 팔레트(30)·트리(96) 뒤. */
+@import "./screens/97-grep.css"           layer(legacy);
+/* 리디자인 7단계(2026-11) — 데스크톱 집중 모드. 막대(95)의 자리 변수를 0으로 만들고 막대를 띄우므로 그 뒤.
+   개입 알약(#vt-focus-pill)은 폰과 같은 요소라, 뒤에 오는 98-mobile.css보다 강한 선택자(html.vt-focus …)로 데스크톱 모양을 준다. */
+@import "./screens/98-focus.css"          layer(legacy);
+/* 리디자인 8단계(2026-11) — 폰(compact) 「정돈」 배치: 상단바·아래 탭·세션 카드·키바·떠 있는 마이크·집중 모드. 골격(60)·막대(95) 뒤, 오버레이(99) 앞. */
+@import "./screens/98-mobile.css"         layer(legacy);
+/* 리디자인 6단계(2026-11) — 오버레이(토스트 밖의 떠 있는 면: 대화상자 · 승인 · 작업 기록 · 보관함 · 상태 화면). 대화상자 껍데기(30)를 덮으므로 마지막. */
+@import "./screens/99-overlays.css"       layer(legacy);

@@ -82,12 +82,11 @@
    오른쪽에 있다. 그래서 clauth가 없거나 그 파일 스키마가 바뀐 환경(=그냥
    usage가 꺼진 흔한 환경)에서 온보딩이 dock 전체를 덮어 클릭이 안 먹었다
    — 실브라우저 스모크가 잡았다. */
+/* 2026-11(작업대) — 왼쪽은 활동 막대 + 사이드바 하나(--vt-activity-w + --vt-side-w, 90-workbench.css),
+   오른쪽은 wide에서 무언가를 고정했을 때만 300(--vt-pin-w, 리디자인 9단계). */
 @media (min-width:720px) {
-  .vt-onboarding { left:var(--vt-wgrail-w, 252px); right:36px; }
-}
-@media (min-width:1280px) {
-  .vt-onboarding { right:var(--vt-dock-w, 392px); }
-  body.vt-rail-panel-open:not(.vt-rail-overlay) .vt-onboarding { left:calc(var(--vt-wgrail-w, 252px) + var(--vt-rail-panel-w, 280px)); }
+  /* 리디자인 2단계 — 아래 상태 막대(24)도 덮지 않는다(에이전트 칩·토스트 메시지가 거기 산다). */
+  .vt-onboarding { left:calc(var(--vt-activity-w, 48px) + var(--vt-side-w, 0px)); right:var(--vt-pin-w, 0px); bottom:var(--statusbar-h, 0px); }
 }
 /* L7: 실브라우저 검증 중 발견한 같은 종류의 회귀 2건(위 L4 회귀와 원인이
    같다 — .vt-onboarding의 z-index:500이 새로 생긴 하단/중앙 UI를 덮는다).
@@ -501,20 +500,21 @@ body.vt-term-selecting #keybar-main { display:none; }
 
 /* 포커스 모드(2026-10-06, term/keybar.js positionBar) — 보이는 높이가 300px 미만(가로 폰 + 소프트
    키보드)이면 탭 바(#topbar)·칸 헤더·레일·dock·HUD·하단 내비를 숨기고 터미널이 남은 높이를 모두 쓴다.
-   키보드가 내려가면 JS가 클래스를 걷어 그대로 복귀한다. 레일·dock이 body에 거는 좌우 padding(!important,
-   720px/1280px 문턱)도 같이 풀어야 가로 폭을 되찾는다 — 이 선택자가 더 구체적이라 이긴다. keybar는 남긴다
+   키보드가 내려가면 JS가 클래스를 걷어 그대로 복귀한다. 작업대(활동 막대·사이드바)가 body에 거는 padding(!important,
+   720px 문턱, 90-workbench.css)도 같이 풀어야 가로 폭을 되찾는다 — 이 선택자가 더 구체적이라 이긴다. keybar는 남긴다
    (키보드 위에 떠 있는 입력 수단이다). */
 body.vt-kb-focus #topbar,
+body.vt-kb-focus #vt-titlebar,
+body.vt-kb-focus #vt-workbench,
+body.vt-kb-focus #vt-side-right,
 body.vt-kb-focus #vt-wgrail,
-body.vt-kb-focus #vt-rail,
-body.vt-kb-focus #vt-rail-panel,
 body.vt-kb-focus #vt-dock,
 body.vt-kb-focus #vt-hud,
-body.vt-kb-focus #vt-right-rail,
 body.vt-kb-focus #vt-mnav-bottom,
 body.vt-kb-focus .vt-pane-head { display:none; }
 body.vt-kb-focus {
   padding-top:env(safe-area-inset-top) !important;
+  padding-bottom:env(safe-area-inset-bottom) !important;
   padding-left:env(safe-area-inset-left) !important;
   padding-right:env(safe-area-inset-right) !important;
 }

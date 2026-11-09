@@ -85,6 +85,9 @@ function chunkOf(id) {
     // 음성 상태 UI는 인증 후 조회할 때 로딩한다. 초기 core 크기를 늘리지 않는다.
     if (/\/frontend\/js\/panels\/subagent-(viewer|poll)\.js$/.test(p)) return 'subagents';
     if (p.endsWith('/frontend/js/voice/status-panel.js')) return 'voice-status';
+    // 음성 입력 대상 고정(3KB) — 상태 패널(voice-status)과 설정 > 음성(settings)만 쓴다. 이름이 없으면 두 지연 청크가
+    // 함께 쓴다는 이유로 포괄 규칙이 core로 보낸다(리디자인 9단계에 찾았다). voice.js 번들은 별도 빌드라 제 사본을 갖는다.
+    if (p.endsWith('/frontend/js/voice/target-pin.js')) return 'voice-status';
     // 터치 제스처는 터치 기기에만 로딩한다. 상태/키 인코더는 core 하나를 공유한다.
     if (/\/frontend\/js\/term\/(?:touch(?:-select)?|keybar-ui)\.js$/.test(p)) return 'touch';
     // pane 작업 정보 구독은 main.js가 지연 로딩한다. 초기 부팅에 필요하지 않다.
@@ -111,6 +114,14 @@ function chunkOf(id) {
     // 나머지(view·state·language·search·lezer 런타임)와 뷰어 모듈은 `editor` 하나.
     if (/\/frontend\/js\/panels\/viewer\/editor(?:-text)?\.js$/.test(p)) return 'editor';
     if (/\/node_modules\/(?:@codemirror|@lezer|@marijn|style-mod|w3c-keyname|crelt)\//.test(p)) return 'editor';
+    // 파일 트리(Solid + TS, 파일 개편 단계 5) — panels/viewer/tree.js(`dir.show`)가 패널을 열 때 import()한다.
+    // panels 규칙보다 먼저 올 필요는 없지만(폴더가 다르다) 이름이 없으면 포괄 규칙이 core로 보내 초기 페이로드가 는다.
+    if (p.includes('/frontend/js/files/')) return 'files';
+    // 마크다운 미리보기(파일 개편 단계 7) — marked + DOMPurify와 그 둘을 붙이는 markdown-lib.js만. panels/viewer/file.js가
+    // 마크다운을 「렌더」로 열 때 import()한다. 정화 규칙(markdown.js)은 라이브러리를 import하지 않으므로 panels에 둔다 —
+    // 여기로 보내면 panels가 이 청크를 정적으로 끌어와 파일을 열 때마다 라이브러리를 받게 된다.
+    if (/\/node_modules\/(?:marked|dompurify)\//.test(p)) return 'preview';
+    if (p.endsWith('/frontend/js/panels/viewer/markdown-lib.js')) return 'preview';
     // 진짜로 "열 때" 받는 화면들. 여기 한 줄 추가하는 것만으로 지연
     // 청크가 되고, 그 모듈이 무엇을 import하든 core는 따라오지 않는다.
     if (p.includes('/frontend/js/panels/viewer/')) return 'panels';
@@ -153,6 +164,8 @@ function chunkOf(id) {
     // 화면 청크(panels·settings·share·history·screens)는 panel 청크를 함께 받는다(core를 거치지 않는다).
     if (p.endsWith('/frontend/js/panels/panel.js')) return 'panel';
     if (p.endsWith('/frontend/js/core/dialog.js')) return 'panel';
+    // 패널 전용 아이콘(리디자인 5단계) — 패널 화면 청크가 모두 panel.js를 받으므로 같은 청크에 둔다.
+    if (p.endsWith('/frontend/js/panels/panel-icons.js')) return 'panel';
     // 사용 가이드 본문 — term/guide.js(core 스텁)가 열 때만 import()한다.
     if (p.endsWith('/frontend/js/term/guide-view.js')) return 'panel';
     // 업로드 전송·대기열·취소 본체(10KB) — term/upload-lite.js(core)가 첫 업로드 때와 유휴 시간에 import()한다.
@@ -161,9 +174,18 @@ function chunkOf(id) {
     // <select> 드롭다운 본체(12KB) — ui/select-lazy.js(core 스텁)가 select가 나타날 때와 유휴 시간에 지연 import한다.
     // screens에 합치지 않는다: select 하나 때문에 화면 모듈까지 받게 된다.
     if (p.endsWith('/frontend/js/ui/select.js')) return 'select';
+    // 공용 툴팁 본체(5KB) — ui/tooltip-lazy.js(core 스텁)가 첫 hover·focus 때와 유휴 시간에 import()한다(리디자인 9단계).
+    if (p.endsWith('/frontend/js/ui/tooltip.js')) return 'tooltip';
+    // 칸 경계를 끄는 동안의 크기 캡션(3KB) — layout/panes.js가 첫 드래그 때 import()한다(리디자인 9단계).
+    if (p.endsWith('/frontend/js/layout/resize-overlay.js')) return 'resize-overlay';
     // 에이전트 브랜드 로고 path(18KB) — 초기 페이로드 상한 때문에 뗐다.
     // ui/icons.js가 부팅 직후 지연 import하고, 오기 전엔 선 기호로 그린다.
     if (p.endsWith('/frontend/js/ui/brand-icons.js')) return 'brand';
+    // 작업대(활동 막대·사이드바) 전용 아이콘 — shell 청크(Workbench.tsx)만 정적 import한다.
+    // 규칙이 없으면 포괄 규칙이 core로 보내 초기 페이로드가 는다.
+    if (p.endsWith('/frontend/js/ui/icons-shell.js')) return 'shell';
+    // 세션 미리보기를 터미널 색으로 그리는 해석기(리디자인 6단계) — 팔레트(shell)와 빈 칸 세션 선택(screens)만 쓴다.
+    if (p.endsWith('/frontend/js/lib/ansi-spans.js')) return 'shell';
     // 「연결된 화면」 모달 + 클라이언트 목록 — HUD 칩·레일 메뉴가 열 때만 쓴다.
     // layout/connected-screens-lazy.js가 지연 import하고, 설정 > 음성 섹션도
     // clients.js를 정적 import한다(settings -> screens 단방향, core는 안 따라온다).
@@ -227,6 +249,12 @@ export default defineConfig(({ mode }) => {
       // build-output.test.js가 청크 간 싱글톤 복제를 잡는다. vite 8의 기본 minify는 이름까지 바꾼다.
       minify: isTest ? false : { mangle: false, compress: false },
       sourcemap: !isTest,
+      // 제3자 고지 — 줄이기(minify)가 `@license` 주석을 지우므로(marked·DOMPurify 등), 번들에 든 의존 패키지마다
+      // 이름·버전·라이선스 식별자·LICENSE 본문을 한 파일로 낸다(Vite `build.license`). dist/에 있으므로 릴리스
+      // tarball에 함께 실린다(release.yml이 있는지 확인한다). 주석을 산출물에 남기는 방법(legalComments)은 초기
+      // 페이로드(app.js + core.js ≤ 358,400B)를 늘리므로 쓰지 않았다. voice 빌드는 같은 outDir에 이어 쓰므로 이름을
+      // 따로 둔다(덮어쓰지 않게). DOMPurify(MPL-2.0 OR Apache-2.0)는 Apache-2.0으로 쓰고, 그 패키지의 LICENSE가 그 본문이다.
+      license: isTest ? false : { fileName: isVoice ? 'THIRD_PARTY_NOTICES.voice.md' : 'THIRD_PARTY_NOTICES.md' },
       rolldownOptions: {
         // 벤더(xterm 등)는 아직 ES 모듈로 import하지 않는다 — index.html의 classic
         // <script>가 로드하고 sw.js가 개별 프리캐시한다(F4에서 core/vendor.js가

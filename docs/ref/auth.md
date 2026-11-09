@@ -56,7 +56,7 @@ registration order in `main.py`.
 | 6 | Per-resource verification | The route itself | Share-link token signature/expiry/mode · port PIN · port session · peer HMAC + time window + nonce | `routes/share.py`, `routes/system.py` (`/p/authorize`), `routes/peer.py` | Per-route |
 | 7 | File boundary (`fsguard`) | The route itself | Root resolution → `resolve()` + `is_relative_to` → deny list | `server/fsguard.py` (3 layers) | 403 / 404 |
 | 8 | Dangerous command (`safe_mode`) | PTY input · queue | Does it match a dangerous pattern? Only when `VT_SAFE_MODE=1` | `server/safe_mode.py` | Input blocked / queue `blocked` |
-| 9 | Elevated session | The route itself | Git-account writes etc. require re-confirming the password | `server/auth/__init__.py`, `require_elevated` | Elevation required |
+| 9 | Elevated session | The route itself | Git-account writes, share links, file writes etc. require re-confirming the password (see «Elevated actions») | `server/auth/__init__.py`, `require_elevated` | Elevation required |
 
 **Every layer is an AND gate. A later layer can only make the result stricter, never
 undo what an earlier layer blocked.** Passing one layer only answers that layer's
@@ -143,6 +143,22 @@ message prints the line to add. The table changes no behaviour: the real gates (
 | One-time device registration ticket | The QR/URL from `fsh mobile`/`fsh handoff` carries a 5-minute one-time ticket (`?ticket=`) instead of a persistent token. Physical access to the Mac is already proven at the moment the QR is shown, so scanning it equals approving registration. A persistent token must not be embedded in the URL: it would sit permanently in logs, history, and QR images. **Tickets carry a `purpose`**: the exposed-port `session` mode issues its 60-second tickets into the same `tickets.json`, and `/api/auth` must not accept any ticket — a port ticket (it travels in the exposed app's `/__fsh/cb?t=` URL) would register a 90-day device and give a shell without password or OTP. `consume_ticket(raw, purpose)` requires the purpose (`device` / `port-share`), and a ticket of the wrong purpose is refused **without being burned**. Records without the field are classified by their `share` binding. Tests: `test_auth_device_lifetime.py` (`test_port_share_ticket_cannot_register_a_device`), `test_port_proxy_auth.py` |
 | Cross-site blocking | `OriginGuardMiddleware` (`server/main.py`) — returns 403 for both HTTP and WS if the Origin isn't itself. The only path that auth/OTP alone can't block (if the browser already has a cookie, auth passes). Also removes the default `*` CORS — opt in via `VT_ALLOWED_ORIGINS` if needed |
 | API token auth | The `VT_AUTH_TOKEN` environment variable is a machine-facing token (daemons, hooks, the TUI). Via URL `?token=xxx` or `Authorization: Bearer xxx`. **It is not a second password — the login form rejects it.** Accepting it there would be a human-usable credential that `fsh password` could never change or expire ("I changed the password and the old one still logs me in"). A `?token=` link therefore does not trade itself for a session cookie (it keeps working via the query parameter, unless `VT_AUTHZ_ENFORCE=legacy` is on, see «Shared machine token»); register phones with `fsh mobile`'s one-time ticket instead. The web app itself does not read `?token=` from the address bar: it removes it and shows the normal login. (Legacy names `VT_TOKEN`/`VT_PASSWORD_HASH`/`VT_SECRET_KEY` are still recognized as fallbacks) |
+
+### Elevated actions
+
+Elevation is the web login password typed again (`POST /api/auth/elevate`, not OTP — OTP is only for registering a
+new device). It adds a 15-minute `elev` claim to the signed `vt_session` cookie; routes guarded by `require_elevated`
+answer 401 `elevation_required` without it, and the browser asks for the password once and repeats the same request.
+Which routes need it is declared in `server/authz/route_table.py` (`human(elevated=True)`); the main groups are git
+accounts, share links and `share-import`, port exposure, agent-config and agent-profile writes, session-history
+apply/export, the authz panic switch, and **file writes** (files-overhaul step 8, decision D1):
+
+| Route | Gate | Notes |
+|---|---|---|
+| `PUT /api/fs/file` (save), `POST /api/fs/new`, `POST /api/fs/mkdir`, `POST /api/fs/rename`, `POST /api/fs/delete` (to the OS trash; folders with `kind: "dir"`) | `require_human_session` + `require_elevated` | The first write path open over a public tunnel. A machine token, an agent (socket or token) or a peer is refused with 403 `human_session_required` before elevation is even asked — agents write with their own tools. A server without a password refuses them too (no human can be proven). Paths go through `fsguard.resolve_for_write` (folders through `resolve_dir_for_write`, which also refuses a root itself) (write boundary `VT_WRITE_ROOTS`, a boundary key read from `~/.vt.env` first). Not in the host relay allowlist (decision D7). Leases are a notice only: a human writing inside another holder's lease is allowed and audited as `lease.override`. Every write appends `fs.save` / `fs.new` / `fs.mkdir` / `fs.rename` / `fs.rename_dir` / `fs.trash` / `fs.trash_dir` to the audit chain (`started`, mandatory — 503 `audit_unavailable` if it cannot be written — then the result), with path sha8 and byte count only |
+
+Tests: `server/tests/test_fs_write.py` (missing elevation, machine token, agent principal, cookie + token, cross-site
+Origin, audit rows), `test_authz_route_table.py` (the table matches the real gates).
 
 ## Who is calling: browser session, machine token or peer
 
@@ -722,7 +738,7 @@ request that the server refuses with `choice_unavailable` keeps the window open 
 focus starts on deny, buttons are ignored for 400 ms after the window appears, Esc/backdrop/X mean "later" (nothing is sent). A request with
 `elevated` reasons is marked and allowing it re-asks for the password (the existing elevate prompt) when the server answers `elevation_required`.
 Events carry only ids and kinds, so the screen re-reads `GET /api/authz/approvals`; the old `agent_share_request*` events are used only until a
-new `authz_*` event has been seen, and a burst of both causes one re-read. The pending count is a badge on the settings entry points (the FarShell menu button in the menu bar, phone nav).
+new `authz_*` event has been seen, and a burst of both causes one re-read. The pending count is a badge on the settings entry points (the FarShell menu button in the title bar, phone nav).
 
 Settings > Permissions hosts the pending list, the grants list (filters go to the server; revoke asks for confirmation; built-in defaults are listed
 separately and cannot be revoked), the audit timeline (reverse chronological, filters, optional denials, a chain badge that is neutral when `ok` and a

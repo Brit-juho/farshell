@@ -178,6 +178,7 @@ def test_app_openapi_real_call_returns_a_spec_with_paths():
 #      「코드 파생 값」 절 안으로 스코프를 좁혀 해결.
 #   3) rail 개수를 `class="vt-rail-btn` 접두로 셌다 → `vt-rail-btn-DISABLED`도
 #      세어 코드 쪽 변경을 못 잡았다. 클래스 경계까지 보게 해서 해결.
+#      (리디자인 9단계에 옛 레일을 지우며 `rail-items`는 활동 막대의 id 목록 `activity-items`가 됐다.)
 
 
 def _design_doc(rows: dict) -> str:
@@ -187,18 +188,18 @@ def _design_doc(rows: dict) -> str:
 
 def test_design_rows_are_read_from_the_dedicated_section_only(tmp_path, monkeypatch):
     """생김새가 같은 다른 표(토큰 표)를 검사 대상으로 오인하면 안 된다."""
-    doc = _design_doc({"rail-items": "7"}).replace(
+    doc = _design_doc({"activity-items": "7"}).replace(
         "### 다음 절\n\n본문\n",
         "### 색 토큰\n\n| 토큰 | 값 | 용도 |\n|---|---|---|\n| `--color-acc` | `#f0a860` | 액센트 |\n",
     )
     rows = check_docs._design_rows(doc)
-    assert rows == {"rail-items": "7"}
+    assert rows == {"activity-items": "7"}
 
 
 def test_design_missing_section_is_flagged(tmp_path, monkeypatch):
     monkeypatch.setattr(check_docs, "ROOT", tmp_path)
     (tmp_path / "DESIGN.md").write_text("# D\n\n표가 없다\n")
-    monkeypatch.setattr(check_docs, "_design_expected", lambda: {"rail-items": "7"})
+    monkeypatch.setattr(check_docs, "_design_expected", lambda: {"activity-items": "7"})
     problems = []
     check_docs.check_design_md(problems)
     assert len(problems) == 1 and "표가 없다" in problems[0]
@@ -206,8 +207,8 @@ def test_design_missing_section_is_flagged(tmp_path, monkeypatch):
 
 def test_design_value_mismatch_is_flagged(tmp_path, monkeypatch):
     monkeypatch.setattr(check_docs, "ROOT", tmp_path)
-    (tmp_path / "DESIGN.md").write_text(_design_doc({"rail-items": "6"}))
-    monkeypatch.setattr(check_docs, "_design_expected", lambda: {"rail-items": "7"})
+    (tmp_path / "DESIGN.md").write_text(_design_doc({"activity-items": "6"}))
+    monkeypatch.setattr(check_docs, "_design_expected", lambda: {"activity-items": "7"})
     problems = []
     check_docs.check_design_md(problems)
     assert len(problems) == 1
@@ -216,9 +217,9 @@ def test_design_value_mismatch_is_flagged(tmp_path, monkeypatch):
 
 def test_design_missing_row_is_flagged(tmp_path, monkeypatch):
     monkeypatch.setattr(check_docs, "ROOT", tmp_path)
-    (tmp_path / "DESIGN.md").write_text(_design_doc({"rail-items": "7"}))
+    (tmp_path / "DESIGN.md").write_text(_design_doc({"activity-items": "7"}))
     monkeypatch.setattr(check_docs, "_design_expected",
-                        lambda: {"rail-items": "7", "skins": "a, b"})
+                        lambda: {"activity-items": "7", "skins": "a, b"})
     problems = []
     check_docs.check_design_md(problems)
     assert len(problems) == 1 and "`skins` 행이 없다" in problems[0]
@@ -227,8 +228,8 @@ def test_design_missing_row_is_flagged(tmp_path, monkeypatch):
 def test_design_orphan_row_is_flagged(tmp_path, monkeypatch):
     """표에만 있고 코드 검사가 없는 행은 아무도 검증하지 않는 죽은 약속이다."""
     monkeypatch.setattr(check_docs, "ROOT", tmp_path)
-    (tmp_path / "DESIGN.md").write_text(_design_doc({"rail-items": "7", "made-up": "1"}))
-    monkeypatch.setattr(check_docs, "_design_expected", lambda: {"rail-items": "7"})
+    (tmp_path / "DESIGN.md").write_text(_design_doc({"activity-items": "7", "made-up": "1"}))
+    monkeypatch.setattr(check_docs, "_design_expected", lambda: {"activity-items": "7"})
     problems = []
     check_docs.check_design_md(problems)
     assert len(problems) == 1 and "made-up" in problems[0]
@@ -237,26 +238,39 @@ def test_design_orphan_row_is_flagged(tmp_path, monkeypatch):
 def test_design_checks_both_languages(tmp_path, monkeypatch):
     """한쪽만 고치고 넘어가는 게 이 저장소에서 가장 흔한 문서 사고다."""
     monkeypatch.setattr(check_docs, "ROOT", tmp_path)
-    (tmp_path / "DESIGN.md").write_text(_design_doc({"rail-items": "7"}))
-    (tmp_path / "DESIGN.md").write_text(_design_doc({"rail-items": "6"}))
-    monkeypatch.setattr(check_docs, "_design_expected", lambda: {"rail-items": "7"})
+    (tmp_path / "DESIGN.md").write_text(_design_doc({"activity-items": "7"}))
+    (tmp_path / "DESIGN.md").write_text(_design_doc({"activity-items": "6"}))
+    monkeypatch.setattr(check_docs, "_design_expected", lambda: {"activity-items": "7"})
     problems = []
     check_docs.check_design_md(problems)
     assert len(problems) == 1 and problems[0].startswith("DESIGN.md")
 
 
-def test_rail_count_respects_class_boundary():
-    """`vt-rail-btn-DISABLED`를 rail 버튼으로 세면 코드 쪽 변경을 못 잡는다."""
-    import re
-    pat = r'class="vt-rail-btn(?=[ "])'
-    assert len(re.findall(pat, '<b class="vt-rail-btn x"><b class="vt-rail-btn">')) == 2
-    assert len(re.findall(pat, '<b class="vt-rail-btn-DISABLED x">')) == 0
+def test_activity_ids_read_the_array_in_order():
+    """개수가 아니라 id 목록이다 — 하나 빼고 하나 넣거나 순서를 바꿔도 잡힌다. 상수 id는 side-prefs에서 푼다."""
+    src = """import x;
+export const ACTIVITIES: Activity[] = [
+  { id: SESSIONS_ACTIVITY, label: t('세션'), icon: 'list' },
+  { id: 'scm', label: t('변경'), icon: 'git-branch' },
+  { id: "dir", label: t('파일') },
+];
+
+export function activityById(id: string) { return ACTIVITIES.find((a) => a.id === id); }
+"""
+    side = "export const SESSIONS_ACTIVITY = 'sessions';"
+    assert check_docs._activity_ids(src, side) == ["sessions", "scm", "dir"]
+
+
+def test_activity_ids_refuse_unknown_expressions():
+    """모르는 식(다른 상수 등)이면 틀린 목록 대신 빈 목록 — 표의 행이 「코드 검사가 없다」로 드러난다."""
+    src = "export const ACTIVITIES: Activity[] = [\n  { id: OTHER_CONST, label: 'x' },\n];\n"
+    assert check_docs._activity_ids(src, "") == []
 
 
 def test_design_expected_reads_real_code():
     """추출기가 조용히 빈 dict를 돌려주면 검사 전체가 무의미해진다."""
     exp = check_docs._design_expected()
-    for key in ("skins", "breakpoints", "pane-cap", "rail-items", "agent-states"):
+    for key in ("skins", "breakpoints", "pane-cap", "activity-items", "agent-states"):
         assert key in exp, f"{key}를 코드에서 못 뽑았다 — 추출기가 고장 났다"
     assert exp["breakpoints"] == "720/1280"
     assert exp["pane-cap"] == "1/4/6"

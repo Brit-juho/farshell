@@ -1,5 +1,9 @@
 // N38(70-mobile.md §1/§2) — 모바일 골격: 세션 홈(탭) · 하단 내비
-// 52px(세션|터미널|변경|첨부|설정). compact.js(L3
+// 52px(세션|터미널|변경|파일|설정).
+// 파일 개편 단계 5(2026-11, 사용자 선택 1 「나」) — 「첨부」 탭 자리를 「파일」 탭(폴더 아이콘)으로 바꿨다. 탭을 누르면
+// 안쪽 맨 위 「파일 | 첨부」 전환이 보이고 파일(트리, `vt-dir`)이 기본이다. 첨부(`vt-files`)는 예전 화면 그대로다.
+// 마지막에 본 쪽은 `ui.mobile.filesSegment`(기기 설정)가 기억한다. 올리는 중 배지(`#vt-mnav-badge-files`)는
+// 파일 탭에 그대로 붙고, 전환의 「첨부」 쪽에도 같은 수를 적는다. 「변경」 탭에는 전환이 없다. compact.js(L3
 // 2단계)와 같은 위치(layout/)에 두지만 역할은 다르다 — compact.js는 "지금이
 // compact인가"와 "leaf를 어떤 순서로 스와이프하나"만 안다(트리는 안 건드림).
 // 이 파일은 그 위에 얹히는 **탭 골격**(플릿/터미널/변경/첨부/설정) 하나를
@@ -20,7 +24,8 @@
 import { get as settingsGet, set as settingsSet } from '../core/settings.js';
 import { vtFetch } from '../core/api.js';
 import { createPoll } from '../core/poll.js';
-import { getAction } from '../core/dom.js';
+import { getAction, registerAction } from '../core/dom.js';
+import { t } from '../core/i18n.js';
 import { getSession, activeSessionId } from '../core/store.js';
 import { allStatuses, onStatusChange } from '../agent/state.js';
 import { pruneBlankViews } from './store.js';
@@ -56,6 +61,7 @@ const PANEL_TAB = {
   'vt-dock-scm': 'changes',
   'vt-settings': 'more',
   'vt-files': 'files',
+  'vt-dir': 'files',
   'vt-ports': 'more',
   'vt-usage': 'more',
 };
@@ -123,17 +129,110 @@ function _refreshWaitingCount() {
 // 굳이 window 브리지를 거칠 필요 없이 같은 호출을 반복한다(Dock.tsx 자신의
 // 주석에도 있는 관행 — "응답 두 개, 15초"). -->
 
-// 「첨부」 배지 — 진행 중인 업로드 개수. term/upload.js(지연 로드가 아니다 —
+// ── 「파일」 탭의 「파일 | 첨부」 전환 ─────────────────────────────────────────
+// 두 화면은 각자의 패널(`vt-dir` 트리 · `vt-files` 첨부)이다. 전환은 compact의 탭 화면으로 열린 그 패널 머리
+// 바로 아래에 끼워 넣는다 — 패널 렌더러 둘은 이 전환을 모른다(데스크톱 사이드바에는 따로 있는 활동이라 필요 없다).
+export const FILES_SEGMENTS = [
+  { id: 'tree', panel: 'vt-dir', action: 'dir.show', label: () => t('파일') },
+  { id: 'attach', panel: 'vt-files', action: 'files.show', label: () => t('첨부') },
+];
+
+/** 지금 저장된 전환 값(모르는 값이면 트리). */
+export function filesSegment() {
+  return settingsGet('ui.mobile.filesSegment') === 'attach' ? 'attach' : 'tree';
+}
+
+function _segmentOf(panelId) {
+  return FILES_SEGMENTS.find((s) => s.panel === panelId) || null;
+}
+
+function _uploadCount() {
+  const jobs = (typeof window.vtUploadJobs === 'function') ? window.vtUploadJobs() : [];
+  return jobs.filter((j) => j.phase === 'queued' || j.phase === 'uploading' || j.phase === 'saving').length;
+}
+
+/** 패널 머리 아래에 전환을 끼운다. 이미 있으면 상태만 맞춘다. */
+export function mountFilesSegment(panelEl) {
+  const seg = _segmentOf(panelEl && (panelEl._vtPanelId || panelEl.id));
+  const card = panelEl && panelEl.querySelector('.vt-viewer-card');
+  if (!seg || !card) return null;
+  let bar = card.querySelector(':scope > .vt-mfiles-seg');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.className = 'vt-mfiles-seg';
+    bar.setAttribute('role', 'tablist');
+    bar.setAttribute('aria-label', t('파일 | 첨부'));
+    for (const s of FILES_SEGMENTS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'vt-mfiles-seg-btn';
+      b.dataset.seg = s.id;
+      b.setAttribute('role', 'tab');
+      const label = document.createElement('span');
+      label.textContent = s.label();
+      b.appendChild(label);
+      if (s.id === 'attach') {
+        const badge = document.createElement('span');
+        badge.className = 'vt-mfiles-seg-badge';
+        badge.hidden = true;
+        b.appendChild(badge);
+      }
+      b.addEventListener('click', () => switchFilesSegment(s.id));
+      bar.appendChild(b);
+    }
+    const head = card.querySelector(':scope > .vt-viewer-head');
+    if (head) head.after(bar); else card.prepend(bar);
+  }
+  for (const b of bar.querySelectorAll('.vt-mfiles-seg-btn')) {
+    const on = b.dataset.seg === seg.id;
+    b.setAttribute('aria-selected', String(on));
+    b.tabIndex = on ? 0 : -1;
+  }
+  _paintSegmentBadge(bar);
+  return bar;
+}
+
+function _paintSegmentBadge(bar) {
+  const badge = bar && bar.querySelector('.vt-mfiles-seg-badge');
+  if (!badge) return;
+  const n = _uploadCount();
+  badge.hidden = n <= 0;
+  badge.textContent = n <= 0 ? '' : n > 99 ? '99+' : String(n);
+}
+
+/** 전환 — 기억하고, 지금 패널을 닫고 다른 쪽을 연다. */
+export function switchFilesSegment(id) {
+  const next = FILES_SEGMENTS.find((s) => s.id === id);
+  if (!next) return;
+  settingsSet('ui.mobile.filesSegment', next.id);
+  if (document.getElementById(next.panel)) return;   // 이미 그 쪽이다
+  for (const s of FILES_SEGMENTS) {
+    if (s.panel === next.panel) continue;
+    const el = document.getElementById(s.panel);
+    if (el && typeof window.closePanel === 'function') window.closePanel(el.id, { history: 'replace' });
+  }
+  const fn = getAction(next.action);
+  if (typeof fn === 'function') fn();
+}
+
+/** 「파일」 탭 — 마지막에 본 쪽을 연다. */
+export function openFilesTab() {
+  const seg = FILES_SEGMENTS.find((s) => s.id === filesSegment()) || FILES_SEGMENTS[0];
+  const fn = getAction(seg.action);
+  if (typeof fn === 'function') fn();
+}
+
+// 「파일」 탭 배지 — 진행 중인 업로드 개수. term/upload.js(지연 로드가 아니다 —
 // 파일 input이 최상위 정적 마크업이라 부팅 시 항상 로드됨)의 `vtUploadJobs`
 // 브리지를 읽는다. fetch가 필요 없는 로컬 상태라 폴링보다 `vt:upload-progress`
 // 이벤트(업로드 진행마다 발생)에 얹는 쪽이 더 정확하고 더 싸다.
 function _refreshFilesBadge() {
   const badge = document.getElementById('vt-mnav-badge-files');
   if (!badge) return;
-  const jobs = (typeof window.vtUploadJobs === 'function') ? window.vtUploadJobs() : [];
-  const n = jobs.filter((j) => j.phase === 'queued' || j.phase === 'uploading' || j.phase === 'saving').length;
+  const n = _uploadCount();
   if (n > 0) { badge.hidden = false; badge.textContent = n > 99 ? '99+' : String(n); }
   else badge.hidden = true;
+  for (const bar of document.querySelectorAll('.vt-mfiles-seg')) _paintSegmentBadge(bar);
 }
 
 // 「변경」 배지 — 지금 보고 있는 세션(활성 탭)의 cwd 기준 git diff 파일 수.
@@ -174,6 +273,8 @@ function _toggleSessionsTab() {
   setTab(_tab === 'fleet' ? 'terminal' : 'fleet');
 }
 
+registerAction('mfiles.show', openFilesTab);
+
 function _init() {
   if (!_wired) return;
   document.addEventListener('vt:sessions-toggle', _toggleSessionsTab);
@@ -198,6 +299,11 @@ function _init() {
   document.addEventListener('vt:panel-open', (e) => {
     const tab = PANEL_TAB[e.detail?.id];
     if (_mq.matches && tab) _paintNav(tab);
+    // 「파일」 탭의 두 화면은 compact 탭 화면으로 열릴 때 전환을 단다(데스크톱 사이드바·칸에는 달지 않는다).
+    if (e.detail?.mobileRoute && _segmentOf(e.detail.id)) {
+      const el = document.getElementById(e.detail.id);
+      if (el) mountFilesSegment(el);
+    }
   });
   document.addEventListener('vt:panel-close', (e) => {
     const tab = PANEL_TAB[e.detail?.id];

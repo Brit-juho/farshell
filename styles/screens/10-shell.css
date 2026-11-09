@@ -20,17 +20,26 @@
   background:var(--bar); flex-shrink:0; position:relative; z-index:60;
   border-bottom:1px solid var(--line);
 }
-/* --menubar-h: 맨 위 메뉴바(#vt-hud)가 차지하는 높이. compact에는 메뉴바가 없어 0이다.
-   #topbar 아래로 떨어지는 팝업·오버레이의 top은 이 값을 더한다. */
-:root { --menubar-h:0px; }
+/* 리디자인 2단계 — 맨 위 제목 막대(#vt-titlebar) 36과 맨 아래 상태 막대(#vt-hud) 24. compact에는 둘 다 없어 0이다
+   (#topbar 52 + 하단 내비 52가 그 자리를 쓴다). 막대 규칙은 screens/95-bars.css.
+   --menubar-h는 옛 이름(메뉴바 28)의 별칭이다 — #topbar 아래로 떨어지는 팝업·오버레이·온보딩·뷰어가 top에 더하는
+   값이라 소비처를 그대로 두고 제목 막대 높이를 가리키게 했다. 아래에서 떠오르는 것(토스트·온보딩 아래 끝·뷰어 dock)은
+   --statusbar-h를 더한다. 높이에 transition을 두지 않는다 — 칸 크기가 바뀌면 터미널 refit·SIGWINCH가 난다. */
+:root { --titlebar-h:0px; --statusbar-h:0px; --menubar-h:var(--titlebar-h); }
 @media (min-width:720px) {
-  /* 2026-11 — 뷰 탭 줄이 없어져 #topbar는 넓은 화면에서 남는 게 없다. 상단은 메뉴바(#vt-hud) 하나이고 신호등·
-     키바·⌘K·캡션은 거기로 옮겨 앉는다(layout/menubar-slots.js). 그래서 --topbar-h가 0이고 팝업은 메뉴바 아래에서
-     뜬다. 음성 전용 모드만 #topbar를 전체 화면 컨테이너로 쓰므로 그때는 남긴다. */
-  :root, html[data-skin] { --topbar-h:0px; --menubar-h:var(--hud-h); --topbar-popup-y:calc(var(--hud-h) + 6px); }
+  /* 2026-11 — 뷰 탭 줄이 없어져 #topbar는 넓은 화면에서 남는 게 없다. 맨 위는 제목 막대 하나이고 신호등·키바·캡션은
+     거기로 옮겨 앉는다(layout/menubar-slots.js). 그래서 --topbar-h가 0이고 팝업은 제목 막대 아래에서 뜬다.
+     음성 전용 모드만 #topbar를 전체 화면 컨테이너로 쓰므로 그때는 남긴다. */
+  :root, html[data-skin] {
+    --topbar-h:0px; --titlebar-h:36px; --statusbar-h:24px;
+    --menubar-h:var(--titlebar-h); --topbar-popup-y:calc(var(--titlebar-h) + 6px);
+  }
   body:not(.voice-only-mode) #topbar { display:none; }
-  /* 메뉴바(#vt-hud)는 fixed라 흐름에서 빠진다 — 본문이 그 밑으로 흘러들지 않게 그만큼 민다. */
-  body { padding-top:calc(env(safe-area-inset-top) + var(--menubar-h)); }
+  /* 두 막대는 fixed라 흐름에서 빠진다 — 본문이 그 밑으로 흘러들지 않게 위·아래를 그만큼 민다. */
+  body {
+    padding-top:calc(env(safe-area-inset-top) + var(--titlebar-h));
+    padding-bottom:calc(env(safe-area-inset-bottom) + var(--statusbar-h));
+  }
 }
 html[data-skin="macos"] #topbar { -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px); }
 
@@ -96,8 +105,8 @@ html[data-skin="windows"] #topbar {
      보여줬다(작업 홈=워크스페이스 칩, 그 외=세션 피커+검색) — 세션 탭이
      세션 이동·관리를 전부 떠맡으면서(작업/70-mobile.md) 헤더가 그 역할을
      또 가질 이유가 없어졌다. 워크스페이스 칩(저장소/호스트)은 모바일에서
-     통째로 뺀다 — 기기 정체는 세션 버튼 아랫줄이 말한다(2026-09-29 H1). */
-  #vt-workspace-chip-slot { display:none !important; }
+     통째로 뺀다 — 기기 정체는 세션 버튼 아랫줄이 말한다(2026-09-29 H1). 리디자인 2단계부터 그 칩은 제목 막대
+     안(#vt-titlebar)에 있고, 제목 막대 자체가 compact에서 숨는다(95-bars.css). */
 }
 
 /* 모바일 세션 관리 시트. 좁은 화면에서 세션의 모든 기본 조작을 제공한다. */
@@ -181,21 +190,7 @@ html.vt-has-keybar[data-mobile-tab]:not([data-mobile-tab="terminal"]) #keybar-op
   html[data-mobile-tab]:not([data-mobile-tab="terminal"]) #snippets-open-btn { display:none; }
 }
 
-#vt-workspace-chip {
-  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5);
-  height:26px; padding:0 calc(var(--spacing) * 2); margin-right:calc(var(--spacing) * 1);
-  flex:none; border:none; border-radius:var(--radius-sm); background:transparent;
-  color:var(--sub); font:var(--weight-normal) var(--fs-3xs) var(--font-mono);
-  letter-spacing:var(--tracking-wide); white-space:nowrap;
-}
-/* 2026-11-06 — 이름(farshell)·아이콘은 FarShell 메뉴 버튼이 이미 보여 줘서 칩에서 뺐다.
-   칩은 mono 호스트 경로만 말하고, 메뉴 버튼 바로 뒤에 붙도록 왼쪽 여백을 줄였다. */
-#vt-workspace-chip { padding-left:0; }
-.vt-workspace-host { color:var(--color-muted); }
-/* 2026-09-28 — 활성 칸이 원격 호스트면 칩도 그 호스트를 말한다. 원격 스위처
-   (.vt-fleet-host.remote)와 같은 강조색으로 "지금 다른 맥을 보고 있다"를 표시하고,
-   거쳐 온 서버(로그인한 이 맥)는 한 단 더 흐리게 덧붙인다. */
-.vt-workspace-host.remote { color:var(--acc); }
+/* 옛 워크스페이스 칩(#vt-workspace-chip)은 제목 막대의 호스트 칸이 됐다 — 모양은 screens/95-bars.css. */
 
 /* N37 §4 — 「연결된 화면」. 평소(나 혼자)엔 아이콘만 있는 조용한 버튼이고,
    2명 이상 붙으면 숫자 배지가 붙어 존재감이 생긴다(tmux가 가장 작은
@@ -444,7 +439,7 @@ html[data-skin="windows"] .caption { display:flex; }
 /* long-press가 아직 확정 전(LONGPRESS_MS 대기 중)임을 알리는 최소한의 시각
    피드백 — keybar.js의 .kb.holding과 같은 패턴(배경만 살짝). */
 /* 레일 세션 행·pane 헤더의 롱프레스 대기 표시 */
-.vt-rail-session-row.vt-drag-pending, .vt-pane-head.vt-drag-pending { background:var(--menu-hover); }
+.vt-pane-head.vt-drag-pending { background:var(--menu-hover); }
 /* 드래그 중엔 터치 스크롤/텍스트 선택이 끼어들면 안 된다. */
 body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-select:none; }
 /* pane 헤더 — root가 leaf 하나뿐이면 JS가 display:none으로 숨긴다(분할을
@@ -569,8 +564,8 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
 #terminal-container .xterm-viewport::-webkit-scrollbar { display:none; width:0; height:0; }
 
 /* ---- 음성 버튼 (voice.js 계약: .label 자식 + .recording) --------------------
-   L7: 상단바에서 이관됐다 — dock(#vt-dock-mic-home) 또는 rail 설정
-   슬롯(#vt-rail-mic-slot)에 살고(keybar.js), 음성 전용 모드에서만 잠깐
+   L7: 상단바에서 이관됐다 — 활동 막대(#vt-activity-mic-home) · 폰 #vt-mic-fab · 대기 자리
+   (#vt-mic-park, 숨김)에 살고(keybar.js), 음성 전용 모드에서만 잠깐
    #topbar로 옮겨간다(media-session.js). 키바 슬롯은 2026-09-29에 없앴다.
    색·상태(녹음 중)는 어디에 있든 공통이라 컨텍스트 무관 규칙으로 두고,
    크기·배치만 컨텍스트별로 아래에서 오버라이드한다. */
@@ -588,59 +583,81 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
   content:''; position:absolute; right:5px; bottom:5px; width:7px; height:7px; box-sizing:border-box;
   border:1.5px solid currentColor; border-radius:50%; pointer-events:none;
 }
-/* rail 설정 패널 컨텍스트 — 폭은 #vt-rail-settings-tpl .mi가 이미 주는 100%를
-   그대로 쓰고, 여긴 아이콘 크기·라벨 굵기만. */
-#vt-rail-mic-slot #mic-btn-wrap svg { width:16px; height:16px; }
-#vt-rail-mic-slot #mic-btn-wrap .label { font-weight:600; }
 
-/* 마이크에 붙는 음성 상태 패널. 기존 상태 노드는 고정 팝업 대신 패널 내용이다. */
+/* 마이크에 붙는 음성 상태 패널. 기존 상태 노드는 고정 팝업 대신 패널 내용이다.
+   리디자인 6단계(2026-11, 시안 O16-F 「정돈」 배치): 폭 440, raised 면, 반경 8, 머리 48, 본문 패딩 20 · 간격 12.
+   마이크(활동 막대) 바로 오른쪽에 아래 끝을 맞춰 연다(voice/status-panel.js position). */
 #voice-status-panel {
   position:fixed; z-index:90; box-sizing:border-box; max-height:calc(100dvh - 24px);
-  overflow:auto; padding:12px; font-size:var(--fs-sm); color:var(--color-txt);
-  background:var(--menu); border:1px solid var(--color-line-strong);
-  border-radius:var(--radius-sm); box-shadow:var(--shadow-e2); line-height:1.5;
+  overflow:auto; display:flex; flex-direction:column; font-size:var(--fs-sm); color:var(--color-txt);
+  background:var(--color-bg-raised); border:1px solid var(--color-line-strong);
+  border-radius:var(--radius-lg); box-shadow:var(--shadow-e2); line-height:1.5;
 }
 #voice-status-panel[hidden] { display:none; }
 #voice-status-panel.vt-voice-mobile {
   bottom:calc(64px + env(safe-area-inset-bottom,0px)); max-height:calc(100dvh - 100px);
 }
-.vt-voice-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
-.vt-voice-server { display:flex; flex-direction:column; gap:2px; }
-#voice-stt-detail { color:var(--color-sub); overflow-wrap:anywhere; }
-#mic-status { margin-top:12px; padding-top:12px; border-top:1px solid var(--color-line); overflow-wrap:anywhere; }
-#mic-status:empty { display:none; }
-.vt-voice-meta { margin:8px 0; color:var(--color-sub); overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
-.vt-voice-meta:empty { display:none; }
-/* 녹음 중 부분 인식 결과: 확정 전이라 보조 텍스트 색으로 흐리게. 최종 결과(#mic-status)가 오면 지운다. */
-.vt-voice-partial { margin:8px 0; color:var(--color-sub); overflow-wrap:anywhere; }
-.vt-voice-partial[hidden] { display:none; }
-/* 녹음 중 음량 미터: 가는 막대. 값(--lv 0~1)은 status-panel.js가 넣는다. 색은 토큰만. */
-.vt-voice-meter { height:4px; margin:8px 0; border-radius:2px; overflow:hidden; background:var(--color-line); }
-.vt-voice-meter[hidden] { display:none; }
-.vt-voice-meter-bar {
-  display:block; height:100%; width:100%; background:var(--acc); transform-origin:left center;
-  transform:scaleX(var(--lv,0)); transition:background-color .12s linear;
+.vt-voice-head {
+  display:flex; align-items:center; gap:10px; height:48px; flex:none; box-sizing:border-box;
+  padding:0 12px 0 20px; border-bottom:1px solid var(--color-line);
 }
-.vt-voice-meter[data-clip] .vt-voice-meter-bar { background:var(--err); }
-@media (pointer:coarse) { .vt-voice-meter { height:6px; } }
-@media (prefers-reduced-motion:reduce) { .vt-voice-meter-bar { transition:none; } }
-.vt-voice-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
-.vt-voice-pin { display:flex; flex-direction:column; align-items:stretch; gap:4px; margin-top:12px; }
-.vt-voice-pin label { color:var(--color-sub); font-size:var(--fs-xs); }
-.vt-voice-pin .vt-select, .vt-voice-pin .vt-dd { width:100%; box-sizing:border-box; }
-.vt-voice-pin .vt-voice-meta { margin:2px 0 0; }
+.vt-voice-head > strong { font:var(--weight-semibold) var(--fs-base)/24px var(--font-ui); }
+.vt-voice-ic { display:inline-flex; color:var(--color-acc); }
+.vt-voice-srv { display:inline-flex; align-items:center; gap:6px; min-width:0; color:var(--color-muted); font-size:var(--fs-xs); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vt-voice-dot { width:6px; height:6px; border-radius:var(--radius-full); flex:none; background:var(--color-st-working); }
+.vt-voice-head[data-voice-state="setup"] .vt-voice-dot { background:var(--color-st-waiting); }
+.vt-voice-head[data-voice-state="busy"] .vt-voice-dot { background:var(--color-acc); }
+.vt-voice-head[data-voice-state="error"] .vt-voice-dot { background:var(--color-st-error); }
+.vt-voice-x { margin-left:auto; }
+.vt-voice-body { display:flex; flex-direction:column; gap:12px; padding:20px; min-height:0; }
+#voice-stt-detail { color:var(--color-muted); overflow-wrap:anywhere; }
+#mic-status { overflow-wrap:anywhere; }
+#mic-status:empty { display:none; }
+.vt-voice-meta { margin:0; color:var(--color-muted); font-size:var(--fs-xs); overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+.vt-voice-meta:empty { display:none; }
+/* 입력 대상 줄 — 「입력 대상」 글자 + 들어간 면 셀렉트(시안: 12px, sunk). */
+.vt-voice-pin { display:flex; align-items:center; gap:8px; min-width:0; }
+.vt-voice-pin label { flex:none; color:var(--color-muted); font-size:var(--fs-xs); }
+.vt-voice-pin .vt-select, .vt-voice-pin .vt-dd { flex:1 1 auto; min-width:0; max-width:260px; box-sizing:border-box; background:var(--color-bg-2); font-size:var(--fs-xs); }
+/* 녹음 중 음량 막대 24개(높이 40). 값은 status-panel.js가 scaleY로 밀어 넣는다(레이아웃 없이 transform만).
+   --lv(0~1)는 마지막 값 — 접근성 값(aria-valuenow)과 같다. 색은 토큰만. */
+.vt-voice-meter { display:flex; align-items:center; justify-content:center; gap:3px; height:40px; flex:none; }
+.vt-voice-meter[hidden] { display:none; }
+.vt-voice-bar {
+  display:block; width:4px; height:36px; border-radius:2px; background:var(--color-acc);
+  transform:scaleY(.1); transform-origin:center; transition:transform .08s linear;
+}
+.vt-voice-meter[data-clip] .vt-voice-bar:last-child { background:var(--color-st-error); }
+@media (prefers-reduced-motion:reduce) { .vt-voice-bar { transition:none; } }
+/* 부분 결과 — 확정 전이라 흐린 글자. 시안의 96px 상자(들어간 면, 15px). 최종 결과(#mic-status)가 오면 지운다. */
+.vt-voice-partial {
+  margin:0; min-height:96px; box-sizing:border-box; padding:8px 10px; border-radius:var(--radius-sm);
+  background:var(--color-bg-2); border:1px solid var(--color-line-strong);
+  color:var(--color-muted); font-size:var(--fs-base); line-height:22px; overflow-wrap:anywhere;
+}
+.vt-voice-partial[hidden] { display:none; }
+.vt-voice-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.vt-voice-gap { flex:1 1 auto; }
 /* 확인 후 전송: 인식 결과를 고쳐서 입력한다. 상태 줄(#mic-status) 바로 아래. */
-#voice-confirm { display:flex; flex-direction:column; gap:6px; margin-top:12px; padding-top:12px; border-top:1px solid var(--color-line); }
+#voice-confirm { display:flex; flex-direction:column; gap:8px; }
 #voice-confirm[hidden] { display:none; }
-#voice-confirm label { color:var(--color-sub); font-size:var(--fs-xs); }
-#voice-confirm textarea { width:100%; box-sizing:border-box; min-height:72px; max-height:200px; resize:vertical; line-height:1.5; }
-#voice-confirm .vt-voice-meta { margin:0; }
-#voice-confirm .vt-voice-actions { margin-top:4px; }
-.vt-voice-help { margin:10px 0 0; color:var(--color-sub); font-size:var(--fs-xs); }
+#voice-confirm textarea {
+  width:100%; box-sizing:border-box; min-height:96px; max-height:200px; resize:vertical;
+  padding:8px 10px; font-size:var(--fs-base); line-height:22px; background:var(--color-bg-2);
+}
+.vt-voice-hint { color:var(--color-muted); font-size:var(--fs-3xs); line-height:16px; }
+/* 확인 중에는 확인 줄이 주 버튼 줄이다 — 녹음 줄을 접는다(버튼이 두 줄로 겹쳐 보이지 않게). */
+#voice-status-panel:has(#voice-confirm:not([hidden])) .vt-voice-main { display:none; }
+.vt-voice-foot { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; padding-top:10px; border-top:1px solid var(--color-line); }
+.vt-voice-help { flex:1 1 220px; margin:0; color:var(--color-muted); font-size:var(--fs-xs); line-height:1.5; }
+.vt-voice-link { padding:0; border:0; background:none; color:var(--color-acc); font:inherit; font-size:var(--fs-xs); cursor:pointer; }
+.vt-voice-link:hover { text-decoration:underline; }
+.vt-voice-link:focus-visible { outline:2px solid var(--color-acc); outline-offset:2px; border-radius:var(--radius-xs); }
 #mic-status .vt-btn { margin:8px 8px 0 0; }
 @media (pointer:coarse) {
   #voice-status-panel .vt-btn { min-height:44px; }
   .vt-voice-pin .vt-select, .vt-voice-pin .vt-dd { min-height:44px; }
+  .vt-voice-meter { height:44px; }
 }
 
 /* ---- 연결 상태 pill ---------------------------------------------------- */
