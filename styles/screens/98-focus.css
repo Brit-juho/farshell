@@ -20,8 +20,10 @@
 @media (min-width:720px) {
   /* ── 자리 0 — 칸이 창 네 변 끝까지 ─────────────────────────────────────── */
   html.vt-focus:root {
-    --vt-activity-w:0px; --vt-side-w:0px; --titlebar-h:0px; --statusbar-h:0px;
+    --vt-activity-w:0px; --vt-side-w:0px; --vt-pin-w:0px; --titlebar-h:0px; --statusbar-h:0px;
   }
+  /* 오른쪽 고정 사이드바(리디자인 9단계)는 가장자리 노출 대상이 아니다 — 집중 모드 동안 그냥 숨는다. */
+  html.vt-focus #vt-side-right { display:none; }
 
   /* 막대 자신의 크기는 자리 변수가 아니라 고정값으로 — 숨었다 드러나도 같은 모양이다(10-shell.css 36 · 24와 같다). */
   html.vt-focus #vt-titlebar { height:36px; }

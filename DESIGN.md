@@ -12,22 +12,42 @@ Visual rules, tokens and component guidance for FarShell. See
 These are the rules this project actually holds itself to. Read this before
 drawing a new screen.
 
-### Restraint is taste
+### Structural principles (구조 원칙)
 
-Gradients, animations, glassmorphism, decorative icons — none of them go in
-just because they *can*. Every visual element has to earn its place, and the
-default is always the simpler thing.
+Redesign 「작업대」 (2026-11) replaced "restraint is taste" with structure: the screen is
+read from its **frame** — activity bar, sidebar, title bar 36, panes, status bar 24 — and
+every new element first has to find its place in that frame before it gets a colour, a
+border or a motion. Concretely:
+
+- **One frame, fixed sizes.** Bars and rows come from the shell metrics in §2/§3 (36 · 24 ·
+  48 · 44 · rows 24/28/32/36/44); a new screen reuses them instead of inventing a height.
+- **Space before lines, lines before fills.** Separate with layout first, a 1px line second,
+  a background step last. Never all three.
+- **Active is a line, not a fill.** The current item is marked with a **2px `--color-acc`
+  line** (activity bar, pane, tabs in a panel) — allowed and preferred over a filled
+  background or an accent-coloured block.
+- **One focal point.** Within 0.5 seconds you can name the one thing to look at.
+
+The prohibitions stay, unchanged:
+
+- **No emoji** as a UI asset (user content such as terminal output is exempt).
+- **No icon trapped in a coloured box** (filled square/circle behind an icon). Avatars and
+  app icons are the only exceptions.
+- **No glow** — no blurred halo of the accent behind a button.
+- **Blur only on an OS-mimicking skin's title bar** (`macos`, `windows`); every other
+  surface is opaque.
+- **One moving thing per screen** (§0 「Motion」).
 
 ### Color — 70/20/10
 
 Four neutral background steps (`--color-bg-0..3`) are the 70%, four text
 steps (txt/sub/muted/faint) are the 20%, and the accent is the 10%.
 
-- **One solid accent per screen — the primary action.** If the active rail
-  item, a badge, and a primary button all fill with the accent at once, none
-  of them reads as primary.
-  → The active rail/dock item states itself through background elevation;
-  the accent survives only as the status bar's color and the icon color.
+- **One solid accent per screen — the primary action.** If the active
+  activity, a badge, and a primary button all fill with the accent at once,
+  none of them reads as primary.
+  → The active activity states itself with the 2px accent line (no fill); a
+  selected row uses the selection tint (`--color-acc-soft`), not a solid fill.
 - Don't give every element its own tinted background. Whitespace and layout
   separate things first.
 - Don't add a border where a background step already separates.
@@ -55,8 +75,8 @@ steps (txt/sub/muted/faint) are the 20%, and the accent is the 10%.
 
 - `backdrop-filter: blur()` only where a skin **explicitly mimics an OS** —
   that's `macos` (translucent header bar) and `windows` (Windows Terminal
-  acrylic), and only on the header bar. The default skin `farshell`'s cards,
-  panels, dock, and rail are all opaque.
+  acrylic), and only on the title bar. The default skin `farshell`'s cards,
+  panels, sidebars and activity bar are all opaque.
 - No gradients on text or buttons.
 - No **glow shadow** — a blurred halo of the same color behind a button.
   Shadow is gray, low-opacity, and states elevation in exactly two places:
@@ -104,10 +124,12 @@ reuses the `.vt-menu` look and lives in `screens/20-overlay.css` because `.vt-me
 
 ### Pre-flight checklist
 
+- [ ] The element has a place in the frame (bar · sidebar · pane · overlay) and uses its metrics
+- [ ] Active state is the 2px accent line or the selection tint, not a solid accent fill
 - [ ] No icon trapped in a color box
 - [ ] No emoji used as a design element
 - [ ] No default serif on a hero
-- [ ] No unrequested glassmorphism
+- [ ] No blur outside an OS-mimicking skin's title bar
 - [ ] No gradient on text or buttons
 - [ ] No color glow behind a button
 - [ ] Accent respects 70/20/10 (one solid accent = the primary action)
@@ -115,7 +137,7 @@ reuses the `.vt-menu` look and lives in `screens/20-overlay.css` because `.vt-me
 - [ ] No slow entrance animation on content
 - [ ] Row heights stay within 24/28/36
 - [ ] No `border-left` + `border-radius` together
-      (the bar gets clipped at the corner — a rail status bar uses a
+      (the bar gets clipped at the corner — an active line or a row status bar uses a
       dedicated `::before`/element, or `box-shadow: inset`)
 - [ ] Can you name the #1 thing to look at within 0.5 seconds?
 
@@ -147,11 +169,13 @@ ramp, the accent, status colors) is solved algorithmically against
 `scripts/check_contrast.py`'s thresholds rather than picked by eye: pick
 values, compute contrast, adjust until passing.
 
-**App icon.** The favicon and PWA icons (`frontend/icon-192.png`, `icon-512.png`) are a
-purple tile, and `frontend/manifest.json` still names Catppuccin colours (`#1e1e2e` /
-`#181825`) — neither follows the `farshell` palette yet.
+**App icon.** `frontend/manifest.json` uses the `farshell` palette (`background_color`
+`#121316` = `--color-bg-0`, `theme_color` `#17181b` = `--color-bg-1`, since redesign phase 9),
+as does the `<meta name="theme-color">` in `index.html`. The icon art itself
+(`frontend/icon-192.png`, `icon-512.png`, the favicon) is still the old purple tile — there
+is no generator script in the repository, so redrawing it is deferred.
 
-Switched from the header's ⚙ settings, or the theme chip in the command
+Switched from Settings → 모양, or the theme chip in the command
 palette (`Mod+K`, shows up mixed into a bare search, or under the `>`
 settings mode). A boot-time inline script in `<head>` commits `data-skin`
 before first paint (anti-FOUC).
@@ -185,7 +209,7 @@ The redesign mockups use short names (`--bg`, `--side`, `--sunk`, `--raised`, `-
 | Token | Value | Use |
 |------|-----|------|
 | `--color-bg-0` | `#121316` | Panes (the terminal area) |
-| `--color-bg-1` | `#17181b` | Chrome — activity bar, sidebar, menu bar |
+| `--color-bg-1` | `#17181b` | Chrome — activity bar, sidebars, title bar, status bar |
 | `--color-bg-2` | `#0f1012` | Sunk surfaces — inputs, row headers, subbars. **Darker than `bg-1`** (and, in `farshell`, darker than `bg-0` too): a sunk surface sits one notch below the chrome it is laid on (the order is not monotonic) |
 | `--color-bg-3` | `#25272d` | Hover / pressed row and icon button |
 | `--color-bg-raised` | `#202227` | Floating surfaces — menus, dialogs, toasts, sheets. The four text steps meet the same bars on it as on `bg-0..2`. `farshell`'s legacy `--menu` alias points here |
@@ -320,7 +344,7 @@ scanning prose lets a wrong value slip through unnoticed.
 | `skins` | `farshell, macos, catppuccin, windows, vscode, notepad, warp, linear, vercel` | `frontend/js/theme.js` — `VT_SKINS` |
 | `breakpoints` | `720/1280` | `frontend/js/layout/breakpoints.js` — `COMPACT_MAX`/`REGULAR_MAX` |
 | `pane-cap` | `1/4/6` | `frontend/js/layout/dnd.js` — `tierCap()` (compact/regular/wide; xwide is `Infinity`, so it isn't captured in the table) |
-| `rail-items` | `8` | `frontend/index.html` — count of `.vt-rail-btn` (**the legacy 48px icon rail `#vt-rail`, hidden via CSS** — see §3. The shell's worktree rail `#vt-wgrail` is not counted here). `dir` is counted alongside `files` |
+| `activity-items` | `sessions, scm, dir, queue, files, snippets, ports, usage, system` | `frontend/js/shell/activity-data.ts` — ids of `ACTIVITIES` in order (the activity bar's upper group, §3; `ports`/`usage` are capability-gated at runtime but always listed). Replaced `rail-items` (the legacy icon rail, removed in redesign phase 9) |
 | `agent-states` | `5` | `server/agent_status.py` — `STATUSES` (`error` is reserved, §5) |
 | `color-bg-0` | `#121316` | `styles/theme/tokens.css` |
 | `color-acc` | `#7aa2ff` | `styles/theme/tokens.css` |
@@ -385,9 +409,9 @@ cols/rows survive).
 │ scm  │   rail       │                                                    │
 │ …    │ tools =      │                                                    │
 │ mcp  │   dock body  │                                                    │
-│ mic  │              │                                                    │
-│ set  │              │                                                    │
-├──────┴──────────────┴────────────────────────────────────────────────────┤
+│ mic  │              │                                     ┌ pinned 300 ┐ │
+│ set  │              │                                     │ (optional) │ │
+├──────┴──────────────┴─────────────────────────────────────┴────────────┴─┤
 │ status bar 24: [agents] [message] [E2E safe screens] … [CPU RAM NET usage] [v] [clock] │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
@@ -397,14 +421,12 @@ cols/rows survive).
 | Tier | Width | Workbench (activity bar + sidebar) | Pane cap | Rendering |
 |---|---|---|---|---|
 | compact | < 720px | none (fleet home and bottom nav, §7) | 2 | 1 pane fullscreen, swipe left/right |
-| regular | 720~1279px | collapsed by default; expanding pushes the panes at `min(stored, 260px, 40vw)` | 4 | split tree |
-| wide | 1280~1599px | open by default at `min(stored, 40vw)`, pushes the panes | 6 | split tree |
+| regular | 720~1279px | collapsed by default; expanding pushes the panes at `min(stored, 260px, 40vw)`; a pinned tool floats over the panes as a drawer | 4 | split tree |
+| wide | 1280~1599px | open by default at `min(stored, 40vw)`, pushes the panes; a pinned tool takes 300 on the right | 6 | split tree |
 | xwide | ≥ 1600px | same | **unlimited** | same as wide + cap lifted |
 
-> **The rail is never the legacy icon rail.** Regular does not fall back to the
-> 48px `#vt-rail`: `#vt-rail` is
-> `display:none` at every width (see "What's left as legacy"). The worktree rail
-> is the only rail, at every tier.
+> The legacy 48px icon rail (`#vt-rail`) and the 2.0 right usage rail (`#vt-right-rail`) were
+> removed from the DOM in redesign phase 9; the workbench is the only left edge at every tier.
 
 The tier touches the sidebar in exactly two places, and **neither overwrites what
 you chose** — `ui.side.width`/`ui.side.collapsed` are device-scoped settings
@@ -454,7 +476,8 @@ and **one sidebar** beside it. The bar's top group are the activities, in this o
 (`plug`, capability-gated) · 사용량 (`gauge`, capability-gated) · 시스템 (`bar-chart`)
 (`shell/activity-data.ts`). The bottom group are actions that do not change the sidebar: MCP · 스킬 관리
 (`box`, the lazy `ui/icons-shell.js`), 음성 (the `#mic-btn-wrap` node itself, moved into
-`#vt-activity-mic-home` by `term/keybar.js` `placeMicButton`) and 설정 (opens Settings).
+`#vt-activity-mic-home` by `term/keybar.js` `placeMicButton` from its hidden parking slot `#vt-mic-park`)
+and 설정 (opens Settings; the approval-pending badge from `share-lazy.js` sits on its icon corner).
 
 - **Item** 48×44, icon 20 (stroke 1.75), name only in `aria-label` and the tooltip (`data-tip`, shown to
   the right; second line = badge count, plus the `railToggle` key on the current activity). **Active** =
@@ -481,7 +504,27 @@ and **one sidebar** beside it. The bar's top group are the activities, in this o
 - **Drag an activity into a pane** like the old dock tabs (`vtWirePanelDragSource`); if that tool was the
   one open in the sidebar, the sidebar collapses (`vt-panel-pane-drop`).
 - Positions that depend on the left edge read `--vt-activity-w` + `--vt-side-w` (body padding, onboarding,
-  the viewer's dock mode). There is no right-hand panel any more, so `body`'s right padding is 0.
+  the viewer's dock mode). The right edge reads `--vt-pin-w` — 300 when a tool is pinned at wide, else 0.
+
+### Right pinned sidebar (`#vt-side-right`, `ui.side.pinned`)
+
+A tool panel can be pinned as a **second sidebar on the right** (mock D01: sessions on the left, 변경 on the
+right). The panel head's 「오른쪽에 고정(나란히 보기)」 button (`panel-right`, inserted before the close X by
+`Dock.tsx`) pins it; the same button — now `panel-left`, `aria-pressed="true"`, accent — unpins it back into the
+left sidebar. The setting is `ui.side.pinned` (device scope, the **panel id** such as `vt-dock-scm`, `''` = none).
+
+- **Width 300, fixed** (no resizer). The left sidebar keeps its shared-width rule; pinning moves the left sidebar
+  back to 세션 without changing its width.
+- **Wide (≥1280):** takes 300 beside the panes (`--vt-pin-w`, body `padding-right`). **Regular (720~1279):** a
+  floating drawer over the panes with `--shadow-e2`, so pane sizes do not change. **Compact:** none (panels are
+  sheets). Focus mode hides it (`--vt-pin-w: 0`).
+- **One panel, one place.** A panel id is global, so the pinned tool cannot also be the left activity: its activity
+  button shows a 4px accent dot in the top-right corner (`.vt-act.pinned::after`) and clicking it focuses the
+  pinned panel instead. Pin/unpin **moves the panel node** (polling, scroll and edit state survive), which is why
+  `#vt-side-right` is always mounted and only toggles `hidden`.
+- Closing the pinned panel (its X, or toggling the same command from the palette) unpins it.
+- Pin and unpin change the pane width once; both are wrapped in the refit gate (`vtSurfaceDrag('begin'|'end')`)
+  so each pane fits — and sends a WS `resize` — once.
 
 ### Session view — worktree rail (`#vt-wgrail`, `shell/Rail.tsx`)
 
@@ -548,10 +591,11 @@ first on the amber tint, a 24×1 separator, then the rest; the tooltip carries n
 ### Tool views — dock body (`#vt-dock`, `shell/Dock.tsx`)
 
 There is no separate right-hand dock and no dock tab strip any more: the tabs became the activity bar's
-tool activities, and the dock is the sidebar's **tool view**. `Dock.tsx` keeps two jobs — "only the open
-tool activity's panel is in the DOM" (it calls the panel's action and `closePanel`s the others) and the
-`window.vtDockHost(panelId)` contract `panels/panel.js` asks (an element to attach to, `null` for a modal,
-or `'stale'` when the activity changed while the chunk was loading). Each tool's content is drawn by the
+tool activities, and the dock is the sidebar's **tool view**. `Dock.tsx` keeps three jobs — "only the open
+tool activity's panel and the pinned tool's panel are in the DOM" (it calls the panel's action and `closePanel`s
+the others), the `window.vtDockHost(panelId)` contract `panels/panel.js` asks (an element to attach to — the left
+body or the pinned body —, `null` for a modal, or `'stale'` when the activity changed while the chunk was
+loading), and the pin button in each docked panel's head. Each tool's content is drawn by the
 existing panel renderers (`queue.js`, `ports.js`, `panels/usage.js`, `panels/viewer/scm.js` …) into
 `.vt-dock-body`. There are no modal popup panels; the action ids (`queue.show`, `ports.show`,
 `usage.open`, `scm.show`) open that tool activity in the sidebar (the palette and keymap reference those
@@ -730,13 +774,12 @@ start. The overlay fades out 200ms after the drag ends, and under
 
 ### What's left as legacy
 
-`#vt-rail` (the 48px icon rail — session/queue/snippets/ports/usage/settings,
-6 buttons) and `#vt-right-rail` (a right rail dedicated to usage) are **still
-in the DOM but hidden via CSS** (`styles/screens/70-worktree-rail.css`'s
-`#vt-rail { display:none !important; }`). The worktree rail (`#vt-wgrail`)
-and the dock's usage tab each take over that role. Only
-`#vt-rail-settings-tpl` (the desktop mic slot, theme-chip flyout) is
-kept — Rail.tsx's "more" overflow reopens the same button inside it.
+Nothing in the DOM. Redesign phase 9 removed the hidden 48px icon rail (`#vt-rail`, 8 buttons), its flyout
+(`#vt-rail-panel`, `#vt-rail-settings-tpl`), the 2.0 right usage rail (`#vt-right-rail`) and
+`styles/screens/40-rail-legacy.css`. The mic waits in `#vt-mic-park` until the workbench mounts; the earphone
+media key and the guide are palette commands. What remains is **read fallbacks** in settings: `ui.rail.*` and
+`ui.dock.*` stay in the schema for one release because `shell/side-prefs.js` still reads them when the
+`ui.side.*` keys are unset (they are never written). `--menubar-h` survives as an alias of `--titlebar-h`.
 
 ## 4. Code viewer / file pane
 
@@ -837,6 +880,16 @@ pre-load fallback.
 
 ### Settings (`Mod+,` / FarShell menu)
 
+**Window (mock O04–O06, redesign phase 9):** 1240×788 (88vh cap), radius 8, `--color-bg-raised`, `--shadow-e2`.
+Head 44: gear 16 + 「설정」 15/600, the auto-save status on the right (12, muted). Left nav 220 on `bg-1` with
+the search field (28) on top; items 32 high, 13px, radius 6, the current section on the selection tint
+(`acc-soft`) in 600. Content padding 20/28, left-aligned (max 760): title 22/600, description 13 muted, group
+heads 12/600 muted 20 above, rows padded 12/0 with a 1px line below, label 13/500, help 12 muted, scope tag
+11/500 muted with a 1px `line-strong` border and no fill. The right preview column is 300 wide, padded 20, on
+`bg-1` (terminal and appearance sections only; hidden below 1100px). 상태 막대 (O05) lays its three zones
+side by side above 720px with 32px item tiles; 계정 및 보안 (O06) draws the device table with a 28 head and
+48 rows, this device on the selection tint.
+
 **Three settings, three icons.** 설정 = gear (reached from the FarShell menu, `Mod+,` and the activity bar's bottom gear), 레일 설정 = `sliders-horizontal` (rail header), 상태 막대 설정 = `panel-top` (FarShell menu item).
 
 Settings are split across two scopes — `frontend/js/core/settings.js`'s
@@ -848,7 +901,8 @@ Settings are split across two scopes — `frontend/js/core/settings.js`'s
 - **device**: `GET/PUT /api/device-settings` — the server identifies the
   device via the `vt_device` cookie and stores it at
   `~/.vt/device-settings/<device_id>.json` (0600). Values that only make
-  sense "on this device": rail/dock width and collapse state, terminal font
+  sense "on this device": sidebar width, activity, collapse and pinned tool
+  (`ui.side.*`), terminal font
   size, whether mouse events forward to the app, the mobile home tab
   (`ui.mobile.home`). Split off because a pinch-zoom on the phone must not
   grow the Mac terminal's font.
@@ -909,9 +963,10 @@ is on `⌥⇧F` (rebindable); `⌘⇧F` opens the sidebar's content search.
 
 The no-prefix screen lists no sessions (session switching lives in the
 세션 tab, and `@` is the only palette path) and the command list covers
-everything: `settings.show`/`scm.show`/`clients.show` (no rail button pairs with these, so they are in
+everything: `settings.show`/`clients.show` (no activity pairs with these, so they are in
 `DEFAULT_COMMANDS` **without** `isPanel: true`, which keeps
-`rail-palette-parity.test.js`'s check from firing on them) plus every
+`rail-palette-parity.test.js`'s check from firing on them; every tool activity's action — `scm.show` …
+`system.open` — **is** `isPanel`, and that test compares them with `shell/activity-data.ts`) plus every
 non-`unavailable` `core/keymap.js` action, so the palette is a real "search
 every command" surface and not just files+a fixed list.
 
@@ -1154,8 +1209,8 @@ screen, recent-commands tracking, the keymap registration rule, and the
   session-sheet bottom padding to the nav-less value.
 - *Focus mode* — when the **visible height** (`visualViewport.height`) is under
   300px (landscape phone + keyboard: ~400px minus ~200px), `body.vt-kb-focus`
-  hides the tab bar, pane headers, rail, dock, HUD and bottom nav
-  (`20-overlay.css`) and releases the rail/dock body padding, so the terminal
+  hides the tab bar, pane headers, the workbench, the pinned sidebar, the status bar and bottom nav
+  (`20-overlay.css`) and releases the workbench body padding, so the terminal
   takes the whole remaining height. The keybar stays (it is closed by default
   anyway). No state is kept: the same function removes the class when the height
   comes back. Pointer-fine devices never get it (the keybar is not wired there).
@@ -1186,7 +1241,7 @@ also by pulling down from the **top 24px edge** (`#vt-focus-edge`, handle 36×4)
 the finger and reads 「놓으면 집중 모드를 끝냅니다」 past 64px; releasing past 64px exits,
 less snaps back. Leaving the terminal tab or crossing 720px (either way) also exits. Not persisted.
 
-## 8. Usage (dock "Usage" tab)
+## 8. Usage (activity bar 「사용량」)
 
 Two interfaces in `server/usage/base.py`:
 
@@ -1205,7 +1260,7 @@ class CounterProvider:  # counter-based — cumulative, no limit
   script actually makes that call is up to the user; FarShell only stores
   and displays. `usage/ollama.py` (optional) surfaces the running local
   model as a counter label whenever `localhost:11434/api/ps` responds.
-- If neither provider exists, the dock tab disappears entirely — `VT_USAGE_PROVIDER` (`auto`/`clauth`/`none`) controls the choice.
+- If neither provider exists, the 사용량 activity disappears entirely — `VT_USAGE_PROVIDER` (`auto`/`clauth`/`none`) controls the choice. There is no always-on usage badge or right usage rail any more (removed in redesign phase 9 — both drew into hidden DOM).
 
 ## 9. xterm.js terminal theme
 
@@ -1239,11 +1294,13 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
   Only status badges get a status-colored border. A badge **counts** something —
   a diff count, an unread count, a port count.
   **A badge needs room of its own.** It sits in the flow, so it widens whatever
-  holds it: an 18px `min-width` badge inside a 36px collapsed dock tab makes the
-  tab 38px wide and `overflow: hidden` cuts the rest off. Where the container is
+  holds it: an 18px `min-width` badge inside a 36px fixed strip makes the
+  strip 38px wide and `overflow: hidden` cuts the rest off (the activity bar therefore places its
+  badge `absolute` on the icon corner). Where the container is
   a fixed strip, drop the number for a 6px `--color-acc` dot positioned
   `absolute` (contributing 0px of width) and let the tooltip say the count.
-- **Tooltips** (`.vt-tip`, `js/ui/tooltip.js`): one `position: fixed` element on
+- **Tooltips** (`.vt-tip`, `js/ui/tooltip.js`, loaded on first hover/focus or idle by
+  `ui/tooltip-lazy.js`; touch never loads it): one `position: fixed` element on
   `body`, driven by `data-tip` (name) and optional `data-tip-sub` (the value —
   a count, a shortcut, a reason; `--font-mono`, `tabular-nums`, `--color-sub`).
   `data-tip-side` picks `top|bottom|left|right` and flips when the side doesn't
@@ -1305,7 +1362,7 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
   (`color-mix(… 16%, transparent)`), so a consumer sets only `color` and the
   ratio isn't restated at each use site. Not a pill — the whole screen is one
   5px radius step. Use this one component rather than copying the `color-mix`.
-- **Tabs (header, dock)**: active = a 2px `--color-acc` bottom underline +
+- **Tabs (inside panels and dialogs)**: active = a 2px `--color-acc` bottom underline +
   `--color-acc-surface` background. Inactive = `--color-sub` text.
 - **Panes** (`.vt-pane`): flush, like iTerm2. No border, no radius, no `gap`
   between siblings, no padding on `#terminal-container` — the boundary is the
@@ -1394,13 +1451,14 @@ design.
 | `styles/theme/skins.css` | Color remapping for the other 8 skins |
 | `styles/layers/components.css` | `.status-dot` — the home for new components |
 | `styles/screens/*.css` | Per-screen CSS in the `legacy` layer (wins over `components`) |
-| `frontend/index.html` | Boot theme script (anti-FOUC), login gate, `#vt-chrome` mount point, mobile bottom nav, keybar |
+| `frontend/index.html` | Boot theme script (anti-FOUC), login gate, `#vt-workbench-slot` mount point, mic parking slot, mobile bottom nav, keybar |
 | `frontend/js/layout/surface.js` | Terminal placement (which pane holds which session) · refit gate · `#vt-term-stage` waiting room |
 | `frontend/js/core/types.ts` | Shared TS types |
-| `frontend/js/shell/Workbench.tsx` · `side-prefs.js` | Workbench: activity bar + one shared-width sidebar; width/collapse/activity rules |
+| `frontend/js/shell/Workbench.tsx` · `side-prefs.js` | Workbench: activity bar + one shared-width sidebar + the right pinned sidebar; width/collapse/activity/pin rules |
 | `frontend/js/shell/ActivityBar.tsx` · `activity-data.ts` | Activity bar 48px (vertical tablist) and its items |
 | `frontend/js/shell/Rail.tsx` | Worktree rail — the sidebar's sessions view |
-| `frontend/js/shell/Dock.tsx` | Dock body — the sidebar's tool view (`vtDockHost`) |
+| `frontend/js/shell/Dock.tsx` | Dock body — the sidebar's tool view (`vtDockHost`), pinned-panel hosting and the head pin button |
+| `styles/screens/90-workbench.css` | Activity bar, sidebar, right pinned sidebar frames and their width variables |
 | `frontend/js/ui/icons-shell.js` | Icons only the workbench draws (lazy `shell` chunk) |
 | `frontend/js/shell/TitleBar.tsx` | Title bar 36px: FarShell menu · host · breadcrumb · palette field · tools |
 | `frontend/js/shell/Hud.tsx` · `hud-data.ts` · `hud-layout.js` | Status bar 24px at the bottom; chip catalogue and layout rules |
@@ -1413,7 +1471,7 @@ design.
 | `frontend/js/shell/Focus.tsx` | Desktop focus mode: edge strips and reveal, scrim, entry hint, touch exit button (lazy `shell` chunk) |
 | `styles/screens/98-focus.css` | Desktop focus mode: reservations to 0, hidden/revealed bars, strips, desktop pill, layers |
 | `frontend/js/shell/Palette.tsx` · `palette-data.ts` | Command palette, 8 modes |
-| `frontend/js/layout/resize-overlay.js` | px / cols×rows caption while dragging a divider |
+| `frontend/js/layout/resize-overlay.js` | px / cols×rows caption while dragging a divider (lazy `resize-overlay` chunk) |
 | `frontend/js/layout/tree.js` | Pane tree — leaf `kind: 'terminal'\|'viewer'\|'panel'` |
 | `frontend/js/layout/breakpoints.js` | The 4 responsive-tier boundaries (single source) |
 | `frontend/js/layout/dom-ids.js` | Tree node id → DOM element id, in one place (the maker and the finder both read it) |
@@ -1421,9 +1479,9 @@ design.
 | `frontend/js/layout/panes.js` · `compact.js` · `dnd.js` | Pane-tree rect computation · compact mode · drop zones |
 | `frontend/js/core/settings.js` | Server-backed settings store — global/device scope |
 | `frontend/js/core/keymap.js` | Keymap registry |
-| `frontend/js/panels/viewer/scm.js` | Dock source-control tab renderer (read-only) |
+| `frontend/js/panels/viewer/scm.js` | 변경 (source control) tool renderer |
 | `frontend/js/ui/icons.js` | Inline SVG icon registry (the only icon source) — includes the 5 agent marks |
-| `frontend/js/ui/tooltip.js` | The one tooltip layer — `data-tip` / `data-tip-sub` / `data-tip-side`, replaces native `title` |
+| `frontend/js/ui/tooltip.js` · `tooltip-lazy.js` | The one tooltip layer — `data-tip` / `data-tip-sub` / `data-tip-side`, replaces native `title` (body in the lazy `tooltip` chunk) |
 | `frontend/js/term/xterm-setup.js` | xterm instance creation, applies `getVtXtermTheme()` |
 | `server/usage/base.py` · `clauth.py` · `counter_jsonl.py` · `ollama.py` | LimitProvider/CounterProvider |
 | `server/device_settings.py` | Device-scoped settings storage |

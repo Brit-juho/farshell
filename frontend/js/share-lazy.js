@@ -13,8 +13,8 @@ const loadAuthz = () => (authzMod || (authzMod = import('./authz/entry.js')));
 const warn = (e) => console.error('[FarShell share]', e);
 
 // 설정 버튼들에 붙는 대기 건수 배지(기존 rail 배지와 같은 모양). 0건이면 숨긴다.
-// 넓은 화면의 설정 진입점은 메뉴바의 FarShell 메뉴 버튼이다(2026-11, 우측 dock의 ⚙를 없앴다).
-const BADGE_HOSTS = ['#vt-rail-settings', '.vt-mb-menu', '.vt-mnav-btn[data-mnav="more"]'];
+// 넓은 화면의 설정 진입점은 활동 막대 아래 ⚙(.vt-act-settings)와 제목 막대의 FarShell 메뉴 버튼이다.
+const BADGE_HOSTS = ['.vt-act-settings', '.vt-mb-menu', '.vt-mnav-btn[data-mnav="more"]'];
 window.vtAuthzBadge = (n) => {
   window.vtAuthzPending = n;      // 설정 모바일 홈의 「권한」 줄이 읽는다
   for (const sel of BADGE_HOSTS) {

@@ -1,4 +1,4 @@
-/* 설정 화면 · 사용량 게이지 · 연결된 화면 · 우측 레일
+/* 설정 화면 · 사용량 게이지 · 연결된 화면
  *
  * styles/layers/legacy.css(2927줄 한 파일)를 섹션 경계 그대로 쪼갠 것 중 하나다
  * (2.1.6). **내용은 한 줄도 바꾸지 않았다** — 순서도 원본 그대로 유지하므로
@@ -16,7 +16,7 @@
 /* ── S4 설정 화면 ──────────────────────────────────────────────────────────
    wide는 좌측 섹션 목록 + 우측 내용 2단, compact(<720px)는 더보기 목록에서
    설정 상세로 들어가는 단일 열 화면이다. */
-.vt-settings .vt-vw-body { display:flex; gap:0; padding:0; overflow:hidden; }
+.vt-settings .vt-vw-body { display:flex; gap:0; padding:0; overflow:hidden; background:var(--color-bg-raised); }
 /* 2026-09-22(사용자 지적: "렌더링이 뒤늦게 되면서 창이 늘어난다") — 카드에
    height가 없고 max-height만 있으면 flex-column 컨테이너는 콘텐츠 높이로
    잡힌다. 에이전트 감지표·등록 기기표·MCP 목록·음성 모델 목록이 열린 뒤
@@ -27,20 +27,29 @@
    열자마자 최종 크기로 뜨게 한다. 이후 데이터는 안쪽 스크롤 영역
    (.vt-set-content)만 채운다. 대가: 내용이 짧은 섹션(예: 「모양」)은 카드
    아래쪽에 빈 공간이 남는다 — 매번 크기가 바뀌는 것보다 낫다는 판단. */
-.vt-settings .vt-viewer-card { width:min(1240px, 100%); height:min(88vh, 860px); max-height:min(88vh, 860px); }
+/* 리디자인 9단계(시안 O04–O06) — 창 1240×788 · 반경 8 · raised 면 · 그림자 e2. */
+.vt-settings .vt-viewer-card {
+  width:min(1240px, 100%); height:min(88vh, 788px); max-height:min(88vh, 788px);
+  background:var(--color-bg-raised); border:1px solid var(--color-line-strong); border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-e2);
+}
 /* 2026-10-27 팝업 리뉴얼 2단계 — 큰 중앙 패널. 880px 카드에 13.5px 글자는 읽기에 빠듯했다:
    카드를 1240px로 넓히고 라벨 15px·설명 13.5px·행 48px로 키운다. 오른쪽 미리보기 칸(.vt-set-preview)은
    폭 1100px 이상에서만 열린다 — 그보다 좁으면 내용 칸이 먼저다. */
-.vt-settings .vt-viewer-head { min-height:44px; }
-.vt-set-save { font:400 var(--fs-xs) var(--ui); color:var(--sub); }
+.vt-settings .vt-viewer-head { min-height:44px; height:44px; padding:0 8px 0 16px; gap:8px; border-bottom:1px solid var(--color-line); }
+.vt-settings .vt-viewer-head .vt-vw-title { display:inline-flex; align-items:center; gap:8px; font:600 var(--fs-base) / 1 var(--font-ui); color:var(--color-txt); }
+.vt-settings .vt-viewer-head .vt-vw-title svg { color:var(--color-sub); flex:none; }
+/* 저장 상태는 머리 오른쪽(닫기 X 앞)에 붙는다 — 시안 「변경 사항 자동 저장 · 저장됨」. */
+.vt-set-save { margin-left:auto; font:400 var(--fs-xs) / 1 var(--ui); color:var(--color-muted); }
 .vt-set-save[data-state="saving"] { color:var(--color-st-waiting); }
 .vt-set-save[data-state="failed"] { color:var(--color-st-error); }
 .vt-set-search { margin-bottom:calc(var(--spacing) * 2); }
 .vt-set-search-input {
-  width:100%; height:32px; box-sizing:border-box; padding:0 10px;
-  border:1px solid var(--line); border-radius:var(--radius-sm);
-  background:var(--color-term-bg); color:var(--txt); font:400 var(--fs-xs) var(--ui);
+  width:100%; height:28px; box-sizing:border-box; padding:0 8px;
+  border:1px solid var(--color-line-strong); border-radius:var(--radius-sm);
+  background:var(--color-bg-2); color:var(--txt); font:400 var(--fs-sm) var(--ui);
 }
+.vt-set-search-input:focus-visible { outline:none; border-color:var(--color-acc); }
 .vt-set-search-results { display:flex; flex-direction:column; margin-top:4px; }
 .vt-set-search-result {
   display:flex; flex-direction:column; align-items:flex-start; gap:2px;
@@ -52,35 +61,47 @@
 .vt-set-search-result small,
 .vt-set-search-empty { color:var(--sub); font:400 var(--fs-2xs) var(--ui); }
 .vt-set-search-empty { padding:8px 0; }
+/* 탐색 220 · bg-1 · 패딩 12/8. 항목 32 · 13px · 반경 6, 활성은 선택 틴트(acc-soft) + 굵게 — 시안 O04. */
 .vt-set-nav {
-  display:flex; flex-direction:column; gap:2px; flex-shrink:0; width:224px;
-  padding:calc(var(--spacing) * 3) calc(var(--spacing) * 2.5); border-right:1px solid var(--line); overflow-y:auto;
+  display:flex; flex-direction:column; gap:2px; flex-shrink:0; width:220px; box-sizing:border-box;
+  padding:12px 8px; border-right:1px solid var(--color-line); background:var(--color-bg-1); overflow-y:auto;
 }
-.vt-settings .vt-set-navitem { --menu-item-h:40px; font-size:var(--fs-base); }
+.vt-settings .vt-set-navitem {
+  --menu-item-h:32px; min-height:32px; padding:0 10px; border-radius:var(--radius-sm);
+  font:400 var(--fs-sm) / 1 var(--font-ui); color:var(--color-sub);
+}
+.vt-settings .vt-set-navitem.active { background:var(--color-acc-soft); color:var(--color-txt); font-weight:600; }
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-menu-item`이 맡는다. 설정 왼쪽 내비(sm). 활성은 .active */
-.vt-set-content { flex:1; min-width:0; padding:calc(var(--spacing) * 6) calc(var(--spacing) * 8); overflow-y:auto; }
-.vt-set-content > * { max-width:680px; margin-left:auto; margin-right:auto; }
-.vt-set-intro { margin-bottom:calc(var(--spacing) * 5); }
-.vt-set-title { margin:0; color:var(--txt); font:600 var(--fs-xl) var(--ui); letter-spacing:var(--tracking-tight); }
-.vt-set-description { margin:6px 0 0; color:var(--sub); font:400 var(--fs-sm) / var(--leading-body) var(--ui); }
+/* 내용 패딩 20/28, 왼쪽 정렬(시안은 가운데로 모으지 않는다). 제목 22/600, 설명 13 muted. */
+.vt-set-content { flex:1; min-width:0; padding:20px 28px; overflow-y:auto; }
+.vt-set-content > * { max-width:760px; }
+.vt-set-intro { margin-bottom:4px; }
+.vt-set-title { margin:0; color:var(--txt); font:600 var(--fs-xl) / 1.2 var(--ui); letter-spacing:var(--tracking-tight); }
+.vt-set-description { margin:4px 0 0; color:var(--color-muted); font:400 var(--fs-sm) / var(--leading-body) var(--ui); }
 /* 스킨 칩 줄 아래 간격 — 칩 줄이 다음 묶음(언어) 제목에 붙어 있었다. */
 .vt-set-content .theme-row { margin-bottom:calc(var(--spacing) * 6); }
-.vt-set-group { margin:0 0 calc(var(--spacing) * 6); }
+/* 묶음 제목 12/600 muted, 위 20. 행은 패딩 12/0 + 아래 1px 선(시안 `sRow`). */
+.vt-set-group { margin:20px 0 0; }
 .vt-set-group-title {
-  margin:0 0 calc(var(--spacing) * 1.5); color:var(--sub);
-  font:600 var(--fs-sm) var(--ui); letter-spacing:.02em;
+  margin:0; color:var(--color-muted);
+  font:600 var(--fs-xs) / 1 var(--ui);
 }
 
 .vt-set-row {
-  display:flex; align-items:flex-start; justify-content:space-between; gap:calc(var(--spacing) * 2);
-  padding:calc(var(--spacing) * 3) 0; min-height:48px; border-bottom:1px solid var(--line);
+  display:flex; align-items:flex-start; justify-content:space-between; gap:16px;
+  padding:12px 0; min-height:0; border-bottom:1px solid var(--line);
 }
 .vt-set-row:last-child { border-bottom:0; }
 .vt-set-row.conflict .vt-set-combo { color:var(--color-st-error); border-color:var(--color-st-error); }
 .vt-set-meta { min-width:0; }
-.vt-set-label { font:500 var(--fs-base) var(--ui); color:var(--txt); }
-.vt-set-scope { margin-left:calc(var(--spacing) * 1.5); vertical-align:middle; color:var(--sub); }
-.vt-set-help { margin-top:4px; font:400 var(--fs-sm) / var(--leading-body) var(--ui); color:var(--sub); max-width:48ch; }
+.vt-set-label { font:500 var(--fs-sm) / 20px var(--ui); color:var(--txt); }
+/* 범위 태그(모든 기기 / Mac / 이 기기) — 11/500 muted, 1px 선 테두리 · 반경 4, 면은 칠하지 않는다(시안 `.tag`). */
+.vt-set-scope {
+  margin-left:6px; padding:0 4px; vertical-align:1px;
+  font:500 var(--fs-2xs) / 16px var(--ui); color:var(--color-muted);
+  background:transparent; border:1px solid var(--color-line-strong); border-radius:4px;
+}
+.vt-set-help { margin-top:4px; font:400 var(--fs-xs) / 1.5 var(--ui); color:var(--color-muted); max-width:56ch; }
 /* 2026-09-22(사용자 지적: "버튼이랑 텍스트가 딱 붙어 있다") — 로그아웃처럼
    라벨+설명+버튼 세 단이 오는 행은 .vt-set-help의 margin-top:4px만으로는
    버튼 바로 위 문단과의 간격이 하나도 안 생긴다(문단→문단 간격이지
@@ -461,6 +482,10 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
 .vt-set-secstate[data-state="on"]  { color:var(--color-st-working); background:color-mix(in srgb, var(--color-st-working) 16%, transparent); }
 .vt-set-secstate[data-state="off"] { color:var(--sub); background:color-mix(in srgb, var(--sub) 14%, transparent); }
 .vt-set-devtable { margin-bottom:calc(var(--spacing) * 1.5); }
+/* 리디자인 9단계(시안 O06) — 머리 28 · 12 muted, 행 48, 이 기기 행은 선택 틴트. */
+.vt-settings .vt-set-devtable th { height:28px; font:500 var(--fs-xs) var(--ui); color:var(--color-muted); text-align:left; border-bottom:1px solid var(--color-line-strong); }
+.vt-settings .vt-set-devtable td { height:48px; border-bottom:1px solid var(--color-line); }
+.vt-settings .vt-set-devtable tr:has(.vt-set-devme) td { background:var(--color-acc-soft); }
 .vt-set-devme {
   margin-left:calc(var(--spacing) * 1.5);
   color:var(--color-st-working);
@@ -616,43 +641,6 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
    행마다 있는 이 버튼에는 과하기 때문이다. */
 /* 2.1.6 — `.vt-icon-btn.sm.danger`가 전부 맡는다. 남은 규칙 없음. */
 
-/* ── L8 우측 레일 ──────────────────────────────────────────────────────────
-   wide(≥1280px)에서만 상시 노출. regular/compact에서는 rail 버튼이 여는 패널이
-   같은 내용을 담당한다(같은 렌더러를 두 자리에 쓴다 — 컴포넌트를 두 벌 만들면
-   반드시 어긋난다). 섹션이 없으면 .needs-usage 게이팅으로 통째로 사라진다. */
-/* 좌측 rail과 **같은 관용구**를 쓴다: position:fixed + body padding으로 자리를
-   만든다. body가 flex-column이라 형제로 두면 터미널 아래로 내려가기 때문이고,
-   같은 방식이어야 두 레일의 상호작용(패널 열림 등)을 한 곳에서 계산할 수 있다. */
-#vt-right-rail {
-  display:none;   /* 아래 미디어쿼리에서만 켠다 */
-  flex-direction:column; width:300px;
-  position:fixed; right:0; top:0; bottom:0; z-index:69;
-  border-left:1px solid var(--line); background:var(--bar);
-  overflow:hidden;
-}
-.vt-rr-head {
-  display:flex; align-items:center; justify-content:space-between;
-  padding:calc(var(--spacing) * 1.5); border-bottom:1px solid var(--line);
-}
-.vt-rr-title { font:600 var(--fs-xs) var(--ui); color:var(--sub); }
-/* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다. 안이 아이콘이 아니라 글리프(›)라 글자 크기만 남긴다 */
-.vt-rr-collapse { font:600 var(--fs-sm) var(--ui); }
-.vt-rr-body { flex:1; min-height:0; overflow-y:auto; padding:calc(var(--spacing) * 1.5); }
-
-@media (min-width: 1280px) {
-  #vt-right-rail { display:flex; }
-  /* 레일 폭만큼 본문을 밀어낸다. 사용량 소스가 없으면 .needs-usage 게이팅이
-     display:none을 걸지만 body 패딩은 CSS만으로는 못 되돌린다 — 그래서
-     agent/status.js가 게이팅할 때 body에 .no-right-rail을 함께 단다. */
-  body:not(.no-right-rail) { padding-right:calc(env(safe-area-inset-right) + 300px); }
-  body:not(.no-right-rail).vt-rr-collapsed { padding-right:calc(env(safe-area-inset-right) + 32px); }
-  /* 접으면 헤더 버튼만 남는 얇은 띠 — 완전히 감추면 다시 펼 진입점이 사라진다 */
-  #vt-right-rail.collapsed { width:32px; }
-  #vt-right-rail.collapsed .vt-rr-title,
-  #vt-right-rail.collapsed .vt-rr-body { display:none; }
-  #vt-right-rail.collapsed .vt-rr-head { padding:calc(var(--spacing) * 1) 4px; justify-content:center; }
-}
-
 /* ── D4 잔여: 밀도 대비 ────────────────────────────────────────────────────
    계획서의 마지막 D4 항목("사이드바/rail은 text-sm, 메인 영역은 text-base +
    여유 패딩")은 **적용할 사이드바가 없어서** 미뤄져 있었다. L4(좌측 rail)·
@@ -662,10 +650,10 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
    크기로 두면 사이드바가 화면을 과하게 먹고, 그렇다고 사이드바만 줄이면
    메인이 상대적으로 답답해 보인다 — 대비를 만들어야 둘 다 제 역할로 읽힌다.
 
-   개별 컴포넌트에 이미 font가 박혀 있는 곳(.vt-rail-session-select 등)은
+   개별 컴포넌트에 이미 font가 박혀 있는 곳은
    그대로 둔다. 여기서 바꾸는 것은 **상속 기준선**이라, 명시값이 있는 곳은
    그 값이 계속 이긴다(값 보존). */
-#vt-rail-panel, #vt-right-rail, .vt-clients { font-size:var(--fs-sm); }
+.vt-clients { font-size:var(--fs-sm); }
 /* 메인(터미널 위 온보딩·가이드 등 텍스트 표면)은 기준선을 base로 두고 패딩을
    한 단계 더 준다. 터미널 자체는 xterm이 자기 폰트 크기를 쓰므로 영향 없다. */
 #terminal-container { font-size:var(--fs-base); }
@@ -732,17 +720,18 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
 /* ── 설정 오른쪽 미리보기 칸 (2026-10-27) ───────────────────────────────────
    내용 칸 오른쪽에 붙는 고정폭 칸. 터미널·모양 섹션에서만 만들어진다(settings/preview.js).
    칸 안의 모의 터미널은 스킨의 xterm 팔레트로 직접 칠하므로 앱 스킨 토큰을 따르지 않는다. */
+/* 리디자인 9단계 — 폭 300 · 패딩 20 · bg-1(시안 O04 「터미널 미리보기」). */
 .vt-set-preview {
-  flex:0 0 380px; display:flex; flex-direction:column; gap:calc(var(--spacing) * 3);
-  padding:calc(var(--spacing) * 6) calc(var(--spacing) * 5); border-left:1px solid var(--line);
-  background:var(--bar); overflow:hidden;
+  flex:0 0 300px; display:flex; flex-direction:column; gap:12px; box-sizing:border-box;
+  padding:20px; border-left:1px solid var(--color-line);
+  background:var(--color-bg-1); overflow:hidden;
 }
-.vt-setpv-cap { display:flex; align-items:baseline; justify-content:space-between; gap:calc(var(--spacing) * 2); font:600 var(--fs-sm) var(--ui); color:var(--sub); }
+.vt-setpv-cap { display:flex; align-items:baseline; justify-content:space-between; gap:calc(var(--spacing) * 2); font:600 var(--fs-sm) var(--ui); color:var(--color-txt); }
 .vt-setpv-note { font:500 var(--fs-sm) var(--mono); color:var(--txt); font-variant-numeric:tabular-nums; }
 .vt-setpv-stage { min-width:0; }
 .vt-setpv-term {
-  padding:calc(var(--spacing) * 4); border-radius:var(--radius-lg); overflow:hidden;
-  box-shadow:inset 0 0 0 1px var(--line); line-height:1.5;
+  padding:10px 12px; border-radius:var(--radius-sm); overflow:hidden;
+  box-shadow:inset 0 0 0 1px var(--line); line-height:20px;
 }
 .vt-setpv-line { white-space:pre; min-height:1.5em; }
 .vt-setpv-cursor { display:inline-block; vertical-align:top; }
@@ -751,7 +740,7 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
 .vt-setpv-cursor.is-bar { box-shadow:inset 2px 0 0 var(--vt-cursor); }
 .vt-setpv-cursor.blink { animation:vt-setpv-blink 1.1s steps(1) infinite; }
 @keyframes vt-setpv-blink { 50% { opacity:0; } }
-.vt-setpv-foot { font:400 var(--fs-sm) / var(--leading-body) var(--ui); color:var(--sub); }
+.vt-setpv-foot { font:400 var(--fs-xs) / 1.5 var(--ui); color:var(--color-muted); }
 @media (max-width:1099px) { .vt-set-preview { display:none; } }
 @media (prefers-reduced-motion: reduce) { .vt-setpv-cursor.blink { animation:none; } }
 

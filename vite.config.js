@@ -85,6 +85,9 @@ function chunkOf(id) {
     // 음성 상태 UI는 인증 후 조회할 때 로딩한다. 초기 core 크기를 늘리지 않는다.
     if (/\/frontend\/js\/panels\/subagent-(viewer|poll)\.js$/.test(p)) return 'subagents';
     if (p.endsWith('/frontend/js/voice/status-panel.js')) return 'voice-status';
+    // 음성 입력 대상 고정(3KB) — 상태 패널(voice-status)과 설정 > 음성(settings)만 쓴다. 이름이 없으면 두 지연 청크가
+    // 함께 쓴다는 이유로 포괄 규칙이 core로 보낸다(리디자인 9단계에 찾았다). voice.js 번들은 별도 빌드라 제 사본을 갖는다.
+    if (p.endsWith('/frontend/js/voice/target-pin.js')) return 'voice-status';
     // 터치 제스처는 터치 기기에만 로딩한다. 상태/키 인코더는 core 하나를 공유한다.
     if (/\/frontend\/js\/term\/(?:touch(?:-select)?|keybar-ui)\.js$/.test(p)) return 'touch';
     // pane 작업 정보 구독은 main.js가 지연 로딩한다. 초기 부팅에 필요하지 않다.
@@ -171,6 +174,10 @@ function chunkOf(id) {
     // <select> 드롭다운 본체(12KB) — ui/select-lazy.js(core 스텁)가 select가 나타날 때와 유휴 시간에 지연 import한다.
     // screens에 합치지 않는다: select 하나 때문에 화면 모듈까지 받게 된다.
     if (p.endsWith('/frontend/js/ui/select.js')) return 'select';
+    // 공용 툴팁 본체(5KB) — ui/tooltip-lazy.js(core 스텁)가 첫 hover·focus 때와 유휴 시간에 import()한다(리디자인 9단계).
+    if (p.endsWith('/frontend/js/ui/tooltip.js')) return 'tooltip';
+    // 칸 경계를 끄는 동안의 크기 캡션(3KB) — layout/panes.js가 첫 드래그 때 import()한다(리디자인 9단계).
+    if (p.endsWith('/frontend/js/layout/resize-overlay.js')) return 'resize-overlay';
     // 에이전트 브랜드 로고 path(18KB) — 초기 페이로드 상한 때문에 뗐다.
     // ui/icons.js가 부팅 직후 지연 import하고, 오기 전엔 선 기호로 그린다.
     if (p.endsWith('/frontend/js/ui/brand-icons.js')) return 'brand';

@@ -83,13 +83,10 @@
    usage가 꺼진 흔한 환경)에서 온보딩이 dock 전체를 덮어 클릭이 안 먹었다
    — 실브라우저 스모크가 잡았다. */
 /* 2026-11(작업대) — 왼쪽은 활동 막대 + 사이드바 하나(--vt-activity-w + --vt-side-w, 90-workbench.css),
-   오른쪽에는 패널이 없다. */
+   오른쪽은 wide에서 무언가를 고정했을 때만 300(--vt-pin-w, 리디자인 9단계). */
 @media (min-width:720px) {
   /* 리디자인 2단계 — 아래 상태 막대(24)도 덮지 않는다(에이전트 칩·토스트 메시지가 거기 산다). */
-  .vt-onboarding { left:calc(var(--vt-activity-w, 48px) + var(--vt-side-w, 0px)); right:0; bottom:var(--statusbar-h, 0px); }
-}
-@media (min-width:1280px) {
-  body.vt-rail-panel-open:not(.vt-rail-overlay) .vt-onboarding { left:calc(var(--vt-activity-w, 48px) + var(--vt-side-w, 0px) + var(--vt-rail-panel-w, 280px)); }
+  .vt-onboarding { left:calc(var(--vt-activity-w, 48px) + var(--vt-side-w, 0px)); right:var(--vt-pin-w, 0px); bottom:var(--statusbar-h, 0px); }
 }
 /* L7: 실브라우저 검증 중 발견한 같은 종류의 회귀 2건(위 L4 회귀와 원인이
    같다 — .vt-onboarding의 z-index:500이 새로 생긴 하단/중앙 UI를 덮는다).
@@ -509,12 +506,10 @@ body.vt-term-selecting #keybar-main { display:none; }
 body.vt-kb-focus #topbar,
 body.vt-kb-focus #vt-titlebar,
 body.vt-kb-focus #vt-workbench,
+body.vt-kb-focus #vt-side-right,
 body.vt-kb-focus #vt-wgrail,
-body.vt-kb-focus #vt-rail,
-body.vt-kb-focus #vt-rail-panel,
 body.vt-kb-focus #vt-dock,
 body.vt-kb-focus #vt-hud,
-body.vt-kb-focus #vt-right-rail,
 body.vt-kb-focus #vt-mnav-bottom,
 body.vt-kb-focus .vt-pane-head { display:none; }
 body.vt-kb-focus {

@@ -37,7 +37,22 @@ import { vtFetch } from '../core/api.js';
 // N35 §6 — 뷰어 leaf의 내용은 지연 청크가 그린다(정적 import 금지, ADR-26).
 import { loadViewer } from '../panels/viewer-lazy.js';
 import * as surface from './surface.js';
-import { beginResizeOverlay, endResizeOverlay } from './resize-overlay.js';
+// 리사이즈 캡션 본체는 첫 드래그 때 받는다(vite.config.js 'resize-overlay' 청크 — 초기 페이로드 여유, 리디자인 9단계).
+// 받는 동안 드래그가 끝났으면 띄우지 않는다.
+let _resizeOverlay = null;
+let _resizeOverlayWanted = false;
+function beginResizeOverlay() {
+  _resizeOverlayWanted = true;
+  if (_resizeOverlay) { _resizeOverlay.beginResizeOverlay(); return; }
+  import('./resize-overlay.js').then((m) => {
+    _resizeOverlay = m;
+    if (_resizeOverlayWanted) m.beginResizeOverlay();
+  }).catch((e) => console.error('[FarShell resize-overlay]', e));
+}
+function endResizeOverlay() {
+  _resizeOverlayWanted = false;
+  _resizeOverlay?.endResizeOverlay();
+}
 import { t } from '../core/i18n.js';
 import { isRelayed } from '../core/host-route.js';
 

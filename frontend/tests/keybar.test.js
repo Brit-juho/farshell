@@ -70,12 +70,12 @@ async function buildWindow({ coarse = false, compact = false, search = '', visua
   return { window, dom: domNs, store, vv, keyboard, ...keybarNs };
 }
 
-test('데스크톱(포인터 정밀) — keybar는 hidden 그대로, 마이크는 rail 설정 슬롯에 남는다', async () => {
+test('데스크톱(포인터 정밀) — keybar는 hidden 그대로, 마이크는 숨은 대기 자리(#vt-mic-park)에 남는다', async () => {
   const { window } = await buildWindow({ coarse: false });
   assert.strictEqual(window.document.getElementById('keybar').hidden, true);
   assert.strictEqual(
     window.document.getElementById('mic-btn-wrap').parentElement.id,
-    'vt-rail-mic-slot'
+    'vt-mic-park'
   );
 });
 
@@ -85,7 +85,7 @@ test('터치(포인터 굵음) — keybar가 보이고, 마이크는 키바로 �
   assert.strictEqual(window.document.getElementById('keybar-slot-mic'), null);
   assert.strictEqual(
     window.document.getElementById('mic-btn-wrap').parentElement.id,
-    'vt-rail-mic-slot'
+    'vt-mic-park'
   );
 });
 
@@ -95,7 +95,7 @@ test('강제 노출(?keybar=1)이어도 마이크 배치는 포인터 타입만 
   assert.strictEqual(window.document.getElementById('keybar').classList.contains('force-show'), true);
   assert.strictEqual(
     window.document.getElementById('mic-btn-wrap').parentElement.id,
-    'vt-rail-mic-slot',
+    'vt-mic-park',
     '마이크는 여전히 데스크톱 자리에 있어야 한다(강제 노출과 무관)'
   );
 });
@@ -494,7 +494,7 @@ test('포커스 모드 CSS — 탭 바·칸 헤더·레일을 숨기고 레일/d
   const m = css.match(/body\.vt-kb-focus #topbar,([^{]*)\{\s*display:\s*none;\s*\}/);
   assert.ok(m, '숨김 규칙이 있다');
   const sel = `#topbar,${m[1]}`;
-  for (const part of ['#topbar', '#vt-wgrail', '#vt-rail', '.vt-pane-head']) assert.ok(sel.includes(part), part);
+  for (const part of ['#topbar', '#vt-wgrail', '#vt-workbench', '.vt-pane-head']) assert.ok(sel.includes(part), part);
   assert.ok(!sel.includes('#keybar') && !sel.includes('terminal-container'), '입력 수단과 터미널은 남긴다');
   assert.match(css, /body\.vt-kb-focus\s*\{[^}]*padding-left:[^;]*!important[^}]*padding-right:[^;]*!important/);
 });

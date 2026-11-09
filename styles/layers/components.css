@@ -1635,7 +1635,7 @@
     font-variant-numeric: tabular-nums; pointer-events: none;
   }
   .vt-authz-badge[hidden] { display: none; }
-  #vt-rail-settings, .vt-mb-menu, .vt-mnav-btn[data-mnav="more"] { position: relative; }
+  .vt-mb-menu, .vt-mnav-btn[data-mnav="more"] { position: relative; }
 
   /* 좁은 화면: 승인 모달은 하단 내비(고정 52px) 위까지만 — 아래 끝(「나중에」)이 내비에 가려지지 않게 한다. */
   @media (max-width: 719px) {
@@ -1954,6 +1954,19 @@
  * screens/95-bars.css 한 곳에 있고 이쪽은 띠(24px)와 목록만 그린다. */
 @layer components {
   .vt-hudcfg { display: flex; flex-direction: column; gap: calc(var(--spacing) * 4); }
+  /* 리디자인 9단계(시안 O05) — 넓은 창에서는 세 구역(왼쪽 · 오른쪽 · 사용 안 함)을 나란히, 항목은 32 높이의 낱장. */
+  @media (min-width: 720px) {
+    .vt-hudcfg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 16px; row-gap: 16px; align-items: start; }
+    .vt-hudcfg > :not(.vt-hudcfg-zone) { grid-column: 1 / -1; }
+    .vt-hudcfg-list { border: 0; gap: 4px; }
+    .vt-hudcfg-item { min-height: 32px; padding: 0 6px 0 4px; gap: 8px; border: 1px solid var(--color-line); border-radius: var(--radius-sm); background: var(--color-bg-2); }
+    .vt-hudcfg-item:first-child { border-top: 1px solid var(--color-line); }
+    .vt-hudcfg-item.pinned { padding-left: calc(4px + 14px + 8px); }
+    .vt-hudcfg-item.pinned:hover { background: var(--color-bg-2); }
+    /* 설명은 좁은 구역에서 줄이 넘쳐 낱장을 키운다 — 화면에서는 감추고 보조 기술에는 남긴다. */
+    .vt-hudcfg-zone .vt-hudcfg-text span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .vt-hudcfg-zone .vt-hudcfg-text b { font-size: var(--fs-sm); }
+  }
   .vt-hudcfg-previewwrap { display: flex; flex-direction: column; gap: calc(var(--spacing) * 1.5); }
   .vt-hudcfg-cap { font: var(--weight-medium) var(--fs-3xs) / 1 var(--font-ui); color: var(--color-faint); letter-spacing: var(--tracking-wide); }
   /* 글꼴·색은 #vt-hud(screens/95-bars.css)와 같은 값 — 칩의 라벨·값 크기가 그 상속에 기대고 있다.

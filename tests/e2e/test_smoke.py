@@ -498,7 +498,7 @@ def isolated_page(_pw, server):
 def _boot(pg, url: str) -> None:
     """부팅이 **끝날 때까지** 기다린다.
 
-    `#vt-rail`이 보이는 걸 기다리면 안 된다 — index.html의 정적 마크업이라
+    정적 마크업(예전 `#vt-rail`)이 보이는 걸 기다리면 안 된다 — 그런 요소는
     요소는 있고 리스너는 아직 없는 창이 있다. 실제로 그 창에 클릭이 들어가
     아무 일도 안 일어났다. sleep으로 덮으면 CI에서 플레이키해지므로
     `main.js`가 세우는 완료 마커를 본다.
@@ -2325,6 +2325,47 @@ def test_사이드바_폭을_끌어도_칸마다_WS_resize는_놓은_뒤_한_번
         assert len([n for n in sent.values() if n]) <= panes, (sent, panes)
         print(f"WS resize(드래그): {sent}, 칸 {panes}")
     finally:
+        _cleanup_sessions(page, session_ids)
+
+
+def test_도구를_오른쪽에_고정하고_풀면_칸마다_WS_resize는_한_번씩이다(isolated_page):
+    """리디자인 9단계 — 오른쪽 고정 사이드바. wide에서 300을 차지하고(body padding-right), 고정·해제는 패널을
+    다시 열지 않고 옮기며, 칸 폭이 바뀌는 두 번 모두 칸마다 resize가 최대 한 번이어야 한다(refit 게이트)."""
+    page = isolated_page
+    page.wait_for_function("() => document.documentElement.dataset.vtSide === 'open'", timeout=10000)
+    session_ids = _open_terminal_with_spy(page)
+    try:
+        _open_dock(page, "변경")
+        page.wait_for_selector("#vt-dock-scm .vt-dock-pin", timeout=10000)
+        before = _resize_counts(page)
+        page.click("#vt-dock-scm .vt-dock-pin")
+        page.wait_for_function("() => document.querySelector('#vt-side-right:not([hidden]) #vt-dock-scm')", timeout=10000)
+        page.wait_for_timeout(700)
+        mid = _resize_counts(page)
+        state = page.evaluate("""() => ({
+          w: Math.round(document.getElementById('vt-side-right').getBoundingClientRect().width),
+          pad: getComputedStyle(document.body).paddingRight,
+          pin: document.documentElement.dataset.vtPin,
+          dot: document.querySelector('#vt-activitybar [data-activity="scm"]').classList.contains('pinned'),
+          left: !document.querySelector('.vt-side-sessions').hidden,
+        })""")
+        assert state["w"] == 300, state
+        assert state["pad"] == "300px", state
+        assert state["pin"] == "scm" and state["dot"] and state["left"], state
+        sent_pin = {u: mid.get(u, 0) - before.get(u, 0) for u in mid}
+        assert all(n <= 1 for n in sent_pin.values()), f"고정: 칸마다 최대 1번이어야 한다: {sent_pin}"
+        assert sum(sent_pin.values()) >= 1, f"칸이 300px 줄었는데 resize가 없다: {sent_pin}"
+
+        page.click("#vt-dock-scm .vt-dock-pin")
+        page.wait_for_function("() => document.getElementById('vt-side-right').hidden", timeout=10000)
+        page.wait_for_timeout(700)
+        after = _resize_counts(page)
+        sent_unpin = {u: after.get(u, 0) - mid.get(u, 0) for u in after}
+        assert all(n <= 1 for n in sent_unpin.values()), f"해제: 칸마다 최대 1번이어야 한다: {sent_unpin}"
+        assert page.evaluate("() => !!document.querySelector('#vt-side .vt-dock-body #vt-dock-scm')"), "해제하면 왼쪽으로 돌아온다"
+        print(f"WS resize(고정 {sent_pin}, 해제 {sent_unpin})")
+    finally:
+        page.evaluate("() => window.vtSettingsSet && window.vtSettingsSet('ui.side.pinned', '')")
         _cleanup_sessions(page, session_ids)
 
 

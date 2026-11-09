@@ -103,7 +103,7 @@ test('모르는 이벤트·빈 메시지는 무시한다', async () => {
 
 // ── share-lazy.js 배선 ────────────────────────────────────────────────────
 async function lazy(routes, { relayed = false } = {}) {
-  const env = createDomEnv('<!doctype html><html><body><button id="vt-rail-settings" aria-label="설정"></button></body></html>');
+  const env = createDomEnv('<!doctype html><html><body><button class="vt-act-settings" aria-label="설정"></button></body></html>');
   _wins.push(env.window);
   const { window } = env;
   if (relayed) window.localStorage.setItem('vt.relayHost', 'other-mac');
@@ -151,7 +151,7 @@ test('share-lazy: 연결이 열릴 때 대기 목록을 맞추고 설정 버튼�
   const t = await lazy({ 'GET /api/authz/approvals': () => ({ json: { approvals: [item('p1'), item('p2', 'msg', { created: 2 })] } }) });
   t.sockets[0].onopen();
   await waitFor(() => t.document.querySelector('.vt-authz-approval'));
-  const badge = t.document.querySelector('#vt-rail-settings .vt-authz-badge');
+  const badge = t.document.querySelector('.vt-act-settings .vt-authz-badge');
   assert.strictEqual(badge.textContent, '2');
   assert.ok(!badge.hidden);
 });
@@ -161,7 +161,7 @@ test('share-lazy: 대기 요청이 없으면 청크를 받지 않고 모달도 �
   t.sockets[0].onopen();
   await tick(60);
   assert.strictEqual(t.document.querySelector('.vt-authz-approval'), null);
-  const badge = t.document.querySelector('#vt-rail-settings .vt-authz-badge');
+  const badge = t.document.querySelector('.vt-act-settings .vt-authz-badge');
   assert.ok(!badge || badge.hidden);
 });
 

@@ -42,13 +42,12 @@ import { showToast } from './ui/toast.js';   // F5 — showToast/dismissToast. �
 import { prefetchUpload } from './term/upload-lite.js';  // 업로드 본체는 upload 청크 — 유휴 시간에 미리 받는다
 import { prefetchDialogs } from './core/dialog-lazy.js';  // 확인·입력·알림 대화상자 본체는 panel 청크
 import { watchSelects } from './ui/select-lazy.js';  // 기본 <select> 팝업 대신 FarShell 드롭다운(모든 select에 자동) — 본체는 select 청크
-import { initTooltips } from './ui/tooltip.js';  // 2026-09-18 — 네이티브 title 대체(data-tip)
+import { initTooltips } from './ui/tooltip-lazy.js';  // 2026-09-18 — 네이티브 title 대체(data-tip). 본체는 첫 사용 때(리디자인 9단계)
 import './theme.js';      // F5 — classic script에서 전환. term/xterm-setup.js가 이걸 import한다.
 import './lib/ansilex.js';
 import './lib/keyseq.js';
 import './panels/settings-lazy.js';  // S4 — 설정 화면(Mod+, / rail ⚙)
 import './panels/usage-badge.js';     // U2 — 사용량 게이지(rail 「사용량」 + 우측 레일)
-import './layout/right-rail.js';// L8 — 우측 레일 접기/펴기
 import './ui/favicon.js';
 import './push/swreg.js';
 
@@ -260,7 +259,7 @@ try {
   // 성공은 표시하지 않아서, 밖에서는 "아직 부팅 중"과 "부팅 끝"을 구분할 수 없었다.
   //
   // 필요해진 계기: 실브라우저 스모크(E1)가 rail 버튼을 클릭했는데 아무 일도
-  // 안 일어났다. `#vt-rail`은 index.html의 **정적 마크업**이라 그게 보인다고
+  // 안 일어났다. 옛 레일은 index.html의 **정적 마크업**이라 그게 보인다고
   // 배선이 끝난 게 아니다 — 요소는 있고 리스너는 아직 없는 창이 존재한다.
   // sleep으로 덮으면 느려지고 CI에서 플레이키해진다. 앱이 직접 말하는 게 맞다.
   document.documentElement.dataset.appBooted = 'true';

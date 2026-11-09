@@ -139,3 +139,34 @@ test('활동 클릭 — 펼친 상태의 지금 활동 = 접기, 그 밖은 그 
   assert.strictEqual(fromClosed.collapsed, false);
   assert.strictEqual(fromClosed.activity, 'sessions');
 });
+
+// ── 오른쪽 고정 사이드바(리디자인 9단계) ──────────────────────────────────
+test('고정 — 저장값은 패널 id, 없으면 빈 문자열', async () => {
+  const S = await load();
+  assert.strictEqual(S.SIDE_PINNED_KEY, 'ui.side.pinned');
+  assert.strictEqual(S.PIN_W, 300);
+  let s = store({});
+  assert.strictEqual(S.readSidePinned(s.get, s.has), '');
+  s = store({ 'ui.side.pinned': 'vt-dock-scm' });
+  assert.strictEqual(S.readSidePinned(s.get, s.has), 'vt-dock-scm');
+});
+
+test('고정 — 지금 쓸 수 있는 도구 활동일 때만 그 활동 id, 아니면 null(저장값은 안 바꾼다)', async () => {
+  const S = await load();
+  const avail = [
+    { id: 'sessions', panelId: null }, { id: 'scm', panelId: 'vt-dock-scm' }, { id: 'queue', panelId: 'vt-queue' },
+  ];
+  assert.strictEqual(S.effectivePinned('vt-dock-scm', avail), 'scm');
+  assert.strictEqual(S.effectivePinned('', avail), null);
+  assert.strictEqual(S.effectivePinned('vt-ports', avail), null, '게이팅된(목록에 없는) 도구');
+  assert.strictEqual(S.effectivePinned('nonsense', avail), null);
+});
+
+test('고정 — 표시 방식: wide는 칸 옆, regular는 떠 있는 서랍, compact는 없음', async () => {
+  const S = await load();
+  assert.strictEqual(S.pinnedMode(1440), 'docked');
+  assert.strictEqual(S.pinnedMode(1280), 'docked');
+  assert.strictEqual(S.pinnedMode(1279), 'drawer');
+  assert.strictEqual(S.pinnedMode(720), 'drawer');
+  assert.strictEqual(S.pinnedMode(719), 'none');
+});

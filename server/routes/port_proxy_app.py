@@ -270,6 +270,9 @@ def _pin_state_js() -> str:
     return _PIN_STATE_JS_TEMPLATE.replace("__KO_MSG__", json.dumps(msg).replace("</", "<\\/"))
 
 
+# 이 두 페이지(접근 코드 · 로그인한 기기 전용)는 앱 번들 밖의 독립 HTML이라 토큰 CSS를 못 읽는다. 색은 기본 스킨
+# farshell의 토큰 값을 그대로 옮겨 적는다(styles/theme/tokens.css — bg-0 · bg-raised · line-strong · txt · sub · muted ·
+# 강조 파랑 · st-waiting · st-error, 리디자인 9단계). 토큰 값이 바뀌면 여기도 같이 바꾼다.
 def _pin_page(label: str, error: str = "", status: int = 200, next_path: str = "/") -> HTMLResponse:
     err = f'<p class="err">{_esc(error)}</p>' if error else ""
     lang = i18n.current()
@@ -283,18 +286,18 @@ def _pin_page(label: str, error: str = "", status: int = 200, next_path: str = "
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{title}</title>
 <style>
-body{{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#111;color:#eee;
+body{{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#121316;color:#ecebe8;
   display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}}
-form{{background:#1c1c1c;padding:24px;border-radius:12px;width:min(340px,90vw)}}
+form{{background:#202227;border:1px solid rgba(255,255,255,.12);padding:24px;border-radius:8px;width:min(340px,90vw)}}
 h1{{font-size:15px;margin:0 0 4px}}
-p.sub{{font-size:13px;color:#888;margin:0 0 16px}}
+p.sub{{font-size:13px;color:#8c8a85;margin:0 0 16px}}
 input{{width:100%;box-sizing:border-box;font-size:18px;padding:12px;border-radius:8px;
-  border:1px solid #444;background:#000;color:#eee;letter-spacing:3px;text-align:center;
+  border:1px solid rgba(255,255,255,.12);background:#121316;color:#ecebe8;letter-spacing:3px;text-align:center;
   text-transform:uppercase}}
 button{{width:100%;margin-top:12px;padding:12px;border-radius:8px;border:none;
-  background:#4a8;color:#000;font-weight:600;font-size:15px}}
-.err{{color:#f66;font-size:13px;margin:0 0 8px}}
-.st{{color:#f0a860;font-size:12.5px;margin:8px 0 0}}
+  background:#7aa2ff;color:#121316;font-weight:600;font-size:15px}}
+.err{{color:#f07070;font-size:13px;margin:0 0 8px}}
+.st{{color:#f2b350;font-size:12.5px;margin:8px 0 0}}
 .st[hidden]{{display:none}}
 </style></head><body>
 <form method="post" action="/__fsh/pin">
@@ -328,11 +331,11 @@ def _session_only_page(label: str) -> HTMLResponse:
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{title}</title>
 <style>
-body{{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#111;color:#eee;
+body{{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#121316;color:#ecebe8;
   display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}}
-div{{background:#1c1c1c;padding:24px;border-radius:12px;width:min(360px,90vw)}}
+div{{background:#202227;border:1px solid rgba(255,255,255,.12);padding:24px;border-radius:8px;width:min(360px,90vw)}}
 h1{{font-size:15px;margin:0 0 8px}}
-p{{font-size:13px;color:#aaa;margin:0;line-height:1.6}}
+p{{font-size:13px;color:#a9a7a2;margin:0;line-height:1.6}}
 </style></head><body><div>
 <h1>{heading}</h1>
 <p>{_esc(label)}</p>
