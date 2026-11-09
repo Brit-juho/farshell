@@ -1165,6 +1165,7 @@
   #vt-hud-msg[data-tone="ok"]   { --vt-toast-tone: var(--color-st-working); }
   #vt-hud-msg[data-tone="info"] { --vt-toast-tone: var(--color-acc); }
   #vt-hud-msg[data-tone] {
+    flex: 0 1 auto;                /* 글자에 맞춘 칸(시안) — 띠 전체에 테두리가 걸리지 않게 */
     color: var(--color-txt);
     padding-left: calc(var(--spacing) * 2);
     background: color-mix(in srgb, var(--vt-toast-tone) 10%, transparent);
