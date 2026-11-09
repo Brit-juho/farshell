@@ -1,4 +1,5 @@
-// 메뉴바(옛 하단바, HUD) 배치 규칙 — 어떤 칩을 어느 쪽에 어떤 순서로 둘지(2026-10-23, 2026-11 맨 위로 이동).
+// 상태 막대(옛 메뉴바·하단바, HUD) 배치 규칙 — 어떤 칩을 어느 쪽에 어떤 순서로 둘지(2026-10-23; 2026-11 맨 위
+// 메뉴바로 갔다가, 리디자인 2단계에서 아래 상태 막대 24로 돌아왔다).
 //
 // 순수 함수만 있다(DOM·fetch·Solid 없음). 일반 JS인 이유: HUD(hud-data.ts)와 설정 화면
 // (panels/settings/sections/hud.js)이 같은 규칙을 써야 하고, 설정 화면의 단위 테스트 하네스는
@@ -11,25 +12,31 @@
 // **배치에 없는 종류는 안 보인다**(선택 사항이라 새 종류는 켜기 전까지 꺼져 있다). 값이
 // 없으면 숨긴다는 기존 규칙은 그 위에 그대로 있다 — 배치는 「보여도 되는 것」을 정할 뿐
 // 값이 없는 칩을 억지로 그리지 않는다.
-
+//
+// **에이전트 칩은 배치 밖이다**(세대 3). 상태 막대 맨 왼쪽에 고정이라 옮기거나 끌 수 없다 — 이 제품이 있는
+// 이유(개입이 필요한 세션)를 알리는 유일한 칩이고, 설정을 한 번 잘못 만져 그게 사라지면 되찾을 길을 모른다.
 /** @typedef {'server'|'screens'|'e2e'|'safe-mode'|'cpu'|'gpu'|'ram'|'net'|'usage'|'version'|'agents'|'push'|'clock'} HudKind */
 /** @typedef {{ left: HudKind[], right: HudKind[] }} HudLayout */
 /** @typedef {'left'|'right'|'off'} HudZone */
 
-/** @type {readonly HudKind[]} */
+/** 배치로 옮길 수 있는 종류. @type {readonly HudKind[]} */
 export const HUD_KINDS = [
   'server', 'screens', 'e2e', 'safe-mode', 'cpu', 'gpu', 'ram', 'net', 'usage', 'version',
-  'agents', 'push', 'clock',
+  'push', 'clock',
 ];
+
+/** 늘 상태 막대 맨 왼쪽에 고정된 종류(배치에 적지 않는다). @type {readonly HudKind[]} */
+export const PINNED_HUD_KINDS = ['agents'];
 
 /**
  * 기본 배치. 「서버 :7777」은 뺐다(사용자 요청, 2026-10-23) — 지금 이 화면을 보고 있다는
  * 것 자체가 서버가 떠 있다는 증거라 맨 왼쪽 자리를 차지할 값어치가 없다. 필요하면 설정
- * → 메뉴바에서 다시 켠다.
+ * → 상태 막대에서 다시 켠다.
  * @type {HudLayout}
  */
 export const DEFAULT_HUD_LAYOUT = {
-  left: ['agents', 'screens', 'e2e', 'safe-mode'],
+  // 고정된 에이전트 칩 다음 — 연결·보안·화면 순(시안 D01: 서버 · E2E · 세이프모드 · 연결된 화면).
+  left: ['e2e', 'safe-mode', 'screens'],
   right: ['cpu', 'gpu', 'ram', 'net', 'usage', 'push', 'version', 'clock'],
 };
 
@@ -37,10 +44,12 @@ export const DEFAULT_HUD_LAYOUT = {
 // 「꺼져 있는 것」이 아니라 「그때는 없던 것」이다 — 그대로 두면 이전에 한 번이라도 배치를 만진 사람은
 // 새 칩을 영영 못 본다(배치에 없는 종류는 안 보인다는 규칙). 그래서 세대 표시가 없는 배치를 읽을 때
 // 새 종류를 기본 자리에 **한 번** 얹고, 저장할 때 세대를 적는다. 전부 끈 배치는 사용자의 선택이라 건드리지 않는다.
-export const HUD_LAYOUT_VERSION = 2;
+//
+// 세대 3(리디자인 2단계): 에이전트 칩이 배치 밖으로 나가 고정됐다. 옛 배치에 적힌 `agents`는 읽을 때 버리고
+// (모르는 종류처럼), 저장하면 세대 3이 적힌다. 세대 2 → 3에서 사용자가 옮길 수 있는 종류는 그대로라 따로 얹을 것은 없다.
+export const HUD_LAYOUT_VERSION = 3;
 /** @type {ReadonlyArray<{kind: HudKind, zone: 'left'|'right', front?: boolean}>} */
 const ADDED_IN_V2 = [
-  { kind: 'agents', zone: 'left', front: true },
   { kind: 'push', zone: 'right' },
   { kind: 'clock', zone: 'right' },
 ];
@@ -54,7 +63,7 @@ function defaultLayout() {
 
 /**
  * 저장된 값(JSON 문자열) → 배치. **어떤 입력에도 쓸 수 있는 배치를 돌려준다** — 저장값이
- * 비었거나 깨졌거나 낡았다고 메뉴바가 사라지면 사용자는 왜인지 알 길이 없다.
+ * 비었거나 깨졌거나 낡았다고 상태 막대가 사라지면 사용자는 왜인지 알 길이 없다.
  * 모르는 종류는 버리고(예전 버전이 쓴 값), 같은 종류가 두 번 나오면 먼저 나온 쪽만 남긴다.
  * 전부 끈 배치(`{"left":[],"right":[]}`)는 사용자의 선택이므로 그대로 존중한다.
  * @param {unknown} raw
@@ -81,7 +90,8 @@ export function parseHudLayout(raw) {
   };
   const left = pick(v.left);
   const out = { left, right: pick(v.right) };
-  const legacy = !(Number(v.v) >= HUD_LAYOUT_VERSION);
+  // 세대 표시가 없는(2 이전) 배치만 새 종류를 얹는다 — 세대 2는 이미 push·clock을 아는 배치다.
+  const legacy = !(Number(v.v) >= 2);
   if (legacy && (out.left.length || out.right.length)) {
     for (const { kind, zone, front } of ADDED_IN_V2) {
       if (seen.has(kind)) continue;
@@ -117,6 +127,8 @@ export function hudZoneOf(layout, kind) {
  * @returns {HudLayout}
  */
 export function moveHudKind(layout, kind, zone, index) {
+  // 고정 종류는 배치 밖이다 — 어떤 경로(드래그·선택·버튼)로 와도 배치를 바꾸지 않는다.
+  if (!KIND_SET.has(kind)) return layout;
   const next = {
     left: layout.left.filter((k) => k !== kind),
     right: layout.right.filter((k) => k !== kind),

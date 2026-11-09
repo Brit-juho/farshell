@@ -20,17 +20,26 @@
   background:var(--bar); flex-shrink:0; position:relative; z-index:60;
   border-bottom:1px solid var(--line);
 }
-/* --menubar-h: 맨 위 메뉴바(#vt-hud)가 차지하는 높이. compact에는 메뉴바가 없어 0이다.
-   #topbar 아래로 떨어지는 팝업·오버레이의 top은 이 값을 더한다. */
-:root { --menubar-h:0px; }
+/* 리디자인 2단계 — 맨 위 제목 막대(#vt-titlebar) 36과 맨 아래 상태 막대(#vt-hud) 24. compact에는 둘 다 없어 0이다
+   (#topbar 52 + 하단 내비 52가 그 자리를 쓴다). 막대 규칙은 screens/95-bars.css.
+   --menubar-h는 옛 이름(메뉴바 28)의 별칭이다 — #topbar 아래로 떨어지는 팝업·오버레이·온보딩·뷰어가 top에 더하는
+   값이라 소비처를 그대로 두고 제목 막대 높이를 가리키게 했다. 아래에서 떠오르는 것(토스트·온보딩 아래 끝·뷰어 dock)은
+   --statusbar-h를 더한다. 높이에 transition을 두지 않는다 — 칸 크기가 바뀌면 터미널 refit·SIGWINCH가 난다. */
+:root { --titlebar-h:0px; --statusbar-h:0px; --menubar-h:var(--titlebar-h); }
 @media (min-width:720px) {
-  /* 2026-11 — 뷰 탭 줄이 없어져 #topbar는 넓은 화면에서 남는 게 없다. 상단은 메뉴바(#vt-hud) 하나이고 신호등·
-     키바·⌘K·캡션은 거기로 옮겨 앉는다(layout/menubar-slots.js). 그래서 --topbar-h가 0이고 팝업은 메뉴바 아래에서
-     뜬다. 음성 전용 모드만 #topbar를 전체 화면 컨테이너로 쓰므로 그때는 남긴다. */
-  :root, html[data-skin] { --topbar-h:0px; --menubar-h:var(--hud-h); --topbar-popup-y:calc(var(--hud-h) + 6px); }
+  /* 2026-11 — 뷰 탭 줄이 없어져 #topbar는 넓은 화면에서 남는 게 없다. 맨 위는 제목 막대 하나이고 신호등·키바·캡션은
+     거기로 옮겨 앉는다(layout/menubar-slots.js). 그래서 --topbar-h가 0이고 팝업은 제목 막대 아래에서 뜬다.
+     음성 전용 모드만 #topbar를 전체 화면 컨테이너로 쓰므로 그때는 남긴다. */
+  :root, html[data-skin] {
+    --topbar-h:0px; --titlebar-h:36px; --statusbar-h:24px;
+    --menubar-h:var(--titlebar-h); --topbar-popup-y:calc(var(--titlebar-h) + 6px);
+  }
   body:not(.voice-only-mode) #topbar { display:none; }
-  /* 메뉴바(#vt-hud)는 fixed라 흐름에서 빠진다 — 본문이 그 밑으로 흘러들지 않게 그만큼 민다. */
-  body { padding-top:calc(env(safe-area-inset-top) + var(--menubar-h)); }
+  /* 두 막대는 fixed라 흐름에서 빠진다 — 본문이 그 밑으로 흘러들지 않게 위·아래를 그만큼 민다. */
+  body {
+    padding-top:calc(env(safe-area-inset-top) + var(--titlebar-h));
+    padding-bottom:calc(env(safe-area-inset-bottom) + var(--statusbar-h));
+  }
 }
 html[data-skin="macos"] #topbar { -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px); }
 
@@ -96,8 +105,8 @@ html[data-skin="windows"] #topbar {
      보여줬다(작업 홈=워크스페이스 칩, 그 외=세션 피커+검색) — 세션 탭이
      세션 이동·관리를 전부 떠맡으면서(작업/70-mobile.md) 헤더가 그 역할을
      또 가질 이유가 없어졌다. 워크스페이스 칩(저장소/호스트)은 모바일에서
-     통째로 뺀다 — 기기 정체는 세션 버튼 아랫줄이 말한다(2026-09-29 H1). */
-  #vt-workspace-chip-slot { display:none !important; }
+     통째로 뺀다 — 기기 정체는 세션 버튼 아랫줄이 말한다(2026-09-29 H1). 리디자인 2단계부터 그 칩은 제목 막대
+     안(#vt-titlebar)에 있고, 제목 막대 자체가 compact에서 숨는다(95-bars.css). */
 }
 
 /* 모바일 세션 관리 시트. 좁은 화면에서 세션의 모든 기본 조작을 제공한다. */
@@ -181,21 +190,7 @@ html.vt-has-keybar[data-mobile-tab]:not([data-mobile-tab="terminal"]) #keybar-op
   html[data-mobile-tab]:not([data-mobile-tab="terminal"]) #snippets-open-btn { display:none; }
 }
 
-#vt-workspace-chip {
-  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5);
-  height:26px; padding:0 calc(var(--spacing) * 2); margin-right:calc(var(--spacing) * 1);
-  flex:none; border:none; border-radius:var(--radius-sm); background:transparent;
-  color:var(--sub); font:var(--weight-normal) var(--fs-3xs) var(--font-mono);
-  letter-spacing:var(--tracking-wide); white-space:nowrap;
-}
-/* 2026-11-06 — 이름(farshell)·아이콘은 FarShell 메뉴 버튼이 이미 보여 줘서 칩에서 뺐다.
-   칩은 mono 호스트 경로만 말하고, 메뉴 버튼 바로 뒤에 붙도록 왼쪽 여백을 줄였다. */
-#vt-workspace-chip { padding-left:0; }
-.vt-workspace-host { color:var(--color-muted); }
-/* 2026-09-28 — 활성 칸이 원격 호스트면 칩도 그 호스트를 말한다. 원격 스위처
-   (.vt-fleet-host.remote)와 같은 강조색으로 "지금 다른 맥을 보고 있다"를 표시하고,
-   거쳐 온 서버(로그인한 이 맥)는 한 단 더 흐리게 덧붙인다. */
-.vt-workspace-host.remote { color:var(--acc); }
+/* 옛 워크스페이스 칩(#vt-workspace-chip)은 제목 막대의 호스트 칸이 됐다 — 모양은 screens/95-bars.css. */
 
 /* N37 §4 — 「연결된 화면」. 평소(나 혼자)엔 아이콘만 있는 조용한 버튼이고,
    2명 이상 붙으면 숫자 배지가 붙어 존재감이 생긴다(tmux가 가장 작은

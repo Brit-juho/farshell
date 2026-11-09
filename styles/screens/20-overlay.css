@@ -85,7 +85,8 @@
 /* 2026-11(작업대) — 왼쪽은 활동 막대 + 사이드바 하나(--vt-activity-w + --vt-side-w, 90-workbench.css),
    오른쪽에는 패널이 없다. */
 @media (min-width:720px) {
-  .vt-onboarding { left:calc(var(--vt-activity-w, 48px) + var(--vt-side-w, 0px)); right:0; }
+  /* 리디자인 2단계 — 아래 상태 막대(24)도 덮지 않는다(에이전트 칩·토스트 메시지가 거기 산다). */
+  .vt-onboarding { left:calc(var(--vt-activity-w, 48px) + var(--vt-side-w, 0px)); right:0; bottom:var(--statusbar-h, 0px); }
 }
 @media (min-width:1280px) {
   body.vt-rail-panel-open:not(.vt-rail-overlay) .vt-onboarding { left:calc(var(--vt-activity-w, 48px) + var(--vt-side-w, 0px) + var(--vt-rail-panel-w, 280px)); }
@@ -506,6 +507,7 @@ body.vt-term-selecting #keybar-main { display:none; }
    720px 문턱, 90-workbench.css)도 같이 풀어야 가로 폭을 되찾는다 — 이 선택자가 더 구체적이라 이긴다. keybar는 남긴다
    (키보드 위에 떠 있는 입력 수단이다). */
 body.vt-kb-focus #topbar,
+body.vt-kb-focus #vt-titlebar,
 body.vt-kb-focus #vt-workbench,
 body.vt-kb-focus #vt-wgrail,
 body.vt-kb-focus #vt-rail,
@@ -517,6 +519,7 @@ body.vt-kb-focus #vt-mnav-bottom,
 body.vt-kb-focus .vt-pane-head { display:none; }
 body.vt-kb-focus {
   padding-top:env(safe-area-inset-top) !important;
+  padding-bottom:env(safe-area-inset-bottom) !important;
   padding-left:env(safe-area-inset-left) !important;
   padding-right:env(safe-area-inset-right) !important;
 }

@@ -299,7 +299,8 @@ enough, refresh it.
 - **Breakpoints:** `--breakpoint-regular`(720px) / `--breakpoint-wide`(1280px) /
   `--breakpoint-xwide`(1600px). The JS-side constants live in exactly **one**
   place, `frontend/js/layout/breakpoints.js` (`COMPACT_MAX`/`REGULAR_MAX`/`WIDE_MAX`).
-- **Shell dimensions:** menu bar 28px (top, full width; the only header at >=720px) · activity bar 48px ·
+- **Shell dimensions:** title bar 36px (top, full width; the only header at >=720px) · status bar 24px
+  (bottom, full width) · activity bar 48px ·
   one sidebar, default 360px (resizable 240~480, at most 40vw; regular draws at most 260), **shared by every
   activity**. Collapsed, the sessions activity leaves the rail's 48px strip and a tool activity leaves 0. The
   sidebar's width/activity/collapse state are **device-scoped settings** (`ui.side.*`, §6 "Settings") —
@@ -373,8 +374,8 @@ stay in the DOM, and `visibility: hidden` keeps their box measurable so
 cols/rows survive).
 
 ```
-┌ menu bar 28 (full width, fixed) ─────────────────────────────────────────┐
-│ FarShell menu [workspace chip] [agents]…  [CPU RAM NET …] [v] [clock] [⌘K] │
+┌ title bar 36 (full width, fixed) ────────────────────────────────────────┐
+│ FarShell ▾ · host ▾ · repo › branch › session  [ search… ⌘K ]   [kb] [⎯] │
 ├──────┬──────────────┬────────────────────────────────────────────────────┤
 │ act. │ sidebar 360  │ pane tree                                          │
 │ bar  │ (one width,  │ ┌ pane header 24 ┐                                 │
@@ -386,7 +387,9 @@ cols/rows survive).
 │ mcp  │   dock body  │                                                    │
 │ mic  │              │                                                    │
 │ set  │              │                                                    │
-└──────┴──────────────┴────────────────────────────────────────────────────┘
+├──────┴──────────────┴────────────────────────────────────────────────────┤
+│ status bar 24: [agents] [message] [E2E safe screens] … [CPU RAM NET usage] [v] [clock] │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 4 responsive tiers
@@ -409,7 +412,7 @@ you chose** — `ui.side.width`/`ui.side.collapsed` are device-scoped settings
 
 - **Collapse default**: on a device that has never stated a preference, the sidebar
   starts collapsed below wide (<1280) — a narrow screen does not open with the sidebar
-  expanded and leave the menu bar too little room for its chips.
+  expanded and leave the panes too little room.
 - **Rendered width clamp**: `--vt-side-w` is `min(<stored>px, 40vw)`, and in regular
   `min(<stored>px, 260px, 40vw)` (`styles/screens/90-workbench.css`, media queries — no JS on
   window resize). The stored value says how wide you want it; the clamp asks whether the
@@ -437,8 +440,9 @@ belongs to a session and the remembered closed groups are all stored per view (d
 rules」). There are no next/previous-view or move-view keys either; view order changes only in the phone's order sheet. Think of a view as just a group (or a session with its viewer panes), not as something you navigate.
 
 At >=720px `#topbar` is `display: none` (`--topbar-h: 0`); the traffic lights (macOS skin), the keyboard toggle
-(touch devices), `⌘K` and the Windows caption buttons move into the menu bar (`#vt-mb-lead` / `#vt-mb-tools`,
+(touch devices) and the Windows caption buttons move into the title bar (`#vt-mb-lead` / `#vt-mb-tools`,
 `layout/menubar-slots.js` — they are **moved**, not copied, so ids and listeners survive) and move back below 720px.
+`#palette-toggle` (`⌘K`) stays in `#topbar`: the title bar's palette field does the same job.
 Voice-only mode keeps `#topbar` because it turns it into the full-screen container. Dragging a rail row onto a pane
 still uses `layout/dnd.js`.
 
@@ -532,40 +536,61 @@ See [docs/ref/files.md](./docs/ref/files.md). In `layout/tree.js`, a pane leaf c
 only a file path; a `panel` leaf has one registered dock panel name. Both keep
 `session: null`.
 
-### Menu bar 28px (`shell/Hud.tsx`, element `#vt-hud`)
+### Title bar 36px (`shell/TitleBar.tsx`, element `#vt-titlebar`)
 
-The menu bar is a macOS-style bar at the top of the screen. Its ids and
-classes keep the `vt-hud-*` names (toasts and tests depend on them). It is `position: fixed`
-across the full width at the very top, so the workbench and body start `--menubar-h` (28px) lower
-(`.vt-sidepanel { top: var(--menubar-h) }`, `body { padding-top }`); anything positioned from the top
-(`--topbar-popup-y`, onboarding, the dock viewer) adds `--menubar-h` too. Look: UI font, no chip
-dividers, a translucent blurred bar, hover pills — shared by every skin (colours come from skin tokens).
-Compact (<720px) has no menu bar, so `--menubar-h` is 0 there.
+The top edge of the desktop shell (>=720px), `position: fixed` across the full width. Its height is the CSS
+variable `--titlebar-h` (36px; 0 in compact) — set in CSS, not measured, so the lazy chunk arriving late never
+changes the pane sizes (no refit, no SIGWINCH). `body { padding-top }` and the sidebar's `top` use it.
+`--menubar-h` is kept as an alias of `--titlebar-h` for everything that drops below the top edge
+(`--topbar-popup-y`, onboarding, the dock viewer, the palette and dialogs).
 
-Left to right: the **FarShell menu** (`MenuButton`, first cell: 새 세션 · 빠른 열기 · 접속 주소 복사 ·
-설정 · 메뉴바 설정; the dropdown is a `Portal` into `body` because the bar clips overflow and its
-`backdrop-filter` would trap `position: fixed`; Esc/outside click/↑↓/Home/End work), the workspace chip
-(`#vt-workspace-chip-slot`, moved here from the tab row; host only — `/ <host>` — since the menu button already carries the icon and the FarShell name), then the chips below. **접속 주소 복사** copies
-the public tunnel URL if one is running, else `location.origin`; it never mints a device-registration QR/OTP
-— that stays in `fsh mobile`.
+Three columns (`grid-template-columns: minmax(0,1fr) auto minmax(0,1fr)`, equal side padding) so the palette field
+sits exactly at the window centre and the sides shrink first:
 
-More chip kinds: **`agents`** (`개입 N · 작업 N · 완료 N`; zeros are omitted; with `개입` it is
-warn-coloured, ranks 1 and jumps to the longest-waiting `waiting` session via the `agents.jump` action;
-`완료` counts only completions not yet seen on this browser), **`push`** (`알림 켜짐/꺼짐` for this browser's
-Web Push subscription, click toggles; hidden where push is unavailable) and **`clock`** (date + 24-hour
-time, rebuilt only when the minute changes).
+- **Left:** `#vt-mb-lead` (macOS traffic lights) · the **FarShell menu** (`MenuButton`, class `.vt-mb-menu`: 새 세션 ·
+  빠른 열기 · 접속 주소 복사 · 설정 · 상태 막대 설정; the dropdown is a `Portal` into `body`; Esc/outside click/↑↓/Home/End
+  work; the approval-pending badge from `share-lazy.js` attaches to `.vt-mb-menu`) · the **host** (`#vt-workspace-chip`:
+  the Mac the active pane shows — `laptop` icon locally, `server` + accent when it is another Mac; with two or more
+  registered hosts it is a button that opens the host list and switches the whole screen, like the rail header's
+  switcher; with one host it is a plain label) · the **breadcrumb** 저장소 › 브랜치 › 세션 of the active pane's session
+  (`layout/branch-chips.js` — the same source as the pane-header branch chip; the repository is the *main*
+  worktree's folder name; unknown parts are omitted; hidden in regular).
+- **Centre:** the **palette field** (`#vt-tb-palette`, 360×24; 280 in regular; below 900px only the icon and `⌘K`).
+  It is a button, not an input: clicking opens the existing palette (`quickopen.open`).
+- **Right:** `#vt-tb-focus-slot` — the focus-mode button's place (phase 7; empty until then, no disabled button) —
+  and `#vt-mb-tools` (keyboard toggle on touch devices, Windows caption buttons). `#vt-mb-lead` and `#vt-mb-tools`
+  are static nodes in `index.html`; after mount `TitleBar.tsx` moves them into its own childless elements so Solid
+  never re-renders over them.
 
-A row of chips like `screens 3 · E2E ON · safe mode ON · CPU 17% · GPU 0% · RAM 72% ·
-NET ↓12K ↑3K · Claude 62% · 4h12m · v2.6.0`. Polled every 30s, plus
-immediate refresh on `/ws-notify` events. A chip with no value is **hidden**
-(no usage provider → no chip). There is no menu bar at all in
-compact — the bottom nav takes its place. Chip padding is 6px horizontally,
-with 3px internal gaps. Reset wording appears in tooltips; GPU chips show only usage.
+**접속 주소 복사** copies the public tunnel URL if one is running, else `location.origin`; it never mints a
+device-registration QR/OTP — that stays in `fsh mobile`.
+
+### Status bar 24px (`shell/Hud.tsx`, element `#vt-hud`)
+
+The bottom edge of the desktop shell, `position: fixed` across the full width, height `--statusbar-h` (24px; 0 in
+compact, where the bottom nav takes its place). `body { padding-bottom }`, the sidebar's `bottom`, onboarding's
+bottom, the dock viewer and the toast stack (16px above it) use it. Its ids and classes keep the `vt-hud-*` names
+(toasts and tests depend on them). The bar itself is `role="region"`; only the message slot is `role="status"`
+(`aria-live="polite"`) so chip updates are not announced. Colours: `--color-statusbar-bg` / `--color-statusbar-fg`
+with fallbacks to `--bar` / `--sub` (the title bar uses `--color-titlebar-bg`, same fallback).
+
+Left to right: the **agents chip** (`개입 N · 작업 N · 완료 N`; zeros are omitted; with `개입` it is warn-coloured,
+ranks 1 and jumps to the longest-waiting `waiting` session via the `agents.jump` action; `완료` counts only
+completions not yet seen on this browser) — **pinned leftmost**, outside the layout setting — then the toast
+**message slot** (`#vt-hud-msg`), then the left chips (E2E · safe mode · connected screens; `server` is off by
+default), a spacer, and the right chips (CPU · GPU · RAM · NET · usage · 알림 · version · clock). More chip kinds:
+**`push`** (`알림 켜짐/꺼짐` for this browser's Web Push subscription, click toggles; hidden where push is
+unavailable) and **`clock`** (date + 24-hour time, rebuilt only when the minute changes). Clickable chips are
+`role="button"` with Enter/Space.
+
+Polled every 30s (CPU/network every 3s, connected screens every 5s), plus immediate refresh on `/ws-notify`
+events. A chip with no value is **hidden** (no usage provider → no chip). Reset wording appears in tooltips; GPU
+chips show only usage.
 
 **Which chips show, on which side and in what order is the user's choice**
-(Settings → Status bar; device-scoped `ui.hud.layout`, JSON
-`{"left":[…],"right":[…]}`). The unit is a *kind* (`server`, `screens`, `e2e`, `safe-mode`,
-`cpu`, `gpu`, `ram`, `net`, `usage`, `version`), not a chip id — usage profiles come and go,
+(Settings → 상태 막대; device-scoped `ui.hud.layout`, JSON
+`{"v":3,"left":[…],"right":[…]}`). The unit is a *kind* (`server`, `screens`, `e2e`, `safe-mode`,
+`cpu`, `gpu`, `ram`, `net`, `usage`, `version`, `push`, `clock`), not a chip id — usage profiles come and go,
 so the setting names «usage» once. A kind that is in neither list is hidden, so a new kind
 starts off until someone turns it on. The default layout leaves out `server`: seeing the
 screen already proves the server is up. The rules (parse, move, step) live in
@@ -574,16 +599,18 @@ read `.ts`; `hud-data.ts` applies the layout *after* it builds the chips, so «n
 chip» and the squeeze order below still hold wherever a chip is placed. The settings screen
 edits the layout three ways — drag, a position select and up/down buttons — all through the same
 `moveHudKind`/`stepHudKind` (the select and buttons are the keyboard path, not an extra), shows a
-preview with sample values, and is hidden in compact (there is no menu bar there). The settings section is
-**메뉴바** (id `hud`). The saved layout carries a generation (`{"v":2,…}`): a layout without `v`
-gets the newer kinds added once at their default places when it is read (not an all-off layout, which
-is a choice); saving writes `v`.
+preview with sample values (the status bar as it will look, agents chip first), and is hidden in compact
+(there is no status bar there). The settings section is **상태 막대** (id `hud`). The agents chip is
+`PINNED_HUD_KINDS` — shown at the top of 「왼쪽」 with a 「고정」 tag, no grip, select or arrows. The saved layout
+carries a generation (`{"v":3,…}`): a layout without `v` gets the newer kinds (`push`, `clock`) added once at their
+default places when it is read (not an all-off layout, which is a choice); from generation 3 an `agents` entry in
+an old layout is dropped on read (it is pinned now); saving writes `v`.
 
 **"No value" hides a chip; "no room" drops the least important one.** These are
 two different axes. The first is `buildHudChips` declining to emit a chip. The
 second is `priority` on `HudChip`, a rank for *who survives a squeeze* — the bar
-is one 24px line, and the rail plus dock can easily leave it too narrow
-(measured: 667px of chips in a 472px bar at a 760px viewport).
+is one 24px line, and a narrow window can easily leave it too narrow
+(measured before the status bar spanned the full width: 667px of chips in a 472px bar at a 760px viewport).
 
 The ranking, lowest number survives longest: `server` 1 · alerting usage 2 ·
 `screens` >1 3 · `tunnel` 4 · ordinary usage 5 · `screens` ==1 6 · E2E/safe-mode
@@ -721,7 +748,7 @@ pre-load fallback.
 
 ### Settings (`Mod+,` / FarShell menu)
 
-**Three settings, three icons.** 설정 = gear (reached from the FarShell menu, `Mod+,` and the activity bar's bottom gear), 레일 설정 = `sliders-horizontal` (rail header), 메뉴바 설정 = `panel-top` (FarShell menu item).
+**Three settings, three icons.** 설정 = gear (reached from the FarShell menu, `Mod+,` and the activity bar's bottom gear), 레일 설정 = `sliders-horizontal` (rail header), 상태 막대 설정 = `panel-top` (FarShell menu item).
 
 Settings are split across two scopes — `frontend/js/core/settings.js`'s
 `SCHEMA` gives each key a `scope: 'global' | 'device'` (default `global`).
@@ -870,7 +897,7 @@ of in-flight upload jobs (`window.vtUploadJobs()`, event-driven off
 `vt:upload-progress` rather than polled). Settings opens straight into
 Settings, whose own first screen already lists those as "Tools". Each
 full-screen panel stays inside the mobile navigation shell and Android/browser
-Back closes that panel first. There's no menu bar or second status row: waiting
+Back closes that panel first. There's no title bar, status bar or second status row: waiting
 count is a badge on the Session tab. When the software keyboard opens, the
 bottom nav hides and the keybar moves down to the keyboard edge so both bars
 do not consume the same vertical space — and `#terminal-container`'s bottom
@@ -1096,10 +1123,11 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
   repeat badge. Color goes on the text and the bar only; filling the background
   with a status color turns three stacked toasts into a block of colour.
   **Where it lands is decided by severity, because the goal is to not cover the
-  terminal.** `info`/`success` take over the 28px menu bar (`#vt-hud`) for a moment — it
-  covers no terminal rows, like tmux's status line or vim's echo area (it is at the top; the toast replaces the chips in place). Only `warn`/`error` float,
-  as a card at the bottom right, clear of the prompt line at the
-  bottom left. In compact (<720px) there is no menu bar, so everything is a card,
+  terminal.** `info`/`success` take the status bar's message slot (`#vt-hud-msg`, right of the
+  pinned agents chip) for a moment — it covers no terminal rows, like tmux's status line or vim's echo area; the
+  other chips step aside while it shows, the agents chip stays. Only `warn`/`error` float,
+  as a card at the bottom right 16px above the status bar, clear of the prompt line at the
+  bottom left. In compact (<720px) there is no status bar, so everything is a card,
   sitting on the **measured** height of the keybar and bottom nav
   (`--kb-height`/`--kb-overlap`) and following the software keyboard up.
   Translucency is not an answer here: behind a toast is monospace text, so a
@@ -1222,8 +1250,9 @@ design.
 | `frontend/js/shell/Rail.tsx` | Worktree rail — the sidebar's sessions view |
 | `frontend/js/shell/Dock.tsx` | Dock body — the sidebar's tool view (`vtDockHost`) |
 | `frontend/js/ui/icons-shell.js` | Icons only the workbench draws (lazy `shell` chunk) |
-| `frontend/js/shell/Hud.tsx` · `hud-data.ts` | Menu bar, 28px at the top |
-| `frontend/js/shell/HeaderExtras.tsx` | Workspace chip · connected screens |
+| `frontend/js/shell/TitleBar.tsx` | Title bar 36px: FarShell menu · host · breadcrumb · palette field · tools |
+| `frontend/js/shell/Hud.tsx` · `hud-data.ts` · `hud-layout.js` | Status bar 24px at the bottom; chip catalogue and layout rules |
+| `styles/screens/95-bars.css` | Title bar and status bar frames, chips, FarShell menu dropdown |
 | `frontend/js/shell/Fleet.tsx` | Mobile fleet home |
 | `frontend/js/shell/Palette.tsx` · `palette-data.ts` | Command palette, 8 modes |
 | `frontend/js/layout/resize-overlay.js` | px / cols×rows caption while dragging a divider |

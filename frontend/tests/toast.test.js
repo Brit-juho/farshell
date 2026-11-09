@@ -119,6 +119,18 @@ test('교체되면 기존 타이머가 갱신된다 (옛 타이머가 새 내용
   assert.strictEqual(els[0].textContent, '새것');
 });
 
+test('상태 막대 메시지 칸만 role=status + aria-live=polite (막대 전체는 아니다)', async () => {
+  const { window, showToast } = await buildWindow({ hud: true });
+  window.innerWidth = 1440;
+  showToast('복사했습니다', 'success');
+  const el = hudMsg(window);
+  assert.ok(el, '넓은 화면의 success는 상태 막대 메시지 칸으로 간다');
+  assert.strictEqual(el.getAttribute('role'), 'status');
+  assert.strictEqual(el.getAttribute('aria-live'), 'polite');
+  assert.strictEqual(window.document.getElementById('vt-hud').getAttribute('role'), null);
+  assert.ok(window.document.getElementById('vt-hud').classList.contains('vt-hud-busy'));
+});
+
 test('에러만 role=alert, 나머지는 role=status (aria-live 보완)', async () => {
   const { window, showToast } = await buildWindow();
   showToast('보통');

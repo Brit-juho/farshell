@@ -1,4 +1,4 @@
-// N34 §7 — HUD(2026-11부터 맨 위 메뉴바 28px)가 그릴 칩 목록을 만드는 **순수 함수**. DOM도
+// N34 §7 — HUD(리디자인 2단계부터 아래 상태 막대 24px)가 그릴 칩 목록을 만드는 **순수 함수**. DOM도
 // fetch도 모른다: 여러 API 응답을 모아 놓은 평범한 객체 하나를 받아 칩 배열을
 // 돌려준다. Hud.tsx는 이 결과를 그대로 렌더만 한다.
 //
@@ -13,13 +13,13 @@ export type HudTone = 'ok' | 'warn' | 'err' | 'plain';
 // 배치(어떤 칩을 어느 쪽에 어떤 순서로)의 규칙은 hud-layout.js에 있다 — 설정 화면(일반 JS)도 같은 함수를
 // 써야 하는데 테스트 하네스가 .ts를 직접 못 읽어서다. 여기서는 타입과 함께 다시 내보내기만 한다.
 import {
-  HUD_KINDS, DEFAULT_HUD_LAYOUT, parseHudLayout, serializeHudLayout, sameHudLayout, hudZoneOf,
+  HUD_KINDS, PINNED_HUD_KINDS, DEFAULT_HUD_LAYOUT, parseHudLayout, serializeHudLayout, sameHudLayout, hudZoneOf,
   moveHudKind, stepHudKind,
 } from './hud-layout.js';
 import type { HudKind, HudLayout } from './hud-layout.js';
 
 export {
-  HUD_KINDS, DEFAULT_HUD_LAYOUT, parseHudLayout, serializeHudLayout, sameHudLayout, hudZoneOf,
+  HUD_KINDS, PINNED_HUD_KINDS, DEFAULT_HUD_LAYOUT, parseHudLayout, serializeHudLayout, sameHudLayout, hudZoneOf,
   moveHudKind, stepHudKind,
 };
 export type { HudKind, HudLayout };
@@ -342,11 +342,17 @@ export function buildHudChips(input: HudInput, layout: HudLayout = DEFAULT_HUD_L
     if (text) chips.push({ id: 'clock', kind: 'clock', label: '', value: text, tone: 'plain', side: 'right', priority: PRIORITY.clock });
   }
 
-  // 배치 적용 — 칩이 스스로 정한 side는 무시하고 사용자가 정한 구역·순서를 따른다.
-  // 배치에 없는 종류는 여기서 빠진다. 같은 종류의 칩이 여럿(사용량 프로필)이면 만든 순서를 유지한다.
+  // 배치 적용 — 고정 종류(에이전트)가 늘 맨 왼쪽이고, 나머지는 칩이 스스로 정한 side를 무시하고 사용자가
+  // 정한 구역·순서를 따른다. 배치에 없는 종류는 여기서 빠진다. 배치에 고정 종류가 적혀 있어도(옛 저장값을
+  // 손으로 넘긴 경우) 두 번 그리지 않는다. 같은 종류의 칩이 여럿(사용량 프로필)이면 만든 순서를 유지한다.
+  const pinned = new Set<string>(PINNED_HUD_KINDS);
   const placed: HudChip[] = [];
+  for (const kind of PINNED_HUD_KINDS) {
+    for (const c of chips) if (c.kind === kind) placed.push({ ...c, side: 'left' });
+  }
   for (const side of ['left', 'right'] as const) {
     for (const kind of layout[side]) {
+      if (pinned.has(kind)) continue;
       for (const c of chips) if (c.kind === kind) placed.push({ ...c, side });
     }
   }

@@ -376,8 +376,8 @@
    * 프레임마다 칸이 다시 맞춰진다(터미널 refit·SIGWINCH). */
   .vt-sidepanel {
     position: fixed;
-    top: var(--menubar-h, 0px);   /* 맨 위 전체 폭 메뉴바(#vt-hud) 아래에서 시작한다 */
-    bottom: 0;
+    top: var(--menubar-h, 0px);       /* 맨 위 전체 폭 제목 막대(#vt-titlebar) 아래에서 시작한다 */
+    bottom: var(--statusbar-h, 0px);  /* 맨 아래 전체 폭 상태 막대(#vt-hud) 위에서 끝난다 */
     z-index: 70;
     display: none;
     flex-direction: column;
@@ -1010,14 +1010,14 @@
   body.vt-keyboard-open #vt-toasts {
     bottom: calc(var(--kb-overlap, 0px) + var(--kb-height, 0px) + var(--spacing) * 2);
   }
-  /* regular 이상 — 하단 우측. 프롬프트 줄(하단 좌측)을 비켜난다. 예전엔 하단 HUD 바로 위였으나
-   * HUD가 맨 위 메뉴바로 옮겨 가서(2026-11) 바닥에서 한 칸만 띄운다. 2026-11(작업대) — 오른쪽에는
-   * 더 이상 dock이 없다(사이드바는 왼쪽 하나, 90-workbench.css). 오른쪽 끝에서 한 칸만 띄운다. */
+  /* regular 이상 — 하단 우측. 프롬프트 줄(하단 좌측)을 비켜난다. 2026-11(작업대) — 오른쪽에는
+   * 더 이상 dock이 없다(사이드바는 왼쪽 하나, 90-workbench.css). 리디자인 2단계 — HUD가 다시 아래 상태 막대
+   * 24가 돼서 그 위 16px에 뜬다(시안 spec.html 「토스트」). */
   @media (min-width: 720px) {
     #vt-toasts {
       left: auto;
       right: calc(var(--spacing) * 3 + env(safe-area-inset-right, 0px));
-      bottom: calc(var(--spacing) * 2);
+      bottom: calc(var(--statusbar-h, 0px) + 16px + env(safe-area-inset-bottom, 0px));
       width: min(420px, 45vw);
       align-items: flex-end;
     }
@@ -1071,16 +1071,16 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* ── HUD 줄 메시지 (#vt-hud-msg) ───────────────────────────────────────
-   * info/success는 카드로 띄우지 않고 이 줄이 받는다. #vt-hud는 normal flow
-   * 안의 24px 띠라 터미널을 1px도 가리지 않는다 — 터미널 메시지가 원래 있어야
-   * 할 자리다(tmux status line·vim echo area).
+  /* ── 상태 막대 메시지 (#vt-hud-msg) ───────────────────────────────────
+   * info/success는 카드로 띄우지 않고 이 줄이 받는다. #vt-hud(상태 막대 24)는 body가
+   * 그만큼 비워 둔 자리라 터미널을 1px도 가리지 않는다 — 터미널 메시지가 원래 있어야
+   * 할 자리다(tmux status line·vim echo area). 맨 왼쪽 에이전트 칩 바로 오른쪽에 선다.
    *
    * 칩을 숨기는 규칙(#vt-hud.vt-hud-busy …)은 여기 둘 수 없다 — .vt-hud-chip이
    * styles/screens/60-mobile-hud.css의 **unlayered** 규칙이라 layer는 무조건
    * 진다. 그래서 그쪽 파일에 있다(2.1.6의 CSS 레이어 함정과 같은 건이다). */
   #vt-hud-msg {
-    order: -3;                     /* 칩이 하나라도 남아도 메시지가 왼쪽 끝 */
+    order: -3;                     /* 에이전트 칩(-4, 95-bars.css) 바로 오른쪽, 다른 칩보다 왼쪽 */
     display: flex;
     align-items: center;
     gap: calc(var(--spacing) * 2);
@@ -1917,21 +1917,21 @@
   @media (pointer: coarse) { .vt-q-actions .vt-btn { --btn-h: 36px; } }
 }
 
-/* ── 하단바 구성 (panels/settings/sections/hud.js) ──────────────────────────
- * 미리보기는 실제 HUD의 칩 마크업(.vt-hud-chip)을 그대로 쓴다 — 칩 모양 규칙은
- * screens/60-mobile-hud.css 한 곳에 있고 이쪽은 띠(24px)와 목록만 그린다. */
+/* ── 상태 막대 구성 (panels/settings/sections/hud.js) ───────────────────────
+ * 미리보기는 실제 상태 막대의 칩 마크업(.vt-hud-chip)을 그대로 쓴다 — 칩 모양 규칙은
+ * screens/95-bars.css 한 곳에 있고 이쪽은 띠(24px)와 목록만 그린다. */
 @layer components {
   .vt-hudcfg { display: flex; flex-direction: column; gap: calc(var(--spacing) * 4); }
   .vt-hudcfg-previewwrap { display: flex; flex-direction: column; gap: calc(var(--spacing) * 1.5); }
   .vt-hudcfg-cap { font: var(--weight-medium) var(--fs-3xs) / 1 var(--font-ui); color: var(--color-faint); letter-spacing: var(--tracking-wide); }
-  /* 글꼴은 #vt-hud(screens/60-mobile-hud.css)와 같은 값 — 칩의 라벨·값 크기가 그 상속에 기대고 있다.
-   * 칩이 많으면 줄을 바꿔 전부 보여 준다(실제 띠는 한 줄이고 자리가 모자라면 덜어 낸다 — 여기서는
+  /* 글꼴·색은 #vt-hud(screens/95-bars.css)와 같은 값 — 칩의 라벨·값 크기가 그 상속에 기대고 있다.
+   * 칩이 많으면 줄을 바꿔 전부 보여 준다(실제 막대는 한 줄이고 자리가 모자라면 덜어 낸다 — 여기서는
    * 순서를 보는 게 목적이라 덜지 않는다). */
   .vt-hudcfg-preview {
     display: flex; flex-wrap: wrap; align-items: stretch; min-height: 24px;
     border: 1px solid var(--color-line); border-radius: var(--radius-sm);
-    background: var(--color-bg-1);
-    font: var(--weight-normal) var(--fs-2xs) / 24px var(--font-mono); color: var(--color-sub);
+    background: var(--color-statusbar-bg, var(--bar));
+    font: var(--weight-normal) var(--fs-xs) / 24px var(--font-ui); color: var(--color-statusbar-fg, var(--color-sub));
     user-select: none; overflow: hidden;
     pointer-events: none;
   }
@@ -1952,6 +1952,10 @@
     background: transparent;
   }
   .vt-hudcfg-item:first-child { border-top: 0; }
+  /* 고정 칩(에이전트) — 옮길 수 없어 손잡이가 없다. 손잡이 자리(14 + 간격)만큼 들여 다른 행과 이름을 맞춘다. */
+  .vt-hudcfg-item.pinned { padding-left: calc(var(--spacing) * 3 + 14px + var(--spacing) * 2.5); }
+  .vt-hudcfg-item.pinned:hover { background: transparent; }
+  .vt-hudcfg-pin { flex: none; }
   .vt-hudcfg-item:hover { background: var(--menu-hover); }
   .vt-hudcfg-item.dragging { opacity: .4; }
   .vt-hudcfg-grip { display: inline-flex; flex: none; color: var(--color-faint); cursor: grab; }

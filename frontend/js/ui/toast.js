@@ -32,10 +32,10 @@
 // 바로 그 매직 넘버였다 — 토스트만 옛 상수를 들고 남아 있었다.
 //
 // 그래서 **등급에 따라 목적지를 나눈다**:
-//   info/success  → HUD 줄(#vt-hud, 24px 상태 띠)을 잠시 덮는다. HUD는 normal
-//                   flow에 있어서 터미널을 1px도 가리지 않는다. 터미널 메시지가
+//   info/success  → 상태 막대(#vt-hud, 맨 아래 24px)의 메시지 칸에 잠시 뜬다(맨 왼쪽 에이전트 칩 바로
+//                   오른쪽). body가 그 높이만큼 비워 둔 자리라 터미널을 1px도 가리지 않는다. 터미널 메시지가
 //                   원래 있어야 할 자리다(tmux status line·vim echo area).
-//   warn/error    → HUD 바로 위에 뜨는 카드. 읽어야 하는 것만 터미널을 덮는다.
+//   warn/error    → 상태 막대 위 오른쪽에 뜨는 카드. 읽어야 하는 것만 터미널을 덮는다.
 //   compact(<720) → HUD가 아예 없는 폭이므로(DESIGN.md §7) 전부 카드.
 //
 // 투명도로 "덜 가리게" 하는 길은 택하지 않았다 — 뒤가 모노스페이스 글자라
@@ -96,7 +96,9 @@ function hudLine() {
     el = document.createElement('div');
     el.id = 'vt-hud-msg';
     el.hidden = true;
+    // 상태 막대에서 낭독되는 곳은 이 칸 하나다(막대 전체는 role=region) — 칩이 바뀔 때마다 읽히면 소음이다.
     el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
     el.addEventListener('click', () => retireHud(el));
     bindHoverPause(el);
     bar.appendChild(el);

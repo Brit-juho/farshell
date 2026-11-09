@@ -44,3 +44,19 @@ test('pane 헤더 브랜치는 생성 태그가 아니라 현재 cwd 스냅샷�
   assert.strictEqual(map.get('c'), '분리된 HEAD');
   assert.strictEqual(map.has('d'), false);
 });
+
+test('제목 막대 경로의 저장소 이름은 링크된 워크트리라도 메인 저장소 폴더다', async () => {
+  const { repoNameMap } = await load();
+  const map = repoNameMap([
+    { name: 'main', cwd: '/w/sample-repo/src', context: { cwd: '/w/sample-repo/src', status: 'ready', root: '/w/sample-repo', branch: 'dev', worktree: { kind: 'main', repositoryRoot: '/w/sample-repo', name: 'sample-repo' } } },
+    { name: 'wt', cwd: '/w/sample-repo-wt/feat', context: { cwd: '/w/sample-repo-wt/feat', status: 'ready', root: '/w/sample-repo-wt/feat', branch: 'feat/x', worktree: { kind: 'linked', repositoryRoot: '/w/sample-repo', name: 'feat' } } },
+    { name: 'old', cwd: '/w/acme', context: { cwd: '/w/acme', status: 'ready', root: '/w/acme', branch: 'main' } },
+    { name: 'plain', cwd: '/tmp', context: { cwd: '/tmp', status: 'nonrepo' } },
+    { name: 'moved', cwd: '/w/b', context: { cwd: '/w/a', status: 'ready', root: '/w/a' } },
+  ]);
+  assert.strictEqual(map.get('main'), 'sample-repo');
+  assert.strictEqual(map.get('wt'), 'sample-repo');
+  assert.strictEqual(map.get('old'), 'acme');
+  assert.strictEqual(map.has('plain'), false);
+  assert.strictEqual(map.has('moved'), false, 'cwd가 바뀐 낡은 context는 쓰지 않는다');
+});

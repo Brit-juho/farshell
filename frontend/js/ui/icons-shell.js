@@ -10,6 +10,8 @@ import { icon } from './icons.js';
 export const SHELL_ICONS = {
   // lucide box — MCP · 스킬 관리(옛 dock은 core 예산 때문에 `link`를 빌려 썼다).
   box: '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+  // lucide server — 제목 막대 호스트 전환에서 원격 맥(로컬은 icons.js의 laptop).
+  server: '<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>',
 };
 
 /** icon()과 같은 모양의 SVG 문자열. 이 파일에 없으면 ui/icons.js에서 찾는다. */

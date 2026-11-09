@@ -25,7 +25,9 @@ hydrateIcons();
 // N34 — HUD(지연 청크)에 넘겨줄 것들. 위 부수효과 import와 같은 모듈 인스턴스라
 // 여기서 이름으로 한 번 더 가져와도 중복 평가는 없다(ES 모듈 캐시).
 import { vtFetch } from './core/api.js';
-import { getSession, activeSessionId, allSessions } from './core/store.js';
+import { getSession, activeSessionId, allSessions, sessionDisplayName, subscribe as storeSubscribe } from './core/store.js';
+import { onLayoutChange } from './layout/store.js';
+import { branchOf, repoOf, onBranchChips } from './layout/branch-chips.js';
 import { allStatuses, agentDetails, isUnseen, onStatusChange } from './agent/state.js';
 import { copyToClipboard } from './term/clipboard.js';
 import { lang } from './core/i18n.js';
@@ -60,7 +62,7 @@ import './layout/panes.js';   // L3 1단계 — 분할 pane 렌더러. session.j
 // term/touch.js는 부수효과가 없는 함수 모듈이고 xterm-setup.js가 터치 기기에서만 import()한다 — 여기서 정적 import하지 않는다.
 import './term/links.js';
 import './layout/view-actions.js';  // 뷰(탭마다 pane 트리)의 window 브리지 — 탭 줄 UI는 없다
-import './layout/menubar-slots.js'; // 720px 이상: #topbar의 남은 버튼을 메뉴바로 옮긴다
+import './layout/menubar-slots.js'; // 720px 이상: #topbar의 남은 버튼을 제목 막대로 옮긴다
 import('./term/tab-worktree.js');  // 현재 작업 정보 조회는 셸 UI와 함께 지연 로딩
 import './term/remote.js';   // N7/N39 3단계 — 원격 세션 attach(window 브리지 등록)
 import './term/selection.js';
@@ -200,8 +202,7 @@ try {
       .then(({ mountHud }) => mountHud(hudRoot, {
         vtFetch, activeTmuxName, activeClientsPath, getAction, e2eEnabled: E2E_ENABLED,
         agentCounts, subscribeAgents: onStatusChange, pushState,
-        copyText: copyToClipboard, toast: showToast,
-        locale: () => (lang() === 'en' ? 'en-US' : 'ko-KR'), isMac,
+        locale: () => (lang() === 'en' ? 'en-US' : 'ko-KR'),
         // 배치(ui.hud.layout)는 설정 화면에서 바뀐다 — core/settings.js는 지연 청크가 직접 못 읽으므로 여기서 넘긴다.
         getLayout: () => settingGet('ui.hud.layout'),
         subscribeLayout: (fn) => settingSubscribe((changed) => {
@@ -212,17 +213,27 @@ try {
       .catch((e) => console.error('[FarShell HUD]', e)); // HUD는 부가 정보 — 실패해도 앱은 계속
   }
 
-  // N37 §4 — 워크스페이스 칩 + 연결된 화면. 같은 지연 청크(shell.js)를 공유하므로
-  // HUD와 별도 import()를 또 부르지 않는다(모듈 캐시로 중복 다운로드는 안
-  // 생기지만, 굳이 두 번 요청할 이유가 없다).
-  const chipRoot = document.getElementById('vt-workspace-chip-slot');
-  if (chipRoot) {
-    import('./shell/HeaderExtras.tsx')
-      .then(({ mountWorkspaceChip }) => {
-        const deps = { vtFetch, activeTmuxName, getAction };
-        if (chipRoot) mountWorkspaceChip(chipRoot, deps);
-      })
-      .catch((e) => console.error('[FarShell header]', e));
+  // 리디자인 2단계 — 제목 막대 36(FarShell 메뉴 · 호스트 · 저장소 › 브랜치 › 세션 · 팔레트 입력 · 도구).
+  // 옛 워크스페이스 칩(HeaderExtras.tsx)과 메뉴바의 FarShell 메뉴가 여기로 왔다. 같은 지연 청크(shell.js).
+  // 경로는 활성 칸의 세션에서 읽는다 — 브랜치·저장소 지도는 칸 머리 브랜치 칩과 같은 출처(layout/branch-chips.js).
+  const titleRoot = document.getElementById('vt-titlebar');
+  if (titleRoot) {
+    const crumb = () => {
+      const sid = activeSessionId();
+      const s = sid ? getSession(sid) : null;
+      if (!s) return {};
+      const tmux = s.tmuxName || s.tmux_name || '';
+      return { repo: repoOf(tmux), branch: branchOf(tmux), session: sessionDisplayName(sid) || tmux || null };
+    };
+    const subscribeCrumb = (fn) => {
+      const offs = [storeSubscribe(fn), onLayoutChange(fn), onBranchChips(fn)];
+      return () => { for (const off of offs) if (typeof off === 'function') off(); };
+    };
+    import('./shell/TitleBar.tsx')
+      .then(({ mountTitleBar }) => mountTitleBar(titleRoot, {
+        vtFetch, getAction, isMac, copyText: copyToClipboard, toast: showToast, crumb, subscribeCrumb,
+      }))
+      .catch((e) => console.error('[FarShell title bar]', e));
   }
 
   // 리디자인 1단계 — 작업대(활동 막대 + 사이드바). 사이드바 안에 워크트리 레일(N36 §5)과

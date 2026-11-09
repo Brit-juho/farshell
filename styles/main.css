@@ -69,3 +69,5 @@
 @import "./screens/80-dock.css"           layer(legacy);
 /* 리디자인 1단계(2026-11) — 작업대(활동 막대 + 사이드바). 70(레일)·80(dock)의 프레임을 덮으므로 마지막. */
 @import "./screens/90-workbench.css"      layer(legacy);
+/* 리디자인 2단계(2026-11) — 제목 막대 36 · 상태 막대 24. 작업대 프레임(90)의 위·아래 끝을 정하므로 그 뒤. */
+@import "./screens/95-bars.css"           layer(legacy);
