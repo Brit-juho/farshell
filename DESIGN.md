@@ -242,11 +242,11 @@ enough, refresh it.
 - **Breakpoints:** `--breakpoint-regular`(720px) / `--breakpoint-wide`(1280px) /
   `--breakpoint-xwide`(1600px). The JS-side constants live in exactly **one**
   place, `frontend/js/layout/breakpoints.js` (`COMPACT_MAX`/`REGULAR_MAX`/`WIDE_MAX`).
-- **Shell dimensions:** menu bar 28px (top, full width; the only header at >=720px) · worktree rail default 252px (resizable
-  240~480) · dock default 392px (320~560, collapses to 36px). The
-  rail's and dock's width/collapse state are **device-scoped settings**
-  (`ui.rail.*`/`ui.dock.*`, §6 "Settings") — collapsing it on a phone must not
-  affect the Mac.
+- **Shell dimensions:** menu bar 28px (top, full width; the only header at >=720px) · activity bar 48px ·
+  one sidebar, default 360px (resizable 240~480, at most 40vw; regular draws at most 260), **shared by every
+  activity**. Collapsed, the sessions activity leaves the rail's 48px strip and a tool activity leaves 0. The
+  sidebar's width/activity/collapse state are **device-scoped settings** (`ui.side.*`, §6 "Settings") —
+  collapsing it on a phone must not affect the Mac.
 
 The values below have **the code as the single source of truth**; this
 document merely copies them. A copied value eventually drifts, so
@@ -316,55 +316,59 @@ stay in the DOM, and `visibility: hidden` keeps their box measurable so
 cols/rows survive).
 
 ```
-┌ menu bar 28 (full width, fixed) ───────────────────────────────────────┐
-│ ◆FarShell ▾ [workspace chip] [agents]…  [CPU RAM NET …] [v] [clock] [⌘K] │
-├──────────┬───────────────────────────────────────────┬───────────────┤
-│ rail 252 │ pane tree                                  │ dock 392      │
-│(worktree)│ ┌ pane header 24 ┐                         │ ┌ tabs 28 ┐   │
-│          │ │ cwd · agent     │                        │ │scm|q|…  │   │
-│          │ └─────────────────┘                        │ └─────────┘  │
-└──────────┴───────────────────────────────────────────┴───────────────┘
+┌ menu bar 28 (full width, fixed) ─────────────────────────────────────────┐
+│ FarShell menu [workspace chip] [agents]…  [CPU RAM NET …] [v] [clock] [⌘K] │
+├──────┬──────────────┬────────────────────────────────────────────────────┤
+│ act. │ sidebar 360  │ pane tree                                          │
+│ bar  │ (one width,  │ ┌ pane header 24 ┐                                 │
+│ 48   │  shared by   │ │ cwd · agent     │                                │
+│      │  activities) │ └─────────────────┘                                │
+│ sess │ sessions =   │                                                    │
+│ scm  │   rail       │                                                    │
+│ …    │ tools =      │                                                    │
+│ mcp  │   dock body  │                                                    │
+│ mic  │              │                                                    │
+│ set  │              │                                                    │
+└──────┴──────────────┴────────────────────────────────────────────────────┘
 ```
 
 ### 4 responsive tiers
 
-| Tier | Width | Rail | Dock | Pane cap | Rendering |
-|---|---|---|---|---|---|
-| compact | < 720px | none (fleet home, §7) | a tab in the bottom nav | 2 | 1 pane fullscreen, swipe left/right |
-| regular | 720~1279px | `#vt-wgrail`, device-scoped width | collapsed to 36px by default, opens as overlay | 4 | split tree |
-| wide | 1280~1599px | `#vt-wgrail`, device-scoped width | collapsed to 36px by default, opens by pushing | 6 | split tree + rail |
-| xwide | ≥ 1600px | same | 392px, open by default | **unlimited** | same as wide + cap lifted |
+| Tier | Width | Workbench (activity bar + sidebar) | Pane cap | Rendering |
+|---|---|---|---|---|
+| compact | < 720px | none (fleet home and bottom nav, §7) | 2 | 1 pane fullscreen, swipe left/right |
+| regular | 720~1279px | collapsed by default; expanding pushes the panes at `min(stored, 260px, 40vw)` | 4 | split tree |
+| wide | 1280~1599px | open by default at `min(stored, 40vw)`, pushes the panes | 6 | split tree |
+| xwide | ≥ 1600px | same | **unlimited** | same as wide + cap lifted |
 
 > **The rail is never the legacy icon rail.** Regular does not fall back to the
 > 48px `#vt-rail`: `#vt-rail` is
 > `display:none` at every width (see "What's left as legacy"). The worktree rail
 > is the only rail, at every tier.
 
-The tier touches the rail in exactly two places, and **neither overwrites what
-you chose** — `ui.rail.width`/`ui.rail.collapsed` are device-scoped settings
-(§6), and a stored value always wins.
+The tier touches the sidebar in exactly two places, and **neither overwrites what
+you chose** — `ui.side.width`/`ui.side.collapsed` are device-scoped settings
+(§6), and a stored value always wins (`shell/side-prefs.js`).
 
-- **Collapse default** (`defaultRailCollapsed`): on a device that has never
-  stated a preference, the rail starts collapsed below wide (<1280). `Dock.tsx`
-  makes the same call (`innerWidth < WIDE_MAX`), so a narrow screen does not open
-  with both panels expanded and leave the menu bar 472px for 667px of chips.
-- **Rendered width clamp**: `--vt-wgrail-w` is `min(<stored>px, 40vw)`. The
-  stored value says how wide you want it; the clamp asks whether the window can
-  spare that. Shrink the window and a 480px rail draws at 40vw; widen it and it
-  returns to 480 — the setting is never rewritten, so a wide rail survives a
-  temporary narrow window. 40vw can't drop below the rail's own 240px minimum,
-  because under 720px there is no rail at all (compact).
+- **Collapse default**: on a device that has never stated a preference, the sidebar
+  starts collapsed below wide (<1280) — a narrow screen does not open with the sidebar
+  expanded and leave the menu bar too little room for its chips.
+- **Rendered width clamp**: `--vt-side-w` is `min(<stored>px, 40vw)`, and in regular
+  `min(<stored>px, 260px, 40vw)` (`styles/screens/90-workbench.css`, media queries — no JS on
+  window resize). The stored value says how wide you want it; the clamp asks whether the
+  window can spare that. Shrink the window and the sidebar draws narrower; widen it and it
+  returns — the setting is never rewritten.
 
 Because the variable holds a `min()` expression rather than a plain px
 number, the resizer reads the element's measured width instead of parsing it —
 a custom property doesn't resolve to computed px, so `parseInt` would return
-`NaN` and the rail would jump on drag.
+`NaN` and the sidebar would jump on drag.
 
-The rail's and dock's open/width state are **device-scoped settings**
-(`ui.rail.collapsed`, `ui.rail.width`, `ui.dock.collapsed`, `ui.dock.width`) —
-collapsing it on a phone must not carry over to the Mac. The tier boundaries
-live in exactly one place, `layout/breakpoints.js`. Past the cap, the split
-button goes disabled **with the reason in its tooltip**.
+**Old keys are read, never rewritten.** With no `ui.side.width` the width falls back to
+`ui.dock.width`, then `ui.rail.width` (clamped into 240~480); with no `ui.side.collapsed` the
+collapse state falls back to `ui.rail.collapsed`. Nothing copies the old values into the new
+keys. The tier boundaries live in exactly one place, `layout/breakpoints.js`. Past the cap, the
+split button goes disabled **with the reason in its tooltip**.
 
 ### View tabs
 
@@ -381,7 +385,41 @@ At >=720px `#topbar` is `display: none` (`--topbar-h: 0`); the traffic lights (m
 Voice-only mode keeps `#topbar` because it turns it into the full-screen container. Dragging a rail row onto a pane
 still uses `layout/dnd.js`.
 
-### Worktree rail 252px (`#vt-wgrail`, `shell/Rail.tsx`)
+### Activity bar 48px + sidebar (`#vt-workbench`, `shell/Workbench.tsx`)
+
+The workbench is the left edge of the desktop shell: an **activity bar** (48px, `shell/ActivityBar.tsx`)
+and **one sidebar** beside it. The bar's top group are the activities, in this order: 세션 (`list`) ·
+변경 (`git-branch`) · 파일 (`folder`) · 큐 (`clipboard`) · 첨부 (`paperclip`) · 스니펫 (`braces`) · 포트
+(`plug`, capability-gated) · 사용량 (`gauge`, capability-gated) · 시스템 (`bar-chart`)
+(`shell/activity-data.ts`). The bottom group are actions that do not change the sidebar: MCP · 스킬 관리
+(`box`, the lazy `ui/icons-shell.js`), 음성 (the `#mic-btn-wrap` node itself, moved into
+`#vt-activity-mic-home` by `term/keybar.js` `placeMicButton`) and 설정 (opens Settings).
+
+- **Item** 48×44, icon 20 (stroke 1.75), name only in `aria-label` and the tooltip (`data-tip`, shown to
+  the right; second line = badge count, plus the `railToggle` key on the current activity). **Active** =
+  a 2px `--color-acc` bar on the left edge (10px inset top and bottom, `::before`), no fill. A badge
+  (queue waiting, open ports) is a `.vt-badge` 15px high on the icon's top-right corner.
+- **Accessibility:** the top group is `role="tablist"` with `aria-orientation="vertical"`; each activity is
+  `role="tab"` with `aria-selected` and roving `tabindex`. ↑↓/Home/End move focus only; Enter/Space
+  (the button's own click) opens it. The bottom group is a plain `role="group"`.
+- **The sidebar width is shared by every activity** (default 360, 240~480, ≤ 40vw; `ui.side.width`).
+  Switching activities therefore never changes the pane sizes — no terminal refit, no SIGWINCH. The
+  sessions activity shows the worktree rail below; tool activities show the dock body (below). Both stay
+  **mounted** and only toggle `hidden`, so the rail keeps its polling and in-place editing state.
+- **Collapse:** clicking the current activity while the sidebar is open collapses it, as does `railToggle`
+  (⌘B / Alt+Shift+B, 「사이드바 토글」; `window.vtSideToggle`). Sessions collapse to the rail's 48px strip;
+  a tool collapses to 0 (only the activity bar remains). Clicking any activity while collapsed opens it.
+  Stored as `ui.side.activity` (default `sessions`) and `ui.side.collapsed`.
+- **Resizing:** one resizer on the sidebar's right edge. While dragging, the refit gate in
+  `layout/surface.js` defers terminal fits (`window.vtSurfaceDrag('begin'|'end')`, a bridge because the
+  lazy chunk must not import `surface.js`); the fit — and the WS `resize` — happens once per pane after
+  release, and the width is saved once. No CSS transition on any width or padding.
+- **Drag an activity into a pane** like the old dock tabs (`vtWirePanelDragSource`); if that tool was the
+  one open in the sidebar, the sidebar collapses (`vt-panel-pane-drop`).
+- Positions that depend on the left edge read `--vt-activity-w` + `--vt-side-w` (body padding, onboarding,
+  the viewer's dock mode). There is no right-hand panel any more, so `body`'s right padding is 0.
+
+### Session view — worktree rail (`#vt-wgrail`, `shell/Rail.tsx`)
 
 A row is **one tmux session** (docs/ref/terminal.md 「Rail」). Two zones: **개입 필요**
 (waiting sessions; collapsible, and switchable on/off in 레일 설정 like VS Code's
@@ -407,31 +445,24 @@ A session that is not open keeps full opacity but its name steps down to `--colo
 The ⋯ button and right-click open the same menu (`rowMenuItems`: 열기/닫기 · 이름 변경 ·
 맥에서 열기 · 연결된 화면 · 종료). The gear-less sliders icon in the rail header is **레일 설정** (개입 필요 on/off, show
 or hide sessions by origin — peer / external, and the 저장소 표시 list). Hiding an
-origin never hides a session that is open or waiting. The rail's width resizer spans
-240~480px. Collapsed (48px), only the state icon and agent mark remain; name, branch and
+origin never hides a session that is open or waiting. The rail fills the sidebar; its width and
+collapse state belong to the workbench (above), and the header's chevron toggles the same
+collapse. Collapsed (48px), only the state icon and agent mark remain; name, branch and
 keyword move to the row tooltip.
 
-### Dock 392px (`shell/Dock.tsx`)
+### Tool views — dock body (`#vt-dock`, `shell/Dock.tsx`)
 
-Fixed to the right, collapses to a 36px strip via a chevron (no bottom dock, to keep
-terminal vertical space). 5 tabs: **Source control · Queue ·
-Files · Ports · Usage** (later tabs — attachments, system and **Snippets**
-(`braces` icon, action `snippets.show`) — follow the same frame rules).
-
-**Collapsed, a tab is an icon — never rotated text.** Do not rotate the
-36px strip's labels with `writing-mode: vertical-rl`: it works for Latin
-(glyphs lie on their side) but not for CJK, where Korean syllables *stack*, so
-「소스컨트롤」 becomes a five-character tower, in a monospace face. Each tab
-carries an icon from `js/ui/icons.js` (`git-branch · list · folder · plug ·
-gauge`), shown only while collapsed; the full label stays in `data-tip`. The
-expanded strip is text-only on purpose — five tabs in a row with icons as well
-is crowded. The frame owns only tab switching, collapse, the width resizer
-(320~560), and device-scoped persistence — each tab's content is drawn by the
-existing panel renderers (`queue.js`, `ports.js`, `panels/usage.js`,
-`panels/viewer/scm.js`). There are no modal popup panels; the action ids
-(`queue.show`, `ports.show`, `usage.open`, `scm.show`) open a dock tab (the
-palette and keymap reference those same ids). The ports and usage tabs
-disappear entirely when `/api/capabilities` reports no source for them.
+There is no separate right-hand dock and no dock tab strip any more: the tabs became the activity bar's
+tool activities, and the dock is the sidebar's **tool view**. `Dock.tsx` keeps two jobs — "only the open
+tool activity's panel is in the DOM" (it calls the panel's action and `closePanel`s the others) and the
+`window.vtDockHost(panelId)` contract `panels/panel.js` asks (an element to attach to, `null` for a modal,
+or `'stale'` when the activity changed while the chunk was loading). Each tool's content is drawn by the
+existing panel renderers (`queue.js`, `ports.js`, `panels/usage.js`, `panels/viewer/scm.js` …) into
+`.vt-dock-body`. There are no modal popup panels; the action ids (`queue.show`, `ports.show`,
+`usage.open`, `scm.show`) open that tool activity in the sidebar (the palette and keymap reference those
+same ids). The ports and usage activities disappear entirely when `/api/capabilities` reports no source
+for them. In compact there is no workbench, so no tool is treated as open and the panels fall back to
+their sheets.
 
 **The source-control tab supports status, diff, stage, unstage and commit.**
 Push and PR/MR creation are not offered. Commits use the repository's ambient Git
@@ -448,7 +479,7 @@ only a file path; a `panel` leaf has one registered dock panel name. Both keep
 
 The menu bar is a macOS-style bar at the top of the screen. Its ids and
 classes keep the `vt-hud-*` names (toasts and tests depend on them). It is `position: fixed`
-across the full width at the very top, so the rail, dock and body start `--menubar-h` (28px) lower
+across the full width at the very top, so the workbench and body start `--menubar-h` (28px) lower
 (`.vt-sidepanel { top: var(--menubar-h) }`, `body { padding-top }`); anything positioned from the top
 (`--topbar-popup-y`, onboarding, the dock viewer) adds `--menubar-h` too. Look: UI font, no chip
 dividers, a translucent blurred bar, hover pills — shared by every skin (colours come from skin tokens).
@@ -633,7 +664,7 @@ pre-load fallback.
 
 ### Settings (`Mod+,` / FarShell menu)
 
-**Three settings, three icons.** 설정 = gear (reached from the FarShell menu, `Mod+,`, with no gear button in the dock), 레일 설정 = `sliders-horizontal` (rail header), 메뉴바 설정 = `panel-top` (FarShell menu item).
+**Three settings, three icons.** 설정 = gear (reached from the FarShell menu, `Mod+,` and the activity bar's bottom gear), 레일 설정 = `sliders-horizontal` (rail header), 메뉴바 설정 = `panel-top` (FarShell menu item).
 
 Settings are split across two scopes — `frontend/js/core/settings.js`'s
 `SCHEMA` gives each key a `scope: 'global' | 'device'` (default `global`).
@@ -880,7 +911,7 @@ tap again = lock, held = applies while held (to keybar keys and soft-keyboard
 input alike), and a held modifier that was used in a chord does not count as
 a tap on release. The strip carries only keys the soft keyboard lacks (Esc
 Tab ⇧Tab ^C Home End PgUp PgDn Del tmux prefix F1–F12); there are no character keys, long-press
-variants, collapse toggle or mic slot (the mic lives only in the dock / rail slot).
+variants, collapse toggle or mic slot (the mic lives only in the activity bar / rail slot).
 Modifiers sit outside the strip so a chord is always in the same place and a thumb that
 drifts while holding one does not cancel it. Modifier state reads like a
 Caps Lock light: a 5px lamp top-right — faint ring (off), accent outline +
@@ -1123,8 +1154,11 @@ design.
 | `frontend/index.html` | Boot theme script (anti-FOUC), login gate, `#vt-chrome` mount point, mobile bottom nav, keybar |
 | `frontend/js/layout/surface.js` | Terminal placement (which pane holds which session) · refit gate · `#vt-term-stage` waiting room |
 | `frontend/js/core/types.ts` | Shared TS types |
-| `frontend/js/shell/Rail.tsx` | Worktree rail, 252px |
-| `frontend/js/shell/Dock.tsx` | Dock frame, 392px |
+| `frontend/js/shell/Workbench.tsx` · `side-prefs.js` | Workbench: activity bar + one shared-width sidebar; width/collapse/activity rules |
+| `frontend/js/shell/ActivityBar.tsx` · `activity-data.ts` | Activity bar 48px (vertical tablist) and its items |
+| `frontend/js/shell/Rail.tsx` | Worktree rail — the sidebar's sessions view |
+| `frontend/js/shell/Dock.tsx` | Dock body — the sidebar's tool view (`vtDockHost`) |
+| `frontend/js/ui/icons-shell.js` | Icons only the workbench draws (lazy `shell` chunk) |
 | `frontend/js/shell/Hud.tsx` · `hud-data.ts` | Menu bar, 28px at the top |
 | `frontend/js/shell/HeaderExtras.tsx` | Workspace chip · connected screens |
 | `frontend/js/shell/Fleet.tsx` | Mobile fleet home |
