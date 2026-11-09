@@ -14,7 +14,7 @@ import { Portal } from 'solid-js/web';
 import { t } from '../core/i18n.js';
 import {
   buildRailLists, splitRunning, groupSessionRows, compactRailRows, rowMenuItems, rowSummaryDetails, runRowMenu,
-  ATTENTION_COLLAPSED_KEY, ORDER_KEY, LINEAGE_KEY, VIEW_KEY, encodeOrder, encodeLineagePrefs, encodeRailView,
+  ATTENTION_COLLAPSED_KEY, ATTENTION_SHOW_KEY, ORDER_KEY, LINEAGE_KEY, VIEW_KEY, encodeOrder, encodeLineagePrefs, encodeRailView,
   buildSessionTree, kidsProgress, moveInOrder,
   type SessionRow, type RailSort, type TreeEntry,
 } from './rail-data.js';
@@ -26,7 +26,7 @@ import {
   actionSessionId, collectSessionRows, pollFetch, isNoResponse,
   useAgentVersion, useSessionsVersion, useLayoutVersion, syncAgentsFromServer,
   type RailDeps,
-  createDiffWatcher,
+  createDiffWatcher, answerSessionPrompt,
 } from './rail-fetch.js';
 import { createRailPrefs } from './rail-prefs.js';
 import { Menu, Row, type MenuItem } from './RailRow.js';
@@ -35,6 +35,7 @@ import { CatalogTree, RecentEnded, ArchiveEntry, ArchiveList, type CatalogSnapsh
 import { renameSession as renameCatalogSession } from '../history/session-actions.js';
 import { historyApi } from '../history/api.js';
 import { icon } from '../ui/icons.js';
+import { shellIcon } from '../ui/icons-shell.js';
 
 export type { RailDeps } from './rail-fetch.js';
 import { RepoVisibility } from './RepoVisibility.js';
@@ -70,6 +71,8 @@ export interface RailProps {
   collapsed: () => boolean;
   /** 레일 머리의 접기/펼치기 버튼 — 작업대의 사이드바 토글과 같은 동작이다. */
   onToggleCollapse: () => void;
+  /** waiting 세션 수가 바뀔 때 — 활동 막대 「세션」 배지(Workbench.tsx). 레일 설정의 숨김과 무관하게 센다. */
+  onWaitingCount?: (n: number) => void;
 }
 
 export function Rail(props: RailProps) {
@@ -263,6 +266,12 @@ export function Rail(props: RailProps) {
     return out;
   });
 
+  // 활동 막대 「세션」 배지 — 지금 입력을 기다리는 세션 수. 개입 필요 구역을 숨겨도 센다(그때가 더 필요하다).
+  const waitingCount = createMemo(() => rows().filter((r) => r.status === 'waiting').length);
+  createEffect(() => props.onWaitingCount?.(waitingCount()));
+  onCleanup(() => props.onWaitingCount?.(0));
+  const hideAttention = () => setPref(ATTENTION_SHOW_KEY, false);
+
   const lists = createMemo(() => buildRailLists(rows(), prefs()));
   // 「실행 중」 구역 = 세션 전체에서 개입 필요에 올라간 행을 뺀 것(같은 세션이 두 번 나오지 않는다).
   const running = createMemo(() => splitRunning(lists()));
@@ -427,6 +436,10 @@ export function Rail(props: RailProps) {
     }));
 
   const toggleCollapse = () => props.onToggleCollapse();
+  // 「새 세션」 — 머리 + 버튼과 바닥 버튼이 같은 액션(session.add-menu)을 부른다. 원격 맥을 보고 있으면
+  // 그 맥에 만든다(모든 API가 그 맥으로 중계된다, core/host-route.js). 꺼진 맥에서만 막는다.
+  const newSession = (e: MouseEvent) =>
+    (props.deps.getAction('session.add-menu') as ((el?: HTMLElement, e?: MouseEvent) => void) | undefined)?.(e.currentTarget as HTMLElement, e);
 
   // 같은 행이 두 구역(개입 필요·세션)에 나올 수 있다 — 같은 세션이라 편집·활성 상태도 같이 따라간다.
   const renderRow = (row: SessionRow, lin?: { kid?: boolean; entry?: TreeEntry<SessionRow> }) => (
@@ -449,6 +462,7 @@ export function Rail(props: RailProps) {
       onEditCancel={() => setEditingSessionKey(null)}
       onOpen={(e) => openRow(e, row)}
       onContext={(e) => contextRow(e, row)}
+      onAnswer={(key) => answerSessionPrompt(props.deps, row, key)}
     />
     <Show when={!collapsed()}><NativeChildren row={row} /></Show>
     </>
@@ -456,13 +470,15 @@ export function Rail(props: RailProps) {
 
   return (
     <aside id="vt-wgrail" classList={{ collapsed: collapsed() }} aria-label={t('세션')}>
+      {/* 머리 36: 「세션 N」(호스트가 둘 이상이면 호스트 전환) · 대화 기록 · 레일 설정 · 새 세션 · 접기.
+          접힌 48px 띠는 여닫기 버튼만 둔다. */}
       <div class="vt-wgrail-head">
         <Show when={!collapsed()}>
           {/* C1 — 호스트가 로컬 하나뿐이면 칩을 아예 안 그린다. 멀티호스트를
               안 쓰는 사람에게는 "고를 게 없는 드롭다운"이 잡음일 뿐이다. */}
           <Show
             when={hosts().length > 1}
-            fallback={<span class="vt-wgrail-title">{railTitle()}</span>}
+            fallback={<span class="vt-wgrail-title">{railTitle()}<span class="vt-wgrail-title-count">{totalRows()}</span></span>}
           >
             <button
               type="button"
@@ -483,15 +499,11 @@ export function Rail(props: RailProps) {
           <Show when={!collapsed() && stale()}>
             <span class="vt-stale-mark" role="status" title={t('서버에서 새 값을 한동안 받지 못했습니다. 보이는 값은 마지막으로 받은 것입니다.')}>{t('갱신 지연')}</span>
           </Show>
-          {/* 접힌 레일은 여닫기 버튼만 둔다 — 대화 기록·설정은 펼쳤을 때만. */}
           <Show when={!collapsed()}>
             <button type="button" class="vt-icon-btn sm" aria-label={t('대화 기록')} data-tip={t('대화 기록')} data-tip-sub={t('보관된 대화 검색 · 복구')}
               data-tip-side="bottom"
-              onClick={() => { void import('../history/panel.js').then(m => m.openHistory()); }} innerHTML={icon('list', 14, 2)} />
-          </Show>
-          {/* 레일 설정 — 개입 필요 표시, 만든 곳별 표시, 저장소 표시. 접히지 않은 때만 그린다.
-              머리글 줄은 구역 유무와 무관하게 항상 있어 설정에 늘 닿는다. */}
-          <Show when={!collapsed()}>
+              onClick={() => { void import('../history/panel.js').then(m => m.openHistory()); }} innerHTML={shellIcon('history', 16, 2)} />
+            {/* 레일 설정 — 개입 필요 표시, 만든 곳별 표시, 저장소 표시. 머리 줄은 구역 유무와 무관하게 항상 있어 설정에 늘 닿는다. */}
             <button
               type="button"
               class="vt-icon-btn sm vt-wgrail-settings"
@@ -500,12 +512,21 @@ export function Rail(props: RailProps) {
               data-tip-sub={hiddenCount() ? t('저장소 {n}개 숨김', { n: hiddenCount() }) : t('구역 · 종료 세션 · 저장소')}
               data-tip-side="bottom"
               onClick={() => setRepoSheet(true)}
-              innerHTML={icon('sliders-horizontal', 13, 2)}
+              innerHTML={icon('sliders-horizontal', 16, 2)}
+            />
+            <button
+              type="button"
+              class="vt-icon-btn sm vt-wgrail-head-new"
+              aria-label={t('새 세션')}
+              data-tip={t('새 세션')}
+              data-tip-sub={viewHostOffline() ? t('호스트에 연결할 수 없습니다') : undefined}
+              data-tip-side="bottom"
+              disabled={viewHostOffline()}
+              onClick={(e) => newSession(e)}
+              innerHTML={icon('plus', 16, 2)}
             />
           </Show>
-          {/* 2026-09-18 — 글리프(‹ ›)를 쓰고 있었다. DESIGN.md §아이콘: icons.js의
-              인라인 SVG가 유일한 아이콘 소스다. chevron 하나를 CSS로 돌리는
-              관용구(키바 토글·호스트 캐럿과 같다)로 맞춘다. */}
+          {/* chevron 하나를 CSS로 돌린다(펼침 = ‹, 접힘 = ›). */}
           <button
             type="button"
             class="vt-icon-btn sm vt-wgrail-collapse"
@@ -514,7 +535,7 @@ export function Rail(props: RailProps) {
             aria-label={collapsed() ? t('펼치기') : t('접기')}
             data-tip={collapsed() ? t('레일 펼치기') : t('레일 접기')}
             data-tip-side="bottom"
-            innerHTML={icon('chevron-down', 14, 2)}
+            innerHTML={icon('chevron-down', 16, 2)}
           />
         </div>
       </div>
@@ -550,21 +571,30 @@ export function Rail(props: RailProps) {
           </Show>
           {/* 개입 필요 — waiting 세션만. 접을 수 있고(제목 줄 전체가 토글), 레일 설정에서 끈다. */}
           <Show when={!collapsed() && !archiveOpen() && lists().attention.length > 0}>
-            <Show when={!collapsed()}>
-              <div class="vt-wgrail-group-head">
-                <button
-                  type="button"
-                  class="vt-wgrail-group-toggle"
-                  classList={{ collapsed: prefs().attentionCollapsed }}
-                  aria-expanded={!prefs().attentionCollapsed}
-                  onClick={toggleAttentionCollapsed}
-                >
-                  <span class="vt-wgrail-group-caret" innerHTML={icon('chevron-down', 12, 2)} />
-                  <span class="vt-wgrail-group-label">{t('개입 필요')}</span>
-                  <span class="vt-wgrail-group-count">{lists().attention.length}</span>
-                </button>
-              </div>
-            </Show>
+            <div class="vt-wgrail-group-head is-wait">
+              <button
+                type="button"
+                class="vt-wgrail-group-toggle"
+                classList={{ collapsed: prefs().attentionCollapsed }}
+                aria-expanded={!prefs().attentionCollapsed}
+                onClick={toggleAttentionCollapsed}
+              >
+                <span class="vt-wgrail-group-caret" innerHTML={icon('chevron-down', 12, 2)} />
+                <span class="vt-wgrail-group-label">{t('개입 필요')}</span>
+                <span class="vt-wgrail-group-count">{lists().attention.length}</span>
+              </button>
+              {/* 눈 = 이 구역 숨기기(레일 설정의 「개입 필요」 끄기와 같은 값). waiting 행은 「실행 중」으로 내려간다. */}
+              <button
+                type="button"
+                class="vt-icon-btn sm vt-wgrail-group-act"
+                aria-label={t('이 구역 숨기기')}
+                data-tip={t('이 구역 숨기기')}
+                data-tip-sub={t('레일 설정에서 다시 켭니다')}
+                data-tip-side="bottom"
+                onClick={hideAttention}
+                innerHTML={shellIcon('eye', 14, 2)}
+              />
+            </div>
             <Show when={!prefs().attentionCollapsed || collapsed()}>
               <For each={lists().attention}>{(row) => renderRow(row)}</For>
             </Show>
@@ -622,7 +652,6 @@ export function Rail(props: RailProps) {
                 {renderRow(entry.row, { entry })}
                 <Show when={(entry.kids.length + entry.closedKids.length) > 0 && !kidsCollapsed(entry.row)}>
                   <div class="vt-lin-kids" role="group" aria-label={t('{name}의 하위 세션', { name: entry.row.name })}>
-                    <div class="vt-child-heading">{t('FarShell 위임 세션')}<span>{t('별도 터미널')}</span></div>
                     <For each={entry.kids}>{(kid, i) => (
                       <div
                         class="vt-lin-kid"
@@ -698,14 +727,14 @@ export function Rail(props: RailProps) {
           type="button"
           class="vt-wgrail-new"
           disabled={viewHostOffline()}
+          aria-label={t('새 세션')}
           data-tip={collapsed() ? t('새 세션') : undefined}
           data-tip-sub={viewHostOffline() ? t('호스트에 연결할 수 없습니다') : undefined}
           data-tip-side="right"
-          onClick={(e) => {
-            (props.deps.getAction('session.add-menu') as ((el?: HTMLElement, e?: MouseEvent) => void) | undefined)?.(e.currentTarget, e);
-          }}
+          onClick={(e) => newSession(e)}
         >
-          <Show when={!collapsed()} fallback={<span class="vt-wgrail-new-mark" innerHTML={icon('plus', 15, 2)} />}>+ {t('새 세션')}</Show>
+          <span class="vt-wgrail-new-mark" innerHTML={icon('plus', collapsed() ? 16 : 14, 2)} />
+          <Show when={!collapsed()}><span class="vt-wgrail-new-label">{t('새 세션')}</span></Show>
         </button>
       </div>
       {/* 2026-09-21 — RepoVisibility와 같은 이유로 Portal로 body에 붙인다.

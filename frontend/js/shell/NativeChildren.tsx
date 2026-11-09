@@ -1,7 +1,7 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { t } from '../core/i18n.js';
-import { icon } from '../ui/icons.js';
+import { icon, stateIcon } from '../ui/icons.js';
 import { Menu } from './RailRow.js';
 import { normalizeSubagents, nativeStateLabel } from './native-subagents.js';
 import { formatRelativeTime, type SessionRow } from './rail-data.js';
@@ -53,21 +53,24 @@ export function NativeChildren(props: { row: SessionRow }) {
     { label: t('기록 보기'), run: () => void open(child) },
     { label: t('부모 세션으로 이동'), run: () => (window as any).vtOpenSessionFromRail?.({ sessionId: props.row.sessionId, tmuxName: props.row.tmuxName }) },
   ];
+  // 하위 행(시안 D02 「내부 서브에이전트 하위 행」): 들여쓰기 24 + 가지선, 1줄 상태 아이콘 · 이름 · 경과,
+  // 2줄 「내부 · 작업 중」. 도구 이름은 그리지 않는다 — 호출마다 생겼다 사라져 깜빡인다.
   const render = (child: any) => <div class="vt-native-row" data-state={child.state}>
-    <button type="button" class="vt-native-open" aria-label={`${child.label}, ${nativeStateLabel(child.state)}${child.stale ? `, ${t('상태 확인 필요')}` : ''}`} onClick={() => void open(child)}>
-      <span class="status-dot" data-state={child.state === 'failed' ? 'error' : child.state} data-stale={child.stale ? '' : undefined} />
+    <button type="button" class="vt-native-open" aria-label={`${child.label}, ${nativeStateLabel(child.state)}${child.stale ? `, ${t('상태 확인 필요')}` : ''}`}
+      data-tip={t('기록 보기')} data-tip-side="right" onClick={() => void open(child)}>
+      <span class="vt-native-state" data-stale={child.stale ? '' : undefined} innerHTML={stateIcon(child.state, 16)} />
       <span class="vt-native-main">
         <span class="vt-native-head">
           <span class="vt-native-name">{child.label}</span>
           <span class="vt-native-time">{formatRelativeTime(child.started_at)}</span>
         </span>
+        <span class="vt-native-kw" data-state={child.state}>{t('내부 · {state}', { state: nativeStateLabel(child.state) })}</span>
       </span>
     </button>
     <button type="button" class="vt-icon-btn xs vt-native-menu-btn" aria-label={t('서브에이전트 메뉴')} aria-haspopup="menu" onClick={(e) => openMenu(e, child)} innerHTML={icon('more-horizontal', 14, 2)} />
   </div>;
   return <Show when={summary().items.length || summary().limited}>
     <div class="vt-native-children" role="group" aria-label={t('네이티브 서브에이전트')}>
-      <div class="vt-child-heading">{t('에이전트 내부')}<span>{t('기록 조회')}</span></div>
       <Show when={manyWorking()}>
         <button type="button" class="vt-native-fold" aria-expanded={expanded()} onClick={() => { setExpanded(!expanded()); save(); }}>{t('내부 에이전트 {n}개', { n: current().length })}</button>
       </Show>

@@ -1,9 +1,11 @@
 import { type JSX } from 'solid-js';
 import { promptDialog } from '../core/dialog-lazy.js';
 import { t } from '../core/i18n.js';
+import { icon } from '../ui/icons.js';
 import type { SessionGroup } from './rail-data.js';
 
-/** 레일/Fleet의 묶음 제목은 한 번만 표시. 열린/닫힌 묶음 모두 같은 제목 편집 경로. */
+/** 레일/Fleet의 묶음 제목은 한 번만 표시. 열린/닫힌 묶음 모두 같은 제목 편집 경로.
+ * 머리는 구역 머리(28)와 같은 줄이다: 묶음 아이콘 · 제목(누르면 묶음 열기) · 개수 · 연필(이름 변경). */
 export function ViewGroup(props: { group: SessionGroup; onOpen: () => void; children: JSX.Element }) {
   const rename = async () => {
     const id = props.group.id;
@@ -13,9 +15,10 @@ export function ViewGroup(props: { group: SessionGroup; onOpen: () => void; chil
   };
   return <section class="vt-view-group" aria-label={props.group.label} data-view-id={props.group.id}>
     <div class="vt-view-group-head">
+      <span class="vt-view-group-ico" aria-hidden="true" innerHTML={icon('layout-panels', 12, 2)} />
       <button type="button" class="vt-view-group-title" onClick={props.onOpen} data-tip={t('묶음 열기')} data-tip-side="right">{props.group.label}</button>
       <span class="vt-view-group-count" aria-label={t('{n}개 세션', { n: props.group.rows.length })}>{props.group.rows.length}</span>
-      <button type="button" class="vt-view-group-rename" onClick={() => void rename()} aria-label={t('{label} 묶음 이름 변경', { label: props.group.label })} data-tip={t('묶음 이름 변경')} data-tip-side="right">{t('편집')}</button>
+      <button type="button" class="vt-view-group-rename" onClick={() => void rename()} aria-label={t('{label} 묶음 이름 변경', { label: props.group.label })} data-tip={t('묶음 이름 변경')} data-tip-side="right" innerHTML={icon('pencil', 14, 2)} />
     </div>
     {props.children}
   </section>;
