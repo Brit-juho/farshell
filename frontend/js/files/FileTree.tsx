@@ -29,6 +29,10 @@ export interface FileTreeDeps {
   sharePath: (path: string) => void;
   /** 내려받기(파일 개편 단계 7, `/api/fs/download`). 원격 호스트면 부르지 않고 이유를 알린다(결정 D7). */
   downloadPath?: (path: string, size: number) => void;
+  /** 파일 쓰기(단계 8) — 이 컴퓨터의 파일만(결정 D7). 원격이면 트리가 부르지 않고 이유를 알린다. 끝나면 그 폴더를 다시 읽는다. */
+  newFile?: (dir: string) => Promise<string | null>;
+  renamePath?: (path: string) => Promise<string | null>;
+  trashPath?: (path: string) => Promise<boolean>;
   /** 지금 터미널 세션의 cwd. 모르면 null(이유는 deps가 토스트로 말한다). */
   terminalCwd: () => Promise<string | null>;
   /** 지금 터미널 세션 이름(행 메뉴 「경로 삽입」 옆에 적는다). */
@@ -258,6 +262,22 @@ export function FileTree(props: { deps: FileTreeDeps }) {
         else deps.downloadPath!(r.path, r.size);
       } });
     if (r.kind === 'file') items.push({ id: 'share', label: t('공유 링크 만들기…'), icon: 'link', run: () => deps.sharePath(r.path) });
+    // 쓰기(단계 8) — 원격에서는 숨기지 않고 이유를 붙인다(결정 D7, 시안 F05-F).
+    const writeHint = deps.remote ? t('이 컴퓨터에서만') : undefined;
+    const remoteWrite = () => deps.toast(t('원격 호스트 파일은 읽기만 됩니다 — 편집 · 새 파일 · 이름 바꾸기 · 삭제는 이 컴퓨터의 파일에서만 됩니다'), 'warn');
+    const dirOf = r.kind === 'dir' ? r.path : parentOf(r.path);
+    if (deps.newFile) items.push({ id: 'new', label: t('이 폴더에 새 파일…'), icon: 'plus', hint: writeHint, run: () => {
+      if (deps.remote) { remoteWrite(); return; }
+      void deps.newFile!(dirOf).then((p) => { if (p) { void store.refreshDir(dirOf); deps.openFile(p); } });
+    } });
+    if (r.kind === 'file' && deps.renamePath) items.push({ id: 'rename', label: t('이름 바꾸기…'), icon: 'pencil', hint: writeHint, run: () => {
+      if (deps.remote) { remoteWrite(); return; }
+      void deps.renamePath!(r.path).then((p) => { if (p) void store.refreshDir(parentOf(r.path)); });
+    } });
+    if (r.kind === 'file' && deps.trashPath) items.push({ id: 'trash', label: t('휴지통으로 이동…'), icon: 'trash-2', hint: writeHint, run: () => {
+      if (deps.remote) { remoteWrite(); return; }
+      void deps.trashPath!(r.path).then((ok) => { if (ok) void store.refreshDir(parentOf(r.path)); });
+    } });
     items.push({ id: 'refresh', label: r.kind === 'dir' ? t('이 폴더 새로고침') : t('새로고침'), icon: 'refresh-cw', run: () => refreshRow(r) });
     return items;
   };

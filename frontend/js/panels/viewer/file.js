@@ -1,5 +1,5 @@
 // 코드 뷰어 파일 렌더 — F4에서 viewer.js에서 분리.
-// 파일 본문은 CodeMirror 6(읽기 전용, `editor` 지연 청크 — editor.js)로 그린다(파일 개편 단계 2).
+// 파일 본문은 CodeMirror 6(`editor` 지연 청크 — editor.js)로 그린다(파일 개편 단계 2). 편집·저장은 edit.js(단계 8).
 // 받기는 `/api/fs/file` 2판의 구간·tail·rev·304·인코딩을 쓴다(file-load.js, 단계 3). 큰 파일은 앞 4MB까지 열고
 // 「더 보기」, 「끝부분 보기」, 인코딩 고르기, 터미널 링크의 줄 이동이 여기 있다.
 // hljs(`ensureHljs`·`_hl`)는 diff 화면(diff.js)만 쓴다 — diff를 옮기는 단계 9까지 남는다.
@@ -18,6 +18,7 @@ import {
 } from './preview.js';
 import { slugify } from './markdown.js';
 import { downloadFsPath as _downloadFsPath, downloadBlockedReason } from './download.js';
+import { decorateBar, syncConflict, editing, refreshEditing, stash, restore } from './edit.js';
 // UMD 전역 VTDiffLex — 뷰어 전용이라 panels 청크에서 평가한다. ⚠ 마지막 import여야 한다:
 // tests/helpers/vm-esm.js의 IMPORT_RE가 뒤에 `from '…'`이 더 있으면 부작용 import를 삼킨다.
 import '../../lib/difflex.js';
@@ -97,7 +98,9 @@ export function disposeViewer(root) {
   if (root.classList && root.classList.contains('vt-vw-code-pane')) hosts.push(root);
   if (root.querySelectorAll) hosts.push(...root.querySelectorAll('.vt-vw-code-pane'));
   for (const c of hosts) {
+    try { stash(c); } catch (_) { /* 보관 실패는 닫기를 막지 않는다 */ }
     c._vtDoc = null;
+    c._vtEdit = null;
     const h = c._vtEditor;
     c._vtEditor = null;
     if (h) _destroyEditor(h);
@@ -196,7 +199,9 @@ function _syncTopBar(container, st) {
   const tail = st.mode === 'tail';
   const kind = previewKind(st.path);
   const toggle = st.mode === 'head' && hasRenderedView(kind) && !!meta && !meta.binary && !meta.image;
-  if (!reason && !showEnc && !tail && !st.changing && !toggle) { if (bar) bar.remove(); return; }
+  // 편집 조작(단계 8): 편집기로 그린 텍스트면 띠에 「편집」(못 하면 흐리게 + 이유)이나 편집 중 조작을 둔다.
+  const edit = !!container._vtEditor && !!meta && !meta.binary && !meta.image && !st.preview;
+  if (!reason && !showEnc && !tail && !st.changing && !toggle && !edit) { if (bar) bar.remove(); syncConflict(container, st); return; }
   if (!bar) {
     bar = document.createElement('div');
     bar.className = 'vt-vw-bar';
@@ -241,6 +246,9 @@ function _syncTopBar(container, st) {
       }));
     }
   }
+  if (edit) decorateBar(container, st, bar);
+  bar.classList.toggle('vt-vw-bar-editing', editing(container));
+  syncConflict(container, st);
 }
 
 // 렌더/원문 전환(시안 F07 — 마크다운 렌더/원문, CSV 표/원문, SVG 그림/원문). 크기 상한을 넘어 원문으로 연 경우와
@@ -381,6 +389,7 @@ function _syncBottomNote(container, st) {
 }
 
 function _syncBars(container, st) {
+  container._vtEditSync = () => { if (container._vtDoc === st) _syncBars(container, st); };
   _syncTopBar(container, st);
   _syncBottomNote(container, st);
 }
@@ -520,6 +529,7 @@ function _open(container, path, opts = {}) {
   container._vtDoc = st;
   container._vtEditor = null;
   container._vtPlain = null;
+  container._vtEdit = null;
   return _serial(st, () => _openRun(container, st, path, opts));
 }
 
@@ -582,6 +592,8 @@ async function _openRun(container, st, path, opts) {
   st.carry = r.carry || '';
   if (r.meta.image || r.meta.binary || pdf) { _paintMedia(container, r.meta, path, st.host); return; }
   _syncBars(container, st);
+  // 고친 채 닫았던 파일이면 편집 모드로 이어 연다(edit.js 보관).
+  restore(container, st, container._vtEditSync);
   // 줄 이동이 실패해도(더 받다가 끊김) 이미 그린 내용을 오류로 덮지 않는다.
   if (opts.line) await _jump(container, st, opts.line, opts.col).catch(() => {});
 }
@@ -792,6 +804,7 @@ export function refreshGap(scrollEl) {
 function _reopen(container, mode) {
   const st = container._vtDoc;
   if (!st) return Promise.resolve();
+  stash(container);   // 편집 중이었으면 고친 내용을 보관 — 앞부분으로 다시 열면 이어 연다
   container.innerHTML = `<div class="vt-vw-loading">${t('불러오는 중…')}</div>`;
   return _open(container, st.path, { host: st.host, mode })
     .catch((e) => { _setMsg(container, 'vt-vw-empty', [_errText(e)]); });
@@ -837,6 +850,8 @@ export async function refreshFile(scrollEl, path, isCurrent, opts = {}) {
     try {
       out = await _serial(st, () => {
         if (old._vtDoc !== st) return 'stale';
+        // 편집 중이면 문서를 덮지 않는다 — 바깥 변경은 edit.js가 따라가거나 충돌 배너로 알린다.
+        if (editing(old)) return refreshEditing(old, st);
         return live() ? _refreshDoc(old, st) : 'reopen';
       });
     } catch (e) {

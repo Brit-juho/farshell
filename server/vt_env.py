@@ -176,6 +176,7 @@ def load(path: Optional[str] = None) -> dict[str, str]:
 # 격리 테스트 서버가 그 성질에 의존한다(AGENTS.md).
 BOUNDARY_KEYS = (
     "VT_BROWSE_ROOTS",        # 코드 뷰어 열람 경계
+    "VT_WRITE_ROOTS",         # 편집·저장 쓰기 경계(비우면 열람 경계)
     "VT_NETWORK_MODE",        # IP 필터
     "VT_ALLOWED_ORIGINS",     # 교차 출처 허용
     "VT_ALLOWED_HOSTS",       # Host 허용 목록(DNS rebinding)

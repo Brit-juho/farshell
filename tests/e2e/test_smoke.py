@@ -150,10 +150,22 @@ def _isolated_env(port: int, token: str, tmp: Path) -> dict:
         # (~/GitHub)은 CI에 없고 로컬에선 사람마다 달라 결과가 흔들린다. 열람은
         # 읽기 전용이고 경계도 여기로 좁아진다.
         # 둘째 경계는 뷰어 시험 파일(큰 파일·CP949·긴 한 줄 — `_make_viewer_files`)을 두는 임시 폴더다.
-        VT_BROWSE_ROOTS=f"{ROOT}:{tmp / 'browse'}",
+        VT_BROWSE_ROOTS=f"{ROOT}:{tmp / 'browse'}" + (f":{_trash_dir()}" if _trash_dir() else ""),
+        # 쓰기(파일 개편 단계 8)는 시험 파일 폴더에만 — 기본값(= 열람 경계)이면 이 저장소 자신도 쓰기 경계가 된다.
+        VT_WRITE_ROOTS=f"{tmp / 'browse'}" + (f":{_trash_dir()}" if _trash_dir() else ""),
+        # Linux 휴지통(freedesktop)은 XDG_DATA_HOME을 따른다 — 사용자의 진짜 휴지통에 넣지 않게.
+        XDG_DATA_HOME=str(tmp / "xdg"),
         PYTHONUNBUFFERED="1",
     )
     return env
+
+
+def _trash_dir():
+    """휴지통 시험 파일을 둘 폴더. macOS는 HOME을 바꿔도 시동 볼륨 파일이 사용자의 진짜 ~/.Trash로 간다
+    (NSFileManager가 HOME을 보지 않는다) — 그래서 **다른 볼륨**(디스크 이미지)의 폴더를 `VT_E2E_TRASH_DIR`로
+    줄 때만 그 시험을 돌린다. 그 볼륨의 휴지통은 `<볼륨>/.Trashes/<uid>`다. Linux는 XDG_DATA_HOME으로 격리한다."""
+    v = os.environ.get("VT_E2E_TRASH_DIR", "").strip()
+    return v or None
 
 
 def _tmux_socket(port: int) -> str:
@@ -346,6 +358,7 @@ def _make_viewer_files(d: Path) -> Path:
     (d / "doc.pdf").write_bytes(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj<</JS(app.alert(1))>>endobj\ntrailer<<>>\n%%EOF\n")
     (d / "clip.mp4").write_bytes(b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom" + bytes(range(256)) * 64)
     (d / "보고서 1.txt").write_text("다운로드 시험 내용\n")
+    (d / "edit.txt").write_text("alpha\nbeta\n")          # 단계 8 — 편집·저장
     return d
 
 
@@ -1149,6 +1162,113 @@ def test_인코딩을_모르면_이유를_띄우고_고르면_다시_연다(page
         assert "줄 끝(LF·CRLF)이 섞여" in page.locator("#vt-file .vt-vw-bar").inner_text()
     finally:
         _close_overlay(page)
+
+
+_SAVE_KEY = "Meta+s" if sys.platform == "darwin" else "Control+s"
+_EDOC = "document.querySelector('#vt-file .vt-vw-code-pane')._vtEditor.view"
+
+
+def _type_at_end(page, text):
+    page.evaluate(f"() => {{ const v = {_EDOC}; v.focus(); v.dispatch({{ selection: {{ anchor: v.state.doc.length }} }}); }}")
+    page.keyboard.type(text)
+
+
+def test_편집_저장은_비밀번호를_묻고_바꾸며_바깥_변경은_따라가거나_충돌로_알린다(page):
+    """파일 개편 단계 8(시안 F05 · F05-B · F05-D) — 「편집」 → 입력 → ⌘S/Ctrl+S → 승격(웹 로그인 비밀번호) →
+    디스크에 저장. 고친 것이 없을 때의 바깥 변경은 따라가고, 고친 채 바뀌면 충돌 배너 → 비교 → 내 것으로 덮어쓰기."""
+    target = _viewer_file("edit.txt")
+    Path(target).write_text("alpha\nbeta\n")
+    try:
+        _open_overlay(page, target)
+        btn = page.locator("#vt-file .vt-vw-edit-btn")
+        btn.wait_for(timeout=10000)
+        assert btn.get_attribute("aria-disabled") is None, btn.get_attribute("title")
+        btn.click()
+        page.wait_for_selector("#vt-file .vt-vw-cm-edit", timeout=5000)
+        _type_at_end(page, "gamma\n")
+        expect(page.locator("#vt-file .vt-vw-ss")).to_contain_text("저장 안 됨", timeout=5000)
+        page.keyboard.press(_SAVE_KEY)
+        pw = page.locator(".vt-dialog-input")
+        pw.wait_for(timeout=10000)
+        assert pw.get_attribute("type") == "password"
+        pw.fill(E2E_PASSWORD)
+        page.locator(".vt-dialog-ok").click()
+        expect(page.locator("#vt-file .vt-vw-ss")).to_contain_text("저장됨", timeout=10000)
+        assert Path(target).read_text() == "alpha\nbeta\ngamma\n"
+        assert not [x for x in os.listdir(Path(target).parent) if x.startswith(".fsh-")]
+
+        # 고친 것이 없을 때의 바깥 변경 — 조용히 따라간다(감시 알림 → 다시 읽기).
+        time.sleep(0.05)
+        Path(target).write_text("alpha\nBETA\ngamma\n")
+        page.wait_for_function(f"() => {_EDOC}.state.doc.toString() === 'alpha\\nBETA\\ngamma\\n'", timeout=10000)
+
+        # 고친 채 바깥에서 바뀌면 충돌 배너. 내 글은 그대로다.
+        _type_at_end(page, "mine\n")
+        time.sleep(0.2)
+        Path(target).write_text("other editor\n")
+        ban = page.locator("#vt-file .vt-vw-conflict")
+        ban.wait_for(timeout=10000)
+        assert "다른 곳에서 이 파일이 바뀌었습니다" in ban.inner_text()
+        assert page.evaluate(f"() => {_EDOC}.state.doc.toString()").endswith("mine\n")
+        ban.locator("button", has_text="비교").click()
+        cmp = page.locator("#vt-file .vt-vw-compare")
+        cmp.wait_for(timeout=5000)
+        assert "other editor" in cmp.inner_text() and "mine" in cmp.inner_text()
+        ban.locator("button", has_text="내 것으로 덮어쓰기").click()
+        page.locator(".vt-dialog-ok", has_text="덮어쓰기").click()
+        page.wait_for_selector("#vt-file .vt-vw-conflict", state="detached", timeout=10000)
+        expect(page.locator("#vt-file .vt-vw-ss")).to_contain_text("저장됨", timeout=10000)
+        assert Path(target).read_text() == "alpha\nBETA\ngamma\nmine\n"
+    finally:
+        _close_overlay(page)
+
+
+def test_새_파일_이름_바꾸기_휴지통은_승격과_경계를_지킨다(page, server):
+    """파일 개편 단계 8 — 쓰기 라우트는 승격 없이 401, 교차 출처 403, 경계 밖 403. 새 파일은 덮어쓰지 않고, 이름 바꾸기는
+    같은 이름이 있으면 409. 휴지통: Linux는 격리한 XDG_DATA_HOME의 freedesktop 휴지통, macOS는 다른 볼륨
+    (`VT_E2E_TRASH_DIR`)에서만 시험한다 — 시동 볼륨 파일은 사용자의 진짜 휴지통으로 가기 때문이다."""
+    base, _ = server
+    req = page.context.request
+    browse = Path(_viewer_file("edit.txt")).parent
+    j = {"Content-Type": "application/json"}
+    r = req.post(f"{base}/api/fs/new", data=json.dumps({"dir": str(browse), "name": "made.txt"}), headers=j)
+    assert r.status == 401, r.text()
+    assert req.post(f"{base}/api/auth/elevate", data={"password": E2E_PASSWORD}).ok
+    r = req.post(f"{base}/api/fs/new", data=json.dumps({"dir": str(browse), "name": "made.txt"}), headers={**j, "Origin": "https://evil.example"})
+    assert r.status == 403
+    r = req.post(f"{base}/api/fs/new", data=json.dumps({"dir": str(ROOT), "name": "made.txt"}), headers=j)
+    assert r.status == 403 and not (ROOT / "made.txt").exists()      # 저장소 자신은 열람 경계지만 쓰기 경계 밖
+    r = req.post(f"{base}/api/fs/new", data=json.dumps({"dir": str(browse), "name": "made.txt"}), headers=j)
+    assert r.status == 200, r.text()
+    assert req.post(f"{base}/api/fs/new", data=json.dumps({"dir": str(browse), "name": "made.txt"}), headers=j).status == 409
+    r = req.post(f"{base}/api/fs/rename", data=json.dumps({"path": str(browse / "made.txt"), "to": str(browse / "rows.txt")}), headers=j)
+    assert r.status == 409
+    r = req.post(f"{base}/api/fs/rename", data=json.dumps({"path": str(browse / "made.txt"), "to": str(browse / "renamed.txt")}), headers=j)
+    assert r.status == 200 and (browse / "renamed.txt").exists() and not (browse / "made.txt").exists()
+    if sys.platform == "darwin":
+        tdir = _trash_dir()
+        if not tdir:
+            pytest.skip("macOS 휴지통 시험은 다른 볼륨(VT_E2E_TRASH_DIR)에서만 — 진짜 ~/.Trash를 쓰지 않는다")
+        victim = Path(tdir) / "trash-me.txt"
+        victim.write_text("put back me\n")
+        r = req.post(f"{base}/api/fs/delete", data=json.dumps({"path": str(victim)}), headers=j)
+        assert r.status == 200, r.text()
+        assert not victim.exists()
+        vol = Path(tdir)
+        while vol.parent != vol and os.stat(vol.parent).st_dev == os.stat(tdir).st_dev:
+            vol = vol.parent
+        trash = vol / ".Trashes" / str(os.getuid())
+        name = r.json()["trash_name"]
+        assert (trash / name).read_text() == "put back me\n"
+        # Finder 「되돌리기」가 읽는 원래 위치(ptbL)·이름(ptbN)이 휴지통 .DS_Store에 남았다.
+        ds = (trash / ".DS_Store").read_bytes()
+        assert b"ptbL" in ds and b"ptbN" in ds and "trash-me.txt".encode("utf-16-be") in ds
+    else:
+        r = req.post(f"{base}/api/fs/delete", data=json.dumps({"path": str(browse / "renamed.txt")}), headers=j)
+        assert r.status == 200, r.text()
+        xdg = browse.parent / "xdg" / "Trash"
+        assert (xdg / "files" / "renamed.txt").exists()
+        assert f"Path={browse / 'renamed.txt'}" in (xdg / "info" / "renamed.txt.trashinfo").read_text()
 
 
 def test_줄_이동은_그_줄로_옮기고_표시한다(page):
@@ -2598,11 +2718,12 @@ def test_파일_트리는_보이는_행만_그리고_페이지와_aria_tree와_�
     page.locator("#vt-dir .vt-ft-filter input").fill("n0042")
     page.wait_for_function("() => document.querySelectorAll('#vt-dir .vt-ft-row').length === 1", timeout=5000)
     assert page.locator("#vt-dir .vt-ft-cnt").inner_text() == "1개"
-    # 행 메뉴 — 오른쪽 클릭. 다운로드는 단계 7에서 더했다. 새 파일은 아직 없다.
+    # 행 메뉴 — 오른쪽 클릭. 다운로드는 단계 7, 새 파일·이름 바꾸기·휴지통은 단계 8에서 더했다.
     page.locator("#vt-dir .vt-ft-row.k-file").click(button="right")
     page.wait_for_selector('.vt-ft-menu[role="menu"]', timeout=5000)
     labels = page.locator('.vt-ft-menu [role="menuitem"] .vt-ft-mi-l').all_text_contents()
-    assert labels == ["열기", "터미널에 경로 삽입", "경로 복사", "다운로드", "공유 링크 만들기…", "새로고침"], labels
+    assert labels == ["열기", "터미널에 경로 삽입", "경로 복사", "다운로드", "공유 링크 만들기…",
+                      "이 폴더에 새 파일…", "이름 바꾸기…", "휴지통으로 이동…", "새로고침"], labels
     page.keyboard.press("Escape")
     page.wait_for_function("() => !document.querySelector('.vt-ft-menu')", timeout=5000)
 

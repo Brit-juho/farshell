@@ -52,6 +52,7 @@ from routes.agents import router as agents_router, human_router as agents_human_
 from routes.system import router as system_router
 from routes.clipboard import router as clipboard_router
 from routes.files import router as files_router
+from routes.fs_write import elevated_router as fs_write_elevated_router
 from routes.git import router as git_router
 from routes.ports import router as ports_router
 from routes.ports import elevated_router as ports_elevated_router
@@ -688,6 +689,7 @@ app.include_router(agents_human_router)
 app.include_router(system_router)
 app.include_router(clipboard_router)
 app.include_router(files_router)
+app.include_router(fs_write_elevated_router)
 app.include_router(git_router)
 app.include_router(ports_router)
 app.include_router(ports_elevated_router)

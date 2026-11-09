@@ -808,7 +808,7 @@ def open_resolved(path: Path) -> int:
     return result
 
 
-# --- 쓰기 정책 (쓰기 API가 생길 때까지 닫혀 있다) ----------------------------------
+# --- 쓰기 정책 (편집·저장, files-overhaul 단계 8) ---------------------------------------
 # 읽어도 되는 파일이 원격에서 덮어써도 되는 파일은 아니다. 아래는 읽기 허용 점 디렉토리
 # (ALLOWED_DOT_DIRS) 중 **실행 설정**이 되는 것들이다 — CI 워크플로, 훅 관리자, 개발 컨테이너,
 # 편집기 작업 정의. 쓰기에서는 경로의 어느 조각에 있어도 거부한다. 읽기 거부 목록과 점 디렉토리
@@ -817,26 +817,79 @@ WRITE_DENY_DIR_PARTS = frozenset({
     ".github", ".gitlab", ".husky", ".devcontainer", ".vscode", ".circleci",
 })
 
-# 쓰기 API는 아직 없다. 쓰기 경계(읽기 경계와 따로 둘 설정 값)와 승격 요구를 정하는 단계에서 이 값을 연다.
-# 그 전까지 `resolve_for_write`는 판정을 다 한 뒤에도 거부한다 — 쓰기 라우트가 먼저 생겨도 열리지 않게.
-WRITES_ENABLED = False
+# 쓰기에서만 거부하는 **이름**(경로의 어느 조각이든). `.git` 디렉토리는 점 디렉토리 규칙이 이미 닫지만, `.git`
+# **파일**(gitfile, `gitdir: <경로>`)은 점 파일이라 읽기가 열려 있다. 그 파일을 쓰면 git이 다른 저장소의 설정·훅
+# (`core.fsmonitor`, `core.hooksPath`)을 쓰게 되어 다음 git 명령에서 임의 명령이 돈다 — 실행 설정이다.
+WRITE_DENY_NAMES = frozenset({".git"})
+
+# 쓰기 경계 `VT_WRITE_ROOTS`(결정 D3). 비우면 열람 경계와 같다(`get_roots()`). `off`면 쓰기를 모두 닫는다.
+# 값을 주면 그 루트들만 — 열람 경계 밖의 루트는 `resolve_under_roots`가 먼저 막으므로 넓어지지 않는다(쓰기 ⊆ 읽기).
+WRITE_ROOTS_OFF = ("off", "none", "0", "false")
+
+
+def get_write_roots() -> list[Path]:
+    """쓰기 허용 경계. 빈 목록이면 쓰기가 닫힌 것이다(`writes_enabled()`)."""
+    raw = os.environ.get("VT_WRITE_ROOTS", "").strip()
+    if not raw:
+        return get_roots()
+    if raw.lower() in WRITE_ROOTS_OFF:
+        return []
+    roots = []
+    for chunk in raw.split(":"):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        try:
+            p = Path(chunk).expanduser().resolve()
+        except (OSError, RuntimeError):
+            continue
+        if p.is_dir():
+            roots.append(p)
+    return roots
+
+
+def writes_enabled() -> bool:
+    """쓰기가 정책으로 열려 있는가(옛 상수 `WRITES_ENABLED`, 항상 꺼짐을 대신한다)."""
+    return bool(get_write_roots())
+
+
+def _raw_write_path(raw_path: str) -> str:
+    """쓰기 경로의 모양 검사 — 절대경로만, `..` 조각·제어 문자 없이. 판정 전에 거른다."""
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        raise FsDenied(tr("경로가 비었습니다"))
+    if any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in raw_path):
+        raise FsDenied(tr("경로에 제어 문자가 있습니다"))
+    expanded = os.path.expanduser(raw_path)
+    if not os.path.isabs(expanded):
+        raise FsDenied(tr("쓰기 경로는 절대경로여야 합니다"))
+    if ".." in Path(expanded).parts:
+        raise FsDenied(tr("쓰기 경로에 「..」를 쓸 수 없습니다"))
+    return expanded
 
 
 def resolve_for_write(raw_path: str) -> Path:
     """쓰기 대상 경로를 판정한다 — 쓰기 경로의 **유일한** 판정 지점(AGENTS.md 계약 2).
 
-    1. `resolve_under_roots`: 열람 경계, 읽기 거부 목록, 점 디렉토리 규칙.
-    2. `WRITE_DENY_DIR_PARTS`: 실행 설정 폴더는 읽을 수는 있어도 쓸 수 없다.
-    3. `WRITES_ENABLED`가 꺼져 있으면(지금) 거부한다.
+    1. 모양: 절대경로, `..` 조각·제어 문자 없음.
+    2. `resolve_under_roots`: 열람 경계, 읽기 거부 목록, 점 디렉토리 규칙.
+    3. `WRITE_DENY_DIR_PARTS`·`WRITE_DENY_NAMES`: 실행 설정은 읽을 수는 있어도 쓸 수 없다. 대소문자를 가리지
+       않는다(macOS 기본 파일시스템은 대소문자를 구별하지 않아 `.GitHub`이 `.github`과 같은 폴더다).
+    4. 쓰기 경계(`get_write_roots`) 안이어야 한다. `VT_WRITE_ROOTS=off`면 모두 거부.
 
     통과한 경로는 `open_resolved_parent`로 연다(판정 뒤 바꿔치기 방어). 실패는 `FsDenied`.
     """
-    p = resolve_under_roots(raw_path)
+    p = resolve_under_roots(_raw_write_path(raw_path))
     for part in p.parts:
-        if part in WRITE_DENY_DIR_PARTS:
+        folded = part.casefold()
+        if folded in WRITE_DENY_DIR_PARTS:
             raise FsDenied(tr("쓰기가 금지된 디렉토리: {name}", name=part))
-    if not WRITES_ENABLED:
-        raise FsDenied(tr("파일 쓰기는 지원하지 않습니다"))
+        if folded in WRITE_DENY_NAMES:
+            raise FsDenied(tr("쓰기가 금지된 이름: {name}", name=part))
+    roots = get_write_roots()
+    if not roots:
+        raise FsDenied(tr("파일 쓰기가 꺼져 있습니다 (VT_WRITE_ROOTS=off)"))
+    if not any(_is_within(p, root) for root in roots):
+        raise FsDenied(tr("쓰기 허용 경계 밖의 경로입니다 (VT_WRITE_ROOTS)"))
     return p
 
 
