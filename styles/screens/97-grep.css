@@ -145,7 +145,7 @@
 .vt-gr-q input { flex:1; min-width:0; height:100%; padding:0; border:0; background:transparent; color:var(--txt); font:400 var(--fs-xs) var(--mono); outline:none; }
 .vt-gr-q input::placeholder { color:var(--sub); font-family:var(--ui); }
 .vt-gr-glob.row { flex:none; }
-.vt-gr-glob.row .vt-gr-gl { width:28px; }
+.vt-gr-glob.row .vt-gr-gl { min-width:28px; }
 .vt-gr-scope-line { display:flex; align-items:center; gap:calc(var(--spacing) * 1); min-width:0; font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
 .vt-gr-scope-line span:first-child { display:inline-flex; flex:none; }
 .vt-gr-scope-p { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left; }

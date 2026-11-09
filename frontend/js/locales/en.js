@@ -4735,5 +4735,6 @@ window.__VT_I18N = {
   "파일 보기 전환": "Switch file view",
   "파일 안에서 찾을 글자": "Text to find in files",
   "파일 이름 검색(/)은 계속 쓸 수 있습니다": "File name search (/) still works",
-  "포함": "Include"
+  "포함": "Include",
+  "제외": "Exclude"
 };

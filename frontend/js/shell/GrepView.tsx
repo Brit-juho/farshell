@@ -30,6 +30,11 @@ interface GrepError { code: string; reason: string; status: number; pos?: number
 // 서버 기한(10초) + 중계·자식 정리 여유. 브라우저 쪽 마감은 이보다 길어야 서버의 「기한 초과 + 부분 결과」를 받는다.
 const REQUEST_TIMEOUT_MS = 25000;
 const DEBOUNCE_MS = 250;
+// 제외 칸 자리표시 글. 소스에 그대로 쓰면 `/*`·`*/`가 생겨 scripts/check_i18n.py(주석 걷기)가 그 사이의 t() 키를
+// 못 본다 — 실제로 「제외」가 en.js 누락으로 잡히지 않았다.
+const EXCLUDE_HINT = ['**', '*.test.*'].join('/');
+// 앞을 말줄임하는 경로(direction:rtl)의 `/`가 반대쪽으로 튀지 않게 감싸는 표시(FileTree.tsx와 같다).
+const LRM = '\u200e';
 
 export interface GrepController {
   query: () => string;
@@ -434,7 +439,7 @@ export function GrepPalette(props: {
         </label>
         <label class="vt-gr-glob">
           <span class="vt-gr-gl">{t('제외')}</span>
-          <input type="text" spellcheck={false} autocapitalize="off" autocomplete="off" placeholder="**/*.test.*"
+          <input type="text" spellcheck={false} autocapitalize="off" autocomplete="off" placeholder={EXCLUDE_HINT}
             value={c.opts().exclude} onInput={(e) => c.setOpt('exclude', e.currentTarget.value)} />
         </label>
         <span class="vt-gr-sp" />
@@ -510,12 +515,12 @@ export function GrepSide(props: {
         </label>
         <label class="vt-gr-glob row">
           <span class="vt-gr-gl">{t('제외')}</span>
-          <input type="text" spellcheck={false} autocapitalize="off" autocomplete="off" placeholder="**/*.test.*"
+          <input type="text" spellcheck={false} autocapitalize="off" autocomplete="off" placeholder={EXCLUDE_HINT}
             value={c.opts().exclude} onInput={(e) => c.setOpt('exclude', e.currentTarget.value)} onKeyDown={onKey} />
         </label>
         <Show when={c.scope()}>
           <div class="vt-gr-scope-line" title={c.scope()}>
-            <span innerHTML={shellIcon('folder', 12)} /><span class="vt-gr-scope-p">{c.scope()}</span>
+            <span innerHTML={shellIcon('folder', 12)} /><span class="vt-gr-scope-p">{LRM + c.scope() + LRM}</span>
           </div>
         </Show>
       </div>
