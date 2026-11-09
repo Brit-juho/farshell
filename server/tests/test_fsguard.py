@@ -582,10 +582,18 @@ def test_write_roots_cannot_widen_past_the_browse_boundary(sandbox, monkeypatch)
 
 
 @pytest.mark.parametrize("raw", ["relative/main.py", "{root}/proj/../proj/main.py", "{root}/proj/ma\x00in.py",
-                                 "{root}/proj/a\nb.py", ""])
+                                 "{root}/proj/a\nb.py", "",
+                                 # 끝의 `/`·`.`, 빈 조각 — `Path`가 지워 링크를 따라간 대상이 판정된다
+                                 "{root}/proj/", "{root}/proj/.", "{root}/proj/./main.py", "{root}//proj/main.py",
+                                 "{root}/proj/main.py/", "{root}/proj/main.py/."])
 def test_resolve_for_write_refuses_odd_shapes(sandbox, writes_on, raw):
     with pytest.raises(fsguard.FsDenied):
         fsguard.resolve_for_write(raw.format(root=sandbox["root"]))
+
+
+def test_raw_write_path_allows_plain_paths_and_the_filesystem_root():
+    assert fsguard._raw_write_path("/") == "/"
+    assert fsguard._raw_write_path("/a/b.c/.d") == "/a/b.c/.d"
 
 
 @pytest.mark.parametrize("name", [".git", ".GIT", ".GitHub/ci.yml", ".VSCODE/tasks.json"])
