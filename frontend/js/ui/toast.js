@@ -93,6 +93,10 @@ function hudLine() {
   // HUD는 regular 티어부터만 존재한다(components.css의 min-width:720px).
   // 폭 경계는 layout/breakpoints.js 한 곳에만 있어야 한다(DESIGN.md §3).
   if (typeof window !== 'undefined' && window.innerWidth < COMPACT_MAX) return null;
+  // 데스크톱 집중 모드에서는 상태 막대가 화면 밖으로 밀려나고 inert다 — 그 칸에 쓰면 보이지도
+  // 낭독되지도 않는다. 아래 가장자리로 막대를 드러낸 동안만 칸을 쓰고, 그 밖에는 카드로 간다.
+  const root = document.documentElement;
+  if (root.classList.contains('vt-focus') && !root.classList.contains('vt-reveal-bottom')) return null;
   const bar = document.getElementById('vt-hud');
   if (!bar) return null;
   let el = document.getElementById('vt-hud-msg');

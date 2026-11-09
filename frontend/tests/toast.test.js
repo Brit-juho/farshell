@@ -225,6 +225,24 @@ test('HUD 가 있어도 warn/error 는 카드로 뜬다 — 읽어야 하는 것
   assert.strictEqual(hudMsg(window), null, 'HUD 줄은 만들지도 않는다');
 });
 
+test('데스크톱 집중 모드에서 상태 막대가 숨어 있으면 info/success는 카드로 간다(보이고 낭독되게)', async () => {
+  const { window, showToast } = await buildWindow({ hud: true });
+  window.innerWidth = 1440;
+  const root = window.document.documentElement;
+  root.classList.add('vt-focus');
+  showToast('복사됨', 'success');
+  showToast('동기화 중', 'info');
+  const cards = toasts(window);
+  assert.deepStrictEqual(cards.map((e) => e.textContent), ['복사됨', '동기화 중'], '숨은(inert) 상태 막대 칸에 쓰지 않는다');
+  for (const c of cards) assert.strictEqual(c.getAttribute('role'), 'status', '카드는 낭독된다');
+  assert.strictEqual(hudMsg(window), null);
+  // 아래 가장자리로 상태 막대를 드러낸 동안은 그 칸을 쓴다.
+  root.classList.add('vt-reveal-bottom');
+  showToast('저장됨', 'success');
+  assert.strictEqual(toasts(window).length, 2);
+  assert.strictEqual(hudMsg(window).textContent, '저장됨');
+});
+
 test('HUD 줄도 같은 문구를 합쳐 횟수를 붙인다', async () => {
   const { window, showToast } = await buildWindow({ hud: true });
   showToast('클립보드 동기화됨');
