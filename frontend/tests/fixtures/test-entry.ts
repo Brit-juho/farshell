@@ -20,9 +20,12 @@ export {
 export { collectSessionRows } from '../../js/shell/rail-fetch.js';
 export { mountRow, mountMenu, mountNativeChildren } from './row-mount.js';
 export {
-  parseQuery, fuzzyMatch, PLACEHOLDER, PREFIX_MODE, MODE_PREFIX,
+  parseQuery, fuzzyMatch, PLACEHOLDER, PREFIX_MODE, MODE_PREFIX, MODE_HINT,
   DEFAULT_COMMANDS, SETTINGS_COMMANDS, panelCommands,
 } from '../../js/shell/palette-data.js';
+export {
+  splitGlobs, globParam, grepUrl, groupByFile, segments, hitColumn, summary, skippedLine, DEFAULT_OPTIONS as GREP_DEFAULTS,
+} from '../../js/shell/grep-data.js';
 export {
   buildSettingEntries, matchSettingEntry, stepSettingValue, formatSettingValue, SECTION_META, RAIL_TOGGLES,
 } from '../../js/panels/settings/index-data.js';

@@ -227,3 +227,22 @@ Change ([files.md](./files.md) 「File tree」): the 파일 tree is `frontend/js
 - Not measured: real devices, a real server and the native file watcher (the fake answers in well under a millisecond; the server side is covered by `server/tests/test_fs_watch_tree.py` with the polling backend), the name filter on a large tree.
 
 Initial payload (app.js + core.js): 333,040 B on top of redesign phase 2 (329,732 B before; cap 358,400; +3,308 B from the phone 「파일 | 첨부」 segment and the two device settings). The tree is the lazy `files` chunk (60,398 B, about 16 KB gzip); `panels.js` 158,584 → 149,037 B, `shell.js` 330,715 → 331,857 B.
+
+### 7.6 File content search (`/api/fs/grep`, 2026-11-09)
+
+Change ([files.md](./files.md) 「Content search」): one engine in the `scan_worker` child process (git candidate list → deny rules → read and match), the palette `?` mode and the sidebar 「내용 검색」. Measured on the repository itself (a detached checkout of the branch under `/tmp`, 1,201 candidate files from `git ls-files`, 103 binaries, 4 deny-listed) through an isolated server on this Mac (M1 Pro, APFS), `curl` total time over loopback, 6 runs each. "Cold" is the first request after the server started (first worker spawn); the files had just been checked out, so the page cache was warm in every run — a truly cold disk was not measured (`purge` needs root).
+
+| Query | Results / files | Files read | Cold ms | Warm ms (median of 5) |
+|---|---|---|---|---|
+| rare literal `groupByFile` | 9 / 4 | 1,201 | 179 | 189 |
+| common literal `function` (stops at the 500-line cap) | 500 / 69 | 137 | 126 | 117 |
+| regex `def \w+_grep` | 2 / 2 | 1,201 | 169 | 179 |
+| literal `fsguard`, `glob=server/**,!**/tests/**` | 452 / 63 | 308 (893 excluded) | 124 | 115 |
+| no match | 0 / 0 | 1,201 | 158 | 179 |
+
+- A whole-repository search costs about 150–190 ms end to end, of which the server reports 150–195 ms (`elapsed_ms`): a Python child process start, `git ls-files` and reading every candidate (not broken down further). Cold and warm are the same within noise because nothing is cached between searches by design (each search is a fresh process so the deadline can kill it).
+- Hitting the 500-line cap stops reading early (137 of 1,201 files), so common words answer faster than rare ones. Include/exclude globs cut the read set before any file is opened.
+- In the browser (headless Chromium, same server) typing `? groupByFile` showed 9 results in 4 groups with the preview at the first match; ↓ then Enter opened `GrepView.tsx` at its second match (line 44) in the viewer; ⌘⇧F opened the sidebar search with the tree root as scope. Korean and English (`VT_LANG=en`) both checked.
+- Not measured: a cold disk, very large trees (the 10 s deadline, 200 MB read cap and 200,000-file list cap are covered by `server/tests/test_fs_grep.py` with lowered limits), a remote host through the relay (covered end to end in `test_peer_relay.py`), phones.
+
+Initial payload (app.js + core.js): 334,755 B (333,040 B before; cap 358,400; +1,715 B for the `contentSearch` key, the palette entry's sidebar hand-off and the one-time move toast). The search screen is in the lazy `shell` chunk (331,965 → 370,704 B, +38,739) — the palette and the sidebar share it; `files.js` 60,398 → 63,618 B for the 「트리 | 내용 검색」 segment.

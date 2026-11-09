@@ -61,7 +61,7 @@ RELAY_HTTP_GROUPS: dict[str, str] = {
     r"/api/files/[^/]+/(download|path)": "files",
     r"/api/files/[^/]+/insert": "files.write",
     r"/api/upload": "files.write",
-    r"/api/fs/(file|raw|roots|search|tree)": "fs",
+    r"/api/fs/(file|grep|raw|roots|search|tree)": "fs",
     r"/api/git/(status|diff|log|show)": "git",
     r"/api/git/(stage|unstage|commit)": "git.write",
     r"/api/ports": "ports",

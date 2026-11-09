@@ -32,7 +32,8 @@ import fs_read
 import fsguard
 import tmux_target
 from i18n import tr
-from resilience import fsops, scan as res_scan
+import fs_grep
+from resilience import breaker as res_breaker, fsops, pools as res_pools, scan as res_scan
 from resilience.scan_worker import fuzzy_score as _fuzzy_score
 
 logger = logging.getLogger(__name__)
@@ -234,6 +235,74 @@ async def fs_search(q: str = Query(...), path: str = Query("")):
         return {"results": [], "truncated": True, "timeout": True}
     except fsops.UNAVAILABLE as e:
         return fsops.unavailable_response(e)
+
+
+# --- 파일 내용 검색 (파일 개편 단계 6) -----------------------------------------------
+
+# 요청이 끊겼는지 보는 간격. 끊기면 자식 프로세스 그룹을 바로 죽인다.
+GREP_POLL = 0.25
+
+
+def _grep_unavailable(error: str, reason: str, retry: int = 5) -> JSONResponse:
+    return JSONResponse({"error": error, "reason": reason, "retry_after": retry}, status_code=503,
+                        headers={"Retry-After": str(retry)})
+
+
+def _grep(path: str, spec: dict, token) -> dict:
+    # 건너뛸 경로(위험 마운트·격리·관리 경로) 계산도 resolve를 부르므로 스레드 안에서 한다.
+    return fs_grep.search(path, spec, res_scan.skip_prefixes(_managed_skip_prefixes()), token)
+
+
+@router.get("/api/fs/grep")
+async def fs_grep_route(request: Request, q: str = Query(""), path: str = Query(""),
+                        mode: str = Query("literal"), case: bool = Query(False), word: bool = Query(False),
+                        glob: str = Query(""), sid: str = Query("")):
+    """파일 **내용** 검색 — 팔레트 `?` 모드와 사이드바 「파일 › 내용 검색」(계약은 API.md, 규칙은 `fs_grep.py`).
+
+    `path`가 없으면 시작 루트 전부. 질의가 비면 빈 결과. 검색은 `grep` 풀의 스레드가 자식 프로세스를 기다리며
+    하고, 이 코루틴은 그동안 요청이 끊겼는지 본다 — 끊기면 취소한다(자식 프로세스 그룹 종료)."""
+    try:
+        spec = fs_grep.build_spec(q, mode, case, word, glob)
+    except fs_grep.BadQuery as e:
+        return JSONResponse(e.body(), status_code=400)
+    if spec is None:
+        return {"results": [], "files": 0, "truncated": False, "timeout": False}
+    key = fs_grep.client_key(request, sid)
+    try:
+        res_breaker.check(path or str(Path.home()))
+        token = fs_grep.SLOTS.acquire(key)
+    except fs_grep.Busy:
+        return _grep_unavailable("grep_busy", tr("다른 내용 검색이 돌고 있습니다 — 잠시 뒤 다시 시도하세요"), 2)
+    except fsops.UNAVAILABLE as e:
+        return fsops.unavailable_response(e)
+    task = asyncio.ensure_future(res_pools.run(
+        "grep", _grep, path, spec, token,
+        op="fs.grep", key=path or "~", timeout=fs_grep.TIMEOUT + 10))
+    try:
+        while not task.done():
+            await asyncio.wait({task}, timeout=GREP_POLL)
+            if not task.done() and await request.is_disconnected():
+                token.cancel()
+        out = task.result()
+    except fsguard.FsDenied as e:
+        return _denied(e.reason)
+    except fs_grep.NotADirectory:
+        return JSONResponse({"error": "not a directory"}, status_code=404)
+    except res_scan.ScanUnavailable:
+        return _grep_unavailable("grep_unavailable", tr("검색 프로세스를 띄우지 못했습니다 — 잠시 뒤 다시 시도하세요"))
+    except fsops.UNAVAILABLE as e:
+        return fsops.unavailable_response(e)
+    except RuntimeError as e:
+        logger.warning(f"[grep] 실패: {e}")
+        return _grep_unavailable("grep_failed", tr("검색이 실패했습니다 — 잠시 뒤 다시 시도하세요"))
+    finally:
+        if not task.done():
+            token.cancel()
+        fs_grep.SLOTS.release(key, token)
+    if out.get("cancelled"):
+        # 같은 화면의 새 검색이 이 검색을 밀어냈거나 연결이 끊겼다. 받을 쪽이 없거나 새 결과를 기다린다.
+        return JSONResponse({"error": "cancelled", "reason": tr("새 검색이 이전 검색을 취소했습니다")}, status_code=409)
+    return out
 
 
 # 미리 펼쳐 두는 하위 목록의 상한 — 큰 저장소에서 첫 응답이 커지지 않게 자른다.

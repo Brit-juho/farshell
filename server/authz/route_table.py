@@ -200,6 +200,7 @@ _ROWS: tuple = (
 # --- routes/files.py
     ("GET", "/api/fs/roots", auth()),
     ("GET", "/api/fs/search", auth()),
+    ("GET", "/api/fs/grep", auth()),
     ("GET", "/api/fs/tree", auth()),
     ("GET", "/api/fs/file", auth()),
     ("GET", "/api/fs/raw", auth()),

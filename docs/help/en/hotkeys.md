@@ -17,7 +17,10 @@
 | Click the voice-only button | Switch UI mode (hides the terminal) |
 | Click the earphone button | Turn the media-key trigger on/off |
 | Earphone Play/Pause | Toggle recording (when the earphone trigger is on) |
-| `Cmd+F` / `Ctrl+Shift+F` | Scrollback search (in-terminal search is `Cmd+Shift+F` / `Alt+Shift+F`) |
+| `Cmd+F` / `Ctrl+Shift+F` | Scrollback search |
+| `Alt+Shift+F` | In-terminal search (also on Mac — formerly `Cmd+Shift+F`) |
+| `Cmd+Shift+F` / `Ctrl+Shift+G` | File content search — the sidebar 「Files › Search contents」. In the palette, the `?` prefix |
+| `⌥C` · `⌥W` · `⌥R` in the palette `?` mode | Toggle match case · whole word · regex (`⌥Enter` moves the search to the sidebar) |
 | `⋯` on a rail row, or right-click | Session menu (open/close, rename, open on Mac, connected screens, kill) |
 
 ## Change a hotkey

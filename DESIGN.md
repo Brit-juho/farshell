@@ -836,6 +836,7 @@ One palette covers quick open, commands and in-pane search. 8 prefixes:
 |---|---|---|
 | (none) | `default` | Recent commands (2) → recent files (2) → every command, grouped and scrollable — **no sessions** (see below) |
 | `/` | `file` | File fuzzy search (`GET /api/fs/search?q=`, debounced) |
+| `?` | `grep` | File **content** search (`GET /api/fs/grep`) — the palette widens to 1100×720: options row (⌥C/⌥W/⌥R toggles, include/exclude globs, scope), progress row with 「취소」, results grouped by file with the match in `--color-term-hl`, a 460px preview of the selected line. The same screen is the sidebar 「파일 › 내용 검색」 (`shell/GrepView.tsx`, `styles/screens/97-grep.css`) |
 | `@` | `session` | Sessions — the *only* place sessions are listed in the palette |
 | `:` | `keymap` | Commands — shows **the current key binding** next to each (read from the `core/keymap.js` registry, so a rebind shows up here too) |
 | `#` | `queue` | Prompt queue items |
@@ -847,7 +848,7 @@ Two-column layout — left: result list, right: a **preview** (a file shows a
 highlighted excerpt of its start, a session shows its last lines + state, a
 scrollback result shows surrounding context). The preview hides on narrow
 widths. `⌘F` opens the palette's `~` mode; the in-pane search bar
-is on `⌘⇧F` (rebindable).
+is on `⌥⇧F` (rebindable); `⌘⇧F` opens the sidebar's content search.
 
 ### Default screen
 
@@ -1255,7 +1256,7 @@ See [session UI design](docs/ref/session-ui.md).
   header's right padding is 10px to clear the split resizer's 8px touch zone). On a
   fine pointer it stays 18px / 24px-header.
 - **Keyboard:** `Mod+K` palette, `Mod+,` settings, `Ctrl/Cmd+F` (palette `~`
-  mode), `Ctrl/Cmd+Shift+F` (in-pane search), Esc to close,
+  mode), `Alt+Shift+F` (in-pane search), `Cmd+Shift+F` / `Ctrl+Shift+G` (file content search), Esc to close,
   `:focus-visible` outline (`--color-acc`).
 - **Screen readers:** icon buttons carry `aria-label`; mic status is
   `role="status" aria-live="polite"`. A visible tooltip puts
