@@ -40,30 +40,131 @@
 .vt-dock-panel .vt-vw-x { display:none; }
 .vt-dock-panel .vt-vw-head { border-radius:0; }
 
+/* ── 패널 「정돈」(리디자인 5단계, 시안 panels.html P01–P09) ─────────────────
+   모든 도구 패널이 같은 치수를 쓴다: 머리 40 · 구역 머리 28 · 행 36(두 줄 48/52) · 안쪽 여백 12/14 ·
+   입력 28 · 버튼 24/28. 바탕은 사이드바와 같은 bg-1(본문이 따로 검게 뜨지 않는다). 칸(pane)에 띄운 패널도
+   같은 .vt-dock-panel 이라 같은 모양이다. 색은 --color-* 계약 이름만 쓴다. */
+.vt-dock-panel .vt-viewer-head {
+  height:40px; box-sizing:border-box; gap:calc(var(--spacing) * 1.5);
+  padding:0 calc(var(--spacing) * 1.5) 0 calc(var(--spacing) * 3.5);
+  background:var(--color-bg-1); border-bottom:1px solid var(--color-line);
+}
+.vt-dock-panel .vt-vw-title {
+  flex:none; font:var(--weight-semibold) var(--fs-base) / 20px var(--font-ui); color:var(--color-txt); white-space:nowrap;
+}
+.vt-dock-panel .vt-vw-body { background:var(--color-bg-1); }
+/* .vt-input.lg(18px)는 iOS가 16px 미만 입력에 화면을 확대하는 것을 막는 폰용 크기다. 사이드바·칸의 패널은
+   720px 이상에서만 뜨므로 시안의 입력 글자(13)로 되돌린다 — 폰 시트는 .vt-dock-panel이 아니라 그대로 18. */
+.vt-dock-panel .vt-input.lg { font-size:var(--fs-sm); }
+.vt-dock-panel .vt-viewer-head .vt-btn.sm:not(.solid) { border-color:var(--color-line-strong); }
+/* 머리의 제목 옆 맥락(저장소/브랜치 · N건 대기 · 사용량) — 11 mono muted, 남는 폭을 먹고 말줄임. */
+.vt-ph-ctx {
+  flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font:var(--weight-normal) var(--fs-3xs) / 1 var(--font-mono); color:var(--color-muted);
+}
+.vt-ph-acts { display:flex; align-items:center; gap:2px; flex:none; margin-left:auto; }
+
+/* 구역 머리 28 — 이름 12/600 sub · 개수 11 mono muted · 오른쪽에 동작이나 한 줄 설명. */
+.vt-psec {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); height:28px; flex:none; box-sizing:border-box;
+  padding:0 calc(var(--spacing) * 2) 0 calc(var(--spacing) * 3.5);
+  font:var(--weight-semibold) var(--fs-xs) / 1 var(--font-ui); color:var(--color-sub);
+  letter-spacing:normal; text-transform:none;   /* patterns.css의 대문자 eyebrow(.vt-vw-ghead 등)를 이 모양으로 되돌린다 */
+}
+.vt-psec .n { font:var(--weight-medium) var(--fs-3xs) / 1 var(--font-mono); color:var(--color-muted); font-variant-numeric:tabular-nums; }
+.vt-psec .acts { margin-left:auto; display:flex; align-items:center; gap:2px; }
+.vt-psec .note { margin-left:auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:var(--weight-normal) var(--fs-3xs) / 1 var(--font-ui); color:var(--color-muted); }
+.vt-psec + .vt-psec, * + .vt-psec.gap { margin-top:calc(var(--spacing) * 1); }
+
+/* 행 36 — 좌우 4px 안쪽으로 들인 둥근 행. 머문 행 bg-3, 고른 행 acc-soft(그 위 보조 글자는 한 단계 올림). */
+.vt-prow {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 2); min-height:36px; flex:none; box-sizing:border-box;
+  padding:0 calc(var(--spacing) * 2) 0 calc(var(--spacing) * 2.5); margin:0 calc(var(--spacing) * 1);
+  border-radius:var(--radius-sm); font:var(--weight-normal) var(--fs-sm) / var(--leading-row) var(--font-ui); color:var(--color-txt);
+  white-space:nowrap; min-width:0;
+}
+.vt-prow.two { min-height:48px; }
+.vt-prow:hover { background:var(--color-bg-3); }
+.vt-prow.on, .vt-prow.selected { background:var(--color-acc-soft); }
+.vt-prow .fn { flex:0 1 auto; max-width:60%; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:var(--weight-normal) var(--fs-xs) / 1 var(--font-mono); color:var(--color-txt); }
+.vt-prow .dir { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:var(--weight-normal) var(--fs-xs) / 1 var(--font-mono); color:var(--color-muted); }
+.vt-prow.on .dir, .vt-prow.selected .dir { color:var(--color-sub); }
+.vt-prow .r { margin-left:auto; display:flex; align-items:center; gap:2px; flex:none; }
+.vt-prow .lab { font:var(--weight-normal) var(--fs-3xs) / 1 var(--font-ui); color:var(--color-muted); }
+.vt-prow > svg { flex:none; color:var(--color-muted); }
+/* 행 끝 동작은 머문 행·포커스에서만 — 자리는 그대로 두고(visibility) 이름이 출렁이지 않게. 손가락에는 상시. */
+@media (hover:hover) and (pointer:fine) {
+  .vt-prow .hov { display:none; }
+  .vt-prow:hover .hov, .vt-prow:focus-within .hov { display:flex; }
+  .vt-prow:hover .unhov, .vt-prow:focus-within .unhov { display:none; }
+}
+@media (hover:none), (pointer:coarse) { .vt-prow .unhov { display:none; } }
+
+/* 상태 글자(M/A/D/U/R/C) — 색만으로 말하지 않게 글자 + 행 끝의 낱말을 함께 둔다. */
+.vt-stl { flex:none; width:14px; text-align:center; font:var(--weight-semibold) var(--fs-xs) / 1 var(--font-mono); color:var(--color-muted); }
+.vt-stl[data-st="M"] { color:var(--color-st-waiting); }
+.vt-stl[data-st="A"] { color:var(--color-st-working); }
+.vt-stl[data-st="D"], .vt-stl[data-st="C"] { color:var(--color-st-error); }
+.vt-stl[data-st="R"] { color:var(--color-st-done); }
+
+.vt-ppad { display:flex; flex-direction:column; gap:calc(var(--spacing) * 2); flex:none; padding:calc(var(--spacing) * 3) calc(var(--spacing) * 3.5) calc(var(--spacing) * 2); }
+.vt-ppad.line { padding-bottom:calc(var(--spacing) * 3); border-bottom:1px solid var(--color-line); }
+.vt-prow-h { display:flex; align-items:center; gap:calc(var(--spacing) * 2); min-width:0; }
+.vt-prow-h > .sp { flex:1 1 auto; }
+/* 하위 머리 36 — diff·커밋 상세·스니펫 편집처럼 같은 자리에서 한 단계 들어간 화면. */
+.vt-psub {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); height:36px; flex:none; box-sizing:border-box;
+  padding:0 calc(var(--spacing) * 2) 0 calc(var(--spacing) * 1.5); border-bottom:1px solid var(--color-line);
+  background:var(--color-bg-1); position:sticky; top:0; z-index:2; min-width:0;
+}
+.vt-psub .sp { flex:1 1 auto; }
+.vt-psub-t { font:var(--weight-semibold) var(--fs-sm) / 1 var(--font-ui); color:var(--color-txt); }
+/* 카드 — 반경 8 · 여백 12. 지금 쓰는 것은 액센트 테두리. */
+.vt-pcard { border:1px solid var(--color-line); border-radius:var(--radius-lg); padding:calc(var(--spacing) * 3); background:transparent; }
+.vt-pcard.act { border-color:color-mix(in srgb, var(--color-acc) 45%, transparent); }
+/* 막대 4px — 채움색은 쓰는 쪽이 정한다(기본 acc, 75% 넘으면 waiting). */
+.vt-pbar { position:relative; height:4px; border-radius:2px; overflow:hidden; background:color-mix(in srgb, var(--color-txt) 8%, transparent); }
+.vt-pbar > i { position:absolute; left:0; top:0; bottom:0; border-radius:2px; background:var(--color-acc); }
+.vt-pbar > i.warn { background:var(--color-st-waiting); }
+.vt-pbar > i.err { background:var(--color-st-error); }
+/* 작은 세그먼트(시안 b-seg) — 가라앉은 상자 안에서 켜진 칸만 raised로 뜬다. 액센트 채움은 주 버튼 몫이다. */
+.vt-pseg { display:inline-flex; flex:none; height:24px; padding:1px; gap:1px; box-sizing:border-box; border-radius:var(--radius-sm); background:var(--color-bg-2); border:1px solid var(--color-line-strong); }
+.vt-pseg.s28 { height:28px; }
+.vt-pseg .vt-segment, .vt-pseg .vt-chip {
+  flex:none; min-height:0; height:100%; padding:0 calc(var(--spacing) * 2); border:0; border-radius:var(--radius-xs);
+  background:transparent; color:var(--color-muted); font:var(--weight-medium) var(--fs-xs) / 1 var(--font-ui); box-shadow:none;
+}
+.vt-pseg.s28 .vt-segment, .vt-pseg.s28 .vt-chip { padding:0 calc(var(--spacing) * 2.5); }
+.vt-pseg .vt-segment:hover, .vt-pseg .vt-chip:hover { background:transparent; color:var(--color-txt); }
+.vt-pseg .vt-segment.active, .vt-pseg .vt-segment[aria-selected="true"],
+.vt-pseg .vt-chip.active, .vt-pseg .vt-chip[aria-selected="true"] {
+  background:var(--color-bg-raised); color:var(--color-txt); box-shadow:0 0 0 1px var(--color-line-strong);
+}
+/* 단축키 꼬리표(버튼 안 ⌘↵). 채운 버튼 위에서는 잉크를 흐리게. */
+.vt-btn .k { font:var(--weight-medium) var(--fs-3xs) / 1 var(--font-mono); color:var(--color-muted); }
+.vt-btn.solid .k { color:color-mix(in srgb, var(--color-acc-ink) 62%, transparent); }
+/* 작은 테두리 꼬리표 16px(시안 b-tag) — 성질·상태 낱말. 수는 .vt-badge. */
+.vt-ptag {
+  display:inline-flex; align-items:center; gap:2px; height:16px; padding:0 calc(var(--spacing) * 1); flex:none; box-sizing:border-box;
+  border:1px solid var(--color-line-strong); border-radius:var(--radius-xs); white-space:nowrap;
+  font:var(--weight-medium) var(--fs-3xs) / 1 var(--font-ui); color:var(--color-muted);
+}
+.vt-ptag.mono { font-family:var(--font-mono); }
+.vt-ptag[data-tone="acc"] { color:var(--color-acc); border-color:color-mix(in srgb, var(--color-acc) 40%, transparent); }
+.vt-ptag[data-tone="work"] { color:var(--color-st-working); border-color:color-mix(in srgb, var(--color-st-working) 40%, transparent); }
+.vt-ptag[data-tone="wait"] { color:var(--color-st-waiting); border-color:color-mix(in srgb, var(--color-st-waiting) 40%, transparent); }
+.vt-ptag[data-tone="err"] { color:var(--color-st-error); border-color:color-mix(in srgb, var(--color-st-error) 40%, transparent); }
+.vt-ptag > svg { width:12px; height:12px; }
+/* 빈 상태 — 사이드바 안에서는 작게: 아이콘 20 · 제목 13/600 txt · 설명 13 muted. */
+.vt-dock-panel .vt-empty { padding:calc(var(--spacing) * 7) calc(var(--spacing) * 6); gap:calc(var(--spacing) * 2); flex:1 1 auto; }
+.vt-dock-panel .vt-empty-title { color:var(--color-txt); font:var(--weight-semibold) var(--fs-sm) / 18px var(--font-ui); }
+.vt-dock-panel .vt-empty-desc { color:var(--color-muted); font:var(--weight-normal) var(--fs-sm) / 18px var(--font-ui); }
+.vt-dock-panel .vt-vw-body:has(> .vt-empty:only-child) { display:flex; flex-direction:column; }
+
 /* ── 40 §3 — dock 소스컨트롤 탭 머리말 ─────────────────────────────────────
-   목록·diff·로그·커밋상자 자체는 코드 뷰어와 **같은 렌더러**(vt-vw-* 클래스,
-   git.js)를 쓰므로 여기서 새로 정의하지 않는다. 여기 있는 건 dock에만 있는
-   저장소·브랜치 머리말 한 줄뿐이다 — 계정 칩과 push/PR 버튼 줄은 ADR-27로
-   없다(렌더 자체가 없으므로 여기 disabled 스타일도 필요 없다). */
-.vt-scm-head { flex:1; min-width:0; display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); overflow:hidden; }
-.vt-scm-head-left { flex:1; min-width:0; display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); overflow:hidden; white-space:nowrap; }
-/* 저장소 이름은 이 줄의 주인공이고 나머지(브랜치·↑↓·±)는 그 저장소의 현재
-   상태다. 셋 다 11px이던 것을 이름만 한 단 올리고 ui 글꼴로 바꾼다 —
-   헤더의 워크스페이스 이름과 같은 규칙이다. */
-/* 2026-09-18(4차) — repo/branch에 `min-width:0`이 없어도 부모가
-   `overflow:hidden`이면 flex item의 자동 최소폭이 0으로 떨어진다(스펙). 그
-   결과 이 줄에 함께 서는 flex:none 배지(브랜치·업스트림·↑↓·±·파일 수)가
-   자기 폭을 그대로 지키는 동안 repo/branch만 남은 공간을 나눠 먹어, 392px
-   dock 기본폭에서도 저장소 이름이 "far…" 세 글자로 잘렸다(실측). 주석이
-   말하는 "이름이 주인공"을 실제로 지키려면 최소폭을 명시해야 한다 — repo가
-   branch보다 우선이라 더 넉넉히 준다. 그래도 공간이 모자라면 나머지
-   flex:none 배지들이 컨테이너의 overflow:hidden에 걸려 뒤(오른쪽, DOM상
-   가장 덜 중요한 순서로 배치돼 있다)부터 잘린다 — repo/branch를 지키는 대가다. */
-.vt-scm-repo { font:var(--weight-semibold) var(--fs-xs) var(--font-ui); color:var(--txt); overflow:hidden; text-overflow:ellipsis; min-width:7ch; }
-.vt-scm-branch { font:500 var(--fs-2xs) var(--mono); color:var(--acc); overflow:hidden; text-overflow:ellipsis; min-width:5ch; }
-.vt-scm-upstream, .vt-scm-track, .vt-scm-count { font:400 var(--fs-3xs) var(--mono); color:var(--sub); flex:none; }
-.vt-scm-add { font:600 var(--fs-3xs) var(--mono); color:var(--color-st-done); flex:none; }
-.vt-scm-del { font:600 var(--fs-3xs) var(--mono); color:var(--color-st-error); flex:none; }
+   리디자인 5단계부터 머리는 「소스컨트롤」 제목 + 맥락 한 줄(.vt-ph-ctx `저장소 / 브랜치`)이고,
+   브랜치·upstream·↑↓·±는 본문 첫 줄(30-viewer.css `.vt-scm-line`)로 내려갔다. 계정 칩과 push/PR
+   버튼 줄은 ADR-27로 없다(렌더 자체가 없으므로 여기 disabled 스타일도 필요 없다). */
 /* 스테이지된 게 없어 커밋이 막힌 동안의 disabled — "안 되는 것"이 아니라
    "지금은 안 되는 것"이라 흐리게만. 스테이지 버튼(.vt-vw-gact)은 이 줄에서
    빼냈다 — .vt-btn이 됐고 components.css의 :disabled가 이미 같은 opacity .45 +
@@ -121,70 +222,44 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
   #vt-resize-overlay { transition:none; }
 }
 
-/* ── dock 파일 탭 (N19~N21 · 50-files-share.md §4) ───────────────────────────
-   큐/포트 패널과 같은 껍데기(.vt-viewer-card) 안에서 도므로 여기서는 행·칩·
-   게이지만 정의한다. 색·간격 토큰은 전부 기존 것을 그대로 쓴다 — 파일 탭만의
-   새 팔레트를 만들면 dock 안에서 탭마다 다른 화면처럼 보인다. */
-.vt-fl-chips{
-  display:flex; gap:calc(var(--spacing) * 1.5); padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3);
-  background:var(--bar); border-bottom:1px solid var(--line); flex:0 0 auto; flex-wrap:wrap;
-}
-/* 2.1.6 — 파일 필터 칩은 components.css의 .vt-chip을 쓴다(radius 999px 알약을
-   화면 전체와 같은 5px 한 단계로 되돌린다). files.js가 클래스를 바꿔 단다. */
+/* ── 첨부(dock 파일 탭, N19~N21 · 50-files-share.md §4) — 리디자인 5단계(시안 P04) ──────────
+   위 칸(.vt-ppad): [전체|공유 중|만료 임박] 세그먼트 · 「선택」, 그 아래 용량 막대. 행은 패널 키트의 두 줄 행 48
+   (.vt-prow.two) — 아이콘 16 · 이름 mono 12 · 크기·남은 기간 11 muted. 동작 여섯은 머문 행에서만(손가락은 상시). */
+.vt-fl-top { gap:calc(var(--spacing) * 2.5); }
+.vt-fl-top.selecting .vt-fl-filterrow { display:none; }
+.vt-fl-filterrow .sp { flex:1 1 auto; }
+.vt-fl-chips .vt-chip { gap:calc(var(--spacing) * 1); }
+.vt-fl-row { cursor:default; }
+.vt-fl-row > svg { color:var(--color-muted); }
+.vt-fl-row-main { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.vt-fl-line1 { display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-width:0; }
+.vt-fl-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:400 var(--fs-xs)/16px var(--font-mono); color:var(--color-txt); }
+.vt-fl-shared, .vt-fl-pinned { display:inline-flex; align-items:center; gap:2px; flex:none; font:400 var(--fs-3xs)/1 var(--font-ui); color:var(--color-acc); }
+.vt-fl-pinned { color:var(--color-sub); }
+.vt-fl-line2 { display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-width:0; white-space:nowrap; overflow:hidden; }
+.vt-fl-meta { font:400 var(--fs-3xs)/16px var(--font-ui); color:var(--color-muted); overflow:hidden; text-overflow:ellipsis; }
+.vt-fl-meta.warn { color:var(--color-st-waiting); }
+.vt-fl-sub { font:400 var(--fs-3xs)/16px var(--font-mono); color:var(--color-muted); flex:none; }
+.vt-fl-sub:empty { display:none; }
+.vt-fl-acts { display:flex; gap:2px; flex:0 0 auto; }
+.vt-fl-row.selected .vt-fl-meta, .vt-fl-row.selected .vt-fl-sub { color:var(--color-sub); }
+/* 업로드 진행 행 — 아직 서버 레코드가 없어 동작 버튼 없이 진행률 막대만 있다. */
+.vt-fl-row-progress { margin-top:2px; }
+.vt-fl-row-progress .vt-fl-gauge-fill { transition:width .15s linear; }
+/* 파괴적 동작(삭제)은 머문 행에서도 hover 때만 에러색. */
+.vt-fl-act.rm:hover:not([disabled]){ color:var(--color-st-error); }
 
-.vt-fl-row{
-  display:flex; align-items:center; gap:calc(var(--spacing) * 2);
-  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3); border-bottom:1px solid var(--line);
-}
-.vt-fl-row:hover{ background:var(--menu-hover); }
-.vt-fl-row-main{ flex:1 1 auto; min-width:0; }
-.vt-fl-name{
-  font:600 var(--fs-sm) var(--mono);
-  color:var(--txt);
-}
-/* 2026-09-22 — 이름 아래 2단 위계. meta("지금 상태": 용량·남은기간)가
-   sub("상세 기록": 공유 여부·업로드 시각)보다 한 단 진하고 커서, 항상
-   같은 2줄 구조인데도 뭐가 "지금 봐야 할 정보"인지 헷갈리지 않는다. */
-.vt-fl-meta{ font:500 var(--fs-2xs) var(--mono); color:var(--txt2); margin-top:3px; }
-.vt-fl-meta.warn{ color:var(--warn); }
-.vt-fl-sub{ font:400 var(--fs-3xs) var(--mono); color:var(--sub); margin-top:1px; }
-.vt-fl-acts{ display:flex; gap:calc(var(--spacing) * 0.5); flex:0 0 auto; }
-/* 업로드 진행 행 — 아직 서버 레코드가 없어 동작 버튼 없이 진행률 바만 있다.
-   .vt-fl-gauge(용량 게이지)와 같은 클래스라 새 토큰은 없다. */
-.vt-fl-row-uploading{ background:var(--menu-hover); }
-.vt-fl-row-progress{ margin-top:calc(var(--spacing) * 1.5); }
-.vt-fl-row-progress .vt-fl-gauge-fill{ transition:width .15s linear; }
-/* 2.1.6 — 모양·상태는 `.vt-btn.sm.quiet`가 맡는다. 여기 남은 셋만 이 버튼의
-   고유한 성질이다.
-   - 44px은 못 주더라도(행의 아이콘 6개가 392px dock 안에 들어가야 한다) 터치 표적이
-     28px 아래로는 안 내려가게 한다.
-   - 안쪽이 SVG 하나뿐이라 정사각이어야 한다(좌우 패딩 0).
-   - `.rm`은 파괴적 동작이라 hover에서만 에러색이 된다. */
-.vt-fl-act.rm:hover:not([disabled]){ color:var(--err); }
-/* 2026-09-18(4차) — 행마다 아이콘 5개(다운로드·경로 복사·삽입·링크·삭제)가
-   항상 같은 무게로 늘어서 있어, 파괴적 동작(삭제)이 나머지 넷과 시각적으로
-   구분이 안 됐다. 포트 패널의 종료 버튼(30-viewer.css `.vt-pt-actions`)과
-   같은 관용구 — 포인터가 있는 기기에서만 삭제 아이콘을 행 hover/포커스
-   때까지 숨긴다. 터치는 hover가 없어 영영 못 찾으므로 그대로 상시 노출. */
-@media (hover:hover) and (pointer:fine) {
-  .vt-fl-act.rm{ opacity:0; }
-  .vt-fl-row:hover .vt-fl-act.rm,
-  .vt-fl-act.rm:focus-visible{ opacity:1; }
-}
-
-/* 2026-09-23 — 일괄 정리(설계 4번). 「선택」을 누르면 각 행 앞에 체크박스가
-   붙고 칩 줄 아래에 이 바가 뜬다. 업로드 진행 행은 선택 대상이 아니라서
-   체크박스가 안 붙는다(renderUploadingRow는 애초에 이 클래스를 안 쓴다). */
+/* 2026-09-23 — 일괄 정리(설계 4번). 「선택」을 누르면 각 행 앞에 체크박스가 붙고 필터 줄 자리에 이 줄이 든다. */
 .vt-fl-select-cb{
-  flex:0 0 auto; width:18px; height:18px; margin:0; cursor:pointer;
+  flex:0 0 auto; width:14px; height:14px; margin:0; cursor:pointer;
   appearance:none; -webkit-appearance:none; box-sizing:border-box;
-  border:1.5px solid color-mix(in srgb, var(--sub) 70%, transparent); border-radius:5px;
-  background:transparent center / 12px 12px no-repeat;
+  border:1px solid var(--color-line-strong); border-radius:var(--radius-xs);
+  background:var(--color-bg-2) center / 10px 10px no-repeat;
   transition:background-color .12s, border-color .12s;
 }
-.vt-fl-select-cb:hover{ border-color:var(--acc); }
+.vt-fl-select-cb:hover{ border-color:var(--color-acc); }
 .vt-fl-select-cb:checked, .vt-fl-select-cb:indeterminate{
-  background-color:var(--acc); border-color:var(--acc);
+  background-color:var(--color-acc); border-color:var(--color-acc);
 }
 .vt-fl-select-cb:checked{
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
@@ -193,17 +268,13 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round'%3E%3Cpath d='M5 12h14'/%3E%3C/svg%3E");
 }
 .vt-fl-select-cb:disabled{ opacity:.4; cursor:default; }
-.vt-fl-select-cb:focus-visible{ outline:2px solid var(--acc); outline-offset:2px; }
-.vt-fl-selectall{ margin-right:calc(var(--spacing) * 3); display:inline-flex; align-items:center; gap:calc(var(--spacing) * 2); cursor:pointer; font:500 var(--fs-2xs) var(--mono); color:var(--txt); }
-.vt-fl-row-selectable.selected{ background:color-mix(in srgb, var(--acc) 12%, transparent); }
-.vt-fl-selectbar{
-  display:flex; align-items:center; gap:calc(var(--spacing) * 2);
-  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3);
-  background:var(--bar); border-bottom:1px solid var(--line); flex:0 0 auto;
-}
+.vt-fl-select-cb:focus-visible{ outline:2px solid var(--color-acc); outline-offset:2px; }
+.vt-fl-selectall{ display:inline-flex; align-items:center; gap:calc(var(--spacing) * 2); cursor:pointer; font:400 var(--fs-sm)/1 var(--font-ui); color:var(--color-txt); }
+.vt-fl-row-selectable.selected{ background:var(--color-acc-soft); }
+.vt-fl-selectbar{ min-height:24px; }
 .vt-fl-selectbar[hidden]{ display:none; }
-.vt-fl-selectbar-count{ font:500 var(--fs-2xs) var(--mono); color:var(--sub); flex:1 1 auto; }
-#vt-fl-select-toggle.active{ background:var(--color-acc-surface); color:var(--acc-ink); }
+.vt-fl-selectbar-count{ font:400 var(--fs-xs)/1 var(--font-ui); color:var(--color-sub); flex:1 1 auto; }
+#vt-fl-select-toggle.active{ background:var(--color-acc-surface); color:var(--color-acc-ink); }
 
 /* 경고 한 줄의 아이콘 자리 — 아이콘과 글줄의 광학 정렬. 아이콘을 baseline에
    그냥 두면 한글 글줄에서 살짝 내려앉는다. */
@@ -211,11 +282,11 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 .vt-set-help-ico{ flex:none; display:inline-flex; margin-top:1px; color:var(--warn, var(--color-st-waiting)); }
 .vt-mcp-authwarn{ color:var(--color-st-waiting); }
 
-.vt-fl-footer{ padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3); border-top:1px solid var(--line); }
-.vt-fl-gauge{ height:6px; background:var(--tab); border-radius:999px; overflow:hidden; }
-.vt-fl-gauge-fill{ height:100%; background:var(--acc); }
-.vt-fl-gauge-fill.warn{ background:var(--err); }
-.vt-fl-footer-text{ margin-top:calc(var(--spacing) * 1.5); font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
+/* 용량 막대 — 패널 키트 .vt-pbar(4px) + 아래 한 줄 「N 사용 … 한도 · 보관 기간」. */
+.vt-fl-footer-text{ display:flex; justify-content:space-between; gap:calc(var(--spacing) * 2); margin-top:calc(var(--spacing) * 1); font:400 var(--fs-3xs)/16px var(--font-ui); color:var(--color-muted); }
+/* 「발급된 링크 N」 — 공유가 걸린 파일의 링크를 모은 구역(복사 · 취소). */
+.vt-fl-issued-sec { display:flex; flex-direction:column; padding-bottom:calc(var(--spacing) * 2); }
+.vt-fl-linkrow > svg { color:var(--color-acc); }
 
 /* 링크 발급 다이얼로그(§3 화면 3b). 뼈대는 core/dialog.js의 openDialog, 필드·라디오 카드·버튼줄은
    세션 공유 다이얼로그와 같은 .vt-share-* / .vt-dialog-actions 를 쓴다(components.css). 여기는 이
@@ -316,24 +387,28 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 }
 .vt-pp-panel { display:inline-flex; align-items:center; gap:calc(var(--spacing) * 1); }
 
-/* 시스템(CPU·RAM·네트워크) 패널 — panels/system.js. 값이 위험 쪽으로 가면 숫자와 막대가 같은 토큰으로 물든다. */
-.vt-system .vt-vw-body{ padding:calc(var(--spacing) * 3); display:flex; flex-direction:column; gap:calc(var(--spacing) * 3); }
-.vt-sys-platform{ font:600 var(--fs-3xs) var(--ui); letter-spacing:.04em; color:var(--sub); text-transform:uppercase; }
-.vt-sys-card{ display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5); padding:calc(var(--spacing) * 3); border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--bar); }
-.vt-sys-head{ display:flex; align-items:baseline; justify-content:space-between; gap:calc(var(--spacing) * 2); }
-.vt-sys-label{ font:600 var(--fs-xs) var(--ui); color:var(--sub); }
-.vt-sys-value{ font:600 var(--fs-md) var(--mono); font-variant-numeric:tabular-nums; color:var(--txt); }
-.vt-sys-value.warn{ color:var(--warn); }
-.vt-sys-value.err{ color:var(--err); }
-.vt-sys-value .rx{ color:var(--acc); }
-.vt-sys-value .tx{ color:var(--ok); }
-.vt-sys-bar{ height:4px; border-radius:var(--radius-full); background:var(--menu-hover); overflow:hidden; }
-.vt-sys-fill{ height:100%; border-radius:var(--radius-full); background:var(--acc); transition:width .4s var(--ease-out-quint, ease); }
-.vt-sys-fill.warn{ background:var(--warn); }
-.vt-sys-fill.err{ background:var(--err); }
-.vt-sys-spark{ width:100%; height:36px; color:var(--acc); display:block; }
-.vt-sys-dual{ position:relative; height:36px; }
+/* 시스템(CPU·GPU·RAM·네트워크) 패널 — panels/system.js. 리디자인 5단계(시안 P08): 카드(반경 8 · 여백 12) 사이 10,
+   이름 12/600 sub … 값 18/500 mono · 보조 11 muted · 막대 4px · 스파크라인 36. 75%를 넘으면 값·막대·선이 waiting. */
+.vt-system .vt-vw-body{ padding:calc(var(--spacing) * 3) calc(var(--spacing) * 3.5); display:flex; flex-direction:column; gap:calc(var(--spacing) * 2.5); }
+.vt-sys-platform{ font:400 var(--fs-3xs)/16px var(--font-ui); color:var(--color-muted); }
+.vt-sys-card{ display:flex; flex-direction:column; }
+.vt-sys-head{ display:flex; align-items:center; justify-content:space-between; gap:calc(var(--spacing) * 2); }
+.vt-sys-label{ font:var(--weight-semibold) var(--fs-xs)/16px var(--font-ui); color:var(--color-sub); }
+.vt-sys-value{ font:var(--weight-medium) var(--fs-md)/24px var(--font-mono); font-variant-numeric:tabular-nums; color:var(--color-txt); white-space:nowrap; }
+.vt-sys-value:has(.rx){ font-size:var(--fs-sm); }
+.vt-sys-value.warn{ color:var(--color-st-waiting); }
+.vt-sys-value.err{ color:var(--color-st-error); }
+.vt-sys-value .rx{ color:var(--color-txt); }
+.vt-sys-value .tx{ color:var(--color-txt); }
+.vt-sys-sub{ font:400 var(--fs-3xs)/16px var(--font-ui); color:var(--color-muted); word-break:break-word; }
+.vt-sys-bar{ height:4px; margin:calc(var(--spacing) * 2) 0 calc(var(--spacing) * 1.5); border-radius:2px; background:color-mix(in srgb, var(--color-txt) 8%, transparent); overflow:hidden; }
+.vt-sys-fill{ height:100%; border-radius:2px; background:var(--color-acc); transition:width .4s var(--ease-out-quint, ease); }
+.vt-sys-fill.warn{ background:var(--color-st-waiting); }
+.vt-sys-fill.err{ background:var(--color-st-error); }
+.vt-sys-spark{ width:100%; height:36px; color:var(--color-acc); display:block; }
+.vt-sys-card:has(.vt-sys-value.warn) .vt-sys-spark{ color:var(--color-st-waiting); }
+.vt-sys-card:has(.vt-sys-value.err) .vt-sys-spark{ color:var(--color-st-error); }
+.vt-sys-dual{ position:relative; height:36px; margin-top:calc(var(--spacing) * 2); }
 .vt-sys-dual .vt-sys-spark{ position:absolute; inset:0; }
-.vt-sys-spark.rx{ color:var(--acc); }
-.vt-sys-spark.tx{ color:var(--ok); }
-.vt-sys-sub{ font:400 var(--fs-2xs) var(--mono); color:var(--sub); word-break:break-word; }
+.vt-sys-spark.rx{ color:var(--color-acc); }
+.vt-sys-spark.tx{ color:var(--color-st-working); }

@@ -10,6 +10,8 @@ import { confirmDialog, alertDialog, promptDialog, openDialog, nextId } from '..
 import { relayPath } from '../../core/host-route.js';
 import { t } from '../../core/i18n.js';
 import { icon } from '../../ui/icons.js';
+import { pIcon } from '../panel-icons.js';
+import { emptyState } from '../../ui/empty.js';
 
 // 2026-10 — session("내 기기만") 노출의 공개 주소를 쿠키 없이 열면 안내 화면만 뜬다
 // (메인 FarShell 주소를 드러내지 않으려고 — server/routes/port_proxy_app.py
@@ -55,9 +57,12 @@ function showPorts(opts = {}) {
         paneId: opts.paneId || null,
         id: 'vt-ports',
         ariaLabel: t('포트 대시보드'),
+        // 리디자인 5단계(시안 P06): 머리 = 「포트」 + 맥락(터널 노출 수) + 새로고침 아이콘. 본문 맨 위에 터널 카드,
+        // 그 아래 열 머리(포트 · 프로세스 · 가동 · 메모리)와 「내 서버」 · 「보호됨 · 시스템」 구역.
         headHTML: `
-          <div class="vt-vw-title">${t('포트 — 실행 중인 개발 서버')}</div>
-          <button class="vt-btn sm vt-vw-diff" id="vt-pt-refresh" title="${t('새로고침')}">${t('새로고침')}</button>
+          <div class="vt-vw-title">${t('포트')}</div>
+          <span class="vt-ph-ctx" id="vt-pt-ctx"></span>
+          <button type="button" class="vt-icon-btn sm" id="vt-pt-refresh" aria-label="${t('새로고침')}" data-tip="${t('새로고침')}">${icon('refresh-cw', 14)}</button>
         `,
         bodyId: 'vt-pt-body',
       });
@@ -195,8 +200,20 @@ function showPorts(opts = {}) {
       const name = document.createElement('span');
       name.className = 'vt-pt-cmd';
       name.textContent = p.cmd;                       // textContent — XSS 방어
-      name.title = p.cmd;                              // 좁은 dock에서 말줄임돼도 hover로 복구
+      name.title = `${p.cmd} · PID ${p.pid}`;          // 좁은 dock에서 말줄임돼도 hover로 복구(PID 열이 접혀도 여기 남는다)
       row.dataset.pk = `${p.port}:${p.pid}`;
+      // 공개 중인 포트는 이름 아래 한 줄 「노출 중 · 내 기기만」(시안 P06) — 행이 두 줄(48)이 된다.
+      let nameCell = name;
+      if (p.tunnel_url) {
+        nameCell = document.createElement('span');
+        nameCell.className = 'vt-pt-namecell';
+        const ex = document.createElement('span');
+        ex.className = 'vt-pt-exposed';
+        const mode = p.share && p.share.mode ? MODE_LABEL[p.share.mode] || p.share.mode : '';
+        ex.textContent = mode ? t('노출 중 · {mode}', { mode }) : t('노출 중');
+        nameCell.append(name, ex);
+        row.classList.add('exposed');
+      }
       // 열 맞춤: 숫자는 칸 하나씩 — 값이 바뀌어도 칸 폭이 같아 위아래가 정렬된다.
       const cells = PORT_FIELDS.map((f) => {
         const c = document.createElement('span');
@@ -224,31 +241,21 @@ function showPorts(opts = {}) {
         // L5: 이미 공개 터널이 열려 있으면(server가 GET /api/ports에 tunnel_url을
         // 얹어 알려준다) "공개" 대신 "미리보기"로 바꿔 앱 안에서 바로 확인하게 한다 —
         // 매번 "공개→URL 복사→새 탭"을 거칠 필요가 없다.
-        const ex = document.createElement('button');
-        // sm = 행 높이(24px)와 같은 단. 기본 .vt-btn은 28px이라 24px 행보다 컸다.
-        // quiet = 테두리 상자를 뗀다 — 목록 행 안의 동작이지 주 액션이 아니다.
-        ex.className = 'vt-btn sm quiet';
+        // 시안 P06 — 머문 행의 아이콘 동작: 미리보기(공개 중일 때) 또는 공개 · 종료. 이름은 aria-label·툴팁이 맡는다.
         if (p.tunnel_url) {
-          ex.textContent = t('미리보기');
-          ex.title = p.tunnel_url;
-          ex.onclick = async () => showPortPreview(p.port, await _openUrlFor(p.tunnel_url, p.share));
+          actions.appendChild(_tunnelBtn(t('미리보기'), 'external-link',
+            async () => showPortPreview(p.port, await _openUrlFor(p.tunnel_url, p.share))));
         } else {
-          ex.textContent = t('공개');
-          ex.title = t('이 포트를 Cloudflare 터널로 인터넷에 공개합니다');
-          ex.onclick = () => exposePort(ctx, p.port);
+          actions.appendChild(_tunnelBtn(t('공개'), 'globe', () => exposePort(ctx, p.port)));
+          actions.lastChild.dataset.tipSub = t('이 포트를 Cloudflare 터널로 인터넷에 공개합니다');
         }
-        actions.appendChild(ex);
         if (!swipeKillOnTouch) {
-          const kb = document.createElement('button');
-          kb.className = 'vt-btn sm quiet danger';
-          kb.textContent = t('종료');
-          kb.onclick = () => killPort(ctx, p.port, p.pid, p.cmd);
-          actions.appendChild(kb);
+          actions.appendChild(_tunnelBtn(t('종료'), 'power', () => killPort(ctx, p.port, p.pid, p.cmd), 'danger'));
         }
       }
 
       if (!swipeKillOnTouch) {
-        row.appendChild(port); row.appendChild(name);
+        row.appendChild(port); row.appendChild(nameCell);
         cells.forEach((c) => row.appendChild(c));
         if (!p.protected) row.appendChild(actions);
         return row;
@@ -259,7 +266,7 @@ function showPorts(opts = {}) {
       row.classList.add('swipeable');
       const inner = document.createElement('div');
       inner.className = 'vt-pt-row-inner';
-      inner.appendChild(port); inner.appendChild(name);
+      inner.appendChild(port); inner.appendChild(nameCell);
       cells.forEach((c) => inner.appendChild(c));
       inner.appendChild(actions);
 
@@ -274,16 +281,17 @@ function showPorts(opts = {}) {
       return row;
     }
 
-// N22(50-files-share.md §5) — 노출 중인 터널(메인 + fsh tunnel expose한 포트) 요약을
-// 포트 목록 아래에 얹는다. 주소는 글자로 늘어놓지 않고 [주소] 버튼 하나로 두고, 복사·관리·해제는
-// 행에 올렸을 때만 보인다(포트 행과 같은 규칙). 메인 터널은 여기서 해제·관리 대상이 아니다.
+// N22(50-files-share.md §5) — 노출 중인 터널(메인 + fsh tunnel expose한 포트).
+// 리디자인 5단계(시안 P06 · P06-f)부터 목록 **위**의 터널 카드다: 상태 점(노출 중 work · 일시 닫힘 waiting ·
+// 고장 error) · `:포트 이름` + 낱말 꼬리표(접근 방식 · 자동 · 일시 닫힘 · 고장) · 주소(mono) · 오른쪽 동작.
+// 상태는 색만으로 말하지 않는다 — 점 옆에 꼬리표 낱말이 함께 있다. 메인 터널은 여기서 해제·관리 대상이 아니다.
 function _tunnelBtn(label, svg, onClick, extra = '') {
   const b = document.createElement('button');
   b.type = 'button';
-  b.className = `vt-icon-btn xs ${extra}`.trim();
+  b.className = `vt-icon-btn sm ${extra}`.trim();
   b.setAttribute('aria-label', label);
   b.dataset.tip = label;
-  b.innerHTML = icon(svg, 14);
+  b.innerHTML = pIcon(svg, 14);
   b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
   return b;
 }
@@ -292,19 +300,24 @@ function _buildTunnelSection(ctx, d) {
   if (!d || !d.count) return null;
   const section = document.createElement('div');
   section.className = 'vt-pt-tunnel-section';
-  const head = document.createElement('div');
-  head.className = 'vt-pt-section';
-  head.textContent = t('노출 중 · {n}', { n: d.count });
-  section.appendChild(head);
 
   const rows = d.main ? [d.main, ...d.extra] : d.extra;
   rows.forEach((tn) => {
     const isMain = tn === d.main;
     const paused = !!tn.paused;
     const row = document.createElement('div');
-    row.className = 'vt-pt-tunnel-row' + (paused ? ' paused' : '');
+    row.className = 'vt-pt-tunnel-row' + (paused ? ' paused' : '') + (tn.broken ? ' broken' : '');
     row.dataset.tk = String(tn.port);
 
+    const dot = document.createElement('span');
+    dot.className = 'vt-pt-tdot';
+    dot.dataset.state = tn.broken ? 'error' : paused ? 'waiting' : 'working';
+    row.appendChild(dot);
+
+    const main = document.createElement('div');
+    main.className = 'vt-pt-tmain';
+    const line1 = document.createElement('div');
+    line1.className = 'vt-pt-tline';
     const port = document.createElement('span');
     port.className = 'vt-pt-port';
     port.textContent = `:${tn.port}`;
@@ -312,13 +325,14 @@ function _buildTunnelSection(ctx, d) {
     label.className = 'vt-pt-tunnel-label';
     label.textContent = tn.label;
     label.title = tn.label;
-    row.append(port, label);
+    line1.append(port, label);
 
     const chips = document.createElement('span');
     chips.className = 'vt-pt-chips';
-    const chip = (text, cls = '', title = '') => {
+    const chip = (text, tone = '', title = '') => {
       const c = document.createElement('span');
-      c.className = `vt-pt-chip ${cls}`.trim();
+      c.className = 'vt-ptag vt-pt-chip';
+      if (tone) c.dataset.tone = tone;
       c.textContent = text;
       if (title) c.title = title;
       chips.appendChild(c);
@@ -326,35 +340,43 @@ function _buildTunnelSection(ctx, d) {
     };
     if (tn.mode) chip(MODE_LABEL[tn.mode] || tn.mode);
     if (tn.share && tn.share.autoRenew) chip(t('자동'), '', t('만료되거나 터널이 사라지면 자동으로 다시 엽니다'));
-    if (paused) chip(t('일시 닫힘'), 'warn', t('터널을 내려 둔 상태입니다 — 설정은 그대로 남아 있습니다'));
-    if (tn.broken) chip(`⚠ ${t('고장')}`, 'warn', t('내부 프록시가 뜨지 못했습니다 — 지금은 접속이 안 됩니다'));
-    row.appendChild(chips);
+    if (paused) chip(t('일시 닫힘'), 'wait', t('터널을 내려 둔 상태입니다 — 설정은 그대로 남아 있습니다'));
+    if (tn.broken) chip(t('고장'), 'err', t('내부 프록시가 뜨지 못했습니다 — 지금은 접속이 안 됩니다'));
+    line1.appendChild(chips);
+    main.appendChild(line1);
+    const url = document.createElement('div');
+    url.className = 'vt-pt-tunnel-url';
+    url.textContent = paused ? t('터널을 내려 둔 상태입니다 — 설정은 그대로 남아 있습니다') : (tn.url || '');
+    url.title = tn.url || '';
+    main.appendChild(url);
+    row.appendChild(main);
 
+    const actions = document.createElement('span');
+    actions.className = 'vt-pt-actions';
     if (paused) {
       const reopen = document.createElement('button');
       reopen.type = 'button';
       reopen.className = 'vt-btn sm';
       reopen.textContent = t('다시 열기');
       reopen.addEventListener('click', () => resumeShare(ctx, tn.port));
-      row.appendChild(reopen);
+      actions.appendChild(reopen);
     } else {
-      // 주소는 글자로 보이지 않는다 — 버튼 하나. session 노출은 /p/authorize부터 시작한다
-      // (shareOpenUrl). 복사는 공개 주소 그대로 — 남에게 보내면 안내 화면만 보인다.
-      const open = document.createElement('button');
-      open.type = 'button';
-      open.className = 'vt-btn sm vt-pt-open';
-      open.title = tn.url;
-      open.innerHTML = `${icon('link', 12)}<span>${vtEsc(t('주소'))}</span>`;
-      open.addEventListener('click', async () => {
-        const url = await _openUrlFor(tn.url, tn.share);
-        window.open(url, '_blank', 'noopener,noreferrer');
-      });
-      row.appendChild(open);
+      // 주소 복사 — 공개 주소 그대로(남에게 보내면 안내 화면만 보인다). 열기는 session 노출이면
+      // /p/authorize부터 시작한다(shareOpenUrl).
+      const copy = document.createElement('button');
+      copy.type = 'button';
+      copy.className = 'vt-btn sm quiet vt-pt-copy';
+      copy.innerHTML = `${icon('clipboard-copy', 12)}<span>${vtEsc(t('주소 복사'))}</span>`;
+      copy.title = tn.url;
+      copy.addEventListener('click', (e) => { e.stopPropagation(); _copyText(tn.url); });
+      actions.appendChild(copy);
+      const open = _tunnelBtn(t('주소'), 'link', async () => {
+        const target = await _openUrlFor(tn.url, tn.share);
+        window.open(target, '_blank', 'noopener,noreferrer');
+      }, 'vt-pt-open');
+      open.dataset.tipSub = tn.url || '';
+      actions.appendChild(open);
     }
-
-    const actions = document.createElement('span');
-    actions.className = 'vt-pt-actions';
-    if (!paused) actions.appendChild(_tunnelBtn(t('주소 복사'), 'clipboard-copy', () => _copyText(tn.url)));
     if (!isMain && tn.share) actions.appendChild(_tunnelBtn(t('관리'), 'more-horizontal', () => openShareMenu(ctx, tn)));
     if (!isMain) actions.appendChild(_tunnelBtn(t('해제'), 'trash-2', () => _unexposeTunnel(ctx, tn.port), 'danger'));
     row.appendChild(actions);
@@ -362,7 +384,6 @@ function _buildTunnelSection(ctx, d) {
   });
   return section;
 }
-
 
 async function _copyText(text) {
   try {
@@ -413,7 +434,7 @@ async function _unexposeTunnel(ctx, port) {
       const row = document.createElement('div');
       row.className = 'vt-pt-row vt-pt-thead';
       row.setAttribute('aria-hidden', 'true');
-      for (const [cls, text] of [['vt-pt-port', t('포트')], ['vt-pt-cmd', t('프로세스')], ['vt-pt-num', 'PID'],
+      for (const [cls, text] of [['vt-pt-port', t('포트')], ['vt-pt-cmd', t('프로세스')], ['vt-pt-num vt-pt-num-pid', 'PID'],
         ['vt-pt-num vt-pt-num-uptime', t('가동')], ['vt-pt-num vt-pt-num-mem', t('메모리')], ['vt-pt-num vt-pt-num-cpu', 'CPU']]) {
         const c = document.createElement('span');
         c.className = cls;
@@ -446,37 +467,43 @@ async function _unexposeTunnel(ctx, port) {
       if (body._ptSig === sig) { _patchNumbers(body, d.ports); return; }
 
       const frag = document.createDocumentFragment();
+      // 터널 카드가 맨 위(시안 P06) — 무엇이 밖으로 열려 있는지가 이 화면에서 가장 먼저 읽혀야 한다.
+      const tunnels = _buildTunnelSection(ctx, tl);
+      if (tunnels) frag.appendChild(tunnels);
+      const ctxEl = ctx.byId('vt-pt-ctx');
+      if (ctxEl) ctxEl.textContent = tl && tl.count ? t('터널 노출 중 · {n}', { n: tl.count }) : t('터널 노출 없음');
       if (!d.ports.length) {
-        const empty = document.createElement('div');
-        empty.className = 'vt-vw-empty';
-        empty.textContent = t('리스닝 중인 포트가 없습니다.');
-        frag.appendChild(empty);
+        frag.appendChild(emptyState({
+          icon: 'plug',
+          title: t('실행 중인 개발 서버가 없습니다'),
+          desc: t('vite, uvicorn 같은 서버를 켜면 여기에 나타납니다.'),
+        }));
       } else {
         const list = document.createElement('div');
         list.className = 'vt-vw-list vt-pt-table';
         list.appendChild(_theadEl());
         // U3: 서버가 이미 protected(보호됨/시스템) 기준으로 뒤로 정렬해서 보내준다.
-        // 그 경계가 바뀌는 지점에 구분 헤더만 얹는다 — 정렬 로직 자체는 서버가 단일 소스.
-        // 두 그룹이 실제로 섞여 있을 때만 헤더를 보여준다 — 전부 한쪽뿐이면 굳이 안 나눔.
+        // 그 경계가 바뀌는 지점에 구역 머리만 얹는다 — 정렬 로직 자체는 서버가 단일 소스.
+        // 두 그룹이 실제로 섞여 있을 때만 머리를 보여준다 — 전부 한쪽뿐이면 굳이 안 나눔.
         const hasBothGroups = d.ports.some(p => !p.protected) && d.ports.some(p => p.protected);
+        const sec = (label, n) => {
+          const head = document.createElement('div');
+          head.className = 'vt-pt-section vt-psec';
+          head.innerHTML = `<span>${vtEsc(label)}</span><span class="n">${n}</span>`;
+          return head;
+        };
         let sawProtected = false;
         let sawMine = false;
         // U4/D4: 같은 pid 행 병합 — 대표(가장 낮은 포트) 아래 나머지를 들여쓴
-        // 하위 행으로 그린다. 그룹핑 자체는 _groupByPid, 헤더·행 렌더링은 여기서.
+        // 하위 행으로 그린다. 그룹핑 자체는 _groupByPid, 머리·행 렌더링은 여기서.
         _groupByPid(d.ports).forEach(({ rep, subs }) => {
           if (hasBothGroups && !rep.protected && !sawMine) {
             sawMine = true;
-            const head = document.createElement('div');
-            head.className = 'vt-pt-section';
-            head.textContent = t('내 서버');
-            list.appendChild(head);
+            list.appendChild(sec(t('내 서버'), d.ports.filter((p) => !p.protected).length));
           }
           if (hasBothGroups && rep.protected && !sawProtected) {
             sawProtected = true;
-            const head = document.createElement('div');
-            head.className = 'vt-pt-section';
-            head.textContent = t('보호됨 / 시스템');
-            list.appendChild(head);
+            list.appendChild(sec(t('보호됨 · 시스템'), d.ports.filter((p) => p.protected).length));
           }
           list.appendChild(_buildRow(ctx, rep, false));
           subs.forEach(p => list.appendChild(_buildRow(ctx, p, true)));
@@ -489,8 +516,6 @@ async function _unexposeTunnel(ctx, port) {
           frag.appendChild(n);
         }
       }
-      const tunnels = _buildTunnelSection(ctx, tl);
-      if (tunnels) frag.appendChild(tunnels);
       const scrollTop = body.scrollTop;
       body.replaceChildren(frag);   // 한 번에 갈아 끼운다 — 중간에 빈 화면이 없다
       body.scrollTop = scrollTop;

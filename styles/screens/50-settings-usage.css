@@ -172,7 +172,14 @@
 #vt-mcp .vt-viewer-card { width:min(1240px, 100%); height:min(88vh, 860px); max-height:min(88vh, 860px); }
 #vt-mcp.vt-dock-panel .vt-viewer-card { width:100%; height:100%; max-height:none; }
 #vt-mcp.vt-dock-panel .vt-vw-body { padding:calc(var(--spacing) * 3); }
-#vt-mcp .vt-vw-title { font-size:var(--fs-md); }
+/* 리디자인 5단계(시안 P09-b) — 관리 창의 껍데기만 대화상자 규칙으로: 떠 있는 면(raised) · 머리 48(제목 15/600) · 본문 여백 20.
+   크기(1240)와 키운 글자(아래 2026-10-27 블록)는 그대로 둔다 — 사용자 가독성 지적으로 정한 값이다. */
+@media (min-width:720px) {
+  #vt-mcp:not(.vt-dock-panel) .vt-viewer-card { background:var(--color-bg-raised); border-color:var(--color-line-strong); border-radius:var(--radius-lg); }
+  #vt-mcp:not(.vt-dock-panel) .vt-viewer-head { height:48px; box-sizing:border-box; padding:0 calc(var(--spacing) * 3) 0 calc(var(--spacing) * 5); background:var(--color-bg-raised); border-bottom:1px solid var(--color-line); }
+  #vt-mcp:not(.vt-dock-panel) .vt-vw-body { background:var(--color-bg-raised); padding:calc(var(--spacing) * 5); }
+}
+#vt-mcp .vt-vw-title { font:var(--weight-semibold) var(--fs-base)/20px var(--font-ui); }
 .vt-mcp-group { margin:calc(var(--spacing) * 3) 0; padding-top:calc(var(--spacing) * 3); border-top:1px solid var(--line); }
 .vt-mcp-group:first-child { margin-top:0; padding-top:0; border-top:0; }
 .vt-mcp-servhead .vt-set-label { font:600 var(--fs-md) var(--ui); }
@@ -525,60 +532,56 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
   .vt-set-mobile-link > span:last-child { color:var(--sub); font-size:var(--fs-lg); }
 }
 
-/* ── U2 사용량 게이지 ──────────────────────────────────────────────────────
-   "숫자보다 바가 먼저" — 바 높이 4px, 색만 보고 판단 가능해야 한다. */
-.vt-usage .vt-vw-body { padding:calc(var(--spacing) * 2); }
+/* ── U2 사용량 게이지 — 리디자인 5단계(시안 P07) ─────────────────────────────
+   카드(.vt-pcard: 반경 8 · 여백 12) 사이 간격 12, 본문 여백 12/14. 창 하나 = 이름 … 값 / 막대 4px / 리셋 11 muted.
+   "숫자보다 바가 먼저" — 75%를 넘으면 값과 막대가 같은 waiting 색으로 물든다. */
+.vt-usage .vt-vw-body { padding:calc(var(--spacing) * 3) calc(var(--spacing) * 3.5); }
 .vt-usage .vt-vw-body.stale { opacity:.6; }
-.vt-usage-card { }
-.vt-usage-card.active { border-color:var(--acc); }
-.vt-usage-head { display:flex; align-items:center; gap:calc(var(--spacing) * 1); margin-bottom:calc(var(--spacing) * 1); }
-.vt-usage-name { font:600 var(--fs-sm) var(--ui); color:var(--txt); }
-.vt-usage-tier, .vt-usage-chip { }
-.vt-usage-live { margin-left:auto; font:500 var(--fs-xs) var(--ui); color:var(--color-st-working); }
-.vt-usage-win { display:flex; align-items:center; gap:calc(var(--spacing) * 1); margin-top:6px; }
-.vt-usage-label { flex:0 0 auto; min-width:7ch; font:500 var(--fs-xs) var(--mono); color:var(--sub); white-space:nowrap; }
-.vt-usage-track { flex:1; height:4px; background:var(--menu-hover); border-radius:var(--radius-full); overflow:hidden; }
-.vt-usage-fill { height:100%; border-radius:var(--radius-full); transition:width .3s var(--ease-out-quint, ease); }
-.vt-usage-pct { width:4ch; text-align:right; font:500 var(--fs-xs) var(--mono); color:var(--txt); }
-.vt-usage-reset { min-width:9ch; text-align:right; font:400 var(--fs-xs) var(--ui); color:var(--sub); }
+.vt-usage-limit-section, .vt-usage-counter-section { display:flex; flex-direction:column; gap:calc(var(--spacing) * 3); }
+.vt-usage-card, .vt-counter-card { margin-bottom:0; padding:calc(var(--spacing) * 3); border-radius:var(--radius-lg); }
+.vt-usage-card.active { border-color:color-mix(in srgb, var(--color-acc) 45%, transparent); }
+.vt-usage-head { display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-width:0; }
+.vt-usage-name { font:var(--weight-semibold) var(--fs-sm)/18px var(--font-ui); color:var(--color-txt); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-usage-tier { flex:none; font:400 var(--fs-3xs)/1 var(--font-ui); color:var(--color-muted); }
+.vt-usage-tags { margin-left:auto; display:inline-flex; gap:calc(var(--spacing) * 1); flex:none; }
+.vt-usage-win { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1); margin-top:calc(var(--spacing) * 2.5); }
+.vt-usage-win-head { display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); }
+.vt-usage-label { flex:1 1 auto; min-width:0; font:400 var(--fs-xs)/16px var(--font-ui); color:var(--color-sub); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vt-usage-track { height:4px; background:color-mix(in srgb, var(--color-txt) 8%, transparent); border-radius:2px; overflow:hidden; }
+.vt-usage-fill { height:100%; border-radius:2px; transition:width .3s var(--ease-out-quint, ease); }
+.vt-usage-pct { flex:none; text-align:right; font:var(--weight-medium) var(--fs-xs)/16px var(--font-mono); color:var(--color-txt); font-variant-numeric:tabular-nums; }
+.vt-usage-pct.warn { color:var(--color-st-waiting); }
+.vt-usage-reset { font:400 var(--fs-3xs)/16px var(--font-ui); color:var(--color-muted); }
 .vt-usage-warn {
   display:flex; align-items:center; justify-content:space-between; gap:calc(var(--spacing) * 2);
-  margin-bottom:calc(var(--spacing) * 1); padding:4px 8px; border-radius:var(--radius-sm);
-  background:color-mix(in oklab, var(--color-st-error) 15%, transparent);
-  color:var(--color-st-error); font:500 var(--fs-xs) var(--ui);
+  margin-top:calc(var(--spacing) * 1.5);
+  color:var(--color-muted); font:400 var(--fs-xs)/16px var(--font-ui);
 }
 .vt-usage-empty, .vt-usage-none { }
+.vt-usage-none { margin:0; font:400 var(--fs-xs)/16px var(--font-ui); color:var(--color-muted); }
 /* 데이터가 없는 카드(generic 계정 등)는 머리 줄 하나로 — 안내 문구는 오른쪽 끝에 조용히. */
-.vt-usage-card.compact .vt-usage-head { margin-bottom:0; }
-.vt-usage-card.compact .vt-usage-empty { margin-left:auto; padding:0; text-align:right; color:var(--sub); font:400 var(--fs-2xs) var(--ui); }
-.vt-usage-card.compact .vt-usage-live { margin-left:0; }
+.vt-usage-card.compact .vt-usage-empty { margin-left:auto; padding:0; text-align:right; color:var(--color-muted); font:400 var(--fs-3xs) var(--font-ui); }
+.vt-usage-card.compact .vt-usage-tags + .vt-usage-empty { margin-left:calc(var(--spacing) * 1.5); }
 .vt-usage-warn .vt-btn { flex:0 0 auto; }
-.vt-usage-fallback { margin-top:calc(var(--spacing) * 1); font:400 var(--fs-xs) var(--ui); color:var(--sub); }
-.vt-usage-fallback.armed { color:var(--color-st-waiting); }
-@media (max-width: 720px) {
-  /* compact에서는 리셋 시각을 다음 줄로 — 한 줄에 넣으면 바가 짓눌린다 */
-  .vt-usage-win { flex-wrap:wrap; }
-  .vt-usage-reset { width:100%; text-align:left; padding-left:calc(7ch + var(--spacing)); }
-}
+.vt-usage-fallback { margin-top:calc(var(--spacing) * 2); font:400 var(--fs-3xs)/16px var(--font-ui); color:var(--color-muted); }
+.vt-usage-fallback.armed { color:var(--color-sub); }
 
 /* ── N41 누적형 사용량(로컬 LLM 등, 한도 없음) ────────────────────────────
    한도형과 시각 언어를 다르게 가져간다 — 바(%)가 아니라 숫자 3개 + 스파크라인.
    "얼마나 남았나"가 아니라 "얼마나 썼나"라서 진행률 바를 쓰면 거짓 %가 된다. */
-.vt-usage-section-title {
-  margin-bottom:calc(var(--spacing) * 1);
-}
-.vt-usage-divider { border:none; border-top:1px solid var(--line); margin:calc(var(--spacing) * 2) 0; }
+.vt-usage-section-title { margin-bottom:calc(var(--spacing) * 1); }
+.vt-usage-divider { border:none; border-top:1px solid var(--color-line); margin:calc(var(--spacing) * 3) 0; }
 .vt-counter-card {
   display:flex;
   flex-direction:column;
   gap:6px;
 }
 .vt-counter-head { display:flex; align-items:center; gap:calc(var(--spacing) * 1); }
-.vt-counter-name { font:600 var(--fs-sm) var(--mono); color:var(--txt); }
-.vt-counter-live { margin-left:auto; font:500 var(--fs-xs) var(--ui); color:var(--color-st-working); }
+.vt-counter-name { font:600 var(--fs-sm) var(--font-mono); color:var(--color-txt); }
+.vt-counter-live { margin-left:auto; font:500 var(--fs-xs) var(--font-ui); color:var(--color-st-working); }
 .vt-counter-stats { display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 1.5); }
-.vt-counter-stat { font:500 var(--fs-xs) var(--mono); color:var(--sub); }
-.vt-counter-spark { width:100%; height:24px; color:var(--acc); display:block; }
+.vt-counter-stat { font:500 var(--fs-xs) var(--font-mono); color:var(--color-sub); }
+.vt-counter-spark { width:100%; height:24px; color:var(--color-acc); display:block; }
 
 /* ── C3 연결된 화면 ──────────────────────────────────────────────────────── */
 .vt-clients {

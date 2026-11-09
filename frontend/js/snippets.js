@@ -26,6 +26,8 @@ import { screenId } from './core/screen-id.js';
 import { sendToPty, sendPaste } from './term/clipboard.js';
 import { addSession } from './term/session.js';
 import { icon } from './ui/icons.js';
+import { pIcon } from './panels/panel-icons.js';
+import { confirmDialog } from './core/dialog.js';
 import { isMac } from './core/env.js';
 import { t } from './core/i18n.js';
 import {
@@ -39,7 +41,6 @@ let _items = [];
 let _projectKey = null;
 let _editing = null;        // null = 닫힘, { id: string|null } = 열림(null이면 새 스니펫)
 let _namingId = null;       // 「새 세션」 이름 입력이 열린 행
-let _confirmDeleteId = null;
 const _expanded = new Set();
 let _panelEl = null;
 
@@ -56,12 +57,15 @@ function _afterRun(sessionId) {
 
 export function showSnippets() {
   const key = isMac ? 'Cmd' : 'Ctrl';
+  // 리디자인 5단계(시안 P05): 머리 = 「스니펫」 + 맥락(프로젝트) + 「새 스니펫」. 도구 줄 = 검색 · [프로젝트|전체].
+  // 편집(P05-b)은 목록 위에 펼치지 않고 **같은 자리에서 한 단계 들어간 화면**이다 — ← 「스니펫 수정」 하위 머리.
   const panel = openPanel({
     id: 'vt-snippets',
     ariaLabel: t('프롬프트 스니펫'),
     headHTML: `
-      <div class="vt-vw-title">${t('프롬프트 스니펫')}</div>
-      <button type="button" class="vt-btn sm solid" id="vt-sn-new">${icon('plus', 14)}${t('새 스니펫')}</button>`,
+      <div class="vt-vw-title">${t('스니펫')}</div>
+      <span class="vt-ph-ctx" id="vt-sn-ctx"></span>
+      <button type="button" class="vt-btn sm" id="vt-sn-new">${icon('plus', 12)}${t('새 스니펫')}</button>`,
     extraHTML: `
       <div class="vt-sn-tools">
         <label class="vt-sn-search">
@@ -69,32 +73,46 @@ export function showSnippets() {
           <input id="vt-sn-q" class="vt-input" type="search" autocomplete="off" spellcheck="false"
                  placeholder="${t('이름·내용 검색')}" aria-label="${t('스니펫 검색')}" />
         </label>
-        <div class="vt-sn-seg" role="tablist" aria-label="${t('스니펫 스코프')}">
+        <div class="vt-sn-seg vt-pseg s28" role="tablist" aria-label="${t('스니펫 스코프')}">
           <button type="button" class="vt-segment" role="tab" id="vt-sn-tab-project" data-scope="project">${t('프로젝트')}<b>0</b></button>
           <button type="button" class="vt-segment" role="tab" id="vt-sn-tab-global" data-scope="global">${t('전체')}<b>0</b></button>
         </div>
       </div>
       <form class="vt-sn-editor" id="vt-sn-editor" hidden autocomplete="off">
-        <input id="vt-sn-label" class="vt-input lg" type="text" maxlength="60"
-               placeholder="${t('이름 (비우면 첫 줄)')}" aria-label="${t('이름')}" />
-        <textarea id="vt-sn-text" class="vt-input lg" rows="6" spellcheck="false"
-                  placeholder="${t('명령이나 지시문. 줄바꿈은 Enter로 입력됩니다.')}" aria-label="${t('내용')}"></textarea>
-        <div class="vt-sn-preview" id="vt-sn-preview" aria-live="off"></div>
-        <div class="vt-sn-opts">
+        <div class="vt-psub">
+          <button type="button" class="vt-icon-btn sm" id="vt-sn-back" aria-label="${t('목록으로')}" data-tip="${t('목록으로')}">${icon('arrow-left', 14)}</button>
+          <span class="vt-psub-t" id="vt-sn-edit-title">${t('새 스니펫')}</span>
+        </div>
+        <div class="vt-sn-fields">
+          <label class="vt-fld"><span class="vt-fld-l">${t('이름')}</span>
+            <input id="vt-sn-label" class="vt-input lg" type="text" maxlength="60"
+                   placeholder="${t('이름 (비우면 첫 줄)')}" /></label>
+          <label class="vt-fld"><span class="vt-fld-l">${t('내용')}</span>
+            <textarea id="vt-sn-text" class="vt-input lg" rows="5" spellcheck="false"
+                      placeholder="${t('명령이나 지시문. 줄바꿈은 Enter로 입력됩니다.')}"></textarea></label>
+          <div class="vt-sn-preview" id="vt-sn-preview" aria-live="off"></div>
           <div class="vt-sn-opt" id="vt-sn-proj-opt">
             <div class="vt-sn-opt-text"><b>${t('이 프로젝트에만')}</b>
               <span>${t('지금 세션의 git 저장소에서만 보입니다.')}</span></div>
             <button type="button" class="vt-toggle" role="switch" aria-checked="false" id="vt-sn-proj" aria-label="${t('이 프로젝트에만')}"><span>ON</span><span>OFF</span></button>
           </div>
-        </div>
-        <div class="vt-sn-editor-foot">
-          <span class="vt-sn-hint">${t('{key}+Enter로 저장', { key })}</span>
-          <button type="button" class="vt-btn quiet" id="vt-sn-cancel">${t('취소')}</button>
-          <button type="submit" class="vt-btn solid" id="vt-sn-save">${t('저장')}</button>
+          <div class="vt-fld" role="radiogroup" aria-label="${t('전송 방식')}">
+            <span class="vt-fld-l">${t('전송 방식')}</span>
+            <label class="vt-sn-mode"><input type="radio" name="vt-sn-enter" value="1">
+              <span><b>${t('끝에 Enter')}</b><em>${t('마지막 줄까지 실행합니다')}</em></span></label>
+            <label class="vt-sn-mode"><input type="radio" name="vt-sn-enter" value="0">
+              <span><b>${t('입력만')}</b><em>${t('앞 줄은 실행하고 마지막 줄은 입력만 해 두어 고쳐서 보냅니다')}</em></span></label>
+          </div>
+          <div class="vt-sn-editor-foot">
+            <button type="button" class="vt-btn danger" id="vt-sn-del" hidden>${icon('trash-2', 14)}${t('삭제')}</button>
+            <span class="vt-sn-hint">${t('{key}+Enter로 저장', { key })}</span>
+            <button type="button" class="vt-btn quiet" id="vt-sn-cancel">${t('취소')}</button>
+            <button type="submit" class="vt-btn solid" id="vt-sn-save">${t('저장')}</button>
+          </div>
         </div>
       </form>`,
     bodyId: 'vt-sn-body',
-    onClose: () => { _panelEl = null; _editing = null; _namingId = null; _confirmDeleteId = null; },
+    onClose: () => { _panelEl = null; _editing = null; _namingId = null; },
     onKey: () => {
       // 편집 중 Esc는 편집만 닫는다 — 쓰던 내용 때문에 패널째 닫히면 안 된다.
       if (_editing) { _closeEditor(); return true; }
@@ -109,7 +127,18 @@ export function showSnippets() {
   $('#vt-sn-tab-project').addEventListener('click', () => _switchScopeTab('project'));
   $('#vt-sn-tab-global').addEventListener('click', () => _switchScopeTab('global'));
   $('#vt-sn-cancel').addEventListener('click', _closeEditor);
-  $('#vt-sn-text').addEventListener('input', _paintEditorText);
+  $('#vt-sn-back').addEventListener('click', _closeEditor);
+  $('#vt-sn-del').addEventListener('click', () => {
+    const it = _editing && _editing.id ? _find(_editing.id) : null;
+    if (it) _askDelete(it);
+  });
+  $('#vt-sn-text').addEventListener('input', () => {
+    // 본문 끝에 줄바꿈을 직접 치면 「끝에 Enter」를 고른 것으로 본다(예전 규칙: 끝 줄바꿈 = 마지막 Enter).
+    const ta = $('#vt-sn-text');
+    if (/\n$/.test(ta.value)) _setEnterMode(true);
+    _paintEditorText();
+  });
+  for (const r of _panelEl.querySelectorAll('input[name="vt-sn-enter"]')) r.addEventListener('change', _paintEditorText);
   _bindToggle($('#vt-sn-proj'));
 
   const editor = $('#vt-sn-editor');
@@ -128,6 +157,18 @@ export function showSnippets() {
 
   _paintTabs();
   _refresh();
+}
+
+const _enterMode = () => $('input[name="vt-sn-enter"]:checked')?.value === '1';
+function _setEnterMode(on) {
+  const r = $(`input[name="vt-sn-enter"][value="${on ? '1' : '0'}"]`);
+  if (r) r.checked = true;
+}
+/** 편집 화면의 본문 + 「전송 방식」 → 저장할 본문. 끝 줄바꿈 하나가 곧 마지막 Enter다(snippets-util.js). */
+function _editorText() {
+  const body = composeText($('#vt-sn-text').value).replace(/\n+$/, '');
+  if (!body) return '';
+  return _enterMode() ? `${body}\n` : body;
 }
 
 function _bindToggle(btn) {
@@ -172,6 +213,8 @@ async function _refresh() {
     return;
   }
   _projectKey = await _currentProjectKey();
+  const ctxEl = $('#vt-sn-ctx');
+  if (ctxEl) { ctxEl.textContent = _projectKey ? String(_projectKey).split('/').filter(Boolean).pop() || '' : ''; ctxEl.title = _projectKey || ''; }
   _paintTabs();
   _render();
 }
@@ -203,15 +246,16 @@ function _visibleItems() {
 }
 
 function _emptyHTML() {
-  if (_query.trim()) return `<div class="vt-sn-empty"><p>${t('일치하는 스니펫이 없습니다.')}</p></div>`;
+  const box = (title, desc, withNew) => `<div class="vt-empty" role="status">${icon('braces', 20, 1.75)}
+    <div class="vt-empty-title">${vtEsc(title)}</div>${desc ? `<div class="vt-empty-desc">${vtEsc(desc)}</div>` : ''}
+    ${withNew ? `<button type="button" class="vt-btn sm" data-act="new">${icon('plus', 12)}${vtEsc(t('새 스니펫'))}</button>` : ''}</div>`;
+  if (_query.trim()) return box(t('일치하는 스니펫이 없습니다.'), '', false);
   if (_scopeTab === 'project') {
-    return `<div class="vt-sn-empty"><p>${_projectKey
-      ? t('이 프로젝트에 저장된 스니펫이 없습니다.')
-      : t('현재 세션이 git 저장소 안에 있어야 프로젝트 스니펫을 볼 수 있습니다.')}</p></div>`;
+    return _projectKey
+      ? box(t('이 프로젝트에 저장된 스니펫이 없습니다.'), '', true)
+      : box(t('프로젝트 스니펫을 볼 수 없습니다'), t('현재 세션이 git 저장소 안에 있어야 프로젝트 스니펫을 볼 수 있습니다.'), false);
   }
-  return `<div class="vt-sn-empty">${icon('braces', 22)}
-    <p>${t('저장된 스니펫이 없습니다.')}</p>
-    <p class="vt-sn-empty-sub">${t('자주 쓰는 명령이나 지시문을 저장해 두면 한 번에 입력합니다.')}</p></div>`;
+  return box(t('저장된 스니펫이 없습니다.'), t('자주 쓰는 명령이나 지시문을 저장해 두면 한 번에 입력합니다.'), true);
 }
 
 // 줄마다 ↵ 마커 — 줄바꿈이 곧 Enter 키라는 것을 글자 옆에서 바로 읽게 한다.
@@ -227,7 +271,7 @@ function _paintEditorText() {
   if (!ta || !pv) return;
   const v = ta.value;
   ta.classList.toggle('code', !!v.trim() && !hasHangul(v));
-  const text = composeText(v);
+  const text = _editorText();
   pv.hidden = !text;
   pv.innerHTML = text
     ? `<pre class="${hasHangul(text) ? 'prose' : ''}">${_linesHTML(text)}</pre>
@@ -235,65 +279,55 @@ function _paintEditorText() {
     : '';
 }
 
+// 행 52(시안 P05): 1줄 = 이름(13/600) · [Enter|입력만] · [프로젝트] … 머문 행에서 입력 · 분할 실행 · 수정 · 삭제.
+// 2줄 = 본문 첫 줄(mono 12 muted, 말줄임). 여러 줄이거나 긴 본문은 2줄을 눌러 전체를 펼친다.
 function _rowHTML(it) {
   const { body, enter } = splitText(it.text);
   const open = _expanded.has(it.id);
   const multi = body.includes('\n') || body.length > 90;
+  const id = vtEsc(it.id);
   const flags = [
-    it.scope === 'project' ? `<span class="vt-tag" title="${vtEsc(it.project || '')}">${t('프로젝트')}</span>` : '',
-    `<span class="vt-sn-enter${enter ? ' on' : ''}">${enter ? t('끝에 Enter') : t('입력만')}</span>`,
-    multi ? `<span class="vt-sn-fold${open ? ' open' : ''}" aria-hidden="true">${icon('chevron-down', 14)}</span>` : '',
+    `<span class="vt-ptag vt-sn-enter${enter ? ' on' : ''}" data-tip="${enter ? t('끝에 Enter') : t('입력만')}">${enter ? `${icon('corner-down-left', 12)}Enter` : t('입력만')}</span>`,
+    it.scope === 'project' ? `<span class="vt-ptag" title="${vtEsc(it.project || '')}">${t('프로젝트')}</span>` : '',
   ].join('');
+  const acts = `
+    <span class="vt-sn-acts">
+      <button type="button" class="vt-icon-btn sm" data-act="paste" data-id="${id}"
+              aria-label="${t('이 세션에 입력')}" data-tip="${t('지금 보고 있는 세션에 입력')}">${pIcon('play', 14)}</button>
+      <button type="button" class="vt-icon-btn sm" data-act="new-session" data-id="${id}"
+              aria-label="${t('새 세션')}" data-tip="${t('오른쪽으로 분할해 새 세션에서 실행')}">${icon('columns-2', 14)}</button>
+      <button type="button" class="vt-icon-btn sm" data-act="edit" data-id="${id}"
+              aria-label="${t('수정')}" data-tip="${t('수정')}">${icon('pencil', 14)}</button>
+      <button type="button" class="vt-icon-btn sm danger" data-act="ask-delete" data-id="${id}"
+              aria-label="${t('삭제')}" data-tip="${t('삭제')}">${icon('trash-2', 14)}</button>
+    </span>`;
 
-  // 길거나 여러 줄이면 눌러서 펼친다(접힘 3줄). 짧으면 그냥 보여 준다.
   // 한글이 섞인 본문은 지시문(문장)이라 UI 글꼴로, 그 밖에는 명령이라 고정폭으로 보인다.
   const prose = hasHangul(body);
   const cls = `vt-sn-text${open ? ' open' : ''}${multi ? ' foldable' : ''}${prose ? ' prose' : ''}`;
-  const pre = `<pre>${_linesHTML(it.text)}</pre>`;
+  const pre = `<pre>${open ? _linesHTML(it.text) : vtEsc(body.split('\n')[0])}</pre>`;
   const preview = multi
-    ? `<button type="button" class="${cls}" data-act="toggle" data-id="${vtEsc(it.id)}" aria-expanded="${open}">${pre}</button>`
+    ? `<button type="button" class="${cls}" data-act="toggle" data-id="${id}" aria-expanded="${open}"
+               data-tip="${open ? t('접기') : t('전체 보기')}">${pre}</button>`
     : `<div class="${cls}">${pre}</div>`;
 
-  let actions;
-  if (_namingId === it.id) {
-    actions = `
-      <form class="vt-sn-name-form" data-id="${vtEsc(it.id)}">
+  const naming = _namingId === it.id ? `
+      <form class="vt-sn-name-form" data-id="${id}">
         <input class="vt-input" name="name" maxlength="40" autocomplete="off" spellcheck="false"
                placeholder="${vtEsc(it.label ? it.label : t('세션 이름 (비우면 폴더 이름)'))}" aria-label="${t('새 세션 이름')}" />
         <button type="submit" class="vt-btn sm solid">${t('실행')}</button>
         <button type="button" class="vt-btn sm quiet" data-act="cancel-name">${t('취소')}</button>
-      </form>`;
-  } else if (_confirmDeleteId === it.id) {
-    actions = `
-      <div class="vt-sn-actions">
-        <span class="vt-sn-confirm">${t('삭제할까요?')}</span>
-        <span class="vt-sn-spacer"></span>
-        <button type="button" class="vt-btn sm quiet" data-act="cancel-delete" data-id="${vtEsc(it.id)}">${t('취소')}</button>
-        <button type="button" class="vt-btn sm danger" data-act="delete" data-id="${vtEsc(it.id)}">${t('삭제')}</button>
-      </div>`;
-  } else {
-    actions = `
-      <div class="vt-sn-actions">
-        <button type="button" class="vt-btn sm" data-act="paste" data-id="${vtEsc(it.id)}"
-                title="${t('지금 보고 있는 세션에 입력')}">${icon('terminal', 14)}${t('이 세션에 입력')}</button>
-        <button type="button" class="vt-btn sm quiet" data-act="new-session" data-id="${vtEsc(it.id)}"
-                title="${t('오른쪽으로 분할해 새 세션에서 실행')}">${icon('square-terminal', 14)}${t('새 세션')}</button>
-        <span class="vt-sn-spacer"></span>
-        <button type="button" class="vt-icon-btn" data-act="edit" data-id="${vtEsc(it.id)}"
-                aria-label="${t('수정')}" title="${t('수정')}">${icon('pencil', 14)}</button>
-        <button type="button" class="vt-icon-btn" data-act="ask-delete" data-id="${vtEsc(it.id)}"
-                aria-label="${t('삭제')}" title="${t('삭제')}">${icon('trash-2', 14)}</button>
-      </div>`;
-  }
+      </form>` : '';
 
   return `
-    <article class="vt-sn-row${_editing && _editing.id === it.id ? ' editing' : ''}" data-id="${vtEsc(it.id)}">
+    <article class="vt-sn-row${open ? ' open' : ''}" data-id="${id}">
       <div class="vt-sn-head">
         <span class="vt-sn-name">${vtEsc(displayName(it))}</span>
         <span class="vt-sn-flags">${flags}</span>
+        ${acts}
       </div>
       ${preview}
-      ${actions}
+      ${naming}
     </article>`;
 }
 
@@ -320,12 +354,11 @@ function _onBodyClick(ev) {
       _render();
       break;
     case 'paste': if (it) _pasteSnippet(it); break;
-    case 'new-session': _namingId = el.dataset.id; _confirmDeleteId = null; _render(); break;
+    case 'new-session': _namingId = el.dataset.id; _render(); break;
     case 'cancel-name': _namingId = null; _render(); break;
     case 'edit': if (it) _openEditor(it); break;
-    case 'ask-delete': _confirmDeleteId = el.dataset.id; _namingId = null; _render(); break;
-    case 'cancel-delete': _confirmDeleteId = null; _render(); break;
-    case 'delete': _remove(el.dataset.id); break;
+    case 'ask-delete': if (it) _askDelete(it); break;
+    case 'new': _openEditor(null); break;
     default: break;
   }
 }
@@ -342,18 +375,21 @@ function _onBodySubmit(ev) {
 }
 
 // ── 편집 ──────────────────────────────────────────────────────────────────
+// 편집은 패널 안의 하위 화면이다(시안 P05-b) — 목록·도구 줄은 숨기고 ← 로 돌아온다.
 function _openEditor(it) {
   _editing = { id: it ? it.id : null };
   _namingId = null;
   $('#vt-sn-label').value = it ? it.label || '' : '';
-  $('#vt-sn-text').value = it ? it.text : '';
+  $('#vt-sn-text').value = it ? splitText(it.text).body : '';
+  _setEnterMode(it ? splitText(it.text).enter : false);
   _paintEditorText();
   _setToggle($('#vt-sn-proj'), !!it && it.scope === 'project');
+  $('#vt-sn-edit-title').textContent = it ? t('스니펫 수정') : t('새 스니펫');
   $('#vt-sn-save').textContent = it ? t('수정 저장') : t('저장');
+  $('#vt-sn-del').hidden = !it;
   $('#vt-sn-editor').hidden = false;
+  _panelEl.classList.add('vt-sn-editing');
   $('#vt-sn-new').setAttribute('aria-pressed', 'true');
-  _render();                    // 수정 중인 행을 표시한다
-  if (it) _panelEl.querySelector('.vt-sn-row.editing')?.scrollIntoView({ block: 'nearest' });
   (it ? $('#vt-sn-text') : $('#vt-sn-label')).focus();
 }
 
@@ -361,6 +397,7 @@ function _closeEditor() {
   _editing = null;
   const ed = $('#vt-sn-editor');
   if (ed) ed.hidden = true;
+  _panelEl?.classList.remove('vt-sn-editing');
   const btn = $('#vt-sn-new');
   if (btn) btn.removeAttribute('aria-pressed');
   _render();
@@ -368,7 +405,7 @@ function _closeEditor() {
 
 async function _save() {
   if (!_editing) return;
-  const text = composeText($('#vt-sn-text').value);
+  const text = _editorText();
   if (!text) { showToast(t('내용을 입력하세요'), 'error'); $('#vt-sn-text').focus(); return; }
   const label = $('#vt-sn-label').value;
   const wantProject = _toggleOn($('#vt-sn-proj'));
@@ -391,8 +428,17 @@ async function _save() {
   await _refresh();
 }
 
+// 삭제 확인(시안 P05-c) — 공용 확인 대화상자. 무엇을 지우는지(이름 + 본문 첫 줄)와 되돌릴 수 없다는 것을 말한다.
+async function _askDelete(it) {
+  const first = splitText(it.text).body.split('\n')[0];
+  const lines = [t('「{name}」을(를) 삭제할까요?', { name: displayName(it) }), first.length > 80 ? `${first.slice(0, 80)}…` : first,
+    it.scope === 'project' ? t('되돌릴 수 없습니다. 이 프로젝트에서만 쓰던 스니펫입니다.') : t('되돌릴 수 없습니다.')];
+  if (!await confirmDialog(lines.join('\n\n'), { title: t('스니펫 삭제'), okLabel: t('삭제'), danger: true })) return;
+  if (_editing && _editing.id === it.id) _closeEditor();
+  await _remove(it.id);
+}
+
 async function _remove(id) {
-  _confirmDeleteId = null;
   try { await vtFetch(`/api/snippets/${id}`, { method: 'DELETE' }); }
   catch (e) { showToast(t('삭제 실패: {error}', { error: e.message }), 'error'); }
   _expanded.delete(id);

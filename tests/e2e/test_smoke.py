@@ -1930,6 +1930,75 @@ def test_dock_소스컨트롤_diff_줄에서_큐_코멘트가_열린다(page):
     page.wait_for_selector("#vt-dock-scm .vt-vw-git", timeout=15000)
 
 
+def test_도구_패널이_정돈_치수를_쓴다(page):
+    """리디자인 5단계(시안 panels.html) — 모든 도구 패널이 같은 머리 40, 구역 머리 28, 행 36을 쓰고
+    본문 바탕이 사이드바와 같은 bg-1이다. 캐스케이드(legacy가 components를 이김)가 실제로 합성된 결과라
+    토큰 계산 테스트로는 못 본다."""
+    def measure(sel):
+        return page.evaluate(
+            """(sel) => {
+              const root = document.querySelector(sel);
+              if (!root) return null;
+              const h = (q) => { const e = root.querySelector(q); return e ? Math.round(e.getBoundingClientRect().height) : null; };
+              const body = root.querySelector('.vt-vw-body');
+              const side = document.getElementById('vt-side');
+              return { head: h('.vt-viewer-head'), sec: h('.vt-psec'), row: h('.vt-prow'),
+                       bodyBg: body && getComputedStyle(body).backgroundColor,
+                       sideBg: side && getComputedStyle(side).backgroundColor };
+            }""", sel)
+
+    _open_dock(page, "변경")
+    page.wait_for_selector("#vt-dock-scm .vt-vw-crow", timeout=15000)
+    got = measure("#vt-dock-scm")
+    assert got["head"] == 40, got
+    assert got["sec"] == 28, got
+    assert got["row"] == 36, got
+    assert got["bodyBg"] == got["sideBg"], f"패널 본문 바탕이 사이드바와 다르다: {got}"
+    # 커밋 행은 해시(acc mono) · 제목 · 시각 — 시각 칸이 행 안에 남아 있어야 한다(꼬리표가 밀어내지 않는다).
+    fits = page.evaluate(
+        """() => {
+          const row = document.querySelector('#vt-dock-scm .vt-vw-crow');
+          const t = row.querySelector('.vt-vw-ctime');
+          return !!t && t.getBoundingClientRect().right <= row.getBoundingClientRect().right + 1;
+        }""")
+    assert fits, "커밋 행의 시각이 행 밖으로 밀렸다"
+    for label, sel in (("큐", "#vt-queue"), ("첨부", "#vt-files"), ("스니펫", "#vt-snippets"), ("시스템", "#vt-system")):
+        _open_dock(page, label)
+        page.wait_for_selector(f"#vt-dock {sel} .vt-viewer-head", timeout=15000)
+        got = measure(sel)
+        assert got["head"] == 40, (label, got)
+
+
+def test_dock_소스컨트롤_diff_줄_글자는_기본색이고_부호만_상태색이다(page):
+    """DESIGN.md §2 — diff 줄 글자는 term-fg, 초록·빨강은 +/− 부호(와 바뀐 낱말)에만. 줄 전체를 상태색 글자로
+    그리면 notepad·vscode 틴트 위에서 4.5:1을 못 맞춘다. 작업 트리가 깨끗하면 건너뛴다."""
+    _open_dock(page, "변경")
+    page.wait_for_selector("#vt-dock-scm .vt-vw-crow", timeout=15000)
+    rows = page.locator("#vt-dock-scm .vt-vw-gsec .vt-vw-grow")
+    if rows.count() == 0:
+        pytest.skip("작업 트리가 깨끗해 diff를 열 파일이 없다")
+    rows.first.click()
+    page.wait_for_selector("#vt-dock-scm .vt-vw-dl", timeout=15000)
+    got = page.evaluate(
+        """() => {
+          const probe = document.createElement('span');
+          probe.style.color = 'var(--color-term-fg)';
+          document.body.appendChild(probe);
+          const fg = getComputedStyle(probe).color;
+          probe.remove();
+          const line = document.querySelector('#vt-dock-scm .vt-vw-dl.add, #vt-dock-scm .vt-vw-dl.del');
+          if (!line) return null;
+          return { fg, tx: getComputedStyle(line.querySelector('.vt-vw-tx')).color,
+                   sign: getComputedStyle(line.querySelector('.vt-vw-sign')).color,
+                   nums: line.querySelectorAll('.vt-vw-no').length };
+        }""")
+    if got is None:
+        pytest.skip("추가·삭제 줄이 없는 diff다")
+    assert got["tx"] == got["fg"], got
+    assert got["sign"] != got["fg"], got
+    assert got["nums"] == 1, f"줄 번호 열은 하나다: {got}"
+
+
 def test_사이드바_폭_리사이저가_범위를_지킨다(page):
     """240~480. 드래그로 그 밖으로 못 나간다 — 나가면 칸이 죽거나 사이드바가 빈다."""
     _open_dock(page, "큐")

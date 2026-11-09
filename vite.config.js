@@ -161,6 +161,8 @@ function chunkOf(id) {
     // 화면 청크(panels·settings·share·history·screens)는 panel 청크를 함께 받는다(core를 거치지 않는다).
     if (p.endsWith('/frontend/js/panels/panel.js')) return 'panel';
     if (p.endsWith('/frontend/js/core/dialog.js')) return 'panel';
+    // 패널 전용 아이콘(리디자인 5단계) — 패널 화면 청크가 모두 panel.js를 받으므로 같은 청크에 둔다.
+    if (p.endsWith('/frontend/js/panels/panel-icons.js')) return 'panel';
     // 사용 가이드 본문 — term/guide.js(core 스텁)가 열 때만 import()한다.
     if (p.endsWith('/frontend/js/term/guide-view.js')) return 'panel';
     // 업로드 전송·대기열·취소 본체(10KB) — term/upload-lite.js(core)가 첫 업로드 때와 유휴 시간에 import()한다.

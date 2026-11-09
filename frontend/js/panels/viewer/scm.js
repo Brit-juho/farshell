@@ -13,8 +13,9 @@
 // 정적 import는 금지. 진입점은 panels/viewer-lazy.js의 `scm.show` 액션이다.
 import { openPanel } from '../panel.js';
 import { emptyState } from '../../ui/empty.js';
+import { icon } from '../../ui/icons.js';
 import { vtFetch } from '../../core/api.js';
-import { renderGitStatus, renderCommit, renderCommitFileDiff } from './git.js';
+import { renderGitStatus, renderCommit, renderCommitFileDiff, _gitStatusLetter, _gitFileLabel } from './git.js';
 import { renderFileDiff } from './diff.js';
 import { _viewerState } from './state.js';
 import { t } from '../../core/i18n.js';
@@ -45,34 +46,13 @@ async function _currentRepo() {
   } catch (_) { return null; }
 }
 
-function _el(tag, cls, text) {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text != null) e.textContent = text;
-  return e;
-}
-
-// 머리말 한 줄: `feat/x ← origin/feat/x  ↑3 ↓0  +142 −38  파일 7`.
+// 머리의 맥락 한 줄: `저장소 / 브랜치`(시안 P01 머리 ctx). 브랜치·upstream·↑↓·±는 본문 첫 줄(git.js)이 그린다.
 // 값이 없는 조각은 **그리지 않는다**(2.0 규칙 — 빈 칸을 만들지 않는다).
 function _renderHead(headEl, repo, d) {
-  headEl.innerHTML = '';
-  const left = _el('div', 'vt-scm-head-left');
-  if (!repo) {
-    left.appendChild(_el('span', 'vt-scm-repo', t('열린 세션 없음')));
-    headEl.appendChild(left);
-    return;
-  }
-  left.appendChild(_el('span', 'vt-scm-repo', repo.split('/').pop()));
-  if (d && d.repo) {
-    if (d.branch) left.appendChild(_el('span', 'vt-scm-branch', d.branch));
-    if (d.upstream) left.appendChild(_el('span', 'vt-scm-upstream', `← ${d.upstream}`));
-    if (d.ahead) left.appendChild(_el('span', 'vt-scm-track', `↑${d.ahead}`));
-    if (d.behind) left.appendChild(_el('span', 'vt-scm-track', `↓${d.behind}`));
-    if (d.insertions) left.appendChild(_el('span', 'vt-scm-add', `+${d.insertions}`));
-    if (d.deletions) left.appendChild(_el('span', 'vt-scm-del', `−${d.deletions}`));
-    if (d.files && d.files.length) left.appendChild(_el('span', 'vt-scm-count', t('파일 {n}', { n: d.files.length })));
-  }
-  headEl.appendChild(left);
+  if (!repo) { headEl.textContent = t('열린 세션 없음'); headEl.title = ''; return; }
+  const name = repo.split('/').pop();
+  headEl.textContent = d && d.repo && d.branch ? `${name} / ${d.branch}` : name;
+  headEl.title = repo;
   // 계정 칩 없음(ADR-27) — 40 §1의 계정 저장소는 구현만 되고 dock에 연결하지 않는다.
 }
 
@@ -85,8 +65,9 @@ export async function showScm(opts = {}) {
     paneId: opts.paneId || null,
     id: PANEL_ID,
     ariaLabel: t('소스컨트롤'),
-    headHTML: '<div class="vt-scm-head" id="vt-scm-head"></div>'
-      + `<button class="vt-btn sm vt-vw-diff" id="vt-scm-refresh" title="${t('새로고침')}">${t('새로고침')}</button>`,
+    headHTML: `<div class="vt-vw-title">${t('소스컨트롤')}</div>`
+      + '<span class="vt-ph-ctx vt-scm-head" id="vt-scm-head"></span>'
+      + `<button type="button" class="vt-icon-btn sm" id="vt-scm-refresh" aria-label="${t('새로고침')}" data-tip="${t('새로고침')}">${icon('refresh-cw', 14)}</button>`,
     bodyId: 'vt-scm-body',
   });
   if (!panel) return;   // 토글 — 이미 열려 있어서 닫기만 했다
@@ -142,7 +123,12 @@ export async function showScm(opts = {}) {
       quiet,
       isCurrent: () => listing,
       readOnly: false,
-      onFile: detail((file, staged) => renderFileDiff(body, repo, file, staged, { onBack: back })),
+      onFile: detail((file, staged, entry) => renderFileDiff(body, repo, file, staged, {
+        onBack: back,
+        onOpenFile: (f) => openInViewer(repo, f),
+        status: entry ? _gitStatusLetter(entry, staged) : '',
+        statusLabel: entry ? _gitFileLabel(entry) : '',
+      })),
       onOpenFile: (file) => openInViewer(repo, file),
       onCommit: detail((sha) => renderCommit(body, repo, sha, {
         onBack: back,
