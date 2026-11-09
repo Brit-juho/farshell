@@ -15,3 +15,9 @@ export function mountMenu(root: HTMLElement, props: Parameters<typeof Menu>[0]) 
 export function mountNativeChildren(root: HTMLElement, row: Parameters<typeof NativeChildren>[0]['row']) {
   return render(() => <NativeChildren row={row} />, root);
 }
+
+// 리디자인 8단계 — 폰 세션 카드(Fleet.tsx FleetRow). 두 줄 · 개입 필요 카드 · 길게 누르기.
+import { FleetRow } from '../../js/shell/Fleet.js';
+export function mountFleetRow(root: HTMLElement, props: Parameters<typeof FleetRow>[0]) {
+  return render(() => <FleetRow {...props} />, root);
+}

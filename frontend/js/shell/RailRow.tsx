@@ -167,7 +167,7 @@ export function KidsToggle(props: {
  * 개입 필요 행의 인라인 답 버튼(「1 · 예」 「3 · 아니오」 …). 데스크톱 레일 행과 폰 Fleet 행이 같이 쓴다.
  * 선택지는 서버가 감지한 `row.options`, 보내기는 rail-fetch.ts `answerSessionPrompt` 하나다.
  *   rail   선택지 + 항상 「터미널로」(조용한 버튼) — 선택지에 없는 답은 터미널에서 한다.
- *   fleet  선택지, 없으면 「터미널로」(채움) 하나 — 폰의 옛 모양 그대로(폰 개편은 8단계).
+ *   fleet  선택지(번호를 따로 그린 44px 버튼, 리디자인 8단계), 없으면 「터미널로」(채움) 하나.
  * 열려 있지 않은 세션은 키를 보낼 곳(열린 칸)이 없다 — 부르는 쪽이 `row.open`을 보고 안 그린다.
  */
 export function AnswerButtons(props: {
@@ -197,7 +197,10 @@ export function AnswerButtons(props: {
           // 선택지 글이 길면(「Yes, and don't ask again …」) 버튼이 행 폭을 넘지 않게 말줄임하고 전문은 툴팁으로.
           <button type="button" class="vt-btn sm vt-srow-answer" disabled={answering()} onClick={() => void answer(opt.key)}
             data-tip={`${opt.key} · ${opt.label}`} data-tip-side="bottom">
-            <span class="vt-srow-answer-label">{opt.key} · {opt.label}</span>
+            {/* 폰 카드(시안 M01)는 번호를 대기색으로 따로 그린다 — 「1 예」. 데스크톱 레일은 한 덩어리 「1 · 예」. */}
+            <Show when={rail()} fallback={<><span class="vt-srow-answer-key">{opt.key}</span><span class="vt-srow-answer-label">{opt.label}</span></>}>
+              <span class="vt-srow-answer-label">{opt.key} · {opt.label}</span>
+            </Show>
           </button>
         )}
       </For>
