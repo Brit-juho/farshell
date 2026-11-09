@@ -10,6 +10,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+---
+
+## [2.9.0] — 2026-11-09
+
 ### Fixed
 - **tmux config changes in the repo now actually reach tmux.** The installer used to copy `config/vt-tmux.conf` to `~/.config/vt/tmux.conf` once, and that copy took precedence forever, so later changes (for example the 2.x resize fix) never applied. fsh now always uses the repo config (`VT_TMUX_CONF` still replaces it entirely); personal settings go in `~/.config/vt/tmux.local.conf`, read at the end of it. `fsh tmux reload` (also run by `install.sh` and `fsh sync`) moves the old copy aside — an untouched copy to `tmux.conf.bak-<date>`, an edited one to `tmux.conf.legacy` with a note to move your lines — and re-reads the config into a running tmux without closing sessions. `fsh doctor` gains a "tmux config" check. Settings you removed stay in a running tmux until its server restarts.
 - **File viewer: a growing file no longer costs megabytes per change.** With more than 256 KB on screen, a refresh first checks the 8 KB before the loaded end; when the file only grew it reads just the new bytes and appends them (a tail view follows the new end), and auto-refresh of a view over 1 MB runs at most once a second. Before, every change re-read everything loaded (4 MB or more) — over a tunnel, a phone watching a build log downloaded continuously. Measurements: `docs/ref/session-view-measurements.md` §7.4.
