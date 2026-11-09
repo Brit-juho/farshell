@@ -195,8 +195,14 @@
     #login-otp-wrap[hidden]{display:none;}
     #login-form .login-otp-hint{margin:0 0 10px;font-size:var(--fs-xs,12px);
       color:var(--color-sub,#a9a7a2);line-height:var(--leading-body,1.6);}
-    #login-otp{font-family:var(--font-mono,ui-monospace,monospace);
-      letter-spacing:.34em;text-indent:.34em;text-align:center;font-variant-numeric:tabular-nums;}
+    /* 6칸(시안 M10) — 칸 높이 52, 간격 8, 숫자는 mono 22. 바탕은 입력과 같은 낮은 면. */
+    #login-otp-boxes{display:flex;gap:8px;}
+    #login-form input.login-otp-box{flex:1 1 0;min-width:0;width:0;min-height:52px;padding:0;
+      text-align:center;font-family:var(--font-mono,ui-monospace,monospace);font-size:var(--fs-lg,22px);
+      font-weight:var(--weight-medium,500);font-variant-numeric:tabular-nums;caret-color:var(--color-acc,#7aa2ff);
+      border-color:var(--color-line-strong,rgb(255 255 255 / .14));}
+    #login-form input.login-otp-box:focus{outline:none;border-color:var(--color-acc,#7aa2ff);
+      box-shadow:0 0 0 3px var(--color-acc-soft,rgb(122 162 255 / .16));}
 
     /* ── 주 액션 ──────────────────────────────────────────────────────────
        화면에 채움 버튼은 이것 하나뿐이다(DESIGN §10). hover/active를 밝기
@@ -268,7 +274,6 @@
         background:var(--color-acc-surface,var(--color-acc,#7aa2ff));color:var(--color-acc-ink,#0b1020);}
       #login-form h1{display:inline-block;vertical-align:middle;font-size:var(--fs-lg,22px);font-weight:700;}
       #login-form input{min-height:44px;font-size:16px;}
-      #login-otp{min-height:52px;font-size:var(--fs-lg,22px);}
       #login-submit,#login-retry{min-height:44px;}
     }
   </style>
@@ -335,11 +340,25 @@
         <!-- OTP 단계: 처음 보는 기기에서만, 그리고 'fsh otp setup'으로 연동한 뒤에만 나타난다 -->
         <div id="login-otp-wrap" hidden>
           <p class="login-otp-hint" data-i18n>처음 접속하는 기기입니다. 인증 앱의 6자리 코드를 입력하세요.</p>
-          <label class="login-label" for="login-otp" data-i18n>인증 코드</label>
-          <input id="login-otp" type="text" name="vt-otp" autocomplete="one-time-code"
-            inputmode="numeric" pattern="[0-9]*" maxlength="6"
-            autocorrect="off" autocapitalize="off" spellcheck="false"
-            placeholder="000000" aria-label="인증 코드"  data-i18n-attr="aria-label"/>
+          <!-- 시안 M10 — 한 칸에 한 자리씩 6칸. 칸은 보이는 입력일 뿐이고, 제출하는 값은 숨은 #login-otp 하나다
+               (gate.js가 칸을 이어 붙여 채운다). 첫 칸만 autocomplete=one-time-code — 문자/인증 앱 자동 채우기가
+               여섯 자리를 그 칸에 한꺼번에 넣으면 gate.js가 나눠 담는다. 칸마다의 이름(「n번째 자리」)은 gate.js가 단다. -->
+          <span class="login-label" id="login-otp-label" data-i18n>인증 코드</span>
+          <div id="login-otp-boxes" role="group" aria-labelledby="login-otp-label">
+            <input class="login-otp-box" type="text" size="1" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code"
+              autocorrect="off" autocapitalize="off" spellcheck="false" data-otp-index="0" />
+            <input class="login-otp-box" type="text" size="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+              autocorrect="off" autocapitalize="off" spellcheck="false" data-otp-index="1" />
+            <input class="login-otp-box" type="text" size="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+              autocorrect="off" autocapitalize="off" spellcheck="false" data-otp-index="2" />
+            <input class="login-otp-box" type="text" size="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+              autocorrect="off" autocapitalize="off" spellcheck="false" data-otp-index="3" />
+            <input class="login-otp-box" type="text" size="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+              autocorrect="off" autocapitalize="off" spellcheck="false" data-otp-index="4" />
+            <input class="login-otp-box" type="text" size="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+              autocorrect="off" autocapitalize="off" spellcheck="false" data-otp-index="5" />
+          </div>
+          <input id="login-otp" type="hidden" name="vt-otp" />
         </div>
         <button type="submit" id="login-submit"><span id="login-submit-label" data-i18n>접속</span></button>
       </div>
@@ -522,6 +541,9 @@
         <button type="button" class="kb kb-mod" data-mod="ctrl" aria-pressed="false">Ctrl</button>
         <button type="button" class="kb kb-mod" data-mod="alt" aria-pressed="false">Alt</button>
         <button type="button" class="kb kb-mod" data-mod="shift" aria-pressed="false">Shift</button>
+        <!-- 켜진 수식키의 상태 문구(「Ctrl 다음 키만」·「Ctrl 잠김」, term/keybar.js _renderMods). 폰에서만 보이고
+             자리는 늘 잡아 둔다 — 글자가 생겨도 키가 밀리지 않는다(98-mobile.css). -->
+        <span id="keybar-mod-hint" aria-live="polite"></span>
       </div>
       <div id="keybar-scroll">
         <button type="button" class="kb" data-key="esc">Esc</button>

@@ -81,6 +81,8 @@ import './term/guide.js';
 import './layout/mobile-nav.js';
 // 리디자인 8단계 — 폰 수동 집중 모드(상단바 버튼 · 개입 알약 · 위 가장자리 끌어내리기). focus.toggle 액션의 compact 몫.
 import './layout/mobile-focus.js';
+// 폰 파일 편집(시안 M-F5) — 편집 중엔 아래 탭을 숨기고 키보드 위에 Tab·화살표·Esc·저장 줄을 띄운다.
+import './layout/mobile-edit.js';
 import './layout/env-chip.js'; // N45 — 모바일 헤더 환경 칩
 import { bootApp } from './term/boot.js';
 // F4 — grid.js(382줄)를 agent/{badges,status,preview}.js 3개로 분할.

@@ -270,6 +270,46 @@ test('수식키 — 누른 손가락이 조금 흘러도 누름이 유지된다(
   assert.strictEqual(ctrl.getAttribute('aria-pressed'), 'false');
 });
 
+// 시안 M02 — 수식키 줄 오른쪽 상태 문구. 「다음 키만」·「잠김」을 글로 한 번 더 말한다(램프·면만으로는 둘이 헷갈린다).
+test('수식키 상태 문구 — 다음 키만 · 잠김 · 둘이 섞이면 둘 다, 누르고 있는 동안·꺼지면 비운다', async () => {
+  const { btn, tap, fire, window } = await buildWired();
+  const hint = window.document.getElementById('keybar-mod-hint');
+  assert.ok(hint, '자리는 처음부터 있다(문구가 생겨도 키가 밀리지 않게)');
+  assert.strictEqual(hint.parentElement.id, 'keybar-mods');
+  assert.ok(!hint.classList.contains('kb'), '키가 아니다');
+  assert.strictEqual(hint.textContent, '');
+  const ctrl = btn('#keybar [data-mod="ctrl"]');
+  const alt = btn('#keybar [data-mod="alt"]');
+  tap(ctrl);
+  assert.strictEqual(hint.textContent, 'Ctrl 다음 키만');
+  tap(ctrl);
+  assert.strictEqual(hint.textContent, 'Ctrl 잠김');
+  tap(alt, 2);
+  assert.strictEqual(hint.textContent, 'Ctrl 잠김 · Alt 다음 키만');
+  assert.strictEqual(hint.title, hint.textContent, '말줄임돼도 전체 문구를 볼 수 있다');
+  tap(btn('#keybar [data-key="home"]'), 3);
+  assert.strictEqual(hint.textContent, 'Ctrl 잠김', '한 번용은 쓰고 나면 사라진다');
+  tap(ctrl);
+  assert.strictEqual(hint.textContent, '');
+  fire(ctrl, 'pointerdown', 4);
+  assert.strictEqual(hint.textContent, '', '누르고 있는 동안은 말하지 않는다');
+  fire(ctrl, 'pointercancel', 4);
+});
+
+test('수식키 상태 문구 — 키바를 닫으면(수식키가 풀리면) 같이 비운다', async () => {
+  const { btn, tap, window, resetKeybarMods } = await buildWired();
+  tap(btn('#keybar [data-mod="shift"]'));
+  assert.strictEqual(window.document.getElementById('keybar-mod-hint').textContent, 'Shift 다음 키만');
+  resetKeybarMods();
+  assert.strictEqual(window.document.getElementById('keybar-mod-hint').textContent, '');
+});
+
+test('폰 CSS — 상태 문구는 폰에서만 보이고, 자리를 늘 잡고(flex 1) 한 줄로 말줄임한다', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../../styles/screens/98-mobile.css'), 'utf8');
+  assert.match(css, /#keybar-mods #keybar-mod-hint \{[^}]*display:block; flex:1 1 0; min-width:0;[^}]*white-space:nowrap;/);
+  assert.match(css, /\n#keybar-mod-hint \{ display:none; \}/, '넓은 화면(강제 키바)에서는 숨는다');
+});
+
 test('수식키 — 브라우저가 누름을 취소하면(pointercancel) 꺼진다', async () => {
   const { btn, fire } = await buildWired();
   const ctrl = btn('#keybar [data-mod="ctrl"]');

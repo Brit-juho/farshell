@@ -5020,5 +5020,9 @@ window.__VT_I18N = {
   "폴더를 만들 수 없습니다": "Could not create the folder",
   "폴더를 만들려면 웹 로그인 비밀번호를 확인하세요. 확인하면 이 기기에서 15분 동안 다시 묻지 않습니다.": "Confirm your web login password to create the folder. This device will not ask again for 15 minutes.",
   "폴더를 자기 안으로 옮길 수 없습니다": "A folder cannot be moved into itself",
-  "휴지통으로 옮긴 항목이 확인한 폴더와 다릅니다 — 휴지통을 확인하세요": "The item moved to the Trash is not the folder that was checked — check the Trash"
+  "휴지통으로 옮긴 항목이 확인한 폴더와 다릅니다 — 휴지통을 확인하세요": "The item moved to the Trash is not the folder that was checked — check the Trash",
+  "{keys} 잠김": "{keys} locked",
+  "{keys} 다음 키만": "{keys} next key only",
+  "인증 코드 {n}번째 자리": "Code digit {n}",
+  "편집 보조 키": "Editing keys"
 };

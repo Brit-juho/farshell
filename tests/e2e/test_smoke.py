@@ -3620,3 +3620,159 @@ def test_MCP_관리_창이_P09b_치수를_따른다(page):
       return { sw: body.scrollWidth, cw: body.clientWidth };
     }""")
     assert m["sw"] <= m["cw"] + 1, m
+
+
+# ── 폰 후속(미룬 항목) — 키바 수식키 문구 · OTP 6칸 · 설정 상세 · 파일 편집 키 줄 ─────────────────────
+# 스크린샷은 /tmp/fud-shots/에 남긴다(검증 기록용, 단언과 무관).
+_FUD_SHOTS = Path("/tmp/fud-shots")
+
+
+def _fud_shot(pg, name):
+    try:
+        _FUD_SHOTS.mkdir(parents=True, exist_ok=True)
+        pg.screenshot(path=str(_FUD_SHOTS / f"e2e-{name}.png"))
+    except (OSError, PlaywrightError):
+        pass
+
+
+def test_폰_키바_수식키_문구는_다음_키만과_잠김을_말하고_키를_밀지_않는다(phone_page):
+    pg = phone_page
+    _phone_terminal(pg)
+    pg.locator("#keybar-open-btn").click()
+    pg.wait_for_function("() => !document.getElementById('keybar').classList.contains('closed')")
+    keys = ("() => [...document.querySelectorAll('#keybar-mods .kb, #keybar-arrows .kb')].map(b => {"
+            " const r = b.getBoundingClientRect(); return [Math.round(r.x), Math.round(r.y), Math.round(r.width)]; })")
+    hint = "() => document.getElementById('keybar-mod-hint').textContent"
+    before, height = pg.evaluate(keys), _rect(pg, "#keybar")["h"]
+    assert pg.evaluate(hint) == ""
+    ctrl = pg.locator('#keybar .kb-mod[data-mod="ctrl"]')
+    ctrl.tap()
+    assert pg.evaluate(hint) == "Ctrl 다음 키만"
+    _fud_shot(pg, "keybar-once")
+    ctrl.tap()
+    assert pg.evaluate(hint) == "Ctrl 잠김"
+    _fud_shot(pg, "keybar-locked")
+    assert pg.evaluate(keys) == before, "문구가 생겨도 키 자리가 그대로다"
+    assert _rect(pg, "#keybar")["h"] == height
+    box = _rect(pg, "#keybar-mod-hint")
+    assert box["w"] > 100 and box["h"] <= 36, box
+    ctrl.tap()
+    assert pg.evaluate(hint) == ""
+
+
+def test_폰_OTP는_6칸이고_붙여넣기와_Backspace가_칸을_넘나든다(browser, server):
+    base, _ = server
+    ctx = browser.new_context(viewport=PHONE, is_mobile=True, has_touch=True)
+    posts = []
+
+    def fake_auth(route):
+        body = route.request.post_data_json or {}
+        posts.append(body.get("otp"))
+        if "otp" not in body:
+            route.fulfill(status=401, json={"error": "otp_required"})
+        else:
+            route.fulfill(status=401, json={"error": "otp_invalid", "remaining": 4})
+    try:
+        pg = ctx.new_page()
+        pg.route("**/api/auth", fake_auth)
+        pg.goto(f"{base}/")
+        pg.wait_for_selector("#login-pass", state="visible", timeout=10000)
+        pg.fill("#login-pass", "whatever")
+        pg.click("#login-submit")
+        pg.wait_for_function("() => !document.getElementById('login-otp-wrap').hidden")
+        boxes = pg.locator("#login-otp-boxes .login-otp-box")
+        assert boxes.count() == 6
+        form, last = _rect(pg, "#login-form"), _rect(pg, "#login-otp-boxes .login-otp-box:last-child")
+        assert last["r"] <= form["r"] and form["r"] <= PHONE["width"], (form, last)
+        assert round(last["h"]) == 52
+        pg.wait_for_function("() => document.activeElement?.dataset?.otpIndex === '0'")
+        pg.keyboard.type("1234")
+        val = "() => document.getElementById('login-otp').value"
+        assert pg.evaluate(val) == "1234"
+        _fud_shot(pg, "otp-typed")
+        pg.keyboard.press("Backspace")
+        assert pg.evaluate(val) == "123"
+        assert pg.evaluate("() => document.activeElement.dataset.otpIndex") == "3"
+        pg.evaluate("""() => { const dt = new DataTransfer(); dt.setData('text', '246 813');
+            document.activeElement.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); }""")
+        assert pg.evaluate(val) == "246813"
+        pg.click("#login-submit")
+        expect(pg.locator("#login-err-msg")).to_contain_text("인증 코드가 올바르지 않습니다")
+        assert pg.evaluate(val) == ""
+        assert posts == [None, "246813"]
+        _fud_shot(pg, "otp-invalid")
+    finally:
+        ctx.close()
+
+
+def test_폰_설정_상세는_행_56에_컨트롤을_오른쪽에_두고_모든_항목이_그려진다(phone_page):
+    pg = phone_page
+
+    def open_home():
+        pg.locator("#vt-mnav-bottom button").nth(4).click()
+        pg.wait_for_timeout(150)
+        if not pg.locator(".vt-set-mobile-link").first.is_visible():
+            pg.locator(".vt-set-back").click()
+        pg.wait_for_selector(".vt-set-mobile-link", timeout=5000)
+
+    open_home()
+    names = pg.evaluate("() => [...document.querySelectorAll('.vt-set-mobile-link strong')].map(e => e.textContent)")
+    sections = names[names.index("터미널"):] if "터미널" in names else names
+    assert len(sections) >= 6, names
+    for i, name in enumerate(sections):
+        if i:
+            open_home()
+        pg.locator(".vt-set-mobile-link", has_text=name).first.click()
+        pg.wait_for_selector(".vt-set-intro .vt-set-title", timeout=5000)
+        expect(pg.locator(".vt-set-intro .vt-set-title")).to_have_text(name)
+        intro = _rect(pg, ".vt-set-intro")
+        assert round(intro["h"]) == 48, (name, intro)
+        over = pg.evaluate("() => [...document.querySelectorAll('#vt-set-body *')].filter(e => {"
+                           " const r = e.getBoundingClientRect(); return r.width && r.right > innerWidth + 1; }).length")
+        assert over == 0, f"{name}: 가로로 넘친 요소 {over}개"
+        _fud_shot(pg, f"settings-{i:02d}")
+        if name == "터미널":
+            row = pg.evaluate("""() => { const t = document.querySelector('.vt-set-row > .vt-toggle'); const r = t.closest('.vt-set-row');
+                const a = t.getBoundingClientRect(), m = r.querySelector('.vt-set-meta').getBoundingClientRect(), rr = r.getBoundingClientRect();
+                return { dir: getComputedStyle(r).flexDirection, h: rr.height, right: a.left > m.left + 100,
+                         track: getComputedStyle(t, '::before').width }; }""")
+            assert row["dir"] == "row" and row["right"] and row["h"] >= 56 and row["track"] == "40px", row
+
+
+def test_폰_파일_편집은_아래_탭을_숨기고_키_줄로_고치고_저장한다(phone_page):
+    pg = phone_page
+    target = _viewer_file("phone-edit.txt")
+    Path(target).write_text("alpha\nbeta\n")
+    try:
+        _open_overlay(pg, target)
+        pg.locator("#vt-file .vt-vw-edit-btn").click()
+        pg.wait_for_selector("#vt-edit-keys:not([hidden])", timeout=5000)
+        assert pg.evaluate("() => document.documentElement.classList.contains('vt-mobile-editing')")
+        assert not pg.locator("#vt-mnav-bottom").is_visible()
+        row = _rect(pg, "#vt-edit-keys")
+        assert round(row["b"]) == PHONE["height"] and 44 <= round(row["h"]) <= 46, row
+        labels = pg.locator("#vt-edit-keys button").all_inner_texts()
+        assert labels == ["Tab", "←", "→", "↑", "↓", "Esc", "저장"], labels
+        card = _rect(pg, "#vt-file .vt-viewer-card")
+        assert card["b"] <= row["y"] + 1, (card, row)
+        pg.evaluate(f"() => {{ const v = {_EDOC}; v.focus(); v.dispatch({{ selection: {{ anchor: 0 }} }}); }}")
+        pg.locator('#vt-edit-keys [data-key="ArrowDown"]').tap()
+        pg.locator('#vt-edit-keys [data-key="Tab"]').tap()
+        assert pg.evaluate(f"() => {_EDOC}.state.doc.toString()") != "alpha\nbeta\n"
+        _fud_shot(pg, "edit-row")
+        pg.locator("#vt-edit-keys .vt-edit-keys-save").tap()
+        pw = pg.locator(".vt-dialog-input")
+        pw.wait_for(timeout=10000)
+        assert not pg.locator("#vt-edit-keys").is_visible(), "대화상자 위에는 키 줄을 걷는다"
+        pw.fill(E2E_PASSWORD)
+        pg.locator(".vt-dialog-ok").click()
+        expect(pg.locator("#vt-file .vt-vw-ss")).to_contain_text("저장됨", timeout=10000)
+        saved = Path(target).read_text()
+        assert saved != "alpha\nbeta\n" and saved.startswith("alpha\n"), saved
+        pg.locator("#vt-file .vt-vw-edit-tools button", has_text="편집 끝내기").click()
+        pg.wait_for_function("() => !document.documentElement.classList.contains('vt-mobile-editing')")
+        assert not pg.locator("#vt-edit-keys").is_visible()
+    finally:
+        _close_overlay(pg)
+    pg.wait_for_timeout(200)
+    assert pg.locator("#vt-mnav-bottom").is_visible()
