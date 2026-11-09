@@ -116,7 +116,7 @@ html[data-skin="windows"] {
   --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
   --menu:var(--color-bg-1); --menu-hover:rgba(255,255,255,.1); --line:var(--color-line);
   --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:var(--color-bg-3);
-  --wrad:8px; --trad:6px;
+  --wrad:8px; --trad:2px; /* 탭·끌기 표시도 컨트롤과 같은 2px(skins.css의 --radius-sm). 창 모서리는 그대로 */
   /* Windows 11 실제 창 닫기 버튼 hover 빨강 — windows 스킨 전용 UI 크롬(D1
      하드코딩 정리 대상, .traffic과 같은 이유로 스킨 블록 안으로 이동). */
   --close-hover:#e81123;
@@ -126,7 +126,7 @@ html[data-skin="vscode"] {
   --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
   --menu:var(--color-bg-2); --menu-hover:rgba(255,255,255,.08); --line:var(--color-line);
   --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#181818;
-  --wrad:8px; --trad:4px;
+  --wrad:8px; --trad:2px; /* 탭·끌기 표시도 컨트롤과 같은 2px(skins.css의 --radius-sm). 창 모서리는 그대로 */
 }
 /* 노트패드 — 메모장/종이 느낌의 라이트 테마. 다른 스킨과 달리 밝은 배경이라
    --menu-hover/--line은 흰색이 아닌 검정 오버레이로 뒤집어야 대비가 산다. */
