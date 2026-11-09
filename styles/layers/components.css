@@ -1708,54 +1708,140 @@
 .vt-native-chip[data-working] { color: var(--color-st-working); border-color: color-mix(in srgb, var(--color-st-working) 30%, transparent); background: color-mix(in srgb, var(--color-st-working) 10%, transparent); }
 .vt-native-chip-icon { display: inline-flex; }
 
-/* Customization manager: one list, explicit context, detail only on demand. */
+/* Customization manager: one list, explicit context, detail only on demand.
+ * 리디자인 후속(시안 panels P09-b) — 3단계 토큰으로 안쪽을 다시 그렸다. 위 막대(관리 대상 세그먼트 · 호스트 · 세션 ·
+ * 새로고침) / 왼쪽 탐색 200 / 필터 막대 · 일괄 막대 / 행 56(이름 mono 13/500 + 태그, 원본 위치 mono 11) / 바닥 막대.
+ * 창 크기와 큰 글자(screens/50-settings-usage.css 「MCP · 스킬 · 플러그인 글자 한 단계 키움」)는 그대로다.
+ * 두 단 배치(탐색 | 내용)는 넓은 창 모달에서만 — screens/50-settings-usage.css가 #vt-mcp 범위로 건다. */
 .vt-agent-config { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.vt-agent-config .vt-chip { min-height: 28px; padding: 4px 8px; font-size: 12px; line-height: 1.4; }
-.vt-ac-top, .vt-ac-mode, .vt-ac-controls, .vt-ac-actions, .vt-ac-nav, .vt-ac-preset, .vt-ac-envrow, .vt-ac-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.vt-ac-top { justify-content: space-between; }
-.vt-ac-mode [aria-selected="true"], .vt-ac-nav [aria-current="page"] { color: var(--color-txt); background: var(--color-bg-3); border-color: var(--color-line-strong); }
-.vt-ac-field { display: flex; flex-direction: column; gap: 4px; min-width: 120px; max-width: 100%; }
-.vt-ac-field select { width: 100%; max-width: 320px; }
-.vt-ac-search { flex: 1; min-width: 160px; }
+/* 버튼 — 대화상자 버튼(28 · 반경 6 · raised · line-strong · 13/500). 선택·현재는 hover 면 + 본문색. */
+.vt-agent-config .vt-chip {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 10px;
+  border: 1px solid var(--color-line-strong); border-radius: var(--radius-sm); background: var(--color-bg-raised);
+  color: var(--color-txt); font: var(--weight-medium) var(--fs-sm) / 1.2 var(--font-ui); white-space: nowrap;
+}
+.vt-agent-config .vt-chip:hover:not(:disabled) { background: var(--color-bg-3); }
+.vt-agent-config .vt-chip:disabled { opacity: .45; }
+.vt-agent-config .vt-chip.sm { min-height: 24px; padding: 0 8px; border-radius: var(--radius-xs); font-size: var(--fs-xs); }
+.vt-ac-top, .vt-ac-mode, .vt-ac-controls, .vt-ac-actions, .vt-ac-preset, .vt-ac-envrow, .vt-ac-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.vt-ac-top { gap: 12px; }
+/* 관리 대상 — 세그먼트(바닥 bg-2 · 안쪽 칸 반경 4 · 켠 칸은 raised + line-strong 테두리). */
+.vt-ac-mode { flex-wrap: nowrap; gap: 1px; padding: 1px; border: 1px solid var(--color-line-strong); border-radius: var(--radius-sm); background: var(--color-bg-2); }
+.vt-agent-config .vt-ac-mode .vt-chip { min-height: 26px; border-color: transparent; border-radius: var(--radius-xs); background: transparent; color: var(--color-muted); font-size: var(--fs-xs); }
+.vt-agent-config .vt-ac-mode .vt-chip[aria-selected="true"] { background: var(--color-bg-raised); color: var(--color-txt); box-shadow: 0 0 0 1px var(--color-line-strong); }
+.vt-ac-target { flex: 1 1 auto; }
+.vt-ac-refresh { margin-inline-start: auto; }
+/* 필드 — 이름(12 muted)을 컨트롤 왼쪽에 둔다(28 높이 막대 한 줄). 선택 상자는 sunk 면. */
+.vt-ac-field { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+.vt-ac-field > .vt-mcp-meta { flex: none; color: var(--color-muted); font-size: var(--fs-xs); white-space: nowrap; }
+.vt-ac-field select, .vt-agent-config .vt-ac-search {
+  height: 28px; min-height: 28px; box-sizing: border-box; max-width: 240px; padding: 0 8px;
+  border: 1px solid var(--color-line-strong); border-radius: var(--radius-sm); background: var(--color-bg-2);
+  color: var(--color-txt); font: var(--weight-normal) var(--fs-sm) / 1 var(--font-ui);
+}
+.vt-ac-field select:focus-visible, .vt-agent-config .vt-ac-search:focus-visible { outline: none; border-color: var(--color-acc); box-shadow: 0 0 0 3px var(--color-acc-soft); }
+.vt-agent-config .vt-ac-search { flex: 1 1 200px; min-width: 160px; max-width: 320px; }
 .vt-ac-context, .vt-ac-notice, .vt-ac-path, .vt-ac-review { white-space: pre-wrap; overflow-wrap: anywhere; }
-.vt-ac-context { margin: 0; font-size: 12px; color: var(--color-sub); }
-.vt-ac-notice { margin: 0; padding: 10px 0; border-block: 1px solid var(--color-line); color: var(--color-txt); }
-.vt-ac-nav { flex-shrink: 0; min-height: 44px; padding-block: 8px; border-bottom: 1px solid var(--color-line); }
+.vt-ac-context { margin: 0; font: var(--weight-normal) var(--fs-xs) / 1.5 var(--font-mono); color: var(--color-sub); }
+.vt-ac-notice { margin: 0; padding: 8px 12px; border: 1px solid var(--color-line); border-radius: var(--radius-sm); background: var(--color-bg-2); color: var(--color-txt); font-size: var(--fs-sm); }
+.vt-ac-intro { display: flex; flex-direction: column; gap: 8px; }
+/* 탐색 — 항목 32 · 반경 6 · 13 sub, 현재 = hover 면 + 본문색 600, 개수 mono 11 오른쪽. 좁은 창에서는 가로 띠. */
+.vt-ac-nav { display: flex; flex-wrap: nowrap; gap: 2px; overflow-x: auto; }
+.vt-ac-navitem {
+  display: flex; align-items: center; gap: 10px; flex: none; min-height: 32px; padding: 0 10px;
+  border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-sub);
+  font: var(--weight-normal) var(--fs-sm) / 1 var(--font-ui); text-align: left; white-space: nowrap; cursor: pointer;
+}
+.vt-ac-navitem:hover { background: var(--menu-hover); color: var(--color-txt); }
+.vt-ac-navitem[aria-current="page"] { background: var(--color-bg-3); color: var(--color-txt); font-weight: var(--weight-semibold); }
+.vt-ac-navitem:focus-visible { outline: 2px solid var(--color-acc); outline-offset: -2px; }
+.vt-ac-navico { display: inline-flex; flex: none; color: var(--color-muted); }
+.vt-ac-navitem[aria-current="page"] .vt-ac-navico { color: var(--color-sub); }
+.vt-ac-navcount { margin-inline-start: auto; color: var(--color-muted); font: var(--weight-normal) var(--fs-3xs) / 1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.vt-ac-main { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.vt-ac-pane { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .vt-ac-body { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.vt-ac-filters, .vt-ac-bulk { gap: 8px 12px; }
+.vt-ac-selected { font: var(--weight-medium) var(--fs-sm) / 1 var(--font-ui); color: var(--color-txt); font-variant-numeric: tabular-nums; }
+.vt-ac-plugins { margin-inline-start: auto; }
+.vt-ac-count { margin: 0; color: var(--color-muted); font-size: var(--fs-xs); }
 .vt-ac-list { min-width: 0; }
-.vt-ac-item { border-bottom: 1px solid var(--color-line); }
-.vt-ac-entry { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; column-gap: 8px; align-items: start; border-bottom: 1px solid var(--color-line); }
-.vt-ac-entry > .vt-ac-item { grid-column: 2; grid-row: 1; border-bottom: 0; }
-.vt-ac-entry > .vt-ac-pick { grid-column: 1; grid-row: 1; min-height: 44px; font-size: 0; }
-.vt-ac-entry > .vt-ac-quick { grid-column: 3; grid-row: 1; margin-top: 8px; }
-.vt-ac-itemhead { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; cursor: pointer; padding: 12px 0; min-height: 36px; }
-.vt-ac-itemhead strong { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
-.vt-ac-status { margin-inline-start: auto; color: var(--color-sub); font-size: 11px; }
-.vt-ac-itembody { padding: 0 0 12px; }
+/* 행 — 머리 56: 고르기 · (캐럿 · 이름 줄 / 원본 줄) · 상태 · 켜기/끄기. 펼치면 아래로 자세히. */
+.vt-ac-item { border-bottom: 0; }
+.vt-ac-entry { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; column-gap: 12px; align-items: start; padding: 0 8px; border-bottom: 1px solid var(--color-line); border-radius: var(--radius-sm); }
+.vt-ac-entry:hover { background: var(--menu-hover); }
+.vt-ac-entry > .vt-ac-item { grid-column: 2; grid-row: 1; min-width: 0; }
+.vt-ac-entry > .vt-ac-pick { grid-column: 1; grid-row: 1; min-height: 56px; font-size: 0; justify-content: center; }
+.vt-ac-entry > .vt-ac-quick { grid-column: 3; grid-row: 1; margin-top: 16px; }
+.vt-ac-itemhead { display: flex; align-items: center; gap: 8px 12px; min-height: 56px; padding: 0; cursor: pointer; list-style: none; }
+.vt-ac-itemhead::-webkit-details-marker { display: none; }
+.vt-ac-itemhead:focus-visible { outline: 2px solid var(--color-acc); outline-offset: -2px; border-radius: var(--radius-sm); }
+.vt-ac-chev { display: inline-flex; flex: none; color: var(--color-muted); transition: transform var(--dur-fast) var(--ease-out-quint); }
+.vt-ac-item[open] > .vt-ac-itemhead .vt-ac-chev { transform: rotate(90deg); }
+.vt-ac-headmain { display: flex; flex-direction: column; gap: 2px; flex: 1 1 0; min-width: 0; }
+.vt-ac-line1 { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
+.vt-ac-line1 strong { font: var(--weight-medium) var(--fs-sm) / 18px var(--font-mono); color: var(--color-txt); overflow-wrap: anywhere; }
+.vt-ac-line1 .vt-mcp-meta { color: var(--color-muted); font-size: var(--fs-xs); }
+.vt-ac-line2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-muted); font: var(--weight-normal) var(--fs-3xs) / 16px var(--font-mono); }
+/* 태그 — 16 · 반경 4 · 11/500 · line-strong 테두리, 채움 없음. */
+.vt-ac-tag { display: inline-flex; align-items: center; flex: none; height: 16px; padding: 0 4px; box-sizing: border-box; border: 1px solid var(--color-line-strong); border-radius: var(--radius-xs); color: var(--color-muted); font: var(--weight-medium) var(--fs-3xs) / 1 var(--font-ui); white-space: nowrap; }
+.vt-ac-tag.mono { font-family: var(--font-mono); }
+.vt-ac-status { flex: none; margin-inline-start: auto; color: var(--color-muted); font-size: var(--fs-xs); white-space: nowrap; }
+.vt-ac-status[data-state="on"] { color: var(--color-st-working); }
+.vt-ac-itembody { padding: 0 0 12px 20px; }
 .vt-ac-itembody p { margin-block: 6px; }
-.vt-ac-path { color: var(--color-sub); font: 11px/1.5 var(--font-mono); }
+.vt-ac-path { color: var(--color-sub); font: var(--weight-normal) var(--fs-3xs) / 1.5 var(--font-mono); }
 .vt-ac-actions { padding-top: 8px; }
-.vt-ac-pick { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+.vt-ac-pick { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); cursor: pointer; }
 .vt-ac-pick input { accent-color: var(--color-acc); }
-.vt-ac-child { font-size: 12px; padding: 3px 0 3px 12px; color: var(--color-sub); }
-.vt-ac-preset, .vt-ac-envrow { padding-block: 12px; border-bottom: 1px solid var(--color-line); }
+.vt-ac-child { font-size: var(--fs-xs); padding: 3px 0 3px 12px; color: var(--color-sub); }
+.vt-ac-preset, .vt-ac-envrow { min-height: 56px; padding: 8px; box-sizing: border-box; border-bottom: 1px solid var(--color-line); }
 .vt-ac-preset strong, .vt-ac-envrow code { margin-inline-end: auto; overflow-wrap: anywhere; }
-.vt-ac-editor { display: block; width: 100%; min-height: 280px; resize: vertical; font: 12px/1.6 var(--font-mono); margin-block: 12px; }
-.vt-ac-review { flex-basis: 100%; max-height: 240px; overflow: auto; font: 12px/1.5 var(--font-mono); }
+.vt-ac-preset strong { font: var(--weight-medium) var(--fs-sm) / 18px var(--font-mono); }
+.vt-ac-editor { display: block; width: 100%; min-height: 280px; resize: vertical; font: var(--fs-xs) / 1.6 var(--font-mono); margin-block: 12px; }
+.vt-ac-review { flex-basis: 100%; max-height: 240px; overflow: auto; font: var(--fs-xs) / 1.5 var(--font-mono); }
+/* 바닥 막대 — 안내(12 muted, 왼쪽) · 재시작 · 옛 보관함(오른쪽). */
 .vt-ac-footer { padding-top: 12px; border-top: 1px solid var(--color-line); }
-.vt-ac-errors { color: var(--color-sub); font-size: 12px; }
-.vt-ac-job { font-size: 12px; }
+.vt-ac-foothelp { flex: 1 1 240px; margin: 0; color: var(--color-muted); font-size: var(--fs-xs); }
+.vt-ac-legacy { margin-inline-start: auto; }
+.vt-ac-errors { color: var(--color-sub); font-size: var(--fs-xs); }
+.vt-ac-job { display: flex; align-items: center; gap: 8px; font-size: var(--fs-xs); }
+.vt-ac-job p { margin: 0; }
+@media (prefers-reduced-motion: reduce) { .vt-ac-chev { transition: none; } }
 @media (max-width: 600px) {
   .vt-ac-entry { grid-template-columns: 44px minmax(0, 1fr) auto; }
   .vt-agent-config .vt-chip, .vt-agent-config select, .vt-ac-pick { min-height: 44px; }
   .vt-ac-controls > .vt-ac-field { flex: 1 1 120px; }
-  .vt-ac-status { flex-basis: 100%; margin-inline-start: 0; }
-  .vt-ac-nav { flex-wrap: nowrap; overflow-x: auto; }
-  .vt-ac-nav button { flex-shrink: 0; }
+  .vt-ac-field select { flex: 1; max-width: none; }
+  .vt-ac-itemhead { flex-wrap: wrap; padding-block: 8px; }
+  .vt-ac-status { flex-basis: 100%; margin-inline-start: 20px; }
   .vt-ac-top { align-items: flex-start; }
+  .vt-ac-refresh { margin-inline-start: 0; }
 }
 @media (pointer: coarse) {
   .vt-agent-config button, .vt-agent-config select, .vt-agent-config summary, .vt-ac-pick { min-height: 44px; }
+}
+/* 두 단 배치(시안 P09-b) — 넓은 창 모달에서만. 본문 여백을 걷고 위 막대(12/20, 아래 줄) · 왼쪽 탐색 200(bg-1,
+ * 오른쪽 줄) | 내용(스스로 스크롤) · 바닥 막대(12/20, 위 줄)로 창을 채운다. 옛 보관함(mcp.js)으로 넘어가면
+ * .vt-agent-config가 빠져 원래 여백으로 돌아간다. 폰·dock은 한 단 그대로. ⚠ 이 블록은 위 규칙과 같이 레이어 밖에
+ * 둔다 — screens(legacy 레이어)에 두면 레이어 밖의 위 규칙이 특이도와 무관하게 이긴다. */
+@media (min-width:720px) {
+  #vt-mcp:not(.vt-dock-panel) .vt-vw-body.vt-agent-config { padding:0; gap:0; overflow:hidden; display:flex; flex-direction:column; }
+  #vt-mcp:not(.vt-dock-panel) .vt-agent-config > .vt-ac-top { flex:none; padding:12px 20px; border-bottom:1px solid var(--color-line); }
+  #vt-mcp:not(.vt-dock-panel) .vt-agent-config > .vt-ac-main { flex:1; min-height:0; flex-direction:row; gap:0; }
+  #vt-mcp:not(.vt-dock-panel) .vt-ac-main > .vt-ac-nav {
+    flex:0 0 200px; flex-direction:column; overflow:auto; box-sizing:border-box; padding:12px 8px;
+    border-right:1px solid var(--color-line); background:var(--color-bg-1);
+  }
+  #vt-mcp:not(.vt-dock-panel) .vt-ac-main > .vt-ac-pane { flex:1; min-width:0; overflow-y:auto; gap:0; }
+  #vt-mcp:not(.vt-dock-panel) .vt-ac-pane > .vt-ac-intro { padding:12px 20px 0; }
+  #vt-mcp:not(.vt-dock-panel) .vt-ac-pane > .vt-ac-body { gap:0; padding:0 0 12px; }
+  #vt-mcp:not(.vt-dock-panel) .vt-ac-body > * { margin-inline:20px; }
+  #vt-mcp:not(.vt-dock-panel) .vt-ac-body > .vt-ac-filters { position:sticky; top:0; z-index:1; margin:0; padding:12px 20px; border-bottom:1px solid var(--color-line); background:var(--color-bg-raised); }
+  #vt-mcp:not(.vt-dock-panel) .vt-ac-body > .vt-ac-bulk { padding-block:12px 4px; }
+  #vt-mcp:not(.vt-dock-panel) .vt-ac-body > .vt-ac-list { margin-inline:12px; }
+  #vt-mcp:not(.vt-dock-panel) .vt-ac-body:not([data-section="items"]) { gap:12px; padding-top:16px; }
+  #vt-mcp:not(.vt-dock-panel) .vt-agent-config > .vt-ac-footer { flex:none; padding:12px 20px; }
 }
 
 .vt-child-heading { display: flex; flex-wrap: wrap; gap: 4px 8px; padding: 8px 4px 2px; font-size: 11px; font-weight: 600; color: var(--color-sub); }

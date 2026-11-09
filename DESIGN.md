@@ -948,6 +948,17 @@ drag-select always work even under vim/tmux mouse mode.
   `::-webkit-slider-thumb` and `::-moz-range-thumb`). The desktop affordance
   is `:hover { transform:scale(1.15) }`, which never fires on touch, so the
   knob would stay a tiny 12px.
+- **MCP · 스킬 · 플러그인 window (mock P09-b, `panels/agent-config.js`).** The window keeps its size
+  (1240×860) and the legacy view's enlarged text; only the unified manager's insides follow P09-b: a top bar
+  (관리 대상 as a segmented control, 호스트/세션 selects with an inline 12px label, 새로고침 right), a 200px
+  left nav on `bg-1` (icon 16 · 13px label · mono 11 count, current = `bg-3` + 600), a sticky filter bar
+  (28px controls on `bg-2`), the bulk bar, rows with a 56px head (checkbox · caret · name mono 13/500 + kind
+  tag 16 + tool/host/scope in 12 muted, source path mono 11 ellipsized · state, `st-working` when on · 켜기/끄기
+  24) and a footer bar (help left, restart and 「기존 MCP 보관함·상세 관리」 right). Two columns only in the
+  wide modal; phones and the dock keep one column with the nav as a scrolling strip. The rules live
+  unlayered in `components.css` next to the base `.vt-ac-*` rules — in the legacy screens layer they would
+  lose to them regardless of specificity. Opening the legacy view drops `.vt-agent-config` so its 20px
+  padding returns.
 - **MCP server rows' Korean explanatory text uses the UI font**
   (`.vt-mcp-meta`/`.vt-mcp-verify`, `--ui`). Hangul in a monospace face has
   uneven glyph spacing and reads worse; a lone identifier inside a sentence
