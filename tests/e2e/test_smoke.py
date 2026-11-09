@@ -2077,7 +2077,19 @@ def test_파일을_패널에_끌어다_놓으면_올라간다(page):
     # 업로드 탭은 「첨부」다(4039376에서 「파일」은 디렉토리 트리로 넘어갔다).
     _open_dock(page, "첨부")
     page.wait_for_selector("#vt-dock #vt-files", timeout=15000)
-    before = page.evaluate("() => document.querySelectorAll('#vt-dock .vt-fl-row').length")
+    # `before`는 **서버 저장소**에서 센다. 목록은 패널이 뜬 뒤 비동기로 그려지므로
+    # 패널이 보이자마자 DOM 행을 세면 첫 목록이 오기 전의 0을 읽는다 — 앞 테스트
+    # (터미널 칸 드롭)가 올린 파일이 그 뒤에 그려져 "행 2개"로 오판했다(실측: 목록
+    # 응답을 0.8초 늦추면 매번 재현). 화면이 그 수를 다 그린 뒤에 드롭한다.
+    count_store = """async () => {
+      const r = await fetch('/api/files?filter=all', { credentials: 'same-origin' });
+      return ((await r.json()).items || []).map((f) => f.name || '');
+    }"""
+    before = len(page.evaluate(count_store))
+    page.wait_for_function(
+        "(n) => document.querySelectorAll('#vt-dock .vt-fl-row').length === n",
+        arg=before, timeout=15000,
+    )
 
     name = f"e2e-drop-{int(time.time())}.txt"
     page.evaluate(
@@ -2113,6 +2125,10 @@ def test_파일을_패널에_끌어다_놓으면_올라간다(page):
         }""",
         name,
     )
+    # 드롭 한 번 = 업로드 한 번 — 화면이 아니라 저장소로도 본다(두 번 올라가면 이름이 같은 레코드가 둘 생긴다).
+    stored = page.evaluate(count_store)
+    assert stored.count(name) == 1, f"드롭 한 번에 한 번만 올라가야 한다: {stored}"
+    assert len(stored) == before + 1, f"저장소에 하나만 늘어야 한다: {stored}"
     assert got["rows"] == before + 1, f"행이 하나 늘어야 한다: {got}"
     assert "7B" in got["sub"], f"크기가 안 맞는다(내용 'drop me' = 7바이트): {got}"
 

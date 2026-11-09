@@ -895,4 +895,5 @@ async function renderShareList(item, wrap) {
   }
 }
 
-export { showFiles, closeFiles };
+// wireFileDrop은 「드롭 한 번 = 업로드 한 번」 단위 테스트(files-panel.test.js)용으로 내보낸다.
+export { showFiles, closeFiles, wireFileDrop };
