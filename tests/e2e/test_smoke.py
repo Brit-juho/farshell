@@ -2669,3 +2669,124 @@ def test_폰_파일_탭은_트리가_기본이고_파일_첨부를_오가며_길
     page.wait_for_selector("#vt-files.vt-mobile-route", timeout=15000)
     page.locator('#vt-files .vt-mfiles-seg [data-seg="tree"]').click()
     page.wait_for_selector("#vt-dir.vt-mobile-route", timeout=15000)
+
+
+# ── 리디자인 8단계 — 폰(390×844, is_mobile · 터치) ────────────────────────────────
+PHONE = {"width": 390, "height": 844}
+
+
+@pytest.fixture
+def phone_page(browser, server):
+    """진짜 폰처럼 — 모바일 뷰포트 · 터치 · 굵은 포인터(키바가 붙는다). `page`와 같은 초기화를 쓴다."""
+    base, token = server
+    _reset_saved_layout(base, token)
+    ctx = browser.new_context(viewport=PHONE, is_mobile=True, has_touch=True)
+    _login(ctx, base)
+    pg = ctx.new_page()
+    _boot(pg, f"{base}/")
+    before = set(pg.evaluate("() => Object.keys(window.allSessions())"))
+    yield pg
+    # 이 테스트가 만든 세션은 닫기 버튼과 같은 경로로 지운다 — 다음 테스트의 「세션 0개」 전제를 지킨다.
+    try:
+        for sid in set(pg.evaluate("() => Object.keys(window.allSessions())")) - before:
+            pg.evaluate("(id) => window.removeSession && window.removeSession(id)", sid)
+    except PlaywrightError:
+        pass
+    ctx.close()
+    _reset_saved_layout(base, token)
+
+
+def _phone_terminal(pg) -> None:
+    """터미널 탭 · 세션 하나 · 키바 닫힘에서 시작한다."""
+    if pg.evaluate("() => Object.keys(window.allSessions?.() || {}).length") == 0:
+        pg.evaluate("() => window.createTmuxSession?.()")
+        pg.wait_for_selector(".vt-pane .xterm", timeout=15000)
+    pg.evaluate("() => window.vtSettingsSet('keybar.open', false)")
+    pg.locator('#vt-mnav-bottom [data-mnav="terminal"]').click()
+    pg.wait_for_function("() => document.documentElement.dataset.mobileTab === 'terminal'")
+    pg.wait_for_timeout(300)
+
+
+def _rect(pg, sel):
+    return pg.evaluate("(s) => { const r = document.querySelector(s)?.getBoundingClientRect();"
+                       " return r ? { x: r.x, y: r.y, w: r.width, h: r.height, b: r.bottom, r: r.right } : null; }", sel)
+
+
+def test_폰_마이크는_떠_있는_56이고_아래_탭이나_키바_위_16에_뜬다(phone_page):
+    pg = phone_page
+    _phone_terminal(pg)
+    assert pg.evaluate("() => document.getElementById('mic-btn-wrap').parentElement.id") == "vt-mic-fab"
+    if not pg.locator("#mic-btn-wrap").is_visible():
+        pytest.skip("이 서버에는 음성 기능이 없어 마이크가 숨는다(.needs-voice)")
+    fab, nav = _rect(pg, "#mic-btn-wrap"), _rect(pg, "#vt-mnav-bottom")
+    assert (round(fab["w"]), round(fab["h"])) == (56, 56), fab
+    assert round(nav["y"] - fab["b"]) == 16, (fab, nav)
+    assert round(PHONE["width"] - fab["r"]) == 16
+    pg.locator("#keybar-open-btn").click()
+    pg.wait_for_function("() => !document.getElementById('keybar').classList.contains('closed')")
+    pg.wait_for_timeout(200)
+    fab, kb = _rect(pg, "#mic-btn-wrap"), _rect(pg, "#keybar")
+    assert round(kb["y"] - fab["b"]) == 16, (fab, kb)
+    assert round(kb["h"]) in (90, 91), kb   # 키 36×2 + 간격 6 + 패딩 6×2 (+ 위 테두리 1)
+    # 다른 탭에서는 안 보인다.
+    pg.locator('#vt-mnav-bottom [data-mnav="fleet"]').click()
+    pg.wait_for_timeout(200)
+    assert not pg.locator("#mic-btn-wrap").is_visible()
+
+
+def test_폰_집중_모드는_상단바_버튼으로_들어가고_끌어내리기로_나온다(phone_page):
+    pg = phone_page
+    _phone_terminal(pg)
+    btn = pg.locator("#vt-focus-btn")
+    assert btn.is_visible()
+    assert (round(_rect(pg, "#vt-focus-btn")["w"]), round(_rect(pg, "#topbar")["h"])) == (44, 52)
+    btn.click()
+    pg.wait_for_function("() => document.documentElement.classList.contains('vt-focus')")
+    assert not pg.locator("#topbar").is_visible()
+    assert not pg.locator("#vt-mnav-bottom").is_visible()
+    assert pg.locator("#keybar").is_visible(), "닫혀 있던 키바도 집중 모드에서는 보인다"
+    assert round(PHONE["height"] - _rect(pg, "#keybar")["b"]) == 0
+    assert pg.evaluate("() => document.getElementById('mic-btn-wrap').parentElement.id") == "keybar-mic-slot"
+    pill = _rect(pg, "#vt-focus-pill")
+    assert round(pill["h"]) == 28, pill
+    edge = _rect(pg, "#vt-focus-edge")
+    assert round(edge["h"]) == 24
+    # 덜 끌면 제자리(마우스 포인터로 끌어도 같은 pointer 이벤트다).
+    pg.mouse.move(195, 8)
+    pg.mouse.down()
+    pg.mouse.move(195, 50, steps=4)
+    pg.mouse.up()
+    assert pg.evaluate("() => document.documentElement.classList.contains('vt-focus')")
+    pg.mouse.move(195, 8)
+    pg.mouse.down()
+    pg.mouse.move(195, 90, steps=6)
+    assert pg.locator("#vt-focus-hint").is_visible()
+    pg.mouse.up()
+    pg.wait_for_function("() => !document.documentElement.classList.contains('vt-focus')")
+    assert pg.locator("#topbar").is_visible() and pg.locator("#vt-mnav-bottom").is_visible()
+    assert pg.evaluate("() => document.getElementById('mic-btn-wrap').parentElement.id") == "vt-mic-fab"
+    # 알약의 나가기로도 나간다.
+    btn.click()
+    pg.wait_for_function("() => document.documentElement.classList.contains('vt-focus')")
+    pg.locator("#vt-focus-pill .vt-focus-pill-exit").click()
+    pg.wait_for_function("() => !document.documentElement.classList.contains('vt-focus')")
+
+
+def test_폰_세션_카드는_두_줄_64이고_개입_카드의_답_버튼은_44다(phone_page):
+    pg = phone_page
+    _phone_terminal(pg)
+    name = pg.evaluate("() => { const s = Object.values(window.allSessions())[0]; return s && (s.tmuxName || s.tmux_name) || null; }")
+    pg.locator('#vt-mnav-bottom [data-mnav="fleet"]').click()
+    pg.wait_for_selector("#vt-fleet .vt-fleet-row", timeout=15000)
+    h = pg.evaluate("() => Math.round(document.querySelector('#vt-fleet .vt-fleet-row').getBoundingClientRect().height)")
+    assert h == 64, h
+    if not name:
+        return
+    pg.evaluate("""(n) => window.vtApplyAgentSnapshot({ e2e: { tmux_session: n, session_id: 'e2e-w', status: 'waiting',
+      kind: 'approval', question: 'npm test', options: [{ key: '1', label: '예' }, { key: '3', label: '아니요' }] } })""", name)
+    pg.wait_for_selector("#vt-fleet .vt-fleet-card .vt-fleet-answers .vt-btn", timeout=5000)
+    hs = pg.evaluate("() => [...document.querySelectorAll('#vt-fleet .vt-fleet-card .vt-fleet-answers .vt-btn')]"
+                     ".map(b => Math.round(b.getBoundingClientRect().height))")
+    assert hs and all(x == 44 for x in hs), hs
+    badge = pg.locator("#vt-mnav-badge-waiting")
+    assert badge.is_visible() and badge.inner_text().strip() == "1"

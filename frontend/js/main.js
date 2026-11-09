@@ -79,6 +79,8 @@ import './term/guide.js';
 // 마운트. term/session.js(switchTo) 이후 — 직접 참조는 안 하지만(window
 // 브리지로 대신 받는 shell/Fleet.tsx 쪽), 같은 부팅 단계에 두는 게 자연스럽다.
 import './layout/mobile-nav.js';
+// 리디자인 8단계 — 폰 수동 집중 모드(상단바 버튼 · 개입 알약 · 위 가장자리 끌어내리기). focus.toggle 액션의 compact 몫.
+import './layout/mobile-focus.js';
 import './layout/env-chip.js'; // N45 — 모바일 헤더 환경 칩
 import { bootApp } from './term/boot.js';
 // F4 — grid.js(382줄)를 agent/{badges,status,preview}.js 3개로 분할.

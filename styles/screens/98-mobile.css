@@ -1,0 +1,284 @@
+/* 리디자인 8단계(2026-11) — 폰(compact, 폭 < 720) 「정돈」 배치. 시안 specimen/final/mobile.html M01–M14.
+ *
+ * 치수(시안 그대로): 상단바 52 · 아래 탭 52 · 세션 카드 64(두 줄) · 답 버튼 44 · 키바 90(키 44×36, 간격 6, 패딩 6) ·
+ * 떠 있는 마이크 56(아래 탭 위 16, 키바가 열려 있으면 키바 위 16) · 시트 항목 44 · 집중 알약 28(터치 44) · 위 가장자리 24.
+ * 색·글자·반경은 3단계 토큰만 쓴다(면: 바 --color-bg-1 · 카드·시트 --color-bg-raised · 입력 --color-bg-2).
+ *
+ * 골격(위치·표시 조건)은 60-mobile-hud.css · 10-shell.css · 20-overlay.css에 그대로 있고, 이 파일은 그 위에
+ * 모양과 8단계에서 새로 생긴 것(마이크 자리 · 집중 모드)을 얹는다. 같은 legacy 레이어라 파일 순서로 이긴다 —
+ * 그래서 오버레이(99)보다 앞이고, 오버레이의 폰 모양은 선택자를 한 단 구체적으로 써서 이긴다.
+ * 폭·패딩에 transition을 두지 않는다(터미널 refit·SIGWINCH). 움직임은 transform만. */
+
+@media (max-width:719px) {
+  :root {
+    /* 대기색 테두리(개입 필요 카드 · 승인 시트) — 시안 --wait-line. 대기색 위 글자(배지)는 대기색을 검정 쪽으로 내린 잉크. */
+    --m-wait-line: color-mix(in srgb, var(--color-st-waiting) 42%, transparent);
+    --m-wait-ink: color-mix(in srgb, var(--color-st-waiting) 14%, black);
+    --m-nav-h: calc(52px + env(safe-area-inset-bottom,0px));
+  }
+
+  /* ── 상단바 52 ───────────────────────────────────────────────────────── */
+  #topbar { background:var(--color-bg-1); border-bottom:1px solid var(--color-line); padding:0 4px 0 16px; gap:0; }
+  .vt-sp-name { font:600 var(--fs-base) / 20px var(--font-ui); letter-spacing:0; }
+  .vt-sp-meta { font:400 var(--fs-xs) / 16px var(--font-ui); color:var(--color-muted); }
+  #topbar > .vt-icon-btn { width:44px; height:44px; border-radius:var(--radius-lg); color:var(--color-sub); }
+  #topbar > .vt-icon-btn svg { width:20px; height:20px; }
+  #topbar > .vt-icon-btn[aria-pressed="true"] { color:var(--color-acc); background:var(--color-acc-soft); }
+  /* 집중 모드 버튼 — 상단바 첫 버튼(시안 M02 · M14-a). 키바 버튼과 같은 조건: 키바가 있는 기기 · 터미널 탭. */
+  #vt-focus-btn { display:none; }
+  html[data-mobile-tab="terminal"] #vt-focus-btn { display:inline-flex; flex:none; }
+
+  /* ── 아래 탭 52 ──────────────────────────────────────────────────────── */
+  #vt-mnav-bottom { background:var(--color-bg-1); border-top:1px solid var(--color-line); }
+  .vt-mnav-btn { color:var(--color-muted); gap:2px; font:500 var(--fs-2xs) / 16px var(--font-ui); }
+  .vt-mnav-btn > svg { width:20px; height:20px; }
+  .vt-mnav-label { font:500 var(--fs-2xs) / 16px var(--font-ui); letter-spacing:0; }
+  .vt-mnav-btn[aria-pressed="true"] { color:var(--color-txt); }
+  .vt-mnav-btn[aria-pressed="true"]::before { left:30%; right:30%; border-radius:0 0 2px 2px; background:var(--color-acc); }
+  .vt-mnav-badge {
+    top:5px; right:auto; left:calc(50% + 6px); min-width:16px; height:16px; padding:0 4px; box-sizing:border-box;
+    border-radius:8px; font:600 var(--fs-2xs) / 16px var(--font-mono);
+    background:var(--color-bg-raised); color:var(--color-txt); box-shadow:0 0 0 2px var(--color-bg-1);
+  }
+  /* 개입 필요 수만 대기색으로 채운다 — 「지금 나를 기다리는 것」은 이 하나다. */
+  #vt-mnav-badge-waiting { background:var(--color-st-waiting); color:var(--m-wait-ink); }
+
+  /* ── 탭 화면(변경 · 파일 · 설정) — 바탕은 앱 바탕, 머리는 바 면 48 ───────── */
+  .vt-viewer-backdrop.vt-mobile-route { background:var(--color-bg-0); }
+  .vt-viewer-backdrop.vt-mobile-route .vt-viewer-card { background:var(--color-bg-0); border:0; border-radius:0; }
+  .vt-viewer-backdrop.vt-mobile-route .vt-viewer-head {
+    min-height:48px; padding:0 4px 0 16px; background:var(--color-bg-1); border-bottom:1px solid var(--color-line);
+  }
+  .vt-viewer-backdrop.vt-mobile-route .vt-viewer-head .vt-vw-title { font:600 var(--fs-base) / 20px var(--font-ui); }
+
+  /* ── 세션 탭(Fleet) ─────────────────────────────────────────────────── */
+  #vt-fleet-slot { background:var(--color-bg-0); padding:0 0 calc(var(--spacing) * 4); }
+  #vt-fleet { gap:0; }
+  .vt-fleet-toolbar { display:flex; align-items:center; gap:0; min-height:44px; padding:0 4px 0 16px; }
+  .vt-fleet-machine { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:400 var(--fs-xs) / 16px var(--font-ui); color:var(--color-muted); }
+  .vt-fleet-tool { width:44px; height:44px; flex:none; color:var(--color-sub); border-radius:var(--radius-lg); }
+  .vt-fleet-hostbar { padding:0 12px 4px; background:var(--color-bg-0); border-bottom:0; }
+  .vt-fleet-group { display:flex; flex-direction:column; }
+  /* 구역 머리 36 — 「개입 필요 1」만 대기색. 수는 mono 12. */
+  #vt-fleet .vt-fleet-group-head {
+    display:flex; align-items:center; gap:8px; height:36px; margin-top:8px; padding:0 12px 0 16px; box-sizing:border-box;
+    font:600 var(--fs-sm) / 18px var(--font-ui); color:var(--color-sub); letter-spacing:0; text-transform:none;
+  }
+  #vt-fleet .vt-fleet-group-head > span:first-child { flex:1; min-width:0; }
+  .vt-fleet-group-n { margin-left:8px; font:400 var(--fs-xs) / 1 var(--font-mono); color:var(--color-muted); }
+  #vt-fleet .vt-fleet-group-head.is-wait, #vt-fleet .vt-fleet-group-head.is-wait .vt-fleet-group-n { color:var(--color-st-waiting); }
+
+  /* 세션 카드 64 — 두 줄. 행 사이 구분선은 상태 아이콘 열 오른쪽에서 시작한다(시안 m-div 12/50). */
+  #vt-fleet .vt-fleet-row {
+    position:relative; display:flex; flex-direction:column; justify-content:center; box-sizing:border-box;
+    min-height:64px; margin:0 12px; padding:11px 11px 11px 13px; gap:0;   /* 테두리 1 포함 64 */
+    border-radius:var(--radius-lg); background:transparent; border:1px solid transparent;
+  }
+  #vt-fleet .vt-fleet-row:active { background:var(--menu-hover); }
+  #vt-fleet .vt-fleet-row.is-waiting:not(.vt-fleet-card) { background:transparent; box-shadow:none; }
+  #vt-fleet .vt-lin + .vt-lin::before,
+  #vt-fleet .vt-view-group + .vt-lin::before {
+    content:""; display:block; height:1px; margin:0 12px 0 50px; background:var(--color-line);
+  }
+  #vt-fleet .vt-fleet-row-main { display:flex; flex-direction:column; gap:0; min-width:0; }
+  #vt-fleet .vt-fleet-row-top { display:flex; align-items:center; gap:8px; height:20px; min-width:0; }
+  #vt-fleet .vt-fleet-row-top .vt-srow-state { margin-left:0; }
+  #vt-fleet .vt-fleet-name {
+    flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    font:600 var(--fs-base) / 20px var(--font-ui); color:var(--color-txt);
+  }
+  #vt-fleet .vt-fleet-el { margin-left:auto; padding-left:8px; flex:none; font:400 var(--fs-xs) / 1 var(--font-mono); color:var(--color-muted); }
+  #vt-fleet .vt-fleet-line2 {
+    display:flex; align-items:center; gap:6px; height:16px; margin-top:4px; padding-left:24px; min-width:0;
+    overflow:hidden; white-space:nowrap; font:400 var(--fs-xs) / 16px var(--font-ui); color:var(--color-muted);
+  }
+  #vt-fleet .vt-fleet-line2 .vt-srow-kw { font-weight:600; }
+  #vt-fleet .vt-fleet-line2 .vt-srow-tool,
+  #vt-fleet .vt-fleet-line2 .vt-srow-badge { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .vt-fleet-loc {
+    display:inline-flex; gap:0; flex:0 1 auto; min-width:0; overflow:hidden;
+    font:400 var(--fs-xs) / 16px var(--font-mono); color:var(--color-muted);
+  }
+  .vt-fleet-loc > span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .vt-fleet-loc .vt-srow-workspace-kind { margin-right:6px; flex:none; }
+  .vt-fleet-loc .vt-srow-directory + .vt-srow-branch::before { content:"/"; }
+  #vt-fleet .vt-fleet-diff { flex:none; font:400 var(--fs-xs) / 16px var(--font-mono); color:var(--color-sub); }
+  .vt-fleet-gls { display:inline-flex; align-items:center; gap:4px; margin-left:auto; padding-left:4px; flex:none; color:var(--color-muted); }
+  .vt-fleet-gls:empty { display:none; }
+  /* 위임 하위 행 — 시안 m-card.child: 왼쪽 36 들여(가지선은 레일과 같은 .vt-lin-kid 규칙). */
+  #vt-fleet .vt-fleet-row.kid { margin-left:36px; }
+
+  /* 개입 필요 카드 — raised 면 · 대기색 테두리 · 왼쪽 3px 띠 · 질문 한 줄(터미널 색) · 44px 답 버튼. */
+  #vt-fleet .vt-fleet-row.vt-fleet-card { background:var(--color-bg-raised); border-color:var(--m-wait-line); }
+  #vt-fleet .vt-fleet-row.vt-fleet-card::before {
+    content:""; position:absolute; left:-1px; top:11px; bottom:11px; width:3px; border-radius:0 2px 2px 0; background:var(--color-st-waiting);
+  }
+  .vt-fleet-q {
+    margin:10px 0 0 24px; padding:6px 8px; border-radius:var(--radius-sm); background:var(--color-term-bg);
+    font:400 var(--fs-xs) / 16px var(--font-mono); color:var(--color-term-fg);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .vt-fleet-q-mark { color:var(--color-term-amber); margin-right:6px; }
+  #vt-fleet .vt-fleet-answers { display:flex; flex-wrap:nowrap; gap:6px; margin-top:10px; padding-left:24px; }
+  #vt-fleet .vt-fleet-answers .vt-btn {
+    --btn-h:44px; flex:1 1 0; min-width:0; height:44px; padding:0 8px; gap:6px; border-radius:var(--radius-lg);
+    background:var(--color-bg-raised); border:1px solid var(--color-line-strong); color:var(--color-txt);
+    font:500 var(--fs-base) / 1 var(--font-ui);
+  }
+  #vt-fleet .vt-fleet-answers .vt-btn.solid { background:var(--color-acc-surface); border-color:transparent; color:var(--color-acc-ink); font-weight:600; }
+  .vt-srow-answer-key { flex:none; font:600 var(--fs-xs) / 1 var(--font-mono); color:var(--color-st-waiting); }
+
+  /* 정렬 전환 · 뷰 편집 · 새 세션 — 시안 m-seg 28 · 36 아이콘. */
+  #vt-fleet .vt-fleet-group-head-sort .vt-rail-sort { height:28px; }
+  #vt-fleet .vt-fleet-edit-btn { width:36px; height:36px; }
+  .vt-fleet-add-btn { width:auto; margin:12px 12px 0; }
+
+  /* ── 시트(길게 누름 · 이름 변경 · 세션 관리) — 위쪽 반경 16, 손잡이, 항목 44 ── */
+  .vt-session-sheet {
+    padding-left:0; padding-right:0; padding-top:4px;
+    background:var(--color-bg-raised); border:1px solid var(--color-line-strong); border-bottom:0;
+    border-radius:16px 16px 0 0; box-shadow:var(--shadow-e2);
+  }
+  .vt-session-sheet::before {
+    content:""; display:block; width:36px; height:4px; margin:4px auto 4px; border-radius:2px; background:var(--color-surface-active);
+  }
+  .vt-session-sheet .vt-session-head { margin:0; padding:8px 20px; }
+  .vt-session-sheet .vt-session-head h2 { font:600 var(--fs-md) / 24px var(--font-ui); }
+  .vt-fleet-menu-sheet .vt-session-list { gap:0; padding:4px 0; border-top:1px solid var(--color-line); }
+  .vt-fleet-menu-sheet .vt-menu-item,
+  .vt-session-sheet .vt-session-footer-item {
+    min-height:44px; padding:0 20px; border-radius:0; font:400 var(--fs-base) / 20px var(--font-ui); color:var(--color-txt);
+  }
+  .vt-fleet-menu-sheet .vt-menu-item.danger { color:var(--color-st-error); }
+  .vt-session-sheet .vt-menu-summary, .vt-fleet-menu-sheet .vt-menu-summary { margin:0 20px 12px; }
+  /* 이름 변경 — 입력 44(글자 16: iOS 확대 방지), 버튼 둘 다 44로 반씩. */
+  .vt-fleet-menu-sheet > .vt-input { display:block; width:calc(100% - 40px); margin:4px 20px 0; height:44px; font-size:16px; box-sizing:border-box; }
+  .vt-fleet-menu-sheet .vt-dialog-actions { display:flex; gap:8px; padding:12px 20px 0; }
+  .vt-fleet-menu-sheet .vt-dialog-actions .vt-btn { --btn-h:44px; flex:1; height:44px; }
+
+  /* ── 키바 90 — 키 44×36 · 간격 6 · 패딩 6 ─────────────────────────────── */
+  #keybar {
+    gap:6px; background:var(--color-bg-1); border-top:1px solid var(--color-line);
+    padding:6px calc(6px + env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) calc(6px + env(safe-area-inset-left,0px));
+  }
+  /* 아래 탭이 있으면 그 위에 붙으므로 바닥 safe-area는 아래 탭이 이미 먹는다. */
+  body:not(.vt-keyboard-open) #keybar { padding-bottom:6px; }
+  #keybar-main { grid-template-rows:36px 36px; gap:6px; }
+  #keybar-mods { gap:6px; }
+  #keybar-mods .kb { flex:0 0 auto; min-width:52px; padding:0 10px; }
+  #keybar-scroll { gap:6px; }
+  #keybar-arrows { grid-template-columns:repeat(3, 44px); grid-template-rows:repeat(2, 36px); gap:6px; }
+  #keybar .kb {
+    height:36px; min-width:44px; border-radius:var(--radius-sm); background:var(--color-bg-raised);
+    border:1px solid var(--color-line-strong); color:var(--color-txt); font:500 var(--fs-sm) / 1 var(--font-mono);
+  }
+  #keybar .kb-arrow { font-size:var(--fs-base); }
+  #keybar .kb-mod { font-family:var(--font-ui); color:var(--color-sub); }
+  /* 다음 키만(파랑 테두리) · 잠김(채움) · 누르는 동안 — 상태는 램프와 면이 같이 말한다. */
+  #keybar .kb-mod.armed { background:var(--color-acc-soft); border-color:var(--color-acc); color:var(--color-acc); }
+  #keybar .kb-mod.locked { background:var(--color-acc-surface); border-color:var(--color-acc); color:var(--color-acc-ink); }
+  #keybar .kb.holding, #keybar .kb:active { background:var(--menu-hover); }
+  #keybar-selection-actions .vt-btn { --btn-h:44px; height:44px; }
+
+  /* ── 떠 있는 마이크 56 — 터미널 탭에서만. 아래 탭 위 16, 키바가 열려 있으면 키바 위 16 ─────────
+     --kb-height(키바 실측 높이, 닫혀 있으면 0)와 --kb-overlap(소프트 키보드가 덮은 높이)은 term/keybar-ui.js가 낸다.
+     키보드가 열리면 아래 탭이 사라지므로 그 52를 빼고 키보드 위 키바 위에 뜬다. */
+  #vt-mic-fab {
+    display:none; position:fixed; z-index:140;
+    right:calc(16px + env(safe-area-inset-right,0px));
+    bottom:calc(var(--m-nav-h) + var(--kb-height, 0px) + var(--kb-overlap, 0px) + 16px);
+  }
+  body.vt-keyboard-open #vt-mic-fab { bottom:calc(var(--kb-height, 0px) + var(--kb-overlap, 0px) + 16px); }
+  html[data-mobile-tab="terminal"] #vt-mic-fab:not(:empty) { display:block; }
+  body.vt-term-selecting #vt-mic-fab { display:none; }
+  #vt-mic-fab #mic-btn-wrap.mic {
+    display:flex; align-items:center; justify-content:center; width:56px; height:56px; padding:0; margin:0;
+    border-radius:28px; background:var(--color-acc-surface); color:var(--color-acc-ink);
+    box-shadow:var(--shadow-e2); position:relative;
+  }
+  #vt-mic-fab #mic-btn-wrap.mic:hover { filter:none; }
+  #vt-mic-fab #mic-btn-wrap svg { width:20px; height:20px; }
+  #vt-mic-fab #mic-btn-wrap .label { display:none; }
+  #vt-mic-fab #mic-btn-wrap.mic.recording { background:var(--color-st-error); color:var(--color-on-solid); }
+  /* 상태 점(준비 필요 · 진행 중 · 실패) — voice/status-panel.js가 data-voice-state를 단다. 바 면 테두리로 버튼에서 떼어 낸다. */
+  #vt-mic-fab #mic-btn-wrap[data-voice-state]::after {
+    content:""; position:absolute; top:4px; right:4px; width:10px; height:10px; border-radius:50%;
+    box-shadow:0 0 0 2px var(--color-bg-0);
+  }
+  #vt-mic-fab #mic-btn-wrap[data-voice-state="busy"]::after { background:var(--color-st-working); }
+  #vt-mic-fab #mic-btn-wrap[data-voice-state="setup"]::after { background:var(--color-st-waiting); }
+  #vt-mic-fab #mic-btn-wrap[data-voice-state="error"]::after { background:var(--color-st-error); }
+  /* 음성 패널은 폰에서 아래 시트 — 아래 탭 위에 붙는다(voice/status-panel.js가 vt-voice-mobile을 단다). */
+  #voice-status-panel.vt-voice-mobile {
+    left:0 !important; width:100% !important; bottom:var(--m-nav-h); z-index:145; border-radius:16px 16px 0 0; border-bottom:0;
+  }
+
+  /* ── 집중 모드(html.vt-focus, layout/mobile-focus.js) — 상단바 · 아래 탭을 숨기고 키바만 남긴다 ──── */
+  html.vt-focus #topbar,
+  html.vt-focus #vt-mnav-bottom,
+  html.vt-focus #vt-fleet-slot { display:none; }
+  /* 키바 여닫기 버튼이 상단바와 함께 사라지므로 닫혀 있어도 보인다. */
+  html.vt-focus #keybar.closed:not([hidden]) { display:flex; }
+  html.vt-focus #keybar { bottom:0; padding-bottom:calc(6px + env(safe-area-inset-bottom,0px)); }
+  html.vt-focus #terminal-container {
+    padding-top:calc(40px + env(safe-area-inset-top,0px));
+    padding-bottom:calc(var(--kb-height, calc(var(--spacing) * 24)) + var(--kb-overlap, 0px));
+  }
+  /* 마이크는 키바 첫 키로 옮겨 간다(term/keybar.js placeMicButton) — 떠 있는 자리는 비어 숨는다. */
+  #keybar-mic-slot { display:none; }
+  html.vt-focus #keybar-mic-slot { display:flex; flex:none; }
+  html.vt-focus #keybar-mic-slot:empty { display:none; }
+  #keybar-mic-slot #mic-btn-wrap.mic {
+    display:flex; align-items:center; justify-content:center; width:44px; height:36px; padding:0; margin:0;
+    border-radius:var(--radius-sm); background:var(--color-bg-raised); border:1px solid var(--color-line-strong); color:var(--color-sub);
+  }
+  #keybar-mic-slot #mic-btn-wrap svg { width:16px; height:16px; }
+  #keybar-mic-slot #mic-btn-wrap .label { display:none; }
+  #keybar-mic-slot #mic-btn-wrap.mic.recording { background:var(--color-st-error); border-color:var(--color-st-error); color:var(--color-on-solid); }
+
+  /* 위 가장자리 24 — 여기서 아래로 64 넘게 끌었다 놓으면 나간다. 손잡이 36×4. */
+  html.vt-focus #vt-focus-edge {
+    display:flex; justify-content:center; position:fixed; left:0; right:0; top:0; z-index:150;
+    height:calc(24px + env(safe-area-inset-top,0px)); padding-top:env(safe-area-inset-top,0px); box-sizing:border-box;
+    touch-action:none;
+  }
+  #vt-focus-edge > i { display:block; width:36px; height:4px; margin-top:6px; border-radius:2px; background:var(--color-surface-active); }
+  #vt-focus-hint {
+    position:fixed; left:50%; top:calc(20px + env(safe-area-inset-top,0px)); z-index:151;
+    transform:translate(-50%, var(--vt-focus-pull, 0px));
+    display:flex; align-items:center; height:36px; padding:0 14px; border-radius:18px; white-space:nowrap;
+    background:var(--color-bg-raised); border:1px solid var(--color-line-strong); box-shadow:var(--shadow-e2);
+    font:500 var(--fs-sm) / 1 var(--font-ui); color:var(--color-sub);
+  }
+  #vt-focus-hint[hidden] { display:none; }
+  #vt-focus-hint[data-armed="true"] { color:var(--color-txt); border-color:var(--color-acc); }
+
+  /* 개입 알약 — 오른쪽 위, 높이 28(터치 44). 개입이 있으면 「개입 N 이름」(대기색 테두리), 나가기 버튼은 늘 있다. */
+  html.vt-focus #vt-focus-pill { display:flex; }
+  html.vt-focus #vt-focus-pill[data-waiting]:not([data-waiting="0"]) { border-color:var(--m-wait-line); }
+}
+
+/* 알약의 모양 — 폰 수동 집중(위)과 가로 폰의 자동 집중(아래, 폭 720 이상일 수 있다)이 같이 쓴다. */
+#vt-focus-pill, #vt-focus-edge { display:none; }
+#vt-focus-pill {
+  position:fixed; top:calc(10px + env(safe-area-inset-top,0px)); right:calc(8px + env(safe-area-inset-right,0px)); z-index:150;
+  align-items:center; height:28px; padding:0 2px 0 0; box-sizing:border-box; border-radius:14px;
+  background:color-mix(in srgb, var(--color-bg-raised) 92%, transparent);
+  border:1px solid var(--color-line-strong); box-shadow:var(--shadow-e2); white-space:nowrap;
+}
+#vt-focus-pill button {
+  position:relative; display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 8px; margin:0;
+  background:none; border:0; color:inherit; cursor:pointer; touch-action:manipulation; -webkit-tap-highlight-color:transparent;
+}
+/* 터치 영역 44 — 보이는 높이는 28 그대로, 위아래로 8씩 넓힌다. */
+#vt-focus-pill button::before { content:""; position:absolute; left:0; right:0; top:-8px; bottom:-8px; }
+#vt-focus-pill button[hidden] { display:none; }
+#vt-focus-pill .vt-focus-pill-go { color:var(--color-st-waiting); font:600 var(--fs-xs) / 1 var(--font-ui); }
+.vt-focus-pill-ic { display:inline-flex; }
+.vt-focus-pill-name { max-width:120px; overflow:hidden; text-overflow:ellipsis; font:500 var(--fs-xs) / 1 var(--font-mono); color:var(--color-sub); }
+#vt-focus-pill .vt-focus-pill-exit { color:var(--color-sub); min-width:32px; justify-content:center; }
+.vt-focus-pill-go:not([hidden]) + .vt-focus-pill-exit { border-left:1px solid var(--color-line); }
+/* 자동 집중(보이는 높이 < 300, body.vt-kb-focus) — 개입이 있을 때만 알약이 뜨고, 나가기는 없다(키보드를 내리면 풀린다). */
+html:not(.vt-focus) body.vt-kb-focus #vt-focus-pill:not([data-waiting="0"]) { display:flex; }
+html:not(.vt-focus) #vt-focus-pill .vt-focus-pill-exit { display:none; }
+html:not(.vt-focus) #vt-focus-pill { padding-right:0; }

@@ -4820,5 +4820,12 @@ window.__VT_I18N = {
   "파일을 칸에 끌어 놓거나 붙여 넣으면 여기에 쌓입니다.": "Drop or paste files into a pane and they collect here.",
   "파일을 칸에 끌어 놓거나 붙여 넣으면 여기에 쌓입니다. {n}일 뒤 자동 삭제됩니다.": "Drop or paste files into a pane and they collect here. They are deleted after {n} days.",
   "프로젝트 스니펫을 볼 수 없습니다": "Project snippets are unavailable",
-  "해시 복사": "Copy hash"
+  "해시 복사": "Copy hash",
+  "집중 모드": "Focus mode",
+  "집중 모드 끝내기": "Exit focus mode",
+  "개입 {n}": "Needs you {n}",
+  "{name} 승인 요청 — 누르면 그 세션으로": "{name} is waiting for approval — tap to open it",
+  "아래로 끌면 상단바와 탭이 돌아옵니다": "Pull down to bring back the top bar and tabs",
+  "놓으면 집중 모드를 끝냅니다": "Release to exit focus mode",
+  "더 끌어내리면 집중 모드를 끝냅니다": "Pull further to exit focus mode"
 };

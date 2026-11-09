@@ -913,12 +913,22 @@ every command" list.
 
 ## 7. Mobile (compact, < 720px)
 
+Redesign phase 8 (2026-11) restyled the whole compact layout to the 「정돈」 mock
+(`specimen/final/mobile.html`, M01–M14) with the phase-3 tokens. Its rules live in one file,
+`styles/screens/98-mobile.css` (after the skeleton in `60-mobile-hud.css` and the bars in
+`95-bars.css`, before the overlays in `99-overlays.css`). Sizes: app bar 52 · bottom nav 52 ·
+session card 64 (two lines) · answer button 44 · keybar 90 (keys 44×36, gap 6, padding 6) ·
+floating mic 56 · sheet item 44 · focus pill 28 (touch 44) · top edge 24. Surfaces: bars
+`--color-bg-1`, cards and sheets `--color-bg-raised`, inputs `--color-bg-2`; amber
+(`--color-st-waiting`) is only for 개입 필요 (card border and strip, the answer-key numbers, the
+Session-tab badge).
+
 ```
-┌ app bar 52 ── session name ▾                     [keybar] [search] ┐
+┌ app bar 52 ── session name ▾          [focus] [keybar] [{}] [search] ┐
 │               MacBook Pro M1 Pro · n/N                             │
 │                                                                     │
 │   tab content (session / terminal / changes / files / settings)    │
-│                                                                     │
+│                                                        ( mic 56 )   │
 ├ keybar (terminal tab, opened from the app bar) — Ctrl Alt Shift │ ↑ ┤
 │      Esc Tab ⇧Tab ^C Home … F12 ▸ (horizontal scroll)     │ ← ↓ →  │
 ├ bottom nav 52 ── session | terminal | changes | files | settings ──┤
@@ -963,6 +973,16 @@ them into 개입 필요 and 세션 (name order), and the row parts (state icon +
 keyword line, origin icon) are `RailRow.tsx`'s own components. Only the waiting rows in the
 개입 필요 zone carry the inline approval buttons (the same session also appears below
 without them). Unseen is shown by the ring on the state icon, not a separate badge.
+
+**Session cards** (`FleetRow` in `Fleet.tsx`) are two lines, 64px including a 1px border:
+line 1 state icon 16 (unseen ring) · agent mark · name 15/600 · delegation toggle · elapsed
+(mono 12, right); line 2, indented 24, keyword 12/600 (with tool/badge) · location (WT ·
+directory/branch, mono) · changes · glyphs (share, other screens, origin) on the right. A waiting
+row in the 개입 필요 zone that is open becomes a card: raised surface, amber border at 42% and a
+3px amber strip on the left, the question on one line in terminal colors, and 44px answer
+buttons with the key drawn apart in amber (`AnswerButtons` `fleet` variant: 「1 예」; the
+desktop rail keeps 「1 · 예」). The same session lower down in 실행 중 is a plain row. A top
+row carries 대화 보관함 and 새 세션 as 44px icon buttons; zone heads are 36px.
 
 **Long-press a row for a bottom-sheet menu** — the same items as the desktop ⋯ menu
 (`rowMenuItems`: open rows get 닫기 · 이름 변경 · 맥에서 열기 · 연결된 화면, closed rows get
@@ -1044,7 +1064,8 @@ tap again = lock, held = applies while held (to keybar keys and soft-keyboard
 input alike), and a held modifier that was used in a chord does not count as
 a tap on release. The strip carries only keys the soft keyboard lacks (Esc
 Tab ⇧Tab ^C Home End PgUp PgDn Del tmux prefix F1–F12); there are no character keys, long-press
-variants, collapse toggle or mic slot (the mic lives only in the activity bar / rail slot).
+variants or collapse toggle. The mic is not a keybar key except in focus mode (below), where it
+becomes the first key (`#keybar-mic-slot`).
 Modifiers sit outside the strip so a chord is always in the same place and a thumb that
 drifts while holding one does not cancel it. Modifier state reads like a
 Caps Lock light: a 5px lamp top-right — faint ring (off), accent outline +
@@ -1067,8 +1088,9 @@ only publishes `html[data-vt-machine]` + a `vt:machine` event for
 `:root, html[data-skin]` because the farshell/macos skin blocks pin
 `--topbar-h:32px` at `html[data-skin=…]` specificity, which silently beats a
 bare `:root` (the coarse-pointer 44px rule loses to it on those
-skins). Two 44px icon buttons on the right: `#keybar-open-btn` (keyboard) and
-search. The keybar is **closed by default** and only that button opens it —
+skins). 44px icon buttons on the right (icons 20): on the terminal tab
+`#vt-focus-btn` (focus mode, first), `#keybar-open-btn` (keyboard) and
+`#snippets-open-btn`; on every tab search. The keybar is **closed by default** and only that button opens it —
 it never opens itself when the soft keyboard appears; the
 state is the device-scoped `keybar.open`. Closing also releases any latched
 modifier, and text-selection mode still shows its copy/done row while
@@ -1096,6 +1118,32 @@ screen, recent-commands tracking, the keymap registration rule, and the
   takes the whole remaining height. The keybar stays (it is closed by default
   anyway). No state is kept: the same function removes the class when the height
   comes back. Pointer-fine devices never get it (the keybar is not wired there).
+  If a session is waiting, the focus pill (below) shows in this mode too, without
+  its exit button.
+
+**Floating mic (`#vt-mic-fab`).** Under 720px the workbench (and its activity-bar mic)
+is hidden, so the phone had no visible mic. `term/keybar.js` `placeMicButton` moves the
+`#mic-btn-wrap` node itself (voice.js caches that id; recording state and the
+`data-voice-state` dot come along) into `#vt-mic-fab` on compact widths, into
+`#keybar-mic-slot` in focus mode, and back to the activity bar on wider screens; it
+re-runs on the width media change and on `vt:focus-change`, and leaves the mic alone
+while voice-only mode has it in `#topbar`. The button is 56px, accent fill, `--shadow-e2`,
+right 16, and sits 16px above the bottom nav — or above the keybar when it is open:
+`bottom: nav + --kb-height + --kb-overlap + 16` (the nav term drops when the soft keyboard
+hides the nav). Terminal tab only; hidden while selecting text. The voice panel opens as a
+bottom sheet above the nav, over the mic.
+
+**Focus mode (manual, `layout/mobile-focus.js`).** Entered **only** from the app-bar
+button (user decision 5 — no two-finger double tap; it clashes with pinch zoom). It sets
+`html.vt-focus` (the same class and `focus.toggle` action as desktop focus mode; on wide
+screens the action is handed to the handler registered before it) and hides the app bar,
+bottom nav and session slot. The keybar stays at the bottom and is shown even when closed
+(its toggle is gone with the app bar); the mic is its first key. The terminal gets 40px of top
+padding for the **pill**: top right, 28px high with 44px touch targets, 「개입 N name」 in amber
+when a session waits (tap → `vtOpenSessionFromRail({ tmuxName })`) plus an exit button. Exit
+also by pulling down from the **top 24px edge** (`#vt-focus-edge`, handle 36×4): a hint follows
+the finger and reads 「놓으면 집중 모드를 끝냅니다」 past 64px; releasing past 64px exits,
+less snaps back. Leaving the terminal tab or widening past 720px also exits. Not persisted.
 
 ## 8. Usage (dock "Usage" tab)
 
@@ -1317,7 +1365,9 @@ design.
 | `frontend/js/shell/Hud.tsx` · `hud-data.ts` · `hud-layout.js` | Status bar 24px at the bottom; chip catalogue and layout rules |
 | `styles/screens/95-bars.css` | Title bar and status bar frames, chips, FarShell menu dropdown |
 | `styles/screens/99-overlays.css` | Overlay shell (dialogs, approval, work record, archive, picker, sheets, state screens) and terminal-colour session previews (`.vt-ansi`, `lib/ansi-spans.js`) |
-| `frontend/js/shell/Fleet.tsx` | Mobile fleet home |
+| `frontend/js/shell/Fleet.tsx` | Mobile fleet home; `FleetRow` is the two-line 64px session card |
+| `styles/screens/98-mobile.css` | Phone (compact) look: app bar, bottom nav, cards, sheets, keybar, floating mic, focus mode |
+| `frontend/js/layout/mobile-focus.js` | Phone focus mode: app-bar button, pill, top-edge pull to exit |
 | `frontend/js/shell/Palette.tsx` · `palette-data.ts` | Command palette, 8 modes |
 | `frontend/js/layout/resize-overlay.js` | px / cols×rows caption while dragging a divider |
 | `frontend/js/layout/tree.js` | Pane tree — leaf `kind: 'terminal'\|'viewer'\|'panel'` |

@@ -18,7 +18,7 @@ export {
   splitRunning, pickRecentEnded, parseRailView, encodeRailView,
 } from '../../js/shell/rail-data.js';
 export { collectSessionRows } from '../../js/shell/rail-fetch.js';
-export { mountRow, mountMenu, mountNativeChildren } from './row-mount.js';
+export { mountRow, mountMenu, mountNativeChildren, mountFleetRow } from './row-mount.js';
 export {
   parseQuery, fuzzyMatch, PLACEHOLDER, PREFIX_MODE, MODE_PREFIX, MODE_HINT,
   DEFAULT_COMMANDS, SETTINGS_COMMANDS, panelCommands,

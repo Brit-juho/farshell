@@ -21,7 +21,8 @@ starts, a desktop notification such as "-> dev:0.0" shows which pane this uttera
 
 ## 2. Mobile mic button
 
-The mic button in the web UI's voice bar, or Settings → "Voice and notifications" → "Current session voice" → "Start recording":
+The floating mic at the bottom right of the phone's Terminal tab (the first keybar key in focus mode), the mic in the activity bar on
+wider screens, or Settings → "Voice and notifications" → "Current session voice" → "Start recording":
 - Tap to start recording, tap again to stop
 - The first tap prepares the model. When it's ready, tap again to record
 - STT → typed into the session/pane that was pinned when recording started. The target stays put even if you switch tabs mid-recording

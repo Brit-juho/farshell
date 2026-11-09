@@ -12,6 +12,7 @@
 import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import { icon, stateIcon } from '../ui/icons.js';
+import { shellIcon } from '../ui/icons-shell.js';
 import { t } from '../core/i18n.js';
 import { CatalogTree, RecentEnded, ArchiveEntry, ArchiveList, type CatalogSnapshot } from './CatalogTree.js';
 import { historyApi } from '../history/api.js';
@@ -26,7 +27,7 @@ import {
   collectSessionRows, syncAgentsFromServer, createDiffWatcher, useLayoutVersion, pollFetch, isNoResponse, answerSessionPrompt, type RailDeps,
 } from './rail-fetch.js';
 import {
-  buildRailLists, splitRunning, groupSessionRows, rowMenuItems, rowSummaryDetails, runRowMenu, diffLabel, type SessionRow,
+  buildRailLists, splitRunning, groupSessionRows, rowMenuItems, rowSummaryDetails, runRowMenu, diffLabel, formatRelativeTime, type SessionRow,
   buildSessionTree, kidsProgress, stepInOrder, ORDER_KEY, LINEAGE_KEY, VIEW_KEY, encodeOrder, encodeLineagePrefs, encodeRailView, type TreeEntry,
 } from './rail-data.js';
 import { createRailPrefs } from './rail-prefs.js';
@@ -108,11 +109,18 @@ function useLongPress(onLongPress: () => void) {
   };
 }
 
-function Row(props: {
+/**
+ * 세션 카드(리디자인 8단계, 시안 M01) — 두 줄 64px.
+ *   1줄 20  상태 아이콘 16(읽지 않음은 둘레 링) · 에이전트 14 · 이름 15/600 · 위임 토글 · 경과(mono 12, 오른쪽 끝)
+ *   2줄 16  (왼쪽 24 들여) 상태 키워드 12/600 · 도구·배지 · 위치(WT · 디렉터리 · 브랜치, mono) · 변경량 · 글리프(오른쪽)
+ * 개입 필요 구역의 열린 waiting 카드만 테두리·왼쪽 3px 띠·질문 한 줄(터미널 색)·44px 답 버튼을 갖는다.
+ * 부품(키워드·공유·만든 곳·다른 화면·위임 표시)은 데스크톱 레일 행과 같은 컴포넌트(RailRow.tsx)다.
+ */
+export function FleetRow(props: {
   row: SessionRow;
   /** 인라인 승인 버튼(개입 필요 구역의 행에만). */
   answers?: boolean;
-  /** 위임 하위 세션(레일과 같은 규칙 — 둘째 줄 대신 위임 상태). */
+  /** 위임 하위 세션(레일과 같은 규칙 — 키워드 대신 위임 상태). */
   kid?: boolean;
   entry?: TreeEntry<SessionRow>; kidsCollapsed?: boolean; onToggleKids?: () => void;
   onOpen: () => void; onLongPress: () => void;
@@ -122,6 +130,8 @@ function Row(props: {
   const clock = setInterval(() => setNow(Date.now()), 30000);
   onCleanup(() => clearInterval(clock));
   const diff = () => diffLabel(props.row);
+  const elapsed = () => formatRelativeTime(props.row.since, now());
+  const card = () => !!props.answers && props.row.status === 'waiting' && props.row.open;
 
   const longPress = useLongPress(props.onLongPress);
 
@@ -143,7 +153,8 @@ function Row(props: {
   return (
     <div
       class="vt-srow lg vt-fleet-row"
-      classList={{ 'is-waiting': props.row.status === 'waiting', closed: !props.row.open }}
+      classList={{ 'is-waiting': props.row.status === 'waiting', closed: !props.row.open, 'vt-fleet-card': card(), kid: !!props.kid }}
+      data-state={props.row.status}
       onClick={onRowClick}
       onPointerDown={longPress.onPointerDown}
       onPointerMove={longPress.onPointerMove}
@@ -169,33 +180,32 @@ function Row(props: {
             <KidsToggle progress={kidsProgress(e().kids)} count={e().kids.length + e().closedKids.length}
               collapsed={!!props.kidsCollapsed} name={props.row.name} onToggle={props.onToggleKids} />
           )}</Show>
+          <span class="vt-srow-elapsed vt-fleet-el">{elapsed()}</span>
         </div>
-        <Show when={!props.kid && (props.row.directory || props.row.branch || diff())}>
-          <div class="vt-srow-sub vt-fleet-row-sub vt-srow-line2">
-            <Show when={props.row.workspaceKind}><span class="vt-srow-workspace-kind" role="img" aria-label={props.row.workspaceKind === 'WT' ? t('별도 워크트리') : props.row.workspaceKind}>{props.row.workspaceKind}</span></Show>
-            <Show when={props.row.directory}><span class="vt-srow-directory" data-tip={props.row.locationTip || props.row.cwd}>{props.row.directory}</span></Show>
-            <Show when={props.row.branch}><span class="vt-srow-branch">{props.row.branch}</span></Show>
-            <Show when={diff()}><span class="vt-srow-meta vt-fleet-diff">{diff()}</span></Show>
-          </div>
-        </Show>
-        <Show when={!props.kid && props.row.contextStatus === 'unavailable'}><div class="vt-srow-sub">{t('정보 갱신 대기')}</div></Show>
-        <div class="vt-srow-sub vt-fleet-row-sub vt-srow-line3">
+        <div class="vt-srow-sub vt-fleet-row-sub vt-fleet-line2">
           {/* 하위 행: 진행 중이면 에이전트 상태(작업 중·입력 대기)가 정보고, 끝났으면 위임 결과가 정보다 — 둘을 같이 쓰면
               「보고 · 성공 완료」처럼 같은 말이 겹친다(2026-10-13 실화면). */}
-          <Show when={props.kid && props.row.lineage?.state !== 'running'} fallback={<KeywordLine row={props.row} now={now} />}>
+          <Show when={props.kid && props.row.lineage?.state !== 'running'} fallback={<KeywordLine row={props.row} now={now} noSince />}>
             <LineageMark row={props.row} />
           </Show>
-          <NativeChip row={props.row} />
-          <ShareMark share={props.row.share} />
-          <OriginMark origin={props.row.origin} />
-        </div>
-        <Show when={props.row.otherScreens > 0 || props.row.otherClients > 0}>
-          <div class="vt-srow-sub vt-fleet-row-sub vt-srow-line4">
+          <span class="vt-fleet-loc">
+            <Show when={props.row.contextStatus === 'unavailable'} fallback={<>
+              <Show when={props.row.workspaceKind}><span class="vt-srow-workspace-kind" role="img" aria-label={props.row.workspaceKind === 'WT' ? t('별도 워크트리') : props.row.workspaceKind}>{props.row.workspaceKind}</span></Show>
+              <Show when={props.row.directory}><span class="vt-srow-directory">{props.row.directory}</span></Show>
+              <Show when={props.row.branch}><span class="vt-srow-branch">{props.row.branch}</span></Show>
+            </>}>{t('정보 갱신 대기')}</Show>
+          </span>
+          <Show when={diff()}><span class="vt-srow-meta vt-fleet-diff">{diff()}</span></Show>
+          <span class="vt-fleet-gls">
+            <NativeChip row={props.row} />
+            <ShareMark share={props.row.share} />
             <ScreensMark row={props.row} />
-          </div>
-        </Show>
-        {/* 열려 있지 않은 세션은 키를 보낼 곳(열린 pane)이 없다 — 인라인 승인 버튼 대신 탭해서 연다. */}
-        <Show when={props.answers && props.row.status === 'waiting' && props.row.open}>
+            <OriginMark origin={props.row.origin} />
+          </span>
+        </div>
+        {/* 질문 한 줄 — 터미널에 뜬 것을 터미널 색으로. 열려 있지 않은 세션은 키를 보낼 곳(열린 pane)이 없다 — 인라인 승인 버튼 대신 탭해서 연다. */}
+        <Show when={card()}>
+          <Show when={props.row.question}>{(q) => <div class="vt-fleet-q" data-tip={q()}><span class="vt-fleet-q-mark" aria-hidden="true">$</span>{q()}</div>}</Show>
           <AnswerButtons row={props.row} variant="fleet" onAnswer={props.onAnswer} onTerminal={props.onOpen} />
         </Show>
       </div>
@@ -220,6 +230,11 @@ function Fleet(props: { deps: FleetDeps }) {
   onCleanup(() => diffWatcher.dispose());
   const [hosts, setHosts] = createSignal<HostEntry[]>([]);
   const [hostMenuOpen, setHostMenuOpen] = createSignal(false);
+  // 이 기기 이름(layout/env-chip.js가 html[data-vt-machine]에 두고 늦게 오면 'vt:machine'을 쏜다).
+  const [machine, setMachine] = createSignal(document.documentElement.dataset.vtMachine || '');
+  const onMachine = () => setMachine(document.documentElement.dataset.vtMachine || '');
+  document.addEventListener('vt:machine', onMachine);
+  onCleanup(() => document.removeEventListener('vt:machine', onMachine));
   // 2026-09-28(사용자 요청) — 스위처는 목록 필터가 아니라 화면 전체의 전환이다
   // (core/host-route.js, Rail.tsx와 같은 규칙). 세션 목록은 그 맥의 API에서 온다.
   const viewHostId = String((window as any).vtRelayHost?.() || LOCAL_HOST);
@@ -423,7 +438,16 @@ function Fleet(props: { deps: FleetDeps }) {
 
   return (
     <div id="vt-fleet" aria-label={t('플릿')}>
-      <button type="button" class="vt-btn" onClick={() => { void import('../history/panel.js').then(m => m.openHistory()); }}>{t('대화 보관함')}</button>
+      {/* 맨 위 도구 줄(시안 M01 상단바 오른쪽) — 이 기기 이름 · 대화 보관함 · 새 세션(44px 아이콘). 호스트가 둘 이상이면
+          기기 이름 대신 아래 호스트 스위처가 그 역할을 한다. */}
+      <div class="vt-fleet-toolbar">
+        <span class="vt-fleet-machine">{hosts().length > 1 ? '' : machine()}</span>
+        <button type="button" class="vt-icon-btn vt-fleet-tool" aria-label={t('대화 보관함')} data-tip={t('대화 보관함')}
+          onClick={() => { void import('../history/panel.js').then(m => m.openHistory()); }} innerHTML={shellIcon('history', 20, 2)} />
+        <button type="button" class="vt-icon-btn vt-fleet-tool" aria-label={t('새 세션')} data-tip={t('새 세션')}
+          onClick={(e) => (props.deps.getAction('session.add-menu') as ((el?: HTMLElement, ev?: MouseEvent) => void) | undefined)?.(e.currentTarget, e)}
+          innerHTML={icon('plus', 20, 2)} />
+      </div>
       <Show when={stale()}>
         <span class="vt-stale-mark vt-fleet-stale" role="status" title={t('서버에서 새 값을 한동안 받지 못했습니다. 보이는 값은 마지막으로 받은 것입니다.')}>{t('갱신 지연')}</span>
       </Show>
@@ -485,10 +509,10 @@ function Fleet(props: { deps: FleetDeps }) {
       {/* 개입 필요 — waiting 세션. 인라인 승인 버튼은 여기 행에만 붙는다. */}
       <Show when={!archiveOpen() && lists().attention.length > 0}>
         <div class="vt-fleet-group">
-          <div class="vt-fleet-group-head">{t('개입 필요')} · {lists().attention.length}</div>
+          <div class="vt-fleet-group-head is-wait">{t('개입 필요')}<span class="vt-fleet-group-n">{lists().attention.length}</span></div>
           <For each={lists().attention}>
             {(row) => (
-              <Row
+              <FleetRow
                 row={row}
                 answers
                 onOpen={() => { void openRow(row); }}
@@ -503,7 +527,7 @@ function Fleet(props: { deps: FleetDeps }) {
       <Show when={!archiveOpen() && !(prefs().view.byRepo && catalog()) && running().length > 0}>
         <div class="vt-fleet-group">
           <div class="vt-fleet-group-head vt-fleet-group-head-sort">
-            <span>{t('실행 중')} · {running().length}</span>
+            <span>{t('실행 중')}<span class="vt-fleet-group-n">{running().length}</span></span>
             {/* 폰에도 정렬 전환이 있어야 수동 순서를 이 화면에서 시작할 수 있다(레일 머리와 같은 값) — 순서는 행 시트의 위로·아래로 이동. */}
             <div class="vt-rail-sort" role="radiogroup" aria-label={t('세션 정렬')}>
               <For each={[['name', t('이름순')], ['manual', t('수동')]] as ['name' | 'manual', string][]}>{([id, label]) => (
@@ -519,7 +543,7 @@ function Fleet(props: { deps: FleetDeps }) {
           <Show when={!editViews()}>
           <For each={viewGroups().filter((g) => g.id)}>{(group) => (
             <ViewGroup group={group} onOpen={() => { void openRow(group.rows[0]); }}>
-              <For each={group.rows}>{(row) => <Row row={row}
+              <For each={group.rows}>{(row) => <FleetRow row={row}
                 onOpen={() => { void openRow(row); }} onLongPress={() => openMenu(row)}
                 onAnswer={() => Promise.resolve()} onSeen={() => seenRow(row)} />}</For>
             </ViewGroup>
@@ -527,13 +551,13 @@ function Fleet(props: { deps: FleetDeps }) {
           <For each={fleetTree()}>{(entry) => {
             const collapsed = () => prefs().kidsCollapsed.includes(fleetKey(entry.row));
             const closedOpen = () => prefs().closedOpen.includes(fleetKey(entry.row));
-            const kid = (row: SessionRow) => <Row row={row} kid
+            const kid = (row: SessionRow) => <FleetRow row={row} kid
               onOpen={() => { void openRow(row); }} onLongPress={() => openMenu(row)}
               onAnswer={() => Promise.resolve()} onSeen={() => seenRow(row)} />;
             return (
               <div class="vt-lin vt-lin-fleet" classList={{ 'has-kids': entry.kids.length + entry.closedKids.length > 0 && !collapsed() }}
                 data-lane={entry.row.status}>
-                <Row row={entry.row} entry={entry} kidsCollapsed={collapsed()}
+                <FleetRow row={entry.row} entry={entry} kidsCollapsed={collapsed()}
                   onToggleKids={() => setPref(LINEAGE_KEY, encodeLineagePrefs(fleetFlip(prefs().kidsCollapsed, fleetKey(entry.row)), prefs().closedOpen))}
                   onOpen={() => { void openRow(entry.row); }} onLongPress={() => openMenu(entry.row)}
                   onAnswer={() => Promise.resolve()} onSeen={() => seenRow(entry.row)} />
@@ -576,7 +600,7 @@ function Fleet(props: { deps: FleetDeps }) {
               onToggle={() => setPref(VIEW_KEY, encodeRailView({ ...prefs().view, recentCollapsed: !prefs().view.recentCollapsed }))}
               onChanged={() => { catalogPoll.kick(); }} />}>
             <CatalogTree data={data()} live={lists().sessions}
-              renderLive={row => <Row row={row} onOpen={() => { void openRow(row); }} onLongPress={() => openMenu(row)}
+              renderLive={row => <FleetRow row={row} onOpen={() => { void openRow(row); }} onLongPress={() => openMenu(row)}
                 onAnswer={() => Promise.resolve()} onSeen={() => seenRow(row)} />}
               onChanged={() => { catalogPoll.kick(); }} onMore={() => { void refreshCatalog(true).catch(() => {}); }} />
           </Show>
