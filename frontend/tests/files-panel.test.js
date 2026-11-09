@@ -91,7 +91,7 @@ async function loadWithFetch() {
     return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true, items: [], quota: {} }) });
   };
   const mod = await importFresh(FILES_JS, env.context, new Map());
-  return { mod, calls };
+  return { mod, calls, win: env.window };
 }
 
 test('renderRow — 고정 버튼이 상태를 보여주고 누르면 반대 값을 보낸다', async () => {
@@ -109,4 +109,43 @@ test('renderRow — 고정 버튼이 상태를 보여주고 누르면 반대 값
 
   const pinned = mod.renderRow({ id: 'cd34', name: 'b.txt', size: 5, pin: true, shares: [], expires_at: null }, null);
   assert.strictEqual(pinned.querySelector('.vt-fl-act.pin').getAttribute('aria-pressed'), 'true');
+});
+
+// R6 — 파일 패널 드롭 한 번은 업로드 한 번이다. 패널 안 요소에 놓아도(버블링) 두 번 올라가지 않고,
+// 창 수준 안내(upload-lite의 window drop)까지 올라가지 않으며, 터미널에 경로를 넣지 않는다.
+test('wireFileDrop — 드롭 한 번에 업로드는 한 번, 경로는 안 꽂는다', async () => {
+  const { mod, win } = await loadWithFetch();
+  const doc = win.document;
+  const root = doc.createElement('div');
+  const inner = doc.createElement('div');
+  root.appendChild(inner);
+  doc.body.appendChild(root);
+  mod.wireFileDrop(root);
+
+  const uploads = [];
+  win.vtUploadFiles = (dt, opts) => { uploads.push({ dt, opts }); return Promise.resolve([]); };
+  let reachedWindow = 0;
+  win.addEventListener('drop', () => { reachedWindow += 1; });
+
+  const dt = { types: ['Files'], files: [{ name: 'a.txt' }], dropEffect: 'none' };
+  for (const type of ['dragover', 'drop']) {
+    const ev = new win.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'dataTransfer', { value: dt });
+    inner.dispatchEvent(ev);
+    assert.strictEqual(ev.defaultPrevented, true, `${type}의 기본 동작(페이지 이동)이 막혀야 한다`);
+  }
+  await new Promise((r) => setTimeout(r, 0));
+  assert.strictEqual(uploads.length, 1, '드롭 한 번에 업로드는 한 번이어야 한다');
+  assert.strictEqual(uploads[0].dt, dt);
+  assert.deepStrictEqual({ ...uploads[0].opts }, { insertPath: false });
+  assert.strictEqual(reachedWindow, 0, '패널이 받은 드롭은 창 수준 안내로 올라가면 안 된다');
+  assert.strictEqual(root.dataset.dropfile, undefined, '드롭 뒤 강조 표시가 남으면 안 된다');
+
+  // 파일이 아닌 드래그(탭 이동 등)는 건드리지 않는다.
+  const other = new win.Event('drop', { bubbles: true, cancelable: true });
+  Object.defineProperty(other, 'dataTransfer', { value: { types: ['text/vt-tab-id'] } });
+  inner.dispatchEvent(other);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.strictEqual(uploads.length, 1);
+  assert.strictEqual(other.defaultPrevented, false);
 });
