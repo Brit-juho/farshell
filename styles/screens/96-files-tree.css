@@ -167,5 +167,5 @@
   font:500 var(--fs-sm) var(--ui); cursor:pointer;
 }
 .vt-mfiles-seg-btn[aria-selected="true"] { background:var(--tab-active); color:var(--tab-active-txt); }
-.vt-mfiles-seg-badge { min-width:16px; height:16px; padding:0 4px; border-radius:8px; background:var(--acc); color:var(--acc-ink); font:600 var(--fs-2xs)/16px var(--mono); text-align:center; }
+.vt-mfiles-seg-badge { min-width:16px; height:16px; padding:0 4px; border-radius:8px; background:var(--color-acc-surface); color:var(--acc-ink); font:600 var(--fs-2xs)/16px var(--mono); text-align:center; }
 .vt-mfiles-seg-badge[hidden] { display:none; }
