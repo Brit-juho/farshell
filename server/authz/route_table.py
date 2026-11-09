@@ -204,6 +204,7 @@ _ROWS: tuple = (
     ("GET", "/api/fs/tree", auth()),
     ("GET", "/api/fs/file", auth()),
     ("GET", "/api/fs/raw", auth()),
+    ("GET", "/api/fs/download", auth()),
     ("WS", "/ws-fs-watch", auth()),
     ("GET", "/api/files", auth()),
     ("GET", "/api/files/{file_id}/download", auth()),

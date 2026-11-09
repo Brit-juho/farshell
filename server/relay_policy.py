@@ -34,7 +34,7 @@ B의 응답은 **A의 출처**에서 열린다. 그래서 B가 보낸 보안 헤
   막는 정상 기능이 없다(`<img>`·`fetch`는 응답의 CSP를 보지 않는다). B의 `frame-ancestors *`·
   `report-uri`가 끼어들 자리가 없다.
 - `Content-Type`은 경로마다 허용 목록이다. 모든 경로는 `application/json`, `/api/fs/raw`는
-  `fsguard.IMAGE_TYPES`의 이미지, 첨부 내려받기(`/api/files/{id}/download`)는 무엇이든 받되
+  `fsguard.raw_types()`(이미지·SVG·동영상·소리 — B 자신이 확장자와 매직 바이트로 거른 것과 같은 목록), 첨부 내려받기(`/api/files/{id}/download`)는 무엇이든 받되
   `Content-Disposition: attachment`를 강제하고 수동 타입이 아니면 `application/octet-stream`으로
   바꾼다. 그 밖(`text/html`·SVG·XML·JS 등)은 `text/plain`으로 무력화한다(상태 코드는 그대로).
 - 넘기는 헤더 자체가 허용 목록이다: 위 셋과 길이·`etag`·`last-modified`·구간 헤더뿐. `Set-Cookie`·
@@ -186,6 +186,13 @@ def _image_types() -> frozenset:
     return frozenset(fsguard.IMAGE_TYPES.values())
 
 
+def _raw_types() -> frozenset:
+    # SVG가 들어 있어도 안전하다: 위 RELAY_CSP의 sandbox·default-src 'none'이 A의 출처에서 문서로 열린 SVG의
+    # 스크립트와 외부 불러오기를 막고, 화면은 `<img>`로만 그린다(결정 D8, 계획 7.3).
+    import fsguard
+    return fsguard.raw_types()
+
+
 def _base_type(value: str | None) -> str:
     return (value or "").split(";", 1)[0].strip().lower()
 
@@ -207,7 +214,7 @@ def response_headers(target: str, status: int, upstream) -> tuple[dict[str, str]
     neutralized = False
     if base == _JSON:
         out["content-type"] = _JSON
-    elif target == _RAW_PATH and base in _image_types():
+    elif target == _RAW_PATH and base in _raw_types():
         out["content-type"] = base
         out["content-disposition"] = "inline"
     elif _DOWNLOAD_PATH.fullmatch(target) and status < 300 and raw_type is not None:

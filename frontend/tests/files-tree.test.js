@@ -370,6 +370,7 @@ async function mountWith(env, tree, extra = {}) {
     copyPath: async (p) => { calls.copy.push(p); return true; }, sharePath: (p) => calls.share.push(p),
     terminalCwd: async () => null, sessionName: () => 'dev', recent: () => [], clearRecent: () => {},
     toast: () => {}, getDense: () => !!extra.dense, subscribeSettings: () => () => {},
+    ...(extra.deps || {}),
   });
   await mounted.store.open('/r');
   await tick();
@@ -444,6 +445,38 @@ test('마운트 — 행 메뉴(⇧F10·오른쪽 클릭): 열기 · 경로 삽�
   env.document.querySelector('.vt-ft-menu').dispatchEvent(new env.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   await tick();
   assert.ok(!env.document.querySelector('.vt-ft-menu'));
+});
+
+test('마운트 — 다운로드(단계 7): 파일 행 메뉴에 크기와 함께, 원격 호스트면 부르지 않고 이유를 알린다(D7)', async () => {
+  const tree = { '/r': [{ name: 'a.bin', dir: false, size: 2048 }, { name: 'd', dir: true, size: 0 }], '/r/d': [] };
+  for (const remote of [false, true]) {
+    const env = await fresh();
+    const got = [];
+    const toasts = [];
+    const { host, scroll } = await mountWith(env, tree, {
+      deps: { remote, downloadPath: (p, size) => got.push([p, size]), toast: (m, k) => toasts.push([m, k]) },
+    });
+    scroll.dispatchEvent(new env.window.FocusEvent('focus'));
+    await tick();
+    scroll.dispatchEvent(new env.window.KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true }));
+    await tick();
+    const items = Array.from(env.document.querySelectorAll('.vt-ft-menu [role="menuitem"]'));
+    const dl = items.find((b) => b.textContent.includes('다운로드'));
+    assert.ok(dl, '파일 행에는 다운로드가 있다');
+    assert.match(dl.textContent, remote ? /이 컴퓨터에서만/ : /2\.0K/);
+    dl.click();
+    if (remote) {
+      deq(got, []);
+      assert.match(toasts[0][0], /이 컴퓨터의 파일만/);
+    } else {
+      deq(got, [['/r/a.bin', 2048]]);
+    }
+    // 폴더 행에는 없다.
+    const dirRow = host.querySelector('.vt-ft-row.k-dir');
+    dirRow.dispatchEvent(new env.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
+    await tick();
+    assert.ok(!env.document.querySelector('.vt-ft-menu').textContent.includes('다운로드'));
+  }
 });
 
 test('마운트 — 이름 필터가 행을 줄이고 수를 적는다, 촘촘 설정이면 행 22px', async () => {

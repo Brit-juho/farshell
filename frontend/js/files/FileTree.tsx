@@ -27,6 +27,8 @@ export interface FileTreeDeps {
   insertPath: (path: string) => boolean;
   copyPath: (path: string) => Promise<boolean>;
   sharePath: (path: string) => void;
+  /** 내려받기(파일 개편 단계 7, `/api/fs/download`). 원격 호스트면 부르지 않고 이유를 알린다(결정 D7). */
+  downloadPath?: (path: string, size: number) => void;
   /** 지금 터미널 세션의 cwd. 모르면 null(이유는 deps가 토스트로 말한다). */
   terminalCwd: () => Promise<string | null>;
   /** 지금 터미널 세션 이름(행 메뉴 「경로 삽입」 옆에 적는다). */
@@ -248,6 +250,13 @@ export function FileTree(props: { deps: FileTreeDeps }) {
     items.push({ id: 'copy', label: t('경로 복사'), icon: 'clipboard-copy', run: () => {
       void deps.copyPath(r.path).then((ok) => { if (ok) deps.toast(t('경로를 복사했습니다')); });
     } });
+    // 다운로드는 이 컴퓨터의 파일만(결정 D7) — 원격에서는 숨기지 않고 이유를 붙인다(시안 F01-C).
+    if (r.kind === 'file' && deps.downloadPath) items.push({ id: 'download', label: t('다운로드'), icon: 'download',
+      hint: deps.remote ? t('이 컴퓨터에서만') : fmtSize(r.size),
+      run: () => {
+        if (deps.remote) deps.toast(t('다운로드는 이 컴퓨터의 파일만 됩니다 — 원격 호스트 파일은 받을 수 없습니다'), 'warn');
+        else deps.downloadPath!(r.path, r.size);
+      } });
     if (r.kind === 'file') items.push({ id: 'share', label: t('공유 링크 만들기…'), icon: 'link', run: () => deps.sharePath(r.path) });
     items.push({ id: 'refresh', label: r.kind === 'dir' ? t('이 폴더 새로고침') : t('새로고침'), icon: 'refresh-cw', run: () => refreshRow(r) });
     return items;

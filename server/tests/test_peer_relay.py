@@ -62,6 +62,7 @@ def test_policy_allows_host_scoped_apis(method, path):
     ("GET", "/api/files/../auth"),
     ("GET", "/api//files"),
     ("GET", "/api/unknown"),
+    ("GET", "/api/fs/download"),                         # 경로 기반 다운로드는 로컬 전용(D7)
 ])
 def test_policy_refuses_everything_else(method, path):
     assert not relay_policy.http_allowed(method, path)
@@ -169,6 +170,7 @@ def test_relay_requires_control_level(b_env):
 
 @pytest.mark.parametrize("target", [
     "/api/auth/status", "/api/devices", "/api/hosts", "/api/peer/ping",
+    "/api/fs/download",                                  # B도 스스로 거절한다(경로 기반 다운로드는 로컬 전용, D7)
 ])
 def test_relay_refuses_paths_outside_the_allowlist(b_env, target):
     client, hs, secret = b_env
@@ -362,7 +364,6 @@ def test_host_relay_drops_b_csp_frame_ancestors_and_reporting(a_env, monkeypatch
     ("/api/workspace", "text/html"),
     ("/api/workspace", "text/html; charset=utf-8"),
     ("/api/fs/tree", "application/xhtml+xml"),
-    ("/api/fs/raw", "image/svg+xml"),
     ("/api/fs/raw", "text/xml"),
     ("/api/fs/raw", "text/html"),
     ("/api/fs/raw", "application/javascript"),
@@ -500,10 +501,47 @@ def test_host_relay_fs_raw_image_end_to_end(a_env, tmp_path, monkeypatch):
     assert r.headers["content-disposition"] == "inline"
     assert r.headers["cache-control"] == "no-store"
     _assert_a_policy(r)
-    # SVG 는 B 자신이 거절한다(JSON 오류) — 그 오류도 JSON 그대로 온다.
-    (root / "b.svg").write_bytes(b"<svg xmlns='http://www.w3.org/2000/svg'/>")
+    # SVG(결정 D8): 그림으로는 지나가되 A의 sandbox CSP가 붙는다 — A의 출처에서 직접 열어도 스크립트가 돌지 않는다.
+    svg = b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>"
+    (root / "b.svg").write_bytes(svg)
     r = client.get("/api/hosts/m5/relay/api/fs/raw", params={"path": str(root / "b.svg")})
+    assert r.status_code == 200 and r.content == svg
+    assert r.headers["content-type"] == "image/svg+xml"
+    assert "sandbox" in r.headers["content-security-policy"]
+    _assert_a_policy(r)
+    # 이름만 .svg인 HTML은 B 자신이 거절한다(JSON 오류) — 그 오류도 JSON 그대로 온다.
+    (root / "c.svg").write_bytes(b"just text, not svg")
+    r = client.get("/api/hosts/m5/relay/api/fs/raw", params={"path": str(root / "c.svg")})
     assert r.status_code == 403 and r.headers["content-type"] == "application/json"
+
+
+def test_host_relay_b_svg_cannot_escape_the_sandbox(a_env, monkeypatch):
+    """털린 B가 SVG에 스크립트를 넣고 자기 CSP를 풀어 보내도, A는 B의 CSP를 버리고 sandbox를 붙인다(계획 7.3·3.4)."""
+    client, _ = a_env
+    _mock_b(monkeypatch, content=b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>",
+            headers={"content-type": "image/svg+xml", "content-security-policy": "script-src *",
+                     "content-disposition": "attachment"})
+    r = client.get("/api/hosts/m5/relay/api/fs/raw?path=x.svg")
+    assert r.status_code == 200
+    assert r.headers.get_list("content-security-policy") == [relay_policy.RELAY_CSP]
+    assert r.headers["content-disposition"] == "inline"
+    _assert_a_policy(r)
+
+
+def test_host_relay_refuses_path_download_before_calling_out(a_env, monkeypatch):
+    """경로 기반 다운로드는 이 서버 파일만(결정 D7) — A가 B로 보내기 전에 거절한다."""
+    client, _ = a_env
+    called = []
+
+    async def handler(request):
+        called.append(request.url)
+        return httpx.Response(200, content=b"x")
+
+    import routes.host_relay as hr
+    monkeypatch.setattr(hr, "_client", httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    r = client.get("/api/hosts/m5/relay/api/fs/download", params={"path": "/etc/hosts"})
+    assert r.status_code == 403 and r.json()["error"] == "relay_forbidden"
+    assert called == []
 
 
 @pytest.mark.parametrize("name,expect_type", [

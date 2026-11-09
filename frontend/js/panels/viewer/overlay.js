@@ -1,7 +1,8 @@
 // ADR-44 — 파일 뷰어 오버레이. pane 트리 밖에 있어서
 // 열고 닫아도 터미널 cols×rows가 바뀌지 않는다(fit도 SIGWINCH도 안 일어난다).
 import { openPanel, closePanel } from '../panel.js';
-import { renderFile, refreshFile, refreshGap, jumpToLine, disposeViewer } from './file.js';
+import { renderFile, refreshFile, refreshGap, jumpToLine, disposeViewer, downloadFsPath, viewerRev } from './file.js';
+import { downloadBlockedReason } from './download.js';
 import { isCrossHost } from './file-load.js';
 import { watchPath, coalesce } from '../../shell/fs-watch.js';
 import { _viewerState, _shareFile } from './state.js';
@@ -63,6 +64,7 @@ function _surface() {
 function _headHTML() {
   return '<div class="vt-file-title"><span class="vt-file-name"></span><span class="vt-file-dir"></span></div>'
     + `<button type="button" class="vt-icon-btn vt-file-refresh" aria-label="${t('새로고침')}" data-tip="${t('새로고침')}">${icon('refresh-cw', 14)}</button>`
+    + `<button type="button" class="vt-icon-btn vt-file-download" aria-label="${t('다운로드')}" data-tip="${t('다운로드')}">${icon('download', 14)}</button>`
     + `<button type="button" class="vt-icon-btn vt-file-share" aria-label="${t('공유 링크 만들기')}" data-tip="${t('공유 링크 만들기')}">${icon('link', 14)}</button>`
     + `<button type="button" class="vt-icon-btn vt-file-float" aria-pressed="false">${icon('app-window', 14)}</button>`
     + `<button type="button" class="vt-icon-btn vt-file-topane" aria-label="${t('페인으로 열기')}" data-tip="${t('페인으로 열기')}">${icon('columns-2', 14)}</button>`;
@@ -157,6 +159,11 @@ function _setFile(el, path, opts = {}) {
   const cross = isCrossHost(fileHost);
   el.querySelector('.vt-file-share').hidden = cross;
   el.querySelector('.vt-file-topane').hidden = cross;
+  // 다운로드는 이 컴퓨터의 파일만(결정 D7) — 원격이면 숨기지 않고 흐리게 두고 이유를 툴팁에 적는다(시안 F02-C).
+  const dl = el.querySelector('.vt-file-download');
+  const blocked = downloadBlockedReason(fileHost);
+  if (blocked) dl.setAttribute('aria-disabled', 'true'); else dl.removeAttribute('aria-disabled');
+  dl.dataset.tip = blocked || t('다운로드');
   // 요청마다 새 호스트에 그린다. 늦게 도착한 이전 파일은 떨어져 나간 호스트에 그려져 무해하다.
   const host = document.createElement('div');
   host.className = 'vt-vw-code-pane';
@@ -296,6 +303,10 @@ export function openFileOverlay(path, opts = {}) {
 
   el.querySelector('.vt-file-refresh').addEventListener('click', () => { _refresh(el); });
   el.querySelector('.vt-file-share').addEventListener('click', () => { _shareFile(el.dataset.viewerFile); });
+  el.querySelector('.vt-file-download').addEventListener('click', () => {
+    const file = el.dataset.viewerFile;
+    if (file) downloadFsPath(file, { host: el._vtHost || null, rev: viewerRev(el.querySelector('.vt-vw-body')) });
+  });
   const floatBtn = el.querySelector('.vt-file-float');
   // 폰(compact)은 설정과 무관하게 전체 화면 시트라 옮길 곳이 없다.
   if (!mount) floatBtn.hidden = true;

@@ -114,6 +114,11 @@ function chunkOf(id) {
     // 파일 트리(Solid + TS, 파일 개편 단계 5) — panels/viewer/tree.js(`dir.show`)가 패널을 열 때 import()한다.
     // panels 규칙보다 먼저 올 필요는 없지만(폴더가 다르다) 이름이 없으면 포괄 규칙이 core로 보내 초기 페이로드가 는다.
     if (p.includes('/frontend/js/files/')) return 'files';
+    // 마크다운 미리보기(파일 개편 단계 7) — marked + DOMPurify와 그 둘을 붙이는 markdown-lib.js만. panels/viewer/file.js가
+    // 마크다운을 「렌더」로 열 때 import()한다. 정화 규칙(markdown.js)은 라이브러리를 import하지 않으므로 panels에 둔다 —
+    // 여기로 보내면 panels가 이 청크를 정적으로 끌어와 파일을 열 때마다 라이브러리를 받게 된다.
+    if (/\/node_modules\/(?:marked|dompurify)\//.test(p)) return 'preview';
+    if (p.endsWith('/frontend/js/panels/viewer/markdown-lib.js')) return 'preview';
     // 진짜로 "열 때" 받는 화면들. 여기 한 줄 추가하는 것만으로 지연
     // 청크가 되고, 그 모듈이 무엇을 import하든 core는 따라오지 않는다.
     if (p.includes('/frontend/js/panels/viewer/')) return 'panels';

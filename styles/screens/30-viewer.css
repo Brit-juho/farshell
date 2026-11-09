@@ -876,3 +876,86 @@ body.vt-resizing #terminal-container{ transition:none; }
   .vt-qo-preview-pane{ display:none; }
   .vt-qo-results-pane{ border-right:none; }
 }
+
+/* ── 미리보기(파일 개편 단계 7, panels/viewer/preview.js·markdown.js, 시안 F07) ─────────────────────────
+   렌더/원문 전환은 위 띠(.vt-vw-bar) 안의 두 칸 단추. 색은 토큰 별칭만(계약 9). */
+.vt-vw-seg{ display:inline-flex; border:1px solid var(--line); border-radius:var(--radius-sm); overflow:hidden; }
+.vt-vw-seg .vt-vw-seg-btn{ border:0; border-radius:0; background:transparent; color:var(--sub); }
+.vt-vw-seg .vt-vw-seg-btn + .vt-vw-seg-btn{ border-left:1px solid var(--line); }
+.vt-vw-seg .vt-vw-seg-btn[aria-pressed="true"]{ background:var(--color-acc-soft); color:var(--txt); }
+
+/* 마크다운 렌더 — 본문 14/22, 최대 폭 720(시안 F07). 폰은 15/24(M-F4). */
+.vt-md{
+  max-width:720px; padding:calc(var(--spacing) * 6) calc(var(--spacing) * 10);
+  font:400 14px/22px var(--ui); color:var(--txt); overflow-wrap:anywhere;
+}
+.vt-md > :first-child{ margin-top:0; }
+.vt-md h1,.vt-md h2,.vt-md h3,.vt-md h4,.vt-md h5,.vt-md h6{
+  font-weight:var(--weight-semibold); line-height:var(--leading-tight); margin:1.4em 0 .6em; color:var(--txt);
+}
+.vt-md h1{ font-size:var(--fs-lg); letter-spacing:var(--tracking-tight); }
+.vt-md h2{ font-size:var(--fs-md); padding-bottom:.3em; border-bottom:1px solid var(--line); }
+.vt-md h3{ font-size:var(--fs-base); }
+.vt-md h4,.vt-md h5,.vt-md h6{ font-size:var(--fs-sm); color:var(--sub); }
+.vt-md p,.vt-md ul,.vt-md ol,.vt-md blockquote,.vt-md table,.vt-md pre{ margin:0 0 1em; }
+.vt-md ul,.vt-md ol{ padding-left:1.5em; }
+.vt-md li > input[type="checkbox"]{ margin:0 .4em 0 0; vertical-align:middle; }
+.vt-md a{ color:var(--acc); text-decoration:underline; text-underline-offset:2px; }
+.vt-md a:not([href]){ color:var(--txt); text-decoration:none; }
+.vt-md code{ font:400 .92em var(--mono); background:var(--color-bg-2); border-radius:var(--radius-xs); padding:.1em .35em; }
+.vt-md pre{
+  font:400 var(--fs-xs)/1.55 var(--mono); background:var(--color-bg-2); border:1px solid var(--line);
+  border-radius:var(--radius-sm); padding:calc(var(--spacing) * 3); overflow:auto; white-space:pre;
+}
+.vt-md pre code{ background:none; padding:0; font-size:inherit; }
+.vt-md blockquote{ border-left:3px solid var(--line); padding:0 0 0 1em; color:var(--sub); }
+.vt-md hr{ border:0; border-top:1px solid var(--line); margin:1.5em 0; }
+.vt-md table{ border-collapse:collapse; display:block; overflow:auto; max-width:100%; }
+.vt-md th,.vt-md td{ border:1px solid var(--line); padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3); }
+.vt-md th{ background:var(--bar); font-weight:var(--weight-semibold); }
+.vt-md img{ max-width:100%; height:auto; }
+/* 막은 외부 이미지 — 점선 자리표시 56(시안 F07). 주소는 글자로만, 복사 단추. */
+.vt-md-blocked{
+  display:flex; flex-wrap:wrap; align-items:center; gap:calc(var(--spacing) * 2); min-height:56px;
+  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3); margin:0 0 1em;
+  border:1px dashed var(--line); border-radius:var(--radius-sm); color:var(--sub); font:400 var(--fs-xs) var(--ui);
+}
+.vt-md-blocked-url{ font-family:var(--mono); color:var(--color-faint); overflow-wrap:anywhere; flex:1 1 160px; }
+@media (max-width:719px){
+  .vt-md{ padding:calc(var(--spacing) * 4); font-size:15px; line-height:24px; }
+}
+
+/* CSV 표 — 텍스트로만 그리는 가상 표(머리 고정, 숫자 오른쪽 맞춤 · --color-term-amber). */
+/* 표가 든 칸은 내용만큼 늘어나고 스크롤은 바깥 상자(.vt-vw-body·페인 본문)가 한다 — 편집기 칸(.vt-vw-cm)과 같은 이유.
+   칸이 overflow:auto면 칸 자체가 스크롤 상자로 잡혀 높이가 표 전체가 되고, 가상 스크롤이 모든 행을 그린다. */
+.vt-vw-code-pane:has(> .vt-csv){ overflow:visible; }
+.vt-csv{ overflow-x:auto; background:var(--term); }
+.vt-csv-table{ border-collapse:collapse; font:400 var(--fs-xs) var(--mono); color:var(--txt); min-width:100%; }
+.vt-csv-table th,.vt-csv-table td{
+  height:24px; padding:0 calc(var(--spacing) * 3); white-space:nowrap; text-align:left;
+  border-bottom:1px solid var(--line); max-width:480px; overflow:hidden; text-overflow:ellipsis;
+}
+.vt-csv-table thead th{ position:sticky; top:0; background:var(--bar); color:var(--sub); font-weight:var(--weight-semibold); z-index:1; }
+.vt-csv-table .n{ text-align:right; color:var(--color-term-amber); }
+.vt-csv-table .ix{ color:var(--color-faint); text-align:right; }
+.vt-csv-table tr.vt-csv-pad td,.vt-csv-table tr.vt-csv-pad{ padding:0; border:0; height:auto; }
+
+/* 동영상·소리. */
+.vt-vw-media{ display:flex; justify-content:center; align-items:center; padding:calc(var(--spacing) * 3); }
+.vt-vw-media.video{ background:var(--crust); }
+.vt-vw-media video{ max-width:100%; max-height:70vh; }
+.vt-vw-media audio{ width:min(100%, 560px); }
+
+/* SVG는 <img>로만 — 위 .vt-vw-image의 체크무늬를 그대로 쓴다. */
+.vt-vw-svg img{ min-width:64px; }
+
+/* 빈 상태(PDF·바이너리·재생 실패) — 이유 + 다운로드. 이 화면의 채운 단추는 다운로드 하나(시안 F07-H). */
+.vt-vw-preview-empty{
+  display:flex; flex-direction:column; align-items:center; gap:calc(var(--spacing) * 2); text-align:center;
+  padding:calc(var(--spacing) * 8) calc(var(--spacing) * 4); color:var(--sub); font:400 var(--fs-xs)/1.5 var(--ui);
+}
+.vt-vw-preview-empty b{ color:var(--txt); font-weight:var(--weight-semibold); font-size:var(--fs-sm); }
+.vt-vw-preview-empty span{ max-width:360px; }
+.vt-vw-preview-acts{ display:flex; gap:calc(var(--spacing) * 2); margin-top:calc(var(--spacing) * 1); }
+.vt-vw-dl-btn{ display:inline-flex; align-items:center; gap:calc(var(--spacing) * 1.5); }
+.vt-vw-dl-btn svg{ width:14px; height:14px; }

@@ -555,9 +555,10 @@ def _is_within(p: Path, root: Path) -> bool:
 #
 # 화이트리스트인 이유가 핵심이다. 이 서버는 공개 터널로 나가고, 여기서 내보낸
 # 바이트는 브라우저가 **이 오리진의 리소스로** 해석한다. 그래서:
-#   - SVG는 뺀다. SVG는 스크립트를 품을 수 있어 같은 오리진에서 열면 XSS다
-#     (SVG는 텍스트라 뷰어가 어차피 소스로 보여준다 — 잃는 게 없다).
-#   - HTML·PDF도 뺀다. 같은 이유(스크립트/임베드).
+#   - HTML·PDF는 뺀다. 같은 오리진에서 문서로 열리면 스크립트/임베드가 돈다(PDF는 다운로드만, 결정 D8).
+#   - SVG는 따로(`SVG_TYPE`) 다룬다. SVG는 스크립트를 품을 수 있어, `/api/fs/raw`는 SVG를 낼 때 응답에
+#     `RAW_CSP`(sandbox)를 붙이고 화면은 `<img>`로만 그린다(`<img>` 안의 SVG는 스크립트를 돌리지 않고,
+#     주소를 직접 열어도 sandbox가 스크립트를 막는다 — 결정 D8).
 #   - 확장자만 믿지 않고 매직 바이트로 한 번 더 확인한다 — `.png`로 이름만 바꾼
 #     HTML을 image/png로 내보내면 브라우저가 스니핑으로 되살릴 여지를 준다.
 IMAGE_TYPES = {
@@ -598,6 +599,73 @@ def image_type(path, head: bytes) -> str | None:
     if declared == "image/webp" and head[:4] == b"RIFF" and head[8:12] == b"WEBP":
         return declared
     return None
+
+
+SVG_TYPE = "image/svg+xml"
+
+# 동영상·소리(파일 개편 계획 4.6). 이미지처럼 확장자와 매직 바이트가 **둘 다** 맞아야 내보낸다.
+MEDIA_TYPES = {
+    ".mp4": "video/mp4",
+    ".webm": "video/webm",
+    ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
+    ".wav": "audio/wav",
+}
+
+# `/api/fs/raw`·`/api/fs/download` 응답의 CSP. 주소를 직접 열어 문서로 열려도(SVG) 스크립트·외부 불러오기가
+# 돌지 않고(sandbox, default-src 'none'), 다른 사이트가 끼워 넣지 못한다(frame-ancestors). SVG 안의 인라인
+# 스타일만 허용한다(그림이 깨지지 않게). 계획 7.3의 정책에 frame-ancestors를 더한 것 — 앱 기본 헤더
+# (security_headers.py)는 이미 CSP를 낸 응답을 덮어쓰지 않으므로 여기서 함께 적는다.
+RAW_CSP = "sandbox; default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"
+
+
+def _looks_svg(head: bytes) -> bool:
+    """머리가 XML/SVG 문서로 시작하고 `<svg` 요소가 있다. 바이너리(NUL)는 아니다."""
+    if b"\x00" in head:
+        return False
+    text = head.decode("utf-8", "ignore").lstrip("\ufeff \t\r\n").lower()
+    return text.startswith("<") and "<svg" in text
+
+
+def svg_type(path, head: bytes) -> str | None:
+    from pathlib import Path as _P
+
+    if _P(str(path)).suffix.lower() != ".svg":
+        return None
+    return SVG_TYPE if _looks_svg(head) else None
+
+
+def media_type(path, head: bytes) -> str | None:
+    """동영상·소리 — 확장자와 매직 바이트가 같은 형식을 가리킬 때만."""
+    from pathlib import Path as _P
+
+    declared = MEDIA_TYPES.get(_P(str(path)).suffix.lower())
+    if not declared:
+        return None
+    if declared in ("video/mp4", "audio/mp4"):
+        ok = head[4:8] == b"ftyp"
+    elif declared == "video/webm":
+        ok = head.startswith(b"\x1a\x45\xdf\xa3")
+    elif declared == "audio/mpeg":
+        ok = head.startswith(b"ID3") or (len(head) >= 2 and head[0] == 0xFF and (head[1] & 0xE0) == 0xE0)
+    else:   # audio/wav
+        ok = head[:4] == b"RIFF" and head[8:12] == b"WAVE"
+    return declared if ok else None
+
+
+def raw_type(path, head: bytes) -> str | None:
+    """`/api/fs/raw`가 원본 바이트로 내보내도 되는 타입(이미지·SVG·동영상·소리). 아니면 None."""
+    return image_type(path, head) or svg_type(path, head) or media_type(path, head)
+
+
+def raw_types() -> frozenset:
+    """`raw_type`이 낼 수 있는 Content-Type 전부 — 호스트 중계의 응답 허용 목록(relay_policy)이 쓴다."""
+    return frozenset({*IMAGE_TYPES.values(), SVG_TYPE, *MEDIA_TYPES.values()})
+
+
+def is_capped_preview(mime: str) -> bool:
+    """크기 상한(`MAX_IMAGE_BYTES`)이 걸리는 타입 — 한 번에 통째로 받는 그림. 동영상·소리는 Range로 나눠 받는다."""
+    return mime in IMAGE_TYPES.values() or mime == SVG_TYPE
 
 
 def looks_binary(head: bytes) -> bool:

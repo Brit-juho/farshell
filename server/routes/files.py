@@ -23,12 +23,13 @@ import time
 from pathlib import Path
 
 from fastapi import APIRouter, Query, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
 from authz import leases as authz_leases
 import file_store
 import fs_watch
 import fs_read
+import fs_stream
 import fsguard
 import tmux_target
 from i18n import tr
@@ -459,61 +460,125 @@ async def fs_file(request: Request, path: str = Query(...), offset: str | None =
     return JSONResponse(out["body"], headers=_file_headers(out["etag"]))
 
 
-def _raw_image(path: str):
-    p = fsguard.resolve_under_roots(path)
-    if not p.is_file():
-        return ("missing",)
-    size = p.stat().st_size
-    with open(p, "rb") as f:
-        head = f.read(fsguard.SNIFF_BYTES)
-        mime = fsguard.image_type(p, head)
-        if not mime:
-            return ("not_image",)
-        if size > fsguard.MAX_IMAGE_BYTES:
-            return ("too_large",)
-        return ("ok", head + f.read(), mime)
+def _raw_headers(mime: str, etag: str) -> dict:
+    return {
+        "Content-Type": mime,
+        "Content-Disposition": "inline",
+        "X-Content-Type-Options": "nosniff",
+        # SVG를 주소로 직접 열어도 스크립트가 돌지 않게(결정 D8). 이미지·미디어에는 해가 없다.
+        "Content-Security-Policy": fsguard.RAW_CSP,
+        "Cache-Control": "no-store",
+        "Accept-Ranges": "bytes",
+        "ETag": etag,
+    }
+
+
+def _open_failure(e: BaseException, name: str) -> JSONResponse:
+    """`fs_stream.open_for`가 던진 것 → 응답. `_file`과 같은 규칙: 없는 파일·바뀐 링크는 404, 권한은 403."""
+    if isinstance(e, fsguard.FsDenied):
+        return _denied(e.reason)
+    if isinstance(e, fsops.UNAVAILABLE):
+        return fsops.unavailable_response(e)
+    if isinstance(e, fsguard.NotRegularFile):
+        return JSONResponse({"error": "not found"}, status_code=404)
+    if isinstance(e, PermissionError):
+        return _denied(tr("읽기 권한이 없습니다"))
+    if isinstance(e, OSError) and e.errno in (errno.ENOENT, errno.ENOTDIR, errno.ELOOP):
+        # 판정 뒤 경로의 어느 조각이 심링크로 바뀐 경우(ELOOP/ENOTDIR)도 — 경계 밖을 열지 않고 「없음」.
+        return JSONResponse({"error": "not found"}, status_code=404)
+    logger.warning(f"{name} 실패: {e}")
+    return JSONResponse({"error": "read failed"}, status_code=500)
+
+
+_OPEN_ERRORS = (fsguard.FsDenied, OSError, *fsops.UNAVAILABLE)
 
 
 @router.get("/api/fs/raw")
-async def fs_raw(path: str = Query(...)):
-    """[T3] 이미지 원본 바이트 — 인라인 미리보기 전용.
+async def fs_raw(request: Request, path: str = Query(...)):
+    """[T3] 원본 바이트 — 뷰어의 인라인 미리보기(이미지·SVG)와 동영상·소리 재생 전용.
 
-    **이미지가 아니면 아무것도 안 준다.** 열람 경계(fsguard)는 `/api/fs/file`과
-    같은 것을 쓰고, 그 위에 타입 화이트리스트를 하나 더 얹는다: 여기서 나간
-    바이트는 브라우저가 이 오리진의 리소스로 해석하므로 SVG·HTML을 내보내면
-    그 자체가 XSS다(fsguard.IMAGE_TYPES 주석 참고).
+    **허용 타입이 아니면 아무것도 안 준다.** 열람 경계(fsguard)는 `/api/fs/file`과 같은 것을 쓰고, 그 위에
+    타입 화이트리스트(`fsguard.raw_type` — 확장자와 매직 바이트가 둘 다 맞아야 한다)를 하나 더 얹는다: 여기서
+    나간 바이트는 브라우저가 이 오리진의 리소스로 해석하므로 HTML·PDF를 내보내면 그 자체가 XSS다. SVG는 응답에
+    `sandbox` CSP를 붙여 직접 열어도 스크립트가 돌지 않고, 화면은 `<img>`로만 그린다(결정 D8).
 
-    `Content-Disposition: inline` + `X-Content-Type-Options: nosniff`로 "이건
-    이 타입이고 다른 걸로 스니핑하지 말라"를 못 박는다.
+    Range(계획 4.6): 단일·끝에서 센 구간 → 206 + `Content-Range`, 파일 밖 → 416, 여러 구간 → 200 전체,
+    `If-Range`가 지금 ETag와 다르면 200 전체. 판정한 fd에서 조각으로 보내고, 보내는 도중 바뀌면 끊는다.
     """
     try:
-        out = await fsops.call(_raw_image, path, path=path, op="fs.raw")
-    except fsguard.FsDenied as e:
-        return _denied(e.reason)
-    except fsops.UNAVAILABLE as e:
-        return fsops.unavailable_response(e)
-    except PermissionError:
-        return _denied(tr("읽기 권한이 없습니다"))
-    except OSError as e:
-        logger.warning(f"fs_raw 실패: {e}")
-        return JSONResponse({"error": "read failed"}, status_code=500)
-    kind = out[0]
-    if kind == "missing":
-        return JSONResponse({"error": "not found"}, status_code=404)
-    if kind == "not_image":
-        return _denied(tr("이미지 파일이 아닙니다"))
-    if kind == "too_large":
+        out = await fs_stream.open_for("raw", path)
+    except _OPEN_ERRORS as e:
+        return _open_failure(e, "fs_raw")
+    if not isinstance(out, fs_stream.Opened):
+        if out[0] == "too_large":
+            return JSONResponse(
+                {"error": "too_large",
+                 "reason": tr("이미지가 너무 큽니다 (최대 {max}MB)", max=fsguard.MAX_IMAGE_BYTES // (1024*1024))},
+                status_code=413,
+            )
+        return _denied(tr("미리 볼 수 있는 파일이 아닙니다"))
+    etag = fs_stream.raw_etag(out.rev)
+    headers = _raw_headers(out.mime, etag)
+    try:
+        rng = fs_stream.parse_range(request.headers.get("range"), out.size)
+        if rng is not None and not fs_stream.if_range_matches(request.headers.get("if-range"), etag):
+            rng = None
+    except fs_stream.Unsatisfiable:
+        fs_stream.close(out)
+        return Response(status_code=416, headers={**headers, "Content-Range": f"bytes */{out.size}"})
+    start, end = rng if rng is not None else (0, out.size - 1)
+    length = max(0, end - start + 1)
+    headers["Content-Length"] = str(length)
+    status = 200
+    if rng is not None:
+        status = 206
+        headers["Content-Range"] = f"bytes {start}-{end}/{out.size}"
+    if request.method == "HEAD" or length == 0:
+        fs_stream.close(out)
+        return Response(status_code=status, headers=headers)
+    return StreamingResponse(fs_stream.stream(out, start, length, path=path, op="fs.raw.read"),
+                             status_code=status, headers=headers, media_type=out.mime)
+
+
+@router.get("/api/fs/download")
+async def fs_download(path: str = Query(...), rev: str | None = Query(None)):
+    """탐색 중인 실제 파일 내려받기(계획 4.7, 결정 D4 — 1회용 티켓 없이 인증된 GET).
+
+    - 판정과 열기는 `/api/fs/file`과 같다(`resolve_under_roots` + `open_resolved`). 노출 범위가 지금 읽기와 같고
+      크기만 크다. 내용 타입은 언제나 `application/octet-stream` + `attachment` + `nosniff` — 브라우저가 문서로
+      열지 않는다.
+    - `rev`를 주었는데 지금 판과 다르면 409 `changed`(본 것과 다른 파일을 받지 않게).
+    - 상한은 `VT_MAX_UPLOAD_MB`(업로드와 같은 값) — 넘으면 413.
+    - **이 서버의 파일만**(결정 D7). 호스트 중계 허용 목록(`relay_policy.py`)에 없어 원격 호스트로는 닿지 않는다.
+    """
+    if rev is not None and (not rev or len(rev) > fs_read.MAX_REV_LEN):
+        return JSONResponse({"error": "bad_rev", "reason": "rev is malformed"}, status_code=400)
+    cap = file_store.MAX_UPLOAD_BYTES
+    try:
+        out = await fs_stream.open_for("download", path, rev=rev, cap=cap)
+    except _OPEN_ERRORS as e:
+        return _open_failure(e, "fs_download")
+    if not isinstance(out, fs_stream.Opened):
+        if out[0] == "changed":
+            return _changed(out[1])
         return JSONResponse(
-            {"error": "too_large",
-             "reason": tr("이미지가 너무 큽니다 (최대 {max}MB)", max=fsguard.MAX_IMAGE_BYTES // (1024*1024))},
-            status_code=413,
-        )
-    _, data, mime = out
-    return Response(content=data, media_type=mime, headers={
-        "Content-Disposition": "inline",
+            {"error": "too_large", "size": out[1], "max": cap,
+             "reason": tr("파일이 너무 커서 받을 수 없습니다 (최대 {max}MB)", max=cap // (1024 * 1024))},
+            status_code=413, headers={"Cache-Control": "no-store"})
+    headers = {
+        "Content-Disposition": fs_stream.content_disposition("attachment", Path(path).name),
         "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": fsguard.RAW_CSP,
         "Cache-Control": "no-store",
-    })
+        "Content-Length": str(out.size),
+        "ETag": fs_stream.raw_etag(out.rev),
+        "X-FS-Rev": out.rev,
+    }
+    if out.size == 0:
+        fs_stream.close(out)
+        return Response(status_code=200, headers=headers, media_type="application/octet-stream")
+    return StreamingResponse(fs_stream.stream(out, 0, out.size, path=path, op="fs.download.read"),
+                             headers=headers, media_type="application/octet-stream")
 
 
 async def _read_json_body(request: Request) -> dict:
