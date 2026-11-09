@@ -13,6 +13,8 @@ preview.py:91-93 에 같은 교훈이 있다 — 동기 호출 하나가 터미�
 from __future__ import annotations
 
 import asyncio
+import base64
+import bisect
 import errno
 import json
 import logging
@@ -55,14 +57,53 @@ async def fs_roots():
 # --- 트리 --------------------------------------------------------------------
 
 
-def _list_dir(p: Path) -> dict:
-    entries = []
-    truncated = False
+# 페이지 하나의 크기(기본·최대)와 한 디렉토리에서 스캔하는 상한(계획 4.4). 예전에는 scandir 앞 1000개를 **먼저 자르고
+# 나서** 정렬해, 1000개를 넘는 폴더는 어느 1000개가 보일지가 디스크 순서에 달렸고 나머지를 볼 길이 없었다.
+# 지금은 전체(상한 5만)를 이름만으로 모아 정렬한 뒤 페이지를 자른다. 크기(`stat`)는 그 페이지 항목에만 부른다.
+PAGE_ENTRIES = fsguard.MAX_ENTRIES
+MAX_SCAN_ENTRIES = 50_000
+_CURSOR_MAX = 2048
+
+
+class BadCursor(ValueError):
+    pass
+
+
+def _sort_key(is_dir: bool, name: str) -> tuple:
+    # 폴더 먼저, 그다음 대소문자 무시 이름순, 같으면 원래 이름(커서가 항목 하나를 정확히 가리키게).
+    return (0 if is_dir else 1, name.casefold(), name)
+
+
+def encode_cursor(key: tuple) -> str:
+    raw = json.dumps([key[0], key[1], key[2]], ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def decode_cursor(cursor: str) -> tuple:
+    """`after=` 값 → 정렬 키. 모양이 틀리면 BadCursor(400). 커서는 이름만 담는다 — 경로 판정과 무관하다."""
+    if not cursor or len(cursor) > _CURSOR_MAX:
+        raise BadCursor("after is malformed")
+    try:
+        raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
+        v = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        raise BadCursor("after is malformed") from None
+    if (not isinstance(v, list) or len(v) != 3 or v[0] not in (0, 1)
+            or not isinstance(v[1], str) or not isinstance(v[2], str)):
+        raise BadCursor("after is malformed")
+    return (v[0], v[1], v[2])
+
+
+def _list_dir(p: Path, after: tuple | None = None, limit: int = PAGE_ENTRIES) -> dict:
+    """디렉토리 한 페이지. 응답: `entries`(이 페이지), `total`(스캔한 보이는 항목 수), `next`(다음 페이지 커서 또는
+    None), `capped`(스캔 상한에 닿음), `truncated`(이 응답 밖에 항목이 더 있다 — 옛 클라이언트용 뜻 그대로)."""
+    found: list[tuple[tuple, os.DirEntry]] = []
+    capped = False
     try:
         with os.scandir(p) as it:
             for de in it:
-                if len(entries) >= fsguard.MAX_ENTRIES:
-                    truncated = True
+                if len(found) >= MAX_SCAN_ENTRIES:
+                    capped = True
                     break
                 name = de.name
                 if fsguard.is_managed_profile_path(Path(de.path)):
@@ -77,17 +118,38 @@ def _list_dir(p: Path) -> dict:
                 # 거부 대상은 목록에서도 감춘다. 이름만으로도 정보가 되기 때문.
                 if not is_dir and fsguard._is_denied_name(name):
                     continue
-                try:
-                    size = de.stat(follow_symlinks=False).st_size if not is_dir else 0
-                except OSError:
-                    size = 0
-                entries.append({"name": name, "dir": is_dir, "size": size})
+                found.append((_sort_key(is_dir, name), de))
     except PermissionError:
         raise fsguard.FsDenied(tr("읽기 권한이 없습니다"))
 
-    # 디렉토리 우선, 그다음 이름순 — 파일 탐색기의 보편적 정렬.
-    entries.sort(key=lambda e: (not e["dir"], e["name"].lower()))
-    return {"path": str(p), "entries": entries, "truncated": truncated}
+    found.sort(key=lambda x: x[0])
+    start = 0
+    if after is not None:
+        start = bisect.bisect_right([k for k, _ in found], after)
+    page = found[start:start + limit]
+    entries = []
+    for key, de in page:
+        is_dir = key[0] == 0
+        size = 0
+        mtime = None
+        if not is_dir:
+            try:
+                st = de.stat(follow_symlinks=False)
+                size = st.st_size
+                mtime = st.st_mtime_ns // 1_000_000
+            except OSError:
+                pass
+        e = {"name": de.name, "dir": is_dir, "size": size}
+        if mtime is not None:
+            e["mtime"] = mtime
+        entries.append(e)
+    more = start + len(page) < len(found)
+    return {
+        "path": str(p), "entries": entries,
+        "truncated": more or capped,
+        "total": len(found), "next": encode_cursor(page[-1][0]) if more and page else None,
+        "capped": capped,
+    }
 
 
 # --- 파일명 검색 (N5/N40, 60-settings-palette.md §3 `/` 모드) ----------------
@@ -180,12 +242,12 @@ MAX_PREFETCH_DIRS = 150
 MAX_PREFETCH_CHILD_ENTRIES = 200
 
 
-def _list_dir_deep(p: Path, depth: int) -> dict:
+def _list_dir_deep(p: Path, depth: int, limit: int = PAGE_ENTRIES) -> dict:
     """_list_dir + 하위 디렉토리 목록을 depth 단계까지 `children` 에 미리 담는다.
 
     권한 없는 하위 디렉토리는 조용히 건너뛰고(펼칠 때 일반 조회가 오류를 보여준다),
     총 디렉토리 수와 항목 수 상한을 넘으면 그 아래는 미리 담지 않는다."""
-    root = _list_dir(p)
+    root = _list_dir(p, None, limit)
     budget = [MAX_PREFETCH_DIRS]
 
     def fill(listing: dict, base: Path, left: int) -> None:
@@ -200,7 +262,7 @@ def _list_dir_deep(p: Path, depth: int) -> dict:
                 sub = _list_dir(child)
             except (fsguard.FsDenied, OSError):
                 continue
-            if len(sub["entries"]) > MAX_PREFETCH_CHILD_ENTRIES:
+            if sub["total"] > MAX_PREFETCH_CHILD_ENTRIES:
                 continue
             e["children"] = sub
             fill(sub, child, left - 1)
@@ -209,19 +271,27 @@ def _list_dir_deep(p: Path, depth: int) -> dict:
     return root
 
 
-def _tree(path: str, depth: int):
+def _tree(path: str, depth: int, after: tuple | None = None, limit: int = PAGE_ENTRIES):
     p = fsguard.resolve_under_roots(path)
     if not p.is_dir():
         return None
-    return _list_dir_deep(p, depth) if depth else _list_dir(p)
+    # 다음 페이지(`after`)에는 미리 받기를 붙이지 않는다 — 미리 받기는 처음 열 때만 쓴다(계획 4.4).
+    if after is not None or not depth:
+        return _list_dir(p, after, limit)
+    return _list_dir_deep(p, depth, limit)
 
 
 @router.get("/api/fs/tree")
-async def fs_tree(path: str = Query(...), depth: int = Query(0, ge=0, le=MAX_PREFETCH_DEPTH)):
+async def fs_tree(path: str = Query(...), depth: int = Query(0, ge=0, le=MAX_PREFETCH_DEPTH),
+                  after: str | None = Query(None), limit: int = Query(PAGE_ENTRIES, ge=1, le=PAGE_ENTRIES)):
     # 경로 검증(resolve)부터 목록까지 전부 `fs` 풀에서 기한을 두고 한다 — 예전엔 resolve·is_dir 를
     # 이벤트 루프 위에서 불러, NFS 경로 하나가 서버 전체를 멈출 수 있었다.
     try:
-        out = await fsops.call(_tree, path, depth, path=path, op="fs.tree")
+        cursor = decode_cursor(after) if after is not None else None
+    except BadCursor as e:
+        return JSONResponse({"error": "bad_cursor", "reason": str(e)}, status_code=400)
+    try:
+        out = await fsops.call(_tree, path, depth, cursor, limit, path=path, op="fs.tree")
     except fsguard.FsDenied as e:
         return _denied(e.reason)
     except fsops.UNAVAILABLE as e:

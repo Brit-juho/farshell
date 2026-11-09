@@ -1,8 +1,10 @@
 // 코드 뷰어 자동 갱신 — `/ws-fs-watch` 구독(server/fs_watch.py).
 //
-// 열린 파일(`file`)·트리의 펼친 디렉토리(`dir`)·소스컨트롤의 저장소(`repo`)를
+// 열린 파일(`file`)·디렉토리(`dir`)·소스컨트롤의 저장소(`repo`)·파일 트리 루트(`tree`)를
 // 구독하면, 디스크에서 바뀌었을 때 콜백이 불린다. 서버는 "바뀌었다"만 알리고
 // 내용은 안 보낸다 — 콜백이 기존 /api/fs/*·/api/git/*로 다시 읽는다.
+// `tree`만 예외로 **바뀐 디렉토리 목록**을 함께 준다(server/fs_watch.py) — 콜백의 첫 인자가
+// `{dirs, overflow}`다. 다시 붙었을 때는 `{reconnect: true}`(목록 없음 = 받아 둔 것 전부 다시 읽기).
 //
 // 연결은 구독이 하나라도 있을 때만 연다. 마지막 구독이 풀리면 닫는다 — 뷰어를
 // 안 쓰는 동안 서버에 감시가 남지 않게. 구독 목록은 매번 **전체**를 보낸다
@@ -33,7 +35,7 @@ let _rejected = new Set();    // 서버가 거절한 구독 키(경계 밖·저�
 const _key = (kind, path) => `${kind}\n${path}`;
 
 /**
- * 경로 변경 구독. kind: 'file' | 'dir' | 'repo'. 해제 함수를 돌려준다.
+ * 경로 변경 구독. kind: 'file' | 'dir' | 'repo' | 'tree'. 해제 함수를 돌려준다.
  * 같은 (kind, path)를 여럿이 구독해도 서버 구독은 하나다.
  */
 export function watchPath(kind, path, fn) {
@@ -52,12 +54,12 @@ export function watchPath(kind, path, fn) {
   };
 }
 
-function _emit(k) {
+function _emit(k, detail) {
   const set = _subs.get(k);
   if (!set) return;
   for (const fn of Array.from(set)) {
     // 구독자 하나가 던져도 나머지와 채널은 살아 있어야 한다.
-    try { fn(); } catch (_) { /* 무시 */ }
+    try { fn(detail); } catch (_) { /* 무시 */ }
   }
 }
 
@@ -121,7 +123,7 @@ function _connect() {
     _everOpened = true;
     _sync();
     // 끊긴 동안 바뀐 것을 놓쳤을 수 있다 — 전부 한 번씩 다시 읽게 한다.
-    if (reconnected) for (const k of Array.from(_subs.keys())) _emit(k);
+    if (reconnected) for (const k of Array.from(_subs.keys())) _emit(k, { reconnect: true });
   };
   ws.onmessage = (e) => {
     liveness?.alive();
@@ -140,8 +142,12 @@ function _connect() {
     }
     if (msg && msg.type === 'error') { _failed = true; return; }
     if (!msg || msg.type !== 'changed' || !Array.isArray(msg.subs)) return;
+    // `tree` 알림은 구독 하나에 바뀐 디렉토리 목록(루트 기준 상대경로)이 붙어 온다.
+    const detail = Array.isArray(msg.dirs)
+      ? { dirs: msg.dirs.filter((d) => typeof d === 'string'), overflow: msg.overflow === true }
+      : (msg.overflow === true ? { overflow: true } : undefined);
     for (const s of msg.subs) {
-      if (s && typeof s.kind === 'string' && typeof s.path === 'string') _emit(_key(s.kind, s.path));
+      if (s && typeof s.kind === 'string' && typeof s.path === 'string') _emit(_key(s.kind, s.path), detail);
     }
   };
   ws.onclose = () => {

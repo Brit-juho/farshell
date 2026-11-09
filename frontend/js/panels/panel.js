@@ -66,7 +66,8 @@ const MOBILE_ROUTE_IDS = new Set([
 ]);
 
 // 하단 내비의 탭 화면 — 팝업이 아니라 탭이라 × 를 숨기고 상단 바 아래를 채운다(60-mobile-hud.css).
-const TAB_PANEL_IDS = new Set(['vt-dock-scm', 'vt-files', 'vt-settings']);
+// 「파일」 탭(파일 개편 단계 5)은 트리(`vt-dir`)와 첨부(`vt-files`) 둘 다 탭 화면이다 — 안쪽 「파일 | 첨부」 전환으로 오간다.
+const TAB_PANEL_IDS = new Set(['vt-dock-scm', 'vt-files', 'vt-dir', 'vt-settings']);
 
 function _withoutPanelState(state) {
   if (!state || typeof state !== 'object') return state;

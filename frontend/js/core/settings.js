@@ -122,6 +122,8 @@ export const SCHEMA = {
   // 키보드가 떠도 저절로 열지 않는다 — 사용자 결정). 기본은 닫힘.
   'keybar.open':            { type: 'bool', def: false, scope: 'device' },
   'ui.mobile.home':         { type: 'enum', def: 'fleet', values: ['fleet', 'terminal'], scope: 'device' },
+  // 파일 개편 단계 5 — 폰 아래 탭 「파일」 안의 「파일 | 첨부」 전환. 마지막에 본 쪽을 이 기기에서 다시 연다.
+  'ui.mobile.filesSegment': { type: 'enum', def: 'tree', values: ['tree', 'attach'], scope: 'device' },
 
   // ADR-44 — 파일 뷰어 표면. `pane`은 2.2.0까지의
   // 동작(터미널 옆을 쪼갠다)이라 값으로 남긴다. 표면·높이·창 위치가 폰과 맥 사이에 새면
@@ -131,6 +133,9 @@ export const SCHEMA = {
   'viewer.surface':         { type: 'enum', def: 'sheet', values: ['sheet', 'float', 'pane'], scope: 'device' },
   'viewer.sheet.height':    { type: 'int',  def: 45, min: 20, max: 85, scope: 'device' },
   'viewer.float.rect':      { type: 'str',  def: '{}', scope: 'device' },
+  // 파일 트리 행 높이 — 끄면 28px(기본), 켜면 22px(사용자 선택 4 「가」). 폰은 이 값과 무관하게 44px.
+  // 화면 밀도는 기기마다 다르므로 device.
+  'files.tree.dense':       { type: 'bool', def: false, scope: 'device' },
 
   // C1(80-multihost-agents.md §1) — 레일이 지금 보고 있는 호스트. **device 스코프**인
   // 이유가 이 파일의 존재 이유 그 자체다: `/api/workspace`는 모든 기기가 공유하는

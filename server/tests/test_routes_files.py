@@ -627,3 +627,41 @@ def test_upload_waits_for_the_store_lock_without_blocking_the_loop(client, file_
     r, gap = _loop_gaps_during(lambda ac: ac.post("/api/upload", files={"file": ("a.txt", b"hello")}))
     assert r.status_code == 200, r.text
     assert gap < 0.3, f"이벤트 루프가 {gap:.2f}초 멈췄다"
+
+
+# --- /api/fs/tree 페이지(계획 4.4) ------------------------------------------------------
+
+
+def test_fs_tree_pages_with_after_cursor(client, repo):
+    big = repo / "big"
+    big.mkdir()
+    for i in range(12):
+        (big / f"n{i:02d}.txt").write_text("")
+    (big / ".env").write_text("SECRET=1")
+    r = client.get("/api/fs/tree", params={"path": str(big), "limit": 5})
+    assert r.status_code == 200
+    first = r.json()
+    assert [e["name"] for e in first["entries"]] == [f"n{i:02d}.txt" for i in range(5)]
+    assert first["total"] == 12 and first["next"] and first["truncated"] is True
+    names = [e["name"] for e in first["entries"]]
+    nxt = first["next"]
+    while nxt:
+        page = client.get("/api/fs/tree", params={"path": str(big), "limit": 5, "after": nxt}).json()
+        assert all("children" not in e for e in page["entries"])
+        names += [e["name"] for e in page["entries"]]
+        nxt = page["next"]
+    assert names == [f"n{i:02d}.txt" for i in range(12)]   # 거부 이름(.env)은 어느 페이지에도 없다
+
+
+def test_fs_tree_rejects_bad_cursor_and_limit(client, repo):
+    r = client.get("/api/fs/tree", params={"path": str(repo), "after": "%%%"})
+    assert r.status_code == 400 and r.json()["error"] == "bad_cursor"
+    assert client.get("/api/fs/tree", params={"path": str(repo), "limit": 0}).status_code == 422
+    assert client.get("/api/fs/tree", params={"path": str(repo), "limit": 1001}).status_code == 422
+
+
+def test_fs_tree_cursor_does_not_bypass_path_check(client, repo):
+    import routes.files as F
+    cur = F.encode_cursor(F._sort_key(False, "a"))
+    r = client.get("/api/fs/tree", params={"path": "/etc", "after": cur})
+    assert r.status_code == 403

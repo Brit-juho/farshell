@@ -673,9 +673,11 @@
       <span class="vt-mnav-label" data-i18n>변경</span>
       <span class="vt-mnav-badge" id="vt-mnav-badge-changes" hidden></span>
     </button>
-    <button type="button" class="vt-mnav-btn" data-mnav="files" data-action="files.show" aria-label="첨부" aria-pressed="false" data-i18n-attr="aria-label">
-      <svg data-icon="paperclip" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
-      <span class="vt-mnav-label" data-i18n>첨부</span>
+    <!-- 파일 개편 단계 5 — 예전 「첨부」 자리. 안쪽 맨 위 「파일 | 첨부」 전환(layout/mobile-nav.js)에서 트리가 기본이고,
+         마지막에 본 쪽을 ui.mobile.filesSegment(기기 설정)가 기억한다. 올리는 중 배지는 그대로 이 탭에 붙는다. -->
+    <button type="button" class="vt-mnav-btn" data-mnav="files" data-action="mfiles.show" aria-label="파일" aria-pressed="false" data-i18n-attr="aria-label">
+      <svg data-icon="folder" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
+      <span class="vt-mnav-label" data-i18n>파일</span>
       <span class="vt-mnav-badge" id="vt-mnav-badge-files" hidden></span>
     </button>
     <button type="button" class="vt-mnav-btn" data-mnav="more" data-action="settings.show" aria-label="설정" aria-pressed="false" data-i18n-attr="aria-label">

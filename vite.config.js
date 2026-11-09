@@ -111,6 +111,9 @@ function chunkOf(id) {
     // 나머지(view·state·language·search·lezer 런타임)와 뷰어 모듈은 `editor` 하나.
     if (/\/frontend\/js\/panels\/viewer\/editor(?:-text)?\.js$/.test(p)) return 'editor';
     if (/\/node_modules\/(?:@codemirror|@lezer|@marijn|style-mod|w3c-keyname|crelt)\//.test(p)) return 'editor';
+    // 파일 트리(Solid + TS, 파일 개편 단계 5) — panels/viewer/tree.js(`dir.show`)가 패널을 열 때 import()한다.
+    // panels 규칙보다 먼저 올 필요는 없지만(폴더가 다르다) 이름이 없으면 포괄 규칙이 core로 보내 초기 페이로드가 는다.
+    if (p.includes('/frontend/js/files/')) return 'files';
     // 진짜로 "열 때" 받는 화면들. 여기 한 줄 추가하는 것만으로 지연
     // 청크가 되고, 그 모듈이 무엇을 import하든 core는 따라오지 않는다.
     if (p.includes('/frontend/js/panels/viewer/')) return 'panels';
