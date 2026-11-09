@@ -2,10 +2,9 @@
 // 파일 본문은 CodeMirror 6(`editor` 지연 청크 — editor.js)로 그린다(파일 개편 단계 2). 편집·저장은 edit.js(단계 8).
 // 받기는 `/api/fs/file` 2판의 구간·tail·rev·304·인코딩을 쓴다(file-load.js, 단계 3). 큰 파일은 앞 4MB까지 열고
 // 「더 보기」, 「끝부분 보기」, 인코딩 고르기, 터미널 링크의 줄 이동이 여기 있다.
-// hljs(`ensureHljs`·`_hl`)는 diff 화면(diff.js)만 쓴다 — diff를 옮기는 단계 9까지 남는다.
 // 미리보기(단계 7, preview.js): 마크다운·SVG·CSV는 「렌더/원문」을 위 띠에서 바꾸고(기본 렌더, (호스트, 경로)별로
 // 기억), 동영상·소리는 /api/fs/raw(Range)로 재생하고, PDF와 그 밖의 바이너리는 다운로드만 둔다(결정 D8).
-import { vtEsc, vtUrl } from '../../core/api.js';
+import { vtUrl } from '../../core/api.js';
 import {
   loadHead, loadMore, loadTail, loadProbe, growthFrom, canLoadMore, hostApiPath, mixedEol, ChangingError,
   CHUNK, OPEN_BUDGET, MAX_LOADED, TAIL_BYTES, PROBE_BYTES, INCREMENTAL_MIN,
@@ -29,35 +28,6 @@ export function _fmtSize(n) {
   if (n < 1024) return `${n}B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)}KB`;
   return `${(n / 1024 / 1024).toFixed(1)}MB`;
-}
-
-// P1: highlight.min.js(127KB)는 diff를 실제로 열 때만 불러온다. fetch와 겹쳐
-// 돌므로 체감 지연이 거의 없고, _hl()이 `!window.hljs`를 이스케이프 텍스트로
-// 안전하게 폴백하므로 로드 전에 렌더링이 일어나도 깨지지 않는다.
-let _hljsLoading = null;
-export function ensureHljs() {
-  if (window.hljs) return Promise.resolve();
-  if (!_hljsLoading) {
-    _hljsLoading = new Promise((resolve) => {
-      const el = document.createElement('script');
-      el.src = '/static/vendor/highlight.min.js';
-      el.onload = resolve;
-      el.onerror = resolve;   // 실패해도 이스케이프 폴백으로 계속 동작
-      document.head.appendChild(el);
-    });
-  }
-  return _hljsLoading;
-}
-
-// 하이라이팅. 실패하면 반드시 이스케이프된 원문으로 폴백한다 —
-// 여기서 예외가 새면 뷰어 전체가 빈 화면이 된다.
-export function _hl(text, lang) {
-  if (!lang || !window.hljs) return vtEsc(text);
-  try {
-    return hljs.highlight(text, { language: lang, ignoreIllegals: true }).value;
-  } catch (_) {
-    return vtEsc(text);
-  }
 }
 
 // ── 파일 본문: CodeMirror 6 ─────────────────────────────────────────────────────────

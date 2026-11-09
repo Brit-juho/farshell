@@ -84,6 +84,8 @@
 .vt-ft-ic { flex:none; display:inline-flex; color:var(--sub); }
 .vt-ft-row.k-dir .vt-ft-ic { color:var(--txt); }
 .vt-ft-ic.spin { width:12px; height:12px; border-radius:50%; border:2px solid var(--line); border-top-color:var(--acc); animation:vtSpin .6s linear infinite; }
+/* 옛 트리(30-viewer.css `.vt-vw-trow-spin`)와 함께 지워진 자리에서 옮겨 왔다(단계 9). */
+@keyframes vtSpin { to { transform:rotate(360deg); } }
 .vt-ft-nm { overflow:hidden; text-overflow:ellipsis; min-width:0; }
 .vt-ft-row.k-dir .vt-ft-nm { font-weight:var(--weight-semibold); }
 .vt-ft-nm mark { background:color-mix(in srgb, var(--acc) 30%, transparent); color:inherit; border-radius:2px; }

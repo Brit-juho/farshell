@@ -119,9 +119,8 @@
     return { add: add, del: del };
   }
 
-  // 확장자 → highlight.js 언어명. 모르면 null(=plaintext 폴백).
-  // 하이라이터가 예외를 던지면 뷰어 전체가 죽으므로, 호출부는 반드시 이 값이
-  // null일 때 하이라이팅을 건너뛰어야 한다.
+  // 확장자 → 언어 이름. 모르면 null(=일반 텍스트). 이름은 옛 highlight.js 이름을 그대로 쓴다 —
+  // 편집기(editor-text.js editorLangKey)가 이 이름을 CodeMirror 언어 팩 키로 바꾼다(hljs는 단계 9에서 지웠다).
   var EXT_LANG = {
     py: 'python', pyi: 'python',
     js: 'javascript', mjs: 'javascript', cjs: 'javascript', jsx: 'javascript',

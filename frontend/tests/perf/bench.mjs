@@ -6,13 +6,14 @@
 // 를 부른다(옛 트리 `viewer/tree.js` showTree의 수치는 session-view-measurements.md 7.5에 남아 있다).
 //
 // 재는 구간: 요청 시작(가짜 서버, 실제 HTTP + JSON 파싱) → DOM 생성 → 다음 페인트.
-// 빠지는 것: 지연 청크 다운로드(편집기 모듈과 JS 언어 팩, hljs 스크립트는 측정 전에 미리 불러 둔다).
+// 빠지는 것: 지연 청크 다운로드(편집기 모듈과 JS 언어 팩은 측정 전에 미리 불러 둔다). 단계 9부터 diff 하이라이트도
+// 같은 언어 팩을 쓴다(hljs 제거).
 import '/static/js/core/env.js';   // window.API_BASE 등
 import * as viewerFile from '/static/js/panels/viewer/file.js';
 import { _renderDiffDOM } from '/static/js/panels/viewer/diff.js';
 import { coalesce, watchPath } from '/static/js/shell/fs-watch.js';
 
-const { renderFile, refreshFile, ensureHljs, loadEditor } = viewerFile;
+const { renderFile, refreshFile, loadEditor } = viewerFile;
 // 자동 갱신의 최소 간격(file.js refreshGap) — 그것이 없던 판과 비교해 잴 수 있게 없으면 0.
 const refreshGap = viewerFile.refreshGap || (() => 0);
 const TREE_ROOT = '/bench/tree';
@@ -110,8 +111,12 @@ async function diff5000() {
   const t0 = performance.now();
   const { diff } = await (await fetch('/__data/diff')).json();
   _renderDiffDOM(host, diff);
+  // 단계 9부터 문맥 줄 하이라이트가 언어 팩(Promise)을 거쳐 온다 — 칠해진 뒤의 페인트까지 잰다(옛 hljs는 동기였다).
+  if (host._vtDiff) await host._vtDiff.highlighted;
   const t1 = await nextPaint();
-  return { paintMs: Math.round(t1 - t0), ...(await common(t0, t1)) };
+  const rows = host.querySelectorAll('.vt-vw-dl').length;
+  if (!host.querySelector('.vt-vw-tx [class^="tok-"], .vt-vw-tx [class^="hljs-"]')) throw new Error('diff 문맥 줄이 하이라이트되지 않았다');
+  return { paintMs: Math.round(t1 - t0), domRows: rows, ...(await common(t0, t1)) };
 }
 
 // --- 파일 트리(단계 5, files/mount.tsx) ---------------------------------------------------
@@ -274,7 +279,6 @@ const SCENARIOS = {
 };
 
 window.perfReady = (async () => {
-  await ensureHljs();   // diff 시나리오가 쓴다
   const editor = await loadEditor();
   await editor.loadLanguage('javascript');   // 측정 파일이 모두 .js 다
   await nextPaint();
