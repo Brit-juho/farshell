@@ -38,7 +38,7 @@ export interface PaletteDeps {
   listSessions: () => SessionTab[];
   getSession: (id: string) => any;
   switchTo: (id: string) => void;
-  loadViewer: () => Promise<{ _loadRecent: () => string[]; _hl: (text: string, lang?: string | null) => string }>;
+  loadViewer: () => Promise<{ _loadRecent: () => string[] }>;
   openFile: (path: string, opts?: { line?: number; col?: number; host?: string }) => void;
   openFileInPane: (path: string, opts?: { line?: number; col?: number }) => void;
   /** 지금 화면이 보는 호스트(`relayHost()`) — 내용 검색 결과를 그 호스트의 파일로 연다. */

@@ -142,6 +142,22 @@ test('캐시 키가 bump 돼 있다 (vendor는 SWR이라 필수)', () => {
   assert.ok(Number(m[1]) >= 6, `캐시 키가 v6 미만이다(v${m[1]})`);
 });
 
+// 파일 개편 단계 9 — vendor/highlight.min.js를 지우면서 PRECACHE에서도 뺐다(키 v11). 목록에 지운 파일이 남으면
+// install의 addAll이 통째로 실패해(catch로 삼킨다) 아무것도 미리 받지 못한다.
+test('PRECACHE의 /static/ 파일이 전부 저장소에 있고, hljs는 없다', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
+  const m = /const PRECACHE = \[([\s\S]*?)\];/.exec(src);
+  assert.ok(m, 'PRECACHE 목록을 찾을 수 없다');
+  const urls = [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]);
+  assert.ok(urls.length > 0);
+  for (const u of urls) {
+    assert.ok(u.startsWith('/static/'), u);
+    assert.ok(fs.existsSync(path.join(__dirname, '..', u.slice('/static/'.length))), `${u} 파일이 없다`);
+  }
+  assert.ok(!urls.some((u) => u.includes('highlight')), 'highlight.js가 PRECACHE에 남아 있다');
+  assert.ok(Number(/const CACHE = 'vt-static-v(\d+)'/.exec(src)[1]) >= 11, 'hljs를 뺀 뒤 캐시 키를 올리지 않았다');
+});
+
 // 2026-09-18 — 실제로 난 사고를 잠근다. icon-192/512.png와 /favicon.ico가
 // "vendor immutable" stale-while-revalidate 경로에 있었다. SWR은 캐시가 먼저
 // 답하므로, 마이크 아이콘을 FarShell 마크로 바꿨는데도 이미 방문한 브라우저에는

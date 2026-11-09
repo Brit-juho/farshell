@@ -30,7 +30,7 @@ function _isHigh(c) { return c >= 0xd800 && c <= 0xdbff; }
 function _isLow(c) { return c >= 0xdc00 && c <= 0xdfff; }
 
 /**
- * 하이라이트 언어 키. `VTDiffLex.langForPath`(hljs 이름)를 그대로 따르고, 확장자로만 갈리는 변형
+ * 하이라이트 언어 키. `VTDiffLex.langForPath`(옛 highlight.js 이름)를 그대로 따르고, 확장자로만 갈리는 변형
  * (tsx·jsx, html과 xml)만 덧붙인다. 모르는 확장자는 null(일반 텍스트).
  */
 export function editorLangKey(path, hljsName) {

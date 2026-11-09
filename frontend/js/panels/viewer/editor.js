@@ -17,10 +17,11 @@
 import { EditorState, Compartment, StateEffect, StateField } from '@codemirror/state';
 import { EditorView, Decoration, lineNumbers, highlightSpecialChars, keymap } from '@codemirror/view';
 import { syntaxHighlighting, StreamLanguage } from '@codemirror/language';
-import { classHighlighter } from '@lezer/highlight';
+import { classHighlighter, highlightCode } from '@lezer/highlight';
 import { search, searchKeymap } from '@codemirror/search';
 import { history, historyKeymap, defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { t } from '../../core/i18n.js';
+import { vtEsc } from '../../core/api.js';
 import { textChange, editorLangKey } from './editor-text.js';
 
 // 언어 팩은 쓸 때만 평가한다. 청크는 같지만(번들 크기는 단계 2에서 실측) 파서 초기화 비용을 열지 않은 언어에
@@ -121,6 +122,30 @@ export function loadLanguage(key) {
     }));
   }
   return _langCache.get(key);
+}
+
+/**
+ * diff 문맥 줄 하이라이트(파일 개편 단계 9 — hljs를 대신한다). 파일 보기와 같은 언어 팩·같은 `tok-*` 클래스라
+ * 두 화면의 색이 같다. 돌려주는 함수 `(text) => 줄마다 HTML[]`는 글자를 이스케이프하고 `<span class="tok-…">`만
+ * 붙인다. 모르는 언어이거나 언어 팩을 못 받으면 null. 분석이 실패하면 그 덩어리만 null(글자만 그린다).
+ */
+export async function highlighterFor(path, hljsName) {
+  const lang = await loadLanguage(editorLangKey(path, hljsName));
+  if (!lang) return null;
+  return (text) => {
+    const out = [];
+    let cur = '';
+    try {
+      highlightCode(text, lang.parser.parse(text), classHighlighter,
+        (s, cls) => { cur += cls ? `<span class="${cls}">${vtEsc(s)}</span>` : vtEsc(s); },
+        () => { out.push(cur); cur = ''; });
+    } catch (e) {
+      console.warn('[FarShell diff] highlight failed', e);
+      return null;
+    }
+    out.push(cur);
+    return out;
+  };
 }
 
 // CM 화면 문구(찾기 창, 줄 이동, 제어 문자 설명). 읽기 전용이라 바꾸기 관련 문구는 나타나지 않는다.

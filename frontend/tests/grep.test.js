@@ -111,7 +111,7 @@ function paletteDeps(doc, fetchImpl) {
       return fetchImpl(path, opts);
     },
     getAction: () => undefined, gateOk: () => true, listSessions: () => [], getSession: () => null,
-    switchTo: () => {}, loadViewer: async () => ({ _loadRecent: () => [], _hl: (t) => t }),
+    switchTo: () => {}, loadViewer: async () => ({ _loadRecent: () => [] }),
     openFile: (p, o) => calls.openFile.push({ p, o }), openFileInPane: (p, o) => calls.openFileInPane.push({ p, o }),
     splitActivePane: () => 'pane-2', setPaneSession: () => {},
     buildSessionCard: () => doc.createElement('div'), updateSessionCard: () => {},

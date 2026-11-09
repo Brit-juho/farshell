@@ -89,7 +89,7 @@ function fakeDeps(doc, overrides = {}) {
     listSessions: overrides.listSessions || (() => []),
     getSession: overrides.getSession || (() => null),
     switchTo: (id) => calls.switchTo.push(id),
-    loadViewer: overrides.loadViewer || (async () => ({ _loadRecent: () => [], _hl: (t) => t })),
+    loadViewer: overrides.loadViewer || (async () => ({ _loadRecent: () => [] })),
     openFile: (p) => calls.openFile.push(p),
     openFileInPane: (p) => calls.openFileInPane.push(p),
     splitActivePane: overrides.splitActivePane || (() => 'pane-2'),
@@ -271,7 +271,7 @@ test('명령을 실행하면 「최근 사용 기능」으로 기본 화면 위�
 test('`/` 접두사 — 최근 파일 + 서버 검색 결과(디바운스 후)', async () => {
   const { mountPalette, document, root } = await mountFresh();
   const deps = fakeDeps(document, {
-    loadViewer: async () => ({ _loadRecent: () => ['/repo/old.py'], _hl: (t) => t }),
+    loadViewer: async () => ({ _loadRecent: () => ['/repo/old.py'] }),
     vtFetch: async (path) => {
       if (path.includes('/api/fs/search')) return { results: [{ path: '/repo/src/needle.py', name: 'needle.py' }] };
       return {};
@@ -438,7 +438,7 @@ test('Tab — 파일/스크롤백 결과를 큐로 보낸다', async () => {
   const { mountPalette, document, window, root } = await mountFresh();
   const queuePosts = [];
   const deps = fakeDeps(document, {
-    loadViewer: async () => ({ _loadRecent: () => ['/repo/notes.md'], _hl: (t) => t }),
+    loadViewer: async () => ({ _loadRecent: () => ['/repo/notes.md'] }),
     vtFetch: async (path, opts) => {
       if (opts && opts.method === 'POST' && path.includes('/api/queue')) {
         queuePosts.push(JSON.parse(opts.body));
@@ -468,7 +468,7 @@ async function openFileRow(mods) {
   const { mountPalette, document, window, root } = await mountFresh();
   const splits = [];
   const deps = fakeDeps(document, {
-    loadViewer: async () => ({ _loadRecent: () => ['/repo/notes.md'], _hl: (t) => t }),
+    loadViewer: async () => ({ _loadRecent: () => ['/repo/notes.md'] }),
     splitActivePane: (dir) => { splits.push(dir); return 'pane-2'; },
   });
   const api = mountPalette(root, deps);

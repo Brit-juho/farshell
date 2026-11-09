@@ -20,7 +20,10 @@
 //     **이미 설치된 사용자는 계속 마이크를 본다** — 캐시가 먼저 응답하고
 //     갱신은 다음 방문에야 반영된다. activate가 CACHE와 다른 키를 전부 지우므로
 //     이 한 줄이 옛 아이콘을 확실히 몰아낸다.
-const CACHE = 'vt-static-v10';
+// v11(2026-11-09, 파일 개편 단계 9): diff 하이라이트가 편집기 청크(lezer)로 옮겨 가 vendor/highlight.min.js를
+//     지웠다. PRECACHE에서도 뺀다. 키를 올려야 이미 설치된 브라우저의 옛 캐시(지운 파일이 든)가 activate에서
+//     지워진다 — 안 올리면 새 서비스 워커가 설치되지 않아 옛 항목이 그대로 남는다.
+const CACHE = 'vt-static-v11';
 
 const PRECACHE = [
   '/static/icon-192.png',
@@ -33,7 +36,6 @@ const PRECACHE = [
   '/static/vendor/addon-canvas.min.js',
   '/static/vendor/nacl.min.js',
   '/static/vendor/nacl-util.min.js',
-  '/static/vendor/highlight.min.js',
 ];
 
 self.addEventListener('install', (e) => {
