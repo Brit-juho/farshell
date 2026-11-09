@@ -75,7 +75,12 @@ function FilesSide(props: { deps: FileTreeDeps; host: string; watch?: TreeStoreD
       <Show when={hint}><span class="vt-fs-seg-key">{hint}</span></Show>
     </button>
   );
+  // 폰(좁은 화면) · 터치 기기에는 물리 키보드가 없다 — 단축키 힌트를 적지 않는다.
+  const touchOnly = () => {
+    try { return !!window.matchMedia?.('(pointer:coarse)').matches; } catch (_) { return false; }
+  };
   const comboHint = () => {
+    if (props.deps.mobile() || touchOnly()) return '';
     try { return (window as any).vtContentSearchHint?.() || ''; } catch (_) { return ''; }
   };
   return (
