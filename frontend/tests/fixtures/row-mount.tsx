@@ -3,9 +3,23 @@
 import { render } from 'solid-js/web';
 import { NativeChildren } from '../../js/shell/NativeChildren.js';
 import { Row, Menu } from '../../js/shell/RailRow.js';
+import { ViewGroup } from '../../js/shell/ViewGroup.js';
 
 export function mountRow(root: HTMLElement, props: Parameters<typeof Row>[0]) {
   return render(() => <Row {...props} />, root);
+}
+
+/** 묶음 머리(ViewGroup) — 접힘 토글이 있으면 캐럿 버튼, 접히면 구성원 행을 그리지 않는다. */
+export function mountViewGroup(
+  root: HTMLElement,
+  opts: { label: string; rows: string[]; collapsed?: () => boolean; onToggle?: () => void; onOpen?: () => void },
+) {
+  return render(() => (
+    <ViewGroup group={{ id: 'v1', label: opts.label, rows: [] as any }} onOpen={opts.onOpen || (() => {})}
+      collapsed={opts.collapsed?.()} onToggle={opts.onToggle}>
+      {opts.rows.map((r) => <div class="member">{r}</div>)}
+    </ViewGroup>
+  ), root);
 }
 
 export function mountMenu(root: HTMLElement, props: Parameters<typeof Menu>[0]) {

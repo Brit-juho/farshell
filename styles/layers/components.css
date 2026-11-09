@@ -518,6 +518,13 @@
   .vt-view-group { margin: var(--spacing) 0 calc(var(--spacing) * 2); border-bottom: 1px solid var(--color-line); }
   .vt-view-group-head { display: flex; align-items: center; gap: calc(var(--spacing) * 1.5); min-width: 0; min-height: 28px; padding: 0 calc(var(--spacing) * 2.5); }
   .vt-view-group-ico { display: inline-flex; flex: none; color: var(--color-muted); }
+  /* 묶음 접기 캐럿 — 구역 머리 캐럿과 같은 관용구(chevron-down을 돌린다). */
+  .vt-view-group-toggle { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 16px; height: 20px; padding: 0; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--color-muted); cursor: pointer; }
+  .vt-view-group-toggle svg { transition: transform var(--dur-fast) var(--ease-out-quint); }
+  .vt-view-group-toggle.collapsed svg { transform: rotate(-90deg); }
+  .vt-view-group-toggle:hover { color: var(--color-txt); }
+  .vt-view-group-toggle:focus-visible { outline: 2px solid var(--color-acc); outline-offset: 1px; }
+  @media (prefers-reduced-motion: reduce) { .vt-view-group-toggle svg { transition: none; } }
   .vt-view-group-rename { display: inline-flex; align-items: center; justify-content: center; }
   .vt-view-group-title { flex: 1; min-width: 0; padding: 0; text-align: left; background: transparent; border: 0; color: var(--color-sub); font: var(--weight-medium) var(--fs-xs) / var(--leading-row) var(--font-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
   .vt-view-group-title:hover { color: var(--color-txt); }
@@ -555,6 +562,10 @@
   .vt-srow-since { flex: none; font-variant-numeric: tabular-nums; }
   .vt-srow-since::before { content: "·"; margin-right: calc(var(--spacing) * 1.5); opacity: .6; }
   .vt-srow-origin { margin-left: auto; }
+  /* 만든 곳 글(시안 D02 3줄 「다른 맥에서 만듦」) — 자리가 모자라면 글이 먼저 줄고 아이콘은 남는다. */
+  .vt-srow-origin.with-text { flex: 0 1 auto; min-width: 0; align-items: center; gap: 3px; }
+  .vt-srow-origin-ico { display: inline-flex; flex: none; }
+  .vt-srow-origin-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .vt-srow-view { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* 「다른 화면 N」 — 아이콘 + 글자(시안 D02 4줄). 상자를 두르지 않는다: 줄 자체가 이 정보 하나다. */
   .vt-srow-screens {

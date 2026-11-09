@@ -4967,5 +4967,8 @@ window.__VT_I18N = {
   "오른쪽에 고정(나란히 보기)": "Pin to the right (side by side)",
   "오른쪽 고정 해제": "Unpin from the right",
   "오른쪽에 고정됨": "Pinned to the right",
-  "오른쪽 고정: {name}": "Pinned on the right: {name}"
+  "오른쪽 고정: {name}": "Pinned on the right: {name}",
+  "{label} 묶음 접기": "Collapse group {label}",
+  "{label} 묶음 펼치기": "Expand group {label}",
+  "직접 만듦": "Created directly"
 };

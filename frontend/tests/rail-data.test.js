@@ -434,13 +434,32 @@ test('pickRecentEnded — 보관된 것과 실행 중인 것을 빼고 최근 �
 
 test('parseRailView — 값이 없거나 깨지면 기본값(5개, 묶지 않음, 펼침)', async () => {
   const { parseRailView, encodeRailView } = await mod();
-  const d = { byRepo: false, recent: 5, recentCollapsed: false };
-  assert.deepStrictEqual({ ...parseRailView('') }, d);
-  assert.deepStrictEqual({ ...parseRailView('{') }, d);
-  assert.deepStrictEqual({ ...parseRailView(undefined) }, d);
+  const flat = (v) => ({ ...v, groupsCollapsed: Array.from(v.groupsCollapsed) });
+  const d = { byRepo: false, recent: 5, recentCollapsed: false, runningCollapsed: false, groupsCollapsed: [] };
+  assert.deepStrictEqual(flat(parseRailView('')), d);
+  assert.deepStrictEqual(flat(parseRailView('{')), d);
+  assert.deepStrictEqual(flat(parseRailView(undefined)), d);
   for (const bad of [0, -1, 51, 2.5, '9x', null]) assert.strictEqual(parseRailView(JSON.stringify({ recent: bad })).recent, 5);
-  const v = { byRepo: true, recent: 12, recentCollapsed: true };
-  assert.deepStrictEqual({ ...parseRailView(encodeRailView(v)) }, v);
+  const v = { byRepo: true, recent: 12, recentCollapsed: true, runningCollapsed: true, groupsCollapsed: ['v1', 'v2'] };
+  assert.deepStrictEqual(flat(parseRailView(encodeRailView(v))), v);
+});
+
+test('parseRailView — 옛 저장값(접힘 필드 없음)은 펼침, 묶음 접힘은 문자열 id만 200개까지', async () => {
+  const { parseRailView, encodeRailView, toggleGroupCollapsed } = await mod();
+  const old = parseRailView(JSON.stringify({ byRepo: false, recent: 5, recentCollapsed: true }));
+  assert.strictEqual(old.runningCollapsed, false);
+  assert.deepStrictEqual(Array.from(old.groupsCollapsed), []);
+  assert.strictEqual(old.recentCollapsed, true, '기존 값은 그대로');
+  const mixed = parseRailView(JSON.stringify({ groupsCollapsed: ['a', 1, null, '', 'b'] }));
+  assert.deepStrictEqual(Array.from(mixed.groupsCollapsed), ['a', 'b']);
+  const many = Array.from({ length: 250 }, (_, i) => `v${i}`);
+  const enc = JSON.parse(encodeRailView({ ...old, groupsCollapsed: many }));
+  assert.strictEqual(enc.groupsCollapsed.length, 200);
+  assert.strictEqual(enc.groupsCollapsed[0], 'v50', '넘치면 오래된 것부터 빠진다');
+  assert.deepStrictEqual(Array.from(toggleGroupCollapsed(['a'], 'b')), ['a', 'b']);
+  assert.deepStrictEqual(Array.from(toggleGroupCollapsed(['a', 'b'], 'a')), ['b']);
+  const same = ['a'];
+  assert.strictEqual(toggleGroupCollapsed(same, ''), same, '빈 id(묶음 아님)는 무시');
 });
 
 test('rowMenuItems — 카탈로그에 이어진 행만 작업 기록을 갖고, 열려 있지 않아도 이름 변경이 된다', async () => {

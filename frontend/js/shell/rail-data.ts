@@ -214,6 +214,12 @@ export const ORIGIN_LABEL: Record<Origin, string> = {
   peer: t('다른 맥에서 만듦'),
   external: t('직접 만듦 (CLI·tmux)'),
 };
+/** 행 3줄에 아이콘과 함께 쓰는 짧은 글(시안 D02). 긴 문장(ORIGIN_LABEL)은 툴팁과 스크린 리더가 읽는다.
+ * 서버가 peer 세션을 만든 맥의 이름을 기록하지 않아 「m5-studio에서 만듦」이 아니라 「다른 맥에서 만듦」이다. */
+export const ORIGIN_SHORT: Record<Exclude<Origin, 'local'>, string> = {
+  peer: t('다른 맥에서 만듦'),
+  external: t('직접 만듦'),
+};
 
 /** 서버 값이 없거나(구버전 서버) 모르는 값이면 local — 모든 행에 외부 아이콘이 붙는 것보다 안전하다. */
 export function normalizeOrigin(v: unknown): Origin {
@@ -343,11 +349,15 @@ export function encodeLineagePrefs(collapsed: string[], closedOpen: string[]): s
   return JSON.stringify({ collapsed: collapsed.slice(0, 200), closedOpen: closedOpen.slice(0, 200) });
 }
 
-/** 기기별 설정 하나에 `{"byRepo":bool,"recent":N,"recentCollapsed":bool}`. 키를 아끼려고 JSON 한 덩어리로 묶는다(LINEAGE_KEY와 같은 이유). */
+/** 기기별 설정 하나에 `{"byRepo":bool,"recent":N,"recentCollapsed":bool,"runningCollapsed":bool,"groupsCollapsed":[묶음 id…]}`.
+ * 키를 아끼려고 JSON 한 덩어리로 묶는다(LINEAGE_KEY와 같은 이유). 접힘은 폰에서 접은 것이 맥에 새면 안 되므로 기기별이다.
+ * 「실행 중」 구역 접힘은 행 수를 세는 머리만 남기고, 묶음 접힘은 묶음 id(layout/store.js의 뷰 id)로 기억한다 —
+ * 묶음 제목은 바뀔 수 있고 같은 제목의 묶음이 둘일 수 있다. 사라진 묶음의 id는 남아도 무해하다(200개에서 자른다). */
 export const VIEW_KEY = 'rail.view';
 export const RECENT_DEFAULT = 5;
 export const RECENT_MAX = 50;
-export interface RailView { byRepo: boolean; recent: number; recentCollapsed: boolean }
+export const GROUPS_COLLAPSED_MAX = 200;
+export interface RailView { byRepo: boolean; recent: number; recentCollapsed: boolean; runningCollapsed: boolean; groupsCollapsed: string[] }
 export function parseRailView(v: unknown): RailView {
   const o = parseObj(v);
   const n = Number(o.recent);
@@ -355,10 +365,20 @@ export function parseRailView(v: unknown): RailView {
     byRepo: o.byRepo === true,
     recent: Number.isInteger(n) && n >= 1 && n <= RECENT_MAX ? n : RECENT_DEFAULT,
     recentCollapsed: o.recentCollapsed === true,
+    runningCollapsed: o.runningCollapsed === true,
+    groupsCollapsed: parseNameList(o.groupsCollapsed).filter(Boolean).slice(0, GROUPS_COLLAPSED_MAX),
   };
 }
 export function encodeRailView(v: RailView): string {
-  return JSON.stringify({ byRepo: v.byRepo, recent: v.recent, recentCollapsed: v.recentCollapsed });
+  return JSON.stringify({
+    byRepo: v.byRepo, recent: v.recent, recentCollapsed: v.recentCollapsed,
+    runningCollapsed: !!v.runningCollapsed, groupsCollapsed: (v.groupsCollapsed || []).slice(-GROUPS_COLLAPSED_MAX),
+  });
+}
+/** 묶음 하나의 접힘을 뒤집은 새 목록. 새로 접은 것은 끝에 붙어, 자를 때 오래된 것부터 빠진다. */
+export function toggleGroupCollapsed(list: string[], id: string): string[] {
+  if (!id) return list;
+  return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
 }
 
 export interface RailPrefs {

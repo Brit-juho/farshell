@@ -550,8 +550,10 @@ count mono 11, actions on the right; 개입 필요 is amber. Grouped views use t
    change size (`+add` in `st-working`, `−del` in `st-error`, or `파일 N`). With no context yet:
    「정보 갱신 대기」 (`faint`).
 3. **State keyword** 12/600 · 도구: name (the one place allowed to ellipsize) · badge chip · internal
-   subagent chip (「내부 2 작업 중」, `st-working` tint) · share mark · **origin icon** (local has none;
-   `laptop` = created on another Mac, `square-terminal` = CLI / plain tmux).
+   subagent chip (「내부 2 작업 중」, `st-working` tint) · share mark · **origin icon + short text** (local has none;
+   `laptop` 「다른 맥에서 만듦」, `square-terminal` 「직접 만듦」; the text ellipsizes first, the tooltip keeps the long
+   sentence). The server does not record which Mac created a peer session, so the mock's 「m5-studio에서 만듦」
+   reads 「다른 맥에서 만듦」. The phone's Fleet keeps the icon only.
 4. Only when applicable: 「다른 화면 N」 (`monitor-smartphone`) and the non-web attach count (`terminal`).
 
 The state keyword is short and fixed so it is never truncated: 승인 요청 / 선택 요청 / 계획 확인 / 질문
@@ -578,6 +580,11 @@ indent and line: state icon 16 · name 13/500 · elapsed, then 「내부 · 작�
 Ended rows (`StoppedRow`) use the same columns with the dashed state circle and a `sub` name; their
 action line (다시 확인 · 보관 해제 · 이어서 시작 — only 이어서 시작 is accent-filled) appears on hover or
 focus with a fine pointer and is always shown on touch.
+
+**Collapsing.** The 「실행 중」 head is a toggle like 「개입 필요」 (caret · label · count; the sort switch stays), and
+each grouped view has its own caret before the group icon (the title still opens the group; collapsed groups keep
+their head and count). Both are device-scoped in `rail.view` (`runningCollapsed`, `groupsCollapsed` = view ids,
+newest 200).
 
 The ⋯ button and right-click open the same menu (`rowMenuItems`: 열기/닫기 · 이름 변경 ·
 맥에서 열기 · 연결된 화면 · 종료). **레일 설정** (sliders) holds 개입 필요 on/off, show or hide sessions

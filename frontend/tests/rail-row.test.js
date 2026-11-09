@@ -68,6 +68,12 @@ test('행 해부 — 아이콘 열 + 1줄 이름·경과·⋯, 2줄 브랜치(ma
   assert.strictEqual(l3.querySelector('.vt-srow-kw').textContent, '승인 요청');
   assert.strictEqual(l3.querySelector('.vt-srow-since'), null, '경과는 3줄에 다시 나오지 않는다');
   assert.strictEqual(l3.querySelector('.vt-srow-origin').dataset.origin, 'external');
+  // 만든 곳은 아이콘 + 짧은 글(시안 D02 3줄). 글이 읽히고 아이콘은 장식, 툴팁은 긴 문장.
+  const origin = l3.querySelector('.vt-srow-origin');
+  assert.strictEqual(origin.querySelector('.vt-srow-origin-text').textContent, '직접 만듦');
+  assert.ok(origin.querySelector('.vt-srow-origin-ico[aria-hidden="true"] svg'));
+  assert.strictEqual(origin.dataset.tip, '직접 만듦 (CLI·tmux)');
+  assert.strictEqual(origin.getAttribute('role'), null, '글이 있으니 img 역할로 감싸지 않는다');
   // 옛 요소는 없다.
   assert.strictEqual(root.querySelector('.vt-wgrail-bar'), null);
   assert.strictEqual(root.querySelector('.vt-srow-tmux'), null);
@@ -262,4 +268,48 @@ test('내부 에이전트는 기록 조회로, 위임 세션은 별도 레이블
   env.mountRow(root, { row, kidsCount: 1, progress: { reported: 0, open: 1 }, onToggleKids() {}, onOpen() {}, onContext() {} });
   assert.match(root.querySelector('.vt-srow-kids').textContent, /위임 보고 0\/1/);
   assert.match(root.querySelector('.vt-native-chip').textContent, /내부 1 작업 중/);
+});
+
+test('다른 맥에서 만든 행 — 3줄에 노트북 아이콘 + 「다른 맥에서 만듦」', async () => {
+  const { root } = await mount({ origin: 'peer' });
+  const origin = root.querySelector('.vt-srow-line3 .vt-srow-origin');
+  assert.strictEqual(origin.dataset.origin, 'peer');
+  assert.strictEqual(origin.querySelector('.vt-srow-origin-text').textContent, '다른 맥에서 만듦');
+});
+
+test('묶음 머리 — 접기 캐럿이 있으면 aria-expanded로 말하고, 접으면 구성원 행을 그리지 않는다(머리·개수는 남는다)', async () => {
+  const env = await loadSolidBuild();
+  _envs.push(env);
+  const { document } = env;
+  const root = document.createElement('div');
+  document.body.appendChild(root);
+  let collapsed = false;
+  let opened = 0;
+  const render = () => {
+    root.replaceChildren();
+    env.mountViewGroup(root, { label: 'api · web', rows: ['a', 'b'], collapsed: () => collapsed, onToggle: () => { collapsed = !collapsed; render(); }, onOpen: () => { opened += 1; } });
+  };
+  render();
+  const toggle = () => root.querySelector('.vt-view-group-toggle');
+  assert.strictEqual(toggle().getAttribute('aria-expanded'), 'true');
+  assert.strictEqual(toggle().getAttribute('aria-label'), 'api · web 묶음 접기');
+  assert.strictEqual(root.querySelectorAll('.member').length, 2);
+  toggle().click();
+  assert.strictEqual(toggle().getAttribute('aria-expanded'), 'false');
+  assert.ok(toggle().classList.contains('collapsed'));
+  assert.strictEqual(root.querySelectorAll('.member').length, 0);
+  assert.strictEqual(root.querySelector('.vt-view-group-title').textContent, 'api · web', '머리는 남는다');
+  assert.strictEqual(opened, 0, '접기는 묶음 열기와 다른 단추다');
+  root.querySelector('.vt-view-group-title').click();
+  assert.strictEqual(opened, 1);
+});
+
+test('묶음 머리 — 접기를 넘기지 않으면(폰 Fleet) 캐럿이 없고 행은 늘 보인다', async () => {
+  const env = await loadSolidBuild();
+  _envs.push(env);
+  const root = env.document.createElement('div');
+  env.document.body.appendChild(root);
+  env.mountViewGroup(root, { label: 'g', rows: ['a', 'b'] });
+  assert.strictEqual(root.querySelector('.vt-view-group-toggle'), null);
+  assert.strictEqual(root.querySelectorAll('.member').length, 2);
 });

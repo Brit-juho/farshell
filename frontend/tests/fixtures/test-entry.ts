@@ -15,10 +15,10 @@ export {
   worktreeIconName, diffLabel, KIND_LABEL, BADGE_LABEL, normalizeShare, shareSentence, groupSessionRows,
   normalizeLineage, lineageLabel, buildSessionTree, kidsProgress, moveInOrder, stepInOrder, parseNameList,
   ORDER_KEY, LINEAGE_KEY, encodeOrder, encodeLineagePrefs,
-  splitRunning, pickRecentEnded, parseRailView, encodeRailView,
+  splitRunning, pickRecentEnded, parseRailView, encodeRailView, toggleGroupCollapsed, ORIGIN_SHORT,
 } from '../../js/shell/rail-data.js';
 export { collectSessionRows } from '../../js/shell/rail-fetch.js';
-export { mountRow, mountMenu, mountNativeChildren, mountFleetRow } from './row-mount.js';
+export { mountRow, mountMenu, mountNativeChildren, mountFleetRow, mountViewGroup } from './row-mount.js';
 export {
   parseQuery, fuzzyMatch, PLACEHOLDER, PREFIX_MODE, MODE_PREFIX, MODE_HINT,
   DEFAULT_COMMANDS, SETTINGS_COMMANDS, panelCommands,
