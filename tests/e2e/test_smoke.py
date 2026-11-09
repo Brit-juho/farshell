@@ -2718,11 +2718,12 @@ def test_파일_트리는_보이는_행만_그리고_페이지와_aria_tree와_�
     page.locator("#vt-dir .vt-ft-filter input").fill("n0042")
     page.wait_for_function("() => document.querySelectorAll('#vt-dir .vt-ft-row').length === 1", timeout=5000)
     assert page.locator("#vt-dir .vt-ft-cnt").inner_text() == "1개"
-    # 행 메뉴 — 오른쪽 클릭. 다운로드는 단계 7에서 더했다. 새 파일은 아직 없다.
+    # 행 메뉴 — 오른쪽 클릭. 다운로드는 단계 7, 새 파일·이름 바꾸기·휴지통은 단계 8에서 더했다.
     page.locator("#vt-dir .vt-ft-row.k-file").click(button="right")
     page.wait_for_selector('.vt-ft-menu[role="menu"]', timeout=5000)
     labels = page.locator('.vt-ft-menu [role="menuitem"] .vt-ft-mi-l').all_text_contents()
-    assert labels == ["열기", "터미널에 경로 삽입", "경로 복사", "다운로드", "공유 링크 만들기…", "새로고침"], labels
+    assert labels == ["열기", "터미널에 경로 삽입", "경로 복사", "다운로드", "공유 링크 만들기…",
+                      "이 폴더에 새 파일…", "이름 바꾸기…", "휴지통으로 이동…", "새로고침"], labels
     page.keyboard.press("Escape")
     page.wait_for_function("() => !document.querySelector('.vt-ft-menu')", timeout=5000)
 
