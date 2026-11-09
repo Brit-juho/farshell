@@ -926,6 +926,9 @@ body.vt-resizing #terminal-container{ transition:none; }
 }
 
 /* CSV 표 — 텍스트로만 그리는 가상 표(머리 고정, 숫자 오른쪽 맞춤 · --color-term-amber). */
+/* 표가 든 칸은 내용만큼 늘어나고 스크롤은 바깥 상자(.vt-vw-body·페인 본문)가 한다 — 편집기 칸(.vt-vw-cm)과 같은 이유.
+   칸이 overflow:auto면 칸 자체가 스크롤 상자로 잡혀 높이가 표 전체가 되고, 가상 스크롤이 모든 행을 그린다. */
+.vt-vw-code-pane:has(> .vt-csv){ overflow:visible; }
 .vt-csv{ overflow-x:auto; background:var(--term); }
 .vt-csv-table{ border-collapse:collapse; font:400 var(--fs-xs) var(--mono); color:var(--txt); min-width:100%; }
 .vt-csv-table th,.vt-csv-table td{

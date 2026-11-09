@@ -521,7 +521,7 @@ async function _openRun(container, st, path, opts) {
     if (!mine()) return;
     st.meta = r.meta;
     st.etag = r.etag;
-    if (r.meta.image || r.meta.binary) { _paintMedia(container, r.meta, path, st.host); return; }
+    if (r.meta.image || r.meta.binary || previewKind(path) === 'pdf') { _paintMedia(container, r.meta, path, st.host); return; }
     container.replaceChildren();
     await _paintText(container, r.text, path, 'tail', st);
     if (!mine()) return;
@@ -535,12 +535,15 @@ async function _openRun(container, st, path, opts) {
   // 들어올 때만(SVG는 그림을 서버가 따로 주므로 크기만 본다). 아니면 지금까지처럼 원문 편집기다.
   const kind = previewKind(path);
   const wantPreview = hasRenderedView(kind) && _viewOf(st) === 'render' && !opts.line;
+  // PDF는 바이트가 글자처럼 보여도(NUL 없는 PDF) 원문으로 그리지 않는다 — 다운로드만(결정 D8). 첫 구간만 받아 크기·rev를 안다.
+  const pdf = kind === 'pdf';
   try {
     r = await loadHead({
-      path, host: st.host, encoding, target: OPEN_BUDGET,
+      path, host: st.host, encoding, target: pdf ? 1 : OPEN_BUDGET,
       onFirst: async (text, meta) => {
         if (!mine()) return;
         st.meta = meta;
+        if (pdf) { st.preview = true; painted = true; return; }
         if (painted) { _setDocText(container, text); return; }
         container.replaceChildren();
         if (wantPreview && fitsPreview(kind, meta.size) && (kind === 'svg' || meta.eof)) {
@@ -567,7 +570,7 @@ async function _openRun(container, st, path, opts) {
   st.meta = r.meta;
   st.etag = r.etag;
   st.carry = r.carry || '';
-  if (r.meta.image || r.meta.binary) { _paintMedia(container, r.meta, path, st.host); return; }
+  if (r.meta.image || r.meta.binary || pdf) { _paintMedia(container, r.meta, path, st.host); return; }
   _syncBars(container, st);
   // 줄 이동이 실패해도(더 받다가 끊김) 이미 그린 내용을 오류로 덮지 않는다.
   if (opts.line) await _jump(container, st, opts.line, opts.col).catch(() => {});

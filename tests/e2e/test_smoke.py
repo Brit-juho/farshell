@@ -1243,7 +1243,7 @@ def test_마크다운은_정화되어_렌더되고_원문으로_바꿀_수_있�
         links = {t: (h, r) for t, h, r in got["links"]}
         assert links["js"][0] is None
         assert links["ok"] == ("https://example.com/", "noopener noreferrer")
-        assert links["아래"][0] == "#끝"
+        assert links["아래"][0] in ("#끝", "#%EB%81%9D")   # marked가 주소를 퍼센트 인코딩한다 — 클릭 처리가 푼다
         assert got["imgs"] == ["/api/fs/raw"] and got["blocked"] == 1, got
         assert got["boxes"] == [["checkbox", True, True], ["checkbox", True, False]]
         page.locator("#vt-file .vt-vw-seg button", has_text="원문").click()
@@ -1292,7 +1292,12 @@ def test_CSV는_표로_PDF는_다운로드만_동영상은_Range로_받는다(pa
         assert "PDF는 미리 보지 않습니다" in page.locator("#vt-file .vt-vw-preview-empty").inner_text()
         assert page.locator("#vt-file iframe, #vt-file embed, #vt-file object").count() == 0
         page.evaluate("(p) => window.openFile(p)", _viewer_file("clip.mp4"))
-        page.wait_for_selector("#vt-file .vt-vw-media video", timeout=15000)
+        # 시험 파일은 머리만 mp4라 디코드되지 않는다 — 재생기가 붙었다가 오류로 「재생하지 못했습니다」가 될 수 있다.
+        # 어느 쪽이든 재생기 경로(<video> + /api/fs/raw)를 탔다는 뜻이다.
+        page.wait_for_function(
+            "() => !!document.querySelector('#vt-file .vt-vw-media video')"
+            " || /동영상을 재생하지 못했습니다/.test(document.querySelector('#vt-file .vt-vw-preview-empty')?.textContent || '')",
+            timeout=15000)
     finally:
         _close_overlay(page)
     from urllib.parse import quote
@@ -2417,11 +2422,11 @@ def test_파일_트리는_보이는_행만_그리고_페이지와_aria_tree와_�
     page.locator("#vt-dir .vt-ft-filter input").fill("n0042")
     page.wait_for_function("() => document.querySelectorAll('#vt-dir .vt-ft-row').length === 1", timeout=5000)
     assert page.locator("#vt-dir .vt-ft-cnt").inner_text() == "1개"
-    # 행 메뉴 — 오른쪽 클릭. 다운로드·새 파일은 이 단계에 없다.
+    # 행 메뉴 — 오른쪽 클릭. 다운로드는 단계 7에서 더했다. 새 파일은 아직 없다.
     page.locator("#vt-dir .vt-ft-row.k-file").click(button="right")
     page.wait_for_selector('.vt-ft-menu[role="menu"]', timeout=5000)
     labels = page.locator('.vt-ft-menu [role="menuitem"] .vt-ft-mi-l').all_text_contents()
-    assert labels == ["열기", "터미널에 경로 삽입", "경로 복사", "공유 링크 만들기…", "새로고침"], labels
+    assert labels == ["열기", "터미널에 경로 삽입", "경로 복사", "다운로드", "공유 링크 만들기…", "새로고침"], labels
     page.keyboard.press("Escape")
     page.wait_for_function("() => !document.querySelector('.vt-ft-menu')", timeout=5000)
 

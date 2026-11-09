@@ -325,6 +325,7 @@ test('뷰어 — CSV는 표(머리 고정, 칸은 글자로만), SVG는 <img>로
 test('뷰어 — PDF는 미리 보지 않고 다운로드 하나, 그 밖 바이너리도 다운로드, 동영상·소리는 플레이어', async () => {
   const { file, host, document } = await viewerEnv({
     '/repo/a.pdf': { binary: true, size: 1234, mime: null },
+    '/repo/t.pdf': { text: '%PDF-1.4\n1 0 obj<</JS(app.alert(1))>>endobj\n' },
     '/repo/a.bin': { binary: true, size: 10 },
     '/repo/a.mp4': { binary: true, size: 99, media: 'video', mime: 'video/mp4' },
     '/repo/a.m4a': { binary: true, size: 99, media: 'audio', mime: 'audio/mp4' },
@@ -336,6 +337,11 @@ test('뷰어 — PDF는 미리 보지 않고 다운로드 하나, 그 밖 바이
   assert.strictEqual(host.querySelector('.vt-vw-dl-btn').getAttribute('aria-disabled'), null);
 
   const mk = () => { const h = document.createElement('div'); h.className = 'vt-vw-code-pane'; document.body.appendChild(h); return h; };
+  // NUL이 없어 서버가 글자로 판정한 PDF도 원문으로 그리지 않는다.
+  const tp = mk();
+  await file.renderFile(tp, '/repo/t.pdf');
+  assert.match(tp.textContent, /PDF는 미리 보지 않습니다/);
+  assert.strictEqual(tp.querySelector('pre.vt-vw-plain'), null);
   const b = mk();
   await file.renderFile(b, '/repo/a.bin');
   assert.ok(b.querySelector('.vt-vw-dl-btn'));
