@@ -1,4 +1,4 @@
-// 코드 뷰어 본문 — CodeMirror 6, 읽기 전용(파일 개편 단계 2).
+// 코드 뷰어 본문 — CodeMirror 6. 기본은 읽기 전용(파일 개편 단계 2), 「편집」이면 같은 상태로 편집 가능(단계 8).
 //
 // 옛 렌더러는 줄마다 DOM 행을 만들었다(512KB 파일이면 노드 약 7만 개, 감속 조건에서 메인 스레드가 2초 넘게
 // 멈춘다). CM6는 보이는 줄만 DOM으로 그리고 구문 분석을 나눠서 한다. 수치는
@@ -19,6 +19,7 @@ import { EditorView, Decoration, lineNumbers, highlightSpecialChars, keymap } fr
 import { syntaxHighlighting, StreamLanguage } from '@codemirror/language';
 import { classHighlighter } from '@lezer/highlight';
 import { search, searchKeymap } from '@codemirror/search';
+import { history, historyKeymap, defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { t } from '../../core/i18n.js';
 import { textChange, editorLangKey } from './editor-text.js';
 
@@ -163,12 +164,34 @@ function _coarse() {
  * - `replaceEnd(n, text)` — 끝의 n글자를 text로 바꾼다(커진 파일의 끝 이어 받기). 바꿨으면 true.
  * - `jumpTo(line, col)` — 그 줄로 옮기고 표시한다. 받은 범위를 넘으면 false.
  * - `atBottom()` — 스크롤이 끝에 있는가(끝부분 보기에서 새 내용을 따라갈지 정한다).
+ * - `setEditable(on, {onSave})` — 편집 모드(단계 8). 같은 EditorState를 그대로 두고 읽기 전용만 푼다(스크롤·선택 유지).
+ *   켜면 되돌리기 기록·기본 편집 키·⌘S/Ctrl+S(`onSave`)·Tab 들여쓰기가 붙는다. 끄면 읽기 전용으로 돌아간다.
+ * - `getText()`, `onChange(fn)` — 문서가 바뀔 때마다 `fn()`(편집·다시 읽기 모두). `focus()`.
  * - `destroy()`
  * `opts.lineFrom === 'end'`면 줄 번호를 끝에서 센다(끝부분 보기).
  */
 export async function mountEditor(container, text, path, hljsName, opts = {}) {
   const lang = await loadLanguage(editorLangKey(path, hljsName));
   const langSlot = new Compartment();
+  const editSlot = new Compartment();
+  let changed = null;
+  let saveFn = null;
+  const readOnlyExt = () => [
+    EditorState.readOnly.of(true),
+    EditorView.editable.of(!_coarse()),
+    EditorView.contentAttributes.of({ 'aria-label': t('파일 내용'), 'aria-readonly': 'true' }),
+  ];
+  // 편집 확장(쓰기) — 이 청크(`editor`) 안에만 있다. 저장 키는 기본 키보다 먼저 둔다(브라우저 「페이지 저장」을 막는다).
+  const editExt = () => [
+    EditorState.readOnly.of(false),
+    EditorView.editable.of(true),
+    history(),
+    keymap.of([
+      { key: 'Mod-s', preventDefault: true, run: () => { if (saveFn) saveFn(); return true; } },
+      indentWithTab, ...historyKeymap, ...defaultKeymap,
+    ]),
+    EditorView.contentAttributes.of({ 'aria-label': t('파일 내용 — 편집 중'), 'aria-readonly': 'false', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false' }),
+  ];
   const view = new EditorView({
     parent: container,
     state: EditorState.create({
@@ -177,15 +200,14 @@ export async function mountEditor(container, text, path, hljsName, opts = {}) {
         opts.lineFrom === 'end' ? lineNumbers({ formatNumber: _fromEnd }) : lineNumbers(),
         _targetField,
         highlightSpecialChars(),
-        EditorState.readOnly.of(true),
-        EditorView.editable.of(!_coarse()),
+        editSlot.of(readOnlyExt()),
         EditorState.tabSize.of(4),
         EditorState.phrases.of(_phrases()),
         syntaxHighlighting(classHighlighter),
         _THEME,
         search({ top: true }),
         keymap.of(searchKeymap),
-        EditorView.contentAttributes.of({ 'aria-label': t('파일 내용'), 'aria-readonly': 'true' }),
+        EditorView.updateListener.of((u) => { if (u.docChanged && changed) changed(); }),
         langSlot.of(lang || []),
       ],
     }),
@@ -193,6 +215,14 @@ export async function mountEditor(container, text, path, hljsName, opts = {}) {
   container.classList.add('vt-vw-cm');
   return {
     view,
+    setEditable(on, o = {}) {
+      saveFn = on ? (o.onSave || null) : null;
+      view.dispatch({ effects: editSlot.reconfigure(on ? editExt() : readOnlyExt()) });
+      container.classList.toggle('vt-vw-cm-edit', !!on);
+    },
+    getText() { return view.state.doc.toString(); },
+    onChange(fn) { changed = fn || null; },
+    focus() { view.focus(); },
     setText(next) {
       const change = textChange(view.state.doc.toString(), next);
       if (change) view.dispatch({ changes: change });

@@ -17,6 +17,7 @@ import { copyToClipboard } from '../../term/clipboard.js';
 import { _viewerState, _setMsg, _shareFile } from './state.js';
 import { _loadRecent, _pushRecent, _clearRecent } from './recent.js';
 import { downloadFsPath } from './download.js';
+import { createFileDialog, renameDialog, trashDialog } from './fs-write.js';
 import { watchPath } from '../../shell/fs-watch.js';
 import { t } from '../../core/i18n.js';
 import { shellQuotePath, hasControlChars } from '../../lib/shell-quote.js';
@@ -143,6 +144,10 @@ export async function showTree(opts = {}) {
     sharePath: _shareFile,
     // 다운로드(파일 개편 단계 7) — 원격 호스트면 트리가 부르지 않고 이유를 알린다(remote, 결정 D7).
     downloadPath: (path, size) => { void downloadFsPath(path, { size }); },
+    // 쓰기(파일 개편 단계 8) — 승격(비밀번호 재확인)과 원격 거부는 fs-write.js가 한다.
+    newFile: (dir) => createFileDialog(dir, null),
+    renamePath: (path) => renameDialog(path, null),
+    trashPath: (path) => trashDialog(path, null),
     terminalCwd,
     sessionName,
     recent: _loadRecent,

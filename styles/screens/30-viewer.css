@@ -913,3 +913,56 @@ body.vt-resizing #terminal-container{ transition:none; }
 .vt-vw-preview-acts{ display:flex; gap:calc(var(--spacing) * 2); margin-top:calc(var(--spacing) * 1); }
 .vt-vw-dl-btn{ display:inline-flex; align-items:center; gap:calc(var(--spacing) * 1.5); }
 .vt-vw-dl-btn svg{ width:14px; height:14px; }
+
+/* 편집 모드(파일 개편 단계 8, 시안 F05 · F05-C · F05-D · F05-D2 · M-F5). 색은 토큰 별칭만(계약 9).
+   편집 조작은 위 띠 오른쪽. 편집 중에는 띠가 스크롤 상자 위에 붙는다 — 폰 화상 키보드가 올라와도 저장이 보인다. */
+.vt-vw-edit-tools{ display:inline-flex; flex-wrap:wrap; align-items:center; gap:calc(var(--spacing) * 1.5); margin-left:auto; }
+.vt-vw-bar-btn{ display:inline-flex; align-items:center; gap:calc(var(--spacing) * 1); }
+.vt-vw-bar-btn svg{ width:14px; height:14px; flex:none; }
+.vt-vw-bar-btn[aria-disabled="true"]{ opacity:.5; cursor:not-allowed; }
+.vt-vw-bar-btn.ghost{ background:transparent; color:var(--sub); }
+.vt-vw-bar-btn.ghost:hover{ color:var(--txt); }
+.vt-vw-bar-btn.danger{ color:var(--color-st-error); border-color:color-mix(in srgb, var(--color-st-error) 45%, var(--line)); }
+.vt-vw-bar-btn.primary{ background:var(--color-acc); color:var(--color-acc-ink); border-color:var(--color-acc); font-weight:var(--weight-semibold); }
+.vt-vw-bar-btn.primary:hover{ background:var(--color-acc-dim); }
+.vt-vw-bar-btn kbd{ font:400 var(--fs-xs) var(--mono); opacity:.75; }
+.vt-vw-bar.vt-vw-bar-editing{ position:sticky; top:0; z-index:3; }
+.vt-vw-ss{ display:inline-flex; align-items:center; gap:calc(var(--spacing) * 1); font:500 var(--fs-xs) var(--ui); }
+.vt-vw-ss svg{ width:14px; height:14px; }
+.vt-vw-ss.dirty{ color:var(--color-st-waiting); }
+.vt-vw-ss.dirty::before{ content:""; width:8px; height:8px; border-radius:50%; background:var(--color-st-waiting); }
+.vt-vw-ss.ing{ color:var(--sub); }
+.vt-vw-ss.ok{ color:var(--color-st-working); }
+.vt-vw-ss.bad{ color:var(--color-st-error); }
+.vt-vw-ss.warn{ color:var(--warn); }
+.vt-vw-cm-edit .cm-content{ caret-color:var(--color-acc); }
+.vt-vw-cm-edit .cm-gutters{ border-right:1px solid color-mix(in srgb, var(--color-st-waiting) 40%, var(--line)); }
+
+.vt-vw-conflict{
+  display:flex; flex-wrap:wrap; align-items:flex-start; gap:calc(var(--spacing) * 2);
+  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3); font:400 var(--fs-xs) var(--ui); color:var(--sub);
+  background:color-mix(in srgb, var(--color-st-error) 10%, var(--bar));
+  border-bottom:1px solid color-mix(in srgb, var(--color-st-error) 40%, var(--line));
+}
+.vt-vw-conflict-tx{ flex:1 1 240px; min-width:0; }
+.vt-vw-conflict-tx b{ color:var(--txt); font-weight:var(--weight-semibold); }
+.vt-vw-conflict-acts{ display:inline-flex; flex-wrap:wrap; gap:calc(var(--spacing) * 1.5); }
+.vt-vw-compare{ border-bottom:1px solid var(--line); background:var(--crust); max-height:50vh; overflow:auto; }
+.vt-vw-compare-head{
+  display:flex; justify-content:space-between; gap:calc(var(--spacing) * 2); position:sticky; top:0;
+  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3); font:500 var(--fs-xs) var(--ui); color:var(--sub);
+  background:var(--bar); border-bottom:1px solid var(--line);
+}
+.vt-vw-compare-grid{ font:400 var(--fs-xs)/1.6 var(--mono); }
+.vt-vw-cmp-row{ display:grid; grid-template-columns:48px 16px minmax(0, 1fr); white-space:pre; color:var(--txt); }
+.vt-vw-cmp-row .ln{ text-align:right; padding-right:calc(var(--spacing) * 2); color:var(--sub); user-select:none; }
+.vt-vw-cmp-row .sg{ user-select:none; }
+.vt-vw-cmp-row .tx{ overflow:hidden; text-overflow:ellipsis; }
+.vt-vw-cmp-row.add{ background:var(--color-term-add-bg); }
+.vt-vw-cmp-row.add .sg{ color:var(--color-term-green); }
+.vt-vw-cmp-row.del{ background:var(--color-term-del-bg); }
+.vt-vw-cmp-row.del .sg{ color:var(--color-term-red); }
+.vt-vw-cmp-row.gap{ display:block; padding:calc(var(--spacing) * 1) calc(var(--spacing) * 3); color:var(--sub); font-family:var(--ui); background:var(--bar); }
+@media (pointer: coarse){
+  .vt-vw-conflict .vt-vw-bar-btn, .vt-vw-edit-tools .vt-vw-bar-btn{ min-height:44px; }
+}
