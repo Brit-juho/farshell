@@ -61,7 +61,11 @@ Supported messages following oversized records remain indexed, with progress pre
 History deletion can target this host alone or include approved replicas.
 It hides records and prevents reimport; it does not erase CLI source files or archived raw bytes on disk.
 Deletion acknowledgments from offline replica hosts complete after reconnection.
-FarShell delegation links open separate task records and remain distinct from agent-internal children.
+「작업 기록」 (work record) is one window. The left side is the session (status, resume, stop, rename, archive, linked
+conversations, delegation, internal subagents, run history); the right side is the record of the internal subagent or
+delegated session you pick (prompts, answers, tool calls, tool results). A child row's 「기록 보기」 (view record) and
+「보고 보기」 (view report) and the internal chip open the same window with the right side preselected. Picking the
+parent in the delegation list moves the window to that session's record.
 
 ## tmux config (`fsh tmux`)
 
