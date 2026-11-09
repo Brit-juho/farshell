@@ -32,7 +32,7 @@ Everything about using FarShell in the browser. (For the CLI see `fsh help conce
   paired Macs, click it to switch the whole screen to another one), and the active pane's **repository › branch ›
   session** (hidden below 1280px). Click the **Search or run a command** field in the middle, or press `Cmd+K`, to open
   the palette. The keyboard toggle (touch devices) and window buttons sit on the right.
-- **Status bar** (bottom): the **agents chip** (`개입 N · 작업 N · 완료 N` — needs you, working, done; when something
+- **Status bar** (bottom): the **agents chip** (`Needs you N · Working N · Done N`; when something
   needs you, click it to jump to the session that has waited longest) is pinned at the left end, and short messages
   (copied, saved…) appear briefly just to its right. Then E2E, safe mode and connected screens, and on the right CPU,
   GPU, RAM, network, usage, notifications, version and clock. A chip with no value is hidden, and when space runs out
