@@ -1,4 +1,4 @@
-"""파일 쓰기 라우트(files-overhaul 단계 8) — 저장 `PUT /api/fs/file`, 새 파일, 이름 바꾸기, 휴지통 삭제.
+"""파일 쓰기 라우트(files-overhaul 단계 8) — 저장 `PUT /api/fs/file`, 새 파일·새 폴더, 이름 바꾸기, 휴지통 삭제.
 
 공개 터널로 쓰기가 열리는 첫 경로라서 라우터 전체에 **사람 세션 + 승격**(`require_human_session`,
 `require_elevated` — 웹 로그인 비밀번호 재확인, 15분, 결정 D1)을 건다. 기계 토큰·에이전트 주체·peer 서명은 403이고,
@@ -75,6 +75,12 @@ def _rev(body: dict, key: str = "expected_rev") -> tuple[bool, str | None]:
     if not isinstance(v, str) or not v or len(v) > _REV_MAX:
         return False, None
     return True, v
+
+
+def _kind(body: dict) -> str | None:
+    """`kind` — 없으면 `file`. 폴더는 `dir`로 **밝혀야** 폴더로 다룬다(파일 요청이 바꿔치기로 폴더 작업이 되지 않게)."""
+    v = body.get("kind", "file")
+    return v if v in ("file", "dir") else None
 
 
 def _owner(request: Request) -> str:
@@ -233,7 +239,7 @@ async def fs_new(request: Request):
 
 @elevated_router.post("/api/fs/rename")
 async def fs_rename(request: Request):
-    """이름 바꾸기 `{path, to, overwrite?, expected_rev?}`. 파일만, 쓰기 경계 안에서만."""
+    """이름 바꾸기 `{path, to, kind?, overwrite?, expected_rev?}`. `kind: "dir"`면 폴더(덮어쓰기 없음). 쓰기 경계 안에서만."""
     body = await _read_body(request, _SMALL_BODY)
     if isinstance(body, JSONResponse):
         return body
@@ -241,8 +247,16 @@ async def fs_rename(request: Request):
     dst = _str(body, "to")
     overwrite = body.get("overwrite", False)
     ok_rev, expected_rev = _rev(body)
+    kind = _kind(body)
     if not src or not dst:
         return _bad("bad_path", tr("경로가 비었습니다"))
+    if kind is None:
+        return _bad("bad_kind", tr("kind는 file 또는 dir이어야 합니다"))
+    if kind == "dir":
+        # 폴더는 덮어쓰지 않는다 — overwrite·expected_rev를 받지 않는다(받으면 무시하지 않고 거부).
+        if overwrite is not False or body.get("expected_rev") is not None:
+            return _bad("bad_overwrite", tr("폴더 이름 바꾸기에는 overwrite·expected_rev를 쓸 수 없습니다"))
+        return await _run(request, "fs.rename_dir", [src, dst], fs_write.rename_dir, src, dst)
     if not isinstance(overwrite, bool):
         return _bad("bad_overwrite", tr("overwrite는 참/거짓이어야 합니다"))
     if not ok_rev:
@@ -253,14 +267,39 @@ async def fs_rename(request: Request):
 
 @elevated_router.post("/api/fs/delete")
 async def fs_delete(request: Request):
-    """휴지통으로 옮기기 `{path, expected_rev?}`. 지우지 않는다 — 휴지통을 못 쓰면 409 `trash_unavailable`."""
+    """휴지통으로 옮기기 `{path, kind?, expected_rev?}`. `kind: "dir"`면 폴더(내용째). 지우지 않는다 — 휴지통을 못 쓰면
+    409 `trash_unavailable`."""
     body = await _read_body(request, _SMALL_BODY)
     if isinstance(body, JSONResponse):
         return body
     path = _str(body, "path")
     ok_rev, expected_rev = _rev(body)
+    kind = _kind(body)
     if not path:
         return _bad("bad_path", tr("경로가 비었습니다"))
     if not ok_rev:
         return _bad("bad_rev", tr("expected_rev 값이 잘못됐습니다"))
+    if kind is None:
+        return _bad("bad_kind", tr("kind는 file 또는 dir이어야 합니다"))
+    if kind == "dir":
+        if expected_rev is not None:
+            return _bad("bad_rev", tr("폴더 휴지통 이동에는 expected_rev를 쓸 수 없습니다"))
+        return await _run(request, "fs.trash_dir", [path], fs_write.delete_dir, path)
     return await _run(request, "fs.trash", [path], fs_write.delete, path, expected_rev=expected_rev)
+
+
+@elevated_router.post("/api/fs/mkdir")
+async def fs_mkdir(request: Request):
+    """빈 새 폴더 `{dir, name}`. 같은 이름이 있으면 409 `exists`."""
+    body = await _read_body(request, _SMALL_BODY)
+    if isinstance(body, JSONResponse):
+        return body
+    d = _str(body, "dir")
+    name = body.get("name")
+    if not d:
+        return _bad("bad_path", tr("경로가 비었습니다"))
+    try:
+        fs_write.check_name(name)
+    except fs_write.WriteError as e:
+        return _err(e)
+    return await _run(request, "fs.mkdir", [d.rstrip("/") + "/" + name], fs_write.mkdir, d, name)

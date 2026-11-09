@@ -65,7 +65,8 @@ def _impl() -> str:
 
 
 def trash(dir_fd: int, name: str, path: Path, st: os.stat_result) -> dict:
-    """`dir_fd` 안의 `name`(= 판정한 `path`, `st`는 dir_fd 기준 lstat)을 휴지통으로 옮긴다.
+    """`dir_fd` 안의 `name`(= 판정한 `path`, `st`는 dir_fd 기준 lstat)을 휴지통으로 옮긴다. 일반 파일 또는 폴더
+    (폴더는 내용째 — 옮기기라 비어 있지 않아도 된다).
 
     돌려주는 것: `{"trash": "macos"|"freedesktop", "name": <휴지통 안 이름>}`."""
     kind = _impl()
@@ -88,8 +89,10 @@ def _trash_macos(path: Path, st: os.stat_result) -> dict:
         cur = os.lstat(str(path))
     except OSError as e:
         raise TrashChanged(str(e)) from None
-    if not _same(cur, st) or not stat.S_ISREG(cur.st_mode):
-        raise TrashChanged("path no longer names the checked file")
+    # 판정한 그 항목(같은 dev·ino, 같은 종류 — 일반 파일 또는 폴더)일 때만 도우미에 넘긴다. 심링크는 늘 거부.
+    same_kind = stat.S_IFMT(cur.st_mode) == stat.S_IFMT(st.st_mode)
+    if not _same(cur, st) or not same_kind or not (stat.S_ISREG(cur.st_mode) or stat.S_ISDIR(cur.st_mode)):
+        raise TrashChanged("path no longer names the checked item")
     try:
         cp = _run_helper(path)
     except subprocess.TimeoutExpired:
