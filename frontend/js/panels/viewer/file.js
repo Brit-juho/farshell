@@ -3,6 +3,8 @@
 // 받기는 `/api/fs/file` 2판의 구간·tail·rev·304·인코딩을 쓴다(file-load.js, 단계 3). 큰 파일은 앞 4MB까지 열고
 // 「더 보기」, 「끝부분 보기」, 인코딩 고르기, 터미널 링크의 줄 이동이 여기 있다.
 // hljs(`ensureHljs`·`_hl`)는 diff 화면(diff.js)만 쓴다 — diff를 옮기는 단계 9까지 남는다.
+// 미리보기(단계 7, preview.js): 마크다운·SVG·CSV는 「렌더/원문」을 위 띠에서 바꾸고(기본 렌더, (호스트, 경로)별로
+// 기억), 동영상·소리는 /api/fs/raw(Range)로 재생하고, PDF와 그 밖의 바이너리는 다운로드만 둔다(결정 D8).
 import { vtEsc, vtUrl } from '../../core/api.js';
 import {
   loadHead, loadMore, loadTail, loadProbe, growthFrom, canLoadMore, hostApiPath, mixedEol, ChangingError,
@@ -10,6 +12,11 @@ import {
 } from './file-load.js';
 import { _setMsg } from './state.js';
 import { t } from '../../core/i18n.js';
+import {
+  previewKind, hasRenderedView, fitsPreview, viewLabels, mountCsvTable, mountPlayer, mountSvg, emptyState, downloadButton,
+} from './preview.js';
+import { slugify } from './markdown.js';
+import { downloadFsPath as _downloadFsPath, downloadBlockedReason } from './download.js';
 // UMD 전역 VTDiffLex — 뷰어 전용이라 panels 청크에서 평가한다. ⚠ 마지막 import여야 한다:
 // tests/helpers/vm-esm.js의 IMPORT_RE가 뒤에 `from '…'`이 더 있으면 부작용 import를 삼킨다.
 import '../../lib/difflex.js';
@@ -100,6 +107,19 @@ export function disposeViewer(root) {
 const _encChoice = new Map();
 const _key = (host, path) => `${host || 'local'}\n${path}`;
 const _encOf = (st) => _encChoice.get(_key(st.host, st.path)) || 'auto';
+// 렌더/원문 고르기 — 같은 키. 기본은 렌더.
+const _viewChoice = new Map();
+const _viewOf = (st) => _viewChoice.get(_key(st.host, st.path)) || 'render';
+
+/** 다운로드 — 진입점들(머리줄·페인·빈 상태)이 이 모듈에서 부른다(download.js). */
+export const downloadFsPath = _downloadFsPath;
+
+/** 스크롤 상자(.vt-vw-body·페인 본문) 안의 칸이 보이고 있는 판(rev). 다운로드가 「본 것과 같은 파일」을 받게 넘긴다. */
+export function viewerRev(scrollEl) {
+  const host = scrollEl && _currentHost(scrollEl);
+  const st = host && host._vtDoc;
+  return (st && st.meta && st.meta.rev) || null;
+}
 
 export const ENCODINGS = ['auto', 'utf-8', 'utf-16le', 'utf-16be', 'cp949', 'euc-kr', 'shift_jis', 'latin-1'];
 
@@ -125,7 +145,7 @@ function _plainText(container, text) {
 function _newDoc(path, host, mode) {
   return {
     path, host: host || null, mode: mode === 'tail' ? 'tail' : 'head', meta: null, etag: null, carry: '',
-    changing: false, queue: Promise.resolve(),
+    changing: false, queue: Promise.resolve(), preview: false,
   };
 }
 
@@ -173,13 +193,16 @@ function _syncTopBar(container, st) {
   const reason = _reason(meta);
   const showEnc = !!meta && (!meta.confident || choice !== 'auto');
   const tail = st.mode === 'tail';
-  if (!reason && !showEnc && !tail && !st.changing) { if (bar) bar.remove(); return; }
+  const kind = previewKind(st.path);
+  const toggle = st.mode === 'head' && hasRenderedView(kind) && !!meta && !meta.binary && !meta.image;
+  if (!reason && !showEnc && !tail && !st.changing && !toggle) { if (bar) bar.remove(); return; }
   if (!bar) {
     bar = document.createElement('div');
     bar.className = 'vt-vw-bar';
     container.prepend(bar);
   }
   bar.replaceChildren();
+  if (toggle) _viewToggle(container, st, bar, kind);
   if (st.changing) bar.appendChild(_span(CHANGING_MSG(), true));
   if (tail) {
     bar.append(_span(meta && meta.lineTruncated
@@ -219,11 +242,109 @@ function _syncTopBar(container, st) {
   }
 }
 
+// 렌더/원문 전환(시안 F07 — 마크다운 렌더/원문, CSV 표/원문, SVG 그림/원문). 크기 상한을 넘어 원문으로 연 경우와
+// SVG의 sandbox 안내도 여기 적는다.
+function _viewToggle(container, st, bar, kind) {
+  const [renderLabel, sourceLabel] = viewLabels(kind);
+  const view = st.preview ? 'render' : 'source';
+  const seg = document.createElement('span');
+  seg.className = 'vt-vw-seg';
+  seg.setAttribute('role', 'group');
+  seg.setAttribute('aria-label', t('보기 전환'));
+  const fits = !st.meta || fitsPreview(kind, st.meta.size);
+  for (const [v, label] of [['render', renderLabel], ['source', sourceLabel]]) {
+    const b = _button(label, () => {
+      if (v === view) return;
+      if (v === 'render') _viewChoice.delete(_key(st.host, st.path));
+      else _viewChoice.set(_key(st.host, st.path), 'source');
+      _reopen(container, 'head');
+    });
+    b.classList.add('vt-vw-seg-btn');
+    b.setAttribute('aria-pressed', String(v === view));
+    if (v === 'render' && !fits) b.disabled = true;
+    seg.appendChild(b);
+  }
+  bar.appendChild(seg);
+  if (!fits) {
+    bar.appendChild(_span(kind === 'csv'
+      ? t('1MB를 넘어 표 대신 원문으로 보여 줍니다.')
+      : t('1MB를 넘어 렌더 대신 원문으로 보여 줍니다.')));
+  } else if (kind === 'svg' && st.preview) {
+    bar.appendChild(_span(t('그림으로만 보여 줍니다 — SVG 안의 스크립트와 외부 불러오기는 실행되지 않습니다(sandbox).')));
+  } else if (kind === 'md' && st.preview) {
+    bar.appendChild(_span(t('원문 HTML은 글자로 보이고, 링크는 새 탭으로 열립니다. 외부 이미지는 막습니다.')));
+  }
+}
+
+function _rawUrl(path, host) {
+  return vtUrl(hostApiPath(`/api/fs/raw?path=${encodeURIComponent(path)}`, host));
+}
+
+// 마크다운 렌더 — `preview` 청크(marked + DOMPurify)를 받아 정화된 조각을 붙인다. 못 받으면 false(원문으로).
+let _mdLoading = null;
+function _loadMarkdown() {
+  if (!_mdLoading) {
+    _mdLoading = import('./markdown-lib.js').catch((e) => { _mdLoading = null; throw e; });
+  }
+  return _mdLoading;
+}
+
+/** 시험용 — 마크다운 렌더 모듈을 바꿔 끼운다(이 하네스는 맨 이름 import를 풀지 못한다). */
+export function _setMarkdownLoader(fn) { _mdLoading = fn ? Promise.resolve().then(fn) : null; }
+
+async function _paintMarkdown(container, text, st) {
+  let mod;
+  try { mod = await _loadMarkdown(); } catch (e) {
+    console.warn('[FarShell viewer] markdown preview unavailable, showing source', e);
+    return false;
+  }
+  if (container._vtDoc !== st) return true;
+  const doc = document.createElement('div');
+  doc.className = 'vt-md';
+  doc.appendChild(mod.renderMarkdown(text, { docPath: st.path, rawUrl: (abs) => _rawUrl(abs, st.host) }));
+  // 문서 안 앵커(#…)는 이 칸에서 같은 이름의 제목으로 옮긴다(id를 허용하지 않으므로 제목 글에서 이름을 만든다).
+  // 막은 외부 이미지의 「주소 복사」.
+  doc.addEventListener('click', (ev) => {
+    const copy = ev.target.closest && ev.target.closest('.vt-md-copy');
+    if (copy) {
+      ev.preventDefault();
+      // term/clipboard.js는 부팅 쪽 모듈(env·토스트)을 끌고 온다 — 누를 때만 부른다(core에 이미 있어 새로 받지 않는다).
+      import('../../term/clipboard.js').then((m) => m.copyToClipboard(copy.dataset.copy || '')).then((ok) => {
+        if (ok && typeof window.showToast === 'function') window.showToast(t('주소를 복사했습니다'));
+      }).catch(() => {});
+      return;
+    }
+    const a = ev.target.closest && ev.target.closest('a[href^="#"]');
+    if (!a) return;
+    ev.preventDefault();
+    let want = a.getAttribute('href').slice(1);
+    try { want = decodeURIComponent(want); } catch (_) { /* 그대로 */ }
+    want = want.toLowerCase();
+    const h = [...doc.querySelectorAll('h1,h2,h3,h4,h5,h6')].find((x) => slugify(x.textContent) === want);
+    if (h && h.scrollIntoView) h.scrollIntoView({ block: 'start' });
+  });
+  container.appendChild(doc);
+  return true;
+}
+
+// 「렌더」 그리기. 그렸으면 true(원문 편집기를 붙이지 않는다).
+async function _paintPreview(container, st, kind, text) {
+  if (kind === 'md') return _paintMarkdown(container, text, st);
+  if (kind === 'csv') { mountCsvTable(container, text, st.path); return true; }
+  if (kind === 'svg') {
+    mountSvg(container, _rawUrl(st.path, st.host), st.path.split('/').pop() || 'svg', () => {
+      _setMsg(container, 'vt-vw-empty', [t('SVG를 그림으로 불러오지 못했습니다.'), t('「원문」으로 보세요.')]);
+    });
+    return true;
+  }
+  return false;
+}
+
 // 아래 띠: 앞부분만 받았을 때. 찾기·줄 이동이 받은 범위에서만 된다는 것을 함께 적는다(계획 4.2).
 function _syncBottomNote(container, st) {
   let note = container.querySelector(':scope > .vt-vw-trunc');
   const meta = st.meta;
-  const partial = st.mode === 'head' && meta && !meta.eof && !meta.image && !meta.binary;
+  const partial = st.mode === 'head' && meta && !meta.eof && !meta.image && !meta.binary && !st.preview;
   if (!partial) { if (note) note.remove(); return; }
   if (!note) {
     note = document.createElement('div');
@@ -254,22 +375,31 @@ function _syncBars(container, st) {
   _syncBottomNote(container, st);
 }
 
-// 이미지·바이너리 — 편집기를 쓰지 않는다.
+function _dlButton(container, path, host, d, label) {
+  const blocked = downloadBlockedReason(host);
+  return downloadButton(label, () => {
+    if (blocked) { if (typeof window.showToast === 'function') window.showToast(blocked, 'warn'); return; }
+    const st = container._vtDoc;
+    _downloadFsPath(path, { host, rev: d.rev || (st && st.meta && st.meta.rev) || null, size: d.size });
+  }, blocked);
+}
+
+// 이미지·동영상·소리·바이너리 — 편집기를 쓰지 않는다.
 function _paintMedia(container, d, path, host) {
   // [T3] 이미지는 그려 준다 — 스크린샷·다이어그램은 원격에서 코드만큼 자주
-  // 열어본다. 바이트는 /api/fs/raw가 주고, 그 엔드포인트는 이미지 타입만
-  // 내보낸다(SVG·HTML은 같은 오리진에서 열면 XSS라 제외 — server/fsguard.py).
+  // 열어본다. 바이트는 /api/fs/raw가 주고, 그 엔드포인트는 허용 타입만
+  // 내보낸다(HTML·PDF는 같은 오리진에서 열면 XSS라 제외 — server/fsguard.py).
   container.replaceChildren();
   if (d.image) {
     if (d.tooLarge) {
-      _setMsg(container, 'vt-vw-empty', [t('이미지가 너무 큽니다 ({size})', { size: _fmtSize(d.size) }),
-        t('미리보기 상한을 넘어 표시하지 않습니다.')]);
+      emptyState(container, t('이미지가 너무 큽니다 ({size})', { size: _fmtSize(d.size) }),
+        t('미리보기 상한을 넘어 표시하지 않습니다.'), [_dlButton(container, path, host, d, t('다운로드'))]);
       return;
     }
     const wrap = document.createElement('div');
     wrap.className = 'vt-vw-image';
     const img = document.createElement('img');
-    img.src = vtUrl(hostApiPath(`/api/fs/raw?path=${encodeURIComponent(path)}`, host));
+    img.src = _rawUrl(path, host);
     img.alt = path.split('/').pop() || t('이미지');
     img.loading = 'lazy';
     // 못 불러오면 빈 칸을 남기지 않는다 — 깨진 아이콘만 뜨면 "왜 안 되는지"를 모른다.
@@ -284,7 +414,21 @@ function _paintMedia(container, d, path, host) {
     container.appendChild(wrap);
     return;
   }
-  _setMsg(container, 'vt-vw-empty', [t('바이너리 파일 ({size})', { size: _fmtSize(d.size) }), t('미리보기를 지원하지 않습니다.')]);
+  if (d.media === 'video' || d.media === 'audio') {
+    mountPlayer(container, d.media, _rawUrl(path, host), `${d.mime} · ${_fmtSize(d.size)}`, () => {
+      emptyState(container, d.media === 'audio' ? t('소리를 재생하지 못했습니다.') : t('동영상을 재생하지 못했습니다.'),
+        t('이 브라우저가 재생하지 못하는 형식일 수 있습니다. 내려받아 여세요.'), [_dlButton(container, path, host, d, t('다운로드'))]);
+    });
+    return;
+  }
+  if (previewKind(path) === 'pdf') {
+    emptyState(container, t('PDF는 미리 보지 않습니다'),
+      t('브라우저의 PDF 보기는 문서 안 스크립트를 실행할 수 있어 막았습니다. 내려받아 여세요.'),
+      [_dlButton(container, path, host, d, t('다운로드 {size}', { size: _fmtSize(d.size) }))]);
+    return;
+  }
+  emptyState(container, t('바이너리 파일 ({size})', { size: _fmtSize(d.size) }), t('미리보기를 지원하지 않습니다.'),
+    [_dlButton(container, path, host, d, t('다운로드'))]);
 }
 
 // 텍스트를 비어 있는 container에 그린다. 편집기 청크를 못 받으면 일반 텍스트로(_vtPlain).
@@ -387,6 +531,10 @@ async function _openRun(container, st, path, opts) {
   }
   let painted = false;
   let r;
+  // 렌더 보기(마크다운·CSV·SVG): 사람이 원문을 고르지 않았고, 줄 이동(터미널 링크)이 아니고, 파일 전체가 첫 구간에
+  // 들어올 때만(SVG는 그림을 서버가 따로 주므로 크기만 본다). 아니면 지금까지처럼 원문 편집기다.
+  const kind = previewKind(path);
+  const wantPreview = hasRenderedView(kind) && _viewOf(st) === 'render' && !opts.line;
   try {
     r = await loadHead({
       path, host: st.host, encoding, target: OPEN_BUDGET,
@@ -395,10 +543,18 @@ async function _openRun(container, st, path, opts) {
         st.meta = meta;
         if (painted) { _setDocText(container, text); return; }
         container.replaceChildren();
+        if (wantPreview && fitsPreview(kind, meta.size) && (kind === 'svg' || meta.eof)) {
+          st.preview = true;
+          painted = true;
+          if (await _paintPreview(container, st, kind, text)) return;
+          st.preview = false;
+          if (!mine()) return;
+          container.replaceChildren();
+        }
         await _paintText(container, text, path, 'head', st);
         painted = true;
       },
-      onAppend: (text) => { if (mine()) _appendText(container, text); },
+      onAppend: (text) => { if (mine() && !st.preview) _appendText(container, text); },
     });
   } catch (e) {
     if (!mine()) return;

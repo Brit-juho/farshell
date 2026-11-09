@@ -39,6 +39,7 @@ import { loadViewer } from '../panels/viewer-lazy.js';
 import * as surface from './surface.js';
 import { beginResizeOverlay, endResizeOverlay } from './resize-overlay.js';
 import { t } from '../core/i18n.js';
+import { isRelayed } from '../core/host-route.js';
 
 export { canSplit };
 
@@ -502,6 +503,19 @@ function _renderViewerBody(bodyEl, file) {
     if (f) import('../panels/files/files.js').then((m) => m.shareFsPath(f)).catch((e) => console.error('[FarShell share]', e));
   });
   tools.appendChild(shareBtn);
+  // 다운로드(파일 개편 단계 7) — 이 컴퓨터의 파일만이라 원격 호스트를 보는 중이면 흐리게 두고 이유를 단다(렌더러가 거절도 한다).
+  const dlBtn = document.createElement('button');
+  dlBtn.type = 'button';
+  dlBtn.className = 'vt-icon-btn xs vt-pane-refresh vt-pane-download';
+  dlBtn.setAttribute('aria-label', t('다운로드'));
+  dlBtn.dataset.tip = isRelayed() ? t('다운로드는 이 컴퓨터의 파일만 됩니다 — 원격 호스트 파일은 받을 수 없습니다') : t('다운로드');
+  if (isRelayed()) dlBtn.setAttribute('aria-disabled', 'true');
+  dlBtn.innerHTML = icon('download', 13);
+  dlBtn.addEventListener('click', () => {
+    const f = bodyEl.dataset.viewerFile;
+    if (f) loadViewer().then((v) => v.downloadFsPath(f, { rev: v.viewerRev(bodyEl) })).catch(() => {});
+  });
+  tools.appendChild(dlBtn);
   const host = document.createElement('div');
   host.className = 'vt-vw-code-pane';
   bodyEl.append(tools, host);

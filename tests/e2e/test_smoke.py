@@ -326,6 +326,26 @@ def _make_viewer_files(d: Path) -> Path:
     (d / "mixed.txt").write_bytes(b"a\r\nb\nc\r\n")
     # 1.5MB 한 줄(minified 모양) — 첫 구간이 line_truncated, 다음 구간이 같은 줄을 잇는다.
     (d / "long.min.js").write_text("".join(f"var a{i}=function(b){{return b+{i % 97}}};" for i in range(60000))[: 1536 * 1024])
+    # 단계 7 — 미리보기·다운로드. 마크다운에는 XSS 시도를 넣는다(원문 HTML·javascript: 링크·onerror·외부 이미지).
+    import shutil
+    (d / "pics").mkdir(exist_ok=True)
+    shutil.copy(ROOT / "frontend" / "icon-192.png", d / "pics" / "icon.png")
+    (d / "notes.md").write_text(
+        "# 미리보기 시험\n\n"
+        "<script>window.__vtXss = 1</script>\n\n"
+        "<img src=x onerror=\"window.__vtXss = 2\">\n\n"
+        "[js](javascript:window.__vtXss=3) [ok](https://example.com/) [아래](#끝)\n\n"
+        "![local](pics/icon.png) ![ext](https://example.com/track.png)\n\n"
+        "- [x] 됨\n- [ ] 안 됨\n\n| a | b |\n|---|--:|\n| x | 1 |\n\n## 끝\n"
+    )
+    (d / "evil.svg").write_text(
+        "<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' onload='window.__vtXss = 4'>"
+        "<script>window.__vtXss = 5; document.title = 'pwned'</script><rect width='40' height='40' fill='red'/></svg>"
+    )
+    (d / "table.csv").write_text("name,count\n" + "".join(f"row{i},{i}\n" for i in range(5000)))
+    (d / "doc.pdf").write_bytes(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj<</JS(app.alert(1))>>endobj\ntrailer<<>>\n%%EOF\n")
+    (d / "clip.mp4").write_bytes(b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom" + bytes(range(256)) * 64)
+    (d / "보고서 1.txt").write_text("다운로드 시험 내용\n")
     return d
 
 
@@ -1189,6 +1209,110 @@ def test_터미널의_경로_줄_링크는_그_줄로_연다(isolated_page):
     finally:
         _close_overlay(page)
         page.evaluate("(id) => window.removeSession && window.removeSession(id)", sid)
+
+
+def test_마크다운은_정화되어_렌더되고_원문으로_바꿀_수_있다(page):
+    """파일 개편 단계 7 — 실브라우저에서 원문 HTML·onerror·javascript: 링크가 실행되지 않고, 상대 이미지는 /api/fs/raw로
+    실제로 그려지고, 외부 이미지는 자리표시가 된다. 「원문」으로 바꾸면 CodeMirror가 뜬다."""
+    target = _viewer_file("notes.md")
+    dialogs = []
+    page.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
+    try:
+        page.evaluate("(p) => window.openFile(p)", target)
+        page.wait_for_selector("#vt-file .vt-md h1", timeout=15000)
+        page.wait_for_function(
+            "() => [...document.querySelectorAll('#vt-file .vt-md img')].some((i) => i.naturalWidth > 0)", timeout=10000)
+        got = page.evaluate("""() => {
+          const md = document.querySelector('#vt-file .vt-md');
+          const bad = [...md.querySelectorAll('*')].flatMap((el) => el.getAttributeNames()
+            .filter((n) => /^on/i.test(n) || ['id', 'style', 'srcset'].includes(n)).map((n) => el.tagName + ' ' + n));
+          return {
+            xss: window.__vtXss || 0,
+            scripts: md.querySelectorAll('script, iframe, svg').length,
+            bad,
+            links: [...md.querySelectorAll('a')].map((a) => [a.textContent, a.getAttribute('href'), a.getAttribute('rel')]),
+            imgs: [...md.querySelectorAll('img')].map((i) => new URL(i.src).pathname),
+            blocked: md.querySelectorAll('.vt-md-blocked').length,
+            boxes: [...md.querySelectorAll('input')].map((i) => [i.type, i.disabled, i.checked]),
+            text: md.textContent,
+          };
+        }""")
+        assert got["xss"] == 0 and not dialogs, got
+        assert got["scripts"] == 0 and got["bad"] == [], got
+        assert "<script>" in got["text"], "원문 HTML은 글자로 보인다"
+        links = {t: (h, r) for t, h, r in got["links"]}
+        assert links["js"][0] is None
+        assert links["ok"] == ("https://example.com/", "noopener noreferrer")
+        assert links["아래"][0] == "#끝"
+        assert got["imgs"] == ["/api/fs/raw"] and got["blocked"] == 1, got
+        assert got["boxes"] == [["checkbox", True, True], ["checkbox", True, False]]
+        page.locator("#vt-file .vt-vw-seg button", has_text="원문").click()
+        page.wait_for_selector("#vt-file .cm-line", timeout=15000)
+        assert page.locator("#vt-file .vt-md").count() == 0
+        page.locator("#vt-file .vt-vw-seg button", has_text="렌더").click()
+        page.wait_for_selector("#vt-file .vt-md h1", timeout=15000)
+    finally:
+        _close_overlay(page)
+
+
+def test_SVG는_그림으로만_그려지고_주소를_직접_열어도_스크립트가_돌지_않는다(page, server):
+    """결정 D8 — 뷰어는 <img>로만 그리고, /api/fs/raw의 sandbox CSP 때문에 주소를 문서로 열어도 스크립트가 돌지 않는다."""
+    base, _ = server
+    target = _viewer_file("evil.svg")
+    try:
+        page.evaluate("(p) => window.openFile(p)", target)
+        page.wait_for_selector("#vt-file .vt-vw-svg img", timeout=15000)
+        page.wait_for_function("() => document.querySelector('#vt-file .vt-vw-svg img').naturalWidth > 0", timeout=10000)
+        assert page.evaluate("() => window.__vtXss || 0") == 0
+        assert "sandbox" in page.locator("#vt-file .vt-vw-bar").inner_text()
+    finally:
+        _close_overlay(page)
+    raw = page.context.new_page()
+    try:
+        from urllib.parse import quote
+        resp = raw.goto(f"{base}/api/fs/raw?path={quote(target)}")
+        assert resp.status == 200
+        assert "sandbox" in resp.headers["content-security-policy"]
+        raw.wait_for_timeout(300)
+        assert raw.evaluate("() => window.__vtXss || 0") == 0
+        assert raw.title() != "pwned"
+    finally:
+        raw.close()
+
+
+def test_CSV는_표로_PDF는_다운로드만_동영상은_Range로_받는다(page, server):
+    base, _ = server
+    try:
+        page.evaluate("(p) => window.openFile(p)", _viewer_file("table.csv"))
+        page.wait_for_selector("#vt-file .vt-csv-table tbody tr td", timeout=15000)
+        rows = page.evaluate("() => document.querySelectorAll('#vt-file .vt-csv-table tbody tr').length")
+        assert 0 < rows < 200, f"보이는 행만 그린다: {rows}"
+        page.evaluate("(p) => window.openFile(p)", _viewer_file("doc.pdf"))
+        page.wait_for_selector("#vt-file .vt-vw-preview-empty", timeout=15000)
+        assert "PDF는 미리 보지 않습니다" in page.locator("#vt-file .vt-vw-preview-empty").inner_text()
+        assert page.locator("#vt-file iframe, #vt-file embed, #vt-file object").count() == 0
+        page.evaluate("(p) => window.openFile(p)", _viewer_file("clip.mp4"))
+        page.wait_for_selector("#vt-file .vt-vw-media video", timeout=15000)
+    finally:
+        _close_overlay(page)
+    from urllib.parse import quote
+    r = page.context.request.get(f"{base}/api/fs/raw?path={quote(_viewer_file('clip.mp4'))}", headers={"Range": "bytes=0-15"})
+    assert r.status == 206 and r.headers["content-range"].startswith("bytes 0-15/")
+    assert r.body()[4:8] == b"ftyp"
+
+
+def test_뷰어_머리줄에서_내려받으면_같은_이름과_내용이_저장된다(page):
+    """D4 — 인증된 GET 다운로드. 한글 이름이 그대로 남고, 내용은 디스크와 같다."""
+    target = _viewer_file("보고서 1.txt")
+    try:
+        _open_overlay(page, target)
+        with page.expect_download(timeout=15000) as info:
+            page.locator("#vt-file .vt-file-download").click()
+        dl = info.value
+        assert dl.suggested_filename == "보고서 1.txt"
+        assert Path(dl.path()).read_text() == "다운로드 시험 내용\n"
+    finally:
+        _close_overlay(page)
 
 
 def test_레일_파일_버튼은_사라지고_팔레트가_그_자리다(page):

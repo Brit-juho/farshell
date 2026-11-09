@@ -200,3 +200,16 @@ test('core never statically imports the lazy shell or history chunks', () => {
   assert.doesNotMatch(coreJs, /from\s*["']\.\/(shell|history)\.js["']/,
     'a static back edge evaluates lazy listeners before core state initialization');
 });
+
+test('마크다운 미리보기 라이브러리(marked·DOMPurify)는 preview 청크에만 있고 core·panels·app은 정적으로 받지 않는다', () => {
+  // 파일 개편 단계 7 — 마크다운을 「렌더」로 열 때만 받는다. 규칙(markdown.js)은 panels에 있어도 라이브러리는 아니다.
+  const previewJs = fs.readFileSync(path.join(DIST, 'preview.js'), 'utf8');
+  assert.match(previewJs, /function createDOMPurify/);
+  assert.match(previewJs, /markedjs\/marked/);
+  assert.match(previewJs, /function renderMarkdown/);
+  for (const [name, js] of [['core.js', coreJs], ['panels.js', panelsJs], ['app.js', appJs]]) {
+    assert.doesNotMatch(js, /function createDOMPurify|markedjs\/marked/, `${name}에 마크다운 라이브러리가 들어갔다`);
+    assert.doesNotMatch(js, /from\s*["']\.\/preview\.js["']/, `${name}가 preview.js를 정적으로 import한다`);
+  }
+  assert.match(panelsJs, /import\(["']\.\/preview\.js["']\)/, 'panels는 preview 청크를 import()로만 부른다');
+});
