@@ -10,11 +10,13 @@ export function NativeChip(props: { row: SessionRow }) {
   const summary = () => normalizeSubagents(props.row.subagents);
   const count = () => summary().items.filter((r: any) => r.state === 'working').length;
   const fullLabel = () => summary().limited ? t('내부 에이전트 · 표시 한도 도달') : count() ? t('내부 에이전트 {n} 작업 중', { n: count() }) : t('내부 에이전트 {n}개', { n: summary().items.length });
+  // 리디자인 6단계(시안 O15-B) — 칩을 누르면 「작업 기록」 창을 열고 오른쪽에 작업 중인 첫 서브에이전트를 고른다
+  // (예전 「에이전트 내부」 목록 창은 없앴다 — 같은 목록이 작업 기록 왼쪽에 있다).
   const openList = async () => {
     const host = (window as any).vtRelayHost?.() || 'local';
-    const mod = await import('../panels/subagent-viewer.js');
+    const mod = await import('../history/session-record.js');
     if (host !== ((window as any).vtRelayHost?.() || 'local')) return;
-    mod.showSubagents({ tmuxName: props.row.tmuxName, parentId: summary().parentId, items: summary().items, host });
+    mod.openWorkLog({ tmuxName: props.row.tmuxName, select: { kind: 'working' } });
   };
   return <Show when={summary().items.length || summary().limited}>
     {/* 행 폭이 좁아 칩 글자는 줄이고(「내부 3 작업 중」), 전체 문장은 툴팁에 둔다. 아이콘이 에이전트 가지임을 말한다. */}
@@ -37,11 +39,12 @@ export function NativeChildren(props: { row: SessionRow }) {
   const [expanded, setExpanded] = createSignal(saved().expanded === true);
   const [endedOpen, setEndedOpen] = createSignal(saved().ended === true);
   const save = () => { try { localStorage.setItem(storageKey(), JSON.stringify({ expanded: expanded(), ended: endedOpen() })); } catch {} };
+  // 「기록 보기」 — 작업 기록 창 오른쪽에 이 서브에이전트를 고른 채 연다(시안 O15-B 셋째 줄).
   const open = async (child: any) => {
     const host = (window as any).vtRelayHost?.() || 'local';
-    const m = await import('../panels/subagent-viewer.js');
+    const m = await import('../history/session-record.js');
     if (host !== ((window as any).vtRelayHost?.() || 'local')) return;
-    m.showSubagent({ tmuxName: props.row.tmuxName, parentId: summary().parentId, child, host });
+    m.openWorkLog({ tmuxName: props.row.tmuxName, select: { kind: 'subagent', id: child.id, child } });
   };
   const [menu, setMenu] = createSignal<{ x: number; y: number; child: any } | null>(null);
   const openMenu = (e: MouseEvent, child: any) => {

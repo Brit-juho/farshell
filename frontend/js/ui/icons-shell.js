@@ -18,6 +18,8 @@ export const SHELL_ICONS = {
   history: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
   // lucide play — 종료된 행의 「이어서 시작」.
   play: '<polygon points="6 3 20 12 6 21 6 3"/>',
+  // lucide square — 작업 기록 「실행 종료」(정지).
+  square: '<rect width="14" height="14" x="5" y="5" rx="2"/>',
   // lucide corner-down-right — 부모 행의 「위임 보고 1/2」 토글.
   'corner-down-right': '<polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>',
   server: '<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>',

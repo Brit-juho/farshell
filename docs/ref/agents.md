@@ -273,8 +273,19 @@ The user shares an ordinary tmux session (nickname + `read`/`readwrite`) and the
 ## Native subagents
 
 Native CLI children appear below their parent in the expanded desktop rail; Fleet shows
-a count chip that opens the child list and fullscreen record sheet. These are read-only records, separate from delegated tmux sessions. A row shows name, state and elapsed time only — the child's current tool is not drawn (it appears and vanishes with every call, so it flickered); the record viewer still lists tool calls.
-The record viewer shows instructions, responses and tool calls/results as literal text.
+a count chip. These are read-only records, separate from delegated tmux sessions. A row shows name, state and elapsed time only — the child's current tool is not drawn (it appears and vanishes with every call, so it flickered); the record still lists tool calls.
+
+Records open in the **「작업 기록」 window** (`history/session-record.js`, redesign phase 6), which merges the session record and the
+subagent record that used to be two windows. Left (460): the session — status, 이어서 시작 · 실행 종료 · 이름 변경 · 세션 보관 ·
+삭제, linked conversations, delegation (parent / delegated children with their report state), internal subagents, run history.
+Right: the selected internal subagent (polled transcript, `panels/subagent-viewer.js` `mountSubagentTranscript` +
+`subagent-poll.js`) or delegated session (its latest linked conversation from the conversation archive, plus the report text when
+opened from 「보고 보기」), filterable by kind (전체 / 지시 · 답변 / 도구만), with 새로고침. Every entry point opens the same window
+and only preselects the right side: row menu 「작업 기록」 → the most recent subagent, else the most recent delegated child;
+child row 「보고 보기」 → the parent's record with that child selected; 「기록 보기」 on a subagent row → that subagent; the internal
+chip → the first working subagent. The separate 「서브에이전트 기록」 / 「에이전트 내부」 windows (`#vt-subagent`) are gone.
+Catalog routes are direct-host only, so while viewing another host the left side shows the name and internal subagents only.
+All record text (instructions, responses, tool calls/results, titles) is inserted as literal text.
 Thinking/reasoning is excluded by the server. API details live in [API.md](../../API.md#native-subagent-transcripts).
 
 `fsh hooks install` registers Claude SubagentStart/SubagentStop/StopFailure/TeammateIdle

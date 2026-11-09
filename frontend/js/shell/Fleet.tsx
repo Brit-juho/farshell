@@ -344,9 +344,10 @@ function Fleet(props: { deps: FleetDeps }) {
   // 실행 중 행 ↔ 카탈로그 세션(레일과 같은 규칙) — 메뉴의 작업 기록·이름 변경이 쓴다.
   const catalogOf = (row: SessionRow): any | undefined =>
     catalog()?.sessions.find((x) => x.ended == null && x.runtime_id && x.tmux_name === row.tmuxName && x.physical_key === row.physicalKey);
-  const openRecordOf = async (session: any) => {
+  // 실행 중 행에서 열면 tmux 이름도 넘긴다 — 작업 기록 창 왼쪽에 내부 서브에이전트, 오른쪽에 가장 최근 것을 고른다(시안 O15).
+  const openRecordOf = async (session: any, tmuxName?: string | null) => {
     const { openSessionRecord } = await import('../history/session-record.js');
-    openSessionRecord(session.id, () => { catalogPoll.kick(); });
+    openSessionRecord(session.id, () => { catalogPoll.kick(); }, { tmuxName: tmuxName || session.tmux_name || '' });
   };
   const viewGroups = createMemo(() => { layoutVersion(); return groupSessionRows(running(),
     (window as any).getSessionViewGroups?.() || (window as any).getTabGroups?.() || []); });
@@ -646,7 +647,7 @@ function Fleet(props: { deps: FleetDeps }) {
                           class="vt-menu-item"
                           classList={{ danger: !!it.danger }}
                           onClick={() => {
-                            if (it.id === 'record') { const linked = catalogOf(row); if (linked) runMenuAction(() => { void openRecordOf(linked); }); return; }
+                            if (it.id === 'record') { const linked = catalogOf(row); if (linked) runMenuAction(() => { void openRecordOf(linked, row.tmuxName); }); return; }
                             if (it.id === 'rename') { if (row.sessionId) startRename(); else { const linked = catalogOf(row); if (linked) runMenuAction(() => { void renameCatalogSession(linked).then(() => catalogPoll.kick()); }); } return; }
                             runMenuAction(() => runRowMenu(it.id, row, window, () => {}, (d) => fleetMove(row, d)));
                           }}

@@ -1678,25 +1678,8 @@
 .vt-native-row:hover .vt-native-menu-btn, .vt-native-row:focus-within .vt-native-menu-btn { opacity: 1; }
 .vt-native-fold { display: block; width: 100%; height: 28px; background: transparent; border: 0; color: var(--color-sub); padding: 0 6px 0 36px; text-align: start; cursor: pointer; font: var(--weight-normal) var(--fs-xs) / 28px var(--font-ui); }
 .vt-native-fold:hover { background: var(--color-bg-3); color: var(--color-txt); }
-#vt-subagent .vt-viewer-card { width: min(640px, 94vw); }
-#vt-subagent-body { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
-.vt-native-notice { color: var(--color-sub); font-size: 12px; }
-.vt-native-notice:empty { display: none; }
-.vt-native-transcript { overflow: auto; min-height: 100px; display: flex; flex-direction: column; gap: 14px; }
-.vt-native-entry { padding-inline-start: 12px; border-inline-start: 2px solid transparent; }
-.vt-native-entry-label { color: var(--color-muted); font-size: 11px; font-weight: 500; margin-bottom: 4px; }
-.vt-native-entry pre { margin: 0; color: var(--color-txt); font-family: var(--font-mono); font-size: 12px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
-.vt-native-entry[data-kind="user"] { border-inline-start-color: var(--color-acc); }
-.vt-native-entry[data-kind="user"] .vt-native-entry-label { color: var(--color-acc); }
-.vt-native-entry[data-kind="tool_call"], .vt-native-entry[data-kind="tool_result"] { opacity: .8; }
-.vt-native-entry[data-fold] .vt-native-entry-label { cursor: pointer; border-radius: var(--radius-sm); }
-.vt-native-entry[data-fold] .vt-native-entry-label::after { content: ""; display: inline-block; width: 5px; height: 5px; margin-inline-start: 6px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: translateY(-2px) rotate(-45deg); transition: transform var(--dur-fast) var(--ease-out-quint); }
-.vt-native-entry[data-fold="open"] .vt-native-entry-label::after { transform: translateY(-3px) rotate(45deg); }
-.vt-native-entry[data-fold="closed"] pre { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.vt-native-head-dot { margin-inline-end: 2px; }
-@media (max-width: 719px) { #vt-subagent .vt-viewer-card { width: 100%; height: 100%; max-height: 100%; } }
 @media (pointer: coarse) {
-  .vt-native-open, .vt-native-fold, .vt-native-picker { min-height: 44px; }
+  .vt-native-open, .vt-native-fold { min-height: 44px; }
   .vt-native-menu-btn { opacity: 1; --icon-btn: 36px; }
 }
 
@@ -1705,9 +1688,6 @@
 .vt-native-chip:hover { color: var(--color-txt); background: var(--color-bg-3); }
 .vt-native-chip[data-working] { color: var(--color-st-working); border-color: color-mix(in srgb, var(--color-st-working) 30%, transparent); background: color-mix(in srgb, var(--color-st-working) 10%, transparent); }
 .vt-native-chip-icon { display: inline-flex; }
-.vt-native-picker { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 8px 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-txt); text-align: start; cursor: pointer; }
-.vt-native-picker:hover { background: var(--color-bg-3); }
-.vt-native-picker .vt-native-name { flex: 1; }
 
 /* Customization manager: one list, explicit context, detail only on demand. */
 .vt-agent-config { display: flex; flex-direction: column; gap: 12px; min-width: 0; }

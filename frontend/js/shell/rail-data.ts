@@ -610,9 +610,26 @@ export function runRowMenu(
     case 'moveUp': move?.(-1); break;
     case 'moveDown': move?.(1); break;
     case 'openParent': if (row.lineage?.parent) w.vtOpenSessionFromRail?.({ sessionId: null, tmuxName: row.lineage.parent }); break;
-    case 'report': if (row.lineage) void alertDialog(row.lineage.summary, { title: t('{name}의 보고', { name: row.name }) }); break;
+    // 리디자인 6단계(시안 O15-C) — 보고를 알림 창 대신 「작업 기록」으로 연다: 부모 세션 기록 왼쪽, 오른쪽에 이 위임 세션(보고 포함).
+    // 부모가 사라졌으면 이 세션 자신의 기록을 연다.
+    case 'report': if (row.lineage) void openReport(row, w); break;
     case 'closeDelegation': if (row.lineage) void closeDelegation(row.lineage.delegation, w); break;
   }
+}
+
+async function openReport(row: { tmuxName?: string | null; name?: string; lineage?: Lineage | null }, w: any): Promise<void> {
+  const lin = row.lineage;
+  if (!lin) return;
+  try {
+    const { openWorkLog } = await import('../history/session-record.js');
+    openWorkLog({
+      tmuxName: lin.parent || row.tmuxName || '',
+      select: { kind: 'delegate', tmuxName: row.tmuxName, delegation: lin.delegation, name: row.name, summary: lin.summary },
+    });
+  } catch {
+    void alertDialog(lin.summary, { title: t('{name}의 보고', { name: row.name || '' }) });
+  }
+  void w;
 }
 
 async function closeDelegation(id: string, w: any): Promise<void> {
