@@ -254,6 +254,16 @@ def _grep(path: str, spec: dict, token) -> dict:
     return fs_grep.search(path, spec, res_scan.skip_prefixes(_managed_skip_prefixes()), token)
 
 
+@router.get("/api/fs/grep/progress")
+async def fs_grep_progress(request: Request, sid: str = Query("")):
+    """돌고 있는 내용 검색의 진행 — 같은 클라이언트(자격 + `sid`)의 것만 보인다(계약은 API.md). 검색 풀을 쓰지 않고
+    자리(`fs_grep.SLOTS`)에 적힌 숫자 두 개만 읽는다."""
+    p = fs_grep.SLOTS.progress(fs_grep.client_key(request, sid))
+    if p is None:
+        return {"running": False}
+    return {"running": True, "total": p["total"], "searched": p["searched"]}
+
+
 @router.get("/api/fs/grep")
 async def fs_grep_route(request: Request, q: str = Query(""), path: str = Query(""),
                         mode: str = Query("literal"), case: bool = Query(False), word: bool = Query(False),

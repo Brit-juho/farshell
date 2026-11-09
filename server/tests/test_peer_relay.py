@@ -33,6 +33,7 @@ import relay_policy
     ("POST", "/api/upload"),
     ("GET", "/api/fs/raw"),
     ("GET", "/api/fs/grep"),
+    ("GET", "/api/fs/grep/progress"),                   # 내용 검색 진행(같은 sid의 것만 보인다)
     ("GET", "/api/git/status"),
     ("POST", "/api/queue"),
     ("GET", "/api/capabilities"),
@@ -60,6 +61,7 @@ def test_policy_allows_host_scoped_apis(method, path):
     ("POST", "/api/tmux/open-on-mac"),
     ("POST", "/api/capabilities"),                       # 읽기 전용은 GET만
     ("POST", "/api/fs/grep"),
+    ("POST", "/api/fs/grep/progress"),
     ("GET", "/api/files/../auth"),
     ("GET", "/api//files"),
     ("GET", "/api/unknown"),

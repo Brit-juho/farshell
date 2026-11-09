@@ -4967,5 +4967,15 @@ window.__VT_I18N = {
   "오른쪽에 고정(나란히 보기)": "Pin to the right (side by side)",
   "오른쪽 고정 해제": "Unpin from the right",
   "오른쪽에 고정됨": "Pinned to the right",
-  "오른쪽 고정: {name}": "Pinned on the right: {name}"
+  "오른쪽 고정: {name}": "Pinned on the right: {name}",
+  "{name} 대기 중": "{name} waiting",
+  "{name} 받기를 취소했습니다": "Cancelled downloading {name}",
+  "동시에 {n}개까지 받습니다 — 앞의 것이 끝나면 시작합니다": "Up to {n} downloads run at once — this one starts when an earlier one finishes",
+  "⌘/Ctrl + 휠 · 두 손가락으로 확대": "⌘/Ctrl + wheel · pinch to zoom",
+  "맞춤": "Fit",
+  "맞춤 · {pct}%": "Fit · {pct}%",
+  "이미지 크기": "Image size",
+  "검색 중 · 파일 {searched} / {total} · {secs}": "Searching · {searched} / {total} files · {secs}",
+  "결과가 오래됨": "Results are out of date",
+  "검색한 뒤 이 범위의 파일이 바뀌었습니다": "Files in this scope changed after the search"
 };

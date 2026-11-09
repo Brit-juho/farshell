@@ -67,6 +67,15 @@
 }
 @keyframes vtGrepBar { from { transform:translateX(-100%); } to { transform:translateX(340%); } }
 @media (prefers-reduced-motion: reduce) { .vt-gr-bar { animation:none; width:100%; opacity:.5; } }
+/* 서버가 후보 수를 알려 주면 채워지는 막대(GET /api/fs/grep/progress) — 폭은 인라인(읽은 수 / 후보 수). */
+.vt-gr-bar.det { animation:none; transform:none; opacity:1; transition:width var(--dur-fast) linear; }
+/* 「결과가 오래됨」 — 결과 머리 아래 한 줄(시안 F06-C). 경고색은 글자에만, 바탕은 칠하지 않는다. */
+.vt-gr-stale {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 2); flex:none; min-width:0;
+  min-height:32px; padding:0 calc(var(--spacing) * 2) 0 calc(var(--spacing) * 3); border-bottom:1px solid var(--line);
+  font-size:var(--fs-xs); color:var(--warn);
+}
+.vt-gr-stale .vt-gr-cancel { margin-left:auto; color:var(--txt); }
 
 /* ── 결과 ─────────────────────────────────────────────────────────────────── */
 .vt-gr-main { display:flex; flex:1; min-height:0; }
