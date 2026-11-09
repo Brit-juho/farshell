@@ -155,8 +155,8 @@ JS-generated overlays (palette, dock) also inherit tokens through `.vt-*` classe
 | `farshell` | Near-black (panes #121316, chrome #17181b) + **single blue accent** (#7aa2ff). Amber survives only as the `waiting` state (#f2b350). Not an impersonation of any OS — our own face. Since redesign phase 3 (2026-11) — it was near-black + amber accent (#f0a860) before | ✅ default |
 | `macos` | iTerm2/Terminal.app — traffic lights, SF fonts, system blue, translucent title bar (`--color-titlebar-bg`) | |
 | `catppuccin` | Pastel — no chrome, lavender accent | |
-| `windows` | Windows Terminal — caption buttons, Cascadia, Fluent blue, Campbell terminal palette | |
-| `vscode` | VS Code integrated terminal — dark gray, Fluent blue accent, blue status bar (`--color-statusbar-bg`) | |
+| `windows` | Windows Terminal — caption buttons, Cascadia, Fluent blue, Campbell terminal palette, square 2px controls (§2 Radius) | |
+| `vscode` | VS Code integrated terminal — dark gray, Fluent blue accent, blue status bar (`--color-statusbar-bg`), square 2px controls (§2 Radius) | |
 | `notepad` | Notepad/paper feel — the only **light theme**, warm off-white background | |
 | `warp` | Warp terminal — near-black with a violet cast, single-token accent (`--color-acc`) drawn from a coral→lavender→sky gradient family that surface CSS (e.g. the settings page title) can paint as a gradient text-fill; rounder corners (`--wrad` 16px) than any other skin | |
 | `linear` | Linear — near-black, one flat indigo accent, almost-invisible hairline borders (`--color-line` alpha .05, half of every other dark skin) | |
@@ -315,8 +315,9 @@ enough, refresh it.
   (38/46) stay outside the scale — they size three empty-state glyphs, not text.
 - **Radius:** `--radius-xs`(**4px** — small 24px buttons, chips, menu items) / `--radius-sm`(**6px**,
   was 5 — every control: 28px buttons, inputs, selects) / `--radius-lg`(**8px**, was 10 — menus,
-  dialogs, cards, sheets) / `--radius-full`. There is no `--radius-md`. No skin overrides the radius
-  scale (skins shape their window and tab corners with `--wrad`/`--trad`).
+  dialogs, cards, sheets) / `--radius-full`. There is no `--radius-md`. Skins shape their window and tab corners with `--wrad`/`--trad`; only
+  `windows` and `vscode` override the scale: `--radius-xs`/`--radius-sm` (and `--trad`) are **2px** there, the square controls of
+  Windows Terminal and VS Code, while `--radius-lg` frames (menus, dialogs, cards, sheets) and `--wrad` stay as in every other skin.
 - **Shadow:** `--shadow-e1` (the current row) + `--shadow-e2`/`e3` (overlays).
   e1 must be defined in every skin — see §0 for why.
 - **Motion:** `--dur-fast`(120ms) / `--dur-base`(200ms), `--ease-out-quint`.

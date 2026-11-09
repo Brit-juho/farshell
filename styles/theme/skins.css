@@ -112,6 +112,11 @@
      * bg-0(#0c0c0c)/bg-1(#1a1a1a) 두 앵커를 기준으로 farshell과 같은 4단
      * 순서(bg-0 < bg-2 < bg-1 < bg-3)로 다시 세웠다 — bg-2/bg-3는 그
      * 두 앵커 사이·바깥 간격을 그대로 비례 적용한 값(0.5×·2× 델타). */
+    /* 2026-11-09 — 각진 컨트롤(impl-plan 결정 8). Windows Terminal·VS Code의 버튼·입력·칩은 거의 각져 있다.
+     * 작은 단계(xs·sm — 칩·메뉴 항목·버튼·입력·선택 상자)만 2px로 깎고, 큰 틀(lg — 메뉴·대화상자·카드·시트)과
+     * 창 모서리(--wrad)는 그대로 둔다. DESIGN.md §2 「Radius」. */
+    --radius-xs: 2px;
+    --radius-sm: 2px;
     --color-bg-0: #0c0c0c;
     --color-bg-1: #1a1a1a;
     --color-bg-2: #131313;
@@ -155,6 +160,11 @@
      * 더 가깝게(기존 #2d2d2d는 과장돼 있었다). bg-2/bg-3는 bg-0/bg-1 델타를
      * 그대로 비례 적용(windows와 같은 방식) — 기존 bg-2 값(#252526)이 이번
      * bg-1 신값과 우연히 같아져서 자리를 바꿨다. */
+    /* 2026-11-09 — 각진 컨트롤(impl-plan 결정 8). Windows Terminal·VS Code의 버튼·입력·칩은 거의 각져 있다.
+     * 작은 단계(xs·sm — 칩·메뉴 항목·버튼·입력·선택 상자)만 2px로 깎고, 큰 틀(lg — 메뉴·대화상자·카드·시트)과
+     * 창 모서리(--wrad)는 그대로 둔다. DESIGN.md §2 「Radius」. */
+    --radius-xs: 2px;
+    --radius-sm: 2px;
     --color-bg-0: #1e1e1e;
     --color-bg-1: #252526;
     --color-bg-2: #222222;

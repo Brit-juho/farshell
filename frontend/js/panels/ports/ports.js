@@ -8,6 +8,7 @@ import { vtFetch, vtEsc } from '../../core/api.js';
 import { _isCoarsePointer } from '../../core/env.js';
 import { confirmDialog, alertDialog, promptDialog, openDialog, nextId } from '../../core/dialog.js';
 import { relayPath } from '../../core/host-route.js';
+import { exposeWithDangerConfirm } from './danger-confirm.js';
 import { t } from '../../core/i18n.js';
 import { icon } from '../../ui/icons.js';
 import { pIcon } from '../panel-icons.js';
@@ -638,18 +639,16 @@ async function _unexposeTunnel(ctx, port) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ confirm: true, mode: choice.mode, ttl: choice.ttl, auto_renew: choice.autoRenew, ...extra }),
       });
-      const r = await send({}).catch(async (e) => {
-        // 위험 포트(Chrome 원격 디버깅 등) — 서버가 이유를 알려 준다. 한 번 더 확인받는다.
-        if (e.status === 409 && e.data && e.data.error === 'dangerous_port') {
-          const ok = await confirmDialog(
-            t('{reason}\n\n이 포트를 공개 인터넷에 열면 접근 제어가 있어도 위험합니다. 그래도 열까요?', { reason: e.data.reason }),
-            { title: t('포트 {port}는 위험한 포트입니다', { port }), okLabel: t('그래도 공개'), danger: true });
-          if (!ok) { showToast(t('공개를 취소했습니다')); return null; }
-          return send({ force_danger: true }).catch((e2) => { showToast(t('공개 실패: {msg}', { msg: e2.message })); return null; });
-        }
+      // 위험 포트(Chrome 원격 디버깅 등) — 판정은 서버 하나가 한다(port_share_store.danger_reason).
+      // 서버가 409 dangerous_port 로 이유를 주면 포트 번호를 그대로 입력받은 뒤에만 force_danger 를 붙여 다시 보낸다(시안 P06-d).
+      let r = null;
+      try {
+        const out = await exposeWithDangerConfirm(port, send);
+        if (out.canceled) showToast(t('공개를 취소했습니다'));
+        r = out.result || null;
+      } catch (e) {
         showToast(t('공개 실패: {msg}', { msg: e.message }));
-        return null;
-      });
+      }
       if (r) {
         if (r.pin) await _showPinOnce(r.pin);
         else showToast(r.url ? t('공개됨: {url}', { url: r.url }) : t('공개됨'));

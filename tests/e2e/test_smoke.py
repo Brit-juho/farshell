@@ -3776,3 +3776,126 @@ def test_폰_파일_편집은_아래_탭을_숨기고_키_줄로_고치고_저�
         _close_overlay(pg)
     pg.wait_for_timeout(200)
     assert pg.locator("#vt-mnav-bottom").is_visible()
+
+
+# ── 후속: 위험 포트 번호 확인(P06-d) · windows/vscode 각진 컨트롤 ──────────────────
+
+_FUP_SHOTS = Path("/tmp/fup-shots")
+# port_share_store.danger_reason 이 위험하다고 보는 포트 중 이 기계에서 비어 있을 법한 것들(ngrok · cloudflared · Docker · 프록시 범위).
+_DANGER_CANDIDATES = [4043, 4042, 4041, 20245, 20244, 20243, 2376, 2375] + list(range(7899, 7849, -1))
+
+
+def _fup_shot(pg, name: str, **kw) -> None:
+    _FUP_SHOTS.mkdir(parents=True, exist_ok=True)
+    pg.screenshot(path=str(_FUP_SHOTS / f"{name}.png"), **kw)
+
+
+def _listen_on_danger_port():
+    """위험 목록 안의 빈 포트 하나에 진짜 리스너를 띄운다(포트 패널은 lsof 로 본 것만 보인다). (proc, port)."""
+    for p in _DANGER_CANDIDATES:
+        s = socket.socket()
+        try:
+            s.bind(("127.0.0.1", p))
+        except OSError:
+            continue
+        finally:
+            s.close()
+        proc = subprocess.Popen([sys.executable, "-m", "http.server", str(p), "--bind", "127.0.0.1"],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd="/tmp")
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            try:
+                with socket.create_connection(("127.0.0.1", p), timeout=0.3):
+                    return proc, p
+            except OSError:
+                time.sleep(0.1)
+        proc.kill()
+    pytest.skip("위험 목록 안에 빈 포트가 없다")
+
+
+def test_위험_포트_공개는_포트_번호를_그대로_입력해야_켜진다(page, server):
+    """서버가 409 dangerous_port 로 거부하면 확인 창이 뜨고, 정확한 번호를 입력해야 「공개」가 켜진다.
+    취소하면 force 요청이 안 나가고, 확인하면 그때만 force_danger:true 로 다시 보낸다. 이 격리 서버는
+    VT_NETWORK_MODE=localhost 라 그 다시 보낸 요청도 network_mode 409 로 끝난다 — 터널은 열리지 않는다."""
+    base, _ = server
+    assert page.context.request.post(f"{base}/api/auth/elevate", data={"password": E2E_PASSWORD}).ok
+    proc, port = _listen_on_danger_port()
+    sent: list[dict] = []
+    page.on("request", lambda r: sent.append(json.loads(r.post_data or "{}"))
+            if r.method == "POST" and f"/api/ports/{port}/expose" in r.url else None)
+    try:
+        _open_dock(page, "포트")
+        row = page.locator(f'#vt-dock .vt-pt-row[data-pk^="{port}:"]').first
+        row.wait_for(timeout=20000)
+
+        def open_danger_dialog():
+            row.hover()
+            row.locator('button[aria-label="공개"]').click()
+            page.locator(".vt-dialog .vt-dialog-ok").last.click()          # 일반 공개 창의 「공개」
+            page.wait_for_selector(".vt-pt-danger-dialog .vt-pt-danger-input", timeout=10000)
+            return page.locator(".vt-pt-danger-dialog")
+
+        dlg = open_danger_dialog()
+        ok = dlg.locator(".vt-dialog-ok")
+        assert sent == [{"confirm": True, "mode": "session", "ttl": 3600, "auto_renew": False}], sent
+        expect(ok).to_be_disabled()
+        assert page.evaluate("() => document.activeElement.classList.contains('vt-dialog-cancel')"), "기본 초점은 취소"
+        inp = dlg.locator(".vt-pt-danger-input")
+        inp.fill(str(port)[:-1])
+        expect(ok).to_be_disabled()
+        inp.fill(str(port) + "0")
+        expect(ok).to_be_disabled()
+        inp.fill(str(port))
+        expect(ok).to_be_enabled()
+        page.keyboard.press("Escape")
+        expect(page.locator(".vt-pt-danger-dialog")).to_have_count(0)
+        page.wait_for_timeout(300)
+        assert len(sent) == 1, f"취소하면 force 요청이 없다: {sent}"
+
+        dlg = open_danger_dialog()
+        ok = dlg.locator(".vt-dialog-ok")
+        inp = dlg.locator(".vt-pt-danger-input")
+        inp.fill(str(port + 1))
+        expect(ok).to_be_disabled()
+        inp.fill(str(port))
+        page.wait_for_timeout(150)
+        _fup_shot(page, "p06d-danger-confirm-farshell")
+        ok.click()
+        expect(page.locator(".vt-pt-danger-dialog")).to_have_count(0)
+        deadline = time.time() + 10
+        while len(sent) < 3 and time.time() < deadline:
+            page.wait_for_timeout(100)
+        assert len(sent) == 3, sent
+        assert "force_danger" not in sent[1], sent
+        assert sent[2].get("force_danger") is True, sent
+    finally:
+        proc.kill()
+        proc.wait(timeout=5)
+
+
+@pytest.mark.parametrize("skin", ["windows", "vscode"])
+def test_windows_vscode_스킨은_컨트롤이_2px로_각진다(page, skin):
+    """두 스킨에서 --radius-xs/--radius-sm 이 2px(버튼·입력이 각짐), 큰 틀 --radius-lg 는 8px 그대로. 기본 스킨은 6px."""
+    page.set_viewport_size(WIDE)
+    page.evaluate("(s) => document.documentElement.setAttribute('data-skin', s)", skin)
+    _open_dock(page, "포트")
+    page.wait_for_timeout(300)
+    r = page.evaluate("""() => {
+      const cs = getComputedStyle(document.documentElement);
+      const b = document.createElement('button'); b.className = 'vt-btn'; b.textContent = 'x';
+      const i = document.createElement('input'); i.className = 'vt-dialog-input';
+      document.body.append(b, i);
+      const out = { xs: cs.getPropertyValue('--radius-xs').trim(), sm: cs.getPropertyValue('--radius-sm').trim(),
+                    lg: cs.getPropertyValue('--radius-lg').trim(), btn: getComputedStyle(b).borderTopLeftRadius,
+                    inp: getComputedStyle(i).borderTopLeftRadius };
+      b.remove(); i.remove();
+      return out;
+    }""")
+    assert r == {"xs": "2px", "sm": "2px", "lg": "8px", "btn": "2px", "inp": "2px"}, r
+    _fup_shot(page, f"skin-{skin}-1440x900")
+    page.evaluate("window.openPalette()")
+    page.wait_for_timeout(300)
+    _fup_shot(page, f"skin-{skin}-palette-1440x900")
+    page.keyboard.press("Escape")
+    page.evaluate("() => document.documentElement.setAttribute('data-skin', 'farshell')")
+    assert page.evaluate("() => getComputedStyle(document.documentElement).getPropertyValue('--radius-sm').trim()") == "6px"
