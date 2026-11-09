@@ -14,7 +14,8 @@ export type PaletteMode =
   | 'queue'
   | 'port'
   | 'scrollback'
-  | 'settings';
+  | 'settings'
+  | 'grep';
 
 export interface ParsedQuery {
   mode: PaletteMode;
@@ -31,6 +32,9 @@ export interface ParsedQuery {
 // 8번째 접두사로 유지).
 export const PREFIX_MODE: Record<string, PaletteMode> = {
   '/': 'file',
+  // 파일 개편 단계 6(사용자 선택 2 「가」, 2026-11-09) — 파일 **내용** 검색. 「무엇이 들어 있나?」로 읽히고 폰 자판의
+  // 첫 기호 화면에 있다. 「?」로 시작하는 글자를 찾으려면 「? ?.」처럼 한 번 더 쓴다.
+  '?': 'grep',
   '@': 'session',
   ':': 'keymap',
   '#': 'queue',
@@ -41,6 +45,7 @@ export const PREFIX_MODE: Record<string, PaletteMode> = {
 
 export const MODE_PREFIX: Record<Exclude<PaletteMode, 'default'>, string> = {
   file: '/',
+  grep: '?',
   session: '@',
   keymap: ':',
   queue: '#',
@@ -50,7 +55,10 @@ export const MODE_PREFIX: Record<Exclude<PaletteMode, 'default'>, string> = {
 };
 
 export const PLACEHOLDER =
-  t('세션 · 최근 파일 · 명령 검색… ( / 파일 · @ 세션 · : 명령 · # 큐 · ! 포트 · ~ 스크롤백 )');
+  t('세션 · 최근 파일 · 명령 검색… ( / 파일 · ? 내용 · @ 세션 · : 명령 · # 큐 · ! 포트 · ~ 스크롤백 )');
+
+/** 팔레트 아래 고정 줄의 접두어 안내. */
+export const MODE_HINT = t('/ 파일 · ? 내용 · @ 세션 · : 명령 · # 큐 · ! 포트 · ~ 스크롤백');
 
 export function parseQuery(rawInput: string): ParsedQuery {
   const raw = (rawInput || '').trim();

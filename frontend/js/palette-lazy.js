@@ -21,6 +21,8 @@ import { loadViewer, openFile, openFileInPane } from './panels/viewer-lazy.js';
 import { setVtSkin, vtSkins, vtSkinLabel } from './theme.js';
 import { buildSessionCard, updateSessionCard } from './agent/preview.js';
 import { showToast } from './ui/toast.js';
+import { relayHost } from './core/host-route.js';
+import { isMacKeyboard } from './core/platform.js';
 import { t } from './core/i18n.js';
 
 // 이름의 출처는 세션 레코드다(core/store.js의 sessionDisplayName) — 예전엔
@@ -65,6 +67,8 @@ const deps = {
   displayCombo,
   displayComboHtml,
   showToast,
+  host: relayHost(),
+  openSidebarSearch: (q, opts) => openContentSearch({ q, opts }),
 };
 
 let _api = null;
@@ -115,12 +119,51 @@ function maybeShowRewireToast() {
 
 // N40/N46 — `Mod+F`는 이제 팔레트를 `~`(스크롤백 검색) 모드로 연다.
 registerKey('search', () => { maybeShowRewireToast(); openPalette('scrollback'); });
-// 예전 `Mod+F`(인페인 검색바)는 `Mod+Shift+F`로 내려갔다 — term/search-bar.js가
+// 예전 `Mod+F`(인페인 검색바)는 `searchInPane`으로 내려갔다(지금 기본 Alt+Shift+F) — term/search-bar.js가
 // 등록한 `search.toggle` 액션을 그대로 호출한다(액션 id는 안 바뀐다).
 registerKey('searchInPane', () => {
   const fn = getAction('search.toggle');
   if (typeof fn === 'function') fn();
 });
+
+// ── 파일 내용 검색(파일 개편 단계 6) ─────────────────────────────────────────
+// `contentSearch`(mac ⌘⇧F)는 사이드바 「파일 › 내용 검색」을 연다(시안 F06-C, 사용자 선택 2 「가」). 좁은 화면(폰)은
+// 사이드바 대신 팔레트 `?` 모드. 사이드바의 파일 트리는 files 청크(files/mount.tsx)가 그리므로 여기서는 요청만 남긴다:
+// 이미 떠 있으면 `vt:files-search` 이벤트로, 아니면 `window.__vtFilesSearchPending`에 두고 `dir.show`로 연다 — 트리가
+// 붙으면서 그 요청을 꺼내 쓴다. `dir.show`는 토글이라 이미 열린 패널에는 부르지 않는다.
+function openContentSearch(detail = {}) {
+  if (window.matchMedia?.('(max-width:719px)').matches) { openPalette('grep'); return; }
+  const req = { focus: true, ...detail };
+  const panel = document.getElementById('vt-dir');
+  if (panel && panel.isConnected && panel.querySelector('.vt-fs-side')) {
+    window.dispatchEvent(new CustomEvent('vt:files-search', { detail: req }));
+    return;
+  }
+  window.__vtFilesSearchPending = req;
+  const show = getAction('dir.show');
+  if (typeof show === 'function') show();
+  else openPalette('grep');
+}
+
+// 터미널 내 검색이 ⌘⇧F에서 ⌥⇧F로 옮겨 간 것을 mac에서 처음 ⌘⇧F를 누를 때 한 번 알린다(R7과 같은 근육기억 완화).
+const MOVE_TOAST_KEY = 'vt.palette.contentSearchMoveToastShown';
+function maybeShowMoveToast() {
+  const pane = getBinding('searchInPane');
+  if (!pane || !pane.isDefault || !isMacKeyboard) return;
+  try {
+    if (localStorage.getItem(MOVE_TOAST_KEY)) return;
+    localStorage.setItem(MOVE_TOAST_KEY, '1');
+  } catch (_) { /* 안내가 매번 뜨더라도 없는 것보다 낫다 */ }
+  showToast(t('{key}은 이제 파일 내용 검색입니다 — 터미널 내 검색은 {pane}', { key: displayCombo('Mod+Shift+F'), pane: displayCombo(pane.combo) }), 'info', { duration: 6000 });
+}
+
+registerKey('contentSearch', () => { maybeShowMoveToast(); openContentSearch(); });
+registerAction('files.search', () => openContentSearch());
+// 사이드바 「내용 검색」 칸 옆에 적는 단축키(사용자가 바꿨으면 바꾼 조합). files 청크는 keymap을 import하지 않는다.
+window.vtContentSearchHint = () => {
+  const b = getBinding('contentSearch');
+  return b && !b.unavailable ? displayCombo(b.combo) : '';
+};
 
 // 실브라우저 스모크·디버깅용 브리지 — openFileInPane(panels/viewer-lazy.js)과
 // 같은 관행.

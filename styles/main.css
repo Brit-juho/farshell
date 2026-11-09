@@ -73,3 +73,5 @@
 @import "./screens/95-bars.css"           layer(legacy);
 /* 파일 개편 단계 5(2026-11) — 사이드바 「파일」 트리(files/FileTree.tsx)와 폰 「파일 | 첨부」 전환. 막대(95) 뒤. */
 @import "./screens/96-files-tree.css"     layer(legacy);
+/* 파일 개편 단계 6(2026-11) — 파일 내용 검색(팔레트 `?` 모드 + 사이드바 「파일 › 내용 검색」). 팔레트(30)·트리(96) 뒤. */
+@import "./screens/97-grep.css"           layer(legacy);

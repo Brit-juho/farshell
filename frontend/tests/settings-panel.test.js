@@ -261,9 +261,10 @@ test('키맵 — 재바인딩: 버튼을 누르고 조합을 입력하면 저장
   const btn = rowByLabel(document, '스크롤백 검색').querySelector('.vt-set-combo');
   btn.click();
   assert.ok(btn.classList.contains('recording'), '녹화 상태가 보여야 한다');
-  document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'g', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }));
+  // 비어 있는 조합으로 고른다 — Ctrl+Shift+G는 이제 비-mac의 「파일 내용 검색」 기본값이라 겹침으로 거절된다.
+  document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'y', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }));
   await flush();
-  assert.strictEqual(K.normalize(K.list().find((b) => b.id === 'search').combo), 'mod+shift+g');
+  assert.strictEqual(K.normalize(K.list().find((b) => b.id === 'search').combo), 'mod+shift+y');
 });
 
 test('키맵 — 수식키만 누르면 확정되지 않는다', async () => {
