@@ -14,6 +14,7 @@
 // panels/usage-badge.js에 있고, 여기는 "볼 때" 필요한 렌더러만 담는다.
 import { openPanel, setPanelPoll } from './panel.js';
 import { emptyState } from '../ui/empty.js';
+import { icon } from '../ui/icons.js';
 import { vtFetch } from '../core/api.js';
 import { paintRailBadge } from './usage-badge.js';
 import { t } from '../core/i18n.js';
@@ -26,7 +27,7 @@ const POLL_MS = 30000;   // 피드 자체가 90초 주기라 그보다 자주 �
 // 화면만 따로 만들지 않는다).
 function barColor(pct) {
   if (pct > 95) return 'var(--color-st-error)';
-  if (pct > 80) return 'var(--color-st-waiting)';
+  if (pct >= 75) return 'var(--color-st-waiting)';   // 시안 P07 — 75% 넘는 창은 호박(waiting)
   return 'var(--color-acc)';
 }
 
@@ -49,9 +50,12 @@ function el(tag, cls, text) {
   return n;
 }
 
+// 창 하나(시안 P07): 이름 … 값(mono, 75% 넘으면 waiting) / 막대 4px / 리셋까지 남은 시간(11 muted).
 function renderWindow(w) {
   const row = el('div', 'vt-usage-win');
-  row.appendChild(el('span', 'vt-usage-label', w.label));
+  const head = el('div', 'vt-usage-win-head');
+  head.appendChild(el('span', 'vt-usage-label', w.label));
+  row.appendChild(head);
 
   const track = el('div', 'vt-usage-track');
   const fill = el('div', 'vt-usage-fill');
@@ -64,10 +68,12 @@ function renderWindow(w) {
   track.setAttribute('aria-valuemin', '0');
   track.setAttribute('aria-valuemax', '100');
   track.setAttribute('aria-label', t('{label} 사용량 {pct}%', { label: w.label, pct: Math.round(pct) }));
+  const pctEl = el('span', 'vt-usage-pct', `${Math.round(pct)}%`);
+  if (pct >= 75) pctEl.classList.add('warn');
+  head.appendChild(pctEl);
   row.appendChild(track);
-
-  row.appendChild(el('span', 'vt-usage-pct', `${Math.round(pct)}%`));
-  row.appendChild(el('span', 'vt-usage-reset', humanIn(w.resets_in_sec)));
+  const reset = humanIn(w.resets_in_sec);
+  if (reset) row.appendChild(el('span', 'vt-usage-reset', reset));
   return row;
 }
 
@@ -116,40 +122,50 @@ async function startReauth(p) {
 }
 
 function renderProfile(p, activeName) {
-  const card = el('div', 'vt-usage-card');
-  if (p.name === activeName || p.active) card.classList.add('active');
+  // 카드(시안 P07): 반경 8 · 여백 12. 지금 쓰는 프로필은 액센트 테두리. 머리 = 이름 13/600 · 요금제 11 muted …
+  // 꼬리표(실행 중 · 활성 · 재인증 필요). 상태는 색만이 아니라 낱말 꼬리표로 말한다.
+  const card = el('div', 'vt-usage-card vt-pcard');
+  const isActive = p.name === activeName || p.active;
+  if (isActive) card.classList.add('active', 'act');
 
   const head = el('div', 'vt-usage-head');
   const title = el('span', 'vt-usage-name', p.name);
   head.appendChild(title);
-  if (p.tier) head.appendChild(el('span', 'vt-tag vt-usage-tier', p.tier));
+  if (p.tier) head.appendChild(el('span', 'vt-usage-tier', p.tier));
   // rolling 토큰은 고정 토큰과 성격이 다르다 — 같은 모양으로 그리면 사용자가
   // "왜 값이 계속 바뀌지"를 오해한다(계획서 §4).
-  if (p.rolling_token) head.appendChild(el('span', 'vt-tag vt-usage-chip', 'rolling'));
-  if (p.has_live_session) {
-    // ● 글리프 대신 저장소에 이미 있는 .status-dot 컴포넌트를 쓴다
-    // (styles/layers/components.css). 글리프는 폰트마다 크기·중심이 달라
-    // 글줄에서 떠 보였고, 상태색 토큰과도 연결돼 있지 않았다.
-    const live = el('span', 'vt-usage-live');
-    const liveDot = el('span', 'status-dot');
-    liveDot.dataset.state = 'working';
-    live.appendChild(liveDot);
-    live.appendChild(document.createTextNode('live'));
-    live.title = t('이 프로필로 실행 중인 세션이 있습니다');
-    head.appendChild(live);
-  }
-  card.appendChild(head);
-
+  if (p.rolling_token) head.appendChild(el('span', 'vt-ptag vt-usage-chip', 'rolling'));
+  const tags = el('span', 'vt-usage-tags');
   // 경고는 게이지보다 **위**에 온다 — 재인증이 필요한데 숫자를 먼저 보여주면
   // 그 숫자가 신뢰할 수 있는 값이라고 착각하게 된다.
   const needsAuth = !p.auth_ok || p.fetch_status === 'AuthExpired';
+  if (p.has_live_session) {
+    const live = el('span', 'vt-ptag vt-usage-live', t('실행 중'));
+    live.dataset.tone = 'work';
+    live.title = t('이 프로필로 실행 중인 세션이 있습니다');
+    tags.appendChild(live);
+  }
+  if (isActive) {
+    const act = el('span', 'vt-ptag', t('활성'));
+    act.dataset.tone = 'acc';
+    act.title = t('지금 쓰고 있는 프로필');
+    tags.appendChild(act);
+  }
+  if (needsAuth && p.quota_scope !== 'unsupported') {
+    const bad = el('span', 'vt-ptag', t('재인증 필요'));
+    bad.dataset.tone = 'err';
+    tags.appendChild(bad);
+  }
+  head.appendChild(tags);
+  card.appendChild(head);
+
   if (needsAuth) {
     // terminal 상태다 — 자동 재시도로 감추지 않는다(계획서 §4).
     const warn = el('div', 'vt-usage-warn');
     warn.appendChild(el('span', 'vt-usage-warn-text', p.profile_id && p.quota_scope === 'unsupported'
       ? t('이 제공자의 사용량 조회는 지원하지 않습니다')
       : p.profile_id && p.quota_scope === 'api-key' ? t('API 인증 설정을 확인하세요 ({status})', { status: p.auth_status }) : !p.auth_ok
-      ? t('재인증 필요 ({status})', { status: p.auth_status })
+      ? t('인증이 끊겨 사용량을 읽지 못했습니다 ({status})', { status: p.auth_status })
       : t('조치 필요 — 인증이 만료됐습니다')));
     if (reauthCommand(p)) {
       const btn = el('button', 'vt-btn sm', t('재인증'));
@@ -387,12 +403,15 @@ export function showUsage(opts = {}) {
     paneId: opts.paneId || null,
     id: PANEL_ID,
     ariaLabel: t('사용량'),
-    headHTML: `<div class="vt-vw-title">${t('사용량')}</div>`,
+    // 리디자인 5단계(시안 P07): 머리 = 「사용량」 + 새로고침 아이콘(피드는 30초마다 다시 읽는다).
+    headHTML: `<div class="vt-vw-title">${t('사용량')}</div><span class="vt-ph-ctx"></span>`
+      + `<button type="button" class="vt-icon-btn sm" id="vt-usage-refresh" aria-label="${t('새로고침')}" data-tip="${t('새로고침')}">${icon('refresh-cw', 14)}</button>`,
     bodyId: 'vt-usage-body',
     extraClass: 'vt-usage',
   });
   if (!panel) return;   // 토글 — 이미 열려 있어서 닫기만 했다
   const bodyEl = panel.ctx.byId('vt-usage-body');
+  panel.ctx.byId('vt-usage-refresh')?.addEventListener('click', () => refresh(bodyEl));
   refresh(bodyEl);
   // 손으로 돌리던 `setInterval` + 모듈 레벨 `_timer`를 `setPanelPoll`로 바꿨다.
   // 그 한 벌짜리 타이머는 인스턴스가 둘이 되는 순간 하나가 다른 하나를 덮어쓴다

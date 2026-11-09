@@ -123,7 +123,7 @@ Non-read-only Git actions (for stage/commit in the code viewer):
 | POST | `/api/git/commit` | Commit staged changes (JSON: repo, message). Returns 400 if nothing is staged |
 | GET | `/api/git/log?repo=X[&file=Y][&ref=B]` | Commit list with `parents`/`refs` for the graph; `ref` must be an existing branch |
 | GET | `/api/git/branches?repo=X` | Local and remote branch names (read-only) |
-| GET | `/api/git/show?repo=X&sha=Y` | Diff of one commit |
+| GET | `/api/git/show?repo=X&sha=Y[&file=F]` | One commit: `commit` `{hash, short, author, date, parents, subject, body}` and the changed `files`; with `file`, that file's diff |
 
 ## Git accounts & binding (elevated session required except GET)
 

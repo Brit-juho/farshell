@@ -559,6 +559,20 @@ same ids). The ports and usage activities disappear entirely when `/api/capabili
 for them. In compact there is no workbench, so no tool is treated as open and the panels fall back to
 their sheets.
 
+**Tool panels share one set of metrics** (redesign phase 5, the panel kit at the top of
+`styles/screens/80-dock.css`): head 40 (title 15/600 + an 11px mono context such as `저장소 / 브랜치`,
+`N건 대기` or `사용 / 한도`, then icon actions), section head 28 (`.vt-psec`: name 12/600 `sub`, count 11 mono
+`muted`, actions or a note on the right), rows 36 and two-line rows 48–52 (`.vt-prow`, inset 4px with a 6px
+radius; hover `bg-3`, selected `acc-soft`), inner padding 12/14 (`.vt-ppad`), inputs 28, buttons 24/28, sub-screen
+head 36 (`.vt-psub`: ← plus what you are looking at — a diff, a commit, the snippet editor), cards with an 8px
+radius and 12px padding (`.vt-pcard`, the one in use gets an accent border), 4px bars (`.vt-pbar`, `st-waiting`
+from 75%) and 16px outlined word tags (`.vt-ptag`, tone `acc`/`work`/`wait`/`err`). The body is `bg-1`, the same
+surface as the sidebar. Row actions appear on hover or focus (always shown under a coarse pointer); a file's git
+state is a letter (M/A/D/U/R/!) **and** a word, never colour alone. Panel-only icons live in
+`panels/panel-icons.js` (the `panel` chunk every panel already loads), not in core `ui/icons.js`. Panels in a
+pane use the same classes. In the 720px+ sidebar `.vt-input.lg` drops to 13px (the 18px size exists for iOS zoom
+on phones, which get sheets, not `.vt-dock-panel`).
+
 **The source-control tab supports status, diff, stage, unstage and commit.**
 Push and PR/MR creation are not offered. Commits use the repository's ambient Git
 configuration; the stored git accounts are not connected to this workflow.
