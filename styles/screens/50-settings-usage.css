@@ -16,7 +16,7 @@
 /* ── S4 설정 화면 ──────────────────────────────────────────────────────────
    wide는 좌측 섹션 목록 + 우측 내용 2단, compact(<720px)는 더보기 목록에서
    설정 상세로 들어가는 단일 열 화면이다. */
-.vt-settings .vt-vw-body { display:flex; gap:0; padding:0; overflow:hidden; }
+.vt-settings .vt-vw-body { display:flex; gap:0; padding:0; overflow:hidden; background:var(--color-bg-raised); }
 /* 2026-09-22(사용자 지적: "렌더링이 뒤늦게 되면서 창이 늘어난다") — 카드에
    height가 없고 max-height만 있으면 flex-column 컨테이너는 콘텐츠 높이로
    잡힌다. 에이전트 감지표·등록 기기표·MCP 목록·음성 모델 목록이 열린 뒤
