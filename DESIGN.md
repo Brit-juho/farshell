@@ -1197,7 +1197,10 @@ becomes the first key (`#keybar-mic-slot`).
 Modifiers sit outside the strip so a chord is always in the same place and a thumb that
 drifts while holding one does not cancel it. Modifier state reads like a
 Caps Lock light: a 5px lamp top-right — faint ring (off), accent outline +
-ring (next key), filled key + solid lamp (locked). Keycaps use `--mono`. The
+ring (next key), filled key + solid lamp (locked). On compact the same state is also spelled out to the right of
+Shift (`#keybar-mod-hint`, mock M02): 「Ctrl 다음 키만」, 「Ctrl 잠김」, both joined with 「 · 」 when mixed, nothing
+while a modifier is only held. The slot is always there (`flex:1`, one line, ellipsis, `title` carries the full text)
+and reaches 50px into the empty cell left of ↑, so the text appearing or going never moves a key. Keycaps use `--mono`. The
 strip fades whichever edge has more keys (`.more-left`/`.more-right`) and
 maps vertical wheel to horizontal.
 
@@ -1224,6 +1227,30 @@ state is the device-scoped `keybar.open`. Closing also releases any latched
 modifier, and text-selection mode still shows its copy/done row while
 closed. Touch leaves `:hover` stuck after a tap, which would make a closed toggle
 look pressed — on `(hover:none)` only `aria-pressed` paints it.
+
+**File editing on compact** (`layout/mobile-edit.js`, mock files M-F5). While a viewer pane is in edit mode
+(`panels/viewer/edit.js` puts `vt-vw-editing` on the pane and fires `vt:viewer-edit` on start and stop),
+`html.vt-mobile-editing` hides the bottom nav and shows `#vt-edit-keys` at the bottom: Tab ← → ↑ ↓ Esc and an accent
+「저장」, keys 40×32 in the keybar key style. The row follows the soft keyboard with `visualViewport` (same formula as
+`keybar-ui.js` `positionBar`), and the compact file sheet's bottom moves up by the row height plus the keyboard overlap
+(`--vt-edit-keys-h`, `--vt-edit-overlap`), so the cursor line and 「저장」 are never under the keyboard. Keys send a
+`keydown` to the editor's `.cm-content` (CodeMirror's own keymap: Tab indents, arrows move, Esc collapses the
+selection); 「저장」 clicks the bar's `.vt-vw-save` (one save path, disabled together). `pointerdown` is prevented so the
+editor keeps focus. A dialog on top (save elevation, discard) hides the row. Stopping the edit, the pane going away
+(watched on its ancestors), or crossing 720px restores the nav.
+
+**Settings detail on compact** (mock M08). The section intro becomes a 48px sticky row (‹ 44 + title, the description
+hidden); rows are 56 high; rows whose control is small (switch, select, number) put it to the right of the label and wrap
+it below only when the label would get narrower than 160px; switches draw as a 40×24 track with a knob (still
+`role=switch`/`aria-checked`); number rows hide the slider and keep the input with its two 44px steps. Wide controls
+(presets, key combos, tables) stay under the label. CSS only (`98-mobile.css`).
+
+**Login OTP step** (mock M10). Six 52px boxes, one digit each (`#login-otp-boxes`, `role=group` labelled 「인증 코드」,
+each box 「인증 코드 n번째 자리」, `inputmode=numeric`; the first box carries `autocomplete=one-time-code`). Typing moves to
+the next box, Backspace in an empty box clears the previous one, ←/→ move, and a paste or autofill of several digits fills
+from that box (six digits always from the first). The submitted value is still the single hidden `#login-otp`
+(`gate.js` joins the boxes), so the error flows (`otp_invalid` clears the boxes and focuses the first, `otp_locked`,
+short code) are unchanged.
 
 **Quick open is a full-height bottom sheet on compact** instead
 of the 60vh-capped card shared with the desktop layout — see § 6's "Default
