@@ -10,6 +10,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+---
+
+## [2.10.0] — 2026-11-10
+
 ### Added
 - **Phone file editing keys.** While editing a file on a phone the bottom tabs hide and a small key row sits on top of the soft keyboard: Tab, ←, →, ↑, ↓, Esc and 「Save」. It follows the keyboard, so 「Save」 and the line you are typing on stay visible; stopping the edit brings the tabs back.
 - **Keybar modifier hint.** On a phone the keybar says what an armed modifier will do next to Shift: 「Ctrl next key only」 after one tap, 「Ctrl locked」 after two. The keys do not move when it appears.
