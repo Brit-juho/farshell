@@ -23,9 +23,10 @@ after(() => { for (const d of _doms) { try { d.window.close(); } catch (_) {} } 
 class FakeWebSocket {}
 FakeWebSocket.CONNECTING = 0; FakeWebSocket.OPEN = 1; FakeWebSocket.CLOSING = 2; FakeWebSocket.CLOSED = 3;
 
-function _stubMatchMedia(window, { coarse }) {
+function _stubMatchMedia(window, { coarse, compact = false }) {
   window.matchMedia = (query) => ({
-    matches: query.includes('coarse') ? coarse : !coarse,
+    // 폭 문턱(max-width:719px)은 포인터와 따로 본다 — 폰 폭인지는 compact가 정한다.
+    matches: query.includes('max-width') ? compact : query.includes('coarse') ? coarse : !coarse,
     media: query,
     addListener() {}, removeListener() {},
     addEventListener() {}, removeEventListener() {},
@@ -50,12 +51,12 @@ function _fakeVisualViewport(window, { height, offsetTop = 0 }) {
   return vv;
 }
 
-async function buildWindow({ coarse = false, search = '', visualViewport = null } = {}) {
+async function buildWindow({ coarse = false, compact = false, search = '', visualViewport = null } = {}) {
   const env = createDomEnv(INDEX_HTML, { url: `http://localhost/${search}` });
   _doms.push(env.dom);
   const { window } = env;
   window.WebSocket = FakeWebSocket;
-  _stubMatchMedia(window, { coarse });
+  _stubMatchMedia(window, { coarse, compact });
   const vv = visualViewport ? _fakeVisualViewport(window, visualViewport) : null;
 
   const cache = new Map();
@@ -97,6 +98,46 @@ test('강제 노출(?keybar=1)이어도 마이크 배치는 포인터 타입만 
     'vt-rail-mic-slot',
     '마이크는 여전히 데스크톱 자리에 있어야 한다(강제 노출과 무관)'
   );
+});
+
+// 리디자인 8단계 — 폰 폭에는 활동 막대가 보이지 않아 마이크 자리가 없었다(알려진 구멍).
+test('폰 폭 — 마이크는 떠 있는 자리(#vt-mic-fab)로, 집중 모드에서는 키바 첫 키로 옮겼다가 돌아온다', async () => {
+  const { window, placeMicButton } = await buildWindow({ coarse: true, compact: true });
+  const doc = window.document;
+  const mic = doc.getElementById('mic-btn-wrap');
+  assert.strictEqual(mic.parentElement.id, 'vt-mic-fab');
+  assert.strictEqual(mic.dataset.action, 'voice.record', '녹음 토글 액션·id는 그대로(voice.js 계약)');
+  doc.documentElement.classList.add('vt-focus');
+  doc.dispatchEvent(new window.CustomEvent('vt:focus-change', { detail: { on: true } }));
+  assert.strictEqual(mic.parentElement.id, 'keybar-mic-slot');
+  assert.strictEqual(doc.getElementById('keybar-mods').firstElementChild.id, 'keybar-mic-slot', '키바 첫 키 자리');
+  doc.documentElement.classList.remove('vt-focus');
+  doc.dispatchEvent(new window.CustomEvent('vt:focus-change', { detail: { on: false } }));
+  assert.strictEqual(mic.parentElement.id, 'vt-mic-fab');
+  // 음성 전용 모드가 #topbar로 데려간 동안은 건드리지 않는다.
+  doc.getElementById('topbar').appendChild(mic);
+  doc.body.classList.add('voice-only-mode');
+  placeMicButton();
+  assert.strictEqual(mic.parentElement.id, 'topbar');
+});
+
+test('폰 집중 모드의 키바 마이크 — 누름에서 기본 동작을 막아 터미널 포커스(소프트 키보드)를 지킨다', async () => {
+  const { window } = await buildWindow({ coarse: true, compact: true });
+  const doc = window.document;
+  doc.documentElement.classList.add('vt-focus');
+  doc.dispatchEvent(new window.CustomEvent('vt:focus-change'));
+  const ev = new window.PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 3 });
+  doc.querySelector('#keybar-mic-slot #mic-btn-wrap').dispatchEvent(ev);
+  assert.strictEqual(ev.defaultPrevented, true);
+});
+
+test('폰 CSS — 떠 있는 마이크 56은 터미널 탭에서만, 아래 탭 + 키바 위 16에 뜬다(98-mobile.css)', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../../styles/screens/98-mobile.css'), 'utf8');
+  assert.match(css, /#vt-mic-fab \{[^}]*display:none;[^}]*position:fixed/);
+  assert.match(css, /bottom:calc\(var\(--m-nav-h\) \+ var\(--kb-height, 0px\) \+ var\(--kb-overlap, 0px\) \+ 16px\)/);
+  assert.match(css, /html\[data-mobile-tab="terminal"\] #vt-mic-fab:not\(:empty\) \{ display:block; \}/);
+  assert.match(css, /#vt-mic-fab #mic-btn-wrap\.mic \{[^}]*width:56px; height:56px;/);
+  assert.match(css, /html\.vt-focus #keybar\.closed:not\(\[hidden\]\) \{ display:flex; \}/, '집중 모드에서는 닫힌 키바도 보인다');
 });
 
 // 2026-09-23 — 큐·업로드 슬롯을 없앴다(하단 내비 「첨부」·빠른 열기 `:`가

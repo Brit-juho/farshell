@@ -73,6 +73,9 @@ export function initKeybarUI() {
     if (selectionAll) { e.preventDefault(); _selectAllVisible(); return; }
     const selectionDone = e.target.closest('#keybar-selection-done');
     if (selectionDone) { e.preventDefault(); setTerminalSelectionMode(false); return; }
+    // 폰 집중 모드의 마이크(키바 첫 키) — 누름에서 기본 동작만 막아 터미널 포커스(소프트 키보드)를 지킨다.
+    // 녹음 토글은 그 버튼의 click(data-action="voice.record")이 그대로 맡는다.
+    if (e.target.closest('#keybar-mic-slot')) { e.preventDefault(); return; }
     const btn = e.target.closest('.kb');
     if (!btn) return;
     e.preventDefault();

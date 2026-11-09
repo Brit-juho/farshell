@@ -4786,5 +4786,12 @@ window.__VT_I18N = {
   "PDF는 미리 보지 않습니다": "PDFs are not previewed",
   "브라우저의 PDF 보기는 문서 안 스크립트를 실행할 수 있어 막았습니다. 내려받아 여세요.": "The browser's PDF viewer can run scripts inside the document, so it is blocked. Download it and open it locally.",
   "미리 볼 수 있는 파일이 아닙니다": "This file can't be previewed",
-  "파일이 너무 커서 받을 수 없습니다 (최대 {max}MB)": "The file is too large to download (max {max} MB)"
+  "파일이 너무 커서 받을 수 없습니다 (최대 {max}MB)": "The file is too large to download (max {max} MB)",
+  "집중 모드": "Focus mode",
+  "집중 모드 끝내기": "Exit focus mode",
+  "개입 {n}": "Needs you {n}",
+  "{name} 승인 요청 — 누르면 그 세션으로": "{name} is waiting for approval — tap to open it",
+  "아래로 끌면 상단바와 탭이 돌아옵니다": "Pull down to bring back the top bar and tabs",
+  "놓으면 집중 모드를 끝냅니다": "Release to exit focus mode",
+  "더 끌어내리면 집중 모드를 끝냅니다": "Pull further to exit focus mode"
 };

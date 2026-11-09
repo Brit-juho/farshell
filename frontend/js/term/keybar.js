@@ -114,18 +114,43 @@ export function _selectAllVisible() {
 // Workbench.tsx가 마운트 직후 placeMicButton()을 한 번 더 부른다. 그래서 이 함수는
 // **여러 번 불려도 안전**해야 하고(이미 제자리면 아무것도 안 한다), dock이 아직
 // 없으면 옛 슬롯에 그대로 둔다(음성이 조용히 사라지지 않게).
+// 2026-11(리디자인 8단계) — 폰(compact, 폭 < 720)에는 활동 막대가 없어(작업대가 CSS로 숨는다) 마이크가
+// 보이는 자리가 하나도 없었다. 폰에서는 떠 있는 56px 자리(#vt-mic-fab, index.html)로, 폰 집중 모드
+// (html.vt-focus)에서는 키바 첫 키(#keybar-mic-slot)로 옮긴다. 폭·집중 모드가 바뀔 때마다 다시 부른다(아래).
+// 폭 문턱은 CSS(60-mobile-hud.css)·mobile-nav.js와 같은 719px. 음성 전용 모드는 마이크를 #topbar에
+// 데려다 놓고(voice/media-session.js) 끌 때 되돌리므로 그동안은 손대지 않는다.
+const COMPACT_QUERY = '(max-width:719px)';
+function _isCompactWidth() {
+  try { return Boolean(window.matchMedia?.(COMPACT_QUERY).matches); } catch (_) { return false; }
+}
+
+export function micHome() {
+  if (_isCompactWidth()) {
+    const focus = document.documentElement.classList.contains('vt-focus');
+    const phone = (focus && document.getElementById('keybar-mic-slot')) || document.getElementById('vt-mic-fab');
+    if (phone) return phone;
+  }
+  // 2026-09-29 — 터치 기기의 키바 슬롯을 없앴다(사용자: 안 쓰는데 키 자리만
+  // 먹는다). 넓은 화면에서는 포인터 종류와 무관하게 활동 막대(없으면 rail 설정 슬롯)에 둔다.
+  // 2026-11 — 데스크톱 첫 자리는 작업대 활동 막대의 아래 무리(#vt-activity-mic-home, Workbench.tsx).
+  // dock 탭 줄(#vt-dock-mic-home)은 활동 막대로 옮겨 가며 없어졌다.
+  return document.getElementById('vt-activity-mic-home') || document.getElementById('vt-rail-mic-slot');
+}
+
 export function placeMicButton() {
   const mic = document.getElementById('mic-btn-wrap');
   if (!mic) return; // .needs-voice로 이미 숨겨졌거나(음성 미설치) 마크업 자체가 없는 테스트 환경
-  // 2026-09-29 — 터치 기기의 키바 슬롯을 없앴다(사용자: 안 쓰는데 키 자리만
-  // 먹는다). 이제 포인터 종류와 무관하게 dock(없으면 rail 설정 슬롯)에 둔다.
-  // 2026-11 — 데스크톱 첫 자리는 작업대 활동 막대의 아래 무리(#vt-activity-mic-home, Workbench.tsx).
-  // dock 탭 줄(#vt-dock-mic-home)은 활동 막대로 옮겨 가며 없어졌다.
-  const target = document.getElementById('vt-activity-mic-home') || document.getElementById('vt-rail-mic-slot');
+  if (document.body?.classList.contains('voice-only-mode')) return;
+  const target = micHome();
   if (target && mic.parentElement !== target) target.appendChild(mic);
   window.dispatchEvent(new CustomEvent('vt:mic-placed'));
 }
 placeMicButton();
+try {
+  window.matchMedia?.(COMPACT_QUERY)?.addEventListener?.('change', () => placeMicButton());
+} catch (_) { /* matchMedia 없는 환경 */ }
+// 폰 집중 모드가 켜지고 꺼질 때(layout/mobile-focus.js가 쏜다) — 떠 있는 자리 ↔ 키바 첫 키.
+document.addEventListener('vt:focus-change', () => placeMicButton());
 
 export function _activeMods() {
   const out = {};
