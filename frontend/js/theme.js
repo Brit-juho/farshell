@@ -32,59 +32,69 @@ export function vtSkinLabel(skin) {
 // 각 스킨의 xterm.js 테마 — foreground/background/cursor/selection + ANSI 16색.
 // "iTerm2 vs 윈도우 터미널 느낌"의 핵심은 이 팔레트다.
 const VT_XTERM_THEMES = {
-  // 근흑 + 앰버 단일 액센트(styles/theme/tokens.css의 --color-* 17개와 같은
-  // 값). ANSI 16색은 그 토큰에서 없는 새 값이라 이번에 처음 골랐다 —
-  // red/green/blue는 상태 램프(--color-st-error/working/done)와 맞추고,
-  // yellow는 액센트(--color-acc)와 맞췄다(waiting == accent라는 D3 의도와
-  // 같은 이유). magenta/cyan은 그 넷과 부딪히지 않는 보색으로 새로 골랐다.
+  // 2026-11 리디자인 3단계 — 시안 팔레트(파랑 액센트). 이 값이 styles/theme/
+  // tokens.css의 --color-term-*와 같아야 한다(theme.test.js가 9스킨 전부 본다):
+  // background=term-bg, foreground=term-fg, brightWhite=term-bright,
+  // brightBlack=term-dim, red/green/yellow/blue/magenta/cyan=term-red/green/
+  // amber/blue/mag/cyan, selectionBackground=term-sel. bright 계열은 같은 색상각에서
+  // 밝기만 올렸다. black은 hover 면(bg-3), white는 보조 글자(sub)와 같다.
   farshell: {
-    background:'#0a0a0b', foreground:'#eeeef0', cursor:'#f0a860', cursorAccent:'#0a0a0b',
-    selectionBackground:'rgba(240,168,96,0.28)',
-    black:'#232328', red:'#f06868', green:'#4fd1a5', yellow:'#f0a860',
-    blue:'#5b8def', magenta:'#c792ea', cyan:'#64d9e0', white:'#9a9aa2',
-    brightBlack:'#6a6a72', brightRed:'#ff8585', brightGreen:'#7ee2c0', brightYellow:'#ffc285',
-    brightBlue:'#82a8ff', brightMagenta:'#dba6f5', brightCyan:'#8be6ec', brightWhite:'#ffffff',
+    background:'#121316', foreground:'#d9d7d2', cursor:'#7aa2ff', cursorAccent:'#121316',
+    selectionBackground:'rgba(122,162,255,0.32)',
+    black:'#25272d', red:'#f07070', green:'#7fd18b', yellow:'#e8c46a',
+    blue:'#7aa2ff', magenta:'#c49cf0', cyan:'#6fc8d6', white:'#a9a7a2',
+    brightBlack:'#77756f', brightRed:'#ff9090', brightGreen:'#a2e3ab', brightYellow:'#f2d68e',
+    brightBlue:'#9dbbff', brightMagenta:'#d8bcf6', brightCyan:'#94dbe5', brightWhite:'#ffffff',
   },
+  // 2026-11 — brightBlack #5a5a60 → #626268. 흐린 글자(자동 제안·주석)가 바탕에서
+  // 2.78:1이라 3:1(--color-term-dim 기준)에 못 미쳤다. 같은 회색에서 밝기만 올렸다.
   macos: {
     background:'#101012', foreground:'#e6e6ea', cursor:'#0a84ff', cursorAccent:'#101012',
     selectionBackground:'rgba(10,132,255,0.32)',
     black:'#2a2a2e', red:'#ff453a', green:'#32d74b', yellow:'#ffd60a',
     blue:'#0a84ff', magenta:'#bf5af2', cyan:'#5ac8fa', white:'#d0d0d5',
-    brightBlack:'#5a5a60', brightRed:'#ff6961', brightGreen:'#6ee787', brightYellow:'#ffe066',
+    brightBlack:'#626268', brightRed:'#ff6961', brightGreen:'#6ee787', brightYellow:'#ffe066',
     brightBlue:'#64a5ff', brightMagenta:'#da8fff', brightCyan:'#7fdbff', brightWhite:'#ffffff',
   },
+  // 2026-11 — brightBlack을 surface2(#585b70, 2.46:1)에서 같은 Mocha 팔레트의
+  // overlay0(#6c7086, 3.36:1)으로. 흐린 글자가 3:1을 넘는 가장 가까운 공식 색이다.
   catppuccin: {
     background:'#1e1e2e', foreground:'#cdd6f4', cursor:'#f5e0dc', cursorAccent:'#1e1e2e',
     selectionBackground:'rgba(88,91,112,0.55)',
     black:'#45475a', red:'#f38ba8', green:'#a6e3a1', yellow:'#f9e2af',
     blue:'#89b4fa', magenta:'#f5c2e7', cyan:'#94e2d5', white:'#bac2de',
-    brightBlack:'#585b70', brightRed:'#f38ba8', brightGreen:'#a6e3a1', brightYellow:'#f9e2af',
+    brightBlack:'#6c7086', brightRed:'#f38ba8', brightGreen:'#a6e3a1', brightYellow:'#f9e2af',
     brightBlue:'#89b4fa', brightMagenta:'#f5c2e7', brightCyan:'#94e2d5', brightWhite:'#a6adc8',
   },
-  // VS Code Dark+ 통합 터미널 공식 팔레트
+  // VS Code Dark+ 통합 터미널 공식 팔레트. 2026-11 — brightBlack만 #666666(2.90:1)에서
+  // #6b6b6b(3.13:1)로 — 흐린 글자 3:1 기준(--color-term-dim).
   vscode: {
     background:'#1e1e1e', foreground:'#cccccc', cursor:'#ffffff', cursorAccent:'#1e1e1e',
     selectionBackground:'rgba(38,79,120,0.60)',
     black:'#000000', red:'#cd3131', green:'#0dbc79', yellow:'#e5e510',
     blue:'#2472c8', magenta:'#bc3fbc', cyan:'#11a8cd', white:'#e5e5e5',
-    brightBlack:'#666666', brightRed:'#f14c4c', brightGreen:'#23d18b', brightYellow:'#f5f543',
+    brightBlack:'#6b6b6b', brightRed:'#f14c4c', brightGreen:'#23d18b', brightYellow:'#f5f543',
     brightBlue:'#3b8eea', brightMagenta:'#d670d6', brightCyan:'#29b8db', brightWhite:'#e5e5e5',
   },
-  // 공식 Campbell 팔레트 (Windows Terminal 기본)
+  // 공식 Campbell 팔레트 (Windows Terminal 기본). 2026-11 — brightMagenta만 #b4009e에서
+  // #e000c4로 밝혔다: magenta(#881798 2.44:1)와 brightMagenta(3.20:1)가 둘 다 바탕에서
+  // 4.5에 못 미쳐 --color-term-mag로 쓸 색이 없었다. 같은 색상각에서 밝기만 올린 값.
   windows: {
     background:'#0c0c0c', foreground:'#cccccc', cursor:'#ffffff', cursorAccent:'#0c0c0c',
     selectionBackground:'rgba(255,255,255,0.28)',
     black:'#0c0c0c', red:'#c50f1f', green:'#13a10e', yellow:'#c19c00',
     blue:'#0037da', magenta:'#881798', cyan:'#3a96dd', white:'#cccccc',
     brightBlack:'#767676', brightRed:'#e74856', brightGreen:'#16c60c', brightYellow:'#f9f1a5',
-    brightBlue:'#3b78ff', brightMagenta:'#b4009e', brightCyan:'#61d6d6', brightWhite:'#f2f2f2',
+    brightBlue:'#3b78ff', brightMagenta:'#e000c4', brightCyan:'#61d6d6', brightWhite:'#f2f2f2',
   },
   // 메모장 — 흰 종이 위 잉크. 밝은 배경이라 ANSI 밝기 관계가 다크 테마와 반대로 뒤집힌다.
+  // 2026-11 — yellow #b08800(3.27:1)→#917000, cyan #0598bc(3.35:1)→#047e9c. 종이 위에서
+  // 노랑·청록 글자가 4.5에 못 미쳤다(bright 쪽은 더 밝아 더 낮다). 같은 색상각에서 어둡게.
   notepad: {
     background:'#fffefb', foreground:'#2b2a25', cursor:'#0060df', cursorAccent:'#fffefb',
     selectionBackground:'rgba(0,96,223,0.18)',
-    black:'#24292e', red:'#d73a49', green:'#22863a', yellow:'#b08800',
-    blue:'#0366d6', magenta:'#5a32a3', cyan:'#0598bc', white:'#6a737d',
+    black:'#24292e', red:'#d73a49', green:'#22863a', yellow:'#917000',
+    blue:'#0366d6', magenta:'#5a32a3', cyan:'#047e9c', white:'#6a737d',
     brightBlack:'#959da5', brightRed:'#cb2431', brightGreen:'#28a745', brightYellow:'#dbab09',
     brightBlue:'#005cc5', brightMagenta:'#8250df', brightCyan:'#3192aa', brightWhite:'#2b2a25',
   },
