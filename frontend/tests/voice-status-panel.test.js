@@ -175,3 +175,26 @@ test('부분 결과는 녹음·인식 중에만 흐리게 보이고, 끝나면 �
   stage('done'); await flush();
   assert.equal(el.hidden, true); assert.equal(el.textContent, '');
 });
+
+// 리디자인 6단계(시안 O16-F) — 채운 버튼은 「입력」 하나, 「녹음 종료」는 위험 테두리, 막대 24개, 머리의 서버 점.
+test('정돈 배치: 녹음 중 버튼은 위험 테두리, 막대 24개가 값을 밀어 넣고, 머리 점이 서버 상태를 따른다', async () => {
+  const { w } = await build({ missing: true });
+  const doc = w.document;
+  const record = doc.getElementById('voice-panel-record');
+  const head = doc.querySelector('#voice-status-panel .vt-voice-head');
+  assert.equal(head.dataset.voiceState, 'setup');
+  assert.ok(head.querySelector('.vt-voice-ic svg'), '머리 마이크 아이콘');
+  assert.ok(doc.getElementById('voice-status-close').querySelector('svg'), '닫기는 × 아이콘');
+  assert.equal(doc.querySelectorAll('#voice-status-panel .vt-btn.solid').length, 1, '채운 버튼은 하나뿐');
+  assert.equal(doc.querySelector('#voice-status-panel .vt-btn.solid').id, 'voice-confirm-send');
+  const stage = (phase, target) => w.dispatchEvent(new w.CustomEvent('vt:voice-stage', { detail: { phase, target } }));
+  stage('recording', '작업'); await flush();
+  assert.equal(record.classList.contains('danger'), true);
+  const bars = [...doc.querySelectorAll('#voice-meter .vt-voice-bar')];
+  assert.equal(bars.length, 24);
+  w.dispatchEvent(new w.CustomEvent('vt:voice-level', { detail: { level: 0.8, clip: false } }));
+  assert.equal(bars[23].style.transform, 'scaleY(0.80)');
+  assert.equal(bars[0].style.transform, 'scaleY(0.10)');
+  stage('processing'); await flush();
+  assert.equal(record.classList.contains('danger'), false);
+});

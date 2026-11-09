@@ -22,6 +22,7 @@ import {
   type PaletteMode, type CommandDescriptor,
 } from './palette-data.js';
 import { GrepPalette, type GrepKeyApi } from './GrepView.js';
+import { renderAnsi, fetchPreview } from '../lib/ansi-spans.js';
 import type { GrepOptions } from './grep-data.js';
 import {
   SECTION_META, buildSettingEntries, matchSettingEntry, stepSettingValue, formatSettingValue,
@@ -168,6 +169,8 @@ function PaletteBody(props: PaletteBodyProps) {
   // 설정 값이 바뀌면(이 줄에서든 다른 화면에서든) 줄의 값 표시를 다시 읽는다.
   const [settingsRev, setSettingsRev] = createSignal(0);
   const [previewText, setPreviewText] = createSignal<string[] | null>(null);
+  // 세션 미리보기(시안 O01 · O03) — 그 세션 화면의 마지막 줄들을 터미널 색으로. null = 아직/없음.
+  const [sessionPreview, setSessionPreview] = createSignal<{ name: string; content: string | null } | null>(null);
 
   onMount(() => {
     const off = (window as any).vtSettingsSubscribe?.(() => setSettingsRev((n) => n + 1));
@@ -559,10 +562,20 @@ function PaletteBody(props: PaletteBodyProps) {
         setPreviewText(lines);
       }).catch((e: any) => setPreviewText([e.message]));
     } else if (r.preview.kind === 'session') {
-      // 라이브 프리뷰 카드가 이미 마지막 출력을 보여주므로, 별도 fetch 없이
-      // 상태 문구만 보여준다 — 카드 자체가 결과 목록에도 이미 나온다.
+      // 리디자인 6단계(시안 O01 · O03): 오른쪽에 그 세션 화면의 마지막 줄들을 터미널 색으로 그린다.
+      // tmux capture-pane -e 원문을 받아 lib/ansi-spans.js가 글자는 textContent로, 색은 term 토큰 클래스로만 넣는다.
+      // 위아래로 훑는 동안 요청이 몰리지 않게 120ms 머문 뒤에 묻고, 답이 늦게 오면 그때 고른 세션인지 다시 본다.
       const sess = r.preview.sess;
-      setPreviewText([t('세션 · {name}', { name: sess.name }), sess.command || '']);
+      const name = String(sess.name || '');
+      setPreviewText([t('세션 · {name}', { name }), sess.command || '']);
+      if (sessionPreview()?.name !== name) setSessionPreview({ name, content: null });
+      const timer = setTimeout(() => {
+        void fetchPreview(deps.vtFetch, name, { lines: 40, host: deps.host || '' }).then((content) => {
+          const cur = rows()[selected()];
+          if (cur?.preview?.kind === 'session' && String(cur.preview.sess?.name || '') === name) setSessionPreview({ name, content });
+        });
+      }, 120);
+      onCleanup(() => clearTimeout(timer));
     } else if (r.preview.kind === 'scrollback') {
       setPreviewText(null); // 스크롤백은 행 자체가 컨텍스트를 담아 별도 렌더(아래)
     }
@@ -588,7 +601,11 @@ function PaletteBody(props: PaletteBodyProps) {
   // 벌어지고 오른쪽 절반이 "미리보기 없음"으로 비어 있었다. 파일(`/`)과
   // 스크롤백(`~`)만 실제로 내용을 채운다 — 세션은 결과 줄 자체가 이미 라이브
   // 프리뷰 카드라 오른쪽에 또 그릴 것이 없다.
-  const showPreview = () => props.wide() && (parsed().mode === 'file' || parsed().mode === 'scrollback');
+  // 리디자인 6단계(시안 O01 · O03) — 세션(`@`)과 기본 모드도 미리보기 칸을 연다: 고른 세션의 화면을 터미널 색으로 보여 준다.
+  // 기본 모드는 세션 줄이 하나라도 있을 때만(명령·설정만 보이는 목록이 880으로 벌어지지 않게).
+  const showPreview = () => props.wide() && (parsed().mode === 'file' || parsed().mode === 'scrollback'
+    || parsed().mode === 'session' || (parsed().mode === 'default' && rows().some((r) => r.preview?.kind === 'session')));
+  const selectedSession = () => { const p = rows()[selected()]?.preview; return p && p.kind === 'session' ? p.sess : null; };
 
   function selectAndFire(delta: number) {
     const n = rows().length;
@@ -717,8 +734,22 @@ function PaletteBody(props: PaletteBodyProps) {
         <div class="vt-qo-preview-pane">
           <Show when={parsed().mode === 'scrollback' && rows()[selected()]?.preview?.kind === 'scrollback'}
                 fallback={
-                  <Show when={previewText()} fallback={<div class="vt-vw-empty">{t('미리보기 없음')}</div>}>
-                    <For each={previewText() || []}>{(line) => <div class="vt-qo-preview-line">{line}</div>}</For>
+                  <Show when={selectedSession()} fallback={
+                    <Show when={previewText()} fallback={<div class="vt-vw-empty">{t('미리보기 없음')}</div>}>
+                      <For each={previewText() || []}>{(line) => <div class="vt-qo-preview-line">{line}</div>}</For>
+                    </Show>
+                  }>
+                    {(sess) => (
+                      <div class="vt-qo-term-wrap">
+                        <div class="vt-qo-preview-head"><span class="vt-qo-term-name">{sess().name}</span><span class="vt-qo-term-cmd">{sess().command || ''}</span></div>
+                        <Show when={sessionPreview()?.name === sess().name && sessionPreview()?.content != null}
+                              fallback={<div class="vt-vw-empty">{sessionPreview()?.name === sess().name && sessionPreview()?.content === null ? t('불러오는 중…') : t('미리보기 없음')}</div>}>
+                          <div class="vt-qo-term" ref={(el) => {
+                            createEffect(() => { const p = sessionPreview(); if (p && p.content != null) renderAnsi(el, p.content, { maxLines: 40 }); });
+                          }} />
+                        </Show>
+                      </div>
+                    )}
                   </Show>
                 }>
             {(() => {

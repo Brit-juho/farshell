@@ -55,6 +55,7 @@ function buildFetch(state) {
     const u = String(url);
     const method = opts?.method;
     if (u.includes('/api/tmux/attach')) return ok({ id: `attached-${++seq}`, name: `tmux:${JSON.parse(opts.body).name}` });
+    if (u.includes('/api/tmux/preview/')) { (state.previewCalls ||= []).push(u); return ok(state.preview || { available: false, content: '' }); }
     if (u.includes('/api/tmux/sessions')) return ok(state.tmuxSessions || []);
     if (u.includes('/api/agents')) return ok(state.agents || {});
     if (u.endsWith('/api/sessions') && method === 'POST') return ok({ id: `plain-${++seq}` });
@@ -62,7 +63,7 @@ function buildFetch(state) {
   };
 }
 
-async function buildWindow({ tmuxSessions = [], agents = {} } = {}) {
+async function buildWindow({ tmuxSessions = [], agents = {}, preview = null } = {}) {
   const env = createDomEnv(INDEX_HTML);
   _doms.push(env.dom);
   const { window } = env;
@@ -71,7 +72,7 @@ async function buildWindow({ tmuxSessions = [], agents = {} } = {}) {
   window.Terminal = FakeTerminal;
   window.FitAddon = { FitAddon: class { fit() {} } };
   window.SearchAddon = { SearchAddon: class {} };
-  const state = { tmuxSessions, agents };
+  const state = { tmuxSessions, agents, preview };
   window.fetch = buildFetch(state);
 
   const cache = new Map();
@@ -83,7 +84,7 @@ async function buildWindow({ tmuxSessions = [], agents = {} } = {}) {
   const storeNs = await importFresh(STORE_JS, env.context, cache);
   const coreStore = await importFresh(CORE_STORE_JS, env.context, cache);
 
-  return { window, ...sessionNs, store: storeNs, coreStore };
+  return { window, ...sessionNs, store: storeNs, coreStore, state };
 }
 
 // _renderCandidates()는 fire-and-forget으로 시작되는 비동기 함수라(openPanePicker
@@ -186,4 +187,23 @@ test('tmux가 아닌 일반 터미널 열린 세션도 목록에 나오고, 선�
   const rootNode = tree.a.id === rootPaneId ? tree.a : tree.b;
   assert.strictEqual(emptyNode.session, 'a');
   assert.strictEqual(rootNode.session, null);
+});
+
+// 리디자인 6단계(시안 D03-A) — 카드 미리보기는 그 세션 화면을 터미널 색 클래스로만 그린다(글자는 textContent).
+test('세션 카드에 화면 미리보기가 터미널 색 클래스로 붙고, 화면 글자는 마크업으로 해석되지 않는다', async () => {
+  const { window, addSession, store, state } = await buildWindow({
+    tmuxSessions: [{ name: 'dev', command: 'claude', cwd: '/repo' }],
+    preview: { available: true, content: '\x1b[32m✓ pass\x1b[0m\n\x1b[1;31m<img src=x onerror=alert(1)>\x1b[0m' },
+  });
+  addSession('a');
+  const emptyPaneId = store.splitActivePane('row');
+  window.document.getElementById(`vt-${emptyPaneId}`).querySelector('.vt-pane-empty').click();
+  await flush(); await flush(); await flush();
+  const term = window.document.querySelector('[data-name="dev"] .card-term');
+  assert.ok(term, '미리보기 칸');
+  assert.match(state.previewCalls[0], /\/api\/tmux\/preview\/dev\?lines=\d+&ansi=1/);
+  assert.strictEqual(term.querySelector('img'), null);
+  assert.strictEqual(term.querySelector('.ta-green').textContent, '✓ pass');
+  assert.strictEqual(term.querySelector('.ta-red.ta-bold').textContent, '<img src=x onerror=alert(1)>');
+  window.document.querySelector('#vt-pane-pick .vt-vw-x').click();
 });

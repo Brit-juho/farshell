@@ -1,0 +1,343 @@
+/* 리디자인 6단계(2026-11) — 오버레이(시안 overlays.html O08–O16).
+ *
+ * 떠 있는 면은 전부 같은 껍데기를 쓴다: raised 면(--color-bg-raised), 1px 강한 선, 반경 8(창)·6(입력·버튼)·4(작은 칩),
+ * 그림자 e2, 뒤 막(scrim)은 --color-scrim 하나. 머리 44(승인·음성처럼 「정돈」 배치는 48), 바닥 줄은 위 선 + 12/16 패딩.
+ * 색은 토큰만(AGENTS.md 9번). 폭·패딩에 transition을 쓰지 않는다(움직임은 transform).
+ *
+ * 이 파일이 마지막(99)인 이유: 대화상자 껍데기(30-viewer.css의 .vt-viewer-card)와 화면별 규칙(20·50·70)을 덮는다.
+ * 패널(dock 본문 — 변경·첨부·스니펫·큐·포트·사용량·시스템·MCP)은 이 파일이 아니라 패널 쪽 규칙이 맡는다. */
+
+/* ── 공용: 뒤 막 · 대화상자 껍데기 ─────────────────────────────────────────── */
+.vt-viewer-backdrop { background:var(--color-scrim); }
+
+.vt-dialog .vt-viewer-card {
+  background:var(--color-bg-raised); color:var(--color-txt);
+  border:1px solid var(--color-line-strong); border-radius:var(--radius-lg); box-shadow:var(--shadow-e2);
+}
+.vt-dialog .vt-viewer-head {
+  min-height:44px; box-sizing:border-box; padding:0 8px 0 16px; gap:8px;
+  background:transparent; border-bottom:1px solid var(--color-line);
+}
+.vt-dialog .vt-vw-title { font:var(--weight-semibold) var(--fs-base)/1.3 var(--font-ui); }
+.vt-dialog-ic { display:inline-flex; flex:none; color:var(--color-sub); }
+.vt-dialog .vt-vw-body { background:transparent; padding:16px; }
+/* 확인·입력·알림의 버튼 줄은 창 바닥 줄이다(시안 .dlg-f): 위 선, 12/16 패딩, 오른쪽 정렬. */
+.vt-dialog .vt-vw-body > .vt-dialog-actions {
+  margin:16px -16px -16px; padding:12px 16px; border-top:1px solid var(--color-line);
+}
+.vt-dialog-msg { color:var(--color-sub); line-height:1.55; }
+.vt-dialog-input {
+  box-sizing:border-box; height:36px; padding:0 10px;
+  background:var(--color-bg-2); color:var(--color-txt);
+  border:1px solid var(--color-line-strong); border-radius:var(--radius-sm);
+}
+.vt-dialog-input[type="password"] { font-family:var(--font-mono); letter-spacing:.08em; }
+.vt-dialog-input:focus { border-color:var(--color-acc); box-shadow:0 0 0 3px color-mix(in srgb, var(--color-acc) 18%, transparent); }
+
+/* ── O11 · O11-B 에이전트 접근 요청 · 페어 승인(「정돈」 배치) ────────────────
+ * 창 560, 강조색 테두리, 머리 48(방패 · 제목 · n/m), 본문 패딩 20 · 간격 12, 항목 이름 열 88.
+ * 바닥 60: 왼쪽 「거부」(기본 초점), 오른쪽 「한 번만 · 이 세션 동안 · 나중에」 — 어떤 버튼도 채우지 않는다. */
+.vt-authz-approval .vt-viewer-card {
+  width:min(560px, 100%); max-height:min(88vh, 760px);
+  border-color:color-mix(in srgb, var(--color-acc) 45%, var(--color-line-strong));
+}
+.vt-authz-approval .vt-viewer-head { min-height:48px; padding:0 12px 0 20px; gap:10px; }
+.vt-authz-ic { color:var(--color-acc); }
+.vt-authz-approval .vt-authz-count { margin-left:0; font-family:var(--font-mono); color:var(--color-muted); }
+.vt-authz-approval .vt-viewer-head .vt-vw-title { flex:0 1 auto; }
+.vt-authz-approval .vt-vw-x { margin-left:auto; }
+.vt-authz-approval .vt-vw-body { padding:20px 20px 0; }
+.vt-authz-approval-body { display:flex; flex-direction:column; gap:12px; }
+.vt-authz-approval-body > * { margin:0; }
+.vt-authz-approval .vt-authz-ask { color:var(--color-txt); font:var(--weight-medium) var(--fs-sm)/1.5 var(--font-ui); }
+.vt-authz-approval .vt-authz-facts {
+  grid-template-columns:88px minmax(0, 1fr); gap:4px 16px; margin:0;
+  font:var(--weight-normal) var(--fs-sm)/24px var(--font-ui);
+}
+.vt-authz-approval .vt-authz-facts dt { color:var(--color-muted); font-size:var(--fs-xs); }
+.vt-authz-label { margin:0 0 6px; color:var(--color-sub); font:var(--weight-medium) var(--fs-xs)/1 var(--font-ui); }
+.vt-authz-reason-box .vt-authz-reason {
+  padding:8px 10px; border-radius:var(--radius-sm); background:var(--color-bg-2); border:1px solid var(--color-line-strong);
+  color:var(--color-sub); font:var(--weight-normal) var(--fs-sm)/20px var(--font-ui); overflow-wrap:anywhere;
+}
+.vt-authz-approval .vt-authz-elevated {
+  display:flex; align-items:flex-start; gap:8px; padding:10px 12px; border-radius:var(--radius-sm);
+  background:var(--color-st-waiting-tint); color:var(--color-sub); font:var(--weight-normal) var(--fs-xs)/1.5 var(--font-ui);
+}
+.vt-authz-elev-ic { display:inline-flex; flex:none; margin-top:1px; color:var(--color-st-waiting); }
+.vt-authz-elev-text strong { color:var(--color-st-waiting); }
+.vt-authz-approval .vt-authz-note, .vt-authz-approval .vt-authz-why { margin:0; }
+/* 바닥 줄 — 본문 스크롤과 함께 맨 아래에 붙는다(sticky). 긴 페어 화면에서도 결정 버튼이 늘 보인다. */
+.vt-authz-foot {
+  position:sticky; bottom:0; z-index:1; display:flex; flex-wrap:wrap; align-items:center; gap:8px;
+  min-height:60px; box-sizing:border-box; margin:4px -20px 0; padding:12px 20px;
+  background:var(--color-bg-raised); border-top:1px solid var(--color-line);
+}
+.vt-authz-gap { flex:1 1 auto; }
+.vt-authz-foot .vt-btn.solid { background:transparent; color:var(--color-txt); border-color:var(--color-line-strong); }
+.vt-authz-approval .vt-pair-acts { flex-direction:row; }
+.vt-authz-approval .vt-pair-acts .vt-btn { width:auto; }
+/* 페어 확인 문구(시안 O11-B): 22px 고정폭, 가운데, 글자 간격 — 눈으로 비교하는 값이라 크게. */
+.vt-authz-approval .vt-pair-phrase { font:var(--weight-medium) var(--fs-md)/28px var(--font-mono); letter-spacing:.06em; }
+.vt-authz-approval .vt-pair-phrase-cell { background:transparent; border:1px solid var(--color-line-strong); text-align:center; padding:12px; }
+
+/* ── 세션 미리보기의 터미널 색(시안 O01 · O03 · D03-A) ─────────────────────────
+ * lib/ansi-spans.js가 tmux 화면 원문을 줄(.vt-ansi-line)과 클래스(ta-*)로만 그린다. 색은 --color-term-* 토큰뿐 —
+ * 스킨을 바꾸면 미리보기 색도 따라간다. 인라인 색은 쓰지 않는다. */
+.vt-ansi { font-family:var(--font-mono); color:var(--color-term-fg); background:var(--color-term-bg); white-space:pre; overflow:hidden; }
+.vt-ansi-line { min-height:1lh; overflow:hidden; text-overflow:clip; }
+.vt-ansi .ta-dim { color:var(--color-term-dim); }
+.vt-ansi .ta-red { color:var(--color-term-red); }
+.vt-ansi .ta-green { color:var(--color-term-green); }
+.vt-ansi .ta-amber { color:var(--color-term-amber); }
+.vt-ansi .ta-blue { color:var(--color-term-blue); }
+.vt-ansi .ta-mag { color:var(--color-term-mag); }
+.vt-ansi .ta-cyan { color:var(--color-term-cyan); }
+.vt-ansi .ta-bright { color:var(--color-term-bright); }
+.vt-ansi .ta-bold { font-weight:700; }
+.vt-ansi .ta-rev { color:var(--color-term-bg); background:var(--color-term-fg); }
+.vt-ansi .ta-bg-add { background:var(--color-term-add-bg); }
+.vt-ansi .ta-bg-del { background:var(--color-term-del-bg); }
+.vt-ansi .ta-bg-hl { background:var(--color-term-hl); color:var(--color-term-bright); }
+.vt-ansi .ta-bg-sel { background:var(--color-term-sel); }
+
+/* 팔레트 오른쪽 칸(세션): 머리(이름 · 명령) + 터미널 12/18. */
+.vt-qo-term-wrap { display:flex; flex-direction:column; min-height:100%; }
+.vt-qo-term-wrap .vt-qo-preview-head { display:flex; align-items:baseline; gap:8px; padding:0 4px 6px; }
+.vt-qo-term-name { color:var(--color-txt); font:var(--weight-semibold) var(--fs-sm)/1.4 var(--font-ui); }
+.vt-qo-term-cmd { color:var(--color-muted); font:var(--weight-normal) var(--fs-xs)/1.4 var(--font-mono); }
+.vt-qo-term { flex:1 1 auto; padding:8px 10px; border-radius:var(--radius-sm); border:1px solid var(--color-line); font-size:var(--fs-xs); line-height:18px; }
+.vt-qo-preview-pane:has(.vt-qo-term-wrap) { background:var(--color-term-bg); }
+
+/* 빈 칸 세션 선택(D03-A): 창 620, 카드 2열, 카드 = 머리 28 + 터미널 6줄 11/14. */
+.vt-pane-pick .vt-viewer-card { width:min(620px, 100%); max-width:none; }
+.vt-pane-pick .vt-vw-body { padding:12px 16px; }
+.vt-pane-pick .vt-card-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; margin-top:12px; }
+.vt-pane-pick .vt-card { padding:0; gap:0; overflow:hidden; background:var(--color-bg-1); border-color:var(--color-line-strong); border-radius:var(--radius-sm); }
+.vt-pane-pick .vt-card:hover, .vt-pane-pick .vt-card:focus-within { border-color:var(--color-acc); }
+.vt-pane-pick .vt-card .card-head { min-height:28px; box-sizing:border-box; padding:0 8px; gap:6px; justify-content:flex-start; }
+.vt-pane-pick .vt-card .card-title { flex:0 1 auto; font:var(--weight-semibold) var(--fs-sm)/1.3 var(--font-ui); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-pane-pick .vt-card .card-cmd { margin-left:auto; font-family:var(--font-mono); }
+.vt-pane-pick .vt-card .card-meta { padding:0 8px 4px; color:var(--color-muted); }
+.vt-pane-pick .card-term { height:calc(6 * 14px + 12px); box-sizing:border-box; padding:6px 8px; font-size:var(--fs-3xs); line-height:14px; border-top:1px solid var(--color-line); }
+.vt-pane-pick .card-term[data-empty] { background:var(--color-term-bg); }
+.vt-pane-pick .vt-pp-sep { margin-top:14px; padding-top:0; border-top:0; color:var(--color-muted); font:var(--weight-semibold) var(--fs-xs)/1 var(--font-ui); }
+.vt-pane-pick .vt-pp-panel { --btn-h:24px; }
+@media (max-width:719px) { .vt-pane-pick .vt-card-grid { grid-template-columns:minmax(0, 1fr); } }
+
+/* ── O15 작업 기록(세션 기록 + 서브에이전트 · 위임 세션 기록 한 창) ──────────────────────
+ * 창 1240×788. 머리: 기록 아이콘 · 작업 기록 | 상태 · 세션 이름 · tmux ……… n 전 갱신 · 새로고침 · ×.
+ * 왼쪽 460(크롬 면 bg-1): 상태 블록(16 상태 · 15/600 · 동작 24 버튼) · 구역 머리 28 · 행 32/36 · 실행 이력 28.
+ * 오른쪽: 머리 52(아이콘 · 이름 15/600 · 상태 칩 · 메타 · 새로고침) · 종류 거르기 32 · 기록(76px 종류 열 | 본문). */
+.vt-worklog .vt-viewer-card { width:min(1240px, calc(100vw - 32px)); max-width:none; height:min(788px, calc(100dvh - 32px)); max-height:none; }
+.vt-worklog .vt-vw-body { padding:0; overflow:hidden; display:flex; min-height:0; }
+.vt-wl-sep { width:1px; height:14px; margin:0 4px; background:var(--color-line-strong); flex:none; }
+.vt-wl-head-state { display:inline-flex; flex:none; }
+.vt-wl-head-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:var(--weight-semibold) var(--fs-sm)/1 var(--font-ui); }
+.vt-wl-head-sub { color:var(--color-muted); font:var(--weight-normal) var(--fs-xs)/1 var(--font-mono); white-space:nowrap; }
+.vt-worklog .vt-viewer-head .vt-vw-title { flex:none; }
+.vt-wl-gap { flex:1 1 auto; }
+.vt-wl-updated { color:var(--color-muted); font-size:var(--fs-xs); white-space:nowrap; }
+.vt-wl { display:flex; flex:1 1 auto; min-width:0; min-height:0; }
+.vt-wl-left {
+  width:460px; flex:none; overflow-y:auto; overscroll-behavior:contain; padding-bottom:8px;
+  background:var(--color-bg-1); border-right:1px solid var(--color-line);
+}
+.vt-wl-right { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; }
+.vt-wl-msg { margin:0; padding:0 16px; color:var(--color-st-error); font-size:var(--fs-xs); }
+.vt-wl-msg:empty { display:none; }
+.vt-wl-status { padding:14px 16px; border-bottom:1px solid var(--color-line); }
+.vt-wl-status-top { display:flex; align-items:center; gap:8px; }
+.vt-wl-status-ic { display:inline-flex; }
+.vt-wl-status-label { font:var(--weight-semibold) var(--fs-base)/1.3 var(--font-ui); }
+.vt-wl-status-time { color:var(--color-muted); font:var(--weight-normal) var(--fs-xs)/1 var(--font-mono); white-space:nowrap; }
+.vt-wl-status-sub { margin:6px 0 0 24px; color:var(--color-muted); font:var(--weight-normal) var(--fs-xs)/1.5 var(--font-mono); overflow-wrap:anywhere; }
+.vt-wl-acts { display:flex; flex-wrap:wrap; gap:4px; margin:12px 0 0 24px; }
+.vt-wl-acts .vt-btn > svg { width:12px; height:12px; }
+.vt-wl-sec { padding-top:6px; }
+.vt-wl-sec-h { display:flex; align-items:center; gap:6px; height:28px; margin:0; padding:0 16px; color:var(--color-sub); font:var(--weight-semibold) var(--fs-xs)/1 var(--font-ui); }
+.vt-wl-n { color:var(--color-muted); font:var(--weight-normal) var(--fs-xs)/1 var(--font-mono); }
+.vt-wl-none { margin:0; padding:6px 16px; color:var(--color-muted); font-size:var(--fs-sm); }
+.vt-wl-row {
+  position:relative; display:flex; align-items:center; gap:8px; width:100%; min-height:32px; box-sizing:border-box;
+  padding:0 16px; border:0; background:transparent; color:var(--color-txt); text-align:start; cursor:pointer;
+  font:var(--weight-normal) var(--fs-sm)/1.3 var(--font-ui); white-space:nowrap;
+}
+.vt-wl-row.vt-wl-sub, .vt-wl-row.vt-wl-child { min-height:36px; }
+.vt-wl-row:hover { background:var(--color-bg-3); }
+.vt-wl-row:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
+.vt-wl-row.on { background:var(--color-acc-soft); box-shadow:inset 2px 0 0 var(--color-acc); }
+.vt-wl-row.on .vt-wl-row-name { font-weight:var(--weight-semibold); }
+.vt-wl-row-ic { display:inline-flex; flex:none; color:var(--color-muted); }
+.vt-wl-row-name { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.vt-wl-row-meta { flex:none; color:var(--color-muted); font-size:var(--fs-xs); }
+.vt-wl-row-state { flex:none; color:var(--color-muted); font-size:var(--fs-xs); }
+.vt-wl-row[data-tone="working"] .vt-wl-row-state { color:var(--color-st-working); }
+.vt-wl-row[data-tone="done"] .vt-wl-row-state { color:var(--color-st-done); }
+.vt-wl-row[data-tone="failed"] .vt-wl-row-state { color:var(--color-st-error); }
+.vt-wl-child { padding-left:28px; }
+.vt-wl-run { display:flex; align-items:center; gap:8px; height:28px; padding:0 16px; font-size:var(--fs-sm); white-space:nowrap; }
+.vt-wl-run-time { width:40px; flex:none; color:var(--color-muted); font:var(--weight-normal) var(--fs-xs)/1 var(--font-mono); }
+/* 오른쪽 */
+.vt-wl-rhead { display:flex; align-items:center; gap:8px; height:52px; flex:none; box-sizing:border-box; padding:0 16px 0 20px; border-bottom:1px solid var(--color-line); min-width:0; }
+.vt-wl-rhead-ic { display:inline-flex; color:var(--color-muted); }
+.vt-wl-rhead-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:var(--weight-semibold) var(--fs-base)/1.3 var(--font-ui); }
+.vt-wl-rhead-meta { color:var(--color-muted); font-size:var(--fs-xs); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.vt-wl-rhead-acts { display:flex; gap:4px; margin-left:auto; flex:none; }
+.vt-wl-chip {
+  display:inline-flex; align-items:center; height:18px; padding:0 6px; border-radius:var(--radius-xs); flex:none;
+  font:var(--weight-medium) var(--fs-3xs)/1 var(--font-ui); color:var(--color-sub); background:var(--color-bg-3);
+}
+.vt-wl-chip:empty { display:none; }
+.vt-wl-chip[data-tone="working"] { color:var(--color-st-working); background:color-mix(in srgb, var(--color-st-working) 10%, transparent); }
+.vt-wl-chip[data-tone="done"] { color:var(--color-acc); background:var(--color-acc-soft); }
+.vt-wl-chip[data-tone="failed"] { color:var(--color-st-error); background:color-mix(in srgb, var(--color-st-error) 10%, transparent); }
+.vt-wl-filter { display:flex; align-items:center; gap:12px; height:32px; flex:none; padding:0 20px; border-bottom:1px solid var(--color-line); color:var(--color-muted); font-size:var(--fs-xs); }
+.vt-wl-right[data-kind="none"] .vt-wl-filter, .vt-wl-right[data-kind="none"] .vt-wl-rhead { visibility:hidden; }
+.vt-wl-seg { display:inline-flex; height:24px; box-sizing:border-box; padding:1px; gap:1px; border-radius:var(--radius-sm); background:var(--color-bg-2); border:1px solid var(--color-line-strong); }
+.vt-wl-seg-btn { padding:0 8px; border:0; border-radius:var(--radius-xs); background:transparent; color:var(--color-muted); font:var(--weight-normal) var(--fs-xs)/20px var(--font-ui); cursor:pointer; white-space:nowrap; }
+.vt-wl-seg-btn.on { background:var(--color-bg-raised); color:var(--color-txt); box-shadow:0 0 0 1px var(--color-line-strong); }
+.vt-wl-seg-btn:focus-visible { outline:2px solid var(--color-acc); outline-offset:1px; }
+.vt-wl-count { font-family:var(--font-mono); }
+.vt-wl-rstatus { margin:0; padding:8px 20px 0; color:var(--color-muted); font-size:var(--fs-xs); }
+.vt-wl-rstatus:empty { display:none; }
+.vt-wl-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:4px 20px 16px; }
+.vt-wl-empty { margin:0; padding:40px 0; color:var(--color-muted); text-align:center; font-size:var(--fs-sm); }
+.vt-wl-entry { display:grid; grid-template-columns:76px minmax(0, 1fr); column-gap:12px; padding:10px 0; border-bottom:1px solid var(--color-line); }
+.vt-wl-entry-kind { color:var(--color-sub); font:var(--weight-semibold) var(--fs-xs)/16px var(--font-ui); overflow-wrap:anywhere; }
+.vt-wl-entry-sub { color:var(--color-muted); font:var(--weight-normal) var(--fs-3xs)/16px var(--font-mono); }
+.vt-wl-entry[data-kind="user"] .vt-wl-entry-kind, .vt-wl-entry[data-kind="assistant"] .vt-wl-entry-kind { color:var(--color-txt); }
+.vt-wl-entry[data-kind="tool_call"] .vt-wl-entry-kind { color:var(--color-acc); }
+.vt-wl-entry-body { margin:0; min-width:0; color:var(--color-txt); font:var(--weight-normal) var(--fs-sm)/20px var(--font-ui); white-space:pre-wrap; overflow-wrap:anywhere; }
+.vt-wl-term {
+  max-height:240px; overflow:auto; padding:6px 10px; border-radius:var(--radius-sm); border:1px solid var(--color-line);
+  background:var(--color-term-bg); color:var(--color-term-fg); font:var(--weight-normal) var(--fs-xs)/18px var(--font-mono);
+}
+.vt-wl-entry[data-kind="tool_call"] .vt-wl-term { background:var(--color-bg-2); border-color:var(--color-line-strong); }
+.vt-wl-list[data-filter="talk"] .vt-wl-entry:is([data-kind="tool_call"], [data-kind="tool_result"]) { display:none; }
+.vt-wl-list[data-filter="tools"] .vt-wl-entry:is([data-kind="user"], [data-kind="assistant"]) { display:none; }
+.vt-wl-more { margin:12px 0; }
+@media (max-width:719px) {
+  .vt-worklog .vt-viewer-card { width:100%; height:100%; border-radius:0; }
+  .vt-wl { flex-direction:column; overflow-y:auto; }
+  .vt-wl-left { width:auto; overflow:visible; border-right:0; border-bottom:1px solid var(--color-line); }
+  .vt-wl-right { min-height:60dvh; }
+  .vt-wl-updated, .vt-wl-head-sub { display:none; }
+}
+@media (pointer:coarse) { .vt-wl-row { min-height:44px; } }
+
+/* ── 같은 껍데기를 쓰는 독립 창: 워크트리 만들기(O09) · 세션 목록 설정 시트(O10) · 연결된 화면(O12) ── */
+.vt-wtd-card {
+  background:var(--color-bg-raised); border:1px solid var(--color-line-strong);
+  border-radius:var(--radius-lg); box-shadow:var(--shadow-e2);
+}
+.vt-wtd-head { min-height:44px; box-sizing:border-box; padding:0 8px 0 16px; background:transparent; border-bottom:1px solid var(--color-line); }
+.vt-wtd-title { font:var(--weight-semibold) var(--fs-base)/1.3 var(--font-ui); }
+.vt-wtd-body { padding:16px; gap:14px; }
+.vt-wtd-label { flex:0 0 96px; font:var(--weight-medium) var(--fs-xs)/1 var(--font-ui); color:var(--color-sub); }
+.vt-wtd-input, .vt-wtd-select { height:28px; box-sizing:border-box; background:var(--color-bg-2); border-radius:var(--radius-sm); }
+.vt-wtd-warn {
+  align-items:flex-start; padding:8px 10px; border-radius:var(--radius-sm);
+  color:var(--color-st-waiting); background:var(--color-st-waiting-tint); font:var(--weight-normal) var(--fs-xs)/1.5 var(--font-ui);
+}
+.vt-wtd-warn-fix { --btn-h:24px; color:var(--color-st-waiting); border-color:color-mix(in srgb, var(--color-st-waiting) 40%, transparent); background:transparent; }
+.vt-wtd-error { color:var(--color-st-error); font-size:var(--fs-xs); }
+.vt-wtd-foot { display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--color-line); }
+/* O09 — 560 폭 폼(시안). */
+.vt-wtd-card:not(.vt-repovis-card) { max-width:560px; width:min(560px, 100%); }
+
+/* O10 세션 목록 설정 시트 — 사이드바 바로 옆으로 펼친다(폭 520, 제목 막대 아래부터 상태 막대 위까지). 뒤 막은 옅게. */
+@media (min-width:720px) {
+  .vt-wtd-backdrop:has(.vt-repovis-card) {
+    align-items:stretch; justify-content:flex-start; padding:0;
+    padding-left:calc(var(--vt-activity-w, 48px) + var(--vt-side-w, 0px));
+    padding-top:var(--titlebar-h, 0px); padding-bottom:var(--statusbar-h, 0px);
+    background:color-mix(in srgb, var(--color-scrim) 65%, transparent);
+  }
+  .vt-wtd-card.vt-repovis-card {
+    width:520px; max-width:min(520px, 100%); height:100%; max-height:none;
+    border-radius:0; border:0; border-right:1px solid var(--color-line-strong);
+  }
+}
+.vt-repovis-card .vt-wtd-body { padding:4px 20px 16px; }
+.vt-railset-row { min-height:36px; }
+.vt-railset-label { font:var(--weight-normal) var(--fs-sm)/1.4 var(--font-ui); }
+.vt-railset-hint, .vt-railset-note { font-size:var(--fs-xs); color:var(--color-muted); }
+
+/* O12 연결된 화면 — 상태 막대의 「화면 N」에서 위로 여는 떠 있는 면(360). 다른 곳(레일 메뉴)에서 열면 가운데 창. */
+#vt-connected-screens .vt-wtd-card { max-width:360px; width:min(360px, 100%); padding:0; }
+#vt-connected-screens .vt-wtd-head { min-height:36px; padding:0 4px 0 12px; }
+#vt-connected-screens .vt-wtd-title { font:var(--weight-semibold) var(--fs-sm)/1 var(--font-ui); }
+#vt-connected-screens .vt-wtd-body { padding:0; gap:0; }
+#vt-connected-screens .vt-clients { display:flex; flex-direction:column; }
+#vt-connected-screens .vt-clients-head { order:3; padding:8px 12px; border-top:1px solid var(--color-line); }
+#vt-connected-screens .vt-clients-head .vt-btn { width:100%; justify-content:center; background:var(--color-bg-raised); border:1px solid var(--color-line-strong); color:var(--color-txt); --btn-h:24px; }
+#vt-connected-screens .vt-clients-list { margin:0; }
+#vt-connected-screens .vt-clients-row { min-height:48px; padding:0 12px; gap:10px; }
+#vt-connected-screens .vt-clients-row + .vt-clients-row { border-top:1px solid var(--color-line); }
+#vt-connected-screens .vt-clients-meta { font-size:var(--fs-xs); color:var(--color-muted); }
+#vt-connected-screens .vt-clients-badge { color:var(--color-acc); background:var(--color-acc-soft); border-color:transparent; }
+#vt-connected-screens .vt-clients-status, #vt-connected-screens .vt-clients-note { padding:6px 12px; margin:0; }
+#vt-connected-screens.vt-screens-pop { background:transparent; display:block; padding:0; }
+#vt-connected-screens.vt-screens-pop .vt-wtd-card { position:fixed; bottom:calc(var(--statusbar-h, 24px) + 4px); max-height:min(60vh, 480px); }
+
+/* ── O08 공유 및 권한 — .vt-dialog 껍데기(위)를 쓴다. 폭만 시안(480)에 맞춘다. */
+.vt-dialog.vt-share-dialog .vt-viewer-card { width:min(480px, 100%); }
+
+/* ── O13 파일 뷰어 — 떠 있는 창 · 상단 시트 껍데기(raised 머리, 반경 8). 본문(코드 면)은 그대로. */
+.vt-file-overlay > .vt-viewer-card { border:1px solid var(--color-line-strong); border-radius:var(--radius-lg); box-shadow:var(--shadow-e2); }
+.vt-file-overlay .vt-viewer-head { min-height:40px; box-sizing:border-box; background:var(--color-bg-raised); border-bottom:1px solid var(--color-line); }
+.vt-file-overlay.surface-sheet > .vt-viewer-card { border-top-left-radius:0; border-top-right-radius:0; }
+
+/* ── O14 대화 보관함 — 1200 창, 왼쪽 목록 380(구분선만), 선택 행은 강조 틴트 + 2px 선. */
+#vt-history .vt-viewer-card { width:min(1200px, calc(100vw - 32px)); height:min(788px, calc(100dvh - 32px)); }
+#vt-history .vt-vw-body { padding:16px 20px; }
+.vt-history-split { grid-template-columns:minmax(260px, 380px) minmax(0, 1fr); gap:20px; }
+.vt-history-list { padding-right:0; }
+.vt-history-item { padding:10px 12px; gap:3px; font-size:var(--fs-sm); border-bottom:1px solid var(--color-line); }
+.vt-history-item[aria-pressed="true"] { background:var(--color-acc-soft); }
+.vt-history-detail h3 { font:var(--weight-semibold) var(--fs-base)/1.3 var(--font-ui); }
+.vt-history-message { padding-block:10px; }
+.vt-history-message h4 { font-size:var(--fs-xs); color:var(--color-muted); margin-bottom:4px; }
+.vt-history-message pre { font-size:var(--fs-sm); line-height:1.6; }
+.vt-history-actions .vt-btn { --btn-h:24px; font-size:var(--fs-xs); }
+@media (max-width:719px) { #vt-history .vt-viewer-card { width:100%; height:100%; } }
+
+/* ── O16-A 온보딩 — 가운데 기둥: 강조 아이콘 · 28 제목 · 15 본문 · 살아 있는 tmux 목록(400, 선 상자) · 버튼. */
+.vt-onboarding .vt-ob-icon { color:var(--color-acc); }
+.vt-onboarding h2 { font:var(--weight-semibold) var(--fs-2xl)/1.2 var(--font-ui); letter-spacing:var(--tracking-tight); color:var(--color-txt); margin:0; }
+.vt-onboarding p { color:var(--color-sub); font-size:var(--fs-base); }
+.vt-onboarding .vt-ob-sessions { width:min(400px, 100%); border:1px solid var(--color-line-strong); border-radius:var(--radius-lg); text-align:left; }
+.vt-onboarding .vt-ob-hint { color:var(--color-muted); font-size:var(--fs-xs); opacity:1; }
+
+/* ── O16-B 연결 끊김 — 블러 없이 짙은 막(DESIGN.md §0: 블러는 OS 흉내 스킨 제목 막대만), 20px 아이콘 · 22 제목. */
+.vt-overlay {
+  background:color-mix(in srgb, var(--color-bg-0) 90%, transparent);
+  -webkit-backdrop-filter:none; backdrop-filter:none; gap:8px;
+}
+.vt-overlay .vt-ov-icon { color:var(--color-st-error); }
+.vt-overlay .vt-ov-icon svg { width:20px; height:20px; }
+.vt-overlay .vt-ov-title { color:var(--color-txt); font:var(--weight-semibold) var(--fs-lg)/1.3 var(--font-ui); }
+.vt-overlay .vt-ov-sub { color:var(--color-sub); font-size:var(--fs-sm); }
+.vt-overlay .vt-ov-elapsed { margin-top:0; color:var(--color-muted); font-size:var(--fs-xs); }
+.vt-overlay .vt-ov-stop-btn { margin-top:8px; }
+
+/* ── O16-C 서버 응답 없음 배너 — 제목 막대 바로 아래 36 띠(틴트 면, 본문색 글자, 앞에 상태 점). */
+.vt-unreachable {
+  top:var(--titlebar-h, 0px); display:flex; align-items:center; flex-wrap:wrap; gap:4px 8px; min-height:36px; box-sizing:border-box;
+  padding:6px 12px; text-align:left; box-shadow:none; border-bottom:1px solid var(--color-line);
+  color:var(--color-txt); background:color-mix(in srgb, var(--color-st-error) 14%, var(--color-bg-1));
+}
+.vt-unreachable::before { content:""; flex:none; width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-st-error); }
+.vt-unreachable-title { font:var(--weight-semibold) var(--fs-sm)/1.4 var(--font-ui); }
+.vt-unreachable-sub { margin:0; opacity:1; color:var(--color-sub); font-size:var(--fs-sm); }
+
+/* ── O16-E 툴팁 · 터미널 검색 바 ── */
+.vt-tip { padding:6px 8px; background:var(--color-bg-raised); border-color:var(--color-line-strong); box-shadow:var(--shadow-e2); font-size:var(--fs-xs); }
+#search-bar {
+  width:380px; height:36px; box-sizing:border-box; padding:0 4px 0 10px; gap:6px;
+  background:var(--color-bg-raised); border:1px solid var(--color-line-strong); border-radius:var(--radius-sm); box-shadow:var(--shadow-e2);
+}
+#search-bar input { flex:1 1 auto; width:auto; min-width:0; height:26px; background:transparent; border:0; box-shadow:none; }
+#search-bar input:focus { outline:none; }
+@media (max-width:719px) { #search-bar { width:auto; left:8px; right:8px; } }

@@ -246,3 +246,39 @@ test('같은 key 는 등급이 달라도 한 마디 — 진행(HUD)이 실패(�
     '한 동작이 두 자리에서 서로 다른 말을 하면 안 된다');
   assert.deepStrictEqual(toasts(window).map((e) => e.textContent), ['이미지 업로드 실패 (500)']);
 });
+
+// 리디자인 6단계(시안 O16-D) — 카드 340: 아이콘 · 머리(문구·×N) · 보조 줄 · 동작 버튼 · × 닫기.
+test('카드는 보조 줄과 동작 버튼을 글자로만 그리고, 동작을 누르면 실행 뒤 닫힌다', async () => {
+  const { showToast } = await buildWindow({ hud: true });
+  let ran = 0;
+  const el = showToast('<b>서버 저장 실패</b>', 'error', {
+    detail: '<img src=x onerror=alert(1)>', actions: [{ label: '<i>다시 저장</i>', onClick: () => { ran++; } }],
+  });
+  assert.strictEqual(el.querySelector('b, img, i'), null, '서버 문구는 마크업으로 해석되지 않는다');
+  assert.strictEqual(el.querySelector('.vt-toast-text').textContent, '<b>서버 저장 실패</b>');
+  assert.strictEqual(el.querySelector('.vt-toast-detail').textContent, '<img src=x onerror=alert(1)>');
+  assert.ok(el.querySelector('.vt-toast-icon svg'), '경고·실패는 아이콘이 붙는다');
+  el.querySelector('.vt-toast-actions button').click();
+  assert.strictEqual(ran, 1);
+  assert.ok(el.classList.contains('leaving'), '동작을 누르면 카드가 비킨다');
+});
+
+test('동작이 있는 info는 상태 막대 칸이 아니라 카드로 간다', async () => {
+  const { window, showToast } = await buildWindow({ hud: true });
+  showToast('새 버전', 'info', { actions: [{ label: '새로고침', onClick: () => {} }] });
+  assert.strictEqual(hudMsg(window), null);
+  assert.strictEqual(toasts(window).length, 1);
+});
+
+test('× 닫기는 그 카드만 닫고, 보조 줄이 다르면 합치지 않는다', async () => {
+  const { window, showToast } = await buildWindow();
+  showToast('업로드 실패', 'error', { detail: 'a.m4a' });
+  showToast('업로드 실패', 'error', { detail: 'a.m4a' });
+  showToast('업로드 실패', 'error', { detail: 'b.m4a' });
+  const els = toasts(window);
+  assert.strictEqual(els.length, 2);
+  assert.strictEqual(els[0].querySelector('.vt-toast-count').textContent, '×2');
+  els[1].querySelector('.vt-toast-x').click();
+  assert.ok(els[1].classList.contains('leaving'));
+  assert.ok(!els[0].classList.contains('leaving'));
+});

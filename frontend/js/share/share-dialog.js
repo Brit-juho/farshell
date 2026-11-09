@@ -47,6 +47,7 @@ export function openShareDialog(name, share, { access = false } = {}) {
       id,
       title: access ? t('공유 및 권한 · {name}', { name }) : editing ? t('공유 설정 · {name}', { name }) : t('에이전트와 공유 · {name}', { name }),
       onClose: finish,
+      extraClass: 'vt-share-dialog',   // 리디자인 6단계(시안 O08) — 폭 480
       bodyHTML: `
         <div class="vt-session-share" ${access && !shareable ? 'hidden' : ''}>
         <div class="vt-share-warn" role="note">${WARNING_LINES.map((l) => `<p>${vtEsc(l)}</p>`).join('')}</div>

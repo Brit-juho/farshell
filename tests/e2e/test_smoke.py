@@ -1682,6 +1682,73 @@ def test_파일을_터미널_칸에_끌어다_놓으면_경로가_꽂힌다(isol
         page.wait_for_timeout(300)
 
 
+# ── 리디자인 6단계(2026-11) — 오버레이(시안 overlays.html) ─────────────────────
+# 합성된 결과(실제 폭·위치·초점)만 본다. 마크업·안전성(글자로만 넣기)은 jsdom 테스트가 본다.
+
+_APPROVAL = {
+    "id": "e2e-a1", "kind": "share", "state": "pending",
+    "subject": {"kind": "agent", "id": "agent:local/$1:1", "name": "agent-a"},
+    "resource": {"id": "session:local/$2:2", "label": "build"},
+    "scopes": ["session.read", "session.view"], "conds": {}, "preset": {"id": "view", "label": "보기", "exact": True},
+    "elevated": [], "lineage": None, "created": 1, "expires": 99999, "age": 120, "expiresIn": 3600,
+    "reason": "두 파일만 고칩니다",
+}
+
+
+def test_경고_토스트는_340_카드로_상태_막대_위_16에_뜬다(page):
+    page.evaluate("() => showToast('업로드 실패', 'error', { detail: 'a.m4a', duration: 0, actions: [{ label: '다시', onClick: () => {} }] })")
+    page.wait_for_timeout(300)   # 등장 애니메이션(translateY 4px, 120ms)이 끝난 자리를 잰다
+    box = page.evaluate("""() => {
+      const el = document.querySelector('#vt-toasts .vt-toast');
+      const r = el.getBoundingClientRect();
+      const hud = document.getElementById('vt-hud').getBoundingClientRect();
+      return { w: Math.round(r.width), right: Math.round(innerWidth - r.right), gap: Math.round(hud.top - r.bottom),
+               btn: !!el.querySelector('.vt-toast-actions button'), x: !!el.querySelector('.vt-toast-x'),
+               radius: getComputedStyle(el).borderTopLeftRadius };
+    }""")
+    assert box["w"] == 340 and box["right"] == 16 and box["gap"] == 16, box
+    assert box["btn"] and box["x"] and box["radius"] == "8px", box
+
+
+def test_승인_창은_채운_버튼_없이_거부에_초점을_두고_바닥_줄이_창_안에_보인다(page):
+    page.route("**/api/authz/approvals", lambda r: r.fulfill(status=200, content_type="application/json",
+                                                              body=json.dumps({"approvals": [_APPROVAL]})))
+    page.reload(wait_until="load")
+    page.wait_for_selector(".vt-authz-approval .vt-authz-foot", timeout=15000)
+    st = page.evaluate("""() => {
+      const card = document.querySelector('.vt-authz-approval .vt-viewer-card');
+      const foot = card.querySelector('.vt-authz-foot').getBoundingClientRect();
+      const c = card.getBoundingClientRect();
+      const solid = [...card.querySelectorAll('.vt-btn')].filter((b) => {
+        const bg = getComputedStyle(b).backgroundColor; return !/rgba\\(0, 0, 0, 0\\)|transparent/.test(bg) && b.classList.contains('solid');
+      }).length;
+      return { w: Math.round(c.width), solid, focus: document.activeElement && document.activeElement.dataset.act,
+               footInside: foot.bottom <= c.bottom + 1 && foot.top >= c.top, head: Math.round(card.querySelector('.vt-viewer-head').getBoundingClientRect().height) };
+    }""")
+    assert st["w"] == 560 and st["solid"] == 0 and st["focus"] == "deny", st
+    assert st["footInside"] and st["head"] == 48, st
+
+
+def test_음성_패널은_440으로_마이크_옆에_열리고_화면_밖으로_안_나간다(page):
+    # 음성 상태 패널은 인증 뒤 지연 청크(voice-status)가 액션을 등록한다 — 등록을 기다린 뒤 연다.
+    page.wait_for_function("() => !!(window.getAction && window.getAction('voice.status'))", timeout=15000)
+    page.evaluate("() => window.getAction('voice.status')()")
+    page.wait_for_selector("#voice-status-panel:not([hidden])", timeout=5000)
+    page.evaluate("""() => {
+      window.dispatchEvent(new CustomEvent('vt:voice-stage', { detail: { phase: 'recording', target: 'x' } }));
+      window.dispatchEvent(new CustomEvent('vt:voice-partial', { detail: { text: '부분 결과 '.repeat(20), clipped: false } }));
+    }""")
+    g = page.evaluate("""() => {
+      const p = document.getElementById('voice-status-panel').getBoundingClientRect();
+      const m = document.getElementById('mic-btn-wrap').getBoundingClientRect();
+      return { w: Math.round(p.width), left: Math.round(p.left), micRight: Math.round(m.right), bottom: p.bottom, h: innerHeight,
+               bars: document.querySelectorAll('#voice-meter .vt-voice-bar').length };
+    }""")
+    # 마이크가 보이면(음성 기능이 켜진 서버) 그 바로 오른쪽, 아니면(격리 서버의 음성 게이트) 화면 왼쪽 12.
+    assert g["w"] == 440 and g["left"] == (g["micRight"] + 8 if g["micRight"] else 12), g
+    assert g["bottom"] <= g["h"] and g["bars"] == 24, g
+
+
 # ── N35 §6 dock ───────────────────────────────────────────────────────────
 
 def test_활동_막대가_문서대로_그려진다(page):

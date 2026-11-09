@@ -1151,12 +1151,15 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
   the fill and the 1px edge, and always drifts in one skin.
   A tooltip is a *description*, not a name: icon-only controls still carry
   `aria-label`, which is also the only label a touch device ever gets.
-- **Toasts** (`.vt-toast` / `#vt-hud-msg`, `js/ui/toast.js`): a toast reads as a
-  rail row that floated off the rail — the same 2px leading status bar (an inset
-  `box-shadow`, never `border-left`, which the radius would clip), the same
-  5 status colors, 12px `--font-ui`, `--font-mono` `tabular-nums` for the `×N`
-  repeat badge. Color goes on the text and the bar only; filling the background
-  with a status color turns three stacked toasts into a block of colour.
+- **Toasts** (`.vt-toast` / `#vt-hud-msg`, `js/ui/toast.js`): a card is 340 wide on the raised
+  surface, padding 12/12/12/14, radius 8 — [16px icon] [head: message · `×N` pill] [muted detail
+  line] [up to two action buttons] [× close] (redesign phase 6, mock O16-D). It keeps the 2px
+  leading status bar (an inset `box-shadow`, never `border-left`, which the radius would clip)
+  and the 5 status colors; color goes on the icon and the bar only — the message stays body
+  text, so three stacked cards stay readable. `showToast(msg, type, { detail, actions })` adds the
+  second line and buttons; a toast with actions always becomes a card (the 24px status-bar slot has
+  no room for a button). The status-bar slot is a tinted chip that hugs its text (severity colour at
+  10% with a 25% hairline), not a bar across the strip.
   **Where it lands is decided by severity, because the goal is to not cover the
   terminal.** `info`/`success` take the status bar's message slot (`#vt-hud-msg`, right of the
   pinned agents chip) for a moment — it covers no terminal rows, like tmux's status line or vim's echo area; the
@@ -1181,6 +1184,17 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
   Tapping dismisses; hovering (fine pointer) holds the timer. Default duration is
   3s for `info`/`success`, 6s for `warn`/`error` — a success confirms something
   already seen, a failure has to be read.
+- **Overlays** (redesign phase 6, mock `overlays.html`; rules in `styles/screens/99-overlays.css`): every
+  floating window is one shell — `--color-bg-raised`, 1px `--color-line-strong`, radius 8, `--shadow-e2`,
+  behind it `--color-scrim`; head 44 (the 「정돈」 dialogs — approval, voice — 48), body padding 16 (20),
+  footer row with a top hairline and 12/16 padding. **At most one filled button per window**, and none on
+  a window that grants or destroys: the approval window (O11/O11-B) puts 「거부」 left with default focus
+  and 「한 번만 · 이 세션 동안 · 나중에」 right, all unfilled, and keeps its 400ms input guard; a danger
+  confirm (O16-G) focuses 「취소」 and outlines the danger action. The voice panel (O16-F, 440) opens beside
+  the activity-bar mic anchored to its bottom edge so it grows upward; 「입력」 is its only filled button and
+  「녹음 종료」 is a danger outline. Session previews (palette `@`, empty-pane picker cards) draw the session's
+  screen in `--color-term-*` through `lib/ansi-spans.js` — text as `textContent`, colour as one of 14
+  `ta-*` classes, never inline style. No blur anywhere here (the disconnect overlay used to blur).
 - **Tags** (`.vt-tag`): a filled faint tint, no border, `--radius-sm`. A
   different species from `.vt-badge` — a tag doesn't count, it states a
   *property* (public exposure, trust tier, "this device", a plan name like
@@ -1288,6 +1302,7 @@ design.
 | `frontend/js/shell/TitleBar.tsx` | Title bar 36px: FarShell menu · host · breadcrumb · palette field · tools |
 | `frontend/js/shell/Hud.tsx` · `hud-data.ts` · `hud-layout.js` | Status bar 24px at the bottom; chip catalogue and layout rules |
 | `styles/screens/95-bars.css` | Title bar and status bar frames, chips, FarShell menu dropdown |
+| `styles/screens/99-overlays.css` | Overlay shell (dialogs, approval, work record, archive, picker, sheets, state screens) and terminal-colour session previews (`.vt-ansi`, `lib/ansi-spans.js`) |
 | `frontend/js/shell/Fleet.tsx` | Mobile fleet home |
 | `frontend/js/shell/Palette.tsx` · `palette-data.ts` | Command palette, 8 modes |
 | `frontend/js/layout/resize-overlay.js` | px / cols×rows caption while dragging a divider |

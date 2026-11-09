@@ -47,6 +47,8 @@
 // 직접 붙이던 시절의 잔재, D6에서 그 경로가 사라졌다) 정의가 두 벌이라 한쪽만
 // 고치면 어긋났다 — 지웠다.
 import { COMPACT_MAX } from '../layout/breakpoints.js';
+import { icon } from './icons.js';
+import { t } from '../core/i18n.js';
 
 const TYPE_CLASS = { info: 'info', error: 'err', success: 'ok', warn: 'warn' };
 // 등급별 기본 지속. 성공은 이미 눈으로 본 걸 확인해 주는 말이라 빨리 비켜야
@@ -55,6 +57,8 @@ const DURATION = { info: 3000, success: 3000, warn: 6000, error: 6000 };
 const EXIT_MS = 120;        // 퇴장 트랜지션(--dur-fast)과 같은 값
 const MAX_CARDS = 3;        // 동시에 떠 있는 카드 상한
 const HUD_TYPES = { info: 1, success: 1 };
+// 카드 앞 16px 아이콘(시안 O16-D). info는 아이콘 없이 등급 막대만 — 정보까지 기호를 달면 경고가 덜 띈다.
+const TYPE_ICON = { error: 'alert-triangle', warn: 'alert-triangle', success: 'check' };
 
 const keyed = new Map();   // key -> element (제자리 교체용)
 // 2.1.6 — 지금 화면에 떠 있는 토스트를 "타입+문구"로 찾는다. key를 안 넘긴
@@ -186,20 +190,22 @@ function enforceCap() {
 // 말줄임하고 배지는 남겨야 하기 때문이다(el.textContent에 직접 쓰면 배지가
 // 지워지고, 말줄임은 배지까지 같이 먹는다).
 function paintBody(el, text, count) {
-  let t = el.querySelector(':scope > .vt-toast-text');
-  if (!t) {
-    t = document.createElement('span');
-    t.className = 'vt-toast-text';
-    el.prepend(t);
+  // 카드는 머리 줄(.vt-toast-head) 안에, 상태 막대 칸은 바로 안에 둔다(HUD 줄의 말줄임 규칙이 직계 자식을 본다).
+  const host = el.querySelector(':scope > .vt-toast-body > .vt-toast-head') || el;
+  let t_ = host.querySelector(':scope > .vt-toast-text');
+  if (!t_) {
+    t_ = document.createElement('span');
+    t_.className = 'vt-toast-text';
+    host.prepend(t_);
   }
-  t.textContent = text;
+  t_.textContent = text;
 
-  let badge = el.querySelector(':scope > .vt-toast-count');
+  let badge = host.querySelector(':scope > .vt-toast-count');
   if (count > 1) {
     if (!badge) {
       badge = document.createElement('span');
       badge.className = 'vt-toast-count';
-      el.appendChild(badge);
+      host.appendChild(badge);
     }
     // 문구 자체는 건드리지 않는다 — "…(3회)"처럼 문장에 끼워 넣으면
     // 스크린리더가 매번 문장 전체를 다시 읽는다.
@@ -209,9 +215,63 @@ function paintBody(el, text, count) {
   }
 }
 
-// showToast(메시지, 'info'|'success'|'warn'|'error', { key, duration })
+// 카드 뼈대(시안 O16-D, 정돈 배치): [아이콘] [머리(문구 · ×N) / 보조 문구 / 동작 버튼] [×].
+// 모든 글자는 textContent로 넣는다 — 서버 오류 문구가 그대로 들어오는 자리다.
+function buildCard(el) {
+  const ic = document.createElement('span');
+  ic.className = 'vt-toast-icon';
+  ic.setAttribute('aria-hidden', 'true');
+  const body = document.createElement('div');
+  body.className = 'vt-toast-body';
+  const head = document.createElement('div');
+  head.className = 'vt-toast-head';
+  body.appendChild(head);
+  const x = document.createElement('button');
+  x.type = 'button';
+  x.className = 'vt-icon-btn sm vt-toast-x';
+  x.setAttribute('aria-label', t('알림 닫기'));
+  x.innerHTML = icon('x', 14);
+  x.addEventListener('click', (e) => { e.stopPropagation(); retire(el); });
+  el.append(ic, body, x);
+}
+
+function paintExtras(el, type, detail, actions) {
+  const ic = el.querySelector(':scope > .vt-toast-icon');
+  if (ic && ic.dataset.type !== type) {
+    ic.dataset.type = type;
+    ic.innerHTML = TYPE_ICON[type] ? icon(TYPE_ICON[type], 16) : '';
+    ic.hidden = !TYPE_ICON[type];
+  }
+  const body = el.querySelector(':scope > .vt-toast-body');
+  if (!body) return;
+  let d = body.querySelector(':scope > .vt-toast-detail');
+  if (detail) {
+    if (!d) { d = document.createElement('div'); d.className = 'vt-toast-detail'; body.appendChild(d); }
+    d.textContent = detail;
+  } else if (d) d.remove();
+  let row = body.querySelector(':scope > .vt-toast-actions');
+  const list = Array.isArray(actions) ? actions.filter((a) => a && a.label && typeof a.onClick === 'function').slice(0, 2) : [];
+  if (!list.length) { if (row) row.remove(); return; }
+  if (!row) { row = document.createElement('div'); row.className = 'vt-toast-actions'; body.appendChild(row); }
+  row.replaceChildren(...list.map((a) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'vt-btn sm';
+    b.textContent = String(a.label);
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      try { a.onClick(); } finally { if (a.keepOpen !== true) retire(el); }
+    });
+    return b;
+  }));
+}
+
+// showToast(메시지, 'info'|'success'|'warn'|'error', { key, duration, detail, actions })
 //   key      — 같은 key 의 기존 토스트를 제자리에서 교체 (없으면 새로 쌓음)
 //   duration — ms. 0 이하면 자동으로 사라지지 않음. 생략하면 등급별 기본값
+//   detail   — 카드 둘째 줄(흐린 보조 문구). 상태 막대 칸에서는 쓰지 않는다
+//   actions  — [{ label, onClick, keepOpen? }] 최대 2개. 동작이 있는 토스트는 카드로 간다
+//              (상태 막대 칸은 24px 한 줄이라 버튼을 둘 수 없다)
 export function showToast(msg, type, opts) {
   type = TYPE_CLASS[type] ? type : 'info';
   opts = opts || {};
@@ -220,7 +280,9 @@ export function showToast(msg, type, opts) {
   const text = msg == null ? '' : String(msg);
 
   const key = opts.key || null;
-  if (HUD_TYPES[type]) {
+  const detail = opts.detail == null ? '' : String(opts.detail);
+  const actions = Array.isArray(opts.actions) ? opts.actions : null;
+  if (HUD_TYPES[type] && !(actions && actions.length)) {
     const hud = hudLine();
     if (hud) return paintHud(hud, text, type, ms, key);
   }
@@ -231,7 +293,7 @@ export function showToast(msg, type, opts) {
     const hud = document.getElementById('vt-hud-msg');
     if (hud && !hud.hidden && hud._vtKey === key) clearHud(hud);
   }
-  return paintCard(text, type, ms, key);
+  return paintCard(text, type, ms, key, detail, actions);
 }
 
 function paintHud(el, text, type, ms, key) {
@@ -258,8 +320,8 @@ function paintHud(el, text, type, ms, key) {
   return el;
 }
 
-function paintCard(text, type, ms, key) {
-  const dedupKey = type + '\u0000' + text;
+function paintCard(text, type, ms, key, detail, actions) {
+  const dedupKey = type + '\u0000' + text + '\u0000' + (detail || '');
 
   let el = key ? keyed.get(key) : null;
   if (el && (!el.isConnected || el._vtLeaving)) { keyed.delete(key); el = null; }
@@ -271,6 +333,7 @@ function paintCard(text, type, ms, key) {
     if (same && same.isConnected && !same._vtLeaving) {
       same._vtCount = (same._vtCount || 1) + 1;
       paintBody(same, text, same._vtCount);
+      paintExtras(same, type, detail, actions);
       same._vtMs = ms;
       arm(same, ms);
       return same;
@@ -281,6 +344,7 @@ function paintCard(text, type, ms, key) {
   if (!el) {
     el = document.createElement('div');
     el.className = 'vt-toast entering';
+    buildCard(el);
     el.addEventListener('click', () => retire(el));
     bindHoverPause(el);
     if (key) { el._vtKey = key; keyed.set(key, el); }
@@ -298,6 +362,7 @@ function paintCard(text, type, ms, key) {
   el.classList.add(TYPE_CLASS[type]);
   el._vtCount = 1;
   paintBody(el, text, 1);
+  paintExtras(el, type, detail, actions);
   el.setAttribute('role', type === 'error' || type === 'warn' ? 'alert' : 'status');
 
   el._vtMs = ms;

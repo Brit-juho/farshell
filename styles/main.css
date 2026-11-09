@@ -75,3 +75,5 @@
 @import "./screens/96-files-tree.css"     layer(legacy);
 /* 파일 개편 단계 6(2026-11) — 파일 내용 검색(팔레트 `?` 모드 + 사이드바 「파일 › 내용 검색」). 팔레트(30)·트리(96) 뒤. */
 @import "./screens/97-grep.css"           layer(legacy);
+/* 리디자인 6단계(2026-11) — 오버레이(토스트 밖의 떠 있는 면: 대화상자 · 승인 · 작업 기록 · 보관함 · 상태 화면). 대화상자 껍데기(30)를 덮으므로 마지막. */
+@import "./screens/99-overlays.css"       layer(legacy);

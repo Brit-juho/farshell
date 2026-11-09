@@ -175,6 +175,8 @@ function chunkOf(id) {
     // 작업대(활동 막대·사이드바) 전용 아이콘 — shell 청크(Workbench.tsx)만 정적 import한다.
     // 규칙이 없으면 포괄 규칙이 core로 보내 초기 페이로드가 는다.
     if (p.endsWith('/frontend/js/ui/icons-shell.js')) return 'shell';
+    // 세션 미리보기를 터미널 색으로 그리는 해석기(리디자인 6단계) — 팔레트(shell)와 빈 칸 세션 선택(screens)만 쓴다.
+    if (p.endsWith('/frontend/js/lib/ansi-spans.js')) return 'shell';
     // 「연결된 화면」 모달 + 클라이언트 목록 — HUD 칩·레일 메뉴가 열 때만 쓴다.
     // layout/connected-screens-lazy.js가 지연 import하고, 설정 > 음성 섹션도
     // clients.js를 정적 import한다(settings -> screens 단방향, core는 안 따라온다).

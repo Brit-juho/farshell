@@ -9,6 +9,7 @@
 import { openPanel, closePanel } from '../panels/panel.js';
 import { vtEsc } from '../core/api.js';
 import { t } from '../core/i18n.js';
+import { icon } from '../ui/icons.js';
 import { authzApi } from './api.js';
 import { withElevation } from './elevate.js';
 import { pending, onChange, setPending, removePending, refresh } from './store.js';
@@ -64,13 +65,16 @@ function close() {
   internalClose = false;
 }
 
+// 리디자인 6단계(시안 O11 「정돈」 배치) — 바닥 줄: 왼쪽 「거부」, 오른쪽 「한 번만 · 이 세션 동안 · 나중에」.
+// 어떤 버튼도 채우지 않는다(허용이 시각적으로 「기본」처럼 보이면 안 된다). 기본 초점은 「거부」.
 function choiceButtons(req) {
   const cs = choicesFor(req);
   const btn = (c) => `<button type="button" class="vt-btn lg vt-authz-act" data-act="${c.choice}"${c.available ? '' : ' disabled aria-disabled="true"'}>${vtEsc(c.label)}</button>`;
-  const order = ['deny', 'once', 'session'];       // 거부가 맨 앞 — 기본 포커스도 여기
   const why = cs.filter((c) => !c.available).map((c) => `<p class="vt-authz-why">${vtEsc(c.label)}: ${vtEsc(c.why)}</p>`).join('');
-  return `<div class="vt-dialog-actions vt-authz-acts">${order.map((k) => btn(cs.find((c) => c.choice === k))).join('')}</div>${why}`;
+  return `${why}<div class="vt-dialog-actions vt-authz-acts vt-authz-foot">${btn(cs.find((c) => c.choice === 'deny'))}<span class="vt-authz-gap"></span>${['once', 'session'].map((k) => btn(cs.find((c) => c.choice === k))).join('')}<button type="button" class="vt-btn lg quiet vt-authz-snooze">${t('나중에')}</button></div>`;
 }
+
+const elevatedNote = (text, code) => `<div class="vt-authz-elevated" role="note"><span class="vt-authz-elev-ic" aria-hidden="true">${icon('alert-triangle', 14)}</span><span class="vt-authz-elev-text">${text}${code ? `<span class="vt-authz-code">${vtEsc(code)}</span>` : ''}</span></div>`;
 
 function factsHTML(req) {
   const lin = lineageText(req);
@@ -81,9 +85,9 @@ function factsHTML(req) {
       <dt>${t('요청한 세션')}</dt><dd>${vtEsc(requester(req))}${lin ? `<span class="vt-authz-sub">${vtEsc(lin)}</span>` : ''}</dd>
       <dt>${t('대상')}</dt><dd><span>${vtEsc(label)}</span>${rid && rid !== label ? `<span class="vt-authz-code">${vtEsc(rid)}</span>` : ''}</dd>
       <dt>${t('요청 범위')}</dt><dd><span class="vt-authz-code">${vtEsc(detailLine(req))}</span></dd>
-      ${req.reason ? `<dt>${t('에이전트가 적은 사유')}</dt><dd class="vt-authz-reason">${vtEsc(req.reason)}</dd>` : ''}
       <dt>${t('시각')}</dt><dd>${vtEsc(ageText(req.age))} · ${vtEsc(expiryText(req.expiresIn))}</dd>
-    </dl>`;
+    </dl>
+    ${req.reason ? `<div class="vt-authz-reason-box"><div class="vt-authz-label">${t('에이전트가 적은 사유')}</div><div class="vt-authz-reason">${vtEsc(req.reason)}</div></div>` : ''}`;
 }
 
 function draw() {
@@ -100,13 +104,12 @@ function draw() {
     bindPair(body, req, ticks);
   } else {
   body.innerHTML = `
-    ${elevated ? `<p class="vt-authz-elevated" role="note"><strong>${t('높은 권한이 필요한 요청')}</strong> ${vtEsc(t('비밀번호를 다시 확인한 뒤에만 허용됩니다.'))}<span class="vt-authz-code">${vtEsc(req.elevated.join(', '))}</span></p>` : ''}
     <p class="vt-authz-ask">${vtEsc(askSentence(req))}</p>
     ${factsHTML(req)}
+    ${elevated ? elevatedNote(`<strong>${t('높은 권한이 필요한 요청')}</strong> ${vtEsc(t('비밀번호를 다시 확인한 뒤에만 허용됩니다.'))}`, req.elevated.join(', ')) : ''}
     <div class="vt-authz-err" role="alert">${vtEsc(lastError)}</div>
-    ${choiceButtons(req)}
     <p class="vt-authz-note">${t('허용한 권한은 설정의 「권한」에서 언제든 회수할 수 있습니다.')}</p>
-    <div class="vt-authz-later"><button type="button" class="vt-btn quiet vt-authz-snooze">${t('나중에')}</button></div>`;
+    ${choiceButtons(req)}`;
   }
   body.querySelectorAll('.vt-authz-act').forEach((b) => b.addEventListener('click', () => onAct(b.dataset.act)));
   body.querySelector('.vt-authz-snooze').addEventListener('click', () => { snooze(); close(); });
@@ -162,7 +165,7 @@ function render() {
       id: PANEL_ID,
       ariaLabel: t('에이전트 접근 요청'),
       extraClass: 'vt-dialog vt-authz-approval',
-      headHTML: '<div class="vt-vw-title">' + t('에이전트 접근 요청') + '</div><span class="vt-authz-count" aria-live="polite"></span>',
+      headHTML: `<span class="vt-dialog-ic vt-authz-ic" aria-hidden="true">${icon('shield', 16)}</span><div class="vt-vw-title">${t('에이전트 접근 요청')}</div><span class="vt-authz-count" aria-live="polite"></span>`,
       bodyId: `${PANEL_ID}-body`,
       bodyHTML: '<div class="vt-authz-approval-body"></div>',
       onClose: () => {

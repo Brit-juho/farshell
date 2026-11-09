@@ -384,9 +384,10 @@ export function Rail(props: RailProps) {
   // 실행 중 행 ↔ 카탈로그 세션. 행 객체는 그대로 두고(폴링마다 새로 만들면 DOM이 뜯긴다) 찾아서 쓴다.
   const catalogOf = (row: SessionRow): any | undefined =>
     catalog()?.sessions.find((s) => s.ended == null && s.runtime_id && s.tmux_name === row.tmuxName && s.physical_key === row.physicalKey);
-  const openRecordOf = async (session: any) => {
+  // 실행 중 행에서 열면 tmux 이름도 넘긴다 — 작업 기록 창 왼쪽에 내부 서브에이전트, 오른쪽에 가장 최근 것을 고른다(시안 O15).
+  const openRecordOf = async (session: any, tmuxName?: string | null) => {
     const { openSessionRecord } = await import('../history/session-record.js');
-    openSessionRecord(session.id, () => { catalogPoll.kick(); });
+    openSessionRecord(session.id, () => { catalogPoll.kick(); }, { tmuxName: tmuxName || session.tmux_name || '' });
   };
   const recentCollapsedToggle = () => setPref(VIEW_KEY, encodeRailView({ ...prefs().view, recentCollapsed: !prefs().view.recentCollapsed }));
 
@@ -401,7 +402,7 @@ export function Rail(props: RailProps) {
     return rowMenuItems(row, { split: splitAvailable(row), share: viewHostId === LOCAL_HOST, record: !!linked }).map((it) => ({
       label: it.label, detail: it.detail, danger: it.danger,
       run: () => {
-        if (it.id === 'record' && linked) { void openRecordOf(linked); return; }
+        if (it.id === 'record' && linked) { void openRecordOf(linked, row.tmuxName); return; }
         // 열려 있지 않은 행은 웹 세션이 없어 제자리 편집이 안 된다 — 카탈로그 제목만 바꾼다.
         if (it.id === 'rename' && linked && !row.sessionId) { void renameCatalogSession(linked).then(() => catalogPoll.kick()); return; }
         runRowMenu(it.id, row, window, () => startRenameSession(row.sessionId, row.name));

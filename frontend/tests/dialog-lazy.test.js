@@ -42,3 +42,22 @@ test('받는 데 한 번 실패해도 다음 호출에서 다시 시도한다', 
   await mod.confirmDialog('b');
   assert.equal(log.length, 2);
 });
+
+// 리디자인 6단계(시안 O16-G · O11-C) — 위험 확인은 채운 버튼 없이 「취소」에 초점, 비밀번호 확인은 머리에 자물쇠.
+test('위험 확인은 채운 버튼이 없고 기본 초점이 취소다. 비밀번호 입력 창은 머리에 자물쇠 아이콘', async () => {
+  const env = createDomEnv('<html><body></body></html>');
+  const w = env.window; wins.push(w);
+  const mod = await importFresh(path.join(__dirname, '../js/core/dialog.js'), env.context, new Map());
+  const done = mod.confirmDialog('지울까요?', { danger: true, okLabel: '삭제' });
+  const card = w.document.querySelector('.vt-dialog');
+  assert.equal(card.querySelector('.vt-btn.solid'), null);
+  assert.equal(w.document.activeElement, card.querySelector('.vt-dialog-cancel'));
+  w.document.activeElement.click();
+  assert.equal(await done, false);
+  const pw = mod.promptDialog('비밀번호', { password: true });
+  const dlg = w.document.querySelector('.vt-dialog');
+  assert.ok(dlg.querySelector('.vt-viewer-head .vt-dialog-ic svg'));
+  assert.equal(w.document.activeElement, dlg.querySelector('.vt-dialog-input'));
+  dlg.querySelector('.vt-dialog-cancel').click();
+  assert.equal(await pw, null);
+});
