@@ -27,11 +27,11 @@ Everything about using FarShell in the browser. (For the CLI see `fsh help conce
 
 ### Title bar and status bar (desktop, 720px and wider)
 
-- **Title bar** (top): from the left, the **FarShell menu** (new session, quick open, copy access URL, settings,
+- **Title bar** (top): from the left, the **FarShell menu** (new session, quick open, focus mode, copy access URL, settings,
   status bar settings; the number of pending approvals shows as a badge), the **Mac** this screen shows (if you have
   paired Macs, click it to switch the whole screen to another one), and the active pane's **repository › branch ›
   session** (hidden below 1280px). Click the **Search or run a command** field in the middle, or press `Cmd+K`, to open
-  the palette. The keyboard toggle (touch devices) and window buttons sit on the right.
+  the palette. The focus mode button (four-corners icon), the keyboard toggle (touch devices) and window buttons sit on the right.
 - **Status bar** (bottom): the **agents chip** (`Needs you N · Working N · Done N`; when something
   needs you, click it to jump to the session that has waited longest) is pinned at the left end, and short messages
   (copied, saved…) appear briefly just to its right. Then E2E, safe mode and connected screens, and on the right CPU,
@@ -39,6 +39,15 @@ Everything about using FarShell in the browser. (For the CLI see `fsh help conce
   the less important chips hide first. Choose what goes where in Settings → **Status bar** (saved on this device only;
   the agents chip can't be moved or turned off).
 - Phones (narrower than 720px) have neither bar; the top bar and the bottom tabs do that job.
+- **Focus mode** (wide screens): turn it on and off with `Cmd+.` (`Alt+Shift+.` off the Mac), the button at the right of the
+  title bar, the FarShell menu or the palette ("Focus mode"). It hides the activity bar, sidebar, title bar and status bar so
+  the panes reach the window edges (terminals resize only once on the way in and once on the way out). Rest the pointer on the
+  left, top or bottom edge and that bar floats over the panes (the panes keep their size); move away and it hides again — the
+  left one also closes at once when you pick a session or press `Esc`. When a session is waiting for approval, a pill at the
+  top right shows "Needs you N · name · kind"; click it to go there, or click "End" on its right to leave focus mode. Toasts,
+  the approval dialog and the palette still appear. In Settings → Appearance, "Focus mode" sets showing bars at the edges, the
+  needs-you pill and the edge reveal delay (instant / 250ms / 500ms). Tablets without a mouse use an exit button at the bottom
+  left instead of the edges. Reloading the page or crossing 720px in window width turns it off.
 - **Phone mic**: the round mic floating at the bottom right of the Terminal tab (above the bottom tabs, or above the keybar when it is open)
   starts recording; tap again to stop. A dot on it means voice needs setting up (long-press for the voice panel).
 - **Phone focus mode**: the first button in the Terminal tab's top bar (the four-corners icon) hides the top bar and bottom tabs and leaves

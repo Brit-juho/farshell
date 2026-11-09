@@ -20,6 +20,7 @@
 | `Cmd+F` / `Ctrl+Shift+F` | Scrollback search |
 | `Alt+Shift+F` | In-terminal search (also on Mac — formerly `Cmd+Shift+F`) |
 | `Cmd+Shift+F` / `Ctrl+Shift+G` | File content search — the sidebar 「Files › Search contents」. In the palette, the `?` prefix |
+| `Cmd+.` / `Alt+Shift+.` | Focus mode on/off — hides every bar so the panes reach the window edges (rebind it in Settings → Keymap) |
 | `⌥C` · `⌥W` · `⌥R` in the palette `?` mode | Toggle match case · whole word · regex (`⌥Enter` moves the search to the sidebar) |
 | `⋯` on a rail row, or right-click | Session menu (open/close, rename, open on Mac, connected screens, kill) |
 
