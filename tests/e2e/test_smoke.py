@@ -2227,3 +2227,140 @@ def test_mcp_workspace_tabs_fit_desktop_and_mobile(page):
     }""")
     assert layout["scrollWidth"] <= layout["clientWidth"] + 1, layout
     assert layout["cardBottom"] <= layout["navTop"] + 1, layout
+
+
+# ── 파일 개편 단계 5 — 사이드바 「파일」 트리(files/FileTree.tsx) ─────────────────────────────
+
+
+def _tree_dir(name: str) -> Path:
+    """격리 서버의 둘째 열람 경계 아래 트리 시험 폴더. 외부 서버면 건너뛴다."""
+    d = Path(_viewer_file(name))
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _open_tree_at(page, d: Path) -> None:
+    """「파일」 활동을 열고 트리 최상단을 d로 옮긴다(경로 입력 + Enter)."""
+    _open_dock(page, "파일")
+    page.wait_for_selector("#vt-dock #vt-dir .vt-ft-path", timeout=15000)
+    inp = page.locator("#vt-dir .vt-ft-path")
+    inp.fill(str(d))
+    inp.press("Enter")
+    page.wait_for_function(
+        # 경로는 앞을 말줄임(rtl)하므로 LRM(‎)으로 감싸 그린다 — 그 문자를 빼고 비교한다.
+        "(p) => document.querySelector('#vt-dir .vt-ft-host-p')?.textContent.replace(/\\u200e/g, '') === p",
+        arg=str(d), timeout=10000)
+
+
+def test_파일_트리는_보이는_행만_그리고_페이지와_aria_tree와_키보드가_된다(page):
+    d = _tree_dir("tree-big")
+    for i in range(1500):
+        (d / f"n{i:04d}.txt").write_text("x")
+    _open_tree_at(page, d)
+    page.wait_for_function(
+        "() => document.querySelector('#vt-dir .vt-ft-spacer')?.style.height === '" + f"{1001 * 28}px" + "'", timeout=10000)
+    shape = page.evaluate("""() => {
+      const tree = document.querySelector('#vt-dir .vt-ft-scroll');
+      return { role: tree.getAttribute('role'), rows: tree.querySelectorAll('.vt-ft-row').length,
+        height: tree.querySelector('.vt-ft-spacer').style.height,
+        setsize: tree.querySelector('.vt-ft-row.k-file').getAttribute('aria-setsize'),
+        rowH: Math.round(tree.querySelector('.vt-ft-row').getBoundingClientRect().height) };
+    }""")
+    assert shape["role"] == "tree", shape
+    assert shape["rows"] <= 80, f"보이는 구간만 DOM에 있어야 한다: {shape}"
+    assert shape["height"] == f"{1001 * 28}px", shape   # 첫 페이지 1000개 + 「더 불러오기」
+    assert shape["setsize"] == "1500" and shape["rowH"] == 28, shape
+    # 「더 불러오기」 — 끝까지 스크롤해(가상 행이라 그때 DOM에 생긴다) 누른다.
+    page.evaluate("() => { const t = document.querySelector('#vt-dir .vt-ft-scroll'); t.scrollTop = t.scrollHeight; }")
+    page.wait_for_selector("#vt-dir .vt-ft-row.k-more", timeout=5000)
+    page.locator("#vt-dir .vt-ft-row.k-more").click()
+    page.wait_for_function(
+        "() => document.querySelector('#vt-dir .vt-ft-spacer').style.height === '" + f"{1500 * 28}px" + "'", timeout=10000)
+    # 키보드 — 초점은 스크롤 상자가 갖고 aria-activedescendant가 행을 가리킨다.
+    tree = page.locator("#vt-dir .vt-ft-scroll")
+    tree.focus()
+    tree.press("Home")
+    tree.press("ArrowDown")
+    active = lambda: page.evaluate(  # noqa: E731
+        "() => { const t = document.querySelector('#vt-dir .vt-ft-scroll');"
+        " const id = t.getAttribute('aria-activedescendant'); return id ? document.getElementById(id)?.dataset.key : null; }")
+    assert active().endswith("/n0001.txt"), active()
+    tree.press("End")
+    page.wait_for_function(
+        "() => { const t = document.querySelector('#vt-dir .vt-ft-scroll'); const id = t.getAttribute('aria-activedescendant');"
+        " return id && document.getElementById(id)?.dataset.key.endsWith('/n1499.txt'); }", timeout=5000)
+    # 이름 필터.
+    page.locator("#vt-dir .vt-ft-filter input").fill("n0042")
+    page.wait_for_function("() => document.querySelectorAll('#vt-dir .vt-ft-row').length === 1", timeout=5000)
+    assert page.locator("#vt-dir .vt-ft-cnt").inner_text() == "1개"
+    # 행 메뉴 — 오른쪽 클릭. 다운로드·새 파일은 이 단계에 없다.
+    page.locator("#vt-dir .vt-ft-row.k-file").click(button="right")
+    page.wait_for_selector('.vt-ft-menu[role="menu"]', timeout=5000)
+    labels = page.locator('.vt-ft-menu [role="menuitem"] .vt-ft-mi-l').all_text_contents()
+    assert labels == ["열기", "터미널에 경로 삽입", "경로 복사", "공유 링크 만들기…", "새로고침"], labels
+    page.keyboard.press("Escape")
+    page.wait_for_function("() => !document.querySelector('.vt-ft-menu')", timeout=5000)
+
+
+def test_파일_트리는_루트_감시_하나로_바뀐_폴더만_다시_받고_바뀜_점을_찍는다(page):
+    d = _tree_dir("tree-watch")
+    for i in range(5):
+        (d / f"sub{i}").mkdir(exist_ok=True)
+        (d / f"sub{i}" / "a.txt").write_text("1")
+    _open_tree_at(page, d)
+    for i in range(5):
+        page.locator(f'#vt-dir .vt-ft-row.k-dir[data-key$="/sub{i}"]').click()
+    page.wait_for_function("() => document.querySelectorAll('#vt-dir .vt-ft-row.k-dir.open').length === 5", timeout=10000)
+    page.wait_for_timeout(1500)   # 감시가 자리를 잡고(구독 왕복) 위 생성 이벤트가 가라앉게
+    seen: list[str] = []
+    page.on("request", lambda r: seen.append(r.url) if "/api/fs/tree" in r.url else None)
+    (d / "sub3" / "new.txt").write_text("hello")
+    page.wait_for_selector('#vt-dir .vt-ft-row[data-key$="/sub3/new.txt"] .vt-ft-chg', timeout=15000)
+    page.wait_for_timeout(800)
+    assert len(seen) == 1, f"바뀐 폴더 하나만 다시 받아야 한다: {seen}"
+    assert "depth=0" in seen[0] and "sub3" in seen[0], seen
+    # 조상 폴더는 빈 원(안쪽에 바뀐 것이 있다).
+    assert page.locator('#vt-dir .vt-ft-row.k-dir[data-key$="/sub3"] .vt-ft-chg.ring').count() == 1
+    # 열면 점이 사라진다.
+    page.locator('#vt-dir .vt-ft-row[data-key$="/sub3/new.txt"]').click()
+    page.wait_for_function(
+        "() => !document.querySelector('#vt-dir .vt-ft-row[data-key$=\"/sub3/new.txt\"] .vt-ft-chg')", timeout=5000)
+
+
+def test_폰_파일_탭은_트리가_기본이고_파일_첨부를_오가며_길게_누르면_시트(page):
+    d = _tree_dir("tree-phone")
+    (d / "a.txt").write_text("1")
+    (d / "b.txt").write_text("2")
+    page.set_viewport_size(COMPACT)
+    tab = page.locator('#vt-mnav-bottom [data-mnav="files"]')
+    assert tab.get_attribute("aria-label") == "파일"
+    assert page.locator("#vt-mnav-bottom #vt-mnav-badge-files").count() == 1
+    tab.click()
+    page.wait_for_selector("#vt-dir.vt-mobile-route .vt-mfiles-seg", timeout=15000)
+    sel = page.locator('#vt-dir .vt-mfiles-seg [role="tab"][aria-selected="true"]').inner_text()
+    assert sel.strip() == "파일"
+    inp = page.locator("#vt-dir .vt-ft-path")
+    inp.fill(str(d))
+    inp.press("Enter")
+    page.wait_for_selector('#vt-dir .vt-ft-row[data-key$="/a.txt"]', timeout=10000)
+    h = page.evaluate("() => Math.round(document.querySelector('#vt-dir .vt-ft-row').getBoundingClientRect().height)")
+    assert h == 44, h
+    # 길게 누르면 아래 시트(항목 44).
+    page.evaluate("""() => {
+      const r = document.querySelector('#vt-dir .vt-ft-row[data-key$="/a.txt"]');
+      const b = r.getBoundingClientRect();
+      r.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch', clientX: b.left + 40, clientY: b.top + 10 }));
+    }""")
+    page.wait_for_selector(".vt-ft-menu.sheet", timeout=3000)
+    ih = page.evaluate("() => Math.round(document.querySelector('.vt-ft-menu.sheet [role=menuitem]').getBoundingClientRect().height)")
+    assert ih == 44, ih
+    page.locator(".vt-ft-menu-cancel").click()
+    # 「첨부」로 바꾸면 첨부 화면, 탭을 다시 누르면 마지막에 본 쪽(첨부)이 열린다.
+    page.locator('#vt-dir .vt-mfiles-seg [data-seg="attach"]').click()
+    page.wait_for_selector("#vt-files.vt-mobile-route .vt-mfiles-seg", timeout=15000)
+    assert page.locator("#vt-dir").count() == 0
+    page.locator('#vt-mnav-bottom [data-mnav="fleet"]').click()
+    tab.click()
+    page.wait_for_selector("#vt-files.vt-mobile-route", timeout=15000)
+    page.locator('#vt-files .vt-mfiles-seg [data-seg="tree"]').click()
+    page.wait_for_selector("#vt-dir.vt-mobile-route", timeout=15000)

@@ -1,0 +1,171 @@
+/* 파일 트리 — 사이드바 「파일」 활동(`vt-dir` 패널) 본문(파일 개편 단계 5, 2026-11)
+ *
+ * frontend/js/files/FileTree.tsx가 그린다. 시안: docs/local의 redesign-2026-11 specimen final/files.html
+ * (F01 · F01-B · M-F1 · M-F1-B), 선택 비교 choices.html(3 「가」 바뀜 점 = --color-st-done, 4 「가」 행 28 기본 · 22 설정).
+ *
+ * 행은 가상 스크롤이다 — `.vt-ft-spacer`가 전체 높이를 잡고, 보이는 행만 `transform: translateY()`로 절대 배치된다.
+ * 그래서 행 높이는 **변수 하나**(`--ft-row`, FileTree.tsx가 28 / 22 / 폰 44로 준다)로만 정해지고, 행 안의 어떤 것도
+ * 높이를 늘려서는 안 된다(줄바꿈 금지, 넘치면 말줄임).
+ *
+ * 색은 기존 토큰만 쓴다(계약 9). 선택은 강조색을 옅게 섞은 배경, 키보드 초점은 1px 강조색 안쪽 테두리 — 둘은 따로
+ * 움직인다(시안 F01-B). */
+
+.vt-vw-body.vt-ft-host-body { display:flex; flex-direction:column; min-height:0; overflow:hidden; padding:0; }
+
+.vt-ft { display:flex; flex-direction:column; flex:1; min-height:0; min-width:0; font:400 var(--fs-sm) var(--ui); color:var(--txt); }
+
+/* ── 호스트 줄 28 ─────────────────────────────────────────────────────────── */
+.vt-ft-host {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); flex:none;
+  height:28px; padding:0 calc(var(--spacing) * 3); border-bottom:1px solid var(--line);
+  font-size:var(--fs-xs); color:var(--sub); white-space:nowrap; overflow:hidden;
+}
+.vt-ft-host-ic { display:inline-flex; flex:none; }
+.vt-ft-host-nm { color:var(--txt); font-weight:var(--weight-medium); flex:none; }
+.vt-ft-host.remote .vt-ft-host-nm { color:var(--info); }
+.vt-ft-host-p { font-family:var(--mono); overflow:hidden; text-overflow:ellipsis; direction:rtl; text-align:left; min-width:0; }
+
+/* ── 경로 · 필터 28 ────────────────────────────────────────────────────────── */
+.vt-ft-tools { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5); flex:none; padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3); border-bottom:1px solid var(--line); }
+.vt-ft-tool-row { display:flex; align-items:center; gap:calc(var(--spacing) * 1); min-width:0; }
+.vt-ft-inp {
+  flex:1; min-width:0; height:28px; padding:0 calc(var(--spacing) * 2);
+  background:var(--menu); color:var(--txt); border:1px solid var(--line); border-radius:var(--radius-sm);
+  font:400 var(--fs-xs) var(--mono);
+}
+.vt-ft-inp:focus { outline:none; border-color:var(--acc); }
+.vt-ft-inp::placeholder { color:var(--sub); font-family:var(--ui); }
+.vt-ft-btn { flex:none; width:28px; height:28px; }
+.vt-ft-filter { position:relative; }
+.vt-ft-filter-ic { position:absolute; left:calc(var(--spacing) * 2); display:inline-flex; color:var(--sub); pointer-events:none; }
+.vt-ft-filter .vt-ft-inp { padding-left:calc(var(--spacing) * 7); }
+.vt-ft-cnt { flex:none; font:500 var(--fs-2xs) var(--mono); color:var(--sub); }
+
+/* ── 최근 ─────────────────────────────────────────────────────────────────── */
+.vt-ft-recent { flex:none; border-bottom:1px solid var(--line); }
+.vt-ft-sec {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); width:100%; height:28px;
+  padding:0 calc(var(--spacing) * 3); background:none; border:0; color:var(--sub); cursor:pointer;
+  font:600 var(--fs-2xs) var(--ui); letter-spacing:var(--tracking-wide); text-align:left;
+}
+.vt-ft-sec:hover { color:var(--txt); }
+.vt-ft-sec-n { margin-left:auto; font-family:var(--mono); }
+.vt-ft-recent-list { display:flex; flex-direction:column; padding-bottom:calc(var(--spacing) * 1); }
+.vt-ft-recent-row {
+  display:flex; align-items:baseline; gap:calc(var(--spacing) * 2); height:var(--ft-row, 28px); min-width:0;
+  padding:0 calc(var(--spacing) * 3) 0 calc(var(--spacing) * 7); background:none; border:0; color:var(--txt);
+  cursor:pointer; text-align:left; font:inherit; line-height:var(--ft-row, 28px);
+}
+.vt-ft-recent-row:hover { background:var(--menu-hover); }
+.vt-ft-recent-dir { color:var(--sub); font:400 var(--fs-2xs) var(--mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.vt-ft-recent-clear { align-self:flex-end; margin:0 calc(var(--spacing) * 3); background:none; border:0; color:var(--sub); cursor:pointer; font:400 var(--fs-2xs) var(--ui); }
+.vt-ft-recent-clear:hover { color:var(--txt); }
+
+/* ── 트리(가상 스크롤) ────────────────────────────────────────────────────── */
+.vt-ft-scroll { flex:1; min-height:0; overflow:auto; position:relative; outline:none; overscroll-behavior:contain; }
+.vt-ft-spacer { position:relative; width:100%; }
+.vt-ft-row {
+  position:absolute; top:0; left:0; right:0; height:var(--ft-row, 28px);
+  display:flex; align-items:center; gap:calc(var(--spacing) * 1);
+  padding-right:calc(var(--spacing) * 2); white-space:nowrap; cursor:pointer;
+  touch-action:manipulation; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
+  contain:layout style;
+}
+.vt-ft-row:hover { background:var(--menu-hover); }
+.vt-ft-row.sel { background:color-mix(in srgb, var(--acc) 14%, transparent); }
+.vt-ft-row.foc { box-shadow:inset 0 0 0 1px var(--acc); }
+.vt-ft-row.k-loading, .vt-ft-row.k-empty, .vt-ft-row.k-error, .vt-ft-row.k-capped { cursor:default; }
+.vt-ft-row.k-loading:hover, .vt-ft-row.k-empty:hover, .vt-ft-row.k-capped:hover { background:none; }
+.vt-ft-row.k-more { color:var(--acc); }
+.vt-ft-row.k-error { color:var(--err); cursor:pointer; }
+
+.vt-ft-cv { flex:none; width:12px; height:12px; display:inline-flex; color:var(--sub); transition:transform var(--dur-fast) ease; }
+.vt-ft-cv.open { transform:rotate(90deg); }
+.vt-ft-ic { flex:none; display:inline-flex; color:var(--sub); }
+.vt-ft-row.k-dir .vt-ft-ic { color:var(--txt); }
+.vt-ft-ic.spin { width:12px; height:12px; border-radius:50%; border:2px solid var(--line); border-top-color:var(--acc); animation:vtSpin .6s linear infinite; }
+.vt-ft-nm { overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.vt-ft-row.k-dir .vt-ft-nm { font-weight:var(--weight-semibold); }
+.vt-ft-nm mark { background:color-mix(in srgb, var(--acc) 30%, transparent); color:inherit; border-radius:2px; }
+.vt-ft-note { color:var(--sub); font-size:var(--fs-xs); }
+.vt-ft-row.k-more .vt-ft-note, .vt-ft-row.k-error .vt-ft-note { color:inherit; }
+
+/* 바뀜 — 파일은 채운 점 6, 안쪽에 바뀐 것이 있는 폴더는 빈 원(링 1.5). 세션 목록의 「안 본 결과」 링과 같은 색. */
+.vt-ft-chg { flex:none; width:6px; height:6px; border-radius:50%; background:var(--color-st-done); margin-left:calc(var(--spacing) * 1); }
+.vt-ft-chg.ring { background:none; box-shadow:inset 0 0 0 1.5px var(--color-st-done); width:7px; height:7px; }
+
+.vt-ft-r { margin-left:auto; display:flex; align-items:center; gap:calc(var(--spacing) * 1); flex:none; padding-left:calc(var(--spacing) * 2); }
+.vt-ft-sz { font:400 var(--fs-2xs) var(--mono); color:var(--sub); }
+.vt-ft-acts { display:none; align-items:center; gap:2px; }
+.vt-ft-acts .vt-icon-btn { width:22px; height:22px; }
+/* 마우스를 올리면 크기 대신 행 동작 3개(시안 F01-B). 키보드 초점 행도 보인다. */
+@media (hover:hover) {
+  .vt-ft-row:hover .vt-ft-acts, .vt-ft-row.foc .vt-ft-acts { display:inline-flex; }
+  .vt-ft-row:hover .vt-ft-sz, .vt-ft-row.foc .vt-ft-sz { display:none; }
+}
+
+.vt-ft.dense .vt-ft-acts .vt-icon-btn { width:18px; height:18px; }
+
+.vt-ft-empty { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1); padding:calc(var(--spacing) * 4) calc(var(--spacing) * 5); color:var(--sub); font-size:var(--fs-xs); flex:none; }
+.vt-ft-empty b { color:var(--txt); font-weight:var(--weight-semibold); font-size:var(--fs-sm); }
+
+.vt-ft-keys {
+  display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 3); flex:none;
+  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3); border-top:1px solid var(--line);
+  font-size:var(--fs-2xs); color:var(--sub);
+}
+.vt-ft-keys kbd { font:500 var(--fs-3xs) var(--mono); padding:0 4px; border:1px solid var(--line); border-radius:3px; color:var(--txt); }
+
+/* ── 행 메뉴 260 · 항목 28 / 폰 시트 · 항목 44 ─────────────────────────────── */
+.vt-ft-scrim { position:fixed; inset:0; z-index:900; background:transparent; }
+.vt-ft-scrim.sheet { background:color-mix(in srgb, var(--crust) 50%, transparent); }
+.vt-ft-menu {
+  position:fixed; z-index:901; width:260px; max-width:calc(100vw - 16px);
+  display:flex; flex-direction:column; padding:calc(var(--spacing) * 1) 0;
+  background:var(--menu); border:1px solid var(--line); border-radius:var(--radius-lg);
+  box-shadow:0 8px 24px color-mix(in srgb, var(--crust) 40%, transparent);
+}
+.vt-ft-menu-path {
+  padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3); border-bottom:1px solid var(--line); margin-bottom:calc(var(--spacing) * 1);
+  font:500 var(--fs-2xs) var(--mono); color:var(--sub); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left;
+}
+.vt-ft-mi {
+  display:flex; align-items:center; gap:calc(var(--spacing) * 2); height:28px; padding:0 calc(var(--spacing) * 3);
+  background:none; border:0; color:var(--txt); font:400 var(--fs-sm) var(--ui); text-align:left; cursor:pointer;
+}
+.vt-ft-mi:hover, .vt-ft-mi:focus { background:var(--menu-hover); outline:none; }
+.vt-ft-mi-l { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-ft-mi-k { flex:none; color:var(--sub); font:400 var(--fs-2xs) var(--mono); max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+.vt-ft-menu.sheet {
+  left:0; right:0; bottom:0; top:auto; width:auto; max-width:none;
+  border-radius:var(--radius-lg) var(--radius-lg) 0 0; border-bottom:0;
+  padding:0 0 calc(var(--spacing) * 3 + env(safe-area-inset-bottom));
+}
+.vt-ft-menu-grab { width:36px; height:4px; border-radius:2px; background:var(--line); margin:calc(var(--spacing) * 2) auto calc(var(--spacing) * 1); }
+.vt-ft-menu-head { display:flex; align-items:center; gap:calc(var(--spacing) * 3); padding:calc(var(--spacing) * 2) calc(var(--spacing) * 5) calc(var(--spacing) * 3); border-bottom:1px solid var(--line); margin-bottom:calc(var(--spacing) * 1); }
+.vt-ft-menu-title { display:flex; flex-direction:column; min-width:0; }
+.vt-ft-menu-title b { font:500 var(--fs-base) var(--mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-ft-menu-title span { font:400 var(--fs-xs) var(--mono); color:var(--sub); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-ft-menu.sheet .vt-ft-mi { height:44px; padding:0 calc(var(--spacing) * 5); font-size:var(--fs-base); }
+.vt-ft-menu-cancel { margin:calc(var(--spacing) * 2) calc(var(--spacing) * 4) 0; height:44px; }
+
+/* ── 폰: 행 44 · 들여쓰기 16 · 아이콘 20 ───────────────────────────────────── */
+.vt-ft.touch .vt-ft-host { height:32px; }
+.vt-ft.touch .vt-ft-inp { height:40px; font-size:var(--fs-base); }
+.vt-ft.touch .vt-ft-btn { width:40px; height:40px; }
+.vt-ft.touch .vt-ft-row { font-size:var(--fs-base); gap:calc(var(--spacing) * 2); }
+.vt-ft.touch .vt-ft-ic svg { width:20px; height:20px; }
+.vt-ft.touch .vt-ft-cv { width:16px; height:16px; }
+.vt-ft.touch .vt-ft-cv svg { width:16px; height:16px; }
+
+/* ── 폰 「파일」 탭의 「파일 | 첨부」 전환 36(layout/mobile-nav.js) ──────────────── */
+.vt-mfiles-seg { display:flex; gap:2px; flex:none; margin:calc(var(--spacing) * 2) calc(var(--spacing) * 4); padding:2px; background:var(--menu); border:1px solid var(--line); border-radius:var(--radius-sm); }
+.vt-mfiles-seg-btn {
+  flex:1; display:inline-flex; align-items:center; justify-content:center; gap:calc(var(--spacing) * 1.5);
+  height:32px; background:none; border:0; border-radius:calc(var(--radius-sm) - 2px); color:var(--sub);
+  font:500 var(--fs-sm) var(--ui); cursor:pointer;
+}
+.vt-mfiles-seg-btn[aria-selected="true"] { background:var(--tab-active); color:var(--tab-active-txt); }
+.vt-mfiles-seg-badge { min-width:16px; height:16px; padding:0 4px; border-radius:8px; background:var(--acc); color:var(--acc-ink); font:600 var(--fs-2xs)/16px var(--mono); text-align:center; }
+.vt-mfiles-seg-badge[hidden] { display:none; }

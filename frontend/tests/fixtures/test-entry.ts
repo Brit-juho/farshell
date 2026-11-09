@@ -41,3 +41,10 @@ export { mountActivityBar } from './activity-bar-mount.js';
 export { mountWorkbench } from '../../js/shell/Workbench.tsx';
 export { mountTitleBar, accessUrl } from '../../js/shell/TitleBar.tsx';
 export { mountHud } from '../../js/shell/Hud.tsx';
+export {
+  keyOf, joinPath, parentOf, isUnder, relToAbs, toEntries, dirFromListing, appendPage, flattenPrefetch, changedNames,
+  removedDirs, compileFilter, flatten, FlattenCache, reuseRows, windowRange, scrollToReveal, rowHeight, treeKey,
+  typeahead, focusable, fmtSize, emptyDir, OVERSCAN,
+} from '../../js/files/tree-model.js';
+export { TreeStore } from '../../js/files/tree-store.js';
+export { mountFileTree } from '../../js/files/mount.tsx';
