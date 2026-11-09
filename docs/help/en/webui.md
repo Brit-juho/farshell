@@ -142,7 +142,8 @@ Hand that path to claude as is. (The upload files button does the same.)
 
 | Feature | How |
 |------|------|
-| **Search** | `Cmd+F` / `Ctrl+Shift+F` → scrollback search, `Cmd+Shift+F` / `Alt+Shift+F` → in-terminal search (move with ▲▼) |
+| **Search** | `Cmd+F` / `Ctrl+Shift+F` → scrollback search, `Alt+Shift+F` → in-terminal search (move with ▲▼). The old `Cmd+Shift+F` now searches file contents (a key you set yourself is kept) |
+| **File content search** | In the palette (`Cmd+K`) type `?` and the text (`? groupByZone`) — results are grouped by file with the match highlighted. ↑↓ move, Enter opens the file at that line, `Cmd+Enter` in a new pane, `⌥Enter` moves the search to the sidebar. Options: `⌥C` match case, `⌥W` whole word, `⌥R` regex (plain text by default), include and exclude globs (`src/**, *.ts` / `**/*.test.*`). It searches the current session's repository. `Cmd+Shift+F` (Mac) / `Ctrl+Shift+G` opens the sidebar 「Files › Search contents」, which searches under the tree's current folder. Files in `.gitignore`, secrets such as `.env` and key files, files over 2 MB and binaries are not searched. It stops at 10 seconds or 500 result lines and shows what it found so far. When you have switched to another Mac, it searches that Mac's files |
 | **Upload files** | `⋯ → Upload files` → saved to `~/.vt/files/` |
 | **Grid view** | The grid icon at the top → live previews of every tmux session (pushed only on change) |
 | **Theme** | Settings (`Cmd+,`) → Appearance → switch skin (remembered) |
