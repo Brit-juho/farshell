@@ -398,7 +398,24 @@ function _applyRemote(scope, remote, revision) {
 
 // 서버 동기화. 캐시로 이미 그려진 뒤에 돌고, **서버 값이 이긴다**(ADR-5).
 // 두 스코프를 병렬로 가져온다 — 서로 다른 엔드포인트라 순서는 상관없다.
+// 첫 load()가 끝났는지(성공·실패·오프라인 무관)를 알리는 promise. reject하지 않는다.
+// appReady가 "설정이 도착한 뒤"에 서도록 main.js가 기다린다 — 설정이 늦게 도착하면
+// _notify(getAll())가 theme.js 등을 저장값으로 되돌리므로(ADR-45 경합과 같은 계열),
+// 그 전에 ready를 세우면 e2e가 바꿔 둔 값을 덮어쓴다. 두 번째 이후 load()는 건드리지 않는다.
+let _firstLoadDone;
+const _firstLoad = new Promise((resolve) => { _firstLoadDone = resolve; });
+let _firstLoadSettled = false;
+export function firstLoad() { return _firstLoad; }
+
 export async function load() {
+  try {
+    return await _load();
+  } finally {
+    if (!_firstLoadSettled) { _firstLoadSettled = true; _firstLoadDone(); }
+  }
+}
+
+async function _load() {
   const revision = _revision;
   const candidates = {};
   for (const scope of ['global', 'device']) {

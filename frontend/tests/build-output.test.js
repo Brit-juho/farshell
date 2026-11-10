@@ -41,11 +41,12 @@ const shareJs = fs.readFileSync(path.join(DIST, 'share.js'), 'utf8');
 // 청크 규칙을 뒤집으면서(vite.config.js) app.js는 부팅 배선만 남은 2KB가 되고
 // 상시 코드는 전부 core.js로 갔다. 여기서 app.js만 재면 상한이 아무것도
 // 막지 못한다 — 숫자는 그대로 두되 **재는 대상**을 뜻에 맞춘다.
-// 2026-11-04 — 상한을 300KiB(307200)에서 350KiB(358400)로 올렸다. 존재 이유는 vendor(xterm 약 290KB)가
+// 2026-11-04 — 상한을 300KiB(307200)에서 350KiB(358400)로 올렸다(c05a174가 공백 제거를 잃은 회귀 탓).
+// 2026-11-10 — 공백·주석 제거를 복구(vite.config.js output.minify)해 300KiB(307200)로 되돌렸다. 존재 이유는 vendor(xterm 약 290KB)가
 // 초기 번들로 새는 것을 잡는 안전장치다(docs/ref/session-view-measurements.md §4).
-const EAGER_LIMIT = 358400;
+const EAGER_LIMIT = 307200;
 
-test('초기 페이로드(app.js + core.js)가 350KiB 상한 이내다 — CI(release.yml)와 같은 기준', () => {
+test('초기 페이로드(app.js + core.js)가 300KiB 상한 이내다 — CI(release.yml)와 같은 기준', () => {
   const size = Buffer.byteLength(appJs, 'utf8') + Buffer.byteLength(coreJs, 'utf8');
   assert.ok(size <= EAGER_LIMIT, `app.js+core.js가 ${size}B — 상한 ${EAGER_LIMIT}B를 넘었다`);
 });
@@ -182,7 +183,7 @@ test('에이전트 공유의 대화상자와 통합 승인함(모달·권한·�
   assert.doesNotMatch(coreJs, /에이전트 접근 요청/);
   // core 쪽 진입점은 있고, 청크는 동적 import 로만 받는다
   assert.match(coreJs, /agent_share_request/);
-  assert.match(coreJs, /import\("\.\/share\.js"\)/);
+  assert.match(coreJs, /import\(["\'`]\.\/share\.js["\'`]\)/);
   // share 청크도 core 싱글톤을 복제하지 않는다
   assert.doesNotMatch(shareJs, /\bsessions\s*=\s*\{\}/, 'core/store.js의 세션 저장소가 복제됐다');
   assert.doesNotMatch(shareJs, /const registry\s*=\s*new Map\(\)/, 'core/dom.js의 액션 레지스트리가 복제됐다');
@@ -198,7 +199,7 @@ test('코드 뷰어 본문(CodeMirror 6)은 editor 지연 청크에만 있고, p
   for (const [name, src] of [['core.js', coreJs], ['app.js', appJs], ['panels.js', panelsJs]]) {
     assert.doesNotMatch(src, /class EditorView\b/, `${name}에 CodeMirror가 들어갔다`);
   }
-  assert.match(panelsJs, /import\("\.\/editor\.js"\)/);
+  assert.match(panelsJs, /import\(["\'`]\.\/editor\.js["\'`]\)/);
   assert.doesNotMatch(panelsJs, /from\s*["']\.\/editor\.js["']/, 'panels.js가 editor.js를 정적으로 import한다');
   assert.doesNotMatch(coreJs, /["']\.\/editor(?:-[a-z]+)?\.js["']/, 'core.js가 편집기 청크를 참조한다');
   for (const lang of ['js', 'css', 'html', 'md', 'py', 'java', 'go', 'yaml', 'json', 'sql', 'legacy']) {
@@ -226,5 +227,5 @@ test('마크다운 미리보기 라이브러리(marked·DOMPurify)는 preview �
     assert.doesNotMatch(js, /function createDOMPurify|markedjs\/marked/, `${name}에 마크다운 라이브러리가 들어갔다`);
     assert.doesNotMatch(js, /from\s*["']\.\/preview\.js["']/, `${name}가 preview.js를 정적으로 import한다`);
   }
-  assert.match(panelsJs, /import\(["']\.\/preview\.js["']\)/, 'panels는 preview 청크를 import()로만 부른다');
+  assert.match(panelsJs, /import\(["'`]\.\/preview\.js["'`]\)/, 'panels는 preview 청크를 import()로만 부른다');
 });
