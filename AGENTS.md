@@ -73,7 +73,7 @@ Verify affected behavior with actual responses, operations and logs.
     `scripts/guard_personal.py` blocks such new files by name. Do not add examples, fixtures or
     comments with real account, organization, device or path names; use neutral values
     (`alice`, `acme`, `sample-repo`).
-14. The app document (`GET /`) is served with `server/security_headers.py` `APP_CSP`, which includes
+15. The app document (`GET /`) is served with `server/security_headers.py` `APP_CSP`, which includes
     `script-src 'self'`. Do not add inline `<script>`, `on*=` handlers, `javascript:` URLs, `eval`/`new Function`
     or Blob/data script modules (AudioWorklet included); put code in a same-origin file under `/static/`, use
     `data-action` + `registerAction`, and keep the policy string in that one place. Verify any change that
