@@ -375,20 +375,16 @@
 .vt-repovis-add-wt { align-self:flex-start; }
 /* "왜 이것들이 목록에 있나"의 답. 읽기 전용이다 — ~/.vt.env의 단일 소유자는
    lib/vt_env.sh다(§3). */
-.vt-repovis-foot {
-  display:flex; align-items:baseline; gap:calc(var(--spacing) * 2);
-  padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3);
-  border-top:1px solid var(--line);
+.vt-repovis-sec { padding:0 calc(var(--spacing) * 3) calc(var(--spacing) * 2); border-top:1px solid var(--line); }
+.vt-repovis-sec-head {
+  display:flex; align-items:center; height:28px; margin:calc(var(--spacing) * 2) 0 0;
+  border-bottom:1px solid var(--color-line-strong); color:var(--color-sub); font:600 var(--fs-xs) / 1 var(--font-ui);
 }
-.vt-repovis-foot-label {
-  flex:none; color:var(--color-sub);
-  font:var(--weight-semibold) var(--fs-3xs) var(--font-mono);
-  letter-spacing:var(--tracking-caps); text-transform:uppercase;
+.vt-repovis-root {
+  display:flex; align-items:center; min-height:32px; border-bottom:1px solid var(--color-line);
+  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--color-txt); font:400 var(--fs-xs) var(--font-mono);
 }
-.vt-repovis-foot-value {
-  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-  color:var(--color-txt); font:400 var(--fs-xs) var(--font-mono);
-}
+.vt-repovis-root:last-child { border-bottom:0; }
 
 /* 레일 설정 시트의 위쪽 구획(RailSettings.tsx). 틀은 저장소 관리 시트(.vt-wtd-*)를 그대로 쓴다. */
 .vt-railset { display:flex; flex-direction:column; gap:calc(var(--spacing) * 2); padding-bottom:calc(var(--spacing) * 3); }

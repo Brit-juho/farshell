@@ -53,6 +53,11 @@ RULES = [
     ("--color-acc", TEXT_BGS, 3.0, "액센트(테두리·dot·마커)"),
     ("--color-acc-dim", TEXT_BGS, 3.0, "액센트 테두리"),
     ("--color-acc-ink", ["--color-acc-surface"], 4.5, "채움 버튼의 글자"),
+    # 설정 컨트롤(스위치 · 세그먼트, 2026-11). 켜짐 트랙(acc-surface)은 어느 바탕 위에서도 3:1(UI 컴포넌트, WCAG 1.4.11),
+    # 꺼짐 손잡이(sub)는 꺼짐 트랙(bg-3) 위에서 3:1, 켜짐 손잡이(acc-ink)는 켜짐 트랙 위에서 4.5(위 줄). 선택된 세그먼트는
+    # bg-raised 면 + txt 글자(위 램프 규칙)라 따로 두지 않는다. 안 선택된 칸의 sub 글자는 컨테이너(bg-2) 위 램프 규칙이 본다.
+    ("--color-acc-surface", RAMP_BGS, 3.0, "스위치 켜짐 트랙"),
+    ("--color-sub", ["--color-bg-3"], 3.0, "스위치 꺼짐 손잡이"),
     ("--color-st-working", TEXT_BGS, 3.0, "상태 dot"),
     ("--color-st-waiting", TEXT_BGS, 3.0, "상태 dot"),
     ("--color-st-done", TEXT_BGS, 3.0, "상태 dot"),

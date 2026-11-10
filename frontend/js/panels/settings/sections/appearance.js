@@ -13,7 +13,7 @@ const LANG_LABELS = { ko: '한국어', en: 'English' };
 
 function renderLangControl() {
   const wrap = document.createElement('div');
-  wrap.className = 'vt-select-wrap';
+  wrap.className = 'vt-select-wrap vt-set-langsel';   // 화면 언어는 시안대로 select 로 둔다(2개지만 바꾸면 페이지를 다시 불러온다)
   const sel = document.createElement('select');
   sel.className = 'vt-select';
   for (const [v, label] of Object.entries(LANG_LABELS)) {
@@ -110,8 +110,8 @@ export function renderAppearanceSection() {
 
   frag.appendChild(group(t('파일 뷰어'), renderItems({ items: [
     { key: 'viewer.surface', label: t('파일 뷰어 표시 방식'), kind: 'select',
-      labels: { sheet: t('상단 시트'), float: t('떠 있는 창'), pane: t('페인 (터미널 옆을 쪼갬)') },
-      help: t('파일을 열었을 때 어디에 띄울지 고릅니다. 시트와 창은 터미널 크기를 바꾸지 않습니다.') },
+      labels: { sheet: t('상단 시트'), float: t('떠 있는 창'), pane: t('페인') },
+      help: t('파일을 열었을 때 어디에 띄울지 고릅니다. 페인은 터미널 옆을 쪼개고, 시트와 창은 터미널 크기를 바꾸지 않습니다.') },
     { key: 'files.tree.dense', label: t('파일 트리 촘촘하게'), kind: 'bool',
       help: t('트리 행 높이를 28px에서 22px로 줄입니다. 폰은 터치를 위해 늘 44px입니다.') },
   ] })));

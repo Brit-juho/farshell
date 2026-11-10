@@ -226,7 +226,7 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus-visib
 .vt-act:focus-visible, .vt-act-mic-home #mic-btn-wrap.mic:focus-visible,
 .vt-mb-menu:focus-visible, button.vt-tb-host:focus-visible, .vt-hud-chip.clickable:focus-visible,
 html.vt-focus #vt-focus-pill button:focus-visible, .vt-tb-focus:focus-visible,
-.vt-settings .vt-set-row > .vt-toggle:focus-visible, .vt-wl-row:focus-visible,
+.vt-settings .vt-set-row > .vt-toggle:focus-visible, .vt-switch:focus-visible, .vt-segmented-opt:focus-visible, .vt-wl-row:focus-visible,
 .vt-gr-glob:focus-within, .vt-gr-q:focus-within,
 .vt-menu-item:focus-visible, .vt-mb-item:focus-visible, .vt-ft-mi:focus-visible, .vt-pt-menu-item:focus-visible, .vt-sn-row:focus-visible, .vt-q-row:focus-visible {
   --focus-ring-offset: var(--focus-ring-inset);

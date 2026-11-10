@@ -84,9 +84,10 @@ test('토글 — 다시 부르면 닫힌다', async () => {
 test('컨트롤은 스키마에서 그린다 — 커서 모양 옵션이 스키마 values와 같다', async () => {
   const { document, P, S } = await build();
   P.showSettings();
-  const sel = rowByLabel(document, '커서 모양').querySelector('select');
+  // 선택지 3개 이하 + 짧은 글자 = 세그먼트(role=radiogroup). 값 목록은 그대로 스키마에서 온다.
+  const seg = rowByLabel(document, '커서 모양').querySelector('[role="radiogroup"]');
   assert.deepEqual(
-    Array.from(sel.options).map((o) => o.value),
+    Array.from(seg.querySelectorAll('[role="radio"]')).map((o) => o.dataset.value),
     S.SCHEMA['terminal.cursorStyle'].values,
   );
 });
@@ -202,7 +203,7 @@ test('불리언 토글 변경 → 스토어에 즉시 반영되고 서버로 나
   const { document, P, S, puts } = await build();
   P.showSettings();
   sectionButton(document, '터미널').click();
-  const tg = rowByLabel(document, '앱에 마우스 이벤트 전달').querySelector('.vt-toggle');
+  const tg = rowByLabel(document, '앱에 마우스 이벤트 전달').querySelector('.vt-switch');
   assert.strictEqual(tg.getAttribute('role'), 'switch');
   assert.strictEqual(tg.getAttribute('aria-checked'), 'true');
   tg.click();
@@ -306,7 +307,7 @@ test('정보 — 훅이 전부 등록돼 있으면 그대로 보여준다', asyn
   sectionButton(document, '정보 및 진단').click();
   await flush();
   const block = document.querySelectorAll('.vt-set-about')[0];
-  const rows = Array.from(block.querySelectorAll('.vt-set-hookrow')).map((r) => r.textContent);
+  const rows = Array.from(block.querySelectorAll('.vt-set-hookrow')).map((r) => `${r.querySelector('.vt-set-hkev').textContent} — ${r.querySelector('.vt-set-hkst').textContent}`);
   assert.deepEqual(rows, ['PreToolUse — 등록됨', 'PostToolUse — 등록됨', 'Stop — 등록됨']);
 });
 
@@ -333,11 +334,16 @@ test('정보 — Claude Code와 Codex 훅을 도구별로 모두 보여준다', 
   sectionButton(document, '정보 및 진단').click();
   await flush();
   const block = document.querySelectorAll('.vt-set-about')[0];
-  const titles = Array.from(block.querySelectorAll('.vt-set-label')).map((r) => r.textContent);
-  assert.deepEqual(titles, ['Claude Code 훅', 'Codex 훅']);
-  assert.match(block.textContent, /PermissionRequest — 미등록/);
-  assert.match(block.textContent, /SessionEnd — 등록됨/);
-  assert.match(block.querySelector('.vt-set-help').textContent, /fsh hooks install/);
+  const titles = Array.from(block.querySelectorAll('.vt-set-hksum b')).map((r) => r.textContent);
+  assert.deepEqual(titles, ['Claude Code', 'Codex']);
+  const line = (ev) => Array.from(block.querySelectorAll('.vt-set-hookrow')).find((r) => r.querySelector('.vt-set-hkev').textContent === ev);
+  assert.match(line('PermissionRequest').textContent, /미등록/);
+  assert.strictEqual(line('PermissionRequest').dataset.state, 'add', '문제 행만 호박색(add)');
+  assert.match(line('SessionEnd').textContent, /등록됨/);
+  assert.strictEqual(line('SessionEnd').dataset.state, 'ok');
+  assert.match(block.textContent, /fsh hooks install/);
+  assert.match(block.querySelector('.vt-set-hkcount').textContent, /3 \/ 3 등록됨/);
+  assert.ok(block.querySelector('.vt-set-code-copy'), '명령 복사 버튼');
 });
 
 test('정보 — 서버 점검 결과(health)의 이유와 마지막 확인 시각을 보여준다', async () => {
@@ -383,7 +389,7 @@ test('정보 — 사용량 소스가 켜져 있으면 프로필 수까지 보여
   sectionButton(document, '정보 및 진단').click();
   await flush();
   const block = Array.from(document.querySelectorAll('.vt-set-about')).at(-1);
-  assert.match(block.textContent, /clauth — 사용 중 \(프로필 2개\)/);
+  assert.match(block.textContent, /clauth.*사용 중 \(프로필 2개\)/);
   assert.strictEqual(block.querySelector('.vt-set-help'), null, '켜져 있으면 안내가 없어야 한다');
 });
 
@@ -407,8 +413,7 @@ test('정보 — 훅이 빠져 있으면 해결 방법을 함께 안내한다', 
   P.showSettings();
   sectionButton(document, '정보 및 진단').click();
   await flush();
-  const help = document.querySelector('.vt-set-about .vt-set-help');
-  assert.match(help.textContent, /fsh hooks install/);
+  assert.match(document.querySelector('.vt-set-about').textContent, /fsh hooks install/);
 });
 
 test('정보 — 훅 상태 조회가 실패해도 패널이 죽지 않는다', async () => {
@@ -436,7 +441,7 @@ test('음성 — 유지한 기능이 그려진다', async () => {
   const { document, P } = await build();
   P.showSettings();
   sectionButton(document, '음성 및 알림').click();
-  for (const label of ['웹 푸시', '음성 인식 상태']) {
+  for (const label of ['웹 푸시', '모델 상태']) {
     assert.ok(rowByLabel(document, label), `${label} 행이 있어야 한다`);
   }
 });
@@ -450,8 +455,9 @@ test('음성 — 웹 푸시 상태가 /api/push/status에서 채워진다', asyn
   P.showSettings();
   sectionButton(document, '음성 및 알림').click();
   await flush();
-  const help = rowByLabel(document, '웹 푸시').querySelector('.vt-set-help');
-  assert.match(help.textContent, /구독 2대 · VAPID 확인됨/);
+  const stat = rowByLabel(document, '웹 푸시').nextElementSibling;
+  assert.match(stat.textContent, /구독 2대 · VAPID 확인됨/);
+  assert.strictEqual(stat.dataset.state, 'ok', '정상은 조용한 회색 체크');
 });
 
 test('음성 — 웹 푸시 테스트 발송 버튼이 실호출 + 토스트를 낸다', async () => {
@@ -493,7 +499,7 @@ test('음성 — 세션 미선택이면 안내하고 외부 알림을 TTS 테스
   assert.ok(!posts.some((u) => u.includes('/api/notify/test')));
 });
 
-test('음성 — 음성 인식 상태에 따라 적재/내리기 버튼이 토글된다', async () => {
+test('음성 — 모델 상태에 따라 적재/내리기 버튼이 토글된다', async () => {
   const { document, P } = await build({
     fetchExtra: (u) => (u.includes('/voice/stt/status')
       ? Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, loaded: true, engine: 'mlx_qwen3', model: 'm1', loaded_model: 'm1', rss_mb: 1200 }) })
@@ -502,8 +508,8 @@ test('음성 — 음성 인식 상태에 따라 적재/내리기 버튼이 토�
   P.showSettings();
   sectionButton(document, '음성 및 알림').click();
   await flush();
-  const row = rowByLabel(document, '음성 인식 상태');
-  assert.match(row.querySelector('.vt-set-help').textContent, /메모리에 올라가 있음/);
+  const row = rowByLabel(document, '모델 상태');
+  assert.match(row.nextElementSibling.textContent, /메모리에 올라가 있음/);
   const [preload, unload] = row.querySelectorAll('button');
   assert.strictEqual(preload.disabled, true, '이미 적재돼 있으면 미리 적재는 비활성');
   assert.strictEqual(unload.disabled, false);
@@ -551,7 +557,7 @@ test('에이전트 — 커버리지 표가 API 응답으로 그려진다', async
   assert.ok(table, '표가 그려져야 한다');
   const rows = Array.from(table.querySelectorAll('tbody tr'));
   assert.strictEqual(rows.length, 2);
-  assert.strictEqual(rows[0].querySelector('.vt-set-covcli').textContent, 'claude');
+  assert.strictEqual(rows[0].querySelector('.vt-set-covcli').firstChild.textContent, 'claude');
   assert.strictEqual(rows[0].querySelector('.vt-set-covtrust').dataset.trust, 'mid');
   assert.strictEqual(rows[1].querySelector('.vt-set-covtrust').dataset.trust, 'low');
 });
@@ -565,8 +571,8 @@ test('에이전트 — "보통 이하" 경고 문장이 그대로 노출된다',
   P.showSettings();
   sectionButton(document, '에이전트').click();
   await flush();
-  const texts = Array.from(document.querySelectorAll('.vt-set-help')).map((e) => e.textContent);
-  assert.ok(texts.some((t) => t.startsWith('"보통" 이하는 세션 목록에서 입력 대기를 놓칠 수 있다는 뜻입니다.')));
+  const texts = Array.from(document.querySelectorAll('.vt-set-note')).map((e) => e.textContent);
+  assert.ok(texts.some((t) => t.startsWith('정확도가 「보통」 이하면 사이드바에서 입력 대기를 놓칠 수 있습니다.')));
   // N9 — 훅이 없는 CLI에도 올라갈 길이 있다는 사실을 같은 자리에서 알려준다.
   assert.ok(texts.some((t) => t.includes('fsh pane report')));
 });

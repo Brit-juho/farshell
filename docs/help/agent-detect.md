@@ -5,7 +5,7 @@
 agent-state`). PTY 출력 스트림의 **리터럴 문자열 매칭**이라
 어떤 CLI든 붙일 수 있지만, 실제 문구를 넣기 전에는 아무것도 감지하지 않는다.
 
-설정 → 에이전트 탭의 "감지 커버리지" 표(`GET /api/agents/coverage`)가 지금
+설정 → 에이전트 탭의 "감지 방법과 정확도" 표(`GET /api/agents/coverage`)가 지금
 CLI별로 무엇이 채워져 있는지 보여준다.
 
 ## 왜 파이썬이 아니라 TOML인가
@@ -13,7 +13,7 @@ CLI별로 무엇이 채워져 있는지 보여준다.
 CLI가 업데이트되면 프롬프트 문구가 바뀐다. 그때마다 서버 코드를 고치고
 재시작하는 대신, 이 파일 한 줄만 고치면 된다 — `server/agent_prompt_detect.py`의
 `load_patterns()`가 매 서버 시작마다(또는 `force=True` 재적재 시) 읽는다.
-(감지 커버리지 표(`/api/agents/coverage`)는 요청마다 다시 읽지만 PTY 감지기는
+(감지 방법과 정확도 표(`/api/agents/coverage`)는 요청마다 다시 읽지만 PTY 감지기는
 캐시를 쓴다 — toml을 고친 뒤 실제 waiting/interrupt 감지에 반영하려면 서버를 재시작해야 한다.)
 파싱이 실패한 파일은 **그 파일만** 건너뛴다(잘못된 정규식 하나가 서버 전체의
 승인 대기 감지를 죽이면 안 된다).
@@ -108,4 +108,4 @@ fsh pane report --state done
 - `fsh help agent-state` — 4가지 상태(`idle`/`working`/`waiting`/`done`)와
   Claude Code 훅 경로 전체
 - `server/agent_prompt_detect.py` — 실제 매칭 로직(윈도우·flap guard·ANSI 제거)
-- 설정 → 에이전트 탭 — CLI별 감지 커버리지 표
+- 설정 → 에이전트 탭 — CLI별 감지 방법과 정확도 표(열: CLI · 감지 방법 · 패턴 줄 수 · 알 수 있는 상태 · 정확도)

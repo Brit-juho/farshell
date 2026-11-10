@@ -121,7 +121,7 @@ export const DEFAULT_COMMANDS: CommandDescriptor[] = [
 // 여기 데이터에는 없다 — Palette.tsx가 DOM에서 직접 구성한다.
 export const SETTINGS_COMMANDS: CommandDescriptor[] = [
   { label: t('푸시 알림'), action: 'push.toggle', gate: 'push' },
-  { label: t('드래그 시 자동 복사'), action: '__toggle:mouse.autocopyOnSelect' },
+  { label: t('드래그하면 자동 복사'), action: '__toggle:mouse.autocopyOnSelect' },
   { label: t('새 세션을 맥에서도 열기'), action: '__toggle:session.openOnMac' },
   { label: t('이어폰 미디어키'), action: 'voice.mediakey-toggle', gate: 'voice' },
   { label: t('가이드 보기'), action: 'guide.show' },

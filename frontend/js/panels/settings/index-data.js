@@ -19,7 +19,7 @@ export const TERMINAL_GROUPS = [
       // 2026-09-18 — ui/settings-toggles.js가 진작 스토어에 묶어뒀지만
       // (E2), 그 체크박스가 살던 자리(legacy rail 플라이아웃)가 오늘
       // 도달 불가능해지며 이 키를 끄고 켤 화면이 아예 없어졌다.
-      { key: 'session.openOnMac', label: t('새 세션 생성 시 맥 터미널에서도 열기'), kind: 'bool' },
+      { key: 'session.openOnMac', label: t('새 세션을 만들 때 맥 터미널에서도 열기'), kind: 'bool' },
     ],
   },
   {
@@ -29,7 +29,7 @@ export const TERMINAL_GROUPS = [
         // S1 spike로 구현 가능함이 확인된 항목. 끄면 iTerm2 기본 동작이 된다.
         help: t('끄면 vim·tmux가 마우스를 잡아도 항상 드래그로 선택할 수 있습니다 (iTerm2 기본 동작).'),
         kind: 'bool' },
-      { key: 'mouse.autocopyOnSelect', label: t('드래그 시 자동 복사'), kind: 'bool' },
+      { key: 'mouse.autocopyOnSelect', label: t('드래그하면 자동 복사'), kind: 'bool' },
       { key: 'terminal.osc52Untrusted', label: t('tmux가 아닌 터미널의 클립보드 쓰기 허용(OSC 52)'),
         help: t('켜면 tmux 없는 터미널의 출력이 이 기기 클립보드를 바꿀 수 있습니다. 신뢰할 수 없는 출력(cat 한 파일, 접속한 서버)이 클립보드를 바꿀 위험이 있습니다.'), kind: 'bool' },
       { key: 'mouse.touchTapToApp', label: t('터치 탭을 앱에 전달'),
@@ -41,7 +41,7 @@ export const TERMINAL_GROUPS = [
     items: [
       { key: 'a11y.screenReader', label: t('스크린 리더 모드'), kind: 'select',
         labels: { auto: t('자동 (터치 기기에서 켬)'), on: t('항상 켬'), off: t('항상 끔') },
-        help: t('새로 여는 탭부터 적용됩니다 — 터미널 내부 구조가 달라져 실행 중에는 바꿀 수 없습니다.') },
+        help: t('새로 여는 탭부터 적용됩니다. 터미널 내부 구조가 달라져 실행 중에는 바꿀 수 없습니다.') },
     ],
   },
   {
@@ -92,12 +92,12 @@ export const SECTION_META = [
 
 export const SEARCH_ITEMS = [
   ['terminal', t('글자 크기')], ['terminal', t('커서 모양')], ['terminal', t('커서 깜빡임')],
-  ['terminal', t('새 세션 생성 시 맥 터미널에서도 열기')], ['terminal', t('앱에 마우스 이벤트 전달')],
-  ['terminal', t('드래그 시 자동 복사')], ['terminal', t('터치 탭을 앱에 전달')],
+  ['terminal', t('새 세션을 만들 때 맥 터미널에서도 열기')], ['terminal', t('앱에 마우스 이벤트 전달')],
+  ['terminal', t('드래그하면 자동 복사')], ['terminal', t('터치 탭을 앱에 전달')],
   ['terminal', t('스크린 리더 모드')], ['terminal', t('스크롤백 줄 수')],
-  ['voice', t('웹 푸시 알림')], ['voice', t('완료 알림')], ['voice', t('알림 방식')], ['voice', t('음성 인식 모델')], ['voice', t('내려받은 파일 관리')],
+  ['voice', t('웹 푸시 알림')], ['voice', t('완료 알림')], ['voice', t('알림 방식')], ['voice', t('음성 인식 모델')], ['voice', t('내려받은 파일')],
   ['voice', t('현재 세션 음성')], ['voice', t('음성 전용 모드')], ['voice', t('확인 후 전송')], ['voice', t('입력 대상')],
-  ['agents', t('에이전트 감지 상태')],
+  ['agents', t('감지 방법과 정확도')],
   ['keymap', t('단축키와 터미널 전달')],
   ['appearance', t('스킨')], ['appearance', t('화면 언어')], ['appearance', t('메뉴 크기')], ['appearance', t('파일 뷰어 표시 방식')],
   ['appearance', t('집중 모드')], ['appearance', t('가장자리에 막대 띄우기')], ['appearance', t('개입 표시')], ['appearance', t('가장자리 반응 시간')],
@@ -117,7 +117,7 @@ export const SEARCH_ALIASES = {
   [t('웹 푸시 알림')]: t('브라우저 알림 구독'),
   [t('음성 인식 모델')]: t('음성 입력 받아쓰기 stt 모델 선택 받기 다운로드 qwen3 mlx llama 엔진 정확도 속도 메모리'),
   [t('알림 방식')]: t('완료음 낭독 tts 소리 알림음 최소 작업 시간 오류 제외 웹 접속 중'),
-  [t('내려받은 파일 관리')]: t('모델 삭제 지우기 용량 저장 공간 엔진 파일'),
+  [t('내려받은 파일')]: t('모델 삭제 지우기 용량 저장 공간 엔진 파일'),
   [t('확인 후 전송')]: t('음성 입력 확인 위험 명령 rm sudo 셸 바로 입력 인식 결과 고치기'),
   [t('입력 대상')]: t('음성 입력 세션 고정 따라가기 마이크 대상 pin'),
   [t('맥에서 음성만 쓰기')]: t('로컬 음성 입력 마이크'),
@@ -134,6 +134,7 @@ export const SEARCH_ALIASES = {
   [t('상태 막대 칩')]: t('메뉴바 하단바 hud 칩 시계 cpu'),
   [t('활동 막대 순서')]: t('활동 숨기기 아이콘 순서 왼쪽 막대'),
   [t('에이전트 훅')]: 'hook codex claude',
+  [t('감지 방법과 정확도')]: t('에이전트 감지 상태 커버리지 신뢰도 경로 훅 화면 패턴 pty'),
   [t('자동 업데이트')]: t('업데이트 버전 최신 릴리스 새 버전 update upgrade 서명 stable'),
   [t('새 버전 확인')]: t('업데이트 버전 확인 네트워크 fetch'),
 };
