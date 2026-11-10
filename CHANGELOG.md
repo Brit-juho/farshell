@@ -11,6 +11,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Changed
+- **Smaller bundle: the build now runs the minifier's compressor** (`compress`, names still kept, no side-effect-dropping options). The initial payload (`app.js` + `core.js`) goes from 305,789 B to 293,932 B (-11.9 KB; gzip -1.6 KB) and every lazy chunk shrinks too; the 300 KiB cap is unchanged, headroom 1.4 KB -> 13.3 KB.
 - **clauth retirement check no longer blocks on the "never copy credentials" rule.** clauth is retired, so `credentials-not-copied` and `mcp-credentials-not-migrated` are gone from blockers, warnings and resolved warnings (old receipts that still list them are filtered). `clauth_stopped` is now computed (no clauth launchd job and no clauth daemon process; the `clauth mcp` plugin client is ignored) instead of a fixed `false`, and the note text says clauth is retired. Other items (`configuration-coverage-incomplete`, `conversation-resume-not-verified`, `skill-coverage-incomplete`, ...) are unchanged, as are the secret-handling rules of settings sync and session profiles.
 
 ### Added

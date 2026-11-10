@@ -255,7 +255,7 @@ export default defineConfig(({ mode }) => {
       // 제3자 고지 — 줄이기(minify)가 `@license` 주석을 지우므로(marked·DOMPurify 등), 번들에 든 의존 패키지마다
       // 이름·버전·라이선스 식별자·LICENSE 본문을 한 파일로 낸다(Vite `build.license`). dist/에 있으므로 릴리스
       // tarball에 함께 실린다(release.yml이 있는지 확인한다). 주석을 산출물에 남기는 방법(legalComments)은 초기
-      // 페이로드(app.js + core.js ≤ 358,400B)를 늘리므로 쓰지 않았다. voice 빌드는 같은 outDir에 이어 쓰므로 이름을
+      // 페이로드(app.js + core.js ≤ 307,200B)를 늘리므로 쓰지 않았다. voice 빌드는 같은 outDir에 이어 쓰므로 이름을
       // 따로 둔다(덮어쓰지 않게). DOMPurify(MPL-2.0 OR Apache-2.0)는 Apache-2.0으로 쓰고, 그 패키지의 LICENSE가 그 본문이다.
       license: isTest ? false : { fileName: isVoice ? 'THIRD_PARTY_NOTICES.voice.md' : 'THIRD_PARTY_NOTICES.md' },
       rolldownOptions: {
@@ -267,11 +267,12 @@ export default defineConfig(({ mode }) => {
         // includeDependenciesRecursively:false 의 요구 조건(Rolldown이 안내). main.js는 export가 없는 진입점이라 무해하다.
         preserveEntrySignatures: isVoice || isTest ? 'strict' : false,
         output: {
-          // 공백·주석만 걷어 낸다(2026-11-10 복구, 초기 페이로드 346,035 → 287,512 B). 이름 줄이기(mangle)를
-          // 끄는 이유: 산출물에 모듈 스코프 이름(`sessions`, `activeId`…)이 남아야 build-output.test.js가 청크 간
-          // 싱글톤 복제를 잡는다. 문법 축약(compress)을 끄는 이유: 연속 선언을 병합해 그 검사 정규식을 깰 수 있다.
+          // 공백·주석 제거(2026-11-10 복구, 초기 페이로드 346,035 → 287,512 B)에 문법 축약(compress)을 더했다(같은 날,
+          // 305,789 → 293,932 B). 이름 줄이기(mangle)는 끈다: 산출물에 모듈 스코프 이름(`sessions`, `activeId`…)이 남아야
+          // build-output.test.js(실제 프로덕션 빌드를 본다)가 청크 간 싱글톤 복제를 잡고, 스택·소스맵도 읽힌다. compress 의 부작용 옵션은 명시적으로 끈다: dropConsole·dropDebugger 는 false,
+          // keepNames 는 켜서 `Function.name`·`Class.name` 을 지킨다. 부수효과 제거(treeshake.*)는 기본값(보수적)을 쓴다.
           // 문자열 따옴표는 백틱으로 바뀔 수 있다(codegen) — 테스트 정규식이 이를 받는다. test 빌드는 그대로 둔다.
-          minify: isTest ? false : { mangle: false, compress: false, codegen: { removeWhitespace: true } },
+          minify: isTest ? false : { mangle: false, compress: { dropConsole: false, dropDebugger: false, keepNames: { function: true, class: true } }, codegen: { removeWhitespace: true } },
           // N34/N35/ADR-26 — 지연 청크에도 **해시를 붙이지 않는다.** ADR-1의
           // "산출물 이름 고정" 계약이 entry뿐 아니라 청크에도 그대로 적용된다:
           // sw.js가 `/static/dist/`를 network-first로 잡아 캐시하는데, 이름이
