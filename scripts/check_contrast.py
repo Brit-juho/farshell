@@ -103,6 +103,31 @@ TINTS = [
 ]
 TINT_RULES = [("--color-txt", 6.0), ("--color-sub", 4.5), ("--color-muted", 3.0)]
 
+# 상호작용 상태 면(2026-11) — hover·눌림·선택·선택 위 hover·waiting 위 hover. 이 면들은 rest 면 위에
+# 반투명으로 얹히므로 바탕 4단(bg-0/1/2/raised) 각각과 합성해서 본다. 호버는 한순간, 눌림은 더 짧게
+# 보이는 상태라 rest 틴트보다 기준을 한 단계 낮춘다: hover류 txt 6.0 · sub 4.0 · muted 2.9,
+# press류 txt 5.0 · sub 3.5 · muted 2.5. (rest 틴트는 위 TINT_RULES 그대로 — 4.5/3.0.)
+STATE_SURFACES = [
+    ("--color-state-hover", (6.0, 4.0, 2.9), "hover"),
+    ("--color-state-press", (5.0, 3.5, 2.5), "눌림"),
+    ("--color-state-selected-hover", (6.0, 4.0, 2.9), "선택 위 hover"),
+    ("--color-state-selected-press", (5.0, 3.5, 2.5), "선택 위 눌림"),
+    ("--color-state-waiting-hover", (6.0, 4.0, 2.9), "waiting 위 hover"),
+    ("--color-state-waiting-press", (5.0, 3.5, 2.5), "waiting 위 눌림"),
+]
+STATE_BGS = TEXT_BGS + ["--color-bg-raised"]
+# 포커스 링은 모든 상태 면 위에서도 UI 컴포넌트 기준(3:1)을 넘어야 한다(WCAG 1.4.11).
+FOCUS_ON = STATE_BGS + [s for s, _, _ in STATE_SURFACES] + ["--color-acc-soft", "--color-st-waiting-tint"]
+# 단계가 눈으로 갈라지는가 — (면 A, 면 B, 최소 ΔE(CIE76), 설명). 면은 bg-1 위에 합성한다.
+# hover 단계 자체가 바탕에서 보이는지는 대비비(아래 HOVER_STEP)로 본다.
+STATE_DISTINCT = [
+    ("--color-state-hover", "--color-state-press", 4.0, "hover ≠ 눌림"),
+    ("--color-state-hover", "--color-state-selected", 5.0, "hover ≠ 선택"),
+    ("--color-state-selected", "--color-state-selected-hover", 3.0, "선택 ≠ 선택 위 hover"),
+    ("--color-st-waiting-tint", "--color-state-waiting-hover", 3.0, "waiting ≠ waiting 위 hover"),
+]
+HOVER_STEP = 1.08   # hover 면과 rest 면(bg-0/1/2/raised)의 대비비 하한 — 이 아래면 hover가 안 보인다.
+
 # done 점과 강조색이 같은 색으로 보이면 「끝난 세션」 점이 선택 표시·주 버튼과
 # 헷갈린다(시안 점검: #8b9dff vs #7aa2ff = ΔE 6.7). CIE76 ΔE ≥ 15는 "나란히 두면
 # 누구나 다른 색이라 말하는" 정도의 거리다.
@@ -304,6 +329,59 @@ def main() -> int:
                     if r < minimum:
                         failures.append(f"{skin}: {fg_name} on {label}({bg_name}) = {r:.2f}:1 < {minimum}:1")
 
+        # 상호작용 상태 면 — 글자 대비
+        for sf_name, mins, label in STATE_SURFACES:
+            for bg_name in STATE_BGS:
+                bg = surface(tokens, bg_name)
+                sf = surface(tokens, sf_name, bg_name)
+                if bg is None or sf is None:
+                    failures.append(f"{skin}: {sf_name} 또는 {bg_name} 값을 못 읽었다")
+                    continue
+                for fg_name, minimum in zip(("--color-txt", "--color-sub", "--color-muted"), mins):
+                    r = contrast(to_rgb(resolve(tokens, fg_name) or "") or (0, 0, 0), sf)
+                    if table:
+                        print(f"  {'ok ' if r >= minimum else 'FAIL'} {fg_name:<20} on {label}({bg_name}) {r:5.2f} (>= {minimum})")
+                    if r < minimum:
+                        failures.append(f"{skin}: {fg_name} on {label}({bg_name}) = {r:.2f}:1 < {minimum}:1")
+        # hover 면이 rest 면에서 보이는가
+        for bg_name in STATE_BGS:
+            bg = surface(tokens, bg_name)
+            sf = surface(tokens, "--color-state-hover", bg_name)
+            if bg is None or sf is None:
+                continue
+            r = contrast(sf, bg)
+            if table:
+                print(f"  {'ok ' if r >= HOVER_STEP else 'FAIL'} hover 단계 on {bg_name}: {r:.3f} (>= {HOVER_STEP})")
+            if r < HOVER_STEP:
+                failures.append(f"{skin}: hover 면이 {bg_name}에서 안 보인다 {r:.3f} < {HOVER_STEP}")
+        # 단계 간 구분(bg-1 위)
+        for a_name, b_name, minimum, label in STATE_DISTINCT:
+            a = surface(tokens, a_name, "--color-bg-1")
+            b = surface(tokens, b_name, "--color-bg-1")
+            if a is None or b is None:
+                failures.append(f"{skin}: {a_name} 또는 {b_name} 값을 못 읽었다")
+                continue
+            d = delta_e(a, b)
+            if table:
+                print(f"  {'ok ' if d >= minimum else 'FAIL'} ΔE {label}: {d:.1f} (>= {minimum})")
+            if d < minimum:
+                failures.append(f"{skin}: {label} ΔE {d:.1f} < {minimum}")
+        # 포커스 링 — 모든 상태 면 위 3:1
+        ring = to_rgb(resolve(tokens, "--color-focus-ring") or "")
+        if ring is None:
+            failures.append(f"{skin}: --color-focus-ring 을 못 읽었다")
+        else:
+            for bg_name in FOCUS_ON:
+                bg = surface(tokens, bg_name, "--color-bg-1")
+                if bg is None:
+                    failures.append(f"{skin}: {bg_name} 값을 못 읽었다")
+                    continue
+                r = contrast(ring, bg)
+                if table:
+                    print(f"  {'ok ' if r >= 3.0 else 'FAIL'} focus-ring on {bg_name}: {r:.2f} (>= 3.0)")
+                if r < 3.0:
+                    failures.append(f"{skin}: 포커스 링이 {bg_name} 위에서 {r:.2f}:1 < 3:1")
+
         # 서로 달라 보여야 하는 색 쌍
         for a_name, b_name, minimum, label in DISTINCT:
             a = to_rgb(resolve(tokens, a_name) or "")
@@ -335,7 +413,7 @@ def main() -> int:
         for f in failures:
             print("  -", f, file=sys.stderr)
         return 1
-    print(f"대비 검사 통과 — 스킨 {len(skins)}개 × 규칙 {len(RULES) + len(OVERLAY_RULES)}개 + 틴트 {len(TINTS)}종 + 색 거리 + 램프 간격")
+    print(f"대비 검사 통과 — 스킨 {len(skins)}개 × 규칙 {len(RULES) + len(OVERLAY_RULES)}개 + 틴트 {len(TINTS)}종 + 상호작용 상태 {len(STATE_SURFACES)}종·단계 구분·포커스 링 + 색 거리 + 램프 간격")
     return 0
 
 
