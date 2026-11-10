@@ -1,5 +1,6 @@
 """llama.cpp 엔진 — 가짜 llama-server(실제 서브프로세스)로 수명주기·보안·파싱 검증."""
 import base64
+import hashlib
 import json
 import os
 import signal
@@ -13,7 +14,7 @@ import urllib.request
 import pytest
 
 import vt_paths
-from stt_engines import catalog, hfcache
+from stt_engines import catalog, hfcache, pins
 from stt_engines import llamacpp_qwen3 as mod
 from stt_engines.base import NotReady
 from stt_engines.llamacpp_qwen3 import LlamaCppQwen3Engine, _pick_gguf, parse_asr_text
@@ -62,6 +63,10 @@ HTTPServer((host or "127.0.0.1", port), H).serve_forever()
 '''
 
 
+def _fake(name):
+    return b"GGUF" + name.encode()
+
+
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     state = tmp_path / "state"
@@ -78,6 +83,11 @@ def env(tmp_path, monkeypatch):
     monkeypatch.delenv("FAKE_MODE", raising=False)
     monkeypatch.delenv("FAKE_REPLY", raising=False)
     # 서버 기동 대기를 짧게
+    # 카탈로그 모델은 고정(pins) 표와 맞는 파일만 쓴다 — 검증 로직은 그대로 두고, 표에 _put_model 이
+    # 만드는 가짜 파일(내용 = b"GGUF"+이름)의 크기·해시를 주입한다.
+    for sp in (SPEC, catalog.get("qwen3-asr-1.7b-gguf")):
+        monkeypatch.setitem(pins.PINS, sp.repo, pins.Pin(sp.repo, "f" * 40, {
+            n: (len(_fake(n)), hashlib.sha256(_fake(n)).hexdigest()) for n in sp.files}))
     monkeypatch.setattr(mod, "_START_TIMEOUT", 15)
     monkeypatch.setattr(mod, "time", types.SimpleNamespace(monotonic=time.monotonic, sleep=lambda s: time.sleep(0.05)))
     return types.SimpleNamespace(state=state, hub=hub, fake_dir=fake_dir, exe=exe, tmp=tmp_path)
@@ -87,7 +97,7 @@ def _put_model(hub, spec=SPEC, names=None):
     snap = hfcache.repo_dir(spec.repo, hub) / "snapshots" / "rev1"
     snap.mkdir(parents=True, exist_ok=True)
     for n in names or spec.files:
-        (snap / n).write_bytes(b"GGUF" + n.encode())
+        (snap / n).write_bytes(_fake(n))
     return snap
 
 

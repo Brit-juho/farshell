@@ -1494,6 +1494,58 @@ def test_SVG는_그림으로만_그려지고_주소를_직접_열어도_스크�
         raw.close()
 
 
+def test_앱_CSP_위반이_없다_뷰어_워클릿_서비스워커_iframe(page, server):
+    """앱 문서 CSP(`script-src 'self'` — security_headers.APP_CSP)가 정상 기능을 막지 않는다.
+    정책이 너무 좁으면 뷰어·미리보기·워클릿이 **조용히** 안 뜬다(실브라우저에서만 보인다) — 위반 이벤트를 모아 0건을 단언한다."""
+    base, _ = server
+    page.evaluate(
+        "() => { window.__csp = [];"
+        " document.addEventListener('securitypolicyviolation',"
+        " (e) => window.__csp.push(e.violatedDirective + ' ' + e.blockedURI)); }"
+    )
+    targets = [
+        (_viewer_file("notes.md"), ".vt-pane-viewer .vt-md h1"),
+        (str(ROOT / "server" / "main.py"), ".vt-pane-viewer .cm-line"),
+        (str(ROOT / "frontend" / "icon-192.png"), ".vt-pane-viewer .vt-vw-image img"),
+    ]
+    for path, sel in targets:
+        page.evaluate("(p) => window.openFileInPane(p)", path)
+        page.wait_for_selector(sel, timeout=15000)
+    try:
+        page.evaluate("(p) => window.openFile(p)", _viewer_file("evil.svg"))
+        page.wait_for_selector("#vt-file .vt-vw-svg img", timeout=15000)
+    finally:
+        _close_overlay(page)
+    # 음성 워클릿(정적 파일 모듈) — Blob/data 가 아니라 'self' 로 올라가야 한다
+    page.evaluate(
+        "async () => { const c = new AudioContext();"
+        " const t = new Promise((_, rej) => setTimeout(() => rej(new Error('addModule 시간 초과')), 8000));"
+        " try { await Promise.race([c.audioWorklet.addModule('/static/js/voice/pcm-worklet.js'), t]); }"
+        " finally { c.close(); } }"
+    )
+    # 서비스 워커
+    page.evaluate("async () => { await Promise.race([navigator.serviceWorker.ready,"
+        " new Promise((_, rej) => setTimeout(() => rej(new Error('서비스 워커 시간 초과')), 8000))]); }")
+    # 포트 미리보기 iframe(다른 출처 http, sandbox) — 앱 자신은 frame-ancestors 'none' 이라 별도 서버를 띄운다
+    import http.server
+    import threading
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), http.server.SimpleHTTPRequestHandler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        page.evaluate(
+            "(u) => new Promise((res) => { const f = document.createElement('iframe');"
+            " f.setAttribute('sandbox', 'allow-scripts'); f.onload = f.onerror = () => res(true);"
+            " f.src = u; document.body.appendChild(f); setTimeout(() => res(true), 3000); })",
+            f"http://127.0.0.1:{srv.server_address[1]}/",
+        )
+    finally:
+        srv.shutdown()
+    page.wait_for_timeout(500)
+    assert page.evaluate("() => window.__csp") == []
+    csp_msgs = [e for e in page.console_errors if "Content Security Policy" in e or "Refused to" in e]
+    assert csp_msgs == [], csp_msgs
+
+
 def test_CSV는_표로_PDF는_다운로드만_동영상은_Range로_받는다(page, server):
     base, _ = server
     try:
