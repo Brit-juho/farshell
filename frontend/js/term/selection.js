@@ -6,6 +6,7 @@ import { copyToClipboard, pasteFromClipboard, pasteImageUpload, sendPaste, claim
 import { getSession } from '../core/store.js';
 import { _isCoarsePointer } from '../core/env.js';
 import { t } from '../core/i18n.js';
+import { handleOsc52 } from './osc52.js';
 
 
 export function wireClipboard(id, term, wrapper) {
@@ -93,31 +94,20 @@ export function wireClipboard(id, term, wrapper) {
   // N12 — kitty 키보드 프로토콜. 앱이 모드를 켰을 때만 동작한다(협상 2층).
   wireKeyboardInput(id, term, wrapper);
 
-  // 5) OSC 52 — 서버 쪽 프로그램(vim, tmux copy-mode 등)이 클립보드에 쓰려는
-  //    요청은 PTY 출력 스트림에 이스케이프 시퀀스로 실려 이미 여기까지 온다.
-  //    별도 연결 없이 가로채서 이 브라우저(=이 기기)의 시스템 클립보드에 반영.
+  // 5) OSC 52 — 터미널 출력에 실린 「클립보드에 쓰기」 요청을 이 브라우저(=이 기기)의
+  //    클립보드에 반영한다. 별도 연결 없이 PTY 출력 스트림으로 이미 여기까지 온다.
+  //    · tmux 세션(원격 칸 포함): tmux가 `set-clipboard external`로 pane 안 프로그램의
+  //      요청은 걸러 내고 tmux 자체 복사(copy-mode 등)만 내보낸다 — 사용자 복사만 온다.
+  //      (실측: config/vt-tmux.conf, tmux 3.7c. `on`이면 프로그램 것도 나간다.)
+  //    · tmux 없는 일반 터미널: 출력 속 시퀀스가 그대로 오므로 기본 차단,
+  //      설정 `terminal.osc52Untrusted`로 허용. 1MB 초과는 무시. 판정은 term/osc52.js.
   //    "?"(쿼리) 응답은 미지원 — set 요청만 처리.
+  //    재생분(`_replayingScrollback`, ws.js)은 이미 한 번 처리된 과거 요청이라 조용히 무시한다
+  //    (재접속마다 복사+토스트가 우르르 뜨던 버그 방지). 「드래그 시 자동 복사」를 끄면 이
+  //    경로도 같이 꺼진다(tmux copy-mode 복사도 같은 OSC52 경로라 따로 구분할 수 없다).
   if (term.parser && typeof term.parser.registerOscHandler === 'function') {
     term.parser.registerOscHandler(52, (data) => {
-      const semi = data.indexOf(';');
-      const payload = semi >= 0 ? data.slice(semi + 1) : data;
-      if (!payload || payload === '?') return true;
-      // ws.js가 scrollback 재생 구간 동안 켜두는 플래그 — 재접속마다 세션 도중
-      // 쌓인 과거 OSC52들이 scrollback과 함께 통째로 재생되며 매번 다시 복사+토스트를
-      // 띄우던 버그(새로고침 시 "클립보드 동기화됨" 우르르 뜸)를 막는다. 재생분은
-      // 이미 과거에 한 번 처리된 요청이므로 조용히 무시한다.
-      if (getSession(id)?._replayingScrollback) return true;
-      // tmux가 `set-clipboard external`이면 일반 드래그도 자체 copy-mode를 거쳐
-      // 여기로 OSC52를 쏜다(키보드로 하는 vim/tmux copy-mode 복사도 동일 경로라
-      // 드래그만 따로 구분할 수 없음) — "드래그 시 자동 복사" 토글을 꺼도 이 경로가
-      // 살아있으면 사용자 입장에선 "꺼도 계속 복사된다"로 보이므로 같은 설정을 공유한다.
-      if (!setting('mouse.autocopyOnSelect')) return true;
-      try {
-        const bin = atob(payload);
-        const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-        const text = new TextDecoder('utf-8').decode(bytes);
-        copyToClipboard(text).then((ok) => { if (ok) showToast(t('클립보드 동기화됨 (OSC52)')); });
-      } catch (_) { /* 잘못된 base64 무시 */ }
+      handleOsc52(data, { session: getSession(id), setting, copy: copyToClipboard, toast: showToast, t });
       return true;
     });
   }

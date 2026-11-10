@@ -17,6 +17,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **Expanded rail: delegation branch lines show the child's state again.** The turn into a merged child is drawn in the done colour and a failed child in the error colour (closed children stay faint), matching the collapsed rail and the phone Fleet. The expanded rail had hard-coded the neutral line, so every branch looked the same.
 - **E2E flake: `appReady` no longer rises before the first settings load.** `bootApp()` does not wait for settings, so on a slow link the late settings reply re-applied the saved skin over a value the test had just set (the same family as the ADR-45 race). `main.js` now raises `appReady` after boot **and** the first `core/settings.js` `load()` (`firstLoad()`), waiting for settings at most 5 s so it can never hang. The screen itself is not delayed.
 
+### Security
+- **OSC 52 clipboard writes from a plain (non-tmux) terminal are blocked by default.** Output from a terminal without tmux (a `cat`ed file, an ssh'd server) could silently replace the clipboard. tmux sessions (remote panes included) are unchanged — tmux already forwards only its own copies (`set-clipboard external`, measured on 3.7c). New per-device setting `terminal.osc52Untrusted` (Settings › Terminal) allows it again; the block shows one warning toast per session. Requests over 1 MiB are ignored in all cases, and the copy toast now previews the first 40 characters and the length. The guide and `docs/ref/terminal.md` / `voice.md` no longer claim that a program inside tmux can send OSC 52.
+
 ---
 
 ## [2.10.1] — 2026-11-10

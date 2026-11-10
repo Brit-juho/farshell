@@ -30,6 +30,8 @@ export const TERMINAL_GROUPS = [
         help: t('끄면 vim·tmux가 마우스를 잡아도 항상 드래그로 선택할 수 있습니다 (iTerm2 기본 동작).'),
         kind: 'bool' },
       { key: 'mouse.autocopyOnSelect', label: t('드래그 시 자동 복사'), kind: 'bool' },
+      { key: 'terminal.osc52Untrusted', label: t('tmux가 아닌 터미널의 클립보드 쓰기 허용(OSC 52)'),
+        help: t('켜면 tmux 없는 터미널의 출력이 이 기기 클립보드를 바꿀 수 있습니다. 신뢰할 수 없는 출력(cat 한 파일, 접속한 서버)이 클립보드를 바꿀 위험이 있습니다.'), kind: 'bool' },
       { key: 'mouse.touchTapToApp', label: t('터치 탭을 앱에 전달'),
         help: t('터치 기기에서 짧은 탭을 앱으로 넘겨 커서를 옮깁니다.'), kind: 'bool' },
     ],
