@@ -46,8 +46,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Security
 - Changing the update switches needs a browser session plus password re-entry and is audited; agents, peers, the machine token and relayed calls are refused (`/api/update/*`).
 - `AGENTS.md` contract 16: the server checks agent configuration files but never writes them.
-
-### Security
 - **OSC 52 clipboard writes from a plain (non-tmux) terminal are blocked by default.** Output from a terminal without tmux (a `cat`ed file, an ssh'd server) could silently replace the clipboard. tmux sessions (remote panes included) are unchanged — tmux already forwards only its own copies (`set-clipboard external`, measured on 3.7c). New per-device setting `terminal.osc52Untrusted` (Settings › Terminal) allows it again; the block shows one warning toast per session. Requests over 1 MiB are ignored in all cases, and the copy toast now previews the first 40 characters and the length. The guide and `docs/ref/terminal.md` / `voice.md` no longer claim that a program inside tmux can send OSC 52.
 
 ---
