@@ -16,6 +16,7 @@ from typing import Callable, Optional
 
 import voice_handler
 import notify
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +161,7 @@ class OutputWatcher:
         if len(text) > 200:
             text = text[:200] + "..."
 
-        return f"작업이 완료되었습니다. {text}"
+        return tr("작업이 완료되었습니다. {text}", text=text)
 
     async def _send_notification(self, session_id: str, summary: str) -> None:
         """TTS 생성 + 콜백 호출."""
@@ -177,7 +178,7 @@ class OutputWatcher:
         # 모바일 푸시 알림 (ntfy/Telegram) — 설정돼 있으면 병렬로 전송
         if notify.is_configured():
             try:
-                push_msg = summary[:300] if summary else "세션이 idle 상태입니다"
+                push_msg = summary[:300] if summary else tr("세션이 idle 상태입니다")
                 await notify.send(
                     f"FarShell: {session_id[:8]}",
                     push_msg,

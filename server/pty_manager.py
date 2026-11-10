@@ -32,6 +32,7 @@ from typing import Callable, Optional
 
 import input_mode
 import paste_prepare
+from i18n import tr
 import tmux_paste
 
 logger = logging.getLogger(__name__)
@@ -372,8 +373,9 @@ class PTYManager:
                     ok, reason = safe_mode.check(cmd)
                     if not ok:
                         # 차단 메시지를 PTY 출력으로 broadcast
+                        block_text = tr("[안전모드 차단] {reason}: {cmd}", reason=reason, cmd=cmd)
                         block_msg = (
-                            f"\r\n\x1b[31m[안전모드 차단] {reason}: {cmd}\x1b[0m\r\n"
+                            f"\r\n\x1b[31m{block_text}\x1b[0m\r\n"
                         ).encode()
                         for cb in list(session._subscribers):
                             try:
