@@ -1189,10 +1189,15 @@ drag-and-drop and isn't reusable as-is. **Two pitfalls:** the sheet's action cal
 plain variable before calling `closeMenu()`; reading the render-prop's resolved
 value (`m()`) afterwards finds the `<Show>` block already torn down, so the
 action silently does nothing from a real tap while working when called from a
-console. And the shared `.vt-session-sheet` (also used by the
-`#voice-session-picker` sheet) pads its bottom for the safe-area **and** the
-52px bottom nav, otherwise a sheet's last row/button sits behind the nav and
-is untappable.
+console. And the sheet is `Portal`ed into `body` with its backdrop at `z-index:655`
+(`60-mobile-hud.css`): inside `#vt-fleet-slot` (a stacking context at 500) no `z-index` can
+get above the 650 bottom nav, so the sheet's last row (Cancel) sat behind the nav and
+touches went to the nav (2026-11-10, measured with `elementFromPoint`). Like the specimen's
+M04, the scrim covers the nav — the sheet needs no nav-height padding, only the safe-area.
+Header rows of the bottom-tab screens (Changes, Files/Attachments, Settings) share one
+16px + safe-area side gutter (`98-mobile.css`), and the sheet and its title are
+`user-select:none` (the rename input excepted) so a long-press cannot leave a text
+selection on the sheet title.
 
 A permanent **"+ New session (새 세션)"** button sits at the bottom of the list (hidden
 only in the true empty state, where two dedicated buttons already do the
@@ -1330,8 +1335,8 @@ screen, recent-commands tracking, the keymap registration rule, and the
 - *Bottom nav hides while the keyboard is open* (`body.vt-keyboard-open
   #vt-mnav-bottom`, `60-mobile-hud.css`) — **intentional**, not a bug: the
   keybar sits on the keyboard and the terminal needs the height; the nav
-  returns when the keyboard goes away. The same class swaps the terminal and
-  session-sheet bottom padding to the nav-less value.
+  returns when the keyboard goes away. The same class swaps the terminal
+  bottom padding to the nav-less value.
 - *Focus mode* — when the **visible height** (`visualViewport.height`) is under
   300px (landscape phone + keyboard: ~400px minus ~200px), `body.vt-kb-focus`
   hides the tab bar, pane headers, the workbench, the pinned sidebar, the status bar and bottom nav

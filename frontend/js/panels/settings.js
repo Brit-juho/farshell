@@ -199,7 +199,7 @@ function rerender(focusTarget = null) {
   const preview = isCompact() ? null : createSectionPreview(section.id, content);
   if (preview) { body.appendChild(preview.el); _previewDispose = preview.dispose; }
   if (focusTarget !== null) Promise.resolve().then(() => {
-    const target = focusTarget && Array.from(content.querySelectorAll('.vt-set-label'))
+    const target = focusTarget && Array.from(content.querySelectorAll('.vt-set-label, .vt-set-group-title'))
       .find((el) => el.firstChild?.textContent === focusTarget);
     if (target) { target.tabIndex = -1; target.focus(); target.scrollIntoView?.({ block: 'center' }); }
     else h.focus();

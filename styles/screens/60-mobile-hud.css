@@ -116,21 +116,13 @@
   body.vt-keyboard-open #keybar { bottom:0; }
   html[data-mobile-tab]:not([data-mobile-tab="terminal"]) #keybar { display:none; }
 
-  /* 2026-09-23 — `.vt-session-sheet`(10-shell.css)는 바닥에 붙는 시트인데
-     아래쪽 padding이 safe-area만 보고 하단 내비 52px는 안 봤다 — 시트
-     내용이 그 높이만큼 있으면 마지막 줄이 내비(z-index 650) 밑에 깔려서
-     눌리지 않는다. Fleet.tsx의 꾹 눌러 메뉴가 같은 클래스를 재사용하면서
-     "취소" 버튼이 정확히 그 자리에 있어서 실브라우저로 잡았다 — 기존
-     세션 관리 시트(picker.js)도 같은 결함을 안고 있었다(내용이 짧아 아직
-     아무도 못 봤을 뿐). 키보드가 뜨면 내비가 사라지므로(위 규칙) 그때는
-     원래 padding으로 되돌린다 — #terminal-container·#vt-toasts와 같은
-     두 갈래 패턴. */
-  .vt-session-sheet {
-    padding-bottom:calc(calc(var(--spacing) * 3.5) + 52px + env(safe-area-inset-bottom,0px));
-  }
-  body.vt-keyboard-open .vt-session-sheet {
-    padding-bottom:calc(var(--spacing) * 3.5);
-  }
+  /* 꾹 눌러 메뉴 시트(`.vt-session-sheet`, 10-shell.css) — 시안 M04처럼 막이 하단 내비까지 덮는다.
+     2026-09-23에는 시트 바닥 padding에 내비 52px를 더해 「내비 위에 얹힌 것처럼」 보이게 했다. 그런데 시트가 max-height에
+     걸려 스크롤되면 쉬는 위치에서 마지막 줄(취소)이 내비 밑에 깔렸다(2026-11-10 실기기: 취소 y 784~828, 내비 792~844,
+     elementFromPoint 가 내비). 이제 시트는 body로 Portal되고(Fleet.tsx — 안에 두면 #vt-fleet-slot 쌓임 맥락 500에 갇혀
+     z-index를 올려도 내비 650을 못 넘는다) 막이 내비(650) 위 655에 놓여, 시트 전체가 터치된다. 내비 높이를 따로 비킬 필요가 없다.
+     655: 내비 650 위, 편집 키 줄 660·재연결 오버레이 700·토스트 1000 아래. */
+  .vt-session-backdrop { z-index:655; }
 
   /* 플릿 홈(N38 §2) 행 — Rail.tsx(N36 §5)의 .vt-wgrail-row와 같은 시각
      언어(색점 막대 3px·같은 톤 토큰)를 쓴다: "레일에서 맨 위인 게 폰에서도

@@ -10,7 +10,7 @@
 // 모듈을 정적 import하면 Vite lib 모드가 복제한다, ADR-26). Dock.tsx의 배지
 // 폴링도 같은 이유로 각자 반복하고 있다 — 이 파일도 그 관행을 따른다.
 import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
-import { render } from 'solid-js/web';
+import { render, Portal } from 'solid-js/web';
 import { icon, stateIcon } from '../ui/icons.js';
 import { shellIcon } from '../ui/icons-shell.js';
 import { t } from '../core/i18n.js';
@@ -420,7 +420,13 @@ function Fleet(props: { deps: FleetDeps }) {
   const [renaming, setRenaming] = createSignal(false);
   const [renameValue, setRenameValue] = createSignal('');
 
-  const openMenu = (row: SessionRow) => { setRenaming(false); setMenu({ row }); };
+  // 꾹 누른 손가락 밑에서 OS가 방금 단어를 선택해 두었을 수 있다(안드로이드 크롬) — 시트가 그 자리에 뜨면 제목에 선택·핸들이 남는다.
+  // 시트·행의 user-select:none(98-mobile.css)이 새로 생기는 선택을 막고, 이미 잡힌 DOM 선택은 여기서 지운다.
+  // xterm의 선택은 DOM Range가 아니라 자체 모델(term/touch-select.js)이라 이 호출이 터미널 복사 선택을 건드리지 않는다.
+  const openMenu = (row: SessionRow) => {
+    try { window.getSelection?.()?.removeAllRanges(); } catch { /* 선택 API가 없으면 CSS만으로 충분하다 */ }
+    setRenaming(false); setMenu({ row });
+  };
   const closeMenu = () => { setMenu(null); setRenaming(false); };
   const runMenuAction = (fn: () => void) => { closeMenu(); fn(); };
 
@@ -633,10 +639,13 @@ function Fleet(props: { deps: FleetDeps }) {
           꺼내 평범한 변수(`row`)에 담아 두고, 아래 모든 클릭
           핸들러는 그 변수만 읽는다 — 시트가 열려 있는 동안 대상이 바뀔 일은
           없다(다른 행을 길게 누르면 새 메뉴가 새로 열린다). */}
+      {/* 시트는 body로 Portal한다 — #vt-fleet-slot이 z-index 쌓임 맥락(500)이라 안에 두면 시트의 z-index가 하단 내비(650)를
+          못 넘어, 시트 바닥(취소)이 내비에 가려 터치가 내비로 갔다(2026-11-10 실기기). 시안 M04처럼 막이 내비까지 덮는다. */}
       <Show when={menu()}>
         {(m) => {
           const row = m().row;
           return (
+            <Portal>
             <div class="vt-session-backdrop vt-fleet-menu-backdrop" onClick={closeMenu}>
               <div class="vt-session-sheet vt-fleet-menu-sheet" onClick={(e) => e.stopPropagation()}>
                 <Show when={!renaming()} fallback={
@@ -689,6 +698,7 @@ function Fleet(props: { deps: FleetDeps }) {
                 </Show>
               </div>
             </div>
+            </Portal>
           );
         }}
       </Show>
