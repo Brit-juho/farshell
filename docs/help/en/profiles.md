@@ -96,7 +96,10 @@ runs (Claude or Codex) is inherited. An agent cannot choose an account (a `profi
 parent's account cannot be used right now (folder missing, archived, not signed in, expired token) the delegation is
 refused instead of falling back to the default account. A child created on another Mac does not inherit. It works
 only when you are connected directly to this Mac; register only your own accounts. Profiles set up with an API
-endpoint are not supported by this route; use "run with this account".
+endpoint can be chosen too: the endpoint, auth values, headers and model names in that profile's setup go into that
+session only (a key never appears in a command line, log or screen) and every other account's authentication variable is
+removed. Usage is unknown for these profiles. A profile whose setup file is malformed, or that also has a long-lived
+token, is refused with a reason.
 
 Long-lived token: register a refresh-token-free `claude setup-token` value with
 `fsh profile token set <id>` and the profile's sessions run on it instead of a login. With nothing

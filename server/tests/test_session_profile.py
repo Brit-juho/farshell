@@ -59,6 +59,18 @@ def _token(pid, expires_at=None):
     agent_profile_token.set_token(pid, FAKE_TOKEN, expires_at=expires_at)
 
 
+API_URL = 'https://gateway.example.invalid'
+API_KEY = 'fake-gateway-key-' + 'Qw7z' * 8
+API_AUTH = 'fake-auth-token-' + 'Lm4p' * 8
+
+
+def _api(pid, env=None, key=None):
+    """A private API-endpoint setup (`.farshell-provider.json`), exactly as the importer writes it."""
+    path = profiles.root(pid) / '.farshell-provider.json'
+    path.write_text(json.dumps({'version': 1, 'api_key': key, 'env': env if env is not None else {'ANTHROPIC_BASE_URL': API_URL}}))
+    path.chmod(0o600)
+
+
 def _make(name, tool='claude', login=True):
     pid = profiles.create(name, tool)['id']
     if login:
@@ -92,6 +104,20 @@ def test_picker_reports_states_without_secrets_or_paths(sandbox):
     assert ok and codex
 
 
+def test_picker_lists_api_profiles_without_a_secret(sandbox):
+    pid = _make('gateway', login=False)
+    _api(pid, key=API_KEY, env={'ANTHROPIC_BASE_URL': API_URL, 'ANTHROPIC_AUTH_TOKEN': API_AUTH})
+    bad = _make('bad-gateway', login=False)
+    _api(bad, env={'ANTHROPIC_BASE_URL': 'ftp://x.example.invalid'})
+    rows = {r['name']: r for r in session_profile.picker()['profiles']}
+    assert (rows['gateway']['auth'], rows['gateway']['auth_kind'], rows['gateway']['selectable'], rows['gateway']['reason']) == ('ok', 'api', True, None)
+    assert rows['gateway']['usage'] is None                   # no usage numbers for an API setup: "unknown"
+    assert (rows['bad-gateway']['auth'], rows['bad-gateway']['selectable']) == ('broken', False)
+    blob = json.dumps(session_profile.picker())
+    for secret in (API_KEY, API_AUTH, API_URL, 'gateway.example'):
+        assert secret not in blob
+
+
 def test_picker_is_empty_and_creates_nothing_without_a_registry(sandbox):
     assert session_profile.picker() == {'profiles': [], 'defaults': {}}
     assert session_profile.select('default') is None
@@ -120,7 +146,8 @@ def test_picker_shows_only_cached_usage(sandbox):
 
 @pytest.mark.parametrize('case, code', [
     ('archived', 'profile_archived'), ('folder', 'folder_missing'), ('login', 'not_logged_in'),
-    ('expired', 'token_expired'), ('unreadable', 'credentials_unreadable'), ('api', 'unsupported_auth'),
+    ('expired', 'token_expired'), ('unreadable', 'credentials_unreadable'), ('api_bad', 'unsupported_auth'),
+    ('api_and_token', 'unsupported_auth'), ('api_codex', 'unsupported_auth'),
 ])
 def test_unusable_profile_is_refused_never_replaced(sandbox, case, code):
     pid = _make('alice', login=case not in ('login',))
@@ -134,10 +161,14 @@ def test_unusable_profile_is_refused_never_replaced(sandbox, case, code):
         _token(pid, expires_at=time.time() - 10)
     elif case == 'unreadable':
         (profiles.root(pid) / '.credentials.json').write_text('[1')
-    elif case == 'api':
-        path = profiles.root(pid) / '.farshell-provider.json'
-        path.write_text(json.dumps({'version': 1, 'env': {'ANTHROPIC_BASE_URL': 'https://example.invalid'}, 'api_key': 'fake-key'}))
-        path.chmod(0o600)
+    elif case == 'api_bad':       # a malformed API setup (a protected name) is refused - the only remaining unsupported_auth
+        _api(pid, env={'ANTHROPIC_BASE_URL': API_URL, 'HOME': '/elsewhere'})
+    elif case == 'api_and_token':
+        _token(pid)
+        _api(pid)               # written by hand after the token (the CLI refuses this order)
+    elif case == 'api_codex':
+        pid = _make('personal', 'codex')
+        _api(pid)
     with pytest.raises(session_profile.SlotRefused) as error:
         session_profile.select(pid)
     assert error.value.code == code and error.value.status == 409
@@ -354,6 +385,106 @@ def test_two_defaults_inject_both_tools(sandbox, tmux):
     env = _dump(tmux)
     assert env['CLAUDE_CONFIG_DIR'] == str(profiles.root(a)) and env['CODEX_HOME'] == str(profiles.root(c))
     assert env['FSH_PROFILE_ID'] == f'{a},{c}'
+
+
+def _show_env(tmux, session, name):
+    out = subprocess.run(['tmux', '-L', tmux.socket, 'show-environment', '-t', '=' + session, name], capture_output=True).stdout
+    assert out.startswith(name.encode() + b'=') and out.endswith(b'\n')
+    return out[len(name) + 1:-1].decode()
+
+
+def test_api_profile_gets_its_endpoint_and_the_other_auth_variables_go(sandbox, tmux, monkeypatch):
+    pid = _make('gateway', login=False)
+    _api(pid, env={'ANTHROPIC_BASE_URL': API_URL, 'ANTHROPIC_AUTH_TOKEN': API_AUTH, 'ANTHROPIC_DEFAULT_SONNET_MODEL': 'gw-model'})
+    monkeypatch.setenv('ANTHROPIC_API_KEY', 'ambient-api-key')
+    monkeypatch.setenv('CLAUDE_CODE_OAUTH_TOKEN', 'ambient-oauth')
+    monkeypatch.setenv('ANTHROPIC_CUSTOM_HEADERS', 'X: ambient')
+    monkeypatch.setenv('ANTHROPIC_DEFAULT_OPUS_MODEL', 'ambient-opus')
+    selection = session_profile.select(pid)
+    plain, secret, _ = session_profile.environment(selection)
+    removed = session_profile.removed_names(selection, plain, secret)
+    assert 'ANTHROPIC_AUTH_TOKEN' not in removed and 'ANTHROPIC_BASE_URL' not in removed          # the profile's own: overwritten, not unset
+    assert 'ANTHROPIC_DEFAULT_SONNET_MODEL' not in removed
+    assert {'ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_CUSTOM_HEADERS', 'ANTHROPIC_DEFAULT_OPUS_MODEL'} <= set(removed)
+    rc, reason, info = _spawn('s-api', selection)
+    assert rc == 0, reason
+    env = _dump(tmux)
+    assert env['ANTHROPIC_BASE_URL'] == API_URL and env['ANTHROPIC_AUTH_TOKEN'] == API_AUTH
+    assert env['ANTHROPIC_DEFAULT_SONNET_MODEL'] == 'gw-model'
+    assert env['CLAUDE_CONFIG_DIR'] == str(profiles.root(pid)) and env['FSH_PROFILE_ID'] == pid
+    for name in ('ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_CUSTOM_HEADERS', 'ANTHROPIC_DEFAULT_OPUS_MODEL'):
+        assert name not in env, name
+    assert 'ANTHROPIC_API_KEY' in info['cleared_env']
+    # Same environment as the managed launch builds (one computation).
+    import agent_profile_runtime
+    assert agent_profile_runtime.provider_environment(pid) == {'ANTHROPIC_BASE_URL': API_URL, 'ANTHROPIC_AUTH_TOKEN': API_AUTH, 'ANTHROPIC_DEFAULT_SONNET_MODEL': 'gw-model'}
+    assert _show_env(tmux, 's-api', 'ANTHROPIC_BASE_URL') == API_URL
+
+
+def test_api_profile_secrets_never_reach_argv_ps_logs_response_or_records(sandbox, tmux, monkeypatch, caplog):
+    pid = _make('gateway', login=False)
+    _api(pid, key=API_KEY, env={'ANTHROPIC_BASE_URL': API_URL, 'ANTHROPIC_AUTH_TOKEN': API_AUTH,
+                                'ANTHROPIC_CUSTOM_HEADERS': 'X-Gateway-Secret: hdr-secret-value'})
+    caplog.set_level('DEBUG')
+    selection = session_profile.select(pid)
+    rc, reason, info = _spawn('s-api-secret', selection)
+    assert rc == 0 and reason == ''
+    session_profile.record('s-api-secret', selection)
+    secrets_ = (API_KEY, API_AUTH, 'hdr-secret-value')
+    blob = json.dumps([info, session_profile.picker(), selection.public()])
+    ps = subprocess.run(['ps', '-axo', 'command'], capture_output=True, text=True).stdout
+    with profiles.database() as db:       # the registry's own records (injected_sessions, ledger, audit tables)
+        dump = '\n'.join(db.iterdump())
+    for secret in secrets_:
+        assert not any(secret in part for call in tmux.argv for part in call), 'reached a tmux argv'
+        assert secret not in caplog.text and secret not in ps and secret not in blob
+        assert secret not in dump
+    assert not list((profiles.directory() / 'launch').glob('session-*.conf'))
+    env = _dump(tmux)
+    assert env['ANTHROPIC_AUTH_TOKEN'] == API_AUTH and 'ANTHROPIC_API_KEY' not in env   # api_key is the apiKeyHelper's job
+    # a failed spawn does not quote the config line (it carries the values)
+    rc, reason, _ = _spawn('s-api-secret', selection)         # name taken
+    assert rc != 0 and reason == ''
+
+
+def test_api_profile_values_are_quoted_safely_in_the_tmux_config(sandbox, tmux, tmp_path):
+    pid = _make('gateway', login=False)
+    marker = tmp_path / 'PWNED'
+    headers = ('X-A: has space "double" \'single\' \\ back\\slash\n'
+               'X-B: a ; new-session -d -s evil ; b\r\n'
+               f'X-C: $(touch {marker}) $HOME ${{X}} `touch {marker}` #{{session_name}} #(touch {marker}) ~ # tail\tTAB')
+    _api(pid, env={'ANTHROPIC_BASE_URL': API_URL, 'ANTHROPIC_CUSTOM_HEADERS': headers, 'ANTHROPIC_AUTH_TOKEN': 'tok"en;$(x)'})
+    rc, reason, _ = _spawn('s-quote', session_profile.select(pid))
+    assert rc == 0, reason
+    assert _show_env(tmux, 's-quote', 'ANTHROPIC_CUSTOM_HEADERS') == headers           # byte for byte
+    assert _show_env(tmux, 's-quote', 'ANTHROPIC_AUTH_TOKEN') == 'tok"en;$(x)'
+    assert not marker.exists()
+    assert not tmux_runner.has_session('evil')
+    assert tmux_runner.has_session('s-quote')
+    assert _dump(tmux)['ANTHROPIC_AUTH_TOKEN'] == 'tok"en;$(x)'
+
+
+def test_api_profile_value_tmux_cannot_carry_is_refused_before_a_session_exists(sandbox, tmux):
+    pid = _make('gateway', login=False)
+    _api(pid, env={'ANTHROPIC_BASE_URL': API_URL, 'ANTHROPIC_CUSTOM_HEADERS': 'X: a\x01b'})
+    with pytest.raises(session_profile.SlotRefused) as error:
+        session_profile.select(pid)
+    assert error.value.code == 'unsupported_auth'
+    assert not tmux_runner.has_session('s-ctl')
+    with pytest.raises(session_profile.SlotRefused):
+        session_profile._quote('a\x00b', multiline=True)
+    with pytest.raises(session_profile.SlotRefused):
+        session_profile._quote('a\nb')              # names and directories still refuse every control character
+
+
+def test_api_profile_config_checked_again_at_spawn(sandbox, tmux):
+    pid = _make('gateway', login=False)
+    _api(pid)
+    selection = session_profile.select(pid)
+    _api(pid, env={'ANTHROPIC_BASE_URL': 'ftp://not-http.example.invalid'})      # edited between select and spawn
+    with pytest.raises(session_profile.SlotRefused) as error:
+        _spawn('s-late', selection)
+    assert error.value.code == 'unsupported_auth' and not tmux_runner.has_session('s-late')
 
 
 def test_a_failed_spawn_leaves_no_half_configured_session(sandbox, tmux):

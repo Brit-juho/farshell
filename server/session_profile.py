@@ -12,6 +12,11 @@ account is worse than no session.
 Secrets: a long-lived token never reaches a command line (`ps`) or a log. The session is
 created by a tmux config file (0600, deleted at once) read with `source-file`, so tmux's
 argv only names the file. The values live in that session's environment, like any env var.
+
+API-endpoint profiles (`.farshell-provider.json`: endpoint, key/auth token, headers, models) get
+exactly the environment the managed launch builds (`agent_profile_runtime.provider_environment`,
+computed in one place) plus `CLAUDE_CONFIG_DIR`. Every such value goes through the same 0600 file; a
+key given as `api_key` is not an environment value at all (the profile's `apiKeyHelper` reads it).
 """
 from __future__ import annotations
 
@@ -39,6 +44,11 @@ OVERRIDES = {
                "ANTHROPIC_BASE_URL", "ANTHROPIC_CUSTOM_HEADERS"),
     "codex": ("OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_ORG_ID"),
 }
+# An API-endpoint profile also decides the model names; another account's (server/tmux-global) model
+# overrides must not mix into it. Removed unless the profile sets them itself.
+API_EXTRA_OVERRIDES = ("ANTHROPIC_MODEL", "ANTHROPIC_SMALL_FAST_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL",
+                       "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+                       "ANTHROPIC_DEFAULT_FABLE_MODEL", "CLAUDE_CODE_SUBAGENT_MODEL")
 TOOL_VARIABLE = {"claude": "CLAUDE_CONFIG_DIR", "codex": "CODEX_HOME"}
 MIN_TMUX = (3, 2)   # `new-session -e`
 
@@ -89,8 +99,23 @@ def auth_state(profile):
     except (ValueError, OSError, fsguard.FsDenied):
         return {"state": "broken", "kind": None, "code": "credentials_unreadable", "reason": tr("인증 파일을 읽지 못했습니다(권한이나 형식 문제)")}
     if private is not None:
-        # API-endpoint profiles carry extra secret environment; they stay on "run with this account".
-        return {"state": "ok", "kind": "api", "code": "unsupported_auth", "reason": tr("API 설정 프로필은 새 세션 주입을 지원하지 않습니다. 「이 계정으로 바로 실행」을 쓰세요")}
+        # An API-endpoint profile: usable when its file is well formed (the same validation the managed
+        # launch applies). Nothing of the file's content leaves this function.
+        bad = None
+        if tool != "claude":
+            bad = tr("API 설정은 Claude 프로필에서만 쓸 수 있습니다")
+        elif token is not None:
+            bad = tr("API 인증과 장기 토큰이 함께 설정되어 있습니다. 하나만 남기세요")
+        else:
+            import agent_profile_runtime
+            try:
+                for value in agent_profile_runtime.provider_environment(pid).values():
+                    _quote(value, multiline=True)     # a value tmux's config syntax cannot carry
+            except (profiles.Refused, ValueError, OSError, fsguard.FsDenied, SlotRefused):
+                bad = tr("API 설정의 형식이 올바르지 않습니다. 설정을 다시 저장하세요")
+        if bad:
+            return {"state": "broken", "kind": "api", "code": "unsupported_auth", "reason": bad}
+        return {"state": "ok", "kind": "api", "code": None, "reason": None}
     if token is not None:
         if token["expires_at"] <= time.time():
             return {"state": "broken", "kind": "token", "code": "token_expired", "reason": tr("장기 토큰이 만료됐습니다. 새로 등록하세요")}
@@ -164,6 +189,17 @@ def environment(selection):
     plain, secret = {}, {}
     for profile in selection.profiles:
         plain[TOOL_VARIABLE[profile["tool"]]] = str(profiles.root(profile["id"]))
+        if selection.kinds[profile["id"]] == "api":
+            import agent_profile_runtime
+            try:
+                values = agent_profile_runtime.provider_environment(profile["id"])
+            except (profiles.Refused, ValueError, OSError, fsguard.FsDenied):
+                values = None
+            if values is None:
+                raise SlotRefused("unsupported_auth", tr("API 설정의 형식이 올바르지 않습니다. 설정을 다시 저장하세요"))
+            # All of it travels through the 0600 file: a header or token is indistinguishable from a
+            # harmless value by name, so nothing is treated as "plain".
+            secret.update(values)
         if selection.kinds[profile["id"]] == "token":
             from agent_profile_token import environment_value
             value = environment_value(profile["id"])
@@ -177,7 +213,9 @@ def environment(selection):
 def removed_names(selection, plain, secret):
     names = []
     for tool in sorted({p["tool"] for p in selection.profiles}):
-        names.extend(n for n in OVERRIDES[tool] if n not in plain and n not in secret and n not in names)
+        extra = API_EXTRA_OVERRIDES if tool == "claude" and "api" in {
+            selection.kinds.get(p["id"]) for p in selection.profiles if p["tool"] == "claude"} else ()
+        names.extend(n for n in (*OVERRIDES[tool], *extra) if n not in plain and n not in secret and n not in names)
     return names
 
 
@@ -259,11 +297,20 @@ def tmux_version():
     return _version
 
 
-def _quote(value):
-    """A tmux config string. Control characters cannot be quoted safely, so they are refused."""
-    if any(ord(c) < 32 or ord(c) == 127 for c in value):
+_ESCAPES = {"\n": "\\n", "\r": "\\r", "\t": "\\t"}
+
+
+def _quote(value, *, multiline=False):
+    """A tmux config string. Control characters cannot be quoted safely, so they are refused — except, for
+    environment values (`multiline`), newline/return/tab, which tmux's own `\\n`, `\\r`, `\\t` escapes carry
+    (a custom-headers value is one header per line). `\\`, `"` and `$` are escaped, so a value can neither
+    end its string, start a second command (`;`) nor expand a variable; `#{}`/`~` stay literal in `-e`."""
+    if any((ord(c) < 32 and not (multiline and c in _ESCAPES)) or ord(c) == 127 for c in value):
         raise SlotRefused("invalid_value", tr("제어 문자가 든 값은 쓸 수 없습니다"), 400)
-    return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$") + '"'
+    text = value.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$")
+    for raw, escaped in _ESCAPES.items():
+        text = text.replace(raw, escaped)
+    return '"' + text + '"'
 
 
 def _script(name, cols, rows, cwd, plain, secret, removed, ids):
@@ -272,7 +319,7 @@ def _script(name, cols, rows, cwd, plain, secret, removed, ids):
     shell = (("unset " + " ".join(removed) + "; ") if removed else "") + 'exec "${SHELL:-/bin/sh}" -l'
     line = ["new-session", "-d", "-s", _quote(name), "-x", str(int(cols)), "-y", str(int(rows)), "-c", _quote(cwd)]
     for key, value in {**plain, **secret}.items():
-        line += ["-e", _quote(f"{key}={value}")]
+        line += ["-e", _quote(f"{key}={value}", multiline=True)]
     line.append(_quote(shell))
     lines = [" ".join(line), f"set-option -t {_quote('=' + name + ':')} {OPTION} {_quote(','.join(ids))}"]
     # New windows and panes of this session must not see the overrides either (tmux global env).

@@ -4324,6 +4324,71 @@ def test_계정을_고르면_그_세션_환경에만_고른_폴더가_들어가�
         shutil.rmtree(_LOCAL_STATE_DIR / "agent-profiles", ignore_errors=True)   # 뒤 시험이 빈 레지스트리에서 시작하게
 
 
+_FAKE_GATEWAY_URL = "https://gateway.example.invalid"
+_FAKE_GATEWAY_AUTH = "fake-e2e-gateway-" + "Zk3q" * 8
+
+
+def _seed_api_profile(tmp_state: Path) -> str:
+    """API 엔드포인트 프로필 하나(가짜 주소·가짜 인증값·여러 줄 헤더). id를 돌려준다."""
+    code = (
+        "import json\n"
+        "import agent_profiles as p\n"
+        "pid = p.create('gateway', 'claude')['id']\n"
+        "path = p.root(pid) / '.farshell-provider.json'\n"
+        f"path.write_text(json.dumps({{'version': 1, 'api_key': None, 'env': {{'ANTHROPIC_BASE_URL': {_FAKE_GATEWAY_URL!r}, 'ANTHROPIC_AUTH_TOKEN': {_FAKE_GATEWAY_AUTH!r}, 'ANTHROPIC_CUSTOM_HEADERS': 'X-One: a b\\nX-Two: $(echo no)'}}}}))\n"
+        "path.chmod(0o600)\n"
+        "print(pid)\n"
+    )
+    home = tmp_state.parent / "seed-home"
+    home.mkdir(exist_ok=True)
+    env = {k: v for k, v in os.environ.items() if not k.startswith("VT_")}
+    env.update(HOME=str(home), VT_STATE_DIR=str(tmp_state), VT_CONFIG=str(home / "none.env"), PYTHONPATH=str(ROOT / "server"))
+    out = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, out.stderr[-600:]
+    return out.stdout.strip().splitlines()[-1]
+
+
+def test_API_엔드포인트_프로필을_선택기에서_고르면_그_세션_환경에_엔드포인트가_들어간다(isolated_page, server):
+    if _LOCAL_STATE_DIR is None:
+        pytest.skip("외부 서버(VT_E2E_URL)에는 가짜 프로필을 만들 수 없다")
+    base, _ = server
+    page = isolated_page
+    pid = _seed_api_profile(_LOCAL_STATE_DIR)
+    _tmux_for(base, "start-server", ";", "set-environment", "-g", "ANTHROPIC_API_KEY", "e2e-ambient-key")
+    before = set(page.evaluate("() => Object.keys(window.allSessions())"))
+    try:
+        page.reload()
+        _boot(page, f"{base}/")
+        _new_session_menu(page)
+        page.locator("#add-menu .vt-menu-item", has_text="이번만 다른 계정").click()
+        page.wait_for_selector("#account-menu", timeout=10000)
+        assert page.locator("#account-menu [aria-disabled='true']").count() == 0, "API 프로필이 비활성이다"
+        picker = page.evaluate("""async () => (await (await fetch('/api/agent-profiles/read/picker', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'})).json())""")
+        row = next(p for p in picker["profiles"] if p["name"] == "gateway")
+        assert (row["auth_kind"], row["selectable"]) == ("api", True)
+        assert _FAKE_GATEWAY_AUTH not in json.dumps(picker) and _FAKE_GATEWAY_URL not in json.dumps(picker)
+        _pick_account_row(page, "gateway")
+        page.wait_for_function("(n) => Object.keys(window.allSessions()).length > n", arg=len(before), timeout=15000)
+        sid = next(iter(set(page.evaluate("() => Object.keys(window.allSessions())")) - before))
+        env = _tmux_env(base, _tmux_name_of(page, sid))
+        assert env["ANTHROPIC_BASE_URL"] == _FAKE_GATEWAY_URL
+        assert env["ANTHROPIC_AUTH_TOKEN"] == _FAKE_GATEWAY_AUTH             # 출력하지 않고 비교만
+        assert env["CLAUDE_CONFIG_DIR"] == str(_LOCAL_STATE_DIR / "agent-profiles" / pid / "claude")
+        assert env.get("ANTHROPIC_API_KEY") is None, "전역 환경의 다른 계정 키가 남았다"
+        page.wait_for_function("() => [...document.querySelectorAll('.vt-srow-profile-name')].map(e => e.textContent).includes('gateway')", timeout=15000)
+        ps = subprocess.run(["ps", "-axo", "command"], capture_output=True, text=True).stdout
+        assert _FAKE_GATEWAY_AUTH not in ps
+    finally:
+        for sid in set(page.evaluate("() => Object.keys(window.allSessions())")) - before:
+            name = _tmux_name_of(page, sid)
+            page.evaluate("(id) => window.removeSession(id)", sid)
+            if name:
+                _tmux_for(base, "kill-session", "-t", f"={name}")
+        _tmux_for(base, "set-environment", "-g", "-u", "ANTHROPIC_API_KEY")
+        import shutil
+        shutil.rmtree(_LOCAL_STATE_DIR / "agent-profiles", ignore_errors=True)
+
+
 def test_계정이_없으면_새_세션_메뉴는_예전_그대로다(isolated_page, server):
     page = isolated_page
     page.locator(".vt-wgrail-new").click()
