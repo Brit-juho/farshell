@@ -1,6 +1,8 @@
 // 레일 행(RailRow.tsx)을 DOM에 올려 보는 테스트용 마운트. 상호작용(우클릭=⋯ 버튼)과
 // 행 3줄 구성을 jsdom에서 확인한다.
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
+import { RailHoverCard, type HoverCardSource } from '../../js/shell/RailHoverCard.js';
 import { NativeChildren } from '../../js/shell/NativeChildren.js';
 import { Row, Menu } from '../../js/shell/RailRow.js';
 import { ViewGroup } from '../../js/shell/ViewGroup.js';
@@ -34,4 +36,25 @@ export function mountNativeChildren(root: HTMLElement, row: Parameters<typeof Na
 import { FleetRow } from '../../js/shell/Fleet.js';
 export function mountFleetRow(root: HTMLElement, props: Parameters<typeof FleetRow>[0]) {
   return render(() => <FleetRow {...props} />, root);
+}
+
+// 접힌 띠 호버 카드(RailHoverCard.tsx). 칸은 테스트가 `root`에 직접 만든다(`data-card-key`). 데이터는 키 → 소스 표이고
+// `update`로 한 칸의 값을 바꿔 열린 카드가 따라가는지(상태 변경 · 도구 이름 고정) 본다.
+export function mountHoverCard(
+  root: HTMLElement,
+  opts: { sources: Record<string, HoverCardSource>; enabled?: boolean; openDelay?: number; closeGrace?: number },
+) {
+  const [map, setMap] = createSignal(opts.sources);
+  const [enabled, setEnabled] = createSignal(opts.enabled !== false);
+  const dispose = render(() => (
+    <RailHoverCard root={() => root} enabled={enabled} resolve={(k) => map()[k] ?? null}
+      openDelay={opts.openDelay} closeGrace={opts.closeGrace} />
+  ), root.ownerDocument.createElement('div'));
+  return {
+    dispose,
+    setEnabled,
+    update: (key: string, patch: Partial<HoverCardSource['row']>) =>
+      setMap({ ...map(), [key]: { ...map()[key], row: { ...map()[key].row, ...patch } } }),
+    remove: (key: string) => { const m = { ...map() }; delete m[key]; setMap(m); },
+  };
 }
