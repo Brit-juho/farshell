@@ -1,8 +1,11 @@
 """Bounded native-child roster owned by one agent_status entry; no disk state."""
 from __future__ import annotations
 
+import logging
 import re
 import time
+
+logger = logging.getLogger(__name__)
 
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 LIFECYCLE = frozenset({"subagent_start", "subagent_stop", "stop_failure", "teammate_idle"})
@@ -28,6 +31,7 @@ def teammate(agent_id: str) -> bool:
 def clear(ent: dict) -> None:
     ent.pop("_subagents", None)
     ent.pop("_subagents_limited", None)
+    ent.pop("_fold_warned", None)
 
 
 def sweep(ent: dict, now=None) -> bool:
@@ -136,6 +140,7 @@ def fold(ent: dict, payload: dict, now=None, ts=None) -> bool:
     listed = {t["id"]: t for t in tasks if t["type"] == "subagent"}
     has_team = any(t["type"] == "teammate" for t in tasks)
     changed = False
+    unlisted = []
     for aid, row in ent.get("_subagents", {}).items():
         if row["state"] in ("done", "failed"):
             continue
@@ -150,8 +155,20 @@ def fold(ent: dict, payload: dict, now=None, ts=None) -> bool:
                 continue
         elif has_team and teammate(aid) and not row.get("_listed"):
             continue
+        elif not teammate(aid) and not row.get("_listed"):
+            # 목록에 한 번도 나타난 적 없는 행은 「목록에 없다」만으로 끝났다고 보지 않는다
+            # (훅 agent_id 와 background_tasks id 가 같다는 실측이 없다). 끝남은 subagent_stop /
+            # stop_failure, 또는 목록에 있다가 사라진 경우로 한정하고, 응답이 끊기면 sweep 의 STALE 이 맡는다.
+            unlisted.append(aid)
+            continue
         _finish(row, "done", now)
         changed = True
+    if unlisted and not any(t["status"] == "running" for t in listed.values()) and not ent.get("_fold_warned"):
+        # 진단: 목록에 running 서브에이전트가 없는데 행은 working 인 불일치(id 형식 차이 가능성)를 부모당 한 번만 남긴다.
+        # 내용(프롬프트·메시지·경로)은 쓰지 않고 id 앞 6자와 개수만.
+        ent["_fold_warned"] = True
+        logger.warning("subagent fold: roster has no running subagent ids but %d rows are working (id prefixes: %s)",
+                       len(unlisted), ",".join(a[:6] for a in unlisted[:3]))
     return changed
 
 
