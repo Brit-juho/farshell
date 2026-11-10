@@ -45,7 +45,10 @@ case $input in
       [ -n "$dir" ] || dir=${FSH_STATUSLINE_DIR:-${VT_STATE_DIR:-$HOME/.vt}/usage/statusline}
       (
         umask 077
+        [ -L "$dir" ] && exit 0
         [ -d "$dir" ] || mkdir -p "$dir" 2>/dev/null || exit 0
+        # A folder that already existed keeps whatever mode it had: close it to group/other (ours only; the owner bits stay as they are).
+        [ -O "$dir" ] && chmod go-rwx "$dir" 2>/dev/null
         tmp=$dir/.$profile.$$.tmp
         if printf '%s\n' "$input" > "$tmp" 2>/dev/null && mv -f "$tmp" "$dir/$profile.json" 2>/dev/null; then
           :

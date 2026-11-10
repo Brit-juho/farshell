@@ -44,8 +44,24 @@ _ENV_KEEP = ("PATH", "HOME", "USER", "LANG", "LC_ALL", "TMPDIR", "HTTPS_PROXY", 
 
 _lock = threading.Lock()
 _running = set()
+_guards = {}       # profile id -> lock held while an app-server for that CODEX_HOME may run or a session is created
 _skipped = {}      # profile id -> monotonic time before which a busy profile is not asked again
 SKIP_RECHECK = 30
+
+
+def _guard(profile_id):
+    with _lock:
+        return _guards.setdefault(profile_id, threading.Lock())
+
+
+def hold(profile_id, timeout):
+    """Acquire the profile's guard (True/False). Session creation for a Codex profile takes it, so it waits for a
+    running app-server (at most `TIMEOUT` + a little) instead of racing it for the login's refresh token."""
+    return _guard(profile_id).acquire(timeout=timeout)
+
+
+def release(profile_id):
+    _guard(profile_id).release()
 
 
 def enabled():
@@ -58,10 +74,11 @@ def _file(profile_id):
 
 def _load(profile_id):
     try:
-        info = os.lstat(_file(profile_id))
-        if not (info.st_mode & 0o170000 == 0o100000) or info.st_uid != os.getuid() or info.st_size > 64 * 1024:
+        from .statusline import read_private     # same strict reader: no links, our own 0600 file in a 0700 folder
+        got = read_private(_file(profile_id), 64 * 1024)
+        if got is None or len(got[0]) > 64 * 1024:
             return {}
-        value = json.loads(_file(profile_id).read_bytes())
+        value = json.loads(got[0])
     except (OSError, ValueError):
         return {}
     return value if isinstance(value, dict) else {}
@@ -72,6 +89,7 @@ def _save(profile_id, value):
     old = os.umask(0o077)
     try:
         target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(target.parent, 0o700)     # a folder that already existed with wider bits is closed too
         tmp = target.with_name(f".{profile_id}.{os.getpid()}.tmp")
         try:
             tmp.write_text(json.dumps(value))
@@ -197,7 +215,8 @@ def query(codex, home, timeout=TIMEOUT):
                         raise _Failed("initialize")
                     shown = (message.get("result") or {}).get("codexHome")
                     # It must be the profile's own home. Falling back to the default ~/.codex would read another account.
-                    if isinstance(shown, str) and Path(shown).resolve() != Path(home).resolve():
+                    # A reply without `codexHome` proves nothing about which home it serves: fail closed.
+                    if not isinstance(shown, str) or Path(shown).resolve() != Path(home).resolve():
                         raise _Failed("wrong-home")
                     initialized = True
                     break
@@ -269,6 +288,16 @@ def refresh(profile, now=None):
         return "not-due"
     if time.monotonic() < _skipped.get(pid, 0):
         return "busy"
+    if not _guard(pid).acquire(blocking=False):      # a session is being created for this home right now
+        return "busy"
+    try:
+        return _refresh_locked(profile, pid, root, now)
+    finally:
+        _guard(pid).release()
+
+
+def _refresh_locked(profile, pid, root, now):
+    import agent_profiles as registry
     try:
         from agent_profile_runtime import require_inactive
         require_inactive(pid)

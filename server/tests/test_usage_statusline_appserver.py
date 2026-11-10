@@ -202,7 +202,10 @@ for line in sys.stdin:
     msg = json.loads(line)
     if msg.get("method") == "initialize":
         home = os.environ["CODEX_HOME"] if mode != "wrong-home" else "/definitely/not/it"
-        send({{"id": msg["id"], "result": {{"codexHome": home, "userAgent": "fake"}}}})
+        if mode == "no-home":
+            send({{"id": msg["id"], "result": {{"userAgent": "fake"}}}})
+        else:
+            send({{"id": msg["id"], "result": {{"codexHome": home, "userAgent": "fake"}}}})
     elif msg.get("method") == "account/rateLimits/read":
         if mode == "hang":
             time.sleep(300)
@@ -359,3 +362,94 @@ def test_usage_poll_starts_the_refresh_in_the_background_and_the_next_read_has_t
         time.sleep(0.1)
     row = next(r for r in usage_profiles.snapshot() if r['profile_id'] == pid)
     assert row['source'] == 'app-server' and row['windows'][0]['pct'] == 34
+
+
+# --- independent security review (hotswap-review) -------------------------------------------
+
+def test_an_app_server_that_does_not_say_which_home_it_serves_is_never_trusted(sandbox, fake_codex):
+    pid = _profile('personal', 'codex')
+    fake_codex.mode('no-home')
+    assert appserver.refresh(profiles.get(pid), time.time()) == 'failed'
+    assert appserver.read(pid, time.time()) is None
+    fake_codex.mode('ok')
+    appserver._skipped.clear()
+    assert appserver.refresh(profiles.get(pid), time.time() + 10_000) == 'ok'     # the same fake with a home still works
+
+
+def test_the_app_server_is_not_started_while_a_session_is_being_created_for_the_home(sandbox, fake_codex):
+    pid = _profile('personal', 'codex')
+    assert appserver.hold(pid, 0)                   # session creation owns the guard
+    try:
+        assert appserver.refresh(profiles.get(pid), time.time()) == 'busy'
+        assert fake_codex.calls() == []             # no process was started
+    finally:
+        appserver.release(pid)
+    assert appserver.refresh(profiles.get(pid), time.time()) == 'ok'
+
+
+def test_a_session_creation_waits_for_a_running_fake_app_server(sandbox, fake_codex, monkeypatch):
+    """Both directions with a real (fake) process: the app-server holds the guard while it runs."""
+    import threading
+    pid = _profile('personal', 'codex')
+    monkeypatch.setattr(appserver, 'TIMEOUT', 3.0)
+    fake_codex.mode('hang')
+    runner = threading.Thread(target=lambda: appserver.refresh(profiles.get(pid), time.time()))
+    runner.start()
+    deadline = time.monotonic() + 5
+    while not fake_codex.calls() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert fake_codex.calls()                        # the app-server process is up
+    assert appserver.hold(pid, 0) is False           # so a session creation cannot take the home right now
+    runner.join(10)
+    assert appserver.hold(pid, 0) is True            # and can once it is over
+    appserver.release(pid)
+
+
+def _drop_in(path, data, mode):
+    path.write_text(data)
+    path.chmod(mode)
+
+
+@pytest.mark.parametrize('reader', ['statusline', 'appserver'])
+def test_usage_files_are_read_only_when_private_and_not_linked(sandbox, tmp_path, reader):
+    pid = _profile('alice', 'claude' if reader == 'statusline' else 'codex')
+    now = time.time()
+    if reader == 'statusline':
+        document = json.dumps({'rate_limits': {'five_hour': {'used_percentage': 5, 'resets_at': now + 100}}})
+        target, read = statusline.path(pid), lambda: statusline.read(pid, now)
+    else:
+        document = json.dumps({'status': 'ok', 'updated_at': now, 'windows': [{'id': 'session', 'label': '5h', 'pct': 5, 'resets_at_epoch': now + 100}]})
+        target, read = appserver._file(pid), lambda: appserver.read(pid, now)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.parent.chmod(0o700)
+    _drop_in(target, document, 0o600)
+    assert read()                                                 # baseline: a private regular file is read
+    target.chmod(0o640)                                           # group-readable: someone else could have written it
+    assert read() is None
+    target.chmod(0o666)
+    assert read() is None
+    target.chmod(0o400)                                           # "0600 or tighter" is fine
+    assert read()
+    target.chmod(0o600)
+    target.parent.chmod(0o755)                                    # the folder is open to others: they could swap the file
+    assert read() is None
+    target.parent.chmod(0o700)
+    assert read()
+    target.unlink()
+    elsewhere = tmp_path / 'elsewhere.json'
+    _drop_in(elsewhere, document, 0o600)
+    target.symlink_to(elsewhere)                                  # a link is never followed (O_NOFOLLOW, no check-then-open race)
+    assert read() is None
+    target.unlink()
+    os.mkfifo(target)                                             # a FIFO must neither be read nor hang the reader
+    started = time.monotonic()
+    assert read() is None and time.monotonic() - started < 2
+
+
+def test_the_stored_appserver_folder_is_closed_when_it_already_existed_wide_open(sandbox):
+    pid = _profile('personal', 'codex')
+    appserver._file(pid).parent.mkdir(parents=True, exist_ok=True)
+    appserver._file(pid).parent.chmod(0o755)
+    appserver._save(pid, {'status': 'ok', 'windows': []})
+    assert stat.S_IMODE(appserver._file(pid).parent.stat().st_mode) == 0o700
+    assert stat.S_IMODE(appserver._file(pid).stat().st_mode) == 0o600

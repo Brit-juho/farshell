@@ -147,6 +147,8 @@ def _isolated_env(port: int, token: str, tmp: Path) -> dict:
         # 사용량은 이 서버의 격리 프로필만 읽게 한다. 기본(auto)은 HOME이 진짜라 `~/.codex/auth.json`·clauth 피드를 읽어
         # 실계정으로 사용량 조회를 보낸다(HUD에 진짜 codex 사용률이 뜬 것으로 확인됨).
         VT_USAGE_PROVIDER="native",
+        # Codex app-server 사용량 소스도 끈다 — 켜 두면 Codex 프로필이 생길 때 `codex app-server`를 띄운다(지금 e2e는 안 만들지만 방어).
+        VT_USAGE_APPSERVER="0",
         VT_STATE_DIR=str(tmp / "state"),      # ~/.vt/ 대신 여기에 쓰게
         VT_CONFIG=str(tmp / "no-such.env"),   # ~/.vt.env를 읽지 않게
         # dock 소스컨트롤 탭이 볼 저장소를 이 저장소 자신으로 고정한다. 기본값
