@@ -1,49 +1,49 @@
-# 세션 UI와 작업 정보 설계
+# Session UI and work-context design
 
-세션 목록의 묶음 구조·제목 편집과 CLI 간 작업 정보 일관성에 대한 계약이다.
+The contract for how the session list groups sessions and edits titles, and for keeping work context consistent across CLIs.
 
-## 설계 제약
+## Design constraints
 
-- 레일은 전체 세션 이름순이며, 묶음 제목은 헤더에서만 편집한다. 구성원 아래에 제목을 반복하지 않는다.
-- tmux 목록의 cwd는 처음 나온 pane이 아니라 활성 window/pane의 것이다.
-- 브랜치/변경량은 활성 위치 하나에서 같은 시점에 수집한다. 별도 저장소 탐색 결과나 cwd 캐시를 섞지 않고, 생성 시 `@fsh_wt` 소속과 현재 위치가 다를 수 있음을 전제로 한다.
-- 조회 실패를 빈 정보로 바꾸지 않으며, 늦게 끝난 HTTP 요청이 새 push를 덮지 않는다.
+- The rail lists all sessions by name, and a group title is edited only in its header. The title is not repeated under each member.
+- The cwd in the tmux list is that of the active window/pane, not the first pane that appears.
+- Branch and change counts are collected from one active location at one point in time. Results of a separate repository search or a cwd cache are never mixed in, and the design assumes that the `@fsh_wt` membership at creation time can differ from the current location.
+- A failed lookup is never turned into empty information, and a late HTTP response never overwrites a newer push.
 
-## 데이터 계약
+## Data contract
 
-세션 정체성(tmux 이름), 사용자 지정 뷰 제목, 현재 작업 위치, 에이전트 상태는 서로 다른 값이다.
+Session identity (the tmux name), the user-set view title, the current work location and the agent state are four different values.
 
-1. 작업 위치는 **활성 window의 활성 pane**에서 읽는다. 에이전트 CLI가 훅으로 알린 cwd가 있으면 그것을 기준으로 쓰고(`agent_cwd_for`), 없거나 읽을 수 없으면 pane cwd를 쓴다. 세션 생성 시 워크트리 태그는 쓰지 않는다.
-2. 서버가 그 cwd의 저장소 루트·브랜치·변경량을 `context` 스냅샷으로 함께 제공한다. REST와 workspace push가 같은 수집 함수를 사용한다. 응답 계약은 [API.md](../../API.md)에 둔다.
-3. pane 작업 정보 조회/구독은 셸 UI 청크와 함께 지연 로딩해 초기 부팅 용량에 포함하지 않는다. 레일, Fleet, 모바일 세션 관리, 선택 카드/팔레트, pane 헤더가 이 스냅샷을 사용한다. 디렉터리는 Git 작업 공간의 종류(`메인`/`WT`), 작업 공간 루트 이름과 상대 경로로 표시한다. 비저장소·구버전 응답은 폴더 이름을 표시한다. 전체 경로는 툴팁과 작업 위치 상세 보기에 둔다. 브랜치가 없는 실제 Git 저장소는 `분리된 HEAD`로 표시한다.
-4. `ready`, `nonrepo`, `unavailable`을 구분한다. 실패 시 **같은 cwd**의 마지막 성공만 보존하고 `정보 갱신 대기`를 표시한다. 새 cwd에 이전 브랜치나 변경량을 붙이지 않는다. 경계 거부 시 이전 값도 제거한다.
-5. Git 조회는 cwd별로 합치고 최대 4개를 동시에 실행한다. 성공 캐시는 10초, 실패 재시도는 2초, 보관 상한은 256개다. I/O는 스레드에서 수행하며 경로 검사와 Git 루트 재검사는 `fsguard`에 위임한다.
-6. 보이는 브라우저가 있을 때 tmux 감시를 기본 5초로 한다. 변경이 있을 때만 push한다. 따라서 외부 `cd`/브랜치 전환/수정은 정상 연결에서 보통 다음 감시 주기, Git 캐시 만료까지 포함하면 최대 약 15초 내 반영한다. 숨은 화면에서는 감시를 쉰다.
-7. 새 push를 받은 뒤 완료된 이전 HTTP 목록 요청은 버린다. `context`가 없는 서버의 목록은 레일 폴백으로 표시한다.
+1. The work location is read from the **active pane of the active window**. If the agent CLI reported a cwd through a hook, that is used (`agent_cwd_for`); if there is none or it can't be read, the pane cwd is used. No worktree tag is written when a session is created.
+2. The server supplies that cwd's repository root, branch and change counts together as a `context` snapshot. REST and the workspace push use the same collection function. The response contract lives in [API.md](../../API.md).
+3. Lookup/subscription of the pane work info is lazy-loaded with the shell UI chunk so it stays out of the initial boot size. The rail, Fleet, mobile session management, the selection card/palette and the pane header use this snapshot. The directory is shown as the Git workspace kind (`Main` (메인) / `WT`), the workspace root name and a relative path. A non-repository or an old-version response shows the folder name. The full path goes in the tooltip and in the workspace detail view. A real Git repository without a branch shows `detached HEAD` (분리된 HEAD).
+4. `ready`, `nonrepo` and `unavailable` are distinguished. On failure only the last success **for the same cwd** is kept and `Waiting for update` (정보 갱신 대기) is shown. A previous branch or change count is never attached to a new cwd. When a boundary check rejects the cwd, the previous values are removed too.
+5. Git lookups are merged per cwd and run at most 4 at a time. A success is cached for 10 seconds, a failure is retried after 2 seconds, and the cache holds at most 256 entries. I/O runs in a thread, and the path check and the Git root re-check are delegated to `fsguard`.
+6. While a browser is visible, tmux is watched every 5 seconds by default, and a push is sent only when something changed. So an external `cd` / branch switch / edit shows up on a healthy connection by the next watch tick, and within about 15 seconds at most once the Git cache expiry is included. The watch pauses while the screen is hidden.
+7. An older HTTP list response that completes after a newer push was received is discarded. A list from a server without `context` is shown with the rail fallback.
 
-에이전트의 종류/상태는 검증된 pane 또는 고유 cwd 귀속 규칙을 보존한다. Claude/Codex/agy의 이벤트 능력 차이를 작업 위치/Git 표시로 전파하지 않는다. Codex에서 같은 cwd의 여러 세션을 구별할 근거가 없으면 임의로 귀속하지 않는다.
+An agent's kind/state keeps the verified-pane or unique-cwd attribution rule. Differences in event capability between Claude, Codex and agy are not propagated into the work-location/Git display. When there is no basis for telling several Codex sessions in the same cwd apart, none is attributed arbitrarily.
 
-## 묶음과 제목
+## Groups and titles
 
-묶음은 현재 뷰의 pane 트리에서 도출한다. 닫힌 묶음은 v5 레이아웃의 기억을 사용한다. 새 그룹 저장소나 tmux 그룹 태그를 만들지 않는다.
+A group is derived from the current view's pane tree. A closed group uses what the v5 layout remembers. No new group store and no tmux group tag is created.
 
-- 레일/Fleet의 전체 세션 구역: 열린 묶음은 뷰 순서, 구성원은 pane 순서로 제목 아래 모은다. 닫힌 묶음도 하나의 제목 아래 모으며, 나머지 단독 세션은 이름순이다. 개입 필요 구역은 waiting 목록을 그대로 쓴다.
-- 헤더는 작은 제목과 세션 개수로 구성하고 굵은 세로선이나 버튼 테두리를 두지 않는다. PC의 편집 버튼은 헤더에 마우스를 올리거나 키보드로 포커스할 때, 터치 환경에서는 항상 표시한다.
-- 제목은 구성원마다 반복하지 않는다. 헤더의 **편집** 버튼에서 열린/닫힌 묶음 모두 수정한다. 제목은 공백 제거 후 1~128자이며 세션 이름·브랜치와 독립적으로 저장한다.
-- 묶음 헤더/닫힌 구성원을 누르면 묶음을 함께 연다. 열린 구성원을 누르면 그 pane으로 이동한다. 함께 열기, 닫기와 완전 종료는 구분되고, 묶음은 브라우저 탭별로 저장되며, 저장 실패 시에도 묶음 기억은 보존된다.
-- 모바일 「세션」 탭(Fleet)에서도 열린/닫힌 묶음 제목 편집과 작업 위치/브랜치를 제공한다.
-- 레일/Fleet에는 현재 화면에 열려 있음을 나타내는 창 아이콘과 메인/별도 워크트리 SVG가 없다. 상태 아이콘, 에이전트 식별, 공유 읽기/쓰기와 연결 화면 표시는 있고, 위치는 현재 디렉터리·브랜치 텍스트로 나타낸다.
+- The all-sessions area of the rail/Fleet: open groups are gathered under their title in view order, with members in pane order. A closed group is also gathered under one title, and the remaining single sessions are sorted by name. The needs-attention area uses the waiting list as is.
+- The header is a small title plus the session count, with no heavy vertical rule or button border. On desktop the edit button shows when the pointer is over the header or it has keyboard focus; on touch it is always shown.
+- The title is not repeated for each member. Both open and closed groups are edited with the header's **Edit** (편집) button. The title is 1–128 characters after trimming whitespace and is stored independently of the session name and branch.
+- Pressing a group header or a closed member opens the group together. Pressing an open member moves to that pane. Open-together, close and full end are distinct; groups are stored per browser tab, and the group memory is kept even when a save fails.
+- The mobile Sessions (세션) tab (Fleet) also provides title editing for open/closed groups and the work location/branch.
+- The rail/Fleet have neither a window icon meaning "open on the current screen" nor main/separate-worktree SVGs. They do have the status icon, the agent identity, shared read/write and attached-screen markers, and the location is shown as current-directory and branch text.
 
-## 회귀 테스트
+## Regression tests
 
-- 서버 `context` 스냅샷(하위 경로, detached HEAD, 비저장소, 같은 cwd 실패 보존·복구, 경계 거부, 같은 cwd 중복 조회, 워크트리 종류 판별): `server/tests/test_session_context.py`
-- 에이전트 cwd 우선과 터미널 cwd 폴백: `server/tests/test_tmux_agent_context.py`
-- REST와 push의 단일 수집원, 변경 시에만 push, 숨은 화면 감시 중단: `server/tests/test_sessions_push.py`
-- 작업 위치 표시(워크트리 종류, 구버전 응답, 갱신 대기, 에이전트 기준 툴팁): `frontend/tests/session-context.test.js`
-- 묶음 순서·뷰 편집·이동: `frontend/tests/session-order.test.js`, `frontend/tests/session-view-edit.test.js`, `frontend/tests/session-view-move.test.js`
+- The server `context` snapshot (subpath, detached HEAD, non-repository, keeping and recovering the last success for the same cwd, boundary rejection, duplicate lookups for the same cwd, worktree kind detection): `server/tests/test_session_context.py`
+- Agent cwd first, terminal cwd as fallback: `server/tests/test_tmux_agent_context.py`
+- A single collection source for REST and push, push only on change, watch stopped for a hidden screen: `server/tests/test_sessions_push.py`
+- Work-location display (worktree kind, old-version response, waiting for update, agent-based tooltip): `frontend/tests/session-context.test.js`
+- Group order, view editing and moving: `frontend/tests/session-order.test.js`, `frontend/tests/session-view-edit.test.js`, `frontend/tests/session-view-move.test.js`
 
-## 워크트리 표시 보완
+## Worktree display follow-up
 
-워크트리 표시 설계에 따라 현재 cwd의 Git directory/common directory로 종류를 판별한다. FarShell 등록·생성 태그·CLI 종류와 무관하다. 종류 판별 실패와 Git 상태 전체 실패는 구분한다. 작업 위치 보기는 레일/Fleet 메뉴와 모바일·선택 카드의 metadata 버튼에서 제공한다.
+Following the worktree display design, the kind is determined from the current cwd's Git directory / common directory. It is independent of FarShell registration, creation tags and the CLI kind. Failing to determine the kind is distinguished from the whole Git status failing. The work-location view is offered from the rail/Fleet menu and from the metadata button on mobile and the selection card.
 
-**기준 위치는 터미널이 아니라 에이전트 CLI다.** 위치·브랜치·변경량은 그 세션의 Claude/Codex가 마지막 훅으로 알린 `cwd`(`agent_status.agent_cwd_for`)로 읽는다. CLI가 내부에서 별도 워크트리로 들어가도 pane의 cwd(셸)는 원래 저장소에 남기 때문이다. 에이전트가 없거나, 서로 다른 cwd의 엔트리가 여럿이거나, 그 cwd를 못 읽으면(경계 밖·삭제) pane cwd로 되돌아간다. 두 위치가 다르면 응답의 `contextSource`는 `agent`이고 터미널 위치는 레일·Fleet 행의 위치 툴팁과 「작업 위치」 대화상자의 「터미널 위치」에만 보인다. 갱신은 훅이 올 때(도구 호출마다)이고, 에이전트가 가만히 있으면 마지막 위치가 유지된다. 서브에이전트 이벤트는 CLI 본체의 cwd를 바꾸지 않는다.
+**The reference location is the agent CLI, not the terminal.** Location, branch and change counts are read from the `cwd` that the session's Claude/Codex last reported through a hook (`agent_status.agent_cwd_for`). That is because even when the CLI moves into a separate worktree internally, the pane's cwd (the shell) stays in the original repository. It falls back to the pane cwd when there is no agent, when several entries have different cwds, or when that cwd can't be read (outside the boundary, deleted). When the two locations differ, the response's `contextSource` is `agent`, and the terminal location shows only in the location tooltip of rail/Fleet rows and in `Terminal location` (터미널 위치) of the `Workspace` (작업 위치) dialog. It refreshes when a hook arrives (on every tool call), and if the agent sits idle the last location is kept. Subagent events do not change the CLI's own cwd.
