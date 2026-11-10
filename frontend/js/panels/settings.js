@@ -22,6 +22,7 @@ import { renderAgentsSection } from './settings/sections/agents.js';
 import { renderSecuritySection } from './settings/sections/security.js';
 import { renderPermissionsSection } from './settings/sections/permissions.js';
 import { renderAboutSection } from './settings/sections/about.js';
+import { renderUpdateSection } from './settings/sections/update.js';
 import { renderHudSection } from './settings/sections/hud.js';
 import { getAction } from '../core/dom.js';
 import { subscribePersistence } from '../core/settings.js';
@@ -60,6 +61,7 @@ const SECTION_RENDERERS = {
   hud: renderHudSection,
   permissions: renderPermissionsSection,
   security: renderSecuritySection,
+  update: renderUpdateSection,
   about: renderAboutSection,
 };
 const SECTIONS = SECTION_META.map((meta) => ({ ...meta, custom: SECTION_RENDERERS[meta.id] }));

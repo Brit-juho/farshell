@@ -24,6 +24,7 @@ hydrateIcons();
 // N34 — HUD(지연 청크)에 넘겨줄 것들. 위 부수효과 import와 같은 모듈 인스턴스라
 // 여기서 이름으로 한 번 더 가져와도 중복 평가는 없다(ES 모듈 캐시).
 import { vtFetch } from './core/api.js';
+import { onWorkspaceEvent } from './core/workspace-ws.js';
 import { getSession, activeSessionId, sessionDisplayName, subscribe as storeSubscribe } from './core/store.js';
 import { onLayoutChange } from './layout/store.js';
 import { branchOf, repoOf, onBranchChips } from './layout/branch-chips.js';
@@ -224,7 +225,7 @@ try {
     import('./shell/TitleBar.tsx')
       .then(({ mountTitleBar }) => mountTitleBar(titleRoot, {
         vtFetch, getAction, isMac, copyText: copyToClipboard, toast: showToast, crumb, subscribeCrumb,
-        keyHint, focusActive: isFocusActive, focusEvent: FOCUS_EVENT,
+        keyHint, focusActive: isFocusActive, focusEvent: FOCUS_EVENT, subscribeEvent: onWorkspaceEvent,
       }))
       .catch((e) => console.error('[FarShell title bar]', e));
   }
