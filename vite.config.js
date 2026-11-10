@@ -247,7 +247,10 @@ export default defineConfig(({ mode }) => {
       // test 빌드는 산출물 문자열을 검사하는 테스트가 있어 그대로 둔다.
       // 식별자를 줄이지 않는다(mangle:false) — 산출물에 모듈 스코프 이름(`sessions`, `activeId`…)이 남아야
       // build-output.test.js가 청크 간 싱글톤 복제를 잡는다. vite 8의 기본 minify는 이름까지 바꾼다.
-      minify: isTest ? false : { mangle: false, compress: false },
+      // build.minify는 끈다 — lib 모드에서는 build.minify 객체의 세부 옵션이 먹지 않았다(c05a174가 공백 제거
+      // 플러그인을 지운 뒤 들여쓰기·`// frontend/js/...` 주석이 산출물에 그대로 남은 회귀). 줄이기는 아래
+      // rolldownOptions.output.minify가 맡는다.
+      minify: false,
       sourcemap: !isTest,
       // 제3자 고지 — 줄이기(minify)가 `@license` 주석을 지우므로(marked·DOMPurify 등), 번들에 든 의존 패키지마다
       // 이름·버전·라이선스 식별자·LICENSE 본문을 한 파일로 낸다(Vite `build.license`). dist/에 있으므로 릴리스
@@ -264,6 +267,11 @@ export default defineConfig(({ mode }) => {
         // includeDependenciesRecursively:false 의 요구 조건(Rolldown이 안내). main.js는 export가 없는 진입점이라 무해하다.
         preserveEntrySignatures: isVoice || isTest ? 'strict' : false,
         output: {
+          // 공백·주석만 걷어 낸다(2026-11-10 복구, 초기 페이로드 346,035 → 287,512 B). 이름 줄이기(mangle)를
+          // 끄는 이유: 산출물에 모듈 스코프 이름(`sessions`, `activeId`…)이 남아야 build-output.test.js가 청크 간
+          // 싱글톤 복제를 잡는다. 문법 축약(compress)을 끄는 이유: 연속 선언을 병합해 그 검사 정규식을 깰 수 있다.
+          // 문자열 따옴표는 백틱으로 바뀔 수 있다(codegen) — 테스트 정규식이 이를 받는다. test 빌드는 그대로 둔다.
+          minify: isTest ? false : { mangle: false, compress: false, codegen: { removeWhitespace: true } },
           // N34/N35/ADR-26 — 지연 청크에도 **해시를 붙이지 않는다.** ADR-1의
           // "산출물 이름 고정" 계약이 entry뿐 아니라 청크에도 그대로 적용된다:
           // sw.js가 `/static/dist/`를 network-first로 잡아 캐시하는데, 이름이
@@ -309,7 +317,7 @@ export default defineConfig(({ mode }) => {
           //
           // ⚠ 그래서 크기 게이트는 app.js 하나가 아니라 **app.js + core.js 합계**를
           // 본다(frontend/tests/build-output.test.js). 상한의 뜻은 원래부터
-          // "초기 페이로드 상한"(300KiB, 2026-11-04부터 350KiB)이었고, 청크를 쪼갰다고 그 뜻이 느슨해지면 안 된다.
+          // "초기 페이로드 상한"(300KiB; 2026-11-04~11-10 한때 350KiB)이었고, 청크를 쪼갰다고 그 뜻이 느슨해지면 안 된다.
           //
           // ⚠ voice 빌드(별도 Rollup 실행, 같은 outDir)에는 적용하지 않는다 —
           // 적용하면 voice 그래프에서도 core.js가 나와 app 빌드의 core.js를
