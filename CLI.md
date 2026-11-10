@@ -67,7 +67,7 @@ fsh tunnel expose 3000 "app name" [--mode public|session|pin] [--ttl 1h|24h|7d|3
                                    # only) — pass --mode public for the old unauthenticated behavior
                                    # Remote-control ports (Chrome DevTools 9222, Node inspector 9229, Docker API,
                                    # ngrok/cloudflared local APIs, FarShell's proxy range) need --force.
-                                   # A session share prints a "처음 열기" link that starts at the main origin's
+                                   # A session share prints a "First visit" (처음 열기) link that starts at the main origin's
                                    # /p/authorize — the public URL alone shows a notice to cookie-less visitors.
                                    # Expired exposures are torn down (tunnel + listener) within a minute.
                                    # Asks whether to auto re-expose unless --auto-renew/--no-auto-renew is given
@@ -185,7 +185,7 @@ fsh authz revoke <grant id>       # prints that a signed-in person revokes it in
 fsh authz panic                   # prints that an elevated person does this in the web/phone screen (exit 3)
 ```
 
-`audit` shows the hash chain state (`정상`/`깨짐`) and merges the denial log (`denials`) with the chain. For agents, the MCP tools
+`audit` shows the hash chain state (`Audit chain: OK` / `Audit chain: BROKEN` in English; `정상`/`깨짐` in Korean) and merges the denial log (`denials`) with the chain. For agents, the MCP tools
 `whoami`, `request_access {resource, scopes, reason?, ttl?}` and `list_my_grants` do the same from inside the session; `request_access` always
 returns «waiting for the user's approval». API and rules: `API.md` «Approval inbox, grants and audit», `docs/ref/auth.md`.
 
