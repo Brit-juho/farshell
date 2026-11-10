@@ -12,7 +12,7 @@ import tempfile
 import threading
 from typing import Optional
 
-from . import hfcache
+from . import hfcache, pins
 from .base import Engine, NotReady, Progress, Requirement
 from .env import HostEnv
 from i18n import tr
@@ -45,7 +45,11 @@ class MlxQwen3Engine(Engine):
             can_install=False)]
 
     # ── 모델 ───────────────────────────────────────────────────────
-    def _snapshot(self, spec) -> Optional[str]:
+    def _snapshot(self, spec, verify: bool = False) -> Optional[str]:
+        if pins.pin_for(spec.repo) is not None:
+            # 카탈로그 모델은 고정된 파일 목록·해시와 맞는 것만 쓴다(verify=True면 해시까지 — 쓰기 직전).
+            snap = pins.verified_snapshot(spec.repo) if verify else pins.complete_snapshot(spec.repo)
+            return str(snap) if snap is not None else None
         snap = hfcache.cached_snapshot(spec.repo)
         # config.json이 있으면 받기가 끝난 스냅샷으로 본다(받는 도중에는 snapshots/가 비어 있다).
         if snap is not None and (snap / "config.json").exists():
@@ -56,11 +60,14 @@ class MlxQwen3Engine(Engine):
         return self._snapshot(spec) is not None
 
     def download_model(self, spec, progress: Progress) -> None:
-        from huggingface_hub import snapshot_download
         from ._progress import poll_cache_progress
         total = (spec.size_mb or 0) * 1_000_000 or None   # 카탈로그 용량은 십진 MB
         with poll_cache_progress(spec.repo, total, progress):
-            snapshot_download(spec.repo)
+            if pins.pin_for(spec.repo) is not None:
+                pins.download_pinned(spec.repo)           # 커밋 고정 + SHA-256 검증
+            else:                                         # 직접 입력한 모델 — 고정 못 함
+                from huggingface_hub import snapshot_download
+                snapshot_download(spec.repo)
 
     def delete_model(self, spec) -> int:
         if self._model_id == spec.id:
@@ -74,7 +81,7 @@ class MlxQwen3Engine(Engine):
                 return
             if importlib.util.find_spec(_PKG) is None:
                 raise NotReady(tr("mlx-qwen3-asr 패키지가 설치돼 있지 않습니다 — 설정 「음성 및 알림」의 안내대로 설치해 주세요"))
-            path = self._snapshot(spec)
+            path = self._snapshot(spec, verify=True)     # PinError(NotReady)면 해시 불일치
             if path is None:
                 raise NotReady(tr("음성 인식 모델 '{model}'을(를) 아직 받지 않았습니다 — 설정 「음성 및 알림」에서 먼저 받아 주세요", model=spec.label))
             from mlx_qwen3_asr import transcribe as _t      # 무거운 import는 여기서
