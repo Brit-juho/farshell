@@ -27,8 +27,8 @@ export function showGuide() {
       { key: t('드래그해도 선택이 안 될 때'), desc: t('tmux 마우스 모드({cmd})가 켜져 있으면 드래그를 tmux가 먼저 가로챔 → {shift}+드래그(맥은 {option}+드래그도 가능)로 강제 선택', { cmd: '<code>mouse on</code>', shift: '<kbd>Shift</kbd>', option: '<kbd>Option</kbd>' }) },
       { key: t('붙여넣기'), desc: t('{paste} · {combo} · 선택 없이 우클릭', { paste: '<kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>V</kbd>', combo: kbdCtrlShiftV }) },
       { key: t('이미지'), desc: t('이미지를 복사해 붙여넣으면 서버에 {auto} + 경로가 명령줄에 삽입', { auto: `<b>${t('자동 업로드')}</b>` }) },
-      { key: t('자동 복사 켬/끔'), desc: t('⋯ 메뉴 → 설정에서 토글. {on}: 드래그·vim/tmux 복사가 클립보드에 즉시 반영. {off}: 선택만 되고 클립보드는 그대로 — 우클릭으로 원할 때만 복사', { on: `<b>${t('켬')}</b>`, off: `<b>${t('끔')}</b>` }) },
-      { key: t('맥↔웹 동기화'), desc: t('vim/tmux copy-mode 복사는 자동(OSC52). 그 밖(Safari 등)은 맥에서 {cmd} 실행', { cmd: '<code>fsh clip</code>' }) },
+      { key: t('자동 복사 켬/끔'), desc: t('⋯ 메뉴 → 설정에서 토글. {on}: 드래그·tmux copy-mode 복사가 클립보드에 즉시 반영. {off}: 선택만 되고 클립보드는 그대로 — 우클릭으로 원할 때만 복사', { on: `<b>${t('켬')}</b>`, off: `<b>${t('끔')}</b>` }) },
+      { key: t('맥↔웹 동기화'), desc: t('tmux copy-mode 복사는 자동(OSC52). 그 밖(Safari 등)은 맥에서 {cmd} 실행', { cmd: '<code>fsh clip</code>' }) },
     ]},
     { icon: 'square-terminal', title: t('tmux 세션'), rows: [
       { key: t('tmux 세션'), desc: t('⋯ 메뉴 → 기존 세션 목록 확인·연결') },

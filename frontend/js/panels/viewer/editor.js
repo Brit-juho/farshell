@@ -4,7 +4,7 @@
 // 멈춘다). CM6는 보이는 줄만 DOM으로 그리고 구문 분석을 나눠서 한다. 수치는
 // docs/ref/session-view-measurements.md 7절.
 //
-// 이 모듈과 @codemirror/*·@lezer/* 는 `editor` 지연 청크다(vite.config.js chunkOf). file.js가 파일을 열 때
+// 이 모듈과 @codemirror/*·@lezer/* 는 `editor` 지연 청크다(vite.config.mjs chunkOf). file.js가 파일을 열 때
 // import()한다 — 초기 페이로드에 들어가지 않는다.
 //
 // 스크롤은 지금처럼 바깥 상자(뷰어 본문·페인 본문)가 한다. 편집기는 높이가 내용만큼 늘어나고, CM이 스크롤하는

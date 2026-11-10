@@ -1,7 +1,7 @@
 // 마이크 녹음 + STT 전송 — F4에서 voice.js에서 분리.
 //
 // 🔴 F4 완료 직후 발견해 여기서 고친 사고: 이 파일은 voice.js 전용 lib entry로
-// 별도 빌드된다(vite.config.js 참고, app.js와 완전히 분리된 두 번의 Rollup 실행).
+// 별도 빌드된다(vite.config.mjs 참고, app.js와 완전히 분리된 두 번의 Rollup 실행).
 // 그 말은 `import ... from '../core/store.js'`를 쓰면 voice 번들이 core/store.js
 // 소스를 "app.js와 공유하는 하나의 모듈"이 아니라 **자기 것만의 새 사본**으로
 // 통째로 인라인한다는 뜻이다 — sessions/activeId 같은 상태를 가진 모듈을 그렇게

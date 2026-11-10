@@ -671,8 +671,9 @@ def test_rotate_replaces_the_secret_on_both_sides_and_records_the_time(duo_rot):
     with b.ctx():
         assert any(e["action"] == "rotate" for e in host_store.read_audit(ids["client_id"], 20))
     assert "마지막 secret 회전" in _cli(a, "list").stdout
-    # 두 번째 회전은 «이전 회전 시각»을 함께 남긴다
-    first = peer1["rotatedAt"]
+    # 두 번째 회전은 «이전 회전 시각»을 함께 남긴다. B 감사의 값은 B가 찍은 시각(grant)이다 — A의 시각(peer)과는
+    # 초 경계에서 1초 어긋날 수 있어(위 `<= 2`) 같은 쪽 값끼리 비교한다.
+    first = grant1["rotatedAt"]
     time.sleep(1.1)
     assert _cli(a, "rotate", bid).returncode == 0
     rows = [x for x in _audit(b) if x["action"] == "peer.rotate"]

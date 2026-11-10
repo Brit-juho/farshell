@@ -1,5 +1,5 @@
 // dock 버튼과 빠른 열기가 지연 import로 부르는 실제 MCP 팝업
-// 열기 로직 — vite.config.js가 이 파일을 'settings' 청크로 못박는다
+// 열기 로직 — vite.config.mjs가 이 파일을 'settings' 청크로 못박는다
 // (panels/mcp.js와 같은 청크). 두 파일이 어차피 같은 청크에 묶이므로
 // mcp-open.js가 mcp.js를 dynamic import 해도 별도 네트워크 요청이 생기지
 // 않는다. core(상시 초기 페이로드, 300KiB 상한)에 안 두는 이유: 처음엔

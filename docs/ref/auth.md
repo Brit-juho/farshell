@@ -58,6 +58,8 @@ registration order in `main.py`.
 | 8 | Dangerous command (`safe_mode`) | PTY input · queue | Does it match a dangerous pattern? Only when `VT_SAFE_MODE=1` | `server/safe_mode.py` | Input blocked / queue `blocked` |
 | 9 | Elevated session | The route itself | Git-account writes, share links, file writes etc. require re-confirming the password (see «Elevated actions») | `server/auth/__init__.py`, `require_elevated` | Elevation required |
 
+The `Permissions-Policy` keeps `hid=()` on purpose. Browsers without WebHID (Android Chrome, Safari, ...) log `Unrecognized feature: 'hid'` in the console; that is expected and harmless, and the entry stays so desktop Chrome still blocks HID.
+
 **Every layer is an AND gate. A later layer can only make the result stricter, never
 undo what an earlier layer blocked.** Passing one layer only answers that layer's
 question — it is not a universal bypass. Two things follow directly:

@@ -112,11 +112,27 @@ When connecting to the web terminal remotely/from mobile, the browser can only a
 "that device's" clipboard, so copies made on the Mac (server) side don't automatically
 carry over. Two paths cover this:
 
-- **OSC52** (no separate process needed) — copies made inside terminal programs like
-  `vim` or `tmux copy-mode` are already carried in the PTY output stream, so
-  `frontend/js/term/selection.js` intercepts them via
-  `term.parser.registerOscHandler(52, ...)` and applies them to the clipboard of
-  whatever device has the web page open.
+- **OSC52** (no separate process needed) — a copy request carried in the PTY output
+  stream. `frontend/js/term/selection.js` intercepts it via
+  `term.parser.registerOscHandler(52, ...)` and `frontend/js/term/osc52.js` decides:
+  - **tmux session** (remote panes too — they carry `tmuxName`): only copies made by
+    tmux itself arrive (copy-mode, `set-buffer -w`). Programs inside the pane (vim,
+    `printf`) do **not** reach the browser; the old wording "vim inside tmux sends OSC52"
+    was wrong. Measured with `config/vt-tmux.conf` on tmux 3.7c:
+
+    | `set-clipboard` | tmux copy-mode / `set-buffer -w` | OSC52 sent by a program in the pane |
+    |---|---|---|
+    | `external` (shipped, `allow-passthrough off`) | forwarded | dropped |
+    | `on` | forwarded | forwarded |
+    | `off` | dropped | dropped |
+  - **Plain terminal** (no tmux, "open on Mac" off): the output reaches us as-is, so
+    untrusted output (a file you `cat`, a server you ssh into) could overwrite the
+    clipboard (pastejacking). **Blocked by default**, one warning toast per session;
+    allow it with Settings › Terminal › "Allow clipboard writes from non-tmux terminals
+    (OSC 52)" (`terminal.osc52Untrusted`, device scope).
+  - Always ignored: scrollback replay, `mouse.autocopyOnSelect` off, empty/`?` payloads,
+    invalid base64, and anything over 1 MiB (1,048,576 bytes decoded).
+  - The copy toast shows the first 40 characters (newlines as ⏎) and the length.
 - **Polling daemon** (`fsh clip`) — copies made outside the terminal (Safari, Finder,
   etc.) can't be caught via OSC52, so `server/clipboard_daemon.py` polls
   `NSPasteboard.changeCount` and, on a change, delivers it to the web via

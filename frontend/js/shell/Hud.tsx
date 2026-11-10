@@ -8,7 +8,7 @@
 // core/dom을 직접 import하면 Rollup이 그 모듈들을 청크 안에 **복제**해 넣는다
 // (실측: shell.js가 import 0개인 자족 번들로 나왔다). 그러면 앱의 액션
 // 레지스트리와 HUD가 보는 레지스트리가 서로 다른 객체가 돼서, 칩을 눌러도
-// 아무 일도 안 일어난다 — vite.config.js 상단이 app.js/voice.js에 대해 설명한
+// 아무 일도 안 일어난다 — vite.config.mjs 상단이 app.js/voice.js에 대해 설명한
 // 중복 문제와 정확히 같은 함정이다. 그래서 필요한 것들을 main.js가 인자로
 // 넘겨준다(HudDeps).
 import { createSignal, createEffect, onCleanup, For, Show } from 'solid-js';

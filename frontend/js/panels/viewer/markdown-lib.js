@@ -1,5 +1,5 @@
 // 마크다운 미리보기에 실제 라이브러리를 붙인다 — marked(MIT) + DOMPurify(MPL-2.0 OR Apache-2.0).
-// `preview` 지연 청크(vite.config.js chunkOf): 마크다운 파일을 「렌더」로 열 때만 받는다. 규칙은 markdown.js.
+// `preview` 지연 청크(vite.config.mjs chunkOf): 마크다운 파일을 「렌더」로 열 때만 받는다. 규칙은 markdown.js.
 import { Marked } from 'marked';
 import createDOMPurify from 'dompurify';
 import { createMarkdown } from './markdown.js';

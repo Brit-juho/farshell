@@ -1,5 +1,5 @@
 // 앱 진입점 (F1 — 구 js/bootstrap.js를 대체). Vite가 이 파일 하나를 lib 모드로
-// 번들해 frontend/dist/app.js + app.css를 만든다 (vite.config.js 참고).
+// 번들해 frontend/dist/app.js + app.css를 만든다 (vite.config.mjs 참고).
 //
 // F2~F5에 걸쳐 모든 프런트엔드 자바스크립트를 여기 정적 import 그래프로
 // 옮겼다(F5에서 마지막 9개 classic script 전환 완료). 아직 window.* 브리지가
@@ -152,7 +152,7 @@ try {
   // N34 §7 — 상태바 HUD(Solid). **동적 import**인 이유는 ADR-26의 번들 게이트다:
   // solid-js 런타임(~32KB)을 app.js에 정적으로 넣으면 300KiB 상한을 바로 넘긴다
   // (실측 303,733 → 336,179B). 상한을 올리는 건 금지돼 있으므로, 문서가 지정한
-  // 대로 **고정 이름 지연 청크**(vite.config.js chunkFileNames → shell.js)로
+  // 대로 **고정 이름 지연 청크**(vite.config.mjs chunkFileNames → shell.js)로
   // 분리한다 — 해시가 붙으면 sw.js 캐시 계약이 깨지므로 이름은 반드시 고정.
   //
   // 부팅이 끝난 뒤에 마운트한다: HUD가 첫 렌더에서 활성 세션의 tmux 이름을 읽어

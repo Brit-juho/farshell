@@ -28,6 +28,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - The Claude Code hook set grows from 12 to 13 events with `PostToolUseFailure`; run `fsh hooks install` or `fsh sync` (also done by `fsh update`) to register it — until then `fsh hooks status` lists it as missing.
 
 ### Fixed
+- **Build and console warnings cleaned up.** `vite.config.js` is now `vite.config.mjs`, which removes the "ESM syntax in a file loaded as CommonJS" build warning (output is byte-identical apart from source maps; the updater watches both names so an update from an older version still rebuilds). `index.html` also declares `mobile-web-app-capable`, which silences Chrome's deprecation warning for the `apple-` meta alone. The `Unrecognized feature: 'hid'` console message on browsers without WebHID is intentional and now documented in `docs/ref/auth.md`.
 - **429 lockout caused by a login page's own requests.** The pre-auth failure limit now counts the same wrong cookie/token once per 60 s per source (a different value is still counted every time), a 401 for a `vt_session` cookie whose signature does not verify deletes that cookie, and the frontend holds API calls and the workspace/fs-watch/notify sockets until login completes (`/api/auth*` and `/api/health/live` excepted). Before, opening the page with a cookie from another FarShell port on the same host sent ~18 unauthenticated calls and locked the correct password out for 5 minutes. Two FarShells on one host still share the cookie name (documented in `docs/ref/auth.md`).
 - **Frontend bundle strips whitespace and comments again; the initial-payload cap is back to 300 KiB.** The vite 8 migration left the `build.minify` options without effect in lib mode, so `app.js` + `core.js` kept indentation and source comments (346,035 B) and the cap had been raised to 350 KiB. Whitespace removal now goes through `rolldownOptions.output.minify` (names and syntax are kept so the build-output tests still work): 287,512 B, `voice.js` 52,852 B.
 - **Phone: opening a viewer and then tapping a bottom tab no longer leaves a dead history entry.** Closing a route panel with `history:'replace'` left its history entry behind, so the next Back press closed nothing. The entry is now actually popped (one step per panel, only while the current entry carries the panel marker, with a 300 ms wait guard); history pushes that arrive meanwhile are queued in order.
@@ -45,6 +46,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Security
 - Changing the update switches needs a browser session plus password re-entry and is audited; agents, peers, the machine token and relayed calls are refused (`/api/update/*`).
 - `AGENTS.md` contract 16: the server checks agent configuration files but never writes them.
+
+### Security
+- **OSC 52 clipboard writes from a plain (non-tmux) terminal are blocked by default.** Output from a terminal without tmux (a `cat`ed file, an ssh'd server) could silently replace the clipboard. tmux sessions (remote panes included) are unchanged — tmux already forwards only its own copies (`set-clipboard external`, measured on 3.7c). New per-device setting `terminal.osc52Untrusted` (Settings › Terminal) allows it again; the block shows one warning toast per session. Requests over 1 MiB are ignored in all cases, and the copy toast now previews the first 40 characters and the length. The guide and `docs/ref/terminal.md` / `voice.md` no longer claim that a program inside tmux can send OSC 52.
 
 ---
 

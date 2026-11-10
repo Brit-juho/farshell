@@ -197,7 +197,7 @@ precache stays valid:
   (`frontend/js/main.js`). `app.js` is only the boot wiring; everything needed at
   boot is in `core.js`, and **app.js + core.js is the initial payload**, capped at
   358,400 B (`frontend/tests/build-output.test.js`, CI). Everything else is a
-  fixed-name lazy chunk chosen by `chunkOf()` in `vite.config.js`: `shell`
+  fixed-name lazy chunk chosen by `chunkOf()` in `vite.config.mjs`: `shell`
   (Solid + `js/shell/` — workbench, title bar, status bar, palette, fleet, focus),
   `panels`, `settings`, `files`, `editor`/`editor-*`, `preview`, `panel`, `screens`,
   `share`, `history`, `touch`, `upload`, `select`, `brand`, `tooltip`,
@@ -209,7 +209,7 @@ precache stays valid:
   voice is installed — so a terminal-only user pays zero bytes for it. It's
   independent specifically because a *shared* dynamic-import chunk between
   the two entries would get a content-hashed filename from Rollup, breaking
-  the fixed-filename guarantee; see `vite.config.js` for the full story
+  the fixed-filename guarantee; see `vite.config.mjs` for the full story
   (including a real bug this caused and fixed: importing `core/store.js`
   from the voice bundle silently duplicated its module state and corrupted
   `window.sessions` after voice.js loaded).
@@ -234,7 +234,7 @@ precache stays valid:
 ### Root
 | File | Responsibility |
 |---|---|
-| `vite.config.js` | Frontend build config — library mode, two independent entries (see above), no hashing, whitespace-only minify (identifiers are kept) |
+| `vite.config.mjs` | Frontend build config — library mode, two independent entries (see above), no hashing, whitespace-only minify (identifiers are kept) |
 | `styles/` | `main.css` (Tailwind entry), `layers/` (reset/components/patterns/history), `screens/` (the pre-Tailwind hand-written CSS, kept unlayered so it always wins the cascade), `theme/` (`tokens.css`, `skins.css`) |
 | `install.sh` | Creates Python venv, installs per-profile packages, symlinks fsh, initializes ~/.vt.env, runs `npm ci && npm run build` (skipped when a prebuilt `frontend/dist/` from a release tarball is present) |
 | `requirements-core.txt` | Terminal-only (~50MB) — input of the hash lock, not an install path |

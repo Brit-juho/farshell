@@ -27,7 +27,7 @@ import { canSplit, tierCap, SESSION_MIME, wirePaneDropTarget, wireTouchDragSourc
 // N4 — 패널 칸. 레지스트리는 상수 + **동적** import 로더만 들고 있어서
 // 여기서 정적으로 가져와도 panels 청크가 core로 승격되지 않는다(ADR-26).
 import { mountPanelInPane, panelLabel } from '../panels/registry.js';
-// 빈 칸을 눌렀을 때만 쓰는 세션 선택 시트 — screens 청크(vite.config.js).
+// 빈 칸을 눌렀을 때만 쓰는 세션 선택 시트 — screens 청크(vite.config.mjs).
 const openPanePicker = (paneId) => import('./pane-picker.js')
   .then((m) => m.openPanePicker(paneId))
   .catch((e) => console.error('[FarShell pane-picker]', e));
@@ -37,7 +37,7 @@ import { vtFetch } from '../core/api.js';
 // N35 §6 — 뷰어 leaf의 내용은 지연 청크가 그린다(정적 import 금지, ADR-26).
 import { loadViewer } from '../panels/viewer-lazy.js';
 import * as surface from './surface.js';
-// 리사이즈 캡션 본체는 첫 드래그 때 받는다(vite.config.js 'resize-overlay' 청크 — 초기 페이로드 여유, 리디자인 9단계).
+// 리사이즈 캡션 본체는 첫 드래그 때 받는다(vite.config.mjs 'resize-overlay' 청크 — 초기 페이로드 여유, 리디자인 9단계).
 // 받는 동안 드래그가 끝났으면 띄우지 않는다.
 let _resizeOverlay = null;
 let _resizeOverlayWanted = false;

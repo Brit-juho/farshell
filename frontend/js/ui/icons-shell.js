@@ -1,7 +1,7 @@
 // 작업대(활동 막대·사이드바)가 새로 쓰는 아이콘 — ui/icons.js에 없는 것만 둔다.
 //
 // icons.js는 core 청크라 path 하나만 늘어도 초기 페이로드(상한 358,400B)가 는다. 작업대는
-// 지연 청크(shell)에서만 그리므로 아이콘도 같은 청크에 둔다(vite.config.js `chunkOf` —
+// 지연 청크(shell)에서만 그리므로 아이콘도 같은 청크에 둔다(vite.config.mjs `chunkOf` —
 // brand-icons.js가 `brand` 청크로 빠진 것과 같은 방식). 여기 없는 이름은 icons.js로 넘긴다.
 //
 // path는 Lucide(ISC)의 24x24 stroke 좌표를 그대로 옮겼다. 고정 데이터라 sanitize 불필요.
