@@ -320,30 +320,99 @@ test('collectSessionRows — 브랜치는 main도 담고, origin·열림·묶음
   assert.strictEqual(by.api.agent, 'claude');
 });
 
-test('compactRailRows — 접힌 레일은 개입 필요가 위, 나머지가 아래, 각 세션은 한 번만', async () => {
-  const { buildRailLists, compactRailRows } = await mod();
-  const lists = buildRailLists([
-    row({ name: 'zed', status: 'waiting' }),
-    row({ name: 'amy', status: 'working' }),
-    row({ name: 'bob', status: 'waiting' }),
-    row({ name: 'cat', status: 'idle' }),
+// 접힘 순서는 펼침(Rail.tsx)과 같은 소스를 쓴다: 개입 필요 → 묶음 구성원 → buildSessionTree(정렬·수동·자식은 부모 밑).
+// 펼침이 그리는 순서를 여기서 따로 적어(attention, 묶음, 트리 전개) 접힘 결과와 대조한다.
+function railOrders(m, rows, prefs, groups = [], collapse = {}) {
+  const lists = m.buildRailLists(rows, prefs);
+  const running = m.splitRunning(lists);
+  const vg = m.groupSessionRows(running, groups);
+  const tree = m.buildSessionTree(vg.filter((g) => !g.id).map((g) => g.rows[0]), prefs.sort || 'name', prefs.order || []);
+  const opts = { kidsCollapsed: (r) => (collapse.kids || []).includes(r.name), closedOpen: (r) => (collapse.closed || []).includes(r.name) };
+  const expanded = [
+    ...lists.attention,
+    ...vg.filter((g) => g.id).flatMap((g) => g.rows),
+    ...tree.flatMap((e) => [e.row,
+      ...(opts.kidsCollapsed(e.row) ? [] : [...e.kids, ...(opts.closedOpen(e.row) ? e.closedKids : [])])]),
+  ];
+  const compact = m.compactRailOrder(lists.attention, vg, tree, opts);
+  return { expanded: names(expanded), compact: compact.entries, compactNames: names(compact.entries.map((e) => e.row)), split: compact.split };
+}
+const kid = (name, parent, over = {}) => row({ name, tmuxName: name, lineage: { delegation: 'd-' + name, parent, state: 'running', outcome: null, createdAt: 1, task: '', summary: '' }, ...over });
+
+test('compactRailOrder — 개입 필요가 위, 나머지가 아래, 각 세션은 한 번만', async () => {
+  const m = await mod();
+  const { compactNames, split, expanded } = railOrders(m, [
+    row({ name: 'zed', tmuxName: 'zed', status: 'waiting' }),
+    row({ name: 'amy', tmuxName: 'amy', status: 'working' }),
+    row({ name: 'bob', tmuxName: 'bob', status: 'waiting' }),
+    row({ name: 'cat', tmuxName: 'cat', status: 'idle' }),
   ], PREFS);
-  const { rows, split } = compactRailRows(lists);
-  assert.deepStrictEqual(names(rows), ['bob', 'zed', 'amy', 'cat']);
+  assert.deepStrictEqual(compactNames, ['bob', 'zed', 'amy', 'cat']);
+  assert.deepStrictEqual(compactNames, expanded);
   assert.strictEqual(split, 2, '경계선은 개입 필요 2개 뒤');
-  // 펼친 레일 규칙은 그대로 — waiting은 두 구역에 모두 남는다.
-  assert.deepStrictEqual(names(lists.sessions), ['amy', 'bob', 'cat', 'zed']);
+  // 펼친 레일 규칙은 그대로 — waiting은 「세션」 전체에는 남는다.
+  assert.deepStrictEqual(names(m.buildRailLists([row({ name: 'b', status: 'waiting' }), row({ name: 'a' })], PREFS).sessions), ['a', 'b']);
 });
 
-test('compactRailRows — waiting만 있거나 개입 필요가 없으면 경계선 없음', async () => {
-  const { buildRailLists, compactRailRows } = await mod();
-  const only = compactRailRows(buildRailLists([row({ name: 'a', status: 'waiting' })], PREFS));
-  assert.deepStrictEqual(names(only.rows), ['a']);
+test('compactRailOrder — waiting만 있거나 개입 필요가 없으면 경계선 없음', async () => {
+  const m = await mod();
+  const only = railOrders(m, [row({ name: 'a', tmuxName: 'a', status: 'waiting' })], PREFS);
+  assert.deepStrictEqual(only.compactNames, ['a']);
   assert.strictEqual(only.split, 0);
-  const off = compactRailRows(buildRailLists(
-    [row({ name: 'b', status: 'waiting' }), row({ name: 'a' })], { ...PREFS, attentionShow: false }));
-  assert.deepStrictEqual(names(off.rows), ['a', 'b']);
+  const off = railOrders(m, [row({ name: 'b', tmuxName: 'b', status: 'waiting' }), row({ name: 'a', tmuxName: 'a' })], { ...PREFS, attentionShow: false });
+  assert.deepStrictEqual(off.compactNames, ['a', 'b']);
   assert.strictEqual(off.split, 0);
+});
+
+test('compactRailOrder — 수동 정렬 순서가 접힘에도 그대로 간다(이름순이 아니다)', async () => {
+  const m = await mod();
+  const rows = ['alpha', 'bravo', 'charlie', 'delta'].map((n) => row({ name: n, tmuxName: n }));
+  const r = railOrders(m, rows, { ...PREFS, sort: 'manual', order: ['delta', 'bravo'] });
+  assert.deepStrictEqual(r.compactNames, ['delta', 'bravo', 'alpha', 'charlie'], '저장된 이름은 앞, 모르는 이름은 뒤에 이름순');
+  assert.deepStrictEqual(r.compactNames, r.expanded);
+});
+
+test('compactRailOrder — 분할 묶음 구성원은 단독 행보다 앞에, 묶음 순서대로', async () => {
+  const m = await mod();
+  const rows = ['aa', 'bb', 'cc', 'dd'].map((n) => row({ name: n, tmuxName: n, sessionId: 's-' + n }));
+  const groups = [{ id: 'v1', label: 'v', sessionIds: ['s-dd', 's-bb'] }];
+  const r = railOrders(m, rows, PREFS, groups);
+  assert.deepStrictEqual(r.compactNames, ['dd', 'bb', 'aa', 'cc']);
+  assert.deepStrictEqual(r.compactNames, r.expanded);
+});
+
+test('compactRailOrder — 자식은 부모 바로 밑, 마지막 자식 표시·병합/실패 가지색', async () => {
+  const m = await mod();
+  const rows = [
+    row({ name: 'api', tmuxName: 'api' }), row({ name: 'zeta', tmuxName: 'zeta' }),
+    kid('api-t1', 'api'), kid('api-t2', 'api', { lineage: { delegation: 'd2', parent: 'api', state: 'reported', outcome: 'failed', createdAt: 2, task: '', summary: '' } }),
+  ];
+  const r = railOrders(m, rows, PREFS);
+  assert.deepStrictEqual(r.compactNames, ['api', 'api-t1', 'api-t2', 'zeta']);
+  assert.deepStrictEqual(r.compactNames, r.expanded);
+  assert.deepStrictEqual(r.compact.map((e) => e.kid && [e.kid.last, e.kid.merged, e.kid.failed]), [null, [false, false, false], [true, true, true], null]);
+});
+
+test('compactRailOrder — waiting 자식은 개입 필요로 올라가 평평하게(부모 밑에 없다)', async () => {
+  const m = await mod();
+  const rows = [row({ name: 'api', tmuxName: 'api' }), kid('api-t1', 'api', { status: 'waiting' }), kid('api-t2', 'api')];
+  const r = railOrders(m, rows, PREFS);
+  assert.deepStrictEqual(r.compactNames, ['api-t1', 'api', 'api-t2']);
+  assert.deepStrictEqual(r.compactNames, r.expanded);
+  assert.strictEqual(r.compact[0].kid, null, '올라간 자식은 관계를 그리지 않는다');
+  assert.strictEqual(r.compact[2].kid.last, true);
+});
+
+test('compactRailOrder — 접어 둔 부모의 자식은 숨고, 닫힌 하위는 펼쳐야 나온다(펼침과 같다)', async () => {
+  const m = await mod();
+  const closed = kid('api-c', 'api', { lineage: { delegation: 'dc', parent: 'api', state: 'closed', outcome: null, createdAt: 3, task: '', summary: '' } });
+  const rows = [row({ name: 'api', tmuxName: 'api' }), kid('api-t1', 'api'), closed];
+  assert.deepStrictEqual(railOrders(m, rows, PREFS).compactNames, ['api', 'api-t1']);
+  const open = railOrders(m, rows, PREFS, [], { closed: ['api'] });
+  assert.deepStrictEqual(open.compactNames, ['api', 'api-t1', 'api-c']);
+  assert.deepStrictEqual(open.compactNames, open.expanded);
+  assert.deepStrictEqual(open.compact.map((e) => e.kid && e.kid.closed), [null, false, true]);
+  assert.deepStrictEqual(railOrders(m, rows, PREFS, [], { kids: ['api'] }).compactNames, ['api']);
 });
 
 test('collectSessionRows — 서버의 webScreens/otherClients로 배지를 센다(이 탭 제외), 구버전 서버는 예전 계산', async () => {

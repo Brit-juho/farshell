@@ -13,7 +13,7 @@ import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'so
 import { Portal } from 'solid-js/web';
 import { t } from '../core/i18n.js';
 import {
-  buildRailLists, splitRunning, groupSessionRows, compactRailRows, rowMenuItems, rowSummaryDetails, runRowMenu,
+  buildRailLists, splitRunning, groupSessionRows, compactRailOrder, rowMenuItems, rowSummaryDetails, runRowMenu,
   ATTENTION_COLLAPSED_KEY, ATTENTION_SHOW_KEY, ORDER_KEY, LINEAGE_KEY, VIEW_KEY, encodeOrder, encodeLineagePrefs, encodeRailView, toggleGroupCollapsed,
   buildSessionTree, kidsProgress, moveInOrder,
   type SessionRow, type RailSort, type TreeEntry,
@@ -277,8 +277,6 @@ export function Rail(props: RailProps) {
   const running = createMemo(() => splitRunning(lists()));
   const viewGroups = createMemo(() => { layoutVersion(); return groupSessionRows(running(),
     (window as any).getSessionViewGroups?.() || (window as any).getTabGroups?.() || []); });
-  const compact = createMemo(() => compactRailRows(lists()));
-
   // ── 계보 트리 · 정렬 ─────────────────────────────────────────────────────
   // 분할 화면 묶음(viewGroups의 id 있는 것)은 지금처럼 따로 그리고, 나머지 단독 행을 부모 → 자식
   // 트리로 묶는다(rail-data.ts buildSessionTree). 자식은 정렬과 상관없이 부모 밑에 붙는다.
@@ -299,6 +297,9 @@ export function Rail(props: RailProps) {
   const toggleClosed = (name: string) => setPref(LINEAGE_KEY, encodeLineagePrefs(prefs().kidsCollapsed, flip(prefs().closedOpen, name)));
   const kidsCollapsed = (r: SessionRow) => prefs().kidsCollapsed.includes(rowKey(r));
   const closedOpen = (r: SessionRow) => prefs().closedOpen.includes(rowKey(r));
+  // 접힌 띠(48px)의 칸 순서 — 펼침이 쓰는 목록(개입 필요 · 묶음 · 트리)을 그대로 펴서 같은 순서가 나온다.
+  const compact = createMemo(() => compactRailOrder(lists().attention, viewGroups(), tree(),
+    { kidsCollapsed, closedOpen }));
 
   // 수동 정렬 드래그. 최상위 항목(부모는 자식과 한 덩어리)만 옮긴다. 터미널 칸 분할 드래그(text/vt-tab-id)와
   // 같은 드래그에 두 형식을 함께 싣는다 — 레일 안에 놓으면 순서, 칸에 놓으면 분할이다.
@@ -561,15 +562,20 @@ export function Rail(props: RailProps) {
         </Show>
         <Show when={!viewHostOffline()}>
           {/* 접힌 레일(48px)은 구역 머리글이 없어 한 목록이다 — 개입 필요가 위, 나머지가 아래,
-              각 세션은 한 번만(compactRailRows). 펼친 레일은 waiting이 두 구역에 모두 나온다. */}
+              같은 순서 소스를 펴서 각 세션은 한 번만(compactRailOrder). 펼친 레일은 waiting이 두 구역에 모두 나온다. */}
           <Show when={collapsed()}>
-            <For each={compact().rows}>
-              {(row, i) => (
+            <For each={compact().entries}>
+              {(entry, i) => (
                 <>
                   <Show when={compact().split > 0 && i() === compact().split}>
                     <div class="vt-wgrail-group-sep" role="separator" />
                   </Show>
-                  {renderRow(row)}
+                  <Show when={entry.kid} fallback={renderRow(entry.row)}>
+                    {/* 하위 세션: 부모 바로 아래 축소한 칸 + 왼쪽 가지선(펼침의 .vt-lin-kid와 같은 last·merged·failed). */}
+                    <div class="vt-wgrail-kidcell" classList={{ last: entry.kid!.last, merged: entry.kid!.merged, failed: entry.kid!.failed, closed: entry.kid!.closed }}>
+                      {renderRow(entry.row, { kid: true })}
+                    </div>
+                  </Show>
                 </>
               )}
             </For>

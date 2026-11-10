@@ -473,22 +473,54 @@ export function buildRailLists<T extends Pick<SessionRow, 'name' | 'status' | 'o
   return { attention, sessions };
 }
 
+export interface CompactEntry<T> {
+  row: T;
+  /** 하위 세션(lineage 자식)이면 부모 밑 가지선을 그리는 데 쓰는 값. 최상위·개입 필요 행은 null. */
+  kid: { last: boolean; merged: boolean; failed: boolean; closed: boolean } | null;
+}
+
 /**
- * 접힌 레일(48px)은 구역 머리글이 없다 — 「개입 필요」와 「세션」을 따로 그리면 waiting 세션이
- * 두 번 보인다. 하나의 목록으로: 개입 필요 세션이 위(이름순), 나머지가 그 아래(이름순).
- * `split`은 둘 사이에 경계선을 그릴 위치(위쪽 개수, 0이면 경계선 없음).
- * 펼친 레일은 이 함수를 안 쓴다 — 거기서는 waiting이 두 구역에 모두 남는 게 규칙이다.
+ * 접힌 레일(48px 띠)의 칸 순서 — **펼친 레일과 같은 트리 순서**다. 순서의 출처를 새로 만들지 않고
+ * 펼침이 쓰는 값(개입 필요 목록 · 분할 묶음 · `buildSessionTree`의 정렬·수동 순서·부모 밑 자식)을 그대로 받아 평평하게 편다.
+ *
+ *   개입 필요(waiting, 이름순) → 분할 묶음 구성원 → 트리(설정된 정렬 · 수동 순서, 하위 세션은 부모 바로 아래)
+ *
+ * 구역 머리글이 없어 waiting 세션은 한 번만 나온다(「개입 필요」에 올라간 행은 `groups`·`tree`에 이미 없다).
+ * 하위 세션이 waiting이면 개입 필요로 올라가 평평하게 나오므로 부모 밑에 없다 — 펼침과 같다.
+ * 부모가 하위를 접어 둔 것(`kidsCollapsed`)과 닫힌 하위(`closedOpen`을 펼쳐야 보임)도 펼침과 같은 규칙을 따른다.
+ * `split`은 개입 필요와 나머지 사이에 경계선을 그릴 위치(위쪽 개수, 0이면 없음).
+ * 펼친 레일은 이 함수를 안 쓴다 — 거기서는 구역 머리글 아래에 그대로 그린다.
  */
-export function compactRailRows<T>(lists: RailLists<T>): { rows: T[]; split: number } {
-  const top = new Set<T>(lists.attention);
-  const rest = lists.sessions.filter((r) => !top.has(r));
-  return { rows: [...lists.attention, ...rest], split: rest.length > 0 ? top.size : 0 };
+export function compactRailOrder<T extends { lineage?: Lineage | null }>(
+  attention: T[],
+  groups: SessionGroup<T>[],
+  tree: TreeEntry<T>[],
+  opts: { kidsCollapsed?: (r: T) => boolean; closedOpen?: (r: T) => boolean } = {},
+): { entries: CompactEntry<T>[]; split: number } {
+  const entries: CompactEntry<T>[] = attention.map((row) => ({ row, kid: null }));
+  const top = entries.length;
+  for (const g of groups) if (g.id) for (const row of g.rows) entries.push({ row, kid: null });
+  for (const e of tree) {
+    entries.push({ row: e.row, kid: null });
+    if (opts.kidsCollapsed?.(e.row)) continue;
+    const shown = [...e.kids, ...(opts.closedOpen?.(e.row) ? e.closedKids : [])];
+    shown.forEach((row, i) => entries.push({
+      row,
+      kid: {
+        last: i === shown.length - 1,
+        merged: row.lineage?.state === 'reported',
+        failed: row.lineage?.outcome === 'failed',
+        closed: row.lineage?.state === 'closed',
+      },
+    }));
+  }
+  return { entries, split: entries.length > top ? top : 0 };
 }
 
 /**
  * 「실행 중」 구역 = 「세션」 전체에서 「개입 필요」에 이미 올라간 행을 뺀 것.
  * 개입 필요 구역이 꺼져 있으면(`attention`이 비어 있다) 빼는 것이 없다.
- * 접힌 레일(compactRailRows)은 이 함수를 안 쓴다 — 거기는 이미 한 번씩만 나온다.
+ * 접힌 레일(compactRailOrder)은 이 함수의 결과(펼침의 「실행 중」)를 그대로 받아 쓴다.
  */
 export function splitRunning<T>(lists: RailLists<T>): T[] {
   if (lists.attention.length === 0) return lists.sessions;
