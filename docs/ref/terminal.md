@@ -300,7 +300,7 @@ and a mode; the MCP tools (`list_shared_sessions`, `read_session`, `send_to_sess
   shared session is shared at its **active pane** only. (5) A grant is not time-limited (it ends with either session or by
   revocation); there is no per-share expiry.
 
-**Frontend.** Code: `frontend/js/share/` (the `share` chunk; `vite.config.js` must name it or the
+**Frontend.** Code: `frontend/js/share/` (the `share` chunk; `vite.config.mjs` must name it or the
 catch-all sends it to `core`), `frontend/js/share-lazy.js` (the only always-loaded part: bridges and event listeners),
 row menu in `shell/rail-data.ts`.
 
