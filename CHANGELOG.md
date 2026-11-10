@@ -10,6 +10,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- **「Clear cache」 and 「Log out」 in the FarShell menu** (and the command palette: `app.clear-cache`, `session.logout`). Clear cache unregisters the service worker, empties Cache Storage, re-fetches the app files and reloads; your `ui.*` settings stay, and push notifications are re-subscribed if they were on. Log out ends only this browser's web login (`POST /api/auth/logout`); the registered device is kept.
+- **`fsh tmux extkeys on|off|status`**: a trial switch for tmux extended keys (Shift+Enter and friends). It edits only the marked block in `~/.config/vt/tmux.local.conf` (idempotent, your other lines are kept) and reloads. The default stays off. Trial checklist in `docs/ref/terminal.md`.
+- **Remote pane proxy watchdog.** The proxy sends the browser an app `ping` every 15 s and closes a pane that has been silent for 45 s or whose send blocks for over 2 s; the upstream host link uses protocol ping/pong (15 s interval, 15 s deadline). The host-switch relay gets the same upstream check.
+- `scripts/lock_python.sh` (regenerates the hash locks; needs `uv`) and `scripts/check_python_lock.py` (CI check that requirements and locks agree).
+
+### Changed
+- **A session made by another Mac says which one** (「Made on m5-studio」) instead of 「Made on another Mac」. The server records the verified grant label in the tmux option `@fsh_origin_host` and returns it as `originHost`; sessions without a record and older servers keep the old wording.
+- The voice install no longer installs `pyobjc-framework-Cocoa` separately; it is part of `requirements-voice.txt` and the lock.
+- Already downloaded voice models are reused when their hashes match (no re-download). Custom `custom:` models are not pinned.
+
+### Fixed
+- The viewer's top-bar buttons, the encoding picker and the Markdown 「Copy address」 button no longer render with the old near-black background in the new design.
+- A quiet remote-host pane no longer drops and reconnects every 45 s.
+
+### Security
+- **The app document is served with a Content-Security-Policy that includes `script-src 'self'`** (`server/security_headers.py` `APP_CSP`). Inline scripts, `on*=` handlers, `eval`, off-origin scripts and Blob modules are blocked; the theme boot, the `?e2e=1` loader and the voice AudioWorklet moved to static files and the login, upload and onboarding handlers became listeners / `data-action`. The `window.uploadFile` bridge is gone. Remote relay responses keep their own policy.
+- **Python dependencies are hash-locked** (`locks/core.txt`, `voice.txt`, `dev.txt`). `install.sh`, CI and `fsh update` install only with `pip install --require-hashes`, so a changed or tampered upstream file stops the install.
+- **Voice models are pinned** to a Hugging Face commit and per-file SHA-256 (`server/stt_engines/model_pins.json`, 4 catalog models). Hashes are checked after download and again right before a model loads; a mismatching file is deleted and reported.
+- Tests: an e2e regression test opens the viewers, worklet, service worker and a port-preview iframe and fails on any CSP violation.
+
 ---
 
 ## [2.10.0] — 2026-11-10
