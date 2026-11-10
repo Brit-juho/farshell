@@ -72,7 +72,7 @@ whenAuthed(() => (async () => {
   // F4: voice.js(classic script)가 voice/ 아래 4개 ES 모듈 + voice/index.js
   // 진입점으로 쪼개졌다. capability 게이팅 패턴(설치 안 됐으면 아예 안 부른다)은
   // 그대로 유지한다. `import()` 동적 임포트 대신 여전히 <script> 태그 주입을
-  // 쓰는 이유는 vite.config.js에 적어뒀다 — 요약하면 동적 임포트는 Rollup이
+  // 쓰는 이유는 vite.config.mjs에 적어뒀다 — 요약하면 동적 임포트는 Rollup이
   // 해시 붙은 공유 청크를 만들어 ADR-1(해시 없음)을 깬다. voice/index.js는
   // 별도 lib entry(frontend/dist/voice.js)로 독립 빌드되므로, 그 산출물을
   // type="module" 스크립트로 지연 주입해야 한다. 계획서는 이 트리거를

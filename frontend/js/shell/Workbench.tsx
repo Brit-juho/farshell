@@ -51,7 +51,7 @@ const _sHas = (k: string) => Boolean((window as any).vtSettingsHas?.(k));
 const _sSet = (k: string, v: unknown) => (window as any).vtSettingsSet?.(k, v);
 
 // MCP 버튼 — 'mcp.show'라는 core 액션을 만들지 않고 여기서 직접 지연 import 한다(core 예산).
-// panels/mcp-open.js는 vite.config.js가 'settings' 청크로 못박아 core에 안 들어간다.
+// panels/mcp-open.js는 vite.config.mjs가 'settings' 청크로 못박아 core에 안 들어간다.
 // 재진입 가드는 청크 도착 전 두 번 눌리면 토글이 겹치기 때문이다.
 let _mcpOpening = false;
 function showMcp() {

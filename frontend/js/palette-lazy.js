@@ -5,7 +5,7 @@
 //
 // 이 파일은 **정적으로** core/store.js·term/session.js·layout/store.js·
 // agent/preview.js 등을 import한다 — 괜찮다: 이 파일 자체는
-// `frontend/js/shell/` 아래가 아니라서 vite.config.js의 manualChunks가
+// `frontend/js/shell/` 아래가 아니라서 vite.config.mjs의 manualChunks가
 // 'shell'로 묶지 않는다(app.js 엔트리 그래프에 남는다, main.js가 이미
 // 이 모듈들을 정적 import하므로 인스턴스 중복도 없다). Palette.tsx(지연
 // 청크) 쪽에는 이 모듈들의 참조만 deps 인자로 건네고, 그쪽에서 직접
