@@ -5,6 +5,8 @@
 # 아니라 "FarShell" 로 뜨고, 한 번 허용하면 릴리스·재시작·Python 업그레이드 뒤에도 유지된다(같은 앱으로 보이는 한).
 # 그래서 앱은 저장소 밖(`$VT_STATE_DIR/app`)에 두고, 껍데기 소스나 Info.plist 가 바뀔 때만 다시 빌드한다 —
 # 다시 빌드하면 서명(ad-hoc cdhash)이 바뀌어 macOS 가 새 앱으로 보고 다시 묻기 때문이다.
+# 아이콘(macos/AppIcon.icns, scripts/gen_app_icon.py 로 만든 산출물)은 권한 창·시스템 설정 개인정보 목록·활동 모니터·Finder 에 보인다.
+# 파일이 없으면 아이콘 없이 만든다. 아이콘을 바꾸면 소스 해시가 달라져 다시 빌드되므로 권한을 한 번 다시 묻는다.
 # 끄기: VT_MACOS_APP=0. macOS 가 아니거나 cc·codesign 이 없으면 쓰지 않는다(지금처럼 Python 이 직접 뜬다).
 
 _vt_app_dir()  { printf '%s/app\n' "${VT_STATE_DIR:-$HOME/.vt}"; }
@@ -18,7 +20,7 @@ _vt_app_wanted() {
 }
 
 _vt_app_source_hash() {
-  cat "$VT_DIR/macos/farshell-launcher.c" "$VT_DIR/macos/Info.plist" | shasum -a 256 | cut -d' ' -f1
+  cat "$VT_DIR/macos/farshell-launcher.c" "$VT_DIR/macos/Info.plist" "$VT_DIR/macos/AppIcon.icns" 2>/dev/null | shasum -a 256 | cut -d' ' -f1
 }
 
 # 쓸 수 있으면 0. 없거나 낡았으면 빌드한다(실패하면 1 — 호출부는 껍데기 없이 띄운다).
@@ -37,6 +39,8 @@ _vt_app_ensure() {
   tmp="$(mktemp -d "$(_vt_app_dir)/.build.XXXXXX")" || return 1
   mkdir -p "$tmp/FarShell.app/Contents/MacOS" \
     && cp "$VT_DIR/macos/Info.plist" "$tmp/FarShell.app/Contents/Info.plist" \
+    && { [ ! -f "$VT_DIR/macos/AppIcon.icns" ] || { mkdir -p "$tmp/FarShell.app/Contents/Resources" \
+         && cp "$VT_DIR/macos/AppIcon.icns" "$tmp/FarShell.app/Contents/Resources/AppIcon.icns"; }; } \
     && cc -O2 -Wall -o "$tmp/FarShell.app/Contents/MacOS/FarShell" "$VT_DIR/macos/farshell-launcher.c" 2>"$tmp/build.log" \
     && codesign --force -s - --identifier com.farshell.server "$tmp/FarShell.app" >/dev/null 2>&1
   local rc=$?

@@ -55,7 +55,7 @@ def test_app_rebuilds_only_when_source_changes(tmp_path):
     (src / "lib").mkdir(parents=True)
     (src / "macos").mkdir()
     shutil.copy(ROOT / "lib" / "macos_app.sh", src / "lib" / "macos_app.sh")
-    for f in ("farshell-launcher.c", "Info.plist"):
+    for f in ("farshell-launcher.c", "Info.plist", "AppIcon.icns"):
         shutil.copy(ROOT / "macos" / f, src / "macos" / f)
     env = {"VT_DIR": str(src), "VT_STATE_DIR": str(tmp_path / "state")}
     exe = _sh("_vt_app_prefix", env).stdout.strip()
@@ -66,6 +66,38 @@ def test_app_rebuilds_only_when_source_changes(tmp_path):
     time.sleep(0.01)
     assert _sh("_vt_app_prefix", env).stdout.strip() == exe
     assert os.stat(exe).st_mtime_ns != first
+
+
+def _repo_copy(tmp_path, files):
+    src = tmp_path / "repo"
+    (src / "lib").mkdir(parents=True)
+    (src / "macos").mkdir()
+    shutil.copy(ROOT / "lib" / "macos_app.sh", src / "lib" / "macos_app.sh")
+    for f in files:
+        shutil.copy(ROOT / "macos" / f, src / "macos" / f)
+    return src, {"VT_DIR": str(src), "VT_STATE_DIR": str(tmp_path / "state")}
+
+
+def test_app_has_icon_and_it_is_part_of_the_hash(tmp_path):
+    src, env = _repo_copy(tmp_path, ("farshell-launcher.c", "Info.plist", "AppIcon.icns"))
+    bundle = Path(_sh("_vt_app_prefix", env).stdout.strip()).parents[2]
+    assert (bundle / "Contents" / "Resources" / "AppIcon.icns").is_file()
+    assert subprocess.run(["codesign", "--verify", "--deep", "--strict", str(bundle)], capture_output=True).returncode == 0
+    plist = subprocess.run(["plutil", "-extract", "CFBundleIconFile", "raw", str(bundle / "Contents" / "Info.plist")],
+                           capture_output=True, text=True)
+    assert plist.stdout.strip() == "AppIcon"
+    assert _sh("_vt_app_state", env).stdout.strip() == "ready"
+    with open(src / "macos" / "AppIcon.icns", "ab") as f:
+        f.write(b"\0")
+    assert _sh("_vt_app_state", env).stdout.strip() == "stale"
+
+
+def test_app_builds_without_icon_file(tmp_path):
+    _, env = _repo_copy(tmp_path, ("farshell-launcher.c", "Info.plist"))
+    exe = _sh("_vt_app_prefix", env).stdout.strip()
+    assert exe and os.access(exe, os.X_OK)
+    assert not (Path(exe).parents[1] / "Resources").exists()
+    assert _sh("_vt_app_state", env).stdout.strip() == "ready"
 
 
 def test_disabled_by_env(tmp_path):
