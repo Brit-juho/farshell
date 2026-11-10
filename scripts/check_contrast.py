@@ -58,6 +58,12 @@ RULES = [
     ("--color-st-done", TEXT_BGS, 3.0, "상태 dot"),
     ("--color-st-error", TEXT_BGS, 3.0, "상태 dot"),
     ("--color-st-idle", TEXT_BGS, 3.0, "상태 dot"),
+    # 접힌 세션 띠 호버 카드(71-rail-hover-card.css)는 bg-raised 위에 상태 기호(링 아이콘)를 상태색으로 그린다 — 기호는 3:1.
+    ("--color-st-working", ["--color-bg-raised"], 3.0, "호버 카드 상태 기호"),
+    ("--color-st-waiting", ["--color-bg-raised"], 3.0, "호버 카드 상태 기호"),
+    ("--color-st-done", ["--color-bg-raised"], 3.0, "호버 카드 상태 기호"),
+    ("--color-st-error", ["--color-bg-raised"], 3.0, "호버 카드 상태 기호(실패)"),
+    ("--color-st-idle", ["--color-bg-raised"], 3.0, "호버 카드 상태 기호"),
     # 크롬 막대. 상태 막대 글자는 12px 본문이라 AA. 제목 막대·활동 막대는 본문
     # 글자(txt)와 보조(sub)가 그대로 얹히므로 램프 기준을 그대로 쓴다. 반투명
     # 막대(macos 제목 막대)는 그 아래 bg-0과 합성해서 본다.
