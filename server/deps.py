@@ -214,9 +214,17 @@ def _on_interrupt(pty_session_id: str) -> None:
         agent_status.finish_interrupted_for_session(tmux_name)
 
 
+def _screen_for_pty(pty_session_id: str, agent):
+    """PTY 감지가 waiting으로 올리기 전에 묻는 지금 화면 한 장(`_screen_probe`와 같은 판정)."""
+    tmux_name = tmux_for_pty(pty_session_id)
+    if not tmux_name:
+        return None
+    return _screen_probe(tmux_name, agent)
+
+
 _prompt_detector = agent_prompt_detect.get_global_detector(
     _on_waiting_change, agent_for=_agent_for_pty, on_badge=_on_badge_change,
-    on_interrupt=_on_interrupt)
+    on_interrupt=_on_interrupt, screen_for=_screen_for_pty)
 
 
 def on_terminal_input(pty_session_id: str, data: bytes | str | None = None) -> None:
