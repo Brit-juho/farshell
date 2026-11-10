@@ -104,9 +104,19 @@ export function updatedText(row, nowMs = Date.now()) {
 
 export function sourceText(row) {
   const s = row.usage?.source;
+  if (s === 'statusline') return t('출처: Claude가 세션에 알려 준 사용률(statusline)');
+  if (s === 'app-server') return t('출처: Codex CLI 자신의 사용량 조회(app-server)');
   if (s === 'oauth-usage') return t('출처: 공식 사용량 조회(OAuth)');
   if (s === 'codex-usage') return t('출처: Codex 사용량 조회');
   return '';
+}
+
+const SOURCE_SHORT = { statusline: 'statusline', 'app-server': 'app-server', 'oauth-usage': 'OAuth', 'codex-usage': 'Codex API' };
+
+/** 「출처 statusline」. 모르는 출처는 이름을 지어내지 않고 비운다. */
+export function sourceShort(row) {
+  const name = SOURCE_SHORT[row.usage?.source];
+  return name ? t('출처 {name}', { name }) : '';
 }
 
 /** 선택기 줄의 보조 글: 도구 · 인증 상태 · 사용률/리셋 · 갱신 시각. */
@@ -115,6 +125,8 @@ export function rowSub(row, nowMs = Date.now()) {
   if (!row.selectable && row.reason) parts.push(row.reason);
   else {
     parts.push(usageText(row));
+    const src = sourceShort(row);
+    if (src) parts.push(src);
     const u = updatedText(row, nowMs);
     if (u) parts.push(u);
   }

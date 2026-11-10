@@ -142,6 +142,9 @@ interface UsageWindow {
 
 interface UsageProfile {
   name?: string;
+  /** 값의 출처(statusline·app-server·oauth-usage·codex-usage)와 그 시각(유닉스 초). 툴팁에만 쓴다. */
+  source?: string;
+  checked_at?: number;
   active?: boolean;
   windows?: UsageWindow[];
 }
@@ -165,6 +168,20 @@ export function formatResetsIn(sec: number | null | undefined): string {
 // 사용량 프로필 하나 → 칩 하나. 창(window)이 여럿이면 **가장 많이 쓴 것**을
 // 대표로 쓴다 — HUD는 한 줄이라 전부 못 싣고, 사용자가 알아야 하는 건 "지금
 // 제일 먼저 바닥나는 것"이다. 자세한 건 dock 사용량 탭(60 §5)이 보여준다.
+const SOURCE_NAME: Record<string, string> = { statusline: 'statusline', 'app-server': 'app-server', 'oauth-usage': 'OAuth', 'codex-usage': 'Codex API' };
+
+/** 「출처 statusline · 3분 전」. 모르는 출처·시각은 이름을 지어내지 않고 뺀다. */
+export function usageOrigin(p: UsageProfile, nowMs: number = Date.now()): string {
+  const name = p.source ? SOURCE_NAME[p.source] : undefined;
+  if (!name) return '';
+  const parts = [t('출처 {name}', { name })];
+  if (typeof p.checked_at === 'number' && Number.isFinite(p.checked_at)) {
+    const min = Math.max(0, Math.round((nowMs / 1000 - p.checked_at) / 60));
+    parts.push(min < 1 ? t('방금') : min < 60 ? t('{n}분 전', { n: min }) : t('{n}시간 전', { n: Math.floor(min / 60) }));
+  }
+  return parts.join(' · ');
+}
+
 function usageChip(p: UsageProfile): HudChip | null {
   const windows = (p.windows || []).filter((w) => Number.isFinite(w.pct));
   if (!windows.length) return null;
@@ -182,7 +199,7 @@ function usageChip(p: UsageProfile): HudChip | null {
     label: name,
     value: `${pct}%`,
     hint: resets ? `· ${resets}` : undefined,
-    tooltip: resets ? t('· {resets} 후 초기화', { resets }) : undefined,
+    tooltip: [resets ? t('· {resets} 후 초기화', { resets }) : '', usageOrigin(p)].filter(Boolean).join('\n') || undefined,
     tone,
     action: 'usage.open',
     side: 'right',

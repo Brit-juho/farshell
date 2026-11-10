@@ -106,6 +106,18 @@ test('사용량 칩: 창이 여럿이면 가장 많이 쓴 창을 대표로 쓴�
   assert.strictEqual(usage.side, 'right');
 });
 
+test('사용량 칩: 툴팁에 출처와 갱신 시각을 싣고, 모르는 출처는 이름을 지어내지 않는다', async () => {
+  const { buildHudChips } = await mod();
+  const at = Date.now() / 1000 - 300;
+  const tip = (source) => buildHudChips({
+    caps: {}, usage: { available: true, profiles: [{ name: 'A', source, checked_at: at, windows: [{ pct: 40, resets_in_sec: 3600 }] }] },
+  }).find((c) => c.id === 'usage:A').tooltip;
+  assert.strictEqual(tip('statusline'), '· 1h0m 후 초기화\n출처 statusline · 5분 전');
+  assert.match(tip('app-server'), /출처 app-server · 5분 전$/);
+  assert.strictEqual(tip('something-new'), '· 1h0m 후 초기화');
+  assert.strictEqual(tip(undefined), '· 1h0m 후 초기화');
+});
+
 test('사용량 칩 색: 75% 주의, 90% 위험', async () => {
   const { buildHudChips } = await mod();
   const toneAt = (pct) => buildHudChips({

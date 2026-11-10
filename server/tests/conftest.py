@@ -76,6 +76,14 @@ import pytest  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
+def _no_real_codex_app_server(monkeypatch):
+    """사용량 조회(usage/appserver.py)가 이 Mac의 진짜 `codex`를 띄우지 않게 한다.
+    app-server 시험은 `VT_USAGE_APPSERVER=1`과 PATH 맨 앞의 가짜 `codex`로 이 차단을 직접 푼다."""
+    monkeypatch.setenv("VT_USAGE_APPSERVER", "0")
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _reset_codex_plugin_cache():
     """codex 플러그인 목록은 모듈 전역 캐시다(ADR-48). 한 테스트가 채운 결과가 다음
     테스트의 `run_json` 스텁을 가리면 안 된다."""

@@ -4,6 +4,12 @@
 // 본문은 JSON이어야 한다(검사 스크립트와 서버가 json으로 읽는다).
 window.__VT_I18N = {
   "{ago} 갱신": "Updated {ago}",
+  "{n}분 전 갱신": "Updated {n} min ago",
+  "{n}시간 전 갱신": "Updated {n} h ago",
+  "방금 갱신": "Updated just now",
+  "출처 {name}": "Source: {name}",
+  "출처: Claude가 세션에 알려 준 사용률(statusline)": "Source: usage reported to the session by Claude (statusline)",
+  "출처: Codex CLI 자신의 사용량 조회(app-server)": "Source: the Codex CLI's own usage query (app-server)",
   "{time} 시작": "Started {time}",
   "기록 종류": "Record kind",
   "내부 서브에이전트": "Internal subagents",

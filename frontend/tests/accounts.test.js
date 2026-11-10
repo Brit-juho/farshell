@@ -47,10 +47,22 @@ test('줄 글: 도구 · 인증 · 사용률/리셋 · 갱신 시각, 값이 없
   const acc = mod.normalizeAccounts(SERVER);
   const [alice, work, personal, blank] = acc.profiles;
   const now = 1000 * 1000 + 180 * 1000; // checked_at + 3분
-  assert.equal(mod.rowSub(alice, now), 'Claude · 정상 · 5시간 80% · 2시간 뒤 리셋 · 주간 20% · 1일 뒤 리셋 · 3분 전 갱신');
+  assert.equal(mod.rowSub(alice, now), 'Claude · 정상 · 5시간 80% · 2시간 뒤 리셋 · 주간 20% · 1일 뒤 리셋 · 출처 OAuth · 3분 전 갱신');
   assert.match(mod.rowSub(work, now), /^Claude · 정상 · 사용량 알 수 없음$/, '값이 없으면 지어내지 않는다');
-  assert.match(mod.rowSub(personal, now), /Codex · 정상 · 5시간 10% · 1분 뒤 리셋 · 3분 전 갱신 · 오래된 값/);
+  assert.match(mod.rowSub(personal, now), /Codex · 정상 · 5시간 10% · 1분 뒤 리셋 · 출처 Codex API · 3분 전 갱신 · 오래된 값/);
   assert.equal(mod.rowSub(blank, now), 'Claude · 로그인 안 됨 · not signed in here');
+});
+
+test('줄 글: statusline·app-server 출처는 이름과 갱신 시각을 함께 보이고, 모르는 출처는 이름을 지어내지 않는다', async () => {
+  const { mod } = await dataModule();
+  const base = SERVER.profiles[0];
+  const rowFor = (source) => mod.normalizeAccounts({ ...SERVER, profiles: [{ ...base, usage: { ...base.usage, source } }] }).profiles[0];
+  const now = 1000 * 1000 + 600 * 1000;
+  assert.match(mod.rowSub(rowFor('statusline'), now), /주간 20% · 1일 뒤 리셋 · 출처 statusline · 10분 전 갱신$/);
+  assert.match(mod.rowSub(rowFor('app-server'), now), /출처 app-server · 10분 전 갱신$/);
+  assert.match(mod.sourceText(rowFor('statusline')), /statusline/);
+  assert.equal(mod.sourceShort(rowFor('something-new')), '');
+  assert.doesNotMatch(mod.rowSub(rowFor('something-new'), now), /출처/);
 });
 
 test('「여유 많은 순」은 목록 순서만 바꾼다 — 여유 = 100 − 가장 많이 쓴 창, 모르면 뒤, 자동 선택 없음', async () => {

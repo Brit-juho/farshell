@@ -239,8 +239,22 @@ def _session_id(name):
     return value if re.fullmatch(r"\$\d+", value) else None
 
 
+def sync_settings(selection):
+    """Bring each chosen Claude profile's settings in line with the global ones, which also places the
+    usage-collecting statusLine wrapper (hotswap H2). The global files are only read. A settings problem
+    never stops a session from being created; `fsh profile sync-settings --dry-run` shows it."""
+    import agent_profile_settings
+    for profile in selection.profiles:
+        if profile["tool"] == "claude":
+            try:
+                agent_profile_settings.sync(profile["id"])
+            except Exception:  # noqa: BLE001
+                pass
+
+
 def spawn(name, cols, rows, cwd, selection):
     """Create the session with the chosen account. Returns `(rc, error_text, info)`."""
+    sync_settings(selection)
     version = tmux_version()
     if version is None or version < MIN_TMUX:
         return 1, "tmux>=3.2 required", {}
@@ -322,9 +336,9 @@ def describe(ids_text):
 
 # --- picker -----------------------------------------------------------------------------
 
-def _usage(profile_id):
+def _usage(profile_id, tool=None):
     from usage.profiles import cached_row
-    row = cached_row(profile_id)
+    row = cached_row(profile_id, tool)
     if not row or not row.get("windows"):
         return None
     now = time.time()
@@ -341,7 +355,7 @@ def _usage(profile_id):
         windows.append({"id": w.get("id"), "label": w.get("label"), "pct": w.get("pct"),
                         "resets_at": reset, "resets_in_sec": left})
     return {"windows": windows, "checked_at": row.get("checked_at"), "stale": bool(row.get("stale")),
-            "source": "oauth-usage" if row.get("provider") == "claude" else "codex-usage"}
+            "source": row.get("source") or ("oauth-usage" if row.get("provider") == "claude" else "codex-usage")}
 
 
 def picker():
@@ -357,7 +371,7 @@ def picker():
         out.append({"id": row["id"], "name": row["name"], "tool": row["tool"], "purpose": row["purpose"],
                     "auth": state["state"], "auth_kind": state["kind"],
                     "selectable": usable, "reason": None if usable else (state["reason"] or tr("프로필 복구를 먼저 완료하세요")),
-                    "default": marked.get(row["tool"]) == row["id"], "usage": _usage(row["id"])})
+                    "default": marked.get(row["tool"]) == row["id"], "usage": _usage(row["id"], row["tool"])})
     active = {r["id"] for r in listing}
     return {"profiles": out,
             "defaults": {tool: {"id": pid, "valid": pid in active} for tool, pid in marked.items()}}

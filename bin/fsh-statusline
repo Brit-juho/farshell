@@ -1,0 +1,65 @@
+#!/bin/sh
+# fsh-statusline — Claude Code statusLine wrapper that records one profile's rate limits.
+#
+#   fsh-statusline --profile <id> [--dir <usage-dir>] -- [<original statusLine command>]
+#
+# Claude Code feeds the statusline command a JSON document on stdin; since a session's first reply it
+# carries `rate_limits.five_hour|seven_day.{used_percentage,resets_at}` for the account that session
+# runs on. This wrapper reads stdin once and
+#   1. keeps the document as that profile's LAST value: <dir>/<id>.json, 0600 in a 0700 directory,
+#      replaced atomically (same-directory temp file, then rename). Only a document that carries
+#      `rate_limits` replaces it, so a fresh session (no reply yet) never erases the last known value.
+#      The whole input is stored (it also holds cwd and transcript_path) because POSIX sh cannot parse
+#      JSON; the server reads only `rate_limits` from it. The directory is private to the user.
+#   2. hands the same input to the original command and returns its output and exit status unchanged.
+#      The command is ONE argument, a shell string run with `sh -c` (so pipes and quotes in it behave as
+#      they did when Claude Code ran it); several arguments after `--` are executed directly instead.
+#      With no command the output is empty.
+# A write failure is ignored and the original command still runs. Nothing else happens: no network
+# call, no server call, no child process besides the original command (and mkdir/mv/rm on writes).
+#
+# <dir> defaults to $FSH_STATUSLINE_DIR, else ${VT_STATE_DIR:-$HOME/.vt}/usage/statusline.
+
+profile=
+dir=
+while [ $# -gt 0 ]; do
+  case $1 in
+    --profile) [ $# -ge 2 ] || break; profile=$2; shift 2 ;;
+    --dir) [ $# -ge 2 ] || break; dir=$2; shift 2 ;;
+    --) shift; break ;;
+    *) break ;;
+  esac
+done
+
+input=$(cat)
+
+# A profile id is 32 lowercase hex characters; anything else is never used as a file name.
+case $profile in
+  *[!a-f0-9]*|'') profile= ;;
+  *) [ ${#profile} -eq 32 ] || profile= ;;
+esac
+
+case $input in
+  *'"rate_limits"'*)
+    if [ -n "$profile" ]; then
+      [ -n "$dir" ] || dir=${FSH_STATUSLINE_DIR:-${VT_STATE_DIR:-$HOME/.vt}/usage/statusline}
+      (
+        umask 077
+        [ -d "$dir" ] || mkdir -p "$dir" 2>/dev/null || exit 0
+        tmp=$dir/.$profile.$$.tmp
+        if printf '%s\n' "$input" > "$tmp" 2>/dev/null && mv -f "$tmp" "$dir/$profile.json" 2>/dev/null; then
+          :
+        else
+          rm -f "$tmp" 2>/dev/null
+        fi
+      ) 2>/dev/null
+    fi
+    ;;
+esac
+
+[ $# -gt 0 ] || exit 0
+if [ $# -eq 1 ]; then
+  printf '%s' "$input" | sh -c "$1"
+else
+  printf '%s' "$input" | "$@"
+fi

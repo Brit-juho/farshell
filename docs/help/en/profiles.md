@@ -112,6 +112,17 @@ support DeepSeek and OpenRouter balances, plus Z.ai and MiniMax international
 quota. Alibaba, other endpoints and other regions remain unsupported and receive
 no keys. Alibaba console credentials are not collected. `none` disables usage display.
 
+Usage is read from official sources. A Claude profile's `statusLine` gets FarShell's wrapper
+(`bin/fsh-statusline`), which keeps the `rate_limits` (5-hour and weekly usage with reset times) that this
+account's sessions received, per profile. The original statusline command still runs unchanged (with none, only the
+wrapper is added), and the global `~/.claude/settings.json` is never modified. If you change the statusline in a
+profile yourself, that value is respected and the profile then has no usage source. For a long-lived-token profile
+this is the only usage source, and it exists only after a session of that account got its first reply (an account
+not used for a while shows "N hours ago"). A Codex profile is read by starting `codex app-server` briefly, only
+when no Codex process uses that `CODEX_HOME`, at most every 5 minutes (`VT_USAGE_APPSERVER=0` turns it off). The
+picker, the status bar and the usage panel show value, reset, source and age; an official value wins over the
+older lookup, and a window past its reset is not shown.
+
 Verify a short live request sends a small Claude model request and may incur
 provider charges. Prepare native refresh test expires only a test login. It
 refuses live profile sessions, and failure may require logging in again. Work
