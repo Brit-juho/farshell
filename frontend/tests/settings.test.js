@@ -378,3 +378,31 @@ for (const [platform, ua, touch, expected] of [
   await S.set('terminal.fontSize', 20);
   assert.match(calls[0].url, new RegExp(`profile=${expected}`));
 });
+
+// appReady가 설정 첫 로드 뒤에 서도록 main.js가 기다리는 promise(ADR-45 경합과 같은 계열).
+const _pending = async (p) => {
+  const tag = {};
+  return (await Promise.race([p.then(() => 'done'), new Promise((r) => setTimeout(() => r(tag), 20))])) === tag ? 'pending' : 'done';
+};
+
+test('firstLoad — load() 전에는 대기, 성공한 load() 뒤에 resolve', async () => {
+  const { S } = await load({ remote: {} });
+  assert.strictEqual(await _pending(S.firstLoad()), 'pending');
+  await S.load();
+  assert.strictEqual(await _pending(S.firstLoad()), 'done');
+});
+
+test('firstLoad — 두 엔드포인트가 모두 실패해도 reject 없이 resolve', async () => {
+  const { S, window } = await load();
+  window.fetch = () => Promise.reject(new Error('offline'));
+  await S.load();
+  await S.firstLoad();
+});
+
+test('firstLoad — 두 번째 load()는 promise를 다시 만들지 않는다', async () => {
+  const { S } = await load({ remote: {} });
+  const first = S.firstLoad();
+  await S.load();
+  await S.load();
+  assert.strictEqual(S.firstLoad(), first);
+});

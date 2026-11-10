@@ -34,7 +34,7 @@ import { isMac } from './core/env.js';
 import { getAction, registerAction } from './core/dom.js';
 import { E2E_ENABLED } from './term/e2e.js';
 import { setFocusUiLoader, isFocusActive, jumpToWaiting, FOCUS_EVENT } from './layout/focus.js';  // 리디자인 7단계 — 집중 모드 스위치(지연 UI는 아래)
-import { get as settingGet, set as settingSet, subscribe as settingSubscribe } from './core/settings.js';  // S2 — 설정 스토어(모듈 평가 시점에 캐시+마이그레이션 동기 적용)
+import { get as settingGet, set as settingSet, subscribe as settingSubscribe, firstLoad as settingsFirstLoad } from './core/settings.js';  // S2 — 설정 스토어(모듈 평가 시점에 캐시+마이그레이션 동기 적용)
 import { getBinding, displayCombo } from './core/keymap.js';    // S3 — 키맵 레지스트리(각 모듈이 register()로 액션을 붙인다)
 import './core/dom.js';
 import { showToast } from './ui/toast.js';   // F5 — showToast/dismissToast. 다른 모듈이 참조하므로 먼저.
@@ -137,7 +137,17 @@ try {
   prefetchUpload();
   // `appBooted`(아래)는 "배선 끝"이고 이건 "부팅 끝"이다(성공·실패 무관). 부팅 도중에
   // 새로고침하는 테스트가 진행 중인 부팅을 끊지 않도록 e2e가 이걸 기다린다(ADR-45).
-  bootApp().finally(() => { document.documentElement.dataset.appReady = 'true'; });
+  // appReady = 부팅 끝 **그리고** 설정 첫 로드 끝. bootApp()은 설정을 기다리지 않아(화면이 늦게
+  // 뜨면 안 된다) 설정 도착 전에 부팅이 끝나기도 하는데, 그 뒤 도착한 설정이 _notify(getAll())로
+  // 저장 스킨 등을 다시 입혀 e2e가 바꿔 둔 값을 되돌렸다(ADR-45 경합과 같은 계열).
+  // 설정 쪽 대기는 5초 상한: core/api.js GET 마감(15초)보다 짧게 잡아, 설정이 끝내 안 와도
+  // (load()가 불리지 않는 인증 전 경로 포함) appReady가 영원히 안 서는 일이 없게 한다.
+  const settingsReady = Promise.race([
+    settingsFirstLoad(),
+    new Promise((resolve) => setTimeout(resolve, 5000)),
+  ]);
+  Promise.allSettled([bootApp(), settingsReady])
+    .then(() => { document.documentElement.dataset.appReady = 'true'; });
   // N34 §7 — 상태바 HUD(Solid). **동적 import**인 이유는 ADR-26의 번들 게이트다:
   // solid-js 런타임(~32KB)을 app.js에 정적으로 넣으면 300KiB 상한을 바로 넘긴다
   // (실측 303,733 → 336,179B). 상한을 올리는 건 금지돼 있으므로, 문서가 지정한
