@@ -91,6 +91,9 @@ async def list_mine(request: Request):
     return {"items": mine}
 
 
+_ACCOUNT_FIELDS = ("profile", "profiles", "profile_id", "account")
+
+
 @router.post("/api/delegations")
 async def spawn(request: Request):
     body = await _body(request)
@@ -98,6 +101,13 @@ async def spawn(request: Request):
     host = str(body.get("host") or "").strip()
     try:
         caller = await _caller(request)
+        # 계정은 부모 세션의 것을 이어받을 뿐이다 — 에이전트가 고르는 필드는 받지 않고 거부한다(조용히 무시하면
+        # 고른 줄로 오해한다).
+        if any(k in body for k in _ACCOUNT_FIELDS):
+            await asyncio.to_thread(delegation._audit, "spawn", "denied", principal=delegation._agent_id(caller.key),
+                                    reason="profile_not_allowed")
+            raise DelegationError("profile_not_allowed",
+                                  tr("하위 세션의 계정은 고를 수 없습니다. 부모 세션의 계정을 그대로 이어받습니다."), 400)
         parent_agent = await asyncio.to_thread(_parent_agent, caller.name)
         if host:
             # 다른 Mac 에 하위 세션 — 작업 폴더·worktree 는 보낼 수 없다(상대 호스트의 기본 시작 폴더). 승인이 필요하면 202.

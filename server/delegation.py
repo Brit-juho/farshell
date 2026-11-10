@@ -74,12 +74,15 @@ _CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f​-‏  ‪-‮⁦-�
 
 
 class DelegationError(Exception):
-    def __init__(self, code: str, reason: str, status: int = 400):
+    def __init__(self, code: str, reason: str, status: int = 400, account: Optional[dict] = None):
         super().__init__(reason)
-        self.code, self.reason, self.status = code, reason, status
+        self.code, self.reason, self.status, self.account = code, reason, status, account
 
     def body(self) -> dict:
-        return {"error": self.code, "reason": self.reason}
+        out = {"error": self.code, "reason": self.reason}
+        if self.account:
+            out["account"] = self.account      # 계정 사유 코드만(비밀값·경로 없음)
+        return out
 
 
 def enabled() -> bool:
@@ -536,6 +539,25 @@ def check_spawn(data: dict, parent_key: str, now: float, *, remote: bool = False
         raise err
 
 
+def _account_refusal(parent_key: str, did: str, code: str) -> DelegationError:
+    _audit("spawn", "failed", principal=_agent_id(parent_key), did=did, reason=f"account:{code}")
+    return DelegationError("parent_profile_unavailable",
+                           tr("부모 세션의 계정을 이어받을 수 없어 하위 세션을 만들지 못했습니다. 기본 계정으로 대신하지 않습니다."),
+                           409, account={"code": code})
+
+
+def _inherit_account(parent_key: str, parent_pane: str, agent: str, did: str):
+    """부모 세션의 계정(핫스왑 H3). 에이전트가 계정을 고르는 통로는 없다 — 서버가 적어 둔 부모의 기록만 따른다.
+    못 쓰면 기본 계정으로 대체하지 않고 거부한다. 락 안에서 부른다(예약 전이라 장부·분당 횟수에 남지 않는다)."""
+    import session_profile
+    try:
+        return session_profile.inherit(parent_key, parent_pane, agent)
+    except session_profile.SlotRefused as e:
+        raise _account_refusal(parent_key, did, e.code) from None
+    except Exception:  # noqa: BLE001 — 읽지 못하면 닫는다
+        raise _account_refusal(parent_key, did, "profile_unverified") from None
+
+
 def _spawn_error(reason: str) -> DelegationError:
     """엔진 거부 이유 → 공개 오류(코드·상태는 옛 `_spawn_denial` 과 같다)."""
     if reason == "spawn_disabled":
@@ -723,6 +745,8 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
                         'runtime_binding': same['runtime_bindings'][same['child']['key']]}
                         if same.get('identity_version') == 2 else {})}
         check_spawn(data, parent_key, now, **({"remote": True} if remote is not None else {}))
+        # 부모 세션의 계정을 이어받는다(다른 호스트가 부모면 그쪽 프로필은 이 호스트에 없으니 해당 없음).
+        inherited = _inherit_account(parent_key, caller.pane_id, agent, did) if remote is None else None
         if cwd and enforced():
             # 명시한 cwd 는 `fs.read` + fsguard 루트(VT_BROWSE_ROOTS) 안일 때만(쿼터 검사 뒤 — 오류 우선순위를 유지).
             # realpath 로 고정해 심볼릭 링크 바꿔치기를 막는다.
@@ -751,10 +775,25 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
         # 3) 세션 — 이름이 겹치면 실패한다(기존 세션을 덮지 않는다).
         if tmux_runner.has_session(child_name):
             raise DelegationError("name_taken", f"'{child_name}' 세션이 이미 있습니다", 409)
-        rc, _, err = tmux_runner.run(["new-session", "-d", "-s", child_name, "-c", start_dir], timeout=5.0)
-        if rc != 0:
-            raise DelegationError("tmux_failed", f"세션을 만들지 못했습니다: {err.decode('utf-8', 'replace')[:200]}", 500)
-        created_session = True
+        if inherited is not None:
+            # H1 의 주입 경로 그대로(0600 설정 파일·위험 변수 제거·`@fsh_profile`) — 새 경로를 따로 만들지 않는다.
+            import session_profile
+            try:
+                rc, _, _info = session_profile.spawn(child_name, 80, 24, start_dir, inherited)
+            except session_profile.SlotRefused as e:   # 장기 토큰이 그 사이 사라짐 등 — 세션을 만들지 않는다
+                raise _account_refusal(parent_key, did, e.code) from None
+            if rc != 0:     # tmux 의 메시지는 토큰이 든 설정 줄을 인용할 수 있어 싣지 않는다
+                raise DelegationError("tmux_failed", "세션을 만들지 못했습니다", 500)
+            created_session = True
+            try:
+                session_profile.record(child_name, inherited)
+            except Exception:  # noqa: BLE001 — 표시용 기록 실패가 위임을 막지 않는다
+                logger.warning("delegated child account record failed", exc_info=False)
+        else:
+            rc, _, err = tmux_runner.run(["new-session", "-d", "-s", child_name, "-c", start_dir], timeout=5.0)
+            if rc != 0:
+                raise DelegationError("tmux_failed", f"세션을 만들지 못했습니다: {err.decode('utf-8', 'replace')[:200]}", 500)
+            created_session = True
         tmux_runner.set_origin(child_name, "local")
         ident = _session_identity(child_name)
         if not ident:
@@ -779,6 +818,8 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
             cur["state"] = RUNNING
             cur["cwd"] = start_dir
             cur["child"] = {"key": ident["key"], "name": child_name, "pane": ident["pane"]}
+            if inherited is not None:
+                cur["account"] = inherited.public()
             if enforced() and remote is None:
                 # 자식의 fs grant 기록(worktree 면 새 경로 전용, 아니면 부모 fs grant 의 공유 참조). 강제는 5단계.
                 fs = _svc().fs_record(parent_key, start_dir, worktree=bool(worktree_branch))
@@ -800,8 +841,9 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
                 _write(data)
         except Exception as ce:  # noqa: BLE001 — 정리 실패가 원래 오류를 가리면 안 된다(sweep 이 spawn_interrupted 로 닫는다)
             logger.warning(f"위임 {did} 예약 정리 실패: {ce}")
-        _audit("spawn", "failed", principal=remote.principal if remote is not None else _agent_id(parent_key), did=did,
-               reason=getattr(e, "code", type(e).__name__))
+        if not getattr(e, "account", None):      # 계정 거부는 만든 쪽이 사유 코드와 함께 이미 감사했다
+            _audit("spawn", "failed", principal=remote.principal if remote is not None else _agent_id(parent_key), did=did,
+                   reason=getattr(e, "code", type(e).__name__))
         if isinstance(e, DelegationError):
             raise
         raise DelegationError("spawn_failed", f"하위 세션을 만들지 못했습니다: {e}", 500) from e
@@ -816,7 +858,10 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
     _push(tr("하위 세션을 만들었습니다"), f"{caller.name} → {child_name}: {_one_line(task, 60)}")
     if remote is not None:
         return {"delegation": did, "child": child_name, "agent": agent, "childKey": ident["key"], **({"identity_version": 2, "runtime_binding": identity_metadata["runtime_bindings"][ident["key"]]} if identity_metadata else {})}    # 이 호스트의 경로는 내보내지 않는다
-    return {"delegation": did, "child": child_name, "agent": agent, "cwd": start_dir}
+    out = {"delegation": did, "child": child_name, "agent": agent, "cwd": start_dir}
+    if inherited is not None:
+        out["account"] = {"inherited": True, "profiles": inherited.public()}
+    return out
 
 
 # --- 부모의 조작 --------------------------------------------------------------------
@@ -1324,6 +1369,8 @@ def public(item: dict, viewer_key: Optional[str] = None) -> dict:
         out["role"] = "parent" if item["parent"]["key"] == viewer_key else "child"
     if item.get("summary"):
         out["summary"] = item["summary"]
+    if item.get("account"):
+        out["account"] = item["account"]         # 부모에게서 이어받은 계정(id·이름·도구만)
     return out
 
 
