@@ -407,6 +407,40 @@ and profile revisions. Nested plans retain the profile ID for the operation lock
 Imports journal writes before rename and preserve backups. Rollback rechecks before/after
 hashes; it refuses external edits. Profile selection never replaces global auth stores.
 
+### Managed-profile usage sources (hotswap H2)
+
+Per managed profile, an official-client value wins over the provider endpoint, window by window; the
+card, the picker row, the HUD chip tooltip and the usage panel show value, reset, **source** and age.
+
+| Source name | Tool | Where it comes from | Notes |
+|---|---|---|---|
+| `statusline` | Claude | `rate_limits.five_hour\|seven_day.{used_percentage, resets_at}` of the statusLine input, kept per profile by `bin/fsh-statusline` at `<VT_STATE_DIR>/usage/statusline/<profile-id>.json` (0600 in a 0700 dir) | The only source for a long-lived-token profile (the token has no usage scope). Exists after a session's first reply; older than a window's reset, that window is dropped. File mtime = value time. Whether token-authenticated sessions receive `rate_limits` is not in Claude's docs: check on a real session |
+| `app-server` | Codex | `codex app-server` JSON-RPC (`initialize` → `initialized` → `account/rateLimits/read`), reading `result.rateLimits.{primary,secondary}.{usedPercent, resetsAt, windowDurationMins}` | Stored at `<VT_STATE_DIR>/usage/appserver/<profile-id>.json`; see conditions below |
+| `oauth-usage` | Claude | the existing `oauth/usage` call (90 s cache), native OAuth profiles only | Used when the statusline has no value for a window |
+| `codex-usage` | Codex | the existing `wham/usage` call | Used when the app-server has no value for a window |
+
+**Statusline wrapper.** The settings sync (`agent_profile_settings.sync`, run before a managed launch, before a new
+session is created with a profile, and by `fsh profile sync-settings`) writes the PROFILE's `statusLine` as
+global value G -> `wrap(G)`: the same object with `command` replaced by
+`<repo>/bin/fsh-statusline --profile <id> --dir <usage dir> -- '<G command>'`; with no global statusLine the
+wrapper alone (it prints nothing). The global `~/.claude/settings.json` is never written. A value that is G itself
+or an earlier wrap (any wrapper path, any earlier G) counts as following, never as the profile's own choice, so a
+changed global statusline or a moved checkout is picked up on the next sync. A statusLine the profile chose
+itself stays its own and is not wrapped (no usage source for it; `take_global` brings the global value back).
+The wrapper reads stdin once, replaces the profile's file only with a document that contains `rate_limits`
+(a new session never erases the last value), pipes the same input to the original command (one shell string,
+`sh -c`) and returns its output and exit status. A write failure is ignored. It makes no network or server
+call. It stores the whole input document (POSIX sh cannot parse JSON; the input also carries cwd and transcript
+path), which is why the directory is 0700 and the server reads only `rate_limits` from it.
+
+**Codex app-server conditions.** Started only when the profile's `auth.json` exists, no Codex process uses that
+`CODEX_HOME` (same ps check as `require_inactive`; an unreadable ps counts as in use), at least 5 minutes since
+the last attempt (6 hours once the CLI turned out not to support the method), and a `codex` is on PATH. It runs
+in its own process group with a minimal environment (no `OPENAI_*`), at most 10 seconds, and is always killed;
+an `initialize` answer naming another home aborts. A failure keeps the last good value. It is triggered by a
+`/api/usage` poll (in a background thread), never by the picker. `VT_USAGE_APPSERVER=0` turns it off. The app-server
+may refresh the login while it runs: unverified race with a same-account session, hence the no-session rule.
+
 `usage/profiles.py` reads namespaced native OAuth credentials and whitelisted quota
 responses without implementing OAuth refresh. API-key profiles do not fall back to
 OAuth credentials. Native mode excludes the default Codex reader; `none` excludes all

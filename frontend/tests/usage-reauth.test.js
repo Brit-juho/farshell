@@ -40,3 +40,15 @@ test('reauthCommand — 관리 프로필은 FarShell 로그인만 사용하고 A
   assert.equal(reauthCommand({ profile_id, provider: 'claude', quota_scope: 'unsupported' }), null);
   assert.equal(reauthCommand({ profile_id: 'bad; echo x', provider: 'codex' }), null);
 });
+
+test('sourceLine — 「출처 · 갱신 시각」, 모르는 출처는 비운다', async () => {
+  const { sourceLine } = await load();
+  const now = 10_000_000;
+  const at = now / 1000;
+  assert.equal(sourceLine({ source: 'statusline', checked_at: at - 180 }, now), '출처 statusline · 3분 전 갱신');
+  assert.equal(sourceLine({ source: 'app-server', checked_at: at - 20 }, now), '출처 app-server · 방금 갱신');
+  assert.equal(sourceLine({ source: 'oauth-usage', checked_at: at - 7300 }, now), '출처 OAuth · 2시간 전 갱신');
+  assert.equal(sourceLine({ source: 'statusline' }, now), '출처 statusline');
+  assert.equal(sourceLine({ source: 'weird', checked_at: at }, now), '');
+  assert.equal(sourceLine({}, now), '');
+});

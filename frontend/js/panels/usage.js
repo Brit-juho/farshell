@@ -118,6 +118,20 @@ async function startReauth(p) {
   window.sendToPty(id, `${cmd}\n`);
 }
 
+// 값의 출처와 갱신 시각 — 「출처 statusline · 3분 전 갱신」. 모르는 출처는 이름을 지어내지 않고 비운다.
+const SOURCE_NAME = { statusline: 'statusline', 'app-server': 'app-server', 'oauth-usage': 'OAuth', 'codex-usage': 'Codex API' };
+
+export function sourceLine(p, nowMs = Date.now()) {
+  const name = SOURCE_NAME[p.source];
+  if (!name) return '';
+  const parts = [t('출처 {name}', { name })];
+  if (typeof p.checked_at === 'number') {
+    const min = Math.max(0, Math.round((nowMs / 1000 - p.checked_at) / 60));
+    parts.push(min < 1 ? t('방금 갱신') : min < 60 ? t('{n}분 전 갱신', { n: min }) : t('{n}시간 전 갱신', { n: Math.floor(min / 60) }));
+  }
+  return parts.join(' · ');
+}
+
 function renderProfile(p, activeName) {
   // 카드(시안 P07): 반경 8 · 여백 12. 지금 쓰는 프로필은 액센트 테두리. 머리 = 이름 13/600 · 요금제 11 muted …
   // 꼬리표(실행 중 · 활성 · 재인증 필요). 상태는 색만이 아니라 낱말 꼬리표로 말한다.
@@ -187,6 +201,8 @@ function renderProfile(p, activeName) {
     head.appendChild(el('span', 'vt-usage-empty', needsAuth || p.balances?.length ? '' : t('사용량 정보 없음')));
   } else {
     for (const w of p.windows) card.appendChild(renderWindow(w));
+    const origin = sourceLine(p);
+    if (origin) card.appendChild(el('div', 'vt-mcp-meta vt-usage-source', origin));
   }
 
   if (p.fallback && p.fallback.position != null) {

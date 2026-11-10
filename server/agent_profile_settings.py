@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 from pathlib import Path
 
 import agent_profiles as profiles
@@ -38,6 +39,46 @@ NESTED = ("env", "enabledPlugins", "skillOverrides", "permissions", "extraKnownM
 _SECRET = re.compile(r"KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|HEADERS|AUTH", re.I)
 _PRIVATE_PREFIX = ("ANTHROPIC_", "AWS_", "GOOGLE_", "GCP_", "VERTEX_", "OPENAI_", "CLAUDE_CODE_OAUTH", "CLAUDE_CODE_USE_")
 _MISSING = object()
+
+
+STATUSLINE = "statusLine"
+WRAPPER = Path(__file__).resolve().parent.parent / "bin" / "fsh-statusline"
+_WRAPPED = re.compile(r"(?:'[^']*fsh-statusline'|[^\s']*fsh-statusline) --profile [a-f0-9]{32}(?: --dir (?:'[^']*'|\S+))? --(?: (?P<rest>.*))?", re.S)
+
+
+def wrap_command(profile_id, command):
+    """The statusLine command that records this profile's rate limits, then runs `command` unchanged."""
+    from usage import statusline
+    head = f"{shlex.quote(str(WRAPPER))} --profile {profile_id} --dir {shlex.quote(str(statusline.directory()))} --"
+    return f"{head} {shlex.quote(command)}" if command else head
+
+
+def _wrapped(value):
+    """(True, original command or None) when `value` is a statusLine that FarShell's wrapper put there."""
+    command = value.get("command") if isinstance(value, dict) else None
+    match = _WRAPPED.fullmatch(command) if isinstance(command, str) else None
+    if not match:
+        return False, None
+    try:
+        parts = shlex.split(match.group("rest") or "")
+    except ValueError:
+        return True, None
+    return True, parts[0] if len(parts) == 1 else None
+
+
+def _statusline_want(profile_id, glob):
+    """The profile's value for the global statusLine `glob`: the same object with its command wrapped.
+
+    No global statusLine -> the wrapper alone (it collects usage and prints nothing). A global value that
+    is not a plain command is left as it is, and when the wrapper file is missing nothing is wrapped.
+    """
+    if not WRAPPER.is_file():
+        return glob
+    if glob is _MISSING:
+        return {"type": "command", "command": wrap_command(profile_id, None)}
+    if not isinstance(glob, dict) or glob.get("type") != "command" or not isinstance(glob.get("command"), str):
+        return glob
+    return {**glob, "command": wrap_command(profile_id, glob["command"])}
 
 
 def _digest(value):
@@ -170,7 +211,7 @@ def sync(profile_id, *, dry_run=False, take_global=(), include_mcp=None):
         if not isinstance(mine, dict):
             raise profiles.Refused(tr("원본 설정의 형식이 올바르지 않습니다"))
         recorded, updated = base["settings"], dict(mine)
-        for key in sorted(set(glob) | set(mine)):
+        for key in sorted(set(glob) | set(mine) | {STATUSLINE}):   # the wrapper is placed even with no global statusLine
             if key in PER_PROFILE_TOP or key == "hooks":
                 continue
             g, p = glob.get(key, _MISSING), mine.get(key, _MISSING)
@@ -182,7 +223,22 @@ def sync(profile_id, *, dry_run=False, take_global=(), include_mcp=None):
                 if not merged:
                     updated.pop(key, None)
                 continue
-            action, value = _decide(key, g, p, recorded.get(key), take)
+            if key == STATUSLINE:
+                # Global G -> profile wrap(G). A value that is G itself or an earlier wrap (any wrapper
+                # path, any earlier G) is the profile following, not the profile's own choice, unless the
+                # key is already marked as its own.
+                raw = g
+                g = _statusline_want(profile["id"], raw)
+                following = (p is not _MISSING and recorded.get(key) != OWN
+                             and (_wrapped(p)[0] or (raw is not _MISSING and _digest(p) == _digest(raw))))
+                if following and g is _MISSING:
+                    action, value = "keep", p
+                elif following:
+                    action, value = ("same", p) if _digest(p) == _digest(g) else ("follow", g)
+                else:
+                    action, value = _decide(key, g, p, recorded.get(key), take)
+            else:
+                action, value = _decide(key, g, p, recorded.get(key), take)
             if action == "follow":
                 updated[key] = value
                 recorded[key] = _digest(g)

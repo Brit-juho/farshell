@@ -380,12 +380,56 @@ def prepare_refresh_test(profile_id):
             'note': tr("테스트 프로필을 다시 열고 짧은 요청을 실행한 뒤 사용량을 읽으세요. 실패하면 이 테스트 프로필에 다시 로그인하세요")}
 
 
-def cached_row(profile_id):
-    """The last snapshot this process already holds for a profile. No file, network or keychain access."""
+SOURCE_NAME = {"claude": "oauth-usage", "codex": "codex-usage"}
+
+
+def overlay(row, now=None):
+    """Official-client sources win over the provider endpoint, window by window.
+
+    Claude: the statusline input the session itself received (`usage/statusline.py`). Codex: the CLI's
+    own app-server answer (`usage/appserver.py`). A source with no usable value changes nothing. Every
+    window and the row say where the value came from (`source`) and when (`updated_at`, row `checked_at`).
+    Local files only: no network, no process.
+    """
+    now = time.time() if now is None else now
+    tool = row.get("provider")
+    base = SOURCE_NAME.get(tool)
+    out = dict(row)
+    windows = [{**w, "source": w.get("source") or base, "updated_at": w.get("updated_at") or row.get("checked_at")}
+               for w in row.get("windows") or []]
+    out["windows"] = windows
+    if base:
+        out["source"] = base if windows else None
+    if base is None or row.get("quota_scope", "account") != "account" or not registry_id(row):
+        return out
+    if tool == "claude":
+        from . import statusline as source
+    else:
+        from . import appserver as source
+    found = source.read(row["profile_id"], now)
+    if not found:
+        return out
+    taken = {w["id"] for w in found["windows"]}
+    out["windows"] = found["windows"] + [w for w in windows if w.get("id") not in taken]
+    out.update(source=found["source"], checked_at=found["updated_at"], stale=False,
+               fetch_status="Fresh" if out.get("fetch_status") in ("Unsupported", "Unavailable", "NoAuth") else out.get("fetch_status"))
+    return out
+
+
+def registry_id(row):
+    return isinstance(row.get("profile_id"), str) and bool(registry.ID.fullmatch(row["profile_id"]))
+
+
+def cached_row(profile_id, tool=None):
+    """The last snapshot this process already holds for a profile, with the official-client sources
+    laid over it. No network, no keychain, no process: local files only."""
     with _instances_lock:
         provider = _instances.get((str(registry.directory()), profile_id))
     cache = provider.cache if provider is not None else None
-    return None if cache is None else {k: v for k, v in cache.items() if not k.startswith("_")}
+    row = {k: v for k, v in cache.items() if not k.startswith("_")} if cache is not None else None
+    if row is None and tool in SOURCE_NAME:
+        row = {"profile_id": profile_id, "provider": tool, "windows": [], "checked_at": None, "stale": False, "quota_scope": "account"}
+    return None if row is None else overlay(row)
 
 
 def snapshot():
@@ -398,9 +442,14 @@ def snapshot():
                 _instances.clear()
             provider = _instances.setdefault(key, NativeProfileProvider(row["id"]))
         try:
-            result.append(provider.snapshot())
+            result.append(overlay(provider.snapshot()))
+            if row["tool"] == "codex":
+                from . import appserver
+                appserver.refresh_async(registry.get(row["id"]))
             if provider.api_quota_identity:
                 quota_identities[row["id"]] = provider.api_quota_identity
+        except fsguard.FsDenied:
+            continue   # a profile whose folder is gone or unsafe has no card; it must not take the whole usage list down
         except registry.Refused:
             if registry.get(row['id'])['archived_at'] is None:
                 raise

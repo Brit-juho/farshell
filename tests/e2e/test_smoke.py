@@ -144,6 +144,9 @@ def _isolated_env(port: int, token: str, tmp: Path) -> dict:
         VT_WORKSPACE_PATH=str(tmp / "workspace.json"),
         VT_TMUX_SOCKET=_tmux_socket(port),
         VT_NETWORK_MODE="localhost",
+        # 사용량은 이 서버의 격리 프로필만 읽게 한다. 기본(auto)은 HOME이 진짜라 `~/.codex/auth.json`·clauth 피드를 읽어
+        # 실계정으로 사용량 조회를 보낸다(HUD에 진짜 codex 사용률이 뜬 것으로 확인됨).
+        VT_USAGE_PROVIDER="native",
         VT_STATE_DIR=str(tmp / "state"),      # ~/.vt/ 대신 여기에 쓰게
         VT_CONFIG=str(tmp / "no-such.env"),   # ~/.vt.env를 읽지 않게
         # dock 소스컨트롤 탭이 볼 저장소를 이 저장소 자신으로 고정한다. 기본값
@@ -4328,3 +4331,73 @@ def test_계정이_없으면_새_세션_메뉴는_예전_그대로다(isolated_p
     page.wait_for_timeout(600)   # 목록 요청이 끝날 시간
     assert page.locator("#add-menu .vt-menu-accounts").count() == 0
     assert page.locator("#add-menu .vt-menu-item").count() == 2
+
+
+# --- 계정 핫스왑 H2: 공식 출처(statusline) 사용률이 선택기에 보인다 -----------------------------
+# 가짜 statusline 파일(래퍼가 남기는 것과 같은 모양)만 둔다. 실제 claude/codex는 실행하지 않고, 토큰 프로필은 네트워크를 쓰지 않는다.
+# FSH_SHOTS_DIR을 주면 같은 화면을 데스크톱·폰 크기로 그 폴더에 저장한다(사람이 눈으로 보는 용도).
+
+
+def test_선택기_줄에_statusline_사용률과_출처와_갱신_시각이_보인다(isolated_page, server):
+    if _LOCAL_STATE_DIR is None:
+        pytest.skip("외부 서버(VT_E2E_URL)에는 가짜 프로필을 만들 수 없다")
+    base, _ = server
+    page = isolated_page
+    ids = _seed_profiles(_LOCAL_STATE_DIR)
+    now = time.time()
+    folder = _LOCAL_STATE_DIR / "usage" / "statusline"
+    folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+    folder.chmod(0o700)
+    file = folder / f"{ids['alice']}.json"
+    file.write_text(json.dumps({"cwd": "/never-shown", "transcript_path": "/never-shown.jsonl", "rate_limits": {
+        "five_hour": {"used_percentage": 62, "resets_at": int(now) + 2 * 3600},
+        "seven_day": {"used_percentage": 18, "resets_at": int(now) + 3 * 86400}}}))
+    file.chmod(0o600)
+    os.utime(file, (now - 300, now - 300))
+    shots = os.environ.get("FSH_SHOTS_DIR")
+    try:
+        page.reload()
+        _boot(page, f"{base}/")
+        _new_session_menu(page)
+        page.locator("#add-menu .vt-menu-item", has_text="이번만 다른 계정").click()
+        page.wait_for_selector("#account-menu", timeout=10000)
+        alice = page.locator("#account-menu .vt-menu-item.two", has=page.locator(".vt-menu-item-label", has_text=re.compile("^alice$")))
+        sub = alice.inner_text()
+        assert "5시간 62%" in sub and "주간 18%" in sub and "출처 statusline" in sub and "분 전 갱신" in sub, sub
+        assert "알 수 없음" in page.locator("#account-menu .vt-menu-item.two", has=page.locator(".vt-menu-item-label", has_text=re.compile("^work$"))).inner_text()
+        assert "never-shown" not in page.content()
+        card = page.evaluate("""async () => (await (await fetch('/api/usage')).json())""")
+        row = next(p for p in card["profiles"] if p.get("profile_id") == ids["alice"])
+        assert row["source"] == "statusline" and abs(row["checked_at"] - (now - 300)) < 5 and row["windows"][0]["pct"] == 62
+        if shots:
+            out = Path(shots)
+            out.mkdir(parents=True, exist_ok=True)
+            for label, size in (("desktop", {"width": 1440, "height": 900}), ("phone", {"width": 390, "height": 844})):
+                page.set_viewport_size(size)
+                page.wait_for_timeout(600)
+                phone = label == "phone"
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(200)
+                # 폰에는 레일 대신 플릿 화면이 있고 새 세션 단추의 자리가 다르다.
+                page.locator('.vt-fleet-tool[aria-label="새 세션"]' if phone else ".vt-wgrail-new").first.click()
+                page.wait_for_selector("#add-menu .vt-menu-accounts", timeout=10000)
+                page.locator("#add-menu .vt-menu-item", has_text="이번만 다른 계정").click()
+                page.wait_for_selector("#account-menu", timeout=10000)
+                page.wait_for_timeout(300)
+                page.screenshot(path=str(out / f"picker-{label}.png"))
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(300)
+                page.screenshot(path=str(out / f"hud-{label}.png"))   # 폰에는 HUD 칩이 없다(상태 막대는 넓은 화면 전용)
+                if phone:
+                    page.locator('.vt-icon-btn[aria-label="빠른 열기"]').first.click()
+                    page.keyboard.type("사용량")
+                    page.wait_for_timeout(500)
+                    page.get_by_text("사용량", exact=True).first.click()
+                else:
+                    page.locator('.vt-act[aria-label="사용량"]').first.click()
+                page.wait_for_timeout(1500)
+                page.screenshot(path=str(out / f"usage-panel-{label}.png"))
+    finally:
+        file.unlink(missing_ok=True)
+        import shutil
+        shutil.rmtree(_LOCAL_STATE_DIR / "agent-profiles", ignore_errors=True)
