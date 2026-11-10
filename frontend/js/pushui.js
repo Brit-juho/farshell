@@ -38,7 +38,7 @@ async function _refreshPushLabel() {
         btn.setAttribute('data-tip', on ? t('푸시 알림 끄기') : t('푸시 알림 켜기'));
         btn.setAttribute('data-tip-sub', on
           ? t('켜짐 — 앱을 닫아도 작업 완료 알림이 온다')
-          : t('앱을 닫아도 작업 완료 알림을 받는다'));
+          : t('앱을 닫아도 작업 완료 알림을 받습니다'));
         btn.classList.remove('disabled');
       }
     }

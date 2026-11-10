@@ -3894,7 +3894,7 @@ print(('ok|' if sel and sel['ready'] else 'warn|') + (sel['label'] + ('|ready' i
     _ls="$(cd "$VT_DIR/server" && "$VT_PYTHON" -m authz lease --cwd "$_ls_cwd" doctor 2>/dev/null)"
     if [ -n "$_ls" ]; then
       IFS='|' read -r _ls_n _ls_guard _ls_skip _ls_enf _ls_saga <<<"$_ls"
-      _check "$(_t '폴더 lease')" ok "$(_t '활성 {n}개 · 쓰기 차단 {enf} (권고 모드면 서버는 막지 않음)' n="$_ls_n" enf="$([ "$_ls_enf" = 1 ] && echo on || echo off)")"
+      _check "$(_t '폴더 점유(lease)')" ok "$(_t '활성 {n}개 · 쓰기 차단 {enf} (권고 모드면 서버는 막지 않음)' n="$_ls_n" enf="$([ "$_ls_enf" = 1 ] && echo on || echo off)")"
       case "$_ls_guard" in
         installed|chained) _check "$(_t 'lease guard')" ok "$(_t '이 저장소에 설치됨 (서버가 안 닿으면 경고만, 최근 24h 건너뜀 {n}회)' n="${_ls_skip:-0}")" ;;
         absent)  _check "$(_t 'lease guard')" ok "$(_t "이 저장소에는 설치 안 됨 (선택) — 'fsh lease guard install'")" ;;

@@ -25,7 +25,7 @@ export function renderAgentsSection() {
 
   const note = document.createElement('div');
   note.className = 'vt-set-help';
-  note.textContent = t('"보통" 이하는 레일에서 입력 대기를 놓칠 수 있다는 뜻입니다. 훅이 없는 CLI는 래퍼에서 fsh pane report로 상태를 알리면 "높음"이 됩니다.');
+  note.textContent = t('"보통" 이하는 세션 목록에서 입력 대기를 놓칠 수 있다는 뜻입니다. 훅이 없는 CLI는 래퍼에서 fsh pane report로 상태를 알리면 "높음"이 됩니다.');
   frag.appendChild(note);
 
   vtFetch('/api/agents/coverage').then((rows) => {

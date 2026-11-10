@@ -96,7 +96,7 @@ export function renderSecuritySection() {
       until && left ? 'on' : 'off',
       // ADR-27 — push/PR을 만들지 않기로 해서 승격을 요구하는 경로가 지금은 없다.
       // 이 문장이 없으면 "왜 항상 비활성이지?"로 읽힌다.
-      t('현재 이 기능을 쓰는 경로가 없습니다(ADR-27) — 승격을 요구하는 조작이 아직 없습니다.'),
+      t('승격을 요구하는 조작이 아직 없어 지금은 이 기능을 쓰는 경로가 없습니다.'),
     ));
   }).catch(() => { elevHost.innerHTML = ''; elevHost.appendChild(statusLine(t('승격 상태를 확인할 수 없습니다.'))); });
 

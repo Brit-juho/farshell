@@ -61,9 +61,9 @@ function handoffTarget(p) {
 
 function cleanupText(c) {
   if (!c) return '';
-  if (c.done || (c.grants === 0 && c.leases === 0)) return t('권한·lease 정리 완료');
+  if (c.done || (c.grants === 0 && c.leases === 0)) return t('권한·폴더 점유 정리 완료');
   if (c.grants < 0 || c.leases < 0) return t('정리 상태를 확인하지 못했습니다');
-  return t('정리 중 — 남은 권한 {g}개 · lease {l}개', { g: c.grants, l: c.leases });
+  return t('정리 중 — 남은 권한 {g}개 · 폴더 점유 {l}개', { g: c.grants, l: c.leases });
 }
 
 export function mountPairs(host, now = () => Date.now()) {
@@ -174,8 +174,8 @@ export function mountPairs(host, now = () => Date.now()) {
     const mine = me(p);
     if (act === 'end') {
       const msg = mine
-        ? t('이 페어를 끝냅니다. 두 쪽이 받은 권한과 폴더 lease 가 모두 거두어집니다. 계속할까요?')
-        : t('이 페어를 회수합니다. 두 에이전트가 받은 권한과 폴더 lease 가 모두 거두어집니다. 계속할까요?');
+        ? t('이 페어를 끝냅니다. 두 쪽이 받은 권한과 폴더 점유가 모두 거두어집니다. 계속할까요?')
+        : t('이 페어를 회수합니다. 두 에이전트가 받은 권한과 폴더 점유가 모두 거두어집니다. 계속할까요?');
       if (!(await confirmDialog(msg, { title: mine ? t('페어 끝내기') : t('페어 회수'), okLabel: mine ? t('끝내기') : t('회수'), danger: true }))) return;
     }
     if (act === 'handoff' && !mine) {
