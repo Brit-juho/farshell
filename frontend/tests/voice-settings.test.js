@@ -176,7 +176,7 @@ test('직접 입력 — 잘못된 형식은 거부하고, 올바르면 custom id
 
 test('관리 — 삭제는 확인 창을 거치고 선택 중이면 경고, 취소하면 DELETE 없음', async () => {
   const { document, dels } = await build();
-  const items = Array.from(document.querySelectorAll('.vt-vm-manage .vt-set-model-item'));
+  const items = Array.from(document.querySelectorAll('.vt-vm-manage > .vt-set-row'));
   assert.strictEqual(items.length, 3);
   btnByText(items[0], /삭제/).click(); await flush();
   assert.match(document.querySelector('.vt-dialog-msg').textContent, /지금 선택 중인 모델입니다/);

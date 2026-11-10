@@ -610,3 +610,31 @@ test('포커스 링이 바탕 4단과 모든 상태 면 위에서 3:1을 넘는�
   }
   assert.deepStrictEqual(fails, [], fails.join('\n'));
 });
+
+// 설정 컨트롤(스위치 · 세그먼트) — scripts/check_contrast.py 의 같은 규칙을 9스킨 전부에서 한 번 더 본다.
+test('스위치: 켜짐 트랙이 바탕 위에서 3:1, 켜짐 손잡이가 트랙 위에서 4.5:1, 꺼짐 손잡이가 꺼짐 트랙 위에서 3:1', () => {
+  const fails = [];
+  for (const [skin, t] of Object.entries(RAW)) {
+    const surface = solidOf(t, '--color-acc-surface');
+    for (const bg of ['--color-bg-0', '--color-bg-1', '--color-bg-2', '--color-bg-raised']) {
+      const r = contrast(surface, solidOf(t, bg));
+      if (r < 3) fails.push(`${skin} 켜짐 트랙 on ${bg} = ${r.toFixed(2)} < 3`);
+    }
+    const on = contrast(solidOf(t, '--color-acc-ink'), surface);
+    if (on < 4.5) fails.push(`${skin} 켜짐 손잡이 = ${on.toFixed(2)} < 4.5`);
+    const off = contrast(solidOf(t, '--color-sub'), solidOf(t, '--color-bg-3'));
+    if (off < 3) fails.push(`${skin} 꺼짐 손잡이 = ${off.toFixed(2)} < 3`);
+  }
+  assert.deepStrictEqual(fails, [], fails.join('\n'));
+});
+
+test('세그먼트: 선택된 칸(txt on bg-raised)과 선택 안 된 칸(sub on bg-2)이 9스킨 전부에서 읽힌다', () => {
+  const fails = [];
+  for (const [skin, t] of Object.entries(RAW)) {
+    const sel = contrast(solidOf(t, '--color-txt'), solidOf(t, '--color-bg-raised'));
+    if (sel < 7) fails.push(`${skin} 선택 칸 = ${sel.toFixed(2)} < 7`);
+    const rest = contrast(solidOf(t, '--color-sub'), solidOf(t, '--color-bg-2'));
+    if (rest < 4.5) fails.push(`${skin} 안 선택 칸 = ${rest.toFixed(2)} < 4.5`);
+  }
+  assert.deepStrictEqual(fails, [], fails.join('\n'));
+});
