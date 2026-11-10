@@ -28,6 +28,10 @@ sub-agent start/end, teammate idle, session start/end, notification, approval re
 In Codex's `~/.codex/config.toml`, 8 kinds are registered: prompt/permission/tool/stop/subagent/session.
 Both manage only FarShell entries and keep your existing hooks.
 
+Claude Code registers 13 hooks, including `PostToolUseFailure` (it clears a pending "choice" wait as soon as a question or tool is rejected or errors out).
+If you only have the older 12, `fsh hooks status` shows `PostToolUseFailure` as not registered and detection coverage drops to `pty`;
+run `fsh hooks install` (or `fsh sync`, which `fsh update` runs) to bring it to 13.
+
 **If you clicked "Import Claude settings" in the Codex app**, Claude's FarShell hooks
 (`agent_hook.sh … claude`) get copied into `~/.codex/hooks.json`. Codex reads both `config.toml` and
 `hooks.json`, so each event arrives twice (one of them tagged `claude`) and the agent label goes
