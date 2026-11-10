@@ -586,7 +586,9 @@ same `answerSessionPrompt` call (`shell/rail-fetch.ts`, with `prompt_id`) as the
 never bubble to the row, and the buttons lock until the reply returns.
 
 **Delegation and subagents.** Delegated child sessions sit under their parent, indented 24 (icon at
-x=36), joined by a 1px `--color-line-strong` branch line on x=19 (the parent icon's axis); their line 3
+x=36), joined by a 1px `--color-line-strong` branch line on x=19 (the parent icon's axis); the short turn into
+each child takes the child's branch colour (merged `--color-st-done`, failed `--color-st-error`, closed
+`--color-line-strong`, otherwise the parent's lane), the same classes as the collapsed rail and the phone Fleet; their line 3
 is the delegation state plus 「별도 터미널」. Native subagent rows (`NativeChildren.tsx`) use the same
 indent and line: state icon 16 · name 13/500 · elapsed, then 「내부 · 작업 중」 in the state colour.
 Ended rows (`StoppedRow`) use the same columns with the dashed state circle and a `sub` name; their

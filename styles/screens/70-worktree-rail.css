@@ -648,7 +648,7 @@ label.vt-railset-row { cursor:pointer; }
   #vt-wgrail .vt-srow.stopped:focus-within .vt-srow-actions { display:flex; }
 }
 
-/* 위임 하위 행 — 부모 아이콘 축(x=19)에서 내려오는 1px 가지선. 폰 Fleet의 색 레인(.vt-lin-fleet)은 그대로 둔다.
+/* 위임 하위 행 — 부모 아이콘 축(x=19)에서 내려오는 1px 가지선. 줄기는 옅은 선, 하위 행으로 꺾이는 끝만 --branch(병합 완료색 · 실패 오류색 · 닫힘 옅은 선 — 접힌 레일 · 폰 Fleet과 같은 분류). 폰 Fleet의 색 레인(.vt-lin-fleet)은 그대로 둔다.
    부모 행은 아이콘 아래(6 + 20 + 2 = y 28)부터 선을 내리고, 하위 행은 위에서 아이콘 가운데(y 16)까지 와서 꺾인다. */
 #vt-wgrail .vt-lin.has-kids > .vt-srow::after {
   left:19px; top:calc(var(--vt-line1) + 8px); bottom:0; width:0; border:0; border-left:1px solid var(--color-line-strong); border-radius:0;
@@ -656,7 +656,7 @@ label.vt-railset-row { cursor:pointer; }
 #vt-wgrail .vt-lin-kid > .vt-srow { padding-left:36px; }
 #vt-wgrail .vt-lin-kid::before {
   left:19px; top:0; width:10px; height:calc(6px + var(--vt-line1) / 2); z-index:1;
-  border:0; border-left:1px solid var(--color-line-strong); border-bottom:1px solid var(--color-line-strong); border-bottom-left-radius:5px;
+  border:0; border-left:1px solid var(--color-line-strong); border-bottom:1px solid var(--branch); border-bottom-left-radius:5px;
 }
 #vt-wgrail .vt-lin-kid:not(.last)::after {
   left:19px; top:calc(6px + var(--vt-line1) / 2); width:0; z-index:1; background:none; border-left:1px solid var(--color-line-strong);

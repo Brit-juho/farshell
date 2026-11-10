@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+- **Expanded rail: delegation branch lines show the child's state again.** The turn into a merged child is drawn in the done colour and a failed child in the error colour (closed children stay faint), matching the collapsed rail and the phone Fleet. The expanded rail had hard-coded the neutral line, so every branch looked the same.
+
 ---
 
 ## [2.10.1] — 2026-11-10
