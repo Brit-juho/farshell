@@ -578,6 +578,18 @@ a peer signature opens.
 
 With `VT_AUTHZ_ENFORCE=peer` the routes in this table that act on another Mac (the list, every `{host_id}` route including the relay, and both WebSocket proxies) require the caller to hold the scope on `host:<id>`: a person logged in through the browser (and an open server without any password) does; `fsh` over the unix socket only for the list and ping; an agent or the machine token does not (403 `host_access_denied`, WebSocket close 4003). Details: [`docs/ref/auth.md`](./docs/ref/auth.md).
 
+## Update (check and automatic update)
+
+Implemented in `server/update_check.py` and `server/routes/update.py`; behavior and threat model in [`docs/ref/dev.md`](./docs/ref/dev.md) «Update check and automatic update». None of these routes is in the host relay allowlist or the unix-socket allowlist: an agent, a peer, the machine token or a relayed call is refused (`403 human_session_required`).
+
+| Method | Path | Description |
+|--------|------|------|
+| GET | `/api/update/status` | **Browser login session only.** The last check from `$VT_STATE_DIR/update-status.json` plus the server settings: `{checked_at, channel, current, latest, latest_tag, available, applicable, signature_ok, signer, error, blocked, attempts:{version,count}, auto:{reason,first_seen,…}, last_apply:{result:"running"\|"ok"\|"failed", at, from, to, reason, rolled_back}, settings:{check, auto, auto_hour}, check_enabled, env_off, in_progress}`. `current` is re-read from `VERSION` on every call, so it is right right after an update. `blocked` is why this install cannot take the update (`no_trusted_key`, `dirty`, `devmode`, `channel_unset`); `auto.reason` is why an automatic update did not run yet (`waiting_window`, `busy_terminal_input`, `busy_agent_busy`, `gave_up`, `stalled`, `applying`, or a policy code such as `channel`, `major`, `dirty`, `branch`, `no_trusted_key`, `signature`). No network request is made |
+| POST | `/api/update/check` | **Browser login session only.** Check now (`git fetch` of `origin` plus tag-signature verification, deadline-bound, `net` pool). `{ran, status}`; `ran:false` when a check is already running or the last manual one was < 10 s ago. `409 update_check_disabled` while checking is off (`update.check` false or `VT_UPDATE_CHECK=0`) — no request is made then |
+| PUT | `/api/update/settings` | **Browser login session + elevation** (`401 elevation_required`). Body: any of `{"check": bool, "auto": "off"\|"stable-only", "auto_hour": 0-23}`; unknown keys or bad values are `400 bad_request`. Written atomically to `update-settings.json`. The change is appended to the audit chain as `update.settings` (`started` first — `503 audit_unavailable` if it cannot be written — then `ok`), with the key names and new values only. Returns the same body as `GET /api/update/status`. Pushes `{"type":"update_status"}` on `/ws-workspace` |
+
+`/ws-workspace` also carries two update events: `{"type":"update_status","kind":"checked"\|"settings"\|"applying"\|"failed"\|"reason"}` (re-read the status) and `{"type":"update_restarting","version":"X.Y.Z"}` (the server is about to restart on the new version; the connection returns by itself, tmux sessions are kept).
+
 ## Misc
 
 | Method | Path | Description |

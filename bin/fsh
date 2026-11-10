@@ -2223,6 +2223,13 @@ cmd_update() {
   (cd "$VT_DIR/server" && VT_DIR="$VT_DIR" "$VT_PYTHON" -m updater "$@")
 }
 
+# 업데이트 확인 결과 한 줄("available 2.10.2" | "latest 2.10.1" | "off" | "unknown") — server/update_check.py 가 서버 안에서 쓴
+# update-status.json 을 읽기만 한다(여기서는 네트워크 요청을 하지 않는다).
+_update_summary() {
+  [ -n "${VT_PYTHON:-}" ] && [ -x "$VT_PYTHON" ] || return 1
+  (cd "$VT_DIR/server" && VT_DIR="$VT_DIR" "$VT_PYTHON" -m updater status --line 2>/dev/null)
+}
+
 # tmux 설정 — 레포 config/vt-tmux.conf 가 기준, 개인 설정은 ~/.config/vt/tmux.local.conf.
 # 옛 사본 정리·다시 읽기·판정은 전부 server/tmux_conf.py 에 있다(install.sh·fsh sync 와 한 곳).
 # reload 는 떠 있는 tmux 서버에만 source-file 한다 — 서버를 띄우거나 죽이지 않는다.
@@ -3692,6 +3699,14 @@ print(('ok|' if sel and sel['ready'] else 'warn|') + (sel['label'] + ('|ready' i
         esac ;;
     esac
   fi
+  local _up _upc _upv
+  _up="$(_update_summary || true)"; _upc="${_up%% *}"; _upv="${_up#* }"
+  case "$_upc" in
+    available) _check "$(_t '업데이트')" warn "$(_t '{ver} 사용 가능 → fsh update' ver="$_upv")" ;;
+    latest)    _check "$(_t '업데이트')" ok "$(_t '최신입니다') ($_upv)" ;;
+    off)       _check "$(_t '업데이트')" ok "$(_t '확인 끔')" ;;
+    unknown)   _check "$(_t '업데이트')" ok "$(_t '아직 확인 전 — 서버가 뜬 뒤 몇 분 안에 확인합니다')" ;;
+  esac
   local _dinc
   _dinc="$(_server_health_summary 1 | sed -n 's/^INCIDENTS //p' | head -1)"
   [ -n "$_dinc" ] && _check "$(_t '장애 기록')" warn "$(_t '워치독이 남긴 진단 {n}건 — 최근: {path}' n="${_dinc%% *}" path="${_dinc#* }")"
@@ -5628,6 +5643,13 @@ cmd_status() {
   fi
   echo "  $(_t '터널 워치독: ')$watchdog_status"
   _status_security_block
+  local _up _upc _upv
+  _up="$(_update_summary || true)"; _upc="${_up%% *}"; _upv="${_up#* }"
+  case "$_upc" in
+    available) echo "  $(_t '업데이트:    ')⚠ $(_t '{ver} 사용 가능 → fsh update' ver="$_upv")" ;;
+    latest)    echo "  $(_t '업데이트:    ')✓ $(_t '최신입니다') ($_upv)" ;;
+    off)       echo "  $(_t '업데이트:    ')- $(_t '확인 끔')" ;;
+  esac
   echo "  Tailscale:   $ts_status  ($(_t '이 맥에 SSH로 붙는 명령 안내: fsh ssh'))"
   echo "  Voice Daemon: $voice_status"
   echo "  Clipboard:   $clip_status"

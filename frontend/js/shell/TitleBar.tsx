@@ -24,6 +24,7 @@ import { t } from '../core/i18n.js';
 import { shellIcon } from '../ui/icons-shell.js';
 import { Menu, type MenuItem } from './RailRow.js';
 import { buildHostMenu, hostDetail, LOCAL_HOST, type HostEntry } from './host-data.js';
+import { menuLine, applyNotice, readSeen, writeSeen } from './update-data.js';
 
 export interface TitleCrumb {
   repo?: string | null;
@@ -50,6 +51,17 @@ export interface TitleBarDeps {
   focusActive?: () => boolean;
   /** 집중 모드를 켜고 끌 때 window에 오는 이벤트 이름. */
   focusEvent?: string;
+  /** `/ws-workspace` push 구독(core/workspace-ws.js onWorkspaceEvent). 해제 함수를 돌려준다. 업데이트 알림이 쓴다. */
+  subscribeEvent?: (type: string, fn: (msg: any) => void) => () => void;
+}
+
+/** `GET /api/update/status` 중 이 막대가 쓰는 부분. */
+interface UpdateStatus {
+  available?: boolean;
+  applicable?: boolean;
+  latest?: string | null;
+  latest_tag?: string | null;
+  last_apply?: { result?: string; at?: number; to?: string | null; reason?: string | null; rolled_back?: boolean } | null;
 }
 
 interface Caps { hostname?: string; tunnel?: unknown }
@@ -89,7 +101,7 @@ export function accessUrl(caps: unknown): string {
  * fixed의 기준 상자를 바꿔서 안에 두면 잘린다. 닫기: 바깥 클릭 · Esc · 항목 실행 · 창 크기 변경/포커스 잃음.
  * 키보드: ↑↓ Home End.
  */
-function MenuButton(props: { deps: TitleBarDeps; getCaps: () => unknown }) {
+function MenuButton(props: { deps: TitleBarDeps; getCaps: () => unknown; update: () => UpdateStatus | null }) {
   const [open, setOpen] = createSignal(false);
   const [pos, setPos] = createSignal({ top: 0, left: 0 });
   let btn: HTMLButtonElement | undefined;
@@ -108,7 +120,14 @@ function MenuButton(props: { deps: TitleBarDeps; getCaps: () => unknown }) {
   };
   const mod = props.deps.isMac ? '⌘' : 'Ctrl+';
 
+  // 업데이트가 있을 때만 맨 위에 한 줄 — 누르면 설정 > 업데이트(명령 팔레트의 `update.open` 과 같은 액션).
+  const updateEntry = (): MenuEntry[] => {
+    const line = menuLine(props.update());
+    return line ? [{ id: 'update', iconName: 'download', label: line.label, run: () => act('update.open') }] : [];
+  };
+
   const entries = (): MenuEntry[] => [
+    ...updateEntry(),
     { id: 'new', iconName: 'plus', label: t('새 세션'), run: (el) => act('session.add-menu', el) },
     { id: 'quick', iconName: 'search', label: t('빠른 열기'), keys: `${mod}K`, run: () => act('quickopen.open') },
     // 리디자인 7단계(시안 O07) — 집중 모드. 표기는 키맵의 지금 조합(사용자가 바꿨으면 그 조합)이다.
@@ -409,10 +428,34 @@ function TitleBar(props: { deps: TitleBarDeps; root: HTMLElement }) {
     if (c) setCaps(c);
   };
   void loadCaps();
+
+  // 업데이트 확인 결과(서버가 24시간마다 점검 — server/update_check.py). 메뉴를 열 때와 서버 push 때 다시 읽는다.
+  // 자동 적용이 끝났거나 실패했으면 화면마다 한 번만 토스트로 알린다(본 시각을 localStorage 에 둔다).
+  const [upd, setUpd] = createSignal<UpdateStatus | null>(null);
+  const loadUpdate = async () => {
+    const st = await safeFetch<UpdateStatus>(props.deps, '/api/update/status');
+    if (!st) return;
+    setUpd(st);
+    const note = applyNotice(st, readSeen());
+    if (note) {
+      writeSeen(note.at);
+      props.deps.toast?.(note.text, note.type);
+    }
+  };
+  void loadUpdate();
+  const offEvents = [
+    props.deps.subscribeEvent?.('update_status', () => { void loadUpdate(); }),
+    // 서버가 새 버전으로 다시 시작하기 직전에 보낸다 — 연결이 잠시 끊겼다 돌아오는 것이 정상임을 알린다(tmux 세션은 유지).
+    props.deps.subscribeEvent?.('update_restarting', (msg: any) => {
+      const ver = typeof msg?.version === 'string' && msg.version ? ` v${msg.version.replace(/^v/, '')}` : '';
+      props.deps.toast?.(t('새 버전{ver}으로 서버를 다시 시작합니다 — 잠시 후 자동으로 다시 연결됩니다', { ver }), 'info');
+    }),
+  ];
+  onCleanup(() => { for (const off of offEvents) off?.(); });
   // 접속 주소(터널 URL)는 바뀔 수 있다 — 메뉴를 열 때마다 다시 읽어 두면 복사가 늘 최신 값을 쓴다.
   // (복사 자체는 클릭과 같은 틱에서 해야 하므로 — 사용자 활성화가 필요한 브라우저가 있다 — 그때 기다리지 않는다.)
   const onMenuOpen = (e: Event) => {
-    if ((e.target as HTMLElement | null)?.closest?.('.vt-mb-menu')) void loadCaps();
+    if ((e.target as HTMLElement | null)?.closest?.('.vt-mb-menu')) { void loadCaps(); void loadUpdate(); }
   };
   props.root.addEventListener('pointerdown', onMenuOpen);
   onCleanup(() => props.root.removeEventListener('pointerdown', onMenuOpen));
@@ -438,7 +481,7 @@ function TitleBar(props: { deps: TitleBarDeps; root: HTMLElement }) {
     <>
       <div class="vt-tb-left">
         <div class="vt-tb-home" ref={leadHome} />
-        <MenuButton deps={props.deps} getCaps={() => caps()} />
+        <MenuButton deps={props.deps} getCaps={() => caps()} update={upd} />
         <HostSwitcher deps={props.deps} hostname={() => caps()?.hostname || ''} />
         <Breadcrumb deps={props.deps} />
       </div>

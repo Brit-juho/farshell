@@ -27,5 +27,7 @@ registerAction('settings.show', () => open());
 registerAction('settings.section', (section) => open(typeof section === 'string' ? section : undefined));
 registerAction('voice.settings', () => open('voice'));
 registerAction('permissions.show', () => open('permissions'));
+// FarShell 메뉴의 「업데이트 있음」 줄과 명령 팔레트가 설정 > 업데이트를 연다.
+registerAction('update.open', () => open('update'));
 // S3에서 잡아둔 `Mod+,` 바인딩의 주인.
 registerKey('settings', () => open());

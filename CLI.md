@@ -44,6 +44,8 @@ fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <
 fsh hotkey [list|set|reset|disable]  # view/change hotkeys
 fsh hooks [status|install|uninstall|dedupe [--dry-run]]  # register Claude Code + Codex hooks (status badges/queue; Claude/Codex Stop drive session-specific TTS); dedupe removes FarShell hooks the Codex app copied into ~/.codex/hooks.json
 fsh update [--channel stable|dev|devmode] [--to vX.Y.Z] [--check] [--restart] [--rollback]  # update by channel (stable = signed release tag, dev = origin/dev, devmode = manual pull) then re-sync hooks + skill; `update trust [--key <pubkey file>]` pins the release-signing key; `--rollback` returns to the previous commit
+fsh update status                                                      # result of the last server-side update check (no network request)
+fsh update auto [on|off|status] [--hour 0-23] [--yes]                  # automatic updates (off by default): signed stable releases only, in a quiet hour; `on` explains the risk and asks (`--yes` when not interactive)
 fsh sync [--dry-run]  # re-sync Claude Code/Codex hooks, the fsh skill link and the tmux config to the current code (use after a manual pull)
 fsh tmux [status|reload [--dry-run]|extkeys [on|off|status]]  # tmux config: the repo base + your ~/.config/vt/tmux.local.conf; reload re-reads it into the running tmux (sessions stay) and moves an old ~/.config/vt/tmux.conf copy aside; extkeys on|off|status is a trial switch for tmux extended keys (a marked block in tmux.local.conf, default stays off)
 fsh pane report [--state ...] [--agent ...]  # report this pane's state (for agents without managed hooks)

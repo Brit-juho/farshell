@@ -83,6 +83,14 @@ Verify affected behavior with actual responses, operations and logs.
     `~/.claude/settings.json` and `~/.codex/config.toml` (read-only plan functions) and reports; repair is always the user's
     `fsh hooks install`/`fsh sync`. Do not add an auto-repair: it races with the user, gstack and clauth, gives a remotely
     reachable process write access to agent settings, and resurrects hooks the user removed on purpose.
+17. **Automatic update runs network code — keep it bounded.** `update.auto` is off by default and only ever applies
+    a signature-verified `stable` release tag (`updater.resolve_target`, trust file outside the repo, `origin/master`
+    history), never on the dev channel, devmode, an unset channel, a tree with local changes, a major-version jump or
+    without a pinned key (trust is a human act: `fsh update trust`). Changing `update.check`/`update.auto`/the hour
+    needs a browser session **plus elevation**, is audited, and is refused for agents, peers, the machine token and
+    relayed calls (keep `/api/update/*` out of `relay_policy.py` and the socket allowlist). The server applies it
+    through a detached child under `update.lock`, never in-process. See [`docs/ref/dev.md`](./docs/ref/dev.md)
+    «Update check and automatic update».
 
 ## Branches and releases
 

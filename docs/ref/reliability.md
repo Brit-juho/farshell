@@ -128,6 +128,7 @@ deadline and the breaker instead.
 ## Other places that follow the same rule
 
 - **Hook health check.** `hook_health` reads the agent settings only in the `hooks` pool under an 8 s deadline and holds its cache with a 2 s `TimedLock`. A read that misses the deadline returns the previous result (`stale`) and is never treated as a hook fault. Tests: `test_hook_health.py` (fake slow read keeps the loop ticking).
+- **Update check.** `update_check.py` runs its `git fetch` under `updater.hardened()` (`proc.run`) in the `net` pool with a 150 s deadline and a `TimedLock`; the automatic apply is a detached child process, never a server thread. Details: `docs/ref/dev.md`.
 - **Hook intake.** `/api/agent/event` and `/api/agent/report` resolve the pane in `proc` (5 s). On
   timeout or saturation the session is left unresolved.
 - **Status sweep.** `agent_status.sweep` never reads a screen on the event loop. On the loop the probe
