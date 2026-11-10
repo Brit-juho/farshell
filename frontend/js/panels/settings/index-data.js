@@ -87,7 +87,7 @@ export const SECTION_META = [
   { id: 'permissions', label: t('권한'), description: t('에이전트의 승인 요청, 페어, 폴더 점유, 허용된 권한, 감사 기록을 봅니다.') },
   { id: 'security', label: t('계정 및 보안'), description: t('로그인, OTP, 등록 기기와 현재 세션을 확인합니다.') },
   { id: 'update', label: t('업데이트'), description: t('새 버전 확인과 자동 업데이트를 설정합니다.') },
-  { id: 'about', label: t('정보 및 진단'), description: t('훅과 사용량 공급자의 연결 상태를 진단합니다.') },
+  { id: 'about', label: t('정보 및 진단'), description: t('훅과 사용량 공급자의 연결 상태를 진단하고, 앱 파일을 새로 받습니다.') },
 ];
 
 export const SEARCH_ITEMS = [
@@ -105,7 +105,7 @@ export const SEARCH_ITEMS = [
   ['permissions', t('승인 대기')], ['permissions', t('페어')], ['permissions', t('폴더 점유(lease)')], ['permissions', t('허용된 권한')], ['permissions', t('감사 기록')], ['permissions', t('비상 정지')],
   ['security', t('로그인과 OTP')], ['security', t('등록 기기')], ['security', t('로그아웃')],
   ['update', t('새 버전 확인')], ['update', t('자동 업데이트')], ['update', t('적용 시각')],
-  ['about', t('에이전트 훅')], ['about', t('사용량 공급자')], ['about', t('버전과 진단')],
+  ['about', t('에이전트 훅')], ['about', t('사용량 공급자')], ['about', t('버전과 진단')], ['about', t('캐시 지우기')],
 ].map(([sectionId, label]) => ({ sectionId, label }));
 
 // 값은 화면에 나오지 않는 검색어 묶음이다. 영어 화면에서는 영어 검색어로 바뀐다.
@@ -134,6 +134,7 @@ export const SEARCH_ALIASES = {
   [t('상태 막대 칩')]: t('메뉴바 하단바 hud 칩 시계 cpu'),
   [t('활동 막대 순서')]: t('활동 숨기기 아이콘 순서 왼쪽 막대'),
   [t('에이전트 훅')]: 'hook codex claude',
+  [t('캐시 지우기')]: t('캐시 앱 파일 새로고침 오래됨 업데이트 화면 안 바뀜 서비스 워커 cache update clear refresh stale'),
   [t('감지 방법과 정확도')]: t('에이전트 감지 상태 커버리지 신뢰도 경로 훅 화면 패턴 pty'),
   [t('자동 업데이트')]: t('업데이트 버전 최신 릴리스 새 버전 update upgrade 서명 stable'),
   [t('새 버전 확인')]: t('업데이트 버전 확인 네트워크 fetch'),
