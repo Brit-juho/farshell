@@ -79,6 +79,14 @@ Verify affected behavior with actual responses, operations and logs.
     `data-action` + `registerAction`, and keep the policy string in that one place. Verify any change that
     could add one in a real browser against an isolated server (console must show no CSP violation).
     `style-src` still allows inline styles. Details: [`docs/ref/auth.md`](./docs/ref/auth.md) «Security headers».
+16. **Automatic update runs network code — keep it bounded.** `update.auto` is off by default and only ever applies
+    a signature-verified `stable` release tag (`updater.resolve_target`, trust file outside the repo, `origin/master`
+    history), never on the dev channel, devmode, an unset channel, a tree with local changes, a major-version jump or
+    without a pinned key (trust is a human act: `fsh update trust`). Changing `update.check`/`update.auto`/the hour
+    needs a browser session **plus elevation**, is audited, and is refused for agents, peers, the machine token and
+    relayed calls (keep `/api/update/*` out of `relay_policy.py` and the socket allowlist). The server applies it
+    through a detached child under `update.lock`, never in-process. See [`docs/ref/dev.md`](./docs/ref/dev.md)
+    «Update check and automatic update».
 
 ## Branches and releases
 

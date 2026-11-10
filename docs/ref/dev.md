@@ -122,6 +122,51 @@ advance, `sync`. Any failure before the branch advance returns to the saved comm
 (`~/.vt/update-prev.json`). `sync` reuses `claude_hooks.py`/`codex_hooks.py install` and links
 `~/.claude/skills/fsh` to the repo copy; it never overwrites a non-link skill. The trust file is
 outside the repo on purpose; do not add a key file to the repository. Tests: `server/tests/test_updater.py`.
+Anything that changes the checkout (`fsh update`, `--rollback`, the automatic apply) first takes
+`$VT_STATE_DIR/update.lock` (`updater.update_lock`, flock, no waiting: the second one is refused).
+
+### Update check and automatic update
+
+`server/update_check.py` (user guide `fsh help update`) runs inside the server (`main.py` lifespan task) and reuses
+`updater.py` for every judgement — `resolve_target`/`verify_tag` (signature, signed name == tag name,
+`origin/master` history), `cmd_update` (checkout, `post_checkout`, restore, `sync`). It adds scheduling, a status
+file and a policy; it does not re-implement verification.
+
+**Check (read-only).** One tick every 5 minutes does local work only. The first network check runs 1–10 minutes
+(random) after start, then every 24 h: `updater.fetch` (a `git fetch --tags origin`) under `updater.hardened()` —
+git runs through `resilience.proc.run` (own session, group SIGKILL at the deadline), the call goes through
+`pools.run("net", …, timeout=150)` and a `TimedLock`, so a hung remote cannot hold the server. No GitHub API, token
+or user identifier is sent. The result is `$VT_STATE_DIR/update-status.json` (atomic write under
+`update-status.lock`; a corrupt file is moved to `.corrupt` and rebuilt). `update.check` (default on, in
+`update-settings.json`) or `VT_UPDATE_CHECK=0` turns the whole thing off: no request, the manual check answers
+`409`. Stable compares the newest verified `vX.Y.Z` with `VERSION` (semver); dev compares `origin/dev` with `HEAD`;
+devmode / no channel / dirty tree show the tag but are marked not applicable (`blocked`). `current` is re-read from
+`VERSION` when the server starts and on every `GET`, so the line disappears right after an update.
+
+**Automatic apply (`update.auto`: `off` default, `stable-only`).** `auto_blockers()` returns the reason not to
+apply, and `apply_main()` runs it again under the lock right before moving: stored channel is `stable` (dev, devmode,
+unset never), branch is `master` or detached, no tracked changes, a trusted key is pinned (TOFU stays a human act,
+`fsh update trust`), `origin/master` exists, signature + history verify, and the major version does not increase.
+Timing: local hour == `update.auto_hour` (default 4), no human terminal input for `VT_UPDATE_IDLE_MIN` (15) minutes
+(`pane_input.last_human_input_age`) and no `working`/`waiting` agent (`agent_status`). Otherwise wait for the next
+tick; after 7 days since the update was first seen it stops (`auto.reason: stalled`); after 3 attempts for one
+version it stops (`gave_up`). An idle tab left open does **not** block an update — only recent input does.
+The server never overwrites its own code: it spawns `python -m update_check apply --to vX.Y.Z` in its own session
+(output in `update-auto.log`), which calls `updater.cmd_update` (failure restores the original commit; the result goes
+to `last_apply`). When the child reports `ok`, the server broadcasts `update_restarting` on `/ws-workspace`, waits 2 s
+and starts a detached `bin/fsh restart` (the tunnel URL is kept; tmux sessions live in the tmux server and survive).
+
+**Threat model.** The feature runs code that came over the network, so it is off by default and bounded by the
+trust file outside the repository: a compromised repository cannot add a signer, a replayed signed tag is refused
+by the name check, an unsigned or foreign-signed tag is never applied, a major jump or a local edit stops it, and
+a build failure rolls back. It cannot protect against a compromised signing key (the trusted one). The switches
+(`PUT /api/update/settings`) need a browser login session **and** elevation, are audited as `update.settings`
+(keys and new values only), and are refused for agents, peers, the machine token and relayed calls (the routes
+are not in `relay_policy.py`). `fsh update auto` is the local-user path (same trust as editing the file).
+To turn it off: Settings > Update, `fsh update auto off`, or `VT_UPDATE_CHECK=0` for everything.
+Tests: `server/tests/test_update_check.py` (fake bare remote + test SSH key; stable/dev/devmode, bad signature,
+major, dirty, no trusted key, schedule with a fake clock, window/idle/7-day/3-attempt, lock, apply + rollback),
+`test_routes_update.py` (authorization, elevation, audit), `frontend/tests/{titlebar-update,update-settings}.test.js`.
 
 ## Validation
 
