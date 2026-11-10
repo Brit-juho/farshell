@@ -193,7 +193,7 @@ export function renderAboutSection() {
   // 앱 파일 — 폰에는 FarShell 메뉴(제목 막대)가 없어 「캐시 지우기」를 여기서도 할 수 있게 한다.
   // 새 로직은 없다: 팔레트·메뉴와 같은 액션(app.clear-cache, 확인 대화상자 포함)을 부른다.
   const clear = document.createElement('button');
-  clear.type = 'button'; clear.className = 'vt-btn sm quiet vt-set-clearcache';
+  clear.type = 'button'; clear.className = 'vt-btn sm vt-set-clearcache';
   clear.textContent = t('캐시 지우기');
   clear.addEventListener('click', () => {
     const run = getAction('app.clear-cache');
