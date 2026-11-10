@@ -92,14 +92,7 @@
   padding:12px 0; min-height:0; border-bottom:1px solid var(--line);
 }
 .vt-set-row:last-child { border-bottom:0; }
-/* 라벨과 컨트롤의 세로 중심(2026-11 점검 7-2: 대부분 +2.0px, 「글자 크기」 +5.0, 「스크롤백 줄 수」 +21.0).
-   라벨 첫 줄의 높이를 표준 컨트롤 높이 28에 맞추면, 위쪽 정렬(flex-start) 그대로 28px 컨트롤과 라벨 첫 줄의 중심이 같아진다.
-   24px 컨트롤(선택·ON/OFF)은 2px 내려 중심을 맞춘다. 컨트롤 상자를 행 가운데로 놓지 않는 이유: 설명 줄이 붙은 행에서
-   컨트롤이 라벨 줄이 아니라 설명 줄 높이만큼 아래로 떠 버린다. 폰은 자기 규칙(98-mobile.css)이 가운데 정렬을 맡는다. */
-@media (min-width:720px) {
-  .vt-set-row:has(> .vt-toggle, > .vt-select-wrap, > .vt-dd, > .vt-number-spinner, > .vt-btn, > .vt-range) > .vt-set-meta > .vt-set-label:first-child { line-height:28px; }
-  .vt-set-row > .vt-toggle, .vt-set-row > .vt-select-wrap, .vt-set-row > .vt-dd, .vt-set-row > .vt-btn.sm { margin-top:2px; }
-}
+/* 라벨 첫 줄과 컨트롤의 세로 중심 — 파일 맨 아래 「설정 정돈(2026-11)」 블록이 정한다(라벨 첫 줄 28 = 표준 컨트롤 28). */
 .vt-set-row.conflict .vt-set-combo { color:var(--color-st-error); border-color:var(--color-st-error); }
 .vt-set-meta { min-width:0; }
 .vt-set-label { font:500 var(--fs-sm) / 20px var(--ui); color:var(--txt); }
@@ -842,3 +835,209 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
 #vt-mcp:not(.vt-dock-panel) .vt-mcp-search { height:40px; font-size:var(--fs-base); }
 #vt-mcp:not(.vt-dock-panel) .vt-mcp-row .vt-chip.sm { min-height:32px; font-size:var(--fs-sm); }
 #vt-mcp:not(.vt-dock-panel) .vt-mcp-group > .vt-set-help { max-width:64ch; margin-left:calc(5.5em + var(--spacing) * 1.5); }
+
+/* ═══ 설정 정돈 (2026-11, 시안 specimen/final/settings.html) ═══════════════════════════════════
+   패널 머리 40 · 구역 머리 28 · 행 36 · 컨트롤 28(폰 44). 구역 순서·항목·동작은 그대로이고 모양만 한 벌로 맞춘다.
+   이 블록이 위 옛 규칙(제목 22 · 구역 제목 12 muted · 행 12/0 패딩)을 나중에 덮는다 — 지우지 않은 이유는 폰(98-mobile)과
+   MCP 창이 같은 클래스를 쓰기 때문이다. 값은 전부 토큰이다. */
+@media (min-width:720px) {
+  .vt-settings .vt-set-content { padding:0 16px 20px; }
+  .vt-settings .vt-set-content > * { max-width:none; }
+  .vt-settings .vt-set-intro { margin:0 -16px 0; }
+  .vt-settings .vt-set-title {
+    display:flex; align-items:center; height:40px; box-sizing:border-box; padding:0 16px; margin:0;
+    border-bottom:1px solid var(--color-line); font:600 var(--fs-base) / 1 var(--font-ui); letter-spacing:0;
+  }
+  .vt-settings .vt-set-description { margin:0; padding:10px 16px 0; font:400 var(--fs-xs) / 16px var(--font-ui); color:var(--color-muted); }
+  .vt-settings .vt-set-group { margin:12px 0 0; }
+  .vt-settings .vt-set-group-title {
+    display:flex; align-items:center; gap:8px; height:28px; box-sizing:border-box;
+    border-bottom:1px solid var(--color-line-strong); color:var(--color-sub); font:600 var(--fs-xs) / 1 var(--font-ui);
+  }
+  .vt-settings .vt-set-group-title > * { margin-left:auto; }
+  .vt-settings .vt-set-group-title > .vt-btn { font-weight:500; }
+  .vt-settings .vt-set-row { padding:4px 0; min-height:36px; box-sizing:border-box; gap:16px; }
+  .vt-settings .vt-set-label {
+    display:flex; align-items:center; flex-wrap:wrap; gap:6px; min-height:28px; font:500 var(--fs-sm) / 18px var(--font-ui);
+  }
+  .vt-settings .vt-set-scope { margin-left:0; vertical-align:baseline; }
+  .vt-settings .vt-set-help { margin:0; padding:0 0 4px; font:400 var(--fs-xs) / 16px var(--font-ui); max-width:62ch; }
+  .vt-settings .vt-set-default { margin-top:0; padding:0 0 4px; }
+  .vt-settings .vt-set-row > :is(.vt-switch, .vt-segmented, .vt-select-wrap, .vt-dd, .vt-range, .vt-number-spinner, .vt-set-btns, .vt-set-unitwrap, .vt-btn) { align-self:flex-start; }
+  .vt-settings .vt-select, .vt-settings .vt-dd:not(.vt-input) { height:28px; }
+  .vt-settings .vt-set-content .vt-btn.sm { --btn-h:28px; font-size:var(--fs-xs); border-color:var(--color-line-strong); }
+  .vt-settings .vt-set-content .vt-btn.sm.quiet { border-color:var(--color-line-strong); background:transparent; }
+  .vt-settings .vt-set-content .vt-btn.sm.quiet:hover { background:var(--color-state-hover); }
+  .vt-settings .vt-set-content .vt-btn.sm.quiet:active { background:var(--color-state-press); }
+  .vt-settings .vt-set-content .vt-btn.sm.danger { border-color:color-mix(in srgb, var(--color-st-error) 40%, transparent); }
+  .vt-settings .vt-set-group-title .vt-btn.sm.quiet { border-color:transparent; color:var(--color-sub); }
+}
+.vt-set-btns { align-items:center; }
+.vt-set-desc { margin:0; padding:6px 0 0; font:400 var(--fs-xs) / 16px var(--font-ui); color:var(--color-muted); }
+.vt-set-subhead { display:flex; align-items:center; min-height:28px; margin-top:4px; font:500 var(--fs-sm) / 18px var(--font-ui); color:var(--color-txt); }
+.vt-set-mono { margin-left:6px; font:400 var(--fs-xs) / 1 var(--font-mono); color:var(--color-muted); }
+.vt-set-unitwrap { display:inline-flex; align-items:center; gap:8px; }
+.vt-set-pcode { padding:0 5px; border-radius:4px; background:var(--color-state-hover); color:var(--color-sub); font:400 var(--fs-xs) / 16px var(--font-mono); word-break:break-all; }
+
+/* 구역 머리 오른쪽 칩 */
+.vt-set-chip {
+  display:inline-flex; align-items:center; height:18px; padding:0 6px; border-radius:4px; white-space:nowrap;
+  background:var(--color-state-hover); color:var(--color-sub); font:500 var(--fs-2xs) / 1 var(--font-ui);
+}
+.vt-set-chip[data-state="warn"] { background:var(--color-st-waiting-tint); color:var(--color-st-waiting); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--color-st-waiting) 30%, transparent); }
+
+/* 상태 한 줄 — 정상은 조용한 회색 체크, 문제만 호박색 */
+.vt-set-stat { display:flex; align-items:center; gap:6px; min-height:20px; font:400 var(--fs-xs) / 16px var(--font-ui); color:var(--color-muted); }
+.vt-set-stat > svg { flex:none; }
+.vt-set-stat[data-state="ok"] { color:var(--color-sub); }
+.vt-set-stat[data-state="warn"] { color:var(--color-st-waiting); }
+.vt-set-stat[data-state="err"] { color:var(--color-st-error); }
+.vt-set-stat-gap { margin-top:4px; }
+
+/* 안내 상자 */
+.vt-settings .vt-set-note {
+  display:flex; gap:8px; align-items:flex-start; margin:8px 0 0; padding:8px 10px; border-radius:6px;
+  background:var(--color-state-hover); color:var(--color-sub); font:400 var(--fs-xs) / 16px var(--font-ui);
+}
+.vt-settings .vt-set-note > svg { flex:none; margin-top:1px; }
+.vt-settings .vt-set-note[data-state="warn"] { background:var(--color-st-waiting-tint); color:var(--color-st-waiting); }
+.vt-settings .vt-set-note[data-state="warn"] .vt-set-help { color:var(--color-st-waiting); max-width:none; }
+
+/* 명령 상자 + 복사 */
+.vt-set-code {
+  display:flex; align-items:center; gap:8px; min-height:32px; box-sizing:border-box; padding:0 4px 0 10px; border-radius:6px;
+  background:var(--color-bg-2); border:1px solid var(--color-line-strong); color:var(--color-txt); font:400 var(--fs-xs) / 1 var(--font-mono);
+}
+.vt-set-code-p { color:var(--color-muted); }
+.vt-set-code code { flex:1; min-width:0; overflow-x:auto; white-space:nowrap; font:inherit; user-select:all; }
+.vt-set-code .vt-btn { flex:none; margin-left:auto; }
+
+/* 표 (감지 방법과 정확도 · 등록 기기) — 머리 28 · 행 36 · 숫자 열 오른쪽 정렬 */
+.vt-settings .vt-set-covtable-host { margin-top:0; }
+.vt-settings .vt-set-covtable th { height:28px; padding:0 8px; font:500 var(--fs-xs) / 1 var(--font-ui); color:var(--color-muted); border-bottom:1px solid var(--color-line-strong); }
+.vt-settings .vt-set-covtable td { height:36px; padding:0 8px; font:400 var(--fs-sm) var(--font-ui); border-bottom:1px solid var(--color-line); vertical-align:middle; }
+.vt-settings .vt-set-covtable tbody tr:last-child td { border-bottom:0; }
+.vt-settings .vt-set-covtable th:first-child, .vt-settings .vt-set-covtable td:first-child { padding-left:0; }
+.vt-settings .vt-set-covtable tbody tr:hover td { background:var(--color-state-hover); }
+.vt-settings .vt-set-covtable tbody tr:active td { background:var(--color-state-press); }
+.vt-settings .vt-set-covcli { font:400 var(--fs-xs) / 1.2 var(--font-mono); }
+.vt-set-covsub { display:none; }
+.vt-set-covtrust { display:inline-flex; align-items:center; gap:4px; height:18px; padding:0 6px; border-radius:4px; font:500 var(--fs-2xs) / 1 var(--font-ui); }
+.vt-set-covtrust[data-trust="high"] { padding:0; background:transparent; color:var(--color-sub); font-size:var(--fs-xs); }
+.vt-set-covtrust[data-trust="high"] > svg { color:var(--color-st-working); }
+.vt-set-covtrust[data-trust="mid"] { background:var(--color-state-hover); color:var(--color-sub); }
+.vt-set-covtrust[data-trust="low"] { background:var(--color-st-waiting-tint); color:var(--color-st-waiting); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--color-st-waiting) 30%, transparent); }
+
+/* 에이전트 훅 표 + 사용량 공급자 */
+.vt-set-hooktop { flex-wrap:wrap; min-height:28px; }
+.vt-set-hookchecked { margin-left:8px; color:var(--color-muted); }
+.vt-set-hksum { display:flex; align-items:center; gap:8px; height:36px; }
+.vt-set-hksum[data-state="ok"] > svg { color:var(--color-st-working); }
+.vt-set-hksum[data-state="warn"] > svg { color:var(--color-st-waiting); }
+.vt-set-hksum b { font:600 var(--fs-sm) / 1 var(--font-ui); }
+.vt-set-hkcount { font:400 var(--fs-xs) / 1 var(--font-ui); color:var(--color-sub); }
+.vt-set-hkgrid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); column-gap:24px; }
+.vt-set-hkmore { display:none; }
+.vt-set-hookrow {
+  display:grid; grid-template-columns:minmax(0, 1fr) 96px; align-items:center; height:28px; margin-top:0;
+  border-bottom:1px solid var(--color-line); font:400 var(--fs-xs) / 1 var(--font-ui);
+}
+.vt-set-hkev { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:400 var(--fs-xs) / 1 var(--font-mono); color:var(--color-txt); }
+.vt-set-hkst { display:flex; align-items:center; gap:4px; color:var(--color-muted); }
+.vt-set-hookrow[data-state="add"], .vt-set-hookrow[data-state="update"], .vt-set-hookrow[data-state="warn"] {
+  margin:0 -6px; padding:0 6px; background:var(--color-st-waiting-tint);
+}
+.vt-set-hookrow[data-state="add"] .vt-set-hkst, .vt-set-hookrow[data-state="update"] .vt-set-hkst, .vt-set-hookrow[data-state="warn"] .vt-set-hkst { color:var(--color-st-waiting); }
+.vt-set-hookrow:hover { background:var(--color-state-hover); }
+.vt-set-hookrow:active { background:var(--color-state-press); }
+.vt-set-hookrow[data-state="add"]:hover, .vt-set-hookrow[data-state="update"]:hover, .vt-set-hookrow[data-state="warn"]:hover { background:var(--color-state-waiting-hover); }
+.vt-set-hookrow[data-state="add"]:active, .vt-set-hookrow[data-state="update"]:active, .vt-set-hookrow[data-state="warn"]:active { background:var(--color-state-waiting-press); }
+.vt-set-provrow { grid-template-columns:160px minmax(0, 1fr); height:auto; min-height:36px; padding:6px 0; }
+.vt-set-provrow .vt-set-provwhy { grid-column:1 / -1; padding:0 0 6px; }
+.vt-set-hookwhy { padding:0 0 6px; }
+
+/* 음성 모델 카드 — 반경 8, 선택된 카드만 틴트, 측정치 3열(숫자 tabular-nums) */
+.vt-settings .vt-vm { gap:0; margin-top:0; }
+.vt-settings .vt-vm-list { gap:8px; }
+.vt-settings .vt-vm-card { border:1px solid var(--color-line-strong); border-radius:8px; background:var(--color-bg-0); }
+.vt-settings .vt-vm-card[data-checked="true"] { border-color:var(--color-acc-dim); background:var(--color-acc-soft); }
+.vt-settings .vt-vm-pick { padding:10px 12px; gap:6px; }
+.vt-settings .vt-vm-metrics { grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; }
+.vt-settings .vt-vm-metric { display:block; font:400 var(--fs-xs) / 16px var(--font-ui); }
+.vt-settings .vt-vm-mval { display:block; font:500 var(--fs-xs) / 16px var(--font-mono); font-variant-numeric:tabular-nums; }
+.vt-settings .vt-vm-bar { height:4px; margin-top:4px; background:var(--color-line-strong); }
+.vt-settings .vt-vm-fill { background:var(--color-sub); }
+.vt-settings .vt-vm-nobench, .vt-settings .vt-vm-facts { font-size:var(--fs-xs); color:var(--color-muted); }
+.vt-settings .vt-vm-manage { gap:0; }
+.vt-settings .vt-vm-manage > .vt-set-row:last-child { border-bottom:0; }
+@media (max-width:560px) {
+  .vt-settings .vt-vm-metrics { grid-template-columns:1fr; gap:6px; }
+  .vt-settings .vt-vm-metric { display:grid; grid-template-columns:1fr auto; }
+  .vt-settings .vt-vm-metric .vt-vm-bar { grid-column:1 / -1; }
+}
+
+/* 폰(390) — 행 44 이상 · 버튼 44 · 구역 머리 32(선 없음) · 훅은 문제 행만 펼침 · 에이전트 표는 두 줄 행 */
+@media (max-width:719px) {
+  .vt-settings .vt-set-group-title { display:flex; align-items:center; gap:8px; height:32px; border:0; color:var(--color-sub); }
+  .vt-settings .vt-set-group-title > * { margin-left:auto; }
+  .vt-settings .vt-set-label { min-height:28px; font:500 var(--fs-base) / 20px var(--font-ui); }
+  .vt-settings .vt-set-help { margin:0; font-size:var(--fs-xs); }
+  .vt-set-code { min-height:44px; }
+  .vt-settings .vt-set-covtable-host { overflow:visible; }
+  .vt-settings .vt-set-covtable, .vt-settings .vt-set-covtable tbody { display:block; }
+  .vt-settings .vt-set-covtable thead { display:none; }
+  .vt-settings .vt-set-covtable tr { display:grid; grid-template-columns:minmax(0, 1fr) auto; align-items:center; min-height:56px; padding:8px 0; border-bottom:1px solid var(--color-line); }
+  .vt-settings .vt-set-covtable td { display:block; height:auto; padding:0; border:0; background:transparent; }
+  .vt-settings .vt-set-covtable td:nth-child(2), .vt-settings .vt-set-covtable td:nth-child(3), .vt-settings .vt-set-covtable td:nth-child(4) { display:none; }
+  .vt-settings .vt-set-covtable td:last-child { grid-column:2; grid-row:1; }
+  .vt-settings .vt-set-covcli { font-size:var(--fs-sm); }
+  .vt-set-covsub { display:block; margin-top:2px; font:400 var(--fs-xs) / 16px var(--font-ui); color:var(--color-muted); white-space:normal; }
+  .vt-set-hkgrid { grid-template-columns:1fr; }
+  .vt-set-hookrow { height:auto; min-height:44px; }
+  .vt-set-hkgrid[data-all-ok="1"] { display:none; }
+  .vt-set-hkgrid[data-collapsible="1"]:not([data-open="1"]) > .vt-set-hookrow[data-state="ok"] { display:none; }
+  .vt-set-hkmore {
+    display:flex; align-items:center; width:100%; min-height:44px; padding:0; border:0; background:transparent; text-align:left;
+    color:var(--color-sub); font:400 var(--fs-xs) / 16px var(--font-ui);
+  }
+  .vt-set-hkmore:hover { color:var(--color-txt); }
+  .vt-set-provrow { grid-template-columns:1fr auto; }
+}
+
+/* 권한 섹션(설정 > 권한) — 버튼 높이 28 하나, 소제목 13/600, 빈 상태·안내는 12px 회색 한 줄, 위험 버튼은 동작 이름 + 빨강 테두리.
+   모달(승인 창)은 settings 밖이라 영향이 없다. 폰은 위 98-mobile/components 의 44px 규칙이 그대로 이긴다. */
+@media (min-width:720px) {
+  .vt-settings .vt-authz-host .vt-btn { --btn-h:28px; padding:0 10px; font-size:var(--fs-xs); border-color:var(--color-line-strong); }
+  .vt-settings .vt-authz-host .vt-btn.danger { border-color:color-mix(in srgb, var(--color-st-error) 40%, transparent); }
+  .vt-settings .vt-authz-host .vt-btn.quiet { border-color:var(--color-line-strong); }
+}
+.vt-settings .vt-authz-host .vt-authz-h { margin:12px 0 0; display:flex; align-items:center; min-height:28px; font:600 var(--fs-sm) / 18px var(--font-ui); color:var(--color-txt); letter-spacing:0; }
+.vt-settings .vt-authz-host .vt-authz-empty,
+.vt-settings .vt-authz-host .vt-authz-note { margin:6px 0 2px; font:400 var(--fs-xs) / 16px var(--font-ui); color:var(--color-muted); }
+.vt-settings .vt-authz-host .vt-authz-chain { margin:6px 0 0; font:500 var(--fs-xs) / 16px var(--font-ui); }
+.vt-settings .vt-authz-host .vt-authz-filters { margin:8px 0; }
+.vt-settings .vt-authz-host .vt-authz-in { min-height:28px; font-size:var(--fs-xs); }
+.vt-settings .vt-authz-host .vt-authz-row { padding:8px 0; border-top:0; border-bottom:1px solid var(--color-line); }
+.vt-settings .vt-authz-host .vt-authz-row:last-child { border-bottom:0; }
+.vt-settings .vt-authz-host .vt-authz-builtin li { flex-direction:row; align-items:baseline; gap:16px; padding:0; min-height:36px; align-items:center; border-top:0; border-bottom:1px solid var(--color-line); }
+.vt-settings .vt-authz-host .vt-authz-builtin li:last-child { border-bottom:0; }
+.vt-settings .vt-authz-host .vt-authz-builtin .vt-authz-who { flex:none; width:120px; font:600 var(--fs-sm) / 18px var(--font-ui); }
+.vt-settings .vt-authz-host .vt-authz-builtin .vt-authz-row-detail { margin:0; font:400 var(--fs-sm) / 18px var(--font-ui); color:var(--color-txt); }
+.vt-settings .vt-authz-host .vt-authz-audit-row { padding:6px 0; }
+
+.vt-settings .vt-segmented-opt { flex:1 1 auto; }
+.vt-settings .vt-range-presets .vt-segmented { max-width:100%; }
+@media (max-width:719px) {
+  .vt-settings .vt-range-presets .vt-segmented { display:flex; width:100%; }
+  .vt-settings .vt-set-row > .vt-segmented { max-width:100%; }
+}
+
+/* 키맵 — 열 시작선을 맞춘다: 키 캡 120 · 전달 대상 132 · 기본값 56 (행마다 폭이 달라 흔들리던 것) */
+@media (min-width:720px) {
+  .vt-settings .vt-set-keyrow { display:grid; grid-template-columns:120px 132px 56px; column-gap:12px; align-items:center; }
+  .vt-settings .vt-set-keyrow > .vt-set-combo { width:100%; box-sizing:border-box; min-height:28px; }
+  .vt-settings .vt-set-keyrow > .vt-select-wrap { width:100%; }
+  .vt-settings .vt-set-keyrow > .vt-select-wrap .vt-select, .vt-settings .vt-set-keyrow > .vt-select-wrap .vt-dd { width:100%; }
+  .vt-settings .vt-set-keyrow > .vt-set-reset { grid-column:3; }
+  .vt-settings .vt-set-row > .vt-set-keyrow { align-self:flex-start; }
+}
