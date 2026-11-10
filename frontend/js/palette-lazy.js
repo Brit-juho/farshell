@@ -15,7 +15,8 @@ import { register as registerKey, getBinding, displayCombo, displayComboHtml, li
 import { vtFetch } from './core/api.js';
 import { sessionDisplayName } from './core/store.js';
 import { openSessionIds } from './layout/compact.js';
-import { revealSession } from './term/session.js';
+import { revealSession, createTmuxSession } from './term/session.js';
+import { loadAccounts, openAccountMenu } from './term/accounts.js';
 import { splitActivePane, setPaneSession } from './layout/store.js';
 import { loadViewer, openFile, openFileInPane } from './panels/viewer-lazy.js';
 import { setVtSkin, vtSkins, vtSkinLabel } from './theme.js';
@@ -69,6 +70,10 @@ const deps = {
   showToast,
   host: relayHost(),
   openSidebarSearch: (q, opts) => openContentSearch({ q, opts }),
+  // 계정(핫스왑 H1) — 「<이름> 계정으로 새 세션」·「기본 계정 바꾸기」 줄의 재료와 동작.
+  loadAccounts,
+  newSessionWithAccount: (profile) => createTmuxSession({ profile }),
+  openAccountMenu,
 };
 
 let _api = null;

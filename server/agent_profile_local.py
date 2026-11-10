@@ -113,6 +113,39 @@ def resolve(reference, tool=None):
     raise profiles.Refused(tr("그런 프로필이 없습니다. 있는 프로필: {names}", names=names))
 
 
+def defaults():
+    """The marked default profile id per tool (only what was explicitly chosen; archived ones included as-is)."""
+    out = {}
+    for tool, pid in _defaults().items():
+        if tool in ("claude", "codex") and isinstance(pid, str) and profiles.ID.fullmatch(pid):
+            out[tool] = pid
+    return out
+
+
+def set_default_for(tool, profile_id):
+    """Mark (or, with `profile_id=None`, clear) the default profile of one tool, for NEW sessions only.
+
+    Same file the CLI's `fsh profile default` writes. Running sessions are never touched.
+    """
+    import config_io
+    from agent_profile_migration import _write_bytes
+    if tool not in ("claude", "codex"):
+        raise profiles.Refused(tr("지원하지 않는 CLI입니다"))
+    path = fsguard.profile_file(profiles.directory(), _DEFAULTS)
+    with config_io.locked(path):
+        values = _defaults()
+        if profile_id is None:
+            values.pop(tool, None)
+        else:
+            profile = profiles.get(profile_id)
+            profiles.require_active(profile)
+            if profile["tool"] != tool:
+                raise profiles.Refused(tr("프로필의 도구가 일치하지 않습니다"))
+            values[tool] = profile["id"]
+        _write_bytes(path, json.dumps(values).encode(), 0o600)
+    return {"tool": tool, "default": profile_id}
+
+
 def default_for(tool):
     """The profile `fsh claude` / `fsh codex` use without a name: the one marked default, else the only one."""
     rows = _active(tool)

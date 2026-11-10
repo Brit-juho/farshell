@@ -32,7 +32,7 @@ import {
 } from './rail-data.js';
 import { createRailPrefs } from './rail-prefs.js';
 import { NativeChip } from './NativeChildren.js';
-import { MenuSummary, KeywordLine, OriginMark, ScreensMark, ShareMark, LineageMark, KidsToggle, AnswerButtons, ROW_MENU_ICON } from './RailRow.js';
+import { MenuSummary, KeywordLine, OriginMark, ScreensMark, ShareMark, ProfileMark, LineageMark, KidsToggle, AnswerButtons, ROW_MENU_ICON } from './RailRow.js';
 import { ViewGroup } from './ViewGroup.js';
 import {
   buildHostMenu, hostDetail, LOCAL_HOST,
@@ -199,6 +199,7 @@ export function FleetRow(props: {
           <span class="vt-fleet-gls">
             <NativeChip row={props.row} />
             <ShareMark share={props.row.share} />
+            <ProfileMark profile={props.row.profile} />
             <ScreensMark row={props.row} />
             <OriginMark origin={props.row.origin} host={props.row.originHost} />
           </span>

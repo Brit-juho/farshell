@@ -9,7 +9,7 @@
 // 파일에 있으면 폴링 주기·캐시 같은 것을 고칠 때 JSX 400줄을 지나쳐야 한다.
 import { createSignal, onCleanup } from 'solid-js';
 
-import { normalizeOrigin, normalizeShare, normalizeLineage, normalizeKind, normalizeBadge, type SessionRow } from './rail-data.js';
+import { normalizeOrigin, normalizeShare, normalizeProfile, normalizeLineage, normalizeKind, normalizeBadge, type SessionRow } from './rail-data.js';
 import { confirmDialog } from '../core/dialog-lazy.js';
 import { t } from '../core/i18n.js';
 import { watchPath, isWatchLive } from './fs-watch.js';
@@ -418,6 +418,7 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
       origin: normalizeOrigin(tm.origin),
       originHost: typeof tm.originHost === 'string' ? tm.originHost : '',
       share: normalizeShare(tm.share),
+      profile: normalizeProfile(tm.profile),
       lineage: normalizeLineage(tm.lineage),
       viewLabel: view?.label || null, viewId: view?.id || null,
       ...screenCounts(tm, attached, !!sid),

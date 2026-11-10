@@ -65,6 +65,10 @@ test('메뉴를 그리는 코드가 규격 클래스를 쓴다 (열거)', () => 
   assert.match(sess, /menu\.className = 'vt-menu'/);
   assert.match(sess, /'vt-menu-item two'/);
   assert.match(read('frontend', 'js', 'panels', 'ports', 'ports.js'), /'vt-pt-menu-item'/);
+  const accounts = read('frontend', 'js', 'term', 'accounts.js');
+  assert.match(accounts, /menu\.className = 'vt-menu'/);
+  assert.match(accounts, /'vt-menu-item two'/);
+  assert.doesNotMatch(accounts, /style="/);
 });
 
 test('「+」 메뉴: 아이콘이 있고 인라인 스타일이 없으며 머리 막대의 +는 사이드바 바깥으로 연다', () => {

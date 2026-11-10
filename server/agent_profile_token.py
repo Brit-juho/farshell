@@ -11,7 +11,6 @@ the stamp here only drives an early warning.
 from __future__ import annotations
 
 import json
-import re
 import time
 
 import agent_profiles as profiles
@@ -109,40 +108,3 @@ def clear(profile_id):
     if existed:
         profiles.bump(profile["id"], profile["revision"])
     return {"configured": False}
-
-
-_MINT_SCOPES = {"user:inference", "user:sessions:claude_code"}
-
-
-def import_from_clauth(profile_id, name):
-    """Reuse a long-lived mint clauth already holds, leaving clauth's file untouched.
-
-    Only a genuine mint qualifies: no refresh token (copying a rotating pair would make two
-    holders of one single-use chain, the very race this mode avoids) and no scope beyond the
-    inference pair. The value is read and written in this process and never printed.
-    """
-    import agent_profile_migration as migration
-    if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", name):
-        raise profiles.Refused(tr("clauth 프로필 이름이 올바르지 않습니다"))
-    profile = profiles.get(profile_id)
-    source = next((s for s in migration.sources().values() if s["kind"] == "clauth" and s["name"] == name and s["tool"] == "claude"), None)
-    if source is None:
-        raise profiles.Refused(tr("원본을 찾지 못했습니다"))
-    filename = "session-token.static.json"
-    if not fsguard.profile_file(source["root"], filename).exists():
-        raise profiles.Refused(tr("그 clauth 프로필에는 장기 토큰이 없습니다"))
-    try:
-        data = json.loads(fsguard.read_profile_bytes(source["root"], filename, 64 * 1024))
-        oauth = data["claudeAiOauth"]
-    except (ValueError, KeyError, TypeError):
-        raise profiles.Refused(tr("clauth 장기 토큰 파일의 형식이 올바르지 않습니다"))
-    scopes = oauth.get("scopes")
-    if (oauth.get("refreshToken") or oauth.get("refresh_token") or not isinstance(scopes, list)
-            or not set(scopes) <= _MINT_SCOPES):
-        raise profiles.Refused(tr("갱신되는 로그인이어서 복사하지 않습니다. 장기 토큰만 가져올 수 있습니다"))
-    token = validate(oauth.get("accessToken"))
-    expires = oauth.get("expiresAt")
-    expires = expires / 1000 if isinstance(expires, (int, float)) and expires > 1e11 else expires
-    if not isinstance(expires, (int, float)) or expires <= time.time():
-        raise profiles.Refused(tr("clauth 장기 토큰이 이미 만료됐거나 만료일이 없습니다"))
-    return set_token(profile["id"], token, expires_at=min(float(expires), time.time() + LIFETIME_SECONDS))

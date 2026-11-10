@@ -619,14 +619,15 @@ label.vt-railset-row { cursor:pointer; }
 }
 #vt-wgrail .vt-srow-kidnote { flex:none; color:var(--color-muted); }
 #vt-wgrail .vt-srow-share { color:var(--color-sub); }
+#vt-wgrail .vt-srow-profile { color:var(--color-sub); }
 #vt-wgrail .vt-srow-share[data-mode="readwrite"] { color:var(--color-st-waiting); }
 
 /* 틴트 행(선택 · 개입 필요) — 보조 글자 한 단 올림. 키워드의 상태색은 그대로 둔다(개입 필요의
    호박 키워드는 components.css가 본문색으로 바꾼다 — 같은 색상각 틴트 위라 대비가 떨어진다). */
 #vt-wgrail .vt-srow.active :is(.vt-srow-line2, .vt-srow-line3, .vt-srow-line4, .vt-srow-elapsed, .vt-srow-agent, .vt-wgrail-diff, .vt-srow-kidnote),
 #vt-wgrail .vt-srow.is-waiting :is(.vt-srow-line2, .vt-srow-line3, .vt-srow-line4, .vt-srow-elapsed, .vt-srow-agent, .vt-wgrail-diff, .vt-srow-kidnote) { color:var(--color-sub); }
-#vt-wgrail .vt-srow.active :is(.vt-srow-branch, .vt-srow-tool, .vt-srow-screens, .vt-srow-clients, .vt-srow-badge, .vt-srow-share:not([data-mode="readwrite"])),
-#vt-wgrail .vt-srow.is-waiting :is(.vt-srow-branch, .vt-srow-tool, .vt-srow-screens, .vt-srow-clients, .vt-srow-badge, .vt-srow-share:not([data-mode="readwrite"])) { color:var(--color-txt); }
+#vt-wgrail .vt-srow.active :is(.vt-srow-branch, .vt-srow-tool, .vt-srow-screens, .vt-srow-clients, .vt-srow-badge, .vt-srow-profile, .vt-srow-share:not([data-mode="readwrite"])),
+#vt-wgrail .vt-srow.is-waiting :is(.vt-srow-branch, .vt-srow-tool, .vt-srow-screens, .vt-srow-clients, .vt-srow-badge, .vt-srow-profile, .vt-srow-share:not([data-mode="readwrite"])) { color:var(--color-txt); }
 #vt-wgrail .vt-srow.active.closed .vt-srow-name,
 #vt-wgrail .vt-srow.is-waiting.closed .vt-srow-name { color:var(--color-sub); }
 #vt-wgrail .vt-srow.is-waiting .vt-srow-pending,

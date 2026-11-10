@@ -116,6 +116,7 @@ _ROWS: tuple = (
     ("POST", "/api/peer/session-history/receive", peer(None, "Signed body, no obo, dedicated human-approved history grant and encrypted payload")),
     ("POST", "/api/agent-config/read/{action}", human()),
     ("POST", "/api/agent-profiles/read/{action}", human()),
+    ("POST", "/api/agent-profiles/default", human()),
     ("POST", "/api/agent-profiles/apply", human(elevated=True)),
     ("POST", "/api/agent-config/write/{action}", human(elevated=True)),
     ("POST", "/api/agent-config/requests/{request_id}/{decision}", human(elevated=True)),

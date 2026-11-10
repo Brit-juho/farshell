@@ -55,7 +55,6 @@ def main():
     tok.add_argument("op", choices=("set", "status", "clear"))
     tok.add_argument("profile")
     tok.add_argument("--stdin", action="store_true", help=tr("토큰 한 줄을 표준입력에서 읽음(터미널이 아닐 때)"))
-    tok.add_argument("--from-clauth", metavar="NAME", help=tr("clauth가 이미 가진 장기 토큰을 가져옴(원본은 그대로)"))
     sync_cmd = subs.add_parser("sync-settings", help=tr("전역 설정을 따라가도록 맞춥니다(전역은 읽기만)"))
     sync_cmd.add_argument("profile")
     sync_cmd.add_argument("--dry-run", action="store_true", help=tr("바꾸지 않고 키 이름만 보여 줌"))
@@ -93,9 +92,7 @@ def main():
             result = local.probe(args.profile)
         elif args.action == "token":
             import agent_profile_token as long_lived
-            if args.op == "set" and args.from_clauth:
-                result = long_lived.import_from_clauth(args.profile, args.from_clauth)
-            elif args.op == "set":
+            if args.op == "set":
                 if args.stdin:
                     raw = sys.stdin.readline()
                 elif sys.stdin.isatty():

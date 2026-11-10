@@ -231,7 +231,7 @@ async def collect_tmux_sessions() -> list[dict]:
     # 2.1 D2: `@fsh_wt`도 같이 받는다 — 세션이 어느 워크트리 소속인지, cwd
     # 추측이 아니라 tmux에 적힌 사실로 답한다(subprocess 호출 수는 그대로다).
     # 마지막 두 칸(session_id·session_created)은 위임 장부의 세션 키다(delegation.py) — 계보 표시용.
-    fmt_sessions = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{@fsh_wt}\t#{@fsh_origin}\t#{@fsh_share_nick}\t#{@fsh_share_mode}\t#{session_id}\t#{session_created}\t#{@fsh_origin_host}"
+    fmt_sessions = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{@fsh_wt}\t#{@fsh_origin}\t#{@fsh_share_nick}\t#{@fsh_share_mode}\t#{session_id}\t#{session_created}\t#{@fsh_origin_host}\t#{@fsh_profile}"
     # A2: pane_id를 함께 받아 응답에 싣는다 — 프런트가 "이 카드가 그 pane인가"를
     # cwd 추측이 아니라 id로 판정할 수 있게(같은 cwd 세션 둘 문제의 해소).
     fmt_panes = "#{session_name}\t#{pane_current_command}\t#{pane_current_path}\t#{pane_id}\t#{window_active}\t#{pane_active}"
@@ -271,6 +271,14 @@ async def collect_tmux_sessions() -> list[dict]:
         if len(p) > 8 and p[8].isdigit():
             keys[f"{p[7]}:{int(p[8])}"] = p[0]
     lineage = await asyncio.to_thread(_lineage_by_name, keys)
+    # 생성 때 고른 계정(`@fsh_profile`) — 태그가 있는 세션이 하나라도 있을 때만 레지스트리를 읽어 이름을 붙인다.
+    tags = {line.split("\t")[10] for line in sessions_text.strip().split("\n")
+            if len(line.split("\t")) > 10 and line.split("\t")[10]}
+    profile_names = {}
+    if tags:
+        import session_profile
+        for tag in tags:
+            profile_names[tag] = await asyncio.to_thread(session_profile.describe, tag)
     sessions = []
     for line in sessions_text.strip().split("\n"):
         if not line:
@@ -314,6 +322,10 @@ async def collect_tmux_sessions() -> list[dict]:
             "share": tmux_runner.parse_share(parts[5] if len(parts) > 5 else "", parts[6] if len(parts) > 6 else ""),
             # 위임으로 만든 하위 세션이면 그 계보(장부 기준 — tmux 옵션은 에이전트가 바꿀 수 있어 안 쓴다).
             "lineage": lineage.get(name),
+            # FarShell이 만들 때 넣은 계정(생성 시 기록 — 셸에서 바꾼 환경은 반영 안 됨). 없으면 null.
+            # `profile`은 첫 번째(Claude 우선), `profiles`는 전부(기본 계정이 도구별로 둘일 수 있다).
+            "profile": (profile_names.get(parts[10]) or [None])[0] if len(parts) > 10 and parts[10] else None,
+            "profiles": profile_names.get(parts[10], []) if len(parts) > 10 and parts[10] else [],
         })
     return sessions
 
@@ -376,6 +388,36 @@ async def create_tmux_session(request: Request):
     else:
         # 새 tmux 세션 시작 디렉토리 — 서버 cwd(프로젝트 폴더) 대신 홈/VT_START_DIR.
         start_dir = platform_utils.default_start_dir()
+    # 계정 선택(핫스왑 H1): 필드가 없으면 지금 그대로(주입 없음). 있으면 사람 로그인 세션만 — 기계 토큰·peer·
+    # 소켓·에이전트는 계정을 고를 수 없다. 고른 계정을 못 쓰면 기본 ~/.claude로 대체하지 않고 거절한다.
+    profile_ref = body.get("profile")
+    selection = None
+    launch_info: dict = {}
+    if profile_ref is not None:
+        import auth
+        auth.require_human_session(request)
+        if not isinstance(profile_ref, str):
+            return JSONResponse({"error": "invalid_profile", "reason": tr("프로필 값이 올바르지 않습니다")}, status_code=400)
+        if profile_ref != "none":
+            import session_profile
+            try:
+                selection = await asyncio.to_thread(session_profile.select, profile_ref)
+            except session_profile.SlotRefused as error:
+                return JSONResponse({"error": error.code, "reason": error.message}, status_code=error.status)
+            except Exception:  # noqa: BLE001 — 사유 문구에 내부 값이 섞이지 않게 고정 문구만 돌려준다
+                logger.warning("profile selection failed", exc_info=False)
+                return JSONResponse({"error": "profile_unavailable", "reason": tr("프로필을 확인하지 못했습니다")}, status_code=409)
+
+    def _launch_with_profile(n, c, r, d):
+        import session_profile
+        try:
+            result = session_profile.spawn(n, c, r, d, selection)
+        except session_profile.SlotRefused as error:   # 토큰이 그 사이 사라짐 등 — 세션을 만들지 않는다
+            launch_info["refused"] = error
+            return 1, "", {}
+        launch_info.update(result[2])
+        return result
+
     async with _create_lock:
         if requested_name and not unique_name:
             tmux_name = requested_name
@@ -399,17 +441,27 @@ async def create_tmux_session(request: Request):
             from session_catalog.lifecycle import create as catalog_create
             from session_catalog.db import Refused
             try:
-                catalog_binding = await asyncio.to_thread(catalog_create,body['operation_id'],tmux_name,start_dir,cols,rows,request_spec={'name':requested_name,'unique_name':unique_name})
+                spec={'name':requested_name,'unique_name':unique_name}
+                if selection:
+                    spec['profile']=profile_ref
+                catalog_binding = await asyncio.to_thread(catalog_create,body['operation_id'],tmux_name,start_dir,cols,rows,request_spec=spec,launcher=_launch_with_profile if selection else None)
                 tmux_name = catalog_binding['name']
                 rc,err = 0,b''
             except Refused as error:
+                if launch_info.get("refused"):
+                    return JSONResponse({"error": launch_info["refused"].code, "reason": launch_info["refused"].message}, status_code=launch_info["refused"].status)
                 return JSONResponse({'error':error.code},status_code=error.status)
+        elif selection:
+            rc, _reason, _info = await asyncio.to_thread(_launch_with_profile, tmux_name, cols, rows, start_dir)
+            err = b""
         else:
             rc, _, err = await tmux_runner.run_async(
                 ["new-session", "-d", "-s", tmux_name, "-x", str(cols), "-y", str(rows), "-c", start_dir],
                 timeout=5.0,
             )
     if rc != 0:
+        if launch_info.get("refused"):
+            return JSONResponse({"error": launch_info["refused"].code, "reason": launch_info["refused"].message}, status_code=launch_info["refused"].status)
         return JSONResponse(
             {"error": "tmux session create failed", "detail": err.decode("utf-8", errors="ignore")},
             status_code=500,
@@ -417,6 +469,14 @@ async def create_tmux_session(request: Request):
 
     # 만든 곳 기록 — 이 화면의 새 세션. 값은 서버가 정한다(요청 본문의 origin은 무시).
     await tmux_runner.set_origin_async(tmux_name, "local")
+
+    if selection and "cleared_env" in launch_info:
+        # 어떤 계정으로 만들었는지 레지스트리에도 남긴다(태그 `@fsh_profile`은 spawn이 이미 달았다). 기록 실패가 세션을 막지 않는다.
+        import session_profile
+        try:
+            await asyncio.to_thread(session_profile.record, tmux_name, selection)
+        except Exception:  # noqa: BLE001
+            logger.warning("profile session record failed", exc_info=False)
 
     # 2.1 D2 그루드워크 — 이 세션이 어느 워크트리에서 열렸는지 아는 호출자(스니펫
     # 「새 섹션」, 워크트리 화면 등)는 태그를 같이 보낼 수 있다. 지금은 어느
@@ -442,10 +502,16 @@ async def create_tmux_session(request: Request):
     _kick_sessions()
     async with _get_attach_lock(tmux_name):
         if screen_id:
-            return await attach_screen(tmux_name, cols, rows, request, screen_id, catalog_binding)
-        if catalog_binding:
-            return await _attach_tmux(tmux_name, cols, rows, request,catalog_binding=catalog_binding)
-        return await _attach_tmux(tmux_name, cols, rows, request)
+            result = await attach_screen(tmux_name, cols, rows, request, screen_id, catalog_binding)
+        elif catalog_binding:
+            result = await _attach_tmux(tmux_name, cols, rows, request,catalog_binding=catalog_binding)
+        else:
+            result = await _attach_tmux(tmux_name, cols, rows, request)
+    if selection and isinstance(result, dict):
+        # 무엇이 주입됐는지 응답에도 싣는다(이름만 — 경로·토큰 없음). cleared_env는 지운 위험 변수의 이름.
+        result = {**result, "profile": selection.public()[0], "profiles": selection.public(),
+                  "cleared_env": launch_info.get("cleared_env", [])}
+    return result
 
 
 # open-on-mac 동시 클릭(더블클릭 등) 시 레이스로 중복 스폰되는 걸 막는 세션명 단위 락.

@@ -83,6 +83,12 @@ def _read(action, body, actor):
     if action == "session-status":
         _keys(body, ["session"])
         return runtime.session_status(body.get("session"))
+    if action == "picker":
+        # A light list for the new-session account chooser: names, auth state and the last cached usage.
+        # No secrets, no paths, and it never starts a network request.
+        _keys(body, [])
+        import session_profile
+        return session_profile.picker()
     if action == "usage":
         _keys(body, [])
         from usage.profiles import snapshot
@@ -306,6 +312,23 @@ async def read(action: str, request: Request):
             # invalidate the plan the person just reviewed.
             auth.require_elevated(request)
         return _public_result(await asyncio.to_thread(_read, action, await _body(request), _actor(request)))
+    except (ValueError, TypeError, OSError, RuntimeError, sqlite3.Error, fsguard.FsDenied) as exc:
+        return _error(exc)
+
+
+@router.post("/api/agent-profiles/default", response_model=dict)
+async def set_default(request: Request):
+    """Change which profile NEW sessions of one tool use by default. A person's browser session only
+    (the router requires it); no password re-check, because it changes no credential and no running
+    session. Peers, machine tokens, the unix socket and agent MCP are refused by `require_human_session`."""
+    try:
+        body = await _body(request)
+        _keys(body, ["tool", "profile_id"])
+        import agent_profile_local
+        profile_id = body.get("profile_id")
+        if profile_id is not None:
+            profile_id = profiles.identifier(profile_id)
+        return await asyncio.to_thread(agent_profile_local.set_default_for, body.get("tool"), profile_id)
     except (ValueError, TypeError, OSError, RuntimeError, sqlite3.Error, fsguard.FsDenied) as exc:
         return _error(exc)
 
