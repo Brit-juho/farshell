@@ -380,6 +380,14 @@ def prepare_refresh_test(profile_id):
             'note': tr("테스트 프로필을 다시 열고 짧은 요청을 실행한 뒤 사용량을 읽으세요. 실패하면 이 테스트 프로필에 다시 로그인하세요")}
 
 
+def cached_row(profile_id):
+    """The last snapshot this process already holds for a profile. No file, network or keychain access."""
+    with _instances_lock:
+        provider = _instances.get((str(registry.directory()), profile_id))
+    cache = provider.cache if provider is not None else None
+    return None if cache is None else {k: v for k, v in cache.items() if not k.startswith("_")}
+
+
 def snapshot():
     result = []
     quota_identities = {}

@@ -1,0 +1,363 @@
+"""Account (profile) injection for NEW tmux sessions — hotswap H1.
+
+A person picks a registered profile; the session is created with that profile's
+`CLAUDE_CONFIG_DIR` / `CODEX_HOME` in its own environment, and nothing else changes:
+no running session is touched, no credential file is copied or swapped, no global
+`~/.claude` is replaced, and there is no automatic switching.
+
+Rules (Orca's slot check): a chosen profile that cannot be used is REFUSED. It is never
+replaced by the default `~/.claude`, because a session that silently runs on another
+account is worse than no session.
+
+Secrets: a long-lived token never reaches a command line (`ps`) or a log. The session is
+created by a tmux config file (0600, deleted at once) read with `source-file`, so tmux's
+argv only names the file. The values live in that session's environment, like any env var.
+"""
+from __future__ import annotations
+
+import os
+import re
+import secrets
+import threading
+import time
+from dataclasses import dataclass, field
+
+import agent_profile_local as local
+import agent_profiles as profiles
+import fsguard
+import tmux_runner
+import vt_paths
+from i18n import tr
+
+OPTION = "@fsh_profile"
+
+# What overrides the chosen account, per tool (Claude "Authentication precedence"; the managed
+# launch refuses the same names). Removed from the new session's environment — whether they come
+# from the server's environment or from tmux's global environment.
+OVERRIDES = {
+    "claude": ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN",
+               "ANTHROPIC_BASE_URL", "ANTHROPIC_CUSTOM_HEADERS"),
+    "codex": ("OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_ORG_ID"),
+}
+TOOL_VARIABLE = {"claude": "CLAUDE_CONFIG_DIR", "codex": "CODEX_HOME"}
+MIN_TMUX = (3, 2)   # `new-session -e`
+
+
+class SlotRefused(Exception):
+    """A deliberate, localized refusal with a stable machine-readable code."""
+
+    def __init__(self, code, message, status=409):
+        super().__init__(message)
+        self.code, self.message, self.status = code, message, status
+
+
+@dataclass
+class Selection:
+    profiles: list = field(default_factory=list)   # public profile rows
+    kinds: dict = field(default_factory=dict)      # profile id -> "login" | "token"
+
+    @property
+    def ids(self):
+        return [p["id"] for p in self.profiles]
+
+    def public(self):
+        return [{"id": p["id"], "name": p["name"], "tool": p["tool"]} for p in self.profiles]
+
+
+def _ready():
+    """The registry exists. Never creates it (a person without profiles must stay untouched)."""
+    return (vt_paths.state_dir() / "agent-profiles" / "registry.sqlite3").exists()
+
+
+# --- authentication state (local files only, never a network call) -----------------------
+
+def auth_state(profile):
+    """`{state: ok|broken|missing, kind: login|token|api|None, code, reason}` for one profile row."""
+    tool, pid = profile["tool"], profile["id"]
+    folder = vt_paths.state_dir() / "agent-profiles" / pid / tool
+    if not folder.is_dir():
+        return {"state": "broken", "kind": None, "code": "folder_missing", "reason": tr("프로필 폴더를 찾지 못했습니다")}
+    try:
+        root = profiles.root(pid)
+    except (fsguard.FsDenied, profiles.Refused, OSError):
+        return {"state": "broken", "kind": None, "code": "folder_unsafe", "reason": tr("프로필 폴더의 위치·소유자·권한이 안전하지 않습니다")}
+    import agent_profile_secret
+    import agent_profile_token
+    try:
+        token = agent_profile_token.read(root) if tool == "claude" else None
+        private = agent_profile_secret.read(root)
+    except (ValueError, OSError, fsguard.FsDenied):
+        return {"state": "broken", "kind": None, "code": "credentials_unreadable", "reason": tr("인증 파일을 읽지 못했습니다(권한이나 형식 문제)")}
+    if private is not None:
+        # API-endpoint profiles carry extra secret environment; they stay on "run with this account".
+        return {"state": "ok", "kind": "api", "code": "unsupported_auth", "reason": tr("API 설정 프로필은 새 세션 주입을 지원하지 않습니다. 「이 계정으로 바로 실행」을 쓰세요")}
+    if token is not None:
+        if token["expires_at"] <= time.time():
+            return {"state": "broken", "kind": "token", "code": "token_expired", "reason": tr("장기 토큰이 만료됐습니다. 새로 등록하세요")}
+        return {"state": "ok", "kind": "token", "code": None, "reason": None}
+    from usage.profiles import _read_credentials
+    if _read_credentials(profile) is not None:
+        return {"state": "ok", "kind": "login", "code": None, "reason": None}
+    filename = ".credentials.json" if tool == "claude" else "auth.json"
+    try:
+        exists = fsguard.profile_file(root, filename).exists()
+    except fsguard.FsDenied:
+        exists = True
+    if exists:
+        return {"state": "broken", "kind": "login", "code": "credentials_unreadable", "reason": tr("로그인 정보를 읽지 못했습니다. 다시 로그인하세요")}
+    return {"state": "missing", "kind": None, "code": "not_logged_in", "reason": tr("이 프로필은 로그인되어 있지 않습니다")}
+
+
+def check_slot(profile):
+    """Refuse unless this profile can be injected right now. Returns the auth kind."""
+    if profile.get("archived_at") is not None:
+        raise SlotRefused("profile_archived", tr("보관된 프로필입니다. 복원한 뒤 쓰세요"))
+    if profile.get("state") != "ready":
+        raise SlotRefused("profile_not_ready", tr("프로필 복구를 먼저 완료하세요"))
+    state = auth_state(profile)
+    if state["code"]:
+        raise SlotRefused(state["code"], state["reason"])
+    return state["kind"]
+
+
+# --- choosing ---------------------------------------------------------------------------
+
+def _lookup(profile_id):
+    try:
+        return profiles.get(profile_id)
+    except profiles.Refused:
+        raise SlotRefused("profile_not_found", tr("그런 프로필이 없습니다"))
+
+
+def select(ref):
+    """`ref` is a profile id or "default" ("none" is handled by the caller). None = inject nothing."""
+    if not isinstance(ref, str) or not (ref == "default" or profiles.ID.fullmatch(ref)):
+        raise SlotRefused("invalid_profile", tr("프로필 값이 올바르지 않습니다"), 400)
+    if not _ready():
+        if ref == "default":
+            return None
+        raise SlotRefused("profile_not_found", tr("그런 프로필이 없습니다"))
+    if ref == "default":
+        chosen = []
+        for tool, pid in sorted(local.defaults().items()):
+            profile = _lookup(pid)
+            try:
+                check_slot(profile)
+            except SlotRefused as error:
+                # A marked default that cannot be used must not fall back to another account.
+                raise SlotRefused("default_invalid", tr("기본 계정을 쓸 수 없습니다: {why}", why=error.message))
+            chosen.append(profile)
+        candidates = chosen
+    else:
+        candidates = [_lookup(ref)]
+    if not candidates:
+        return None
+    selection = Selection()
+    for profile in candidates:
+        selection.kinds[profile["id"]] = check_slot(profile)
+        selection.profiles.append(profile)
+    return selection
+
+
+def environment(selection):
+    """(plain, secret, tools): variables to set. `secret` holds only values read at spawn time."""
+    plain, secret = {}, {}
+    for profile in selection.profiles:
+        plain[TOOL_VARIABLE[profile["tool"]]] = str(profiles.root(profile["id"]))
+        if selection.kinds[profile["id"]] == "token":
+            from agent_profile_token import environment_value
+            value = environment_value(profile["id"])
+            if not value:
+                raise SlotRefused("token_missing", tr("장기 토큰을 찾지 못했습니다"))
+            secret["CLAUDE_CODE_OAUTH_TOKEN"] = value
+    plain["FSH_PROFILE_ID"] = ",".join(selection.ids)
+    return plain, secret, sorted({p["tool"] for p in selection.profiles})
+
+
+def removed_names(selection, plain, secret):
+    names = []
+    for tool in sorted({p["tool"] for p in selection.profiles}):
+        names.extend(n for n in OVERRIDES[tool] if n not in plain and n not in secret and n not in names)
+    return names
+
+
+def present_overrides(names):
+    """Which of `names` actually exist in the server's or tmux's global environment (names only)."""
+    found = {n for n in names if os.environ.get(n)}
+    text = tmux_runner.run_text(["show-environment", "-g"]) or ""
+    for line in text.splitlines():
+        key = line.split("=", 1)[0]
+        if key in names:
+            found.add(key)
+    return sorted(found)
+
+
+# --- creating the tmux session ----------------------------------------------------------
+
+_version = None
+
+
+def tmux_version():
+    global _version
+    if _version is None:
+        import subprocess
+        try:
+            out = subprocess.run(["tmux", "-V"], capture_output=True, text=True, timeout=3).stdout
+        except (OSError, subprocess.SubprocessError):
+            return None
+        match = re.search(r"(\d+)\.(\d+)", out)
+        _version = (int(match.group(1)), int(match.group(2))) if match else None
+    return _version
+
+
+def _quote(value):
+    """A tmux config string. Control characters cannot be quoted safely, so they are refused."""
+    if any(ord(c) < 32 or ord(c) == 127 for c in value):
+        raise SlotRefused("invalid_value", tr("제어 문자가 든 값은 쓸 수 없습니다"), 400)
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$") + '"'
+
+
+def _script(name, cols, rows, cwd, plain, secret, removed, ids):
+    # The shell is started as `unset <overrides>; exec $SHELL -l`, so the variables are truly absent
+    # (tmux `new-session -e VAR=` would only set them empty, and tmux has no way to unset one).
+    shell = (("unset " + " ".join(removed) + "; ") if removed else "") + 'exec "${SHELL:-/bin/sh}" -l'
+    line = ["new-session", "-d", "-s", _quote(name), "-x", str(int(cols)), "-y", str(int(rows)), "-c", _quote(cwd)]
+    for key, value in {**plain, **secret}.items():
+        line += ["-e", _quote(f"{key}={value}")]
+    line.append(_quote(shell))
+    lines = [" ".join(line), f"set-option -t {_quote('=' + name + ':')} {OPTION} {_quote(','.join(ids))}"]
+    # New windows and panes of this session must not see the overrides either (tmux global env).
+    lines += [f"set-environment -t {_quote('=' + name)} -r {n}" for n in removed]
+    # One command list: tmux stops it at the first failure. As separate lines a failed `new-session`
+    # (the name already exists) would still run the rest and mark SOMEONE ELSE's session.
+    return " ; ".join(lines) + "\n"
+
+
+def _session_id(name):
+    value = tmux_runner.run_text(["display-message", "-p", "-t", f"={name}:", "#{session_id}"])
+    value = (value or "").strip()
+    return value if re.fullmatch(r"\$\d+", value) else None
+
+
+def spawn(name, cols, rows, cwd, selection):
+    """Create the session with the chosen account. Returns `(rc, error_text, info)`."""
+    version = tmux_version()
+    if version is None or version < MIN_TMUX:
+        return 1, "tmux>=3.2 required", {}
+    plain, secret, tools = environment(selection)
+    removed = removed_names(selection, plain, secret)
+    text = _script(name, cols, rows, cwd, plain, secret, removed, selection.ids)
+    folder = fsguard.private_profile_directory(profiles.directory() / "launch")
+    path = folder / ("session-" + secrets.token_hex(16) + ".conf")
+    before = _session_id(name)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(text)
+        # `start-server` first: source-file alone does not start one, and the first session may be this one.
+        rc, _, _ = tmux_runner.run(["start-server", ";", "source-file", str(path)], timeout=5)
+    finally:
+        path.unlink(missing_ok=True)
+    if rc != 0:
+        # Never leave a half-configured session (created but without its marker) behind — but only one
+        # THIS call created. A session that already had the name is somebody else's and stays untouched.
+        after = _session_id(name)
+        if after and after != before:
+            tmux_runner.run(["kill-session", "-t", after], timeout=3)
+        # tmux's own message is not passed on: it may quote the config line that carried a token.
+        return rc, "", {}
+    return 0, "", {"cleared_env": present_overrides(removed)}
+
+
+def record(name, selection):
+    """Remember which profiles a session was created with (the marker itself is the tmux option)."""
+    created = tmux_runner.run_text(["display-message", "-p", "-t", f"={name}:", "#{session_id}:#{session_created}"])
+    created = (created or "").strip()
+    now = time.time()
+    with profiles.database() as db:
+        db.execute("""CREATE TABLE IF NOT EXISTS injected_sessions (
+            name TEXT NOT NULL, created TEXT NOT NULL, profile_id TEXT NOT NULL REFERENCES profiles(id),
+            profile_revision INTEGER NOT NULL, started_at REAL NOT NULL, PRIMARY KEY (name, created, profile_id))""")
+        for profile in selection.profiles:
+            db.execute("INSERT OR REPLACE INTO injected_sessions VALUES (?,?,?,?,?)",
+                       (name, created, profile["id"], profile["revision"], now))
+        db.execute("DELETE FROM injected_sessions WHERE rowid NOT IN "
+                   "(SELECT rowid FROM injected_sessions ORDER BY started_at DESC LIMIT 500)")
+
+
+# --- naming the badge (session list) ----------------------------------------------------
+
+_names = {}
+_names_lock = threading.Lock()
+NAME_TTL = 5
+
+
+def describe(ids_text):
+    """`@fsh_profile` text -> [{id, name, tool}] from the registry (name None if it cannot be read)."""
+    ids = [i for i in (ids_text or "").split(",") if profiles.ID.fullmatch(i)]
+    if not ids:
+        return []
+    now = time.time()
+    with _names_lock:
+        hit = _names.get(tuple(ids))
+        if hit and now - hit[0] < NAME_TTL:
+            return hit[1]
+    rows = {}
+    if _ready():
+        try:
+            with profiles.database() as db:
+                for i in ids:
+                    row = db.execute("SELECT id,name,tool FROM profiles WHERE id=?", (i,)).fetchone()
+                    if row:
+                        rows[i] = {"id": row["id"], "name": row["name"], "tool": row["tool"]}
+        except Exception:  # noqa: BLE001 — the list must still render; the badge just has no name
+            rows = {}
+    result = [rows.get(i) or {"id": i, "name": None, "tool": None} for i in ids]
+    with _names_lock:
+        if len(_names) > 64:
+            _names.clear()
+        _names[tuple(ids)] = (now, result)
+    return result
+
+
+# --- picker -----------------------------------------------------------------------------
+
+def _usage(profile_id):
+    from usage.profiles import cached_row
+    row = cached_row(profile_id)
+    if not row or not row.get("windows"):
+        return None
+    now = time.time()
+    windows = []
+    for w in row["windows"]:
+        reset = w.get("resets_at")
+        left = None
+        if isinstance(reset, str):
+            try:
+                from datetime import datetime
+                left = max(0, int(datetime.fromisoformat(reset).timestamp() - now))
+            except ValueError:
+                left = None
+        windows.append({"id": w.get("id"), "label": w.get("label"), "pct": w.get("pct"),
+                        "resets_at": reset, "resets_in_sec": left})
+    return {"windows": windows, "checked_at": row.get("checked_at"), "stale": bool(row.get("stale")),
+            "source": "oauth-usage" if row.get("provider") == "claude" else "codex-usage"}
+
+
+def picker():
+    """A light list for the account chooser: no secrets, no paths, no network."""
+    if not _ready():
+        return {"profiles": [], "defaults": {}}
+    listing = profiles.listing()["profiles"]
+    marked = local.defaults()
+    out = []
+    for row in listing:
+        state = auth_state(row)
+        usable = row["state"] == "ready" and state["code"] is None
+        out.append({"id": row["id"], "name": row["name"], "tool": row["tool"], "purpose": row["purpose"],
+                    "auth": state["state"], "auth_kind": state["kind"],
+                    "selectable": usable, "reason": None if usable else (state["reason"] or tr("프로필 복구를 먼저 완료하세요")),
+                    "default": marked.get(row["tool"]) == row["id"], "usage": _usage(row["id"])})
+    active = {r["id"] for r in listing}
+    return {"profiles": out,
+            "defaults": {tool: {"id": pid, "valid": pid in active} for tool, pid in marked.items()}}

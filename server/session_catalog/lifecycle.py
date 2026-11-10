@@ -257,7 +257,7 @@ def stop(sid, opid, *, force=False):
         return {'operation_id': opid, 'state': 'done', **result}
 
 
-def create(opid,name,cwd,cols=80,rows=24,*,request_spec=None):
+def create(opid,name,cwd,cols=80,rows=24,*,request_spec=None,launcher=None):
     """Create a logical task before spawning; operation replay never spawns again."""
     import os,re
     identifier(opid)
@@ -285,7 +285,8 @@ def create(opid,name,cwd,cols=80,rows=24,*,request_spec=None):
                        (sid,host_id(db),wid,name,'local',now,now))
             result={'session_id':sid,'name':name,'host':host_id(db)}
             _begin(db,opid,'create',sid,payload,result)
-        rc,_,_=tmux_runner.run(['new-session','-d','-s',name,'-x',str(cols),'-y',str(rows),'-c',cwd],timeout=5)
+        # `launcher`: a caller that must create the session itself (account injection). It returns (rc, error, info).
+        rc=launcher(name,cols,rows,cwd)[0] if launcher else tmux_runner.run(['new-session','-d','-s',name,'-x',str(cols),'-y',str(rows),'-c',cwd],timeout=5)[0]
         if rc:
             _finish(opid,'needs_review',result)
             raise Refused('launch_needs_review',503)
