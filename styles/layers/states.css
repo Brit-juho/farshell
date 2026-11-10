@@ -1,0 +1,47 @@
+/* 상호작용 기본선 — 커서·비활성·전환 (2026-11, 화면 점검 6절)
+ *
+ * 이 파일은 components 레이어의 **맨 앞**에서 로드되고 셀렉터가 전부 :where()라
+ * 특이도 0이다. 컴포넌트가 자기 transition·cursor·opacity를 가지면 항상 그쪽이 이긴다.
+ * 여기는 "아무도 안 정한 요소가 앱 안에서 제각각 반응하지 않게" 하는 바닥이다:
+ *
+ *   커서      눌러서 동작하는 모든 요소 = pointer, 비활성 = not-allowed
+ *   비활성    opacity .45 (컴포넌트들이 이미 쓰는 값)
+ *   전환      호버·눌림·선택이 바뀔 때 background-color · color · border-color를
+ *             --dur-fast(120ms) · --ease-fast로만 전환한다. 폭·padding·위치는
+ *             전환하지 않는다(레이아웃이 흔들리고 터미널 refit이 난다).
+ *   모션 감소  prefers-reduced-motion에서는 --dur-fast를 0으로 만든다.
+ *
+ * 호버·눌림·선택 **색**은 여기 없다 — tokens.css의 --color-state-*가 값이고, 소비는
+ * 각 컴포넌트와 styles/screens/99-states.css(선택·waiting 위의 단계)에 있다.
+ * 포커스 링은 styles/screens/00-tokens-reset.css의 :focus-visible 한 곳이다.
+ */
+@layer components {
+  :where(button, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"],
+         [role="tab"], [role="option"], [role="switch"], summary, a[href], select,
+         input[type="checkbox"], input[type="radio"], input[type="range"], input[type="file"],
+         label[for], .vt-srow, .vt-ft-row, .vt-gr-row, .vt-gr-file, .vt-vw-row, .vt-pt-row,
+         .vt-prow, .vt-wl-row, .vt-q-row, .vt-sn-row, .vt-ac-entry, .vt-ac-navitem, .vt-menu-item):not(:disabled):not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+  :where(button, select, input, textarea, fieldset):disabled,
+  :where([aria-disabled="true"]) {
+    cursor: not-allowed;
+  }
+  :where(button, select, input[type="checkbox"], input[type="radio"], input[type="range"]):disabled,
+  :where([role="button"], [role="menuitem"], [role="tab"], [role="option"])[aria-disabled="true"] {
+    opacity: .45;
+  }
+
+  :where(button, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"],
+         [role="tab"], [role="option"], summary, a[href], select, input, textarea,
+         .vt-srow, .vt-ft-row, .vt-gr-row, .vt-gr-file, .vt-vw-row, .vt-pt-row, .vt-prow, .vt-wl-row,
+         .vt-q-row, .vt-sn-row, .vt-ac-entry, .vt-ac-navitem, .vt-menu-item, .vt-act, .vt-hud-chip) {
+    transition: background-color var(--dur-fast) var(--ease-fast),
+                color var(--dur-fast) var(--ease-fast),
+                border-color var(--dur-fast) var(--ease-fast);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-fast: 0ms; }
+}

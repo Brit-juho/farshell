@@ -67,7 +67,8 @@ html[data-skin="windows"] #topbar {
    같은 줄에서 획 굵기가 글꼴의 plus 기호(얇다)와 어긋났고, 수직 중심도 글꼴
    메트릭이 정했다. 아이콘은 SVG라는 규칙(DESIGN.md)대로 되돌린다. */
 #add-btn svg { width:16px; height:16px; }
-#add-btn:hover { background:var(--menu-hover); color:var(--txt); }
+#add-btn:hover { background:var(--color-state-hover); color:var(--txt); }
+#add-btn:active { background:var(--color-state-press); }
 
 /* 좁은 화면 세션 관리 진입점 */
 #voice-session-picker {
@@ -79,7 +80,7 @@ html[data-skin="windows"] #topbar {
   color:var(--txt);
   font-size:var(--fs-sm);
   border:1px solid var(--line);
-  border-radius:var(--trad);
+  border-radius:var(--radius-sm);
   cursor:pointer;
 }
 @media (min-width:720px) { #voice-session-picker { display:none; } } /* 넓은 화면에선 탭으로 충분 */
@@ -170,7 +171,8 @@ html[data-skin="windows"] #topbar {
 
 /* 상단 아이콘 버튼 */
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-icon-btn`이 맡는다. .tbtn에 남은 것은 없다(아래 .tbtn 파생 규칙은 그대로) */
-.tbtn:hover { background:var(--menu-hover); color:var(--txt); }
+.tbtn:hover { background:var(--color-state-hover); color:var(--txt); }
+.tbtn:active { background:var(--color-state-press); }
 .tbtn svg { width:16px; height:16px; }
 .tbtn.more { font-size:var(--fs-xl); letter-spacing:1px; line-height:1; }
 #viewer-toggle.active { background:var(--color-acc-surface); color:var(--acc-ink); }
@@ -263,7 +265,8 @@ html[data-skin="windows"] .caption { display:flex; }
   width:38px; height:var(--topbar-h); display:flex; align-items:center; justify-content:center;
   color:var(--sub); font-size:var(--fs-2xs); cursor:pointer; border-radius:var(--radius-sm);
 }
-.caption span:hover { background:var(--menu-hover); color:var(--txt); }
+.caption span:hover { background:var(--color-state-hover); color:var(--txt); }
+.caption span:active { background:var(--color-state-press); }
 .caption span.cls:hover { background:var(--close-hover); color:var(--color-on-solid); }
 
 /* ---- ⋯ 팝업 메뉴 ------------------------------------------------------- */
@@ -304,7 +307,7 @@ html[data-skin="windows"] .caption { display:flex; }
 .theme-chip[data-skin="warp"]       .dot { background:var(--acc-warp); }
 .theme-chip[data-skin="linear"]     .dot { background:var(--acc-linear); }
 .theme-chip[data-skin="vercel"]     .dot { background:var(--acc-vercel); }
-.theme-chip.sel { border-color:var(--acc); color:var(--txt); background:var(--menu-hover); }
+.theme-chip.sel { border-color:var(--acc); color:var(--txt); background:var(--color-state-hover); }
 
 /* ---- 터미널 ------------------------------------------------------------ */
 /* 2026-09-18 — padding을 0으로. 2px이 pane 트리 바깥을 둘러 터미널 영역이
@@ -431,7 +434,7 @@ html[data-skin="windows"] .caption { display:flex; }
   padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5);
   background:var(--tab-active);
   color:var(--tab-active-txt);
-  border-radius:var(--trad);
+  border-radius:var(--radius-sm);
   font-size:var(--fs-xs);
   box-shadow:var(--shadow-e2);
   opacity:.92;
@@ -439,7 +442,7 @@ html[data-skin="windows"] .caption { display:flex; }
 /* long-press가 아직 확정 전(LONGPRESS_MS 대기 중)임을 알리는 최소한의 시각
    피드백 — keybar.js의 .kb.holding과 같은 패턴(배경만 살짝). */
 /* 레일 세션 행·pane 헤더의 롱프레스 대기 표시 */
-.vt-pane-head.vt-drag-pending { background:var(--menu-hover); }
+.vt-pane-head.vt-drag-pending { background:var(--color-state-hover); }
 /* 드래그 중엔 터치 스크롤/텍스트 선택이 끼어들면 안 된다. */
 body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-select:none; }
 /* pane 헤더 — root가 leaf 하나뿐이면 JS가 display:none으로 숨긴다(분할을
@@ -531,7 +534,8 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
   border:none; background:transparent; color:var(--sub); cursor:pointer;
   font:500 var(--fs-sm) var(--ui);
 }
-.vt-pane-empty:hover { background:var(--menu-hover); color:var(--txt); }
+.vt-pane-empty:hover { background:var(--color-state-hover); color:var(--txt); }
+.vt-pane-empty:active { background:var(--color-state-press); }
 .vt-pane-empty svg { width:20px; height:20px; }
 
 /* 빈 pane 세션 선택 시트(layout/pane-picker.js) — openPanel()의 공용 모달
@@ -544,7 +548,8 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
   width:calc(100% - calc(var(--spacing) * 6));
   margin:calc(var(--spacing) * 3) calc(var(--spacing) * 3) 0;
 }
-.vt-pp-new:hover { background:var(--menu-hover); border-color:var(--acc); color:var(--acc); }
+.vt-pp-new:hover { background:var(--color-state-hover); border-color:var(--acc); color:var(--acc); }
+.vt-pp-new:active { background:var(--color-state-press); }
 .vt-pp-new svg { flex-shrink:0; }
 .vt-card-grid {
   display:grid; grid-template-columns:repeat(2, 1fr); gap:calc(var(--spacing) * 2);
@@ -652,7 +657,6 @@ body.vt-touch-dragging { touch-action:none; user-select:none; -webkit-user-selec
 .vt-voice-help { flex:1 1 220px; margin:0; color:var(--color-muted); font-size:var(--fs-xs); line-height:1.5; }
 .vt-voice-link { padding:0; border:0; background:none; color:var(--color-acc); font:inherit; font-size:var(--fs-xs); cursor:pointer; }
 .vt-voice-link:hover { text-decoration:underline; }
-.vt-voice-link:focus-visible { outline:2px solid var(--color-acc); outline-offset:2px; border-radius:var(--radius-xs); }
 #mic-status .vt-btn { margin:8px 8px 0 0; }
 @media (pointer:coarse) {
   #voice-status-panel .vt-btn { min-height:44px; }

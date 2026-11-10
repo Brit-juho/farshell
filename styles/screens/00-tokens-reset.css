@@ -37,8 +37,8 @@
 
 /* ---- 스케일 토큰 (구 D1 — spacing 21종·font-size 18종·radius 51곳을
    하나의 스케일로 정리한 이전 히스토리, 2.0 이전) ---------------------------
-   font-size는 스킨 무관 값이라 :root에 한 번만 정의. --wrad/--trad(스킨별
-   모서리 굵기)는 그대로 유지, 이 토큰들과는 별개다.
+   font-size는 스킨 무관 값이라 :root에 한 번만 정의. (스킨별 모서리 굵기였던
+   옛 --wrad/--trad는 2026-11에 지웠다 — 소비처 3곳을 --radius-*로 옮겼다.)
    D4(20-design-system.md, 2026-09-04): --sp-1..14와 --r-2xs..pill(10단)을
    여기서 제거했다.
    - spacing은 전부 Tailwind의 4px 단일 --spacing(tokens.css, D1에서 정의)
@@ -69,7 +69,7 @@
    --line/--ok/--warn/--err/--info는 이제 리터럴 hex가 아니라 styles/theme/
    tokens.css·skins.css의 --color-*(색 토큰 17개, 스킨별 html[data-skin=...]
    블록에서 재정의됨)를 가리킨다 — 그 두 파일이 이제 색의 단일 진실이다.
-   --bar/--tab/--tab-active/--tab-active-txt/--menu/--menu-hover/--crust는
+   --bar/--tab/--tab-active/--tab-active-txt/--menu는
    17개 토큰 계약 밖(UI 크롬 세부 톤)이라 지금까지처럼 이 파일에 리터럴로
    남겨둔다 — 강제로 4단 bg 스케일에 욱여넣으면 기존 5종 스킨 다수가 실제로
    보이는 색이 미세하게 달라진다(예: notepad는 tab-active/menu가 이미 같은
@@ -82,9 +82,8 @@ html[data-skin="farshell"] {
   --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
   /* 2026-11 리디자인 3단계 — farshell의 bg-2가 「들어간 면」(칸보다 어둡다)이 되어
    * 떠 있는 메뉴는 bg-raised로 옮겼다. 다른 스킨의 --menu는 그대로다. */
-  --menu:var(--color-bg-raised); --menu-hover:rgb(255 255 255 / .09); --line:var(--color-line);
-  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#000000;
-  --wrad:12px; --trad:7px;
+  --menu:var(--color-bg-raised); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done);
   --topbar-h:32px; --topbar-popup-y:38px;
   --ui:var(--font-ui);
   --mono:var(--font-mono);
@@ -92,9 +91,8 @@ html[data-skin="farshell"] {
 html[data-skin="macos"] {
   --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-1); --tab-active:var(--color-bg-3); --tab-active-txt:#f2f2f5;
   --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
-  --menu:var(--color-bg-2); --menu-hover:rgba(255,255,255,.09); --line:var(--color-line);
-  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#000000;
-  --wrad:12px; --trad:7px;
+  --menu:var(--color-bg-2); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done);
   --topbar-h:32px; --topbar-popup-y:38px;
   --ui:var(--font-ui);
   --mono:var(--font-mono);
@@ -107,16 +105,14 @@ html[data-skin="macos"] {
 html[data-skin="catppuccin"] {
   --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-2); --tab-active:var(--color-bg-3); --tab-active-txt:#f5e0dc;
   --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
-  --menu:var(--color-bg-2); --menu-hover:rgba(255,255,255,.08); --line:var(--color-line);
-  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#11111b;
-  --wrad:12px; --trad:8px;
+  --menu:var(--color-bg-2); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done);
 }
 html[data-skin="windows"] {
   --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-1); --tab-active:var(--color-bg-3); --tab-active-txt:var(--color-on-solid);
   --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
-  --menu:var(--color-bg-1); --menu-hover:rgba(255,255,255,.1); --line:var(--color-line);
-  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:var(--color-bg-3);
-  --wrad:8px; --trad:2px; /* 탭·끌기 표시도 컨트롤과 같은 2px(skins.css의 --radius-sm). 창 모서리는 그대로 */
+  --menu:var(--color-bg-1); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done);
   /* Windows 11 실제 창 닫기 버튼 hover 빨강 — windows 스킨 전용 UI 크롬(D1
      하드코딩 정리 대상, .traffic과 같은 이유로 스킨 블록 안으로 이동). */
   --close-hover:#e81123;
@@ -124,44 +120,39 @@ html[data-skin="windows"] {
 html[data-skin="vscode"] {
   --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-1); --tab-active:var(--color-bg-3); --tab-active-txt:var(--color-on-solid);
   --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
-  --menu:var(--color-bg-2); --menu-hover:rgba(255,255,255,.08); --line:var(--color-line);
-  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#181818;
-  --wrad:8px; --trad:2px; /* 탭·끌기 표시도 컨트롤과 같은 2px(skins.css의 --radius-sm). 창 모서리는 그대로 */
+  --menu:var(--color-bg-2); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done);
 }
 /* 노트패드 — 메모장/종이 느낌의 라이트 테마. 다른 스킨과 달리 밝은 배경이라
-   --menu-hover/--line은 흰색이 아닌 검정 오버레이로 뒤집어야 대비가 산다. */
+   호버·눌림 오버레이(--state-ink)를 검정으로 뒤집어야 대비가 산다(skins.css). */
 html[data-skin="notepad"] {
   --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-2); --tab-active:var(--color-bg-3); --tab-active-txt:var(--color-txt);
   --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
-  --menu:var(--color-bg-3); --menu-hover:rgba(0,0,0,.055); --line:var(--color-line);
-  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:var(--color-bg-1);
-  --wrad:6px; --trad:4px;
+  --menu:var(--color-bg-3); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done);
 }
 
 /* 2026-09-24(2.1 D6) — 3스킨 추가(사용자가 고른 레퍼런스: Warp/Linear/
-   Vercel-Geist). 모서리 반경이 각 정체성의 핵심이라 --wrad/--trad를 다른
-   값으로 뗀다 — Warp는 라운드가 큰 편(그라디언트 카드 느낌), Linear는
+   Vercel-Geist). 모서리 반경이 각 정체성의 핵심이다(반경은 skins.css의
+   --radius-*가 정한다. 옛 --wrad/--trad는 2026-11에 지웠다) — Warp는 라운드가 큰 편(그라디언트 카드 느낌), Linear는
    중간(플랫 표면), Vercel/Geist는 거의 각짐(하드엣지). */
 html[data-skin="warp"] {
   --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-1); --tab-active:var(--color-bg-3); --tab-active-txt:var(--color-txt);
   --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
-  --menu:var(--color-bg-2); --menu-hover:rgb(196 166 255 / .09); --line:var(--color-line);
-  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#000000;
-  --wrad:16px; --trad:9px;
+  --menu:var(--color-bg-2); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done);
 }
 html[data-skin="linear"] {
   --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-1); --tab-active:var(--color-bg-3); --tab-active-txt:var(--color-txt);
   --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
-  --menu:var(--color-bg-2); --menu-hover:rgb(255 255 255 / .04); --line:var(--color-line);
-  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#000000;
-  --wrad:10px; --trad:6px;
+  --menu:var(--color-bg-2); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done);
 }
 html[data-skin="vercel"] {
   --win:var(--color-bg-0); --bar:var(--color-bg-1); --tab:var(--color-bg-1); --tab-active:var(--color-bg-3); --tab-active-txt:var(--color-txt);
   --term:var(--color-term-bg); --txt:var(--color-txt); --sub:var(--color-sub); --acc:var(--color-acc); --acc-ink:var(--color-acc-ink);
-  --menu:var(--color-bg-2); --menu-hover:rgb(255 255 255 / .08); --line:var(--color-line);
-  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done); --crust:#000000;
-  --wrad:2px; --trad:2px;
+  --menu:var(--color-bg-2); --line:var(--color-line);
+  --ok:var(--color-st-working); --warn:var(--color-st-waiting); --err:var(--color-st-error); --info:var(--color-st-done);
 }
 
 /* 3단 텍스트 램프의 중간 톤 — 헤딩(--txt)·메타(--sub) 둘뿐이던 텍스트 색을
@@ -215,5 +206,28 @@ body {
   -webkit-font-smoothing:antialiased;
   font-variant-numeric:tabular-nums;
 }
-:focus-visible { outline:2px solid var(--acc); outline-offset:2px; border-radius:var(--radius-sm); }
+/* ── 포커스 링 — 앱 전체에서 이 규칙 하나다 (2026-11 상호작용 상태 토큰) ──────────
+ * 이전에는 :focus-visible 규칙이 약 45개였고 오프셋이 −2/+1/+2/0 네 가지였다(소비처마다
+ * outline을 따로 썼다). 이제 두께·색·오프셋은 tokens.css의 --focus-ring-*이고 소비처는
+ * outline을 쓰지 않는다. 오프셋은 바깥 +2가 기본이다. 컨테이너 overflow에 링이 잘리는
+ * 자리(막대·목록 행·입력 상자)만 아래 목록으로 inset(−2)을 쓴다 — 값이 아니라 **이 목록에
+ * 올리는 것**이 예외 규칙이다. 새 컴포넌트가 링이 잘리면 outline을 쓰지 말고 여기 올려라
+ * (frontend/tests/state-tokens.test.js가 소비처의 outline 직접 사용을 막는다).
+ * border-radius를 덮어쓰던 옛 선언은 지웠다 — 원형 버튼이 포커스되면 네모로 바뀌는 부작용이었다. */
+:focus-visible, .vt-number-spinner:focus-within, .vt-gr-glob:focus-within, .vt-gr-q:focus-within {
+  outline: var(--focus-ring-w) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+input:focus-visible, textarea:focus-visible, select:focus-visible, [contenteditable]:focus-visible,
+.vt-native-open:focus-visible, .vt-ac-navitem:focus-visible, .vt-ac-itemhead:focus-visible,
+.vt-number-step:focus-visible, .vt-mcp-worktab:focus-visible, .vt-vm-pick:focus-visible,
+.vt-wgrail-new:focus-visible, .vt-rail-sort-opt:focus-visible, #vt-wgrail .vt-srow:focus-visible,
+.vt-act:focus-visible, .vt-act-mic-home #mic-btn-wrap.mic:focus-visible,
+.vt-mb-menu:focus-visible, button.vt-tb-host:focus-visible, .vt-hud-chip.clickable:focus-visible,
+html.vt-focus #vt-focus-pill button:focus-visible, .vt-tb-focus:focus-visible,
+.vt-settings .vt-set-row > .vt-toggle:focus-visible, .vt-wl-row:focus-visible,
+.vt-gr-glob:focus-within, .vt-gr-q:focus-within,
+.vt-menu-item:focus-visible, .vt-sn-row:focus-visible, .vt-q-row:focus-visible {
+  --focus-ring-offset: var(--focus-ring-inset);
+}
 button { font-family:inherit; }

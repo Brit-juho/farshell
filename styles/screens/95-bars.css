@@ -60,8 +60,8 @@
   .vt-mb-menu > .vt-tb-ico:first-child { color:var(--acc); }
   .vt-mb-menu > .vt-tb-ico:last-child { color:var(--color-muted); }
   .vt-mb-menu .vt-authz-badge { top:-2px; right:-4px; }
-  .vt-mb-menu:hover, .vt-mb-menu[aria-expanded="true"] { background:var(--menu-hover); }
-  .vt-mb-menu:focus-visible { outline:2px solid var(--acc); outline-offset:-2px; }
+  .vt-mb-menu:hover, .vt-mb-menu[aria-expanded="true"] { background:var(--color-state-hover); }
+  .vt-mb-menu:active { background:var(--color-state-press); }
 
   /* 호스트 — 이 화면이 보는 맥. 맥이 둘 이상일 때만 버튼(▾)이고, 아니면 같은 모양의 이름표다. */
   .vt-tb-host-wrap { display:flex; align-items:center; min-width:0; flex:0 1 auto; }
@@ -77,8 +77,8 @@
   /* 다른 맥을 보고 있다 — 레일 스위처(.vt-wgrail-host.remote)와 같은 강조색. */
   .vt-tb-host.remote, .vt-tb-host.remote > .vt-tb-ico { color:var(--acc); }
   button.vt-tb-host { cursor:pointer; }
-  button.vt-tb-host:hover, button.vt-tb-host.open { background:var(--menu-hover); }
-  button.vt-tb-host:focus-visible { outline:2px solid var(--acc); outline-offset:-2px; }
+  button.vt-tb-host:hover, button.vt-tb-host.open { background:var(--color-state-hover); }
+  button.vt-tb-host:active { background:var(--color-state-press); }
 
   /* 저장소 › 브랜치 › 세션 — 마지막 조각(지금 칸의 세션)만 본문 색. 넘치면 앞 조각부터 줄인다. */
   .vt-tb-crumb {
@@ -105,11 +105,10 @@
   .vt-tb-palette-ph { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .vt-tb-kbd {
     flex:none; padding:0 calc(var(--spacing) * 1.25); border-radius:var(--radius-sm);
-    background:var(--menu-hover); color:var(--sub);
+    background:var(--color-state-hover); color:var(--sub);
     font:var(--weight-medium) var(--fs-3xs) / 16px var(--font-mono);
   }
   .vt-tb-palette:hover { border-color:color-mix(in srgb, var(--acc) 40%, var(--color-line-strong)); color:var(--sub); }
-  .vt-tb-palette:focus-visible { outline:2px solid var(--acc); outline-offset:1px; }
 
   /* ── 상태 막대 24 ───────────────────────────────────────────────────────── */
   #vt-hud {
@@ -146,8 +145,8 @@
 .vt-hud-chip.tone-warn .vt-hud-dot { background:var(--warn); }
 .vt-hud-chip.tone-err  .vt-hud-dot { background:var(--err); }
 .vt-hud-chip.clickable { cursor:pointer; }
-.vt-hud-chip.clickable:hover { background:var(--menu-hover); color:var(--txt); }
-.vt-hud-chip.clickable:focus-visible { outline:2px solid var(--acc); outline-offset:-2px; }
+.vt-hud-chip.clickable:hover { background:var(--color-state-hover); color:var(--txt); }
+.vt-hud-chip.clickable:active { background:var(--color-state-press); }
 /* Hud.tsx의 fitChips가 폭이 모자랄 때 순위가 낮은 칩부터 붙인다. Solid <For>가 관리하는 노드라 DOM에서 빼지 않고
    클래스로만 감춘다. */
 .vt-hud-chip.overflow-hidden { display:none; }
@@ -171,7 +170,8 @@
   background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer;
 }
 .vt-mb-item svg { width:14px; height:14px; flex:none; color:var(--sub); }
-.vt-mb-item:hover, .vt-mb-item:focus-visible { background:var(--menu-hover); outline:none; }
+.vt-mb-item:hover, .vt-mb-item:focus-visible { background:var(--color-state-hover); outline:none; }
+.vt-mb-item:active { background:var(--color-state-press); }
 .vt-mb-item[disabled] { opacity:.45; cursor:default; }
 .vt-mb-item .vt-mb-label { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .vt-mb-item .vt-mb-keys { color:var(--color-muted); font:var(--weight-normal) var(--fs-3xs) var(--font-mono); }

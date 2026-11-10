@@ -185,9 +185,9 @@
   font:var(--weight-normal) var(--fs-sm)/1.3 var(--font-ui); white-space:nowrap;
 }
 .vt-wl-row.vt-wl-sub, .vt-wl-row.vt-wl-child { min-height:36px; }
-.vt-wl-row:hover { background:var(--color-bg-3); }
-.vt-wl-row:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
-.vt-wl-row.on { background:var(--color-acc-soft); box-shadow:inset 2px 0 0 var(--color-acc); }
+.vt-wl-row:hover { background:var(--color-state-hover); }
+.vt-wl-row:active { background:var(--color-state-press); }
+.vt-wl-row.on { background:var(--color-state-selected); box-shadow:inset 2px 0 0 var(--color-acc); }
 .vt-wl-row.on .vt-wl-row-name { font-weight:var(--weight-semibold); }
 .vt-wl-row-ic { display:inline-flex; flex:none; color:var(--color-muted); }
 .vt-wl-row-name { min-width:0; overflow:hidden; text-overflow:ellipsis; }
@@ -218,7 +218,6 @@
 .vt-wl-seg { display:inline-flex; height:24px; box-sizing:border-box; padding:1px; gap:1px; border-radius:var(--radius-sm); background:var(--color-bg-2); border:1px solid var(--color-line-strong); }
 .vt-wl-seg-btn { padding:0 8px; border:0; border-radius:var(--radius-xs); background:transparent; color:var(--color-muted); font:var(--weight-normal) var(--fs-xs)/20px var(--font-ui); cursor:pointer; white-space:nowrap; }
 .vt-wl-seg-btn.on { background:var(--color-bg-raised); color:var(--color-txt); box-shadow:0 0 0 1px var(--color-line-strong); }
-.vt-wl-seg-btn:focus-visible { outline:2px solid var(--color-acc); outline-offset:1px; }
 .vt-wl-count { font-family:var(--font-mono); }
 .vt-wl-rstatus { margin:0; padding:8px 20px 0; color:var(--color-muted); font-size:var(--fs-xs); }
 .vt-wl-rstatus:empty { display:none; }
@@ -316,7 +315,7 @@
 .vt-history-split { grid-template-columns:minmax(260px, 380px) minmax(0, 1fr); gap:20px; }
 .vt-history-list { padding-right:0; }
 .vt-history-item { padding:10px 12px; gap:3px; font-size:var(--fs-sm); border-bottom:1px solid var(--color-line); }
-.vt-history-item[aria-pressed="true"] { background:var(--color-acc-soft); }
+.vt-history-item[aria-pressed="true"] { background:var(--color-state-selected); }
 .vt-history-detail h3 { font:var(--weight-semibold) var(--fs-base)/1.3 var(--font-ui); }
 .vt-history-message { padding-block:10px; }
 .vt-history-message h4 { font-size:var(--fs-xs); color:var(--color-muted); margin-bottom:4px; }

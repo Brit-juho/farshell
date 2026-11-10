@@ -82,14 +82,14 @@
   border:0; border-radius:0; background:transparent;
   color:var(--color-sub); cursor:pointer;
 }
-.vt-act:hover { color:var(--color-txt); background:var(--menu-hover); }
+.vt-act:hover { color:var(--color-txt); background:var(--color-state-hover); }
+.vt-act:active { background:var(--color-state-press); }
 .vt-act.active { color:var(--color-txt); }
 /* 활성 = 왼쪽 가장자리 2px 강조선(위아래 10px 여백). 면을 깔지 않는다 — 주인공은 선이다. */
 .vt-act.active::before {
   content:""; position:absolute; left:0; top:10px; bottom:10px; width:2px;
   border-radius:0 2px 2px 0; background:var(--color-acc);
 }
-.vt-act:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
 .vt-act.dragging { opacity:.45; cursor:grabbing; }
 .vt-act-ico { display:inline-flex; pointer-events:none; }
 .vt-act > svg { width:20px; height:20px; flex:none; pointer-events:none; }
@@ -123,9 +123,8 @@
 /* 녹음 중일 때만 색이 생긴다. #mic-btn-wrap.mic(id+클래스)이 상대라 클래스만으로는 못 이긴다. */
 .vt-act-mic-home #mic-btn-wrap.mic,
 .vt-act-mic-home #mic-btn-wrap.mic:hover { background:transparent; color:var(--color-sub); filter:none; }
-.vt-act-mic-home #mic-btn-wrap.mic:hover { background:var(--menu-hover); color:var(--color-txt); }
-.vt-act-mic-home #mic-btn-wrap.mic:active { transform:none; background:var(--color-surface-active); }
-.vt-act-mic-home #mic-btn-wrap.mic:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
+.vt-act-mic-home #mic-btn-wrap.mic:hover { background:var(--color-state-hover); color:var(--color-txt); }
+.vt-act-mic-home #mic-btn-wrap.mic:active { transform:none; background:var(--color-state-press); }
 /* 상태 점 — 평소(준비됨)엔 없다. 문제가 있을 때만 아이콘 모서리에 색이 붙는다(voice/status-panel.js). */
 .vt-act-mic-home #mic-btn-wrap { position:relative; }
 .vt-act-mic-home #mic-btn-wrap[data-voice-state]::after {

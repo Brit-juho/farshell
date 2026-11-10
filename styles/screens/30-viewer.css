@@ -19,7 +19,7 @@
    ========================================================================= */
 .vt-viewer-backdrop{
   position:fixed; inset:0; z-index:600;
-  background:color-mix(in srgb, var(--crust) 62%, transparent);
+  background:var(--color-scrim);
   display:flex; align-items:center; justify-content:center;
   padding:calc(var(--spacing) * 4);
 }
@@ -27,7 +27,7 @@
   display:flex; flex-direction:column;
   width:min(1100px, 100%); max-height:min(86vh, 820px);
   background:var(--win); color:var(--txt);
-  border:1px solid var(--line); border-radius:var(--wrad);
+  border:1px solid var(--line); border-radius:var(--radius-lg);
   box-shadow:var(--shadow-e2);
   overflow:hidden;
 }
@@ -101,7 +101,8 @@
   border:1px solid var(--color-line-strong); border-radius:var(--radius-sm);
   padding:calc(var(--spacing) * 0.5) calc(var(--spacing) * 2); cursor:pointer;
 }
-.vt-vw-bar-btn:hover{ background:var(--menu-hover); }
+.vt-vw-bar-btn:hover{ background:var(--color-state-hover); }
+.vt-vw-bar-btn:active { background:var(--color-state-press); }
 /* 막은 이미지 자리표시 안의 복사 단추는 조용한 단추(.vt-btn.quiet)와 같다. */
 .vt-md-copy{ border-color:transparent; color:var(--color-sub); }
 .vt-md-copy:hover{ color:var(--color-txt); }
@@ -147,8 +148,8 @@
   padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 3); cursor:pointer; border-bottom:1px solid var(--line);
   font:400 var(--fs-sm) var(--ui); touch-action:manipulation;
 }
-.vt-vw-row:hover{ background:var(--menu-hover); }
-.vt-vw-row:active{ background:color-mix(in srgb, var(--acc) 16%, var(--menu-hover)); }
+.vt-vw-row:hover{ background:var(--color-state-hover); }
+.vt-vw-row:active{ background:var(--color-state-press); }
 .vt-vw-name{
   flex:1;
 }
@@ -442,7 +443,7 @@ body.vt-resizing #terminal-container{ transition:none; }
   min-height:36px; padding:0 calc(var(--spacing) * 3);
   font:400 var(--fs-sm) var(--font-ui);
 }
-.vt-pt-row:hover{ background:var(--color-bg-3); }
+.vt-pt-row:hover { background:var(--color-state-hover); }
 .vt-pt-row:active{ background:color-mix(in srgb, var(--color-acc) 12%, var(--color-bg-3)); }
 .vt-pt-row.exposed{ min-height:48px; }
 
@@ -525,8 +526,9 @@ body.vt-resizing #terminal-container{ transition:none; }
   width:100%; min-height:28px; padding:calc(var(--spacing) * 1) calc(var(--spacing) * 2); border:0; border-radius:var(--radius-xs);
   background:transparent; color:var(--color-txt); font:400 var(--fs-sm) var(--font-ui); text-align:left; cursor:pointer;
 }
-.vt-pt-menu-item:hover{ background:var(--color-bg-3); }
-.vt-pt-menu-item.current{ background:var(--color-acc-soft); }
+.vt-pt-menu-item:hover { background:var(--color-state-hover); }
+.vt-pt-menu-item:active { background:var(--color-state-press); }
+.vt-pt-menu-item.current{ background:var(--color-state-selected); }
 .vt-pt-menu-item em{ color:var(--color-muted); font:400 var(--fs-3xs) var(--font-ui); font-style:normal; }
 
 /* 포트 표 — 열을 맞춘다. 숫자(PID·기간·메모리·CPU)는 칸 하나씩이라 값이 바뀌어도 위아래가 정렬된다.
@@ -606,7 +608,7 @@ body.vt-resizing #terminal-container{ transition:none; }
   padding:calc(var(--spacing) * 2) calc(var(--spacing) * 2.5) calc(var(--spacing) * 1);
 }
 .vt-qo-row{ cursor:pointer; }
-.vt-qo-row.selected{ background:var(--menu-hover); }
+.vt-qo-row.selected{ background:var(--color-state-hover); }
 .vt-qo-card-slot{ display:contents; }
 .vt-qo-hint{ margin-left:auto; flex:0 0 auto; font:400 var(--fs-sm) var(--mono); color:var(--sub); }
 /* L6: 세션 목록에 얹는 세션 카드(ADR-7) — .vt-card를 그대로 재사용한다.
@@ -653,7 +655,7 @@ body.vt-resizing #terminal-container{ transition:none; }
 .vt-qo-results-pane{ flex:1 1 50%; min-width:0; overflow-y:auto; border-right:1px solid var(--line); }
 .vt-qo-preview-pane{
   flex:1 1 50%; min-width:0; overflow:auto; padding:calc(var(--spacing) * 1.5);
-  font:400 var(--fs-xs)/1.55 var(--mono); color:var(--sub); background:var(--crust);
+  font:400 var(--fs-xs)/1.55 var(--mono); color:var(--sub); background:var(--color-bg-2);
 }
 .vt-qo-preview-pane .vt-qo-preview-head{
   font:600 var(--fs-xs) var(--ui);
@@ -675,7 +677,7 @@ body.vt-resizing #terminal-container{ transition:none; }
 .vt-vw-seg{ display:inline-flex; border:1px solid var(--line); border-radius:var(--radius-sm); overflow:hidden; }
 .vt-vw-seg .vt-vw-seg-btn{ border:0; border-radius:0; background:transparent; color:var(--sub); }
 .vt-vw-seg .vt-vw-seg-btn + .vt-vw-seg-btn{ border-left:1px solid var(--line); }
-.vt-vw-seg .vt-vw-seg-btn[aria-pressed="true"]{ background:var(--color-acc-soft); color:var(--txt); }
+.vt-vw-seg .vt-vw-seg-btn[aria-pressed="true"]{ background:var(--color-state-selected); color:var(--txt); }
 
 /* 마크다운 렌더 — 본문 14/22, 최대 폭 720(시안 F07). 폰은 15/24(M-F4). */
 .vt-md{
@@ -735,7 +737,7 @@ body.vt-resizing #terminal-container{ transition:none; }
 
 /* 동영상·소리. */
 .vt-vw-media{ display:flex; justify-content:center; align-items:center; padding:calc(var(--spacing) * 3); }
-.vt-vw-media.video{ background:var(--crust); }
+.vt-vw-media.video{ background:var(--color-bg-2); }
 .vt-vw-media video{ max-width:100%; max-height:70vh; }
 .vt-vw-media audio{ width:min(100%, 560px); }
 
@@ -803,7 +805,7 @@ body.vt-resizing #terminal-container{ transition:none; }
 .vt-vw-conflict-tx{ flex:1 1 240px; min-width:0; }
 .vt-vw-conflict-tx b{ color:var(--txt); font-weight:var(--weight-semibold); }
 .vt-vw-conflict-acts{ display:inline-flex; flex-wrap:wrap; gap:calc(var(--spacing) * 1.5); }
-.vt-vw-compare{ border-bottom:1px solid var(--line); background:var(--crust); max-height:50vh; overflow:auto; }
+.vt-vw-compare{ border-bottom:1px solid var(--line); background:var(--color-bg-2); max-height:50vh; overflow:auto; }
 .vt-vw-compare-head{
   display:flex; justify-content:space-between; gap:calc(var(--spacing) * 2); position:sticky; top:0;
   padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3); font:500 var(--fs-xs) var(--ui); color:var(--sub);

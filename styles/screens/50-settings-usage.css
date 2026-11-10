@@ -49,14 +49,14 @@
   border:1px solid var(--color-line-strong); border-radius:var(--radius-sm);
   background:var(--color-bg-2); color:var(--txt); font:400 var(--fs-sm) var(--ui);
 }
-.vt-set-search-input:focus-visible { outline:none; border-color:var(--color-acc); }
 .vt-set-search-results { display:flex; flex-direction:column; margin-top:4px; }
 .vt-set-search-result {
   display:flex; flex-direction:column; align-items:flex-start; gap:2px;
   width:100%; padding:8px; border:0; border-radius:var(--radius-sm);
   background:transparent; color:var(--txt); text-align:left; cursor:pointer;
 }
-.vt-set-search-result:hover { background:var(--menu-hover); }
+.vt-set-search-result:hover { background:var(--color-state-hover); }
+.vt-set-search-result:active { background:var(--color-state-press); }
 .vt-set-search-result strong { font:500 var(--fs-xs) var(--ui); }
 .vt-set-search-result small,
 .vt-set-search-empty { color:var(--sub); font:400 var(--fs-2xs) var(--ui); }
@@ -70,7 +70,7 @@
   --menu-item-h:32px; min-height:32px; padding:0 10px; border-radius:var(--radius-sm);
   font:400 var(--fs-sm) / 1 var(--font-ui); color:var(--color-sub);
 }
-.vt-settings .vt-set-navitem.active { background:var(--color-acc-soft); color:var(--color-txt); font-weight:600; }
+.vt-settings .vt-set-navitem.active { background:var(--color-state-selected); color:var(--color-txt); font-weight:600; }
 /* 2.1.6 — 모양·상태는 components.css의 `.vt-menu-item`이 맡는다. 설정 왼쪽 내비(sm). 활성은 .active */
 /* 내용 패딩 20/28, 왼쪽 정렬(시안은 가운데로 모으지 않는다). 제목 22/600, 설명 13 muted. */
 .vt-set-content { flex:1; min-width:0; padding:20px 28px; overflow-y:auto; }
@@ -117,7 +117,7 @@
 .vt-set-default[hidden] { display:none; }
 .vt-set-note {
   margin:0 0 calc(var(--spacing) * 2); padding:calc(var(--spacing) * 1.5);
-  background:var(--menu-hover); border-radius:var(--radius-sm);
+  background:var(--color-state-hover); border-radius:var(--radius-sm);
   font:400 var(--fs-sm) var(--ui); color:var(--sub);
 }
 /* 설정 컨트롤(.vt-set-range/.vt-set-value/.vt-set-select/.vt-set-check)은
@@ -302,7 +302,6 @@
 }
 .vt-mcp-tab:hover { color:var(--txt); }
 .vt-mcp-tab[aria-selected="true"] { color:var(--txt); border-bottom-color:var(--color-acc); }
-.vt-mcp-tab:focus-visible { outline:2px solid var(--color-acc); outline-offset:2px; }
 .vt-mcp-tabcount { font:500 var(--fs-3xs) var(--ui); color:var(--sub); font-variant-numeric:tabular-nums; }
 .vt-mcp-pane[hidden] { display:none; }
 .vt-mcp-toolnav {
@@ -316,18 +315,18 @@
   background:var(--color-bg-2); color:var(--sub); cursor:pointer;
   font:600 var(--fs-xs) var(--ui); text-align:left;
 }
-.vt-mcp-toolnavitem:hover { background:var(--color-bg-3); color:var(--txt); }
+.vt-mcp-toolnavitem:hover { background:var(--color-state-hover); color:var(--txt); }
+.vt-mcp-toolnavitem:active { background:var(--color-state-press); }
 .vt-mcp-toolnavitem[aria-current="page"] {
   border-color:var(--color-line-strong); background:var(--color-bg-3); color:var(--txt);
   box-shadow:inset 0 -2px var(--color-acc);
 }
-.vt-mcp-toolnavitem:focus-visible { outline:2px solid var(--color-acc); outline-offset:2px; }
 .vt-mcp-toolcount { color:var(--sub); font-variant-numeric:tabular-nums; }
 .vt-mcp-worktabs { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:calc(var(--spacing) * 1); border-bottom:1px solid var(--color-line); margin:calc(var(--spacing) * 1) 0; }
 .vt-mcp-worktab { min-height:44px; border:0; border-bottom:2px solid transparent; background:none; color:var(--sub); font:600 var(--fs-sm) var(--ui); cursor:pointer; }
-.vt-mcp-worktab:hover { color:var(--txt); background:var(--color-bg-3); }
+.vt-mcp-worktab:hover { color:var(--txt); background:var(--color-state-hover); }
+.vt-mcp-worktab:active { background:var(--color-state-press); }
 .vt-mcp-worktab[aria-selected="true"] { color:var(--txt); border-bottom-color:var(--color-acc); }
-.vt-mcp-worktab:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
 .vt-mcp-scopes { margin:calc(var(--spacing) * 2) 0; }
 .vt-mcp-skillsection { margin-top:calc(var(--spacing) * 5); border-top:1px solid var(--color-line); }
 .vt-mcp-sectiontitle { margin:calc(var(--spacing) * 3) 0 calc(var(--spacing) * 2); font:600 var(--fs-sm) var(--ui); color:var(--txt); }
@@ -386,7 +385,8 @@
   display:flex; align-items:center; flex-wrap:wrap; gap:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3);
   padding:calc(var(--spacing) * 2) calc(var(--spacing) * 1); border-top:1px solid var(--line);
 }
-.vt-mcp-plugrow:hover { background:var(--menu-hover); }
+.vt-mcp-plugrow:hover { background:var(--color-state-hover); }
+.vt-mcp-plugrow:active { background:var(--color-state-press); }
 .vt-mcp-plugmain { flex:1 1 240px; min-width:0; display:flex; align-items:baseline; flex-wrap:wrap; gap:calc(var(--spacing) * 2); }
 .vt-mcp-plugmain .vt-mcp-name { font:600 var(--fs-sm) var(--ui); color:var(--txt); }
 .vt-mcp-plugmain .vt-mcp-tool { min-width:0; }
@@ -408,7 +408,8 @@
   border-radius:var(--radius-sm);
 }
 .vt-mcp-sum::-webkit-details-marker { display:none; }
-.vt-mcp-sum:hover { background:var(--menu-hover); }
+.vt-mcp-sum:hover { background:var(--color-state-hover); }
+.vt-mcp-sum:active { background:var(--color-state-press); }
 .vt-mcp-chev { flex:none; display:inline-flex; color:var(--sub); transform:rotate(-90deg); transition:transform var(--dur-fast) var(--ease-out-quint); }
 details[open] > .vt-mcp-sum .vt-mcp-chev,
 details[open] > summary > .vt-mcp-chev { transform:none; }
@@ -661,10 +662,9 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
 /* 설정 「음성 입력」 — 모델 카드·준비 체크리스트(voice-models.js). 색은 토큰만, 폭은 부모를 따른다. */
 .vt-vm { display:flex; flex-direction:column; gap:calc(var(--spacing) * 3); min-width:0; margin-top:calc(var(--spacing) * 2); }
 .vt-vm-list { display:flex; flex-direction:column; gap:calc(var(--spacing) * 2); min-width:0; }
-.vt-vm-card { min-width:0; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--menu-hover); }
+.vt-vm-card { min-width:0; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--color-state-hover); }
 .vt-vm-card[data-checked="true"] { border-color:var(--acc); }
 .vt-vm-pick { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5); padding:calc(var(--spacing) * 2); cursor:pointer; min-width:0; }
-.vt-vm-pick:focus-visible { outline:2px solid var(--acc); outline-offset:-2px; }
 .vt-vm-head { display:flex; flex-wrap:wrap; align-items:center; gap:calc(var(--spacing) * 1.5); }
 .vt-vm-name { font:600 var(--fs-sm) var(--ui); color:var(--txt); overflow-wrap:anywhere; }
 .vt-vm-tag-rec { color:var(--acc); }
