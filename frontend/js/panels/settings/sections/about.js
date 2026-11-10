@@ -2,6 +2,21 @@ import { vtFetch } from '../../../core/api.js';
 import { statusLine, secRow, fmtWhen } from '../controls.js';
 import { t } from '../../../core/i18n.js';
 
+// 훅 점검 결과 → 이유 한 줄. 정상(ok)·점검 안 함(absent)이면 빈 문자열.
+export function hookWhy(h) {
+  if (!h) return '';
+  const names = [...(h.missing || []), ...(h.mismatch || [])].join(', ');
+  if (h.state === 'missing') return t('빠진 훅: {events}', { events: names });
+  if (h.state === 'mismatch') {
+    return h.transient
+      ? t('다른 경로로 등록된 훅: {events}. 곧 사라질 수 있는 임시(runtime-*) 경로입니다 — 다른 도구(gstack 등)가 설정을 바꿨을 수 있습니다.', { events: names })
+      : t('다른 경로로 등록된 훅: {events}. FarShell 폴더를 옮겼거나 다른 설치를 가리키고 있습니다.', { events: names });
+  }
+  if (h.state === 'unreadable') return t('설정 파일을 읽지 못했습니다(깨졌거나 권한이 없음).');
+  if (h.state === 'absent') return t('설정 폴더가 없어 점검하지 않습니다(이 CLI를 쓰지 않는 것으로 봅니다).');
+  return '';
+}
+
 // ── 「정보」 ──────────────────────────────────────────────────────────────
 export function renderAboutSection() {
   const frag = document.createDocumentFragment();
@@ -23,6 +38,15 @@ export function renderAboutSection() {
       title.className = 'vt-set-label';
       title.textContent = tool === 'codex' ? t('Codex 훅') : t('Claude Code 훅');
       hooks.appendChild(title);
+      // 서버의 자동 점검(hook_health) 결과 — 왜 이상으로 보이는지 한 줄. 경로는 서버가 주지 않는다.
+      const why = hookWhy(r && r.health && r.health[tool]);
+      if (why) {
+        const w = document.createElement('div');
+        w.className = 'vt-set-help vt-set-hookwhy';
+        w.dataset.hookState = r.health[tool].state;
+        w.textContent = why;
+        hooks.appendChild(w);
+      }
       for (const [event, state] of rows) {
         const line = document.createElement('div');
         line.className = 'vt-set-hookrow';
@@ -32,10 +56,18 @@ export function renderAboutSection() {
         if (state !== 'ok') missing = true;
       }
     }
+    if (r && r.checkedAt) {
+      const when = document.createElement('div');
+      when.className = 'vt-set-help vt-set-hookchecked';
+      when.textContent = r.monitor
+        ? t('서버가 {time}에 마지막으로 확인했습니다 (10분마다, 설정 파일이 바뀌면 바로).', { time: fmtWhen(r.checkedAt) })
+        : t('자동 점검이 꺼져 있습니다 (VT_HOOK_HEALTH=0). 이 화면을 열 때만 확인합니다.');
+      hooks.appendChild(when);
+    }
     if (missing) {
       const hint = document.createElement('div');
       hint.className = 'vt-set-help';
-      hint.textContent = t("터미널에서 'fsh hooks install'을 실행하면 등록됩니다. 등록 전에는 상태 배지·프롬프트 큐 자동 투입·TTS 요약이 동작하지 않습니다.");
+      hint.textContent = t("터미널에서 'fsh hooks install'을 실행하면 등록됩니다. 등록 전에는 상태 배지·프롬프트 큐 자동 투입·응답 읽기(TTS) 요약이 동작하지 않습니다.");
       hooks.appendChild(hint);
     }
   }).catch(() => { hooks.textContent = t('훅 상태를 확인할 수 없습니다.'); });
@@ -67,7 +99,7 @@ export function renderAboutSection() {
 
     const reason = cap.available ? null : cap.reason;
     const hint = reason === 'disabled' ? t('설정에서 껐습니다 (VT_USAGE_PROVIDER=none).')
-      : reason === 'schema' ? t('사용량 피드 형식(schema {seen})을 이 버전이 모릅니다. 지원: {supported}. clauth 또는 FarShell을 올리세요.', {
+      : reason === 'schema' ? t('사용량 피드 형식(스키마 {seen})을 이 버전이 모릅니다. 지원: {supported}. clauth 또는 FarShell을 올리세요.', {
         seen: cap.schema_seen ?? '?', supported: (cap.schema_supported || []).join(', ') || '-' })
       : reason === 'permission' ? t('사용량 피드를 읽을 권한이 없습니다 (~/.clauth/status.json).')
       : reason === 'broken' ? t('사용량 피드가 깨져 있습니다 (쓰는 중일 수 있습니다).')

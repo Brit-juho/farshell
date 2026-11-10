@@ -67,6 +67,9 @@ _INTERRUPT_LOOKBACK = 256
 _INCOMPLETE_ESC_RE = re.compile(rb"\x1b(?:\[[0-9;?]*[ -/]*|\][^\x07\x1b]*|[()]?)$")
 # CLI 판별(프로세스 스캔) 결과를 세션별로 이만큼 재사용한다.
 AGENT_CACHE_SEC = 5.0
+# 현재 화면이 프롬프트가 아니라고 답한 같은 문구 위치를 다시 화면에 묻기까지의 최소 간격.
+# 스트리밍 출력이 계속 오는 동안 같은 인용 문구 때문에 tmux를 반복해 부르지 않는다.
+SCREEN_RECHECK_SEC = 2.0
 
 _patterns: Optional[dict] = None
 
@@ -253,13 +256,95 @@ def _locate_prompt_kind(pats: dict, joined: bytes
     return prompt_spec, prompt_pattern, prompt_pos, prompt_kind
 
 
+# 푸터형 문구(choice: `Enter to select ·` 안내줄)는 선택지 **아래**에 그려진다. 그 줄 위쪽에서
+# 마지막 선택지 묶음까지 허용하는 최대 줄 간격(선택지 설명줄·구분선·빈 줄 몫).
+_FOOTER_GAP_LINES = 10
+
+
+def _option_matches(regex: "re.Pattern", lines: list[str]) -> list[tuple[int, str, str]]:
+    """줄마다 옵션 정규식을 돌려 (줄 번호, 키, 라벨)을 순서대로 모은다.
+
+    기존 계약 그대로 — 단축키 이름 그룹(`key`/`label`)이 있으면 그것, 없으면 (번호, 라벨) 2튜플.
+    그룹이 둘 미만인 정규식은 선택지로 보지 않는다.
+    """
+    if regex.groups < 2:
+        return []
+    named = "key" in regex.groupindex and "label" in regex.groupindex
+    out: list[tuple[int, str, str]] = []
+    for idx, line in enumerate(lines):
+        m = regex.search(line)
+        if m is None:
+            continue
+        key, label = (m.group("key"), m.group("label")) if named else (m.group(1), m.group(2))
+        out.append((idx, str(key).strip(), str(label).strip()))
+    return out
+
+
+def _numbered_runs(matches: list[tuple[int, str, str]]) -> list[list[tuple[int, str, str]]]:
+    """번호가 1씩 늘어나는 묶음으로 가른다(`1,2,3` / `1..6` / `1,2` 는 각각 다른 묶음).
+
+    출력 이력에는 선택지 아닌 번호 목록(앞선 도구 출력·6단계 계획)도 섞여 있다. 같은 대화상자는
+    번호가 이어서 올라가고, 새 목록은 1부터 다시 시작하거나 번호가 끊긴다.
+    """
+    runs: list[list[tuple[int, str, str]]] = []
+    for m in matches:
+        if runs and int(m[1]) == int(runs[-1][-1][1]) + 1:
+            runs[-1].append(m)
+        else:
+            runs.append([m])
+    return runs
+
+
+def _same_dialog(chosen: dict[str, str], run: list[tuple[int, str, str]]) -> bool:
+    """`run`이 `chosen`과 같은 대화상자의 앞선 그림인가 — 겹치는 번호의 라벨이 모두 같다.
+
+    tmux는 바뀐 줄만 다시 보내므로(방향키로 ❯가 옮겨 가면 1·2번 줄만 다시 온다) 가장 뒤 묶음이
+    `1,2`뿐일 수 있다. 앞선 `1,2,3`이 같은 라벨이면 한 대화상자라 3번을 되살린다. 앞선 번호 목록
+    (계획 4·5·6번)은 라벨이 달라 여기서 끊긴다.
+    """
+    overlap = [m for m in run if m[1] in chosen]
+    return bool(overlap) and all(chosen[m[1]] == m[2] for m in overlap)
+
+
+def _pick_numbered(runs: list[list[tuple[int, str, str]]], hit_line: int, footer: bool
+                   ) -> list[tuple[int, str, str]]:
+    """프롬프트 줄 기준으로 진짜 대화상자의 선택지만 고른다.
+
+    - 프롬프트 줄(제목)이나 그 **아래**에 있는 마지막 묶음이 선택지다. 제목 위의 번호 목록은 앞선 출력이다.
+    - 푸터형(choice) 문구는 선택지 아래에 있으므로, 아래에 묶음이 없으면 푸터 바로 위 묶음을 쓴다.
+    - 선택한 묶음 앞에 같은 대화상자의 부분 재그림 앞 그림이 있으면 거기서 빠진 번호를 채운다.
+    """
+    below = [i for i, r in enumerate(runs) if r[-1][0] >= hit_line]
+    if below:
+        pick = below[-1]
+    elif footer:
+        above = [i for i, r in enumerate(runs) if hit_line - r[-1][0] <= _FOOTER_GAP_LINES]
+        if not above:
+            return []
+        pick = above[-1]
+    else:
+        return []
+    chosen = {m[1]: m for m in runs[pick]}
+    labels = {k: v[2] for k, v in chosen.items()}
+    for run in reversed(runs[:pick]):
+        if not _same_dialog(labels, run):
+            break
+        for m in run:
+            if m[1] not in chosen:
+                chosen[m[1]] = m
+                labels[m[1]] = m[2]
+    return sorted(chosen.values(), key=lambda m: int(m[1]))
+
+
 def _extract_prompt(pats: dict, joined: bytes
                     ) -> tuple[Optional[str], Optional[list], Optional[str]]:
     """enter 패턴이 히트한 윈도우에서 질문 1줄과 번호 선택지를 뽑는다.
 
-    질문: 히트한 enter 문자열을 담은 실제 줄(더 구체적인 문구를 위해 리터럴이
+    질문: 히트한 enter 문자열을 **마지막으로** 담은 실제 줄(더 구체적인 문구를 위해 리터럴이
     아니라 그 줄 전체를 쓴다) — 못 찾으면 리터럴 그대로.
-    선택지: `options` 정규식을 텍스트에 돌려 (번호, 라벨) 쌍을 순서대로 모은다.
+    선택지: `options` 정규식을 줄마다 돌려 (번호, 라벨)을 모은 뒤, 프롬프트 줄 기준으로 진짜
+    대화상자의 묶음만 쓴다(`_pick_numbered`). 윈도우는 화면이 아니라 출력 이력이라 앞선 번호 목록
+    (도구 출력·계획 단계)이 함께 들어 있다 — 전부 모으면 그것이 가짜 버튼이 된다.
     kind: 히트한 패턴의 waiting 유형(`approval|choice|plan|question`).
     디코딩 실패(바이너리 잡음 등)는 조용히 빈 결과로 — waiting 판정 자체는
     이미 끝났으므로 여기서 실패해도 상태 전이는 막지 않는다.
@@ -275,47 +360,49 @@ def _extract_prompt(pats: dict, joined: bytes
     # 더 앞에 선언된 패턴을 우선하고 같은 우선순위에서만 최신 위치를 고른다.
     encoded = text.encode("utf-8")
     prompt_spec, prompt_pattern, prompt_pos, kind = _locate_prompt_kind(pats, encoded)
-    if prompt_spec and prompt_spec.get("prefer_latest_kind") and prompt_pos >= 0:
+    latest_only = bool(prompt_spec and prompt_spec.get("prefer_latest_kind") and prompt_pos >= 0)
+    if latest_only:
         # 이전 화면의 선택지가 다음 화면으로 넘어오지 않게 현재 제목 줄부터 읽는다.
         line_start = encoded.rfind(b"\n", 0, prompt_pos) + 1
         text = encoded[line_start:].decode("utf-8", errors="ignore")
+        hit_line = 0
+    else:
+        hit_line = encoded.count(b"\n", 0, max(prompt_pos, 0)) if prompt_pos >= 0 else 0
+    lines = text.split("\n")
     if prompt_pattern is not None:
         needle = prompt_pattern.decode("utf-8", errors="ignore")
-        for line in text.splitlines():
-            if needle in line:
-                question = line.strip()
-                break
-        if question is None:
+        if 0 <= hit_line < len(lines) and needle in lines[hit_line]:
+            question = lines[hit_line].strip()
+        else:
             question = needle
 
     options: Optional[list] = None
     if prompt_spec:
         for regex in prompt_spec.get("options") or []:
-            found = regex.findall(text)
-            if found:
-                options = []
-                seen_keys: dict[str, int] = {}
-                for match in found:
-                    # 기존 패턴은 (번호, 라벨), Codex는 (라벨, 실제 단축키)다.
-                    # named group이 있으면 우선하고, 없으면 기존 2튜플 계약을 유지한다.
-                    if isinstance(match, tuple) and len(match) >= 2:
-                        if "key" in regex.groupindex and "label" in regex.groupindex:
-                            key = match[regex.groupindex["key"] - 1]
-                            label = match[regex.groupindex["label"] - 1]
-                        else:
-                            key, label = match[0], match[1]
-                        key = str(key).strip()
-                        entry = {"key": key, "label": str(label).strip()}
-                        # 전체화면 TUI는 같은 대화상자를 다시 그린다 — 윈도우에 같은 선택지가
-                        # 여러 벌 들어 있으면 버튼이 2~3벌로 불어난다(폰 실측 2026-10-05).
-                        # 같은 키는 처음 자리에 두고 가장 최근 라벨로 덮는다.
-                        if key in seen_keys:
-                            options[seen_keys[key]] = entry
-                        else:
-                            seen_keys[key] = len(options)
-                            options.append(entry)
-                options = options[:6]  # 화면에 6개 넘게 그릴 일은 없다 — 방어적 상한
-                break
+            matches = _option_matches(regex, lines)
+            if not matches:
+                continue
+            if all(m[1].isdigit() for m in matches):
+                picked = _pick_numbered(_numbered_runs(matches), hit_line,
+                                        footer=kind == "choice" and not latest_only)
+            else:
+                # 단축키 키(`(y)`/`(p)`/`esc`)는 번호 순서가 없다 — 프롬프트 줄 이후만 쓴다.
+                picked = [m for m in matches if m[0] >= hit_line]
+            if not picked:
+                continue
+            options = []
+            seen_keys: dict[str, int] = {}
+            for _, key, label in picked:
+                entry = {"key": key, "label": label}
+                # 전체화면 TUI는 같은 대화상자를 다시 그린다 — 같은 키는 처음 자리에 두고
+                # 가장 최근 라벨로 덮는다.
+                if key in seen_keys:
+                    options[seen_keys[key]] = entry
+                else:
+                    seen_keys[key] = len(options)
+                    options.append(entry)
+            options = options[:6]  # 화면에 6개 넘게 그릴 일은 없다 — 방어적 상한
+            break
 
     return question, options, kind
 
@@ -350,12 +437,22 @@ def screen_state(agent: Optional[str], text: str) -> dict:
     spec = _spec_for_agent(load_patterns(), agent)
     if not spec:
         return {"prompt": False, "kind": None, "busy": False}
-    _, _, pos, kind = _locate_prompt_kind(spec, joined)
+    prompt_spec, _, pos, kind = _locate_prompt_kind(spec, joined)
     exit_pos = -1
     for sp in spec.values():
         for pattern in sp.get("exit") or []:
             exit_pos = max(exit_pos, joined.rfind(pattern))
-    prompt = pos >= 0 and exit_pos <= pos
+    # Codex 질문 화면은 맨 아래 안내줄 한 줄에 `enter to submit answer | esc to interrupt`를 같이 그린다
+    # (`ignore_exit_on`). 작업 중 표시가 **프롬프트 문구와 같은 줄**에 있을 때만 지나간 프롬프트의 증거로
+    # 쓰지 않는다 — 인용된 문구 아래의 `Working (… esc to interrupt)` 줄은 여전히 작업 중이라는 뜻이다.
+    ignore = False
+    if pos >= 0 and exit_pos > pos and prompt_spec is not None \
+            and kind in prompt_spec.get("ignore_exit_on", ()):
+        ls = joined.rfind(b"\n", 0, exit_pos) + 1
+        le = joined.find(b"\n", exit_pos)
+        line = joined[ls:le if le >= 0 else len(joined)]
+        ignore = any(lit in line for lit in prompt_spec.get("kinds", {}).get(kind, ()))
+    prompt = pos >= 0 and (ignore or exit_pos <= pos)
     return {"prompt": prompt, "kind": kind if prompt else None, "busy": exit_pos >= 0}
 
 
@@ -372,8 +469,15 @@ class PromptDetector:
     def __init__(self, on_change: Callable[[str, bool], None],
                  agent_for: Optional[Callable[[str], Optional[str]]] = None,
                  on_badge: Optional[Callable[[str, Optional[str]], None]] = None,
-                 on_interrupt: Optional[Callable[[str], None]] = None):
+                 on_interrupt: Optional[Callable[[str], None]] = None,
+                 screen_for: Optional[Callable[[str, Optional[str]], Optional[dict]]] = None):
         self._on_change = on_change
+        # (session_id, agent) -> `screen_state` 결과 또는 None(읽지 못함). 있으면 waiting으로 **올리기 전에**
+        # 지금 화면 마지막 줄들이 정말 프롬프트인지 묻는다(`_screen_ok`). 없으면 출력 이력만 본다.
+        self._screen_for = screen_for
+        self._total: dict[str, int] = {}
+        self._screen_checks: dict[str, tuple[int, Optional[bool], float]] = {}
+        self._screen_pending: set[str] = set()
         self._on_interrupt = on_interrupt
         # session_id -> 그 pane에서 도는 CLI 이름(없으면 None). kind 패턴은 이 CLI의
         # spec으로만 매칭한다 — 서로 다른 CLI가 같은 문구(`Do you want to proceed?`)를
@@ -536,12 +640,14 @@ class PromptDetector:
         if win is None:
             win = self._windows[session_id] = bytearray()
         win.extend(add)
+        self._total[session_id] = self._total.get(session_id, 0) + len(add)
         if len(win) > WINDOW_SIZE:
             del win[: len(win) - WINDOW_SIZE]
         return len(add)
 
     def _drop_window(self, session_id: str) -> None:
-        for store in (self._windows, self._pending, self._decoders):
+        for store in (self._windows, self._pending, self._decoders, self._total,
+                      self._screen_checks):
             store.pop(session_id, None)
 
     # ── 입력 ─────────────────────────────────────────────────────────────
@@ -559,6 +665,22 @@ class PromptDetector:
         # (`esc to interrupt`)을 찍은 뒤 같은 2KB 안에서 승인 질문을 그리므로,
         # exit이 한 번이라도 있으면 무조건 우선하던 옛 규칙은 실제 승인 화면을
         # working으로 남겼다. 가장 마지막에 출력된 신호가 현재 상태다.
+        scoped, enter_at, exit_at = self._resolve(session_id, pats, joined)
+
+        self._check_badge(session_id, pats, joined)
+        interrupted = self._check_interrupt(session_id, pats, joined, fresh)
+
+        if interrupted:
+            # 거절/중단 — 화면에 남은 이전 프롬프트 문구로 waiting을 되살리지 않는다.
+            self._set(session_id, False)
+            self._drop_window(session_id)
+        elif exit_at >= 0 and exit_at > enter_at:
+            self._set(session_id, False)
+        elif enter_at >= 0:
+            self._enter(session_id, scoped, joined, enter_at)
+
+    def _resolve(self, session_id: str, pats: dict, joined: bytes) -> tuple[dict, int, int]:
+        """윈도우에서 (이 CLI의 spec들, 가장 구체적인 최신 enter 위치, 마지막 exit 위치)."""
         scoped = pats
         prompt_spec, _, enter_at, kind = _locate_prompt_kind(pats, joined)
         if prompt_spec is not None and self._agent_for is not None:
@@ -578,34 +700,108 @@ class PromptDetector:
         if (enter_at >= 0 and prompt_spec is not None
                 and kind in prompt_spec.get("ignore_exit_on", ())):
             exit_at = -1
+        return scoped, enter_at, exit_at
 
-        self._check_badge(session_id, pats, joined)
-        interrupted = self._check_interrupt(session_id, pats, joined, fresh)
+    def _enter(self, session_id: str, scoped: dict, joined: bytes, enter_at: int) -> None:
+        if _auto_trust_suppressed(session_id):
+            logger.debug(f"[waiting] sid={session_id} auto_responder cooldown — 억제")
+            return
+        if not self._screen_ok(session_id, enter_at):
+            return
+        question, options, hit_kind = _extract_prompt(scoped, joined)
+        prompt = (question, options)
+        previous_prompt = self._prompts.get(session_id)
+        kind_changed = (previous_prompt is not None
+                        and self._kinds.get(session_id) != hit_kind)
+        self._kinds[session_id] = hit_kind
+        # TUI가 같은 질문 줄을 지우고 다시 그리면 윈도우에는 문구가 두 번
+        # 남아 질문 문자열만 달라질 수 있다. 그 재렌더는 통지하지 않고,
+        # 인라인 승인에 실제로 필요한 선택지가 바뀔 때만 갱신한다.
+        options_changed = (
+            previous_prompt is not None and previous_prompt[1] != prompt[1]
+        ) or kind_changed
+        self._prompts[session_id] = prompt
+        self._set(session_id, True, refresh=options_changed)
 
-        if interrupted:
-            # 거절/중단 — 화면에 남은 이전 프롬프트 문구로 waiting을 되살리지 않는다.
-            self._set(session_id, False)
-            self._drop_window(session_id)
-        elif exit_at >= 0 and exit_at > enter_at:
-            self._set(session_id, False)
-        elif enter_at >= 0:
-            if _auto_trust_suppressed(session_id):
-                logger.debug(f"[waiting] sid={session_id} auto_responder cooldown — 억제")
-                return
-            question, options, hit_kind = _extract_prompt(scoped, joined)
-            prompt = (question, options)
-            previous_prompt = self._prompts.get(session_id)
-            kind_changed = (previous_prompt is not None
-                            and self._kinds.get(session_id) != hit_kind)
-            self._kinds[session_id] = hit_kind
-            # TUI가 같은 질문 줄을 지우고 다시 그리면 윈도우에는 문구가 두 번
-            # 남아 질문 문자열만 달라질 수 있다. 그 재렌더는 통지하지 않고,
-            # 인라인 승인에 실제로 필요한 선택지가 바뀔 때만 갱신한다.
-            options_changed = (
-                previous_prompt is not None and previous_prompt[1] != prompt[1]
-            ) or kind_changed
-            self._prompts[session_id] = prompt
-            self._set(session_id, True, refresh=options_changed)
+    # ── 현재 화면 확인 ────────────────────────────────────────────────────
+    # 출력 이력에 프롬프트 문구가 있다고 지금 사람의 답을 기다리는 것은 아니다. 작업 중인 에이전트가
+    # 문서·설정·테스트를 읽으면 `Enter to select · ↑/↓ to navigate`, `Do you want to proceed?`가 일반
+    # 출력으로 그대로 찍힌다. 진짜 프롬프트는 화면 맨 아래에 붙으므로, waiting으로 올리기 **전에**
+    # 같은 `screen_state`(tmux 화면의 마지막 SCREEN_TAIL_LINES줄, 뒤에 작업 중 표시가 있으면 지나간 것)
+    # 로 한 번 확인한다. 이미 waiting이면 묻지 않는다(선택지 보강·재그림이 매 청크 tmux를 부르지 않게).
+    def _screen_ok(self, session_id: str, enter_at: int) -> bool:
+        """지금 waiting으로 올려도 되는가. False면 올리지 않는다(비동기 확인 중이거나 화면이 아니라고 답함)."""
+        if self._screen_for is None or self._waiting.get(session_id):
+            return True
+        win = self._windows.get(session_id)
+        if win is None:
+            return True
+        # 이 히트의 스트림 절대 위치 — 새로 그려진 프롬프트(더 뒤 위치)만 새로 확인한다.
+        at = self._total.get(session_id, 0) - len(win) + enter_at
+        now = time.monotonic()
+        seen = self._screen_checks.get(session_id)
+        if seen is not None and seen[0] == at:
+            if seen[1] is not False:
+                return True
+            if now - seen[2] < SCREEN_RECHECK_SEC:
+                return False
+        if session_id in self._screen_pending:
+            return False
+        agent = self._agent(session_id)
+        if _on_event_loop():
+            # 화면 읽기는 tmux capture-pane이라 이벤트 루프 위에서 직접 부르지 않는다.
+            self._check_screen_async(session_id, at, agent)
+            return False
+        ok = self._read_screen(session_id, agent)
+        self._screen_checks[session_id] = (at, ok, now)
+        return ok is not False
+
+    def _read_screen(self, session_id: str, agent: Optional[str]) -> Optional[bool]:
+        """True=화면이 프롬프트, False=아님, None=읽지 못함(옛 동작처럼 이력 판정을 따른다)."""
+        try:
+            shot = self._screen_for(session_id, agent) if self._screen_for else None
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"[waiting] 화면 확인 실패: {e}")
+            return None
+        if shot is None:
+            return None
+        return bool(shot.get("prompt"))
+
+    def _check_screen_async(self, session_id: str, at: int, agent: Optional[str]) -> None:
+        import asyncio
+        from resilience import pools
+
+        async def _run():
+            ok: Optional[bool]
+            try:
+                ok = await pools.run("proc", self._read_screen, session_id, agent,
+                                     op="screen_for_pty", key=session_id, timeout=3)
+            except Exception as e:  # noqa: BLE001
+                logger.debug(f"[waiting] 화면 확인 실패: {e}")
+                ok = None
+            finally:
+                self._screen_pending.discard(session_id)
+            if session_id not in self._windows:
+                return  # 확인하는 사이 입력/삭제로 윈도우가 비워졌다
+            self._screen_checks[session_id] = (at, ok, time.monotonic())
+            if ok is not False:
+                self._reevaluate(session_id)
+        try:
+            asyncio.get_running_loop().create_task(_run())
+            self._screen_pending.add(session_id)
+        except RuntimeError:
+            pass
+
+    def _reevaluate(self, session_id: str) -> None:
+        """화면 확인이 끝난 뒤 지금 윈도우로 waiting 판정을 이어 간다(그 사이 exit가 왔으면 따른다)."""
+        pats = load_patterns()
+        win = self._windows.get(session_id)
+        if not pats or win is None:
+            return
+        joined = bytes(win)
+        scoped, enter_at, exit_at = self._resolve(session_id, pats, joined)
+        if enter_at >= 0 and not (exit_at >= 0 and exit_at > enter_at):
+            self._enter(session_id, scoped, joined, enter_at)
 
     def on_user_input(self, session_id: str) -> None:
         """그 pane에 사용자가 뭔가 입력했다 → 승인 대기는 끝난 것으로 본다.
@@ -666,6 +862,7 @@ class PromptDetector:
         self._badges.pop(session_id, None)
         self._agent_cache.pop(session_id, None)
         self._active_specs.pop(session_id, None)
+        self._screen_pending.discard(session_id)
 
 
 def _auto_trust_suppressed(session_id: str) -> bool:
@@ -689,9 +886,10 @@ _global_detector: Optional[PromptDetector] = None
 def get_global_detector(on_change: Callable[[str, bool], None],
                         agent_for: Optional[Callable[[str], Optional[str]]] = None,
                         on_badge: Optional[Callable[[str, Optional[str]], None]] = None,
-                        on_interrupt: Optional[Callable[[str], None]] = None
+                        on_interrupt: Optional[Callable[[str], None]] = None,
+                        screen_for: Optional[Callable[[str, Optional[str]], Optional[dict]]] = None
                         ) -> PromptDetector:
     global _global_detector
     if _global_detector is None:
-        _global_detector = PromptDetector(on_change, agent_for, on_badge, on_interrupt)
+        _global_detector = PromptDetector(on_change, agent_for, on_badge, on_interrupt, screen_for)
     return _global_detector

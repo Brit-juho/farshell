@@ -41,6 +41,8 @@ fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <
 fsh hotkey [list|set|reset|disable]  # 핫키 조회/변경
 fsh hooks [status|install|uninstall|dedupe [--dry-run]]  # Claude Code·Codex 훅 등록(상태 배지·큐·TTS의 전제); dedupe는 Codex 앱이 ~/.codex/hooks.json에 복제한 FarShell 훅 제거
 fsh update [--channel stable|dev|devmode] [--to vX.Y.Z] [--check] [--restart] [--rollback]  # 채널별 업데이트(stable = 서명된 릴리스 태그, dev = origin/dev, devmode = 직접 pull) 후 훅·스킬 재동기화; `update trust [--key <공개키 파일>]` 는 릴리스 서명 키 고정; `--rollback` 은 직전 커밋으로 복귀
+fsh update status                                                      # 서버가 마지막으로 확인한 업데이트 결과(네트워크 요청 없음)
+fsh update auto [on|off|status] [--hour 0-23] [--yes]                  # 자동 업데이트(기본 꺼짐): 서명된 stable 릴리스만, 한가한 시각에; `on` 은 위험을 설명하고 확인을 받음(비대화형은 `--yes`)
 fsh sync [--dry-run]  # Claude Code·Codex 훅, fsh 스킬 링크, tmux 설정을 현재 코드에 맞춤(직접 pull 한 뒤 사용)
 fsh tmux [status|reload [--dry-run]|extkeys [on|off|status]]  # tmux 설정: 레포 기준 + 내 ~/.config/vt/tmux.local.conf; reload 는 떠 있는 tmux 에 다시 읽힘(세션 유지), 옛 ~/.config/vt/tmux.conf 사본은 치움; extkeys on|off|status 는 확장 키 시험 스위치(tmux.local.conf 의 표식 구간, 기본은 꺼짐)
 fsh pane report [--state ...] [--agent ...]  # 이 pane의 상태 보고(훅 없는 에이전트용)
@@ -301,6 +303,7 @@ fsh queue clear                 # 전체 비우기
 | 18 | pair | pair 스위치(`VT_AUTHZ_ENFORCE=pair`) 켜짐 여부, 효력 중인 pair 수와 승인 대기 수. 스위치가 꺼졌는데 저장된 pair 가 남아 있으면 경고(그 grant 는 효력이 없음) |
 | 19 | 다른 Mac 권한 | 프로토콜 v2(`VT_AUTHZ_ENFORCE=peer`)가 켜졌는지. 회수 알림을 못 보냈거나 secret 회전이 확인되지 않았으면 경고(서버가 다시 시도하고, 회전은 `fsh host rotate` 로 정리) |
 | 20 | 브라우저 | 브라우저 broker 스위치(`VT_AUTHZ_ENFORCE=browser`)가 켜졌는지, 사용 가능한 어댑터 중 켠 수, 열린 탭 수. 조작할 수 없게 된 탭(orphaned, `fsh browser tabs`)이 있거나 설정·탭 장부를 못 읽으면 경고. 서버에 묻지 않고 직접 읽어서 서버가 꺼져 있어도 답한다 |
+| 21 | 훅 자동 점검 | 서버가 떠 있을 때만: 서버가 직접 에이전트 훅을 마지막으로 확인한 시각(10분마다, 설정 파일이 바뀌면 바로 다시 읽습니다. `VT_HOOK_HEALTH=0`이면 꺼집니다). 마지막 점검에서 훅이 빠졌거나 어긋났거나 읽을 수 없으면 경고 — `fsh hooks install`로 고칩니다. 서버는 점검만 하고 설정 파일을 쓰지 않습니다 |
 
 ---
 

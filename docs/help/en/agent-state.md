@@ -28,6 +28,13 @@ sub-agent start/end, teammate idle, session start/end, notification, approval re
 In Codex's `~/.codex/config.toml`, 8 kinds are registered: prompt/permission/tool/stop/subagent/session.
 Both manage only FarShell entries and keep your existing hooks.
 
+Claude Code registers 13 hooks, including `PostToolUseFailure` (it clears a pending "choice" wait as soon as a question or tool is rejected or errors out).
+The server also checks on its own that the hooks are still registered correctly, every 10 minutes and as soon as a settings file changes — it only reads and never edits your settings.
+If something is wrong, a "Hook check needed" chip appears in the status bar (click it for the reason in Settings → About) and goes away once it is fixed. Turn it off with `VT_HOOK_HEALTH=0` in `~/.vt.env`.
+
+If you only have the older 12, `fsh hooks status` shows `PostToolUseFailure` as not registered and detection coverage drops to `pty`;
+run `fsh hooks install` (or `fsh sync`, which `fsh update` runs) to bring it to 13.
+
 **If you clicked "Import Claude settings" in the Codex app**, Claude's FarShell hooks
 (`agent_hook.sh … claude`) get copied into `~/.codex/hooks.json`. Codex reads both `config.toml` and
 `hooks.json`, so each event arrives twice (one of them tagged `claude`) and the agent label goes
@@ -76,7 +83,13 @@ Change the values with `VT_AGENT_TTL_WORKING` / `_WAITING` / `_DONE` (seconds).
 ## Delegation — an agent hands work to a child session (MCP)
 
 An agent creates a child session with `spawn_session`, hands it work, and gets the result back as
-`[Delegation result …]` input. The child session starts in the default permission mode, so approval
+an input whose header is the literal below (it stays Korean in every UI language because the agent receives that exact text; it means "Delegation result"):
+
+```
+[위임 결과 …]
+```
+
+The child session starts in the default permission mode, so approval
 requests show up on your phone, and you can open that session from the sidebar's Sessions view and step in at any time.
 A child session can't create further child sessions, and each parent can have at most 3 open child
 sessions. To turn it off, set `VT_AGENT_SPAWN=0`.

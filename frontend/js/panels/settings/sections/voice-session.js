@@ -108,7 +108,7 @@ export function renderSessionVoice() {
       status.textContent = t('최종 응답 어댑터: Claude · Codex{status}. 연결이 모호하면 낭독하지 않습니다.', { status: statusLabel ? ` · ${statusLabel}` : '' });
       host.appendChild(status);
       const bind = document.createElement('p'); bind.className = 'vt-set-help';
-      bind.textContent = t('같은 폴더의 에이전트를 구분하려면 해당 pane에서 fsh voice-bind <claude|codex> <대화 ID>를 실행하세요.');
+      bind.textContent = t('같은 폴더의 에이전트를 구분하려면 해당 페인에서 fsh voice-bind <claude|codex> <대화 ID>를 실행하세요.');
       host.appendChild(bind);
     } catch (e) { if (!disposed && seq === revision) host.textContent = e.message; }
   }

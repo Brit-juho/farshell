@@ -169,6 +169,57 @@ def test_same_tool_post_clears_waiting():
     assert ent["status"] == A.WORKING and ent["question"] is None
 
 
+def test_failed_tool_releases_ask_user_question_wait():
+    """거절·오류로 끝난 질문은 PostToolUse가 안 온다 — 같은 tool_use_id의 PostToolUseFailure가 푼다."""
+    _ask()
+    ent = _ev("post_failure", "s", tool_name="AskUserQuestion", tool_use_id="t1", error="rejected")
+    assert ent["status"] == A.WORKING and ent["question"] is None and ent["options"] is None
+    assert A.status_for_session("dev") == A.WORKING
+    assert ent["_last_tool_failed"] is True
+
+
+def test_failure_of_another_tool_keeps_waiting():
+    _ask()
+    _ev("post_failure", "s", tool_name="Bash", tool_use_id="t2", error="Exit code 1")
+    assert A.status_for_session("dev") == A.WAITING
+    assert A.get_state("s")["question"] == "Pick"
+    _ev("post", "s", tool_name="Read", tool_use_id="t3")          # 다른 id의 성공 post도 유지(현재 동작)
+    assert A.status_for_session("dev") == A.WAITING
+
+
+def test_failure_without_tool_id_uses_legacy_release():
+    _ev("permission", "s", tool_name="Bash")
+    assert _ev("post_failure", "s", tool_name="Bash")["status"] == A.WORKING
+
+
+def test_success_post_after_failure_resets_failed_flag():
+    _ev("pre", "s", tool_name="Bash", tool_use_id="a")
+    _ev("post_failure", "s", tool_name="Bash", tool_use_id="a")
+    assert A.get_state("s")["_last_tool_failed"] is True
+    _ev("post", "s", tool_name="Read", tool_use_id="b")
+    assert A.get_state("s")["_last_tool_failed"] is False
+
+
+def test_subagent_permission_released_only_by_its_own_failure():
+    _ev("pre", "s", tool_name="Task", tool_use_id="m1")
+    _ev("pre", "s", tool_name="Bash", tool_use_id="b1", agent_id="sub1")
+    _ev("permission", "s", tool_name="Bash", agent_id="sub1")
+    assert A.status_for_session("dev") == A.WAITING
+    _ev("post_failure", "s", tool_name="Read", tool_use_id="r9")                      # 메인 쪽 실패
+    assert A.status_for_session("dev") == A.WAITING
+    _ev("post_failure", "s", tool_name="Bash", tool_use_id="zz", agent_id="sub1")      # 같은 쪽, 다른 도구
+    assert A.status_for_session("dev") == A.WAITING
+    _ev("post_failure", "s", tool_name="Bash", tool_use_id="b1", agent_id="sub1")
+    assert A.status_for_session("dev") == A.WORKING
+
+
+def test_subagent_failure_does_not_revive_finished_session():
+    _ev("pre", "s", tool_name="Bash", tool_use_id="m1")
+    _ev("stop", "s")
+    _ev("post_failure", "s", tool_name="Read", tool_use_id="x1", agent_id="bg")
+    assert A.status_for_session("dev") == A.DONE
+
+
 def test_prompt_and_stop_clear_waiting():
     _ask()
     assert _ev("stop", "s")["status"] == A.DONE

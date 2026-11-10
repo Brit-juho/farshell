@@ -15,7 +15,7 @@
 //
 // **에이전트 칩은 배치 밖이다**(세대 3). 상태 막대 맨 왼쪽에 고정이라 옮기거나 끌 수 없다 — 이 제품이 있는
 // 이유(개입이 필요한 세션)를 알리는 유일한 칩이고, 설정을 한 번 잘못 만져 그게 사라지면 되찾을 길을 모른다.
-/** @typedef {'server'|'screens'|'e2e'|'safe-mode'|'cpu'|'gpu'|'ram'|'net'|'usage'|'version'|'agents'|'push'|'clock'} HudKind */
+/** @typedef {'server'|'screens'|'e2e'|'safe-mode'|'cpu'|'gpu'|'ram'|'net'|'usage'|'version'|'agents'|'hooks'|'push'|'clock'} HudKind */
 /** @typedef {{ left: HudKind[], right: HudKind[] }} HudLayout */
 /** @typedef {'left'|'right'|'off'} HudZone */
 
@@ -27,6 +27,13 @@ export const HUD_KINDS = [
 
 /** 늘 상태 막대 맨 왼쪽에 고정된 종류(배치에 적지 않는다). @type {readonly HudKind[]} */
 export const PINNED_HUD_KINDS = ['agents'];
+
+/**
+ * 이상이 있을 때만 생기는 경고 칩 — 배치(설정 화면)와 상관없이 고정 칩 바로 다음에 나온다. 설정을 잘못 만져 경고가 사라지면
+ * 되찾을 길이 없어서 끌 수 없게 배치 밖에 둔다(고정 칩과 달리 설정 목록에는 나오지 않는다). `hooks` = 훅 점검 필요.
+ * @type {readonly HudKind[]}
+ */
+export const ALERT_HUD_KINDS = ['hooks'];
 
 /**
  * 기본 배치. 「서버 :7777」은 뺐다(사용자 요청, 2026-10-23) — 지금 이 화면을 보고 있다는

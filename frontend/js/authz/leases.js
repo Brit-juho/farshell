@@ -16,10 +16,10 @@ function rowHTML(l) {
     <div class="vt-authz-row-main">
       <div class="vt-authz-row-top"><span class="vt-authz-kind">${vtEsc(MODE_LABEL[l.mode] || String(l.mode || ''))}</span>${l.exclusive ? `<span class="vt-authz-preset">${t('배타')}</span>` : ''}${derived ? `<span class="vt-lease-inherit">${t('상위에서 상속 · 읽기 전용')}</span>` : ''}</div>
       <div class="vt-authz-row-ask"><span class="vt-authz-who">${vtEsc(l.holder || '?')}</span><span class="vt-authz-sub">${t('경로')}</span><span class="vt-authz-code">${vtEsc(l.glob || '')}</span></div>
-      <div class="vt-authz-row-meta">${vtEsc([leaseExpiry(l), derived ? t('상위 lease {id}', { id: l.derivedFrom }) : ''].filter(Boolean).join(' · '))}</div>
+      <div class="vt-authz-row-meta">${vtEsc([leaseExpiry(l), derived ? t('상위 점유 {id}', { id: l.derivedFrom }) : ''].filter(Boolean).join(' · '))}</div>
       ${l.reason ? `<div class="vt-authz-row-meta">${t('사유')} · ${vtEsc(l.reason)}</div>` : ''}
     </div>
-    ${derived ? '' : `<div class="vt-authz-row-acts"><button type="button" class="vt-btn lg danger vt-lease-revoke">${t('놓기')}</button></div>`}
+    ${derived ? '' : `<div class="vt-authz-row-acts"><button type="button" class="vt-btn lg danger vt-lease-revoke">${t('점유 해제')}</button></div>`}
   </li>`;
 }
 
@@ -35,8 +35,8 @@ export function mountLeases(host) {
   let keepErr = '';
 
   const noteText = (enforced) => (enforced
-    ? t('lease 는 FarShell 이 직접 하는 쓰기(커밋·업로드 등)만 막습니다. 셸이나 편집기에서 직접 쓰는 것은 막지 못하는 권고 장치입니다.')
-    : t('lease 는 누가 어느 폴더를 쓰는지 알리는 권고 장치입니다. 지금은 막지 않고, 켜도 FarShell 자신의 쓰기 밖(셸·편집기)에서는 막지 못합니다.'));
+    ? t('폴더 점유는 FarShell이 직접 하는 쓰기(커밋·업로드 등)만 막습니다. 셸이나 편집기에서 직접 쓰는 것은 막지 못하는 권고 장치입니다.')
+    : t('폴더 점유는 누가 어느 폴더를 쓰는지 알리는 권고 장치입니다. 지금은 막지 않고, 켜도 FarShell 자신의 쓰기 밖(셸·편집기)에서는 막지 못합니다.'));
   note.textContent = noteText(false);
 
   async function load() {
@@ -49,10 +49,10 @@ export function mountLeases(host) {
       errEl.textContent = keepErr; keepErr = '';
       list.innerHTML = rows.length
         ? `<ul class="vt-authz-rows">${rows.map(rowHTML).join('')}</ul>`
-        : `<p class="vt-authz-empty">${t('잡혀 있는 폴더 lease 가 없습니다. 에이전트가 폴더를 쓰기 시작하면 여기에 나타납니다.')}</p>`;
+        : `<p class="vt-authz-empty">${t('점유 중인 폴더가 없습니다. 에이전트가 폴더를 쓰기 시작하면 여기에 나타납니다.')}</p>`;
     } catch (e) {
       if (mine !== seq || !host.isConnected) return;
-      list.innerHTML = `<p class="vt-authz-empty">${t('lease 목록을 불러오지 못했습니다.')}</p><button type="button" class="vt-btn lg vt-lease-retry">${t('다시 시도')}</button>`;
+      list.innerHTML = `<p class="vt-authz-empty">${t('폴더 점유 목록을 불러오지 못했습니다.')}</p><button type="button" class="vt-btn lg vt-lease-retry">${t('다시 시도')}</button>`;
       errEl.textContent = errorText(e);
     }
   }
@@ -62,12 +62,12 @@ export function mountLeases(host) {
     const b = ev.target.closest('.vt-lease-revoke');
     if (!b || busy) return;
     const row = b.closest('.vt-lease-row');
-    if (!(await confirmDialog(t('이 lease 를 놓습니다. 상속된 하위 lease 도 함께 놓이고, 에이전트는 다시 잡아야 합니다. 계속할까요?'), { title: t('lease 놓기'), okLabel: t('놓기'), danger: true }))) return;
+    if (!(await confirmDialog(t('이 폴더 점유를 해제합니다. 상속된 하위 점유도 함께 해제되며, 에이전트는 다시 점유해야 합니다. 계속할까요?'), { title: t('점유 해제'), okLabel: t('점유 해제'), danger: true }))) return;
     busy = true;
     row.querySelectorAll('button').forEach((x) => { x.disabled = true; });
     try {
       await authzApi.leaseRevoke(row.dataset.lease);
-      toast(t('lease 를 놓았습니다'), 'success');
+      toast(t('폴더 점유를 해제했습니다'), 'success');
       errEl.textContent = '';
     } catch (e) {
       keepErr = errorText(e);

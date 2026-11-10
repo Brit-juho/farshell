@@ -47,7 +47,7 @@ export async function closeEndedSession(sessionId, { notify = true } = {}) {
   await closeSession(sessionId);
   saveLayoutNow();
   _showEmptyIfNoViews();
-  if (notify) showToast(t("'{name}' 세션이 끝나 뷰를 닫았습니다. 레일에서 이어서 시작할 수 있습니다.", { name }));
+  if (notify) showToast(t("'{name}' 세션이 끝나 뷰를 닫았습니다. 세션 목록에서 이어서 시작할 수 있습니다.", { name }));
   return true;
 }
 export const collectTreeSessions = collectSessions;   // 옛 이름

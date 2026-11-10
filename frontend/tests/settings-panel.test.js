@@ -69,7 +69,7 @@ test('열기 — 섹션 목록과 첫 섹션이 그려진다', async () => {
   assert.ok(document.getElementById('vt-settings'), '패널이 열려야 한다');
   assert.deepEqual(
     Array.from(document.querySelectorAll('.vt-set-navitem')).map((b) => b.textContent),
-    ['터미널', '음성 및 알림', '에이전트', '키맵', '모양', '상태 막대 · 활동 막대', '권한', '계정 및 보안', '정보 및 진단'],
+    ['터미널', '음성 및 알림', '에이전트', '키맵', '모양', '상태 막대 · 활동 막대', '권한', '계정 및 보안', '업데이트', '정보 및 진단'],
   );
   assert.ok(rowByLabel(document, '글자 크기'), '첫 섹션(터미널)이 그려져야 한다');
 });
@@ -180,7 +180,7 @@ test('compact — 더보기 첫 화면에 도구와 설정 진입점이 나온�
   const { document, P } = await build({ compact: true });
   P.showSettings();
   const links = Array.from(document.querySelectorAll('.vt-set-mobile-link strong')).map((e) => e.textContent);
-  assert.deepEqual(links, ['파일', '포트', '사용량', '터미널', '음성 및 알림', '에이전트', '키맵', '모양', '권한', '계정 및 보안', '정보 및 진단']);
+  assert.deepEqual(links, ['파일', '포트', '사용량', '터미널', '음성 및 알림', '에이전트', '키맵', '모양', '권한', '계정 및 보안', '업데이트', '정보 및 진단']);
   assert.strictEqual(document.querySelector('.vt-set-nav'), null, 'compact 첫 화면은 숨은 가로 탭을 만들지 않는다');
 });
 
@@ -340,6 +340,33 @@ test('정보 — Claude Code와 Codex 훅을 도구별로 모두 보여준다', 
   assert.match(block.querySelector('.vt-set-help').textContent, /fsh hooks install/);
 });
 
+test('정보 — 서버 점검 결과(health)의 이유와 마지막 확인 시각을 보여준다', async () => {
+  const hooks = {
+    ok: false,
+    events: { PreToolUse: 'ok', Stop: 'add' },
+    tools: {
+      claude: { ok: false, events: { PreToolUse: 'ok', Stop: 'add' } },
+      codex: { ok: false, events: { PreToolUse: 'update' } },
+    },
+    health: {
+      claude: { state: 'missing', missing: ['Stop'], mismatch: [], transient: false },
+      codex: { state: 'mismatch', missing: [], mismatch: ['PreToolUse'], transient: true },
+    },
+    checkedAt: 1760000000,
+    monitor: true,
+  };
+  const { document, P } = await build({ hooks });
+  P.showSettings();
+  sectionButton(document, '정보 및 진단').click();
+  await flush();
+  const block = document.querySelectorAll('.vt-set-about')[0];
+  const why = Array.from(block.querySelectorAll('.vt-set-hookwhy')).map((r) => r.textContent);
+  assert.match(why[0], /빠진 훅: Stop/);
+  assert.match(why[1], /다른 경로로 등록된 훅: PreToolUse.*runtime-\*/);
+  assert.match(block.querySelector('.vt-set-hookchecked').textContent, /서버가 .* 마지막으로 확인했습니다/);
+  assert.match(block.textContent, /fsh hooks install/);
+});
+
 // U1 회귀 — clauth가 schema 2로 올라가자 사용량이 통째로, 아무 말 없이 꺼졌다.
 // 게이팅상 탭도 칩도 사라지므로 「정보」가 유일하게 이유를 볼 수 있는 곳이다.
 function capsFetch(usage) {
@@ -371,7 +398,7 @@ test('정보 — 모르는 피드 schema면 본 값과 지원 범위를 적는�
   sectionButton(document, '정보 및 진단').click();
   await flush();
   const help = Array.from(document.querySelectorAll('.vt-set-about .vt-set-help')).at(-1);
-  assert.match(help.textContent, /schema 3/);
+  assert.match(help.textContent, /스키마 3/);
   assert.match(help.textContent, /1, 2/);
 });
 
@@ -539,7 +566,7 @@ test('에이전트 — "보통 이하" 경고 문장이 그대로 노출된다',
   sectionButton(document, '에이전트').click();
   await flush();
   const texts = Array.from(document.querySelectorAll('.vt-set-help')).map((e) => e.textContent);
-  assert.ok(texts.some((t) => t.startsWith('"보통" 이하는 레일에서 입력 대기를 놓칠 수 있다는 뜻입니다.')));
+  assert.ok(texts.some((t) => t.startsWith('"보통" 이하는 세션 목록에서 입력 대기를 놓칠 수 있다는 뜻입니다.')));
   // N9 — 훅이 없는 CLI에도 올라갈 길이 있다는 사실을 같은 자리에서 알려준다.
   assert.ok(texts.some((t) => t.includes('fsh pane report')));
 });
@@ -651,13 +678,13 @@ test('보안 — 설정 변경 UI(입력·버튼)를 두지 않는다', async ()
   assert.strictEqual(content.querySelector('button'), null);
 });
 
-test('보안 — 승격은 ADR-27로 쓰는 경로가 없다는 설명이 함께 나온다', async () => {
+test('보안 — 승격을 쓰는 경로가 아직 없다는 설명이 함께 나온다', async () => {
   const { document } = await openSecurity({ elevation: { elevated: false, elevated_until: 0, unused: true } });
   const row = Array.from(document.querySelectorAll('.vt-set-secrow'))
     .find((r) => r.querySelector('.vt-set-label').firstChild.textContent === '승격 세션');
   assert.ok(row);
   assert.strictEqual(row.querySelector('.vt-set-secstate').textContent, '승격 안 됨');
-  assert.ok(row.querySelector('.vt-set-help').textContent.includes('ADR-27'));
+  assert.ok(row.querySelector('.vt-set-help').textContent.includes('승격을 요구하는 조작이 아직 없어'));
 });
 
 test('보안 — 승격 중이면 남은 시간을 분으로 보여준다', async () => {

@@ -60,8 +60,8 @@
   .vt-mb-menu > .vt-tb-ico:first-child { color:var(--acc); }
   .vt-mb-menu > .vt-tb-ico:last-child { color:var(--color-muted); }
   .vt-mb-menu .vt-authz-badge { top:-2px; right:-4px; }
-  .vt-mb-menu:hover, .vt-mb-menu[aria-expanded="true"] { background:var(--menu-hover); }
-  .vt-mb-menu:focus-visible { outline:2px solid var(--acc); outline-offset:-2px; }
+  .vt-mb-menu:hover, .vt-mb-menu[aria-expanded="true"] { background:var(--color-state-hover); }
+  .vt-mb-menu:active { background:var(--color-state-press); }
 
   /* 호스트 — 이 화면이 보는 맥. 맥이 둘 이상일 때만 버튼(▾)이고, 아니면 같은 모양의 이름표다. */
   .vt-tb-host-wrap { display:flex; align-items:center; min-width:0; flex:0 1 auto; }
@@ -77,8 +77,8 @@
   /* 다른 맥을 보고 있다 — 레일 스위처(.vt-wgrail-host.remote)와 같은 강조색. */
   .vt-tb-host.remote, .vt-tb-host.remote > .vt-tb-ico { color:var(--acc); }
   button.vt-tb-host { cursor:pointer; }
-  button.vt-tb-host:hover, button.vt-tb-host.open { background:var(--menu-hover); }
-  button.vt-tb-host:focus-visible { outline:2px solid var(--acc); outline-offset:-2px; }
+  button.vt-tb-host:hover, button.vt-tb-host.open { background:var(--color-state-hover); }
+  button.vt-tb-host:active { background:var(--color-state-press); }
 
   /* 저장소 › 브랜치 › 세션 — 마지막 조각(지금 칸의 세션)만 본문 색. 넘치면 앞 조각부터 줄인다. */
   .vt-tb-crumb {
@@ -105,11 +105,10 @@
   .vt-tb-palette-ph { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .vt-tb-kbd {
     flex:none; padding:0 calc(var(--spacing) * 1.25); border-radius:var(--radius-sm);
-    background:var(--menu-hover); color:var(--sub);
+    background:var(--color-state-hover); color:var(--sub);
     font:var(--weight-medium) var(--fs-3xs) / 16px var(--font-mono);
   }
   .vt-tb-palette:hover { border-color:color-mix(in srgb, var(--acc) 40%, var(--color-line-strong)); color:var(--sub); }
-  .vt-tb-palette:focus-visible { outline:2px solid var(--acc); outline-offset:1px; }
 
   /* ── 상태 막대 24 ───────────────────────────────────────────────────────── */
   #vt-hud {
@@ -132,10 +131,16 @@
 .vt-hud-chip {
   display:flex; align-items:center; gap:calc(var(--spacing) * 1.25); flex:none;
   height:var(--statusbar-h, 24px); padding:0 calc(var(--spacing) * 2); white-space:nowrap;
+  /* `#vt-hud`의 font 축약형이 상속된 tabular-nums를 normal로 되돌려, CPU 25%→100% 같은 값 변화에 칩 폭이 흔들려
+     옆 칩(NET·codex)이 밀렸다(2026-11 점검 7-2). 칩마다 다시 켠다. */
+  font-variant-numeric:tabular-nums;
 }
 /* 맨 왼쪽 고정 — 에이전트 칩(-4) · 토스트 메시지 칸(-3, components.css) · 나머지(0). */
 .vt-hud-chip[data-chip="agents"] { order:-4; color:var(--txt); }
 .vt-hud-chip[data-chip="agents"].tone-warn { background:color-mix(in srgb, var(--warn) 10%, transparent); }
+/* 훅 점검 칩(hud-data.ts의 `hooks`) — 에이전트 칩 바로 다음에 고정. 값이 아니라 라벨이 본문이라 라벨을 주의 색으로 쓴다. */
+.vt-hud-chip[data-chip="hooks"] { order:-4; color:var(--txt); background:color-mix(in srgb, var(--warn) 10%, transparent); }
+.vt-hud-chip[data-chip="hooks"] .vt-hud-label { color:var(--warn); font-weight:var(--weight-semibold); }
 .vt-hud-label { color:var(--sub); }
 .vt-hud-value { color:var(--txt); font-weight:var(--weight-semibold); font-variant-numeric:tabular-nums; }
 .vt-hud-hint  { color:var(--color-muted); }
@@ -146,36 +151,21 @@
 .vt-hud-chip.tone-warn .vt-hud-dot { background:var(--warn); }
 .vt-hud-chip.tone-err  .vt-hud-dot { background:var(--err); }
 .vt-hud-chip.clickable { cursor:pointer; }
-.vt-hud-chip.clickable:hover { background:var(--menu-hover); color:var(--txt); }
-.vt-hud-chip.clickable:focus-visible { outline:2px solid var(--acc); outline-offset:-2px; }
+.vt-hud-chip.clickable:hover { background:var(--color-state-hover); color:var(--txt); }
+.vt-hud-chip.clickable:active { background:var(--color-state-press); }
 /* Hud.tsx의 fitChips가 폭이 모자랄 때 순위가 낮은 칩부터 붙인다. Solid <For>가 관리하는 노드라 DOM에서 빼지 않고
    클래스로만 감춘다. */
 .vt-hud-chip.overflow-hidden { display:none; }
 /* info/success 토스트가 메시지 칸(#vt-hud-msg)을 띄우는 동안(toast.js가 .vt-hud-busy) 다른 칩은 비켜선다.
    에이전트 칩은 남는다 — 개입이 필요한 세션이 있다는 사실은 토스트 몇 초 동안에도 가려지면 안 된다. 칩은 DOM에서
    빼지 않고 숨기기만 한다(Solid <For>의 노드를 뒤에서 지우면 실제 DOM과 어긋난다). */
-#vt-hud.vt-hud-busy .vt-hud-chip:not([data-chip="agents"]),
+#vt-hud.vt-hud-busy .vt-hud-chip:not([data-chip="agents"]):not([data-chip="hooks"]),
 #vt-hud.vt-hud-busy .vt-hud-spacer,
 #vt-hud.vt-hud-busy .vt-hud-stale { display:none; }
 
 /* FarShell 메뉴 드롭다운 — body로 꺼내 그린다(Portal). 위치는 버튼 아래로 JS가 잡는다. */
-.vt-mb-pop {
-  position:fixed; z-index:620; min-width:240px; max-width:min(360px, calc(100vw - 16px));
-  padding:calc(var(--spacing) * 1.5); border-radius:var(--radius-lg);
-  background:var(--menu); color:var(--txt); border:1px solid var(--line); box-shadow:var(--shadow-e2);
-  font:var(--weight-normal) var(--fs-xs) var(--font-ui);
-}
-.vt-mb-item {
-  display:flex; align-items:center; gap:calc(var(--spacing) * 2.5); width:100%;
-  height:28px; padding:0 calc(var(--spacing) * 2); border:0; border-radius:var(--radius-sm);
-  background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer;
-}
-.vt-mb-item svg { width:14px; height:14px; flex:none; color:var(--sub); }
-.vt-mb-item:hover, .vt-mb-item:focus-visible { background:var(--menu-hover); outline:none; }
-.vt-mb-item[disabled] { opacity:.45; cursor:default; }
-.vt-mb-item .vt-mb-label { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.vt-mb-item .vt-mb-keys { color:var(--color-muted); font:var(--weight-normal) var(--fs-3xs) var(--font-mono); }
-.vt-mb-sep { height:1px; margin:calc(var(--spacing) * 1) calc(var(--spacing) * 1); background:var(--line); }
+/* 면·항목·구분선·단축키는 components.css 「메뉴 한 규격」이 맡는다 — 여기는 자리(fixed · z-index · 폭)뿐이다. */
+.vt-mb-pop { position:fixed; z-index:620; min-width:240px; max-width:min(360px, calc(100vw - 16px)); }
 
 /* regular(720~1279) — 경로는 숨기고 팔레트 입력은 280으로 줄인다(시안 D04). */
 @media (min-width:720px) and (max-width:1279.98px) {

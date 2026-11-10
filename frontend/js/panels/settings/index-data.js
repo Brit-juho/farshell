@@ -84,8 +84,9 @@ export const SECTION_META = [
   { id: 'keymap', label: t('키맵'), description: t('단축키와 터미널 전달 여부를 바꿉니다.') },
   { id: 'appearance', label: t('모양'), description: t('스킨, 화면 언어, 메뉴 크기, 파일 뷰어 표시 방식, 집중 모드를 고릅니다.') },
   { id: 'hud', label: t('상태 막대 · 활동 막대'), description: t('화면 맨 아래 상태 막대의 칩과, 왼쪽 활동 막대의 순서를 고릅니다.'), desktopOnly: true },
-  { id: 'permissions', label: t('권한'), description: t('에이전트의 승인 요청, 페어, 폴더 lease, 허용된 권한, 감사 기록을 봅니다.') },
+  { id: 'permissions', label: t('권한'), description: t('에이전트의 승인 요청, 페어, 폴더 점유, 허용된 권한, 감사 기록을 봅니다.') },
   { id: 'security', label: t('계정 및 보안'), description: t('로그인, OTP, 등록 기기와 현재 세션을 확인합니다.') },
+  { id: 'update', label: t('업데이트'), description: t('새 버전 확인과 자동 업데이트를 설정합니다.') },
   { id: 'about', label: t('정보 및 진단'), description: t('훅과 사용량 공급자의 연결 상태를 진단합니다.') },
 ];
 
@@ -94,15 +95,16 @@ export const SEARCH_ITEMS = [
   ['terminal', t('새 세션 생성 시 맥 터미널에서도 열기')], ['terminal', t('앱에 마우스 이벤트 전달')],
   ['terminal', t('드래그 시 자동 복사')], ['terminal', t('터치 탭을 앱에 전달')],
   ['terminal', t('스크린 리더 모드')], ['terminal', t('스크롤백 줄 수')],
-  ['voice', t('웹 푸시 알림')], ['voice', t('완료 알림')], ['voice', t('알림 방식')], ['voice', t('음성 인식 모델')], ['voice', t('받아 둔 항목 관리')],
+  ['voice', t('웹 푸시 알림')], ['voice', t('완료 알림')], ['voice', t('알림 방식')], ['voice', t('음성 인식 모델')], ['voice', t('내려받은 파일 관리')],
   ['voice', t('현재 세션 음성')], ['voice', t('음성 전용 모드')], ['voice', t('확인 후 전송')], ['voice', t('입력 대상')],
   ['agents', t('에이전트 감지 상태')],
   ['keymap', t('단축키와 터미널 전달')],
   ['appearance', t('스킨')], ['appearance', t('화면 언어')], ['appearance', t('메뉴 크기')], ['appearance', t('파일 뷰어 표시 방식')],
   ['appearance', t('집중 모드')], ['appearance', t('가장자리에 막대 띄우기')], ['appearance', t('개입 표시')], ['appearance', t('가장자리 반응 시간')],
   ['hud', t('상태 막대 칩')], ['hud', t('활동 막대 순서')],
-  ['permissions', t('승인 대기')], ['permissions', t('페어')], ['permissions', t('폴더 lease')], ['permissions', t('허용된 권한')], ['permissions', t('감사 기록')], ['permissions', t('비상 정지')],
+  ['permissions', t('승인 대기')], ['permissions', t('페어')], ['permissions', t('폴더 점유(lease)')], ['permissions', t('허용된 권한')], ['permissions', t('감사 기록')], ['permissions', t('비상 정지')],
   ['security', t('로그인과 OTP')], ['security', t('등록 기기')], ['security', t('로그아웃')],
+  ['update', t('새 버전 확인')], ['update', t('자동 업데이트')], ['update', t('적용 시각')],
   ['about', t('에이전트 훅')], ['about', t('사용량 공급자')], ['about', t('버전과 진단')],
 ].map(([sectionId, label]) => ({ sectionId, label }));
 
@@ -115,14 +117,14 @@ export const SEARCH_ALIASES = {
   [t('웹 푸시 알림')]: t('브라우저 알림 구독'),
   [t('음성 인식 모델')]: t('음성 입력 받아쓰기 stt 모델 선택 받기 다운로드 qwen3 mlx llama 엔진 정확도 속도 메모리'),
   [t('알림 방식')]: t('완료음 낭독 tts 소리 알림음 최소 작업 시간 오류 제외 웹 접속 중'),
-  [t('받아 둔 항목 관리')]: t('모델 삭제 지우기 용량 저장 공간 엔진 파일'),
+  [t('내려받은 파일 관리')]: t('모델 삭제 지우기 용량 저장 공간 엔진 파일'),
   [t('확인 후 전송')]: t('음성 입력 확인 위험 명령 rm sudo 셸 바로 입력 인식 결과 고치기'),
   [t('입력 대상')]: t('음성 입력 세션 고정 따라가기 마이크 대상 pin'),
   [t('맥에서 음성만 쓰기')]: t('로컬 음성 입력 마이크'),
   [t('등록 기기')]: t('디바이스 장치'),
   [t('승인 대기')]: t('승인함 인박스 에이전트 요청 허용 거부'),
   [t('페어')]: t('pair 짝 코드 합류 역할 교체 handoff driver navigator 운전자 길잡이 fsh pair'),
-  [t('폴더 lease')]: t('lease 잠금 폴더 점유 배타 경로 glob'),
+  [t('폴더 점유(lease)')]: t('lease 잠금 폴더 점유 배타 경로 glob'),
   [t('허용된 권한')]: t('grant 회수 철회 프리셋 보기 협업 운전 제어'),
   [t('감사 기록')]: t('audit 로그 체인 거부 기록'),
   [t('비상 정지')]: t('panic 모든 에이전트 권한 회수'),
@@ -132,6 +134,8 @@ export const SEARCH_ALIASES = {
   [t('상태 막대 칩')]: t('메뉴바 하단바 hud 칩 시계 cpu'),
   [t('활동 막대 순서')]: t('활동 숨기기 아이콘 순서 왼쪽 막대'),
   [t('에이전트 훅')]: 'hook codex claude',
+  [t('자동 업데이트')]: t('업데이트 버전 최신 릴리스 새 버전 update upgrade 서명 stable'),
+  [t('새 버전 확인')]: t('업데이트 버전 확인 네트워크 fetch'),
 };
 
 // 레일 설정 중 스키마 키 하나로 끝나는 켜기/끄기. 「저장소별로 묶기」·「최근 종료 표시 개수」는
@@ -183,7 +187,7 @@ export function buildSettingEntries(shownSectionIds) {
   for (const r of RAIL_TOGGLES) {
     entries.push({
       id: `r:${r.key}`, key: r.key, label: r.label, kind: 'bool', help: r.help,
-      section: null, path: `${t('레일 설정')} › ${r.group}`, aliases: '',
+      section: null, path: `${t('세션 목록 설정')} › ${r.group}`, aliases: '',
     });
   }
   for (const s of SEARCH_ITEMS) {

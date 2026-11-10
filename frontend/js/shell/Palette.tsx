@@ -870,7 +870,7 @@ export function mountPalette(root: HTMLElement, deps: PaletteDeps): PaletteApi {
             <div class="vt-qo-foot" aria-hidden="true">
               <span><kbd class="vt-qo-key" innerHTML={icon('arrow-up', 13, 2) + icon('arrow-down', 13, 2)} /> {t('이동')}</span>
               <span><kbd class="vt-qo-key" innerHTML={icon('key-enter', 13, 2)} /> {grepMode() ? t('그 줄로 열기') : t('열기')}</span>
-              <span><kbd class="vt-qo-key" innerHTML={deps.displayComboHtml ? deps.displayComboHtml('Mod+Enter') : '⌘↵'} /> {t('새 pane')}</span>
+              <span><kbd class="vt-qo-key" innerHTML={deps.displayComboHtml ? deps.displayComboHtml('Mod+Enter') : '⌘↵'} /> {t('새 페인')}</span>
               <Show when={grepMode() && deps.openSidebarSearch}>
                 <span><kbd class="vt-qo-key" innerHTML={deps.displayComboHtml ? deps.displayComboHtml('Alt+Enter') : '⌥↵'} /> {t('사이드바 검색으로 옮기기')}</span>
               </Show>

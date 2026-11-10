@@ -35,6 +35,7 @@ from pathlib import Path
 
 import store_lock
 import vt_paths
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -238,7 +239,7 @@ def send(title: str, body: str = "", url: str = "/") -> dict:
 
     subs = list_subs()
     if not subs:
-        return {"ok": True, "sent": 0, "reason": "구독 없음"}
+        return {"ok": True, "sent": 0, "reason": tr("구독 없음")}
 
     cur = _current_origin()
     payload = json.dumps({

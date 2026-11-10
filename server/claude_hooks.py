@@ -47,6 +47,11 @@ from i18n import tr
 EVENTS = {
     "PreToolUse": "pre",
     "PostToolUse": "post",
+    # 2026-11-10 — PostToolUse는 도구가 **성공했을 때만** 온다(공식). 질문(AskUserQuestion)·승인이
+    # 거절·오류로 끝나고 모델이 다른 도구를 이어 부르면 같은 tool_use_id의 post가 영영 오지
+    # 않아 waiting이 TTL(2분)까지 남았다. 실패 이벤트도 같은 `tool_use_id`를 싣고 와 대기를 푼다.
+    # 실행 전에 거절된 호출(권한 거부·스키마 오류)은 이 이벤트도 안 온다 — 그건 다음 pre/prompt/Stop이 푼다.
+    "PostToolUseFailure": "post_failure",
     "Stop": "stop",
     "SubagentStart": "subagent_start",
     "SubagentStop": "subagent_stop",
@@ -79,6 +84,7 @@ EVENTS = {
 MATCHERS = {
     "PreToolUse": "*",
     "PostToolUse": "*",
+    "PostToolUseFailure": "*",
     "SessionStart": "startup|resume|clear",
     "Notification": "permission_prompt|idle_prompt",
 }

@@ -79,8 +79,8 @@
   html.vt-focus.vt-reveal-top #vt-focus-pill { top:44px; }
   html.vt-focus #vt-focus-pill button { height:28px; gap:6px; font:inherit; }
   html.vt-focus #vt-focus-pill button::before { content:none; }
-  html.vt-focus #vt-focus-pill button:hover { background:var(--menu-hover); }
-  html.vt-focus #vt-focus-pill button:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
+  html.vt-focus #vt-focus-pill button:hover { background:var(--color-state-hover); }
+  html.vt-focus #vt-focus-pill button:active { background:var(--color-state-press); }
   html.vt-focus #vt-focus-pill .vt-focus-pill-go { padding:0 10px 0 8px; max-width:420px; min-width:0; color:var(--color-txt); }
   html.vt-focus #vt-focus-pill .vt-focus-pill-ic { flex:none; color:var(--color-st-waiting); }
   html.vt-focus #vt-focus-pill .vt-focus-pill-n { flex:none; color:var(--color-st-waiting); font-weight:var(--weight-semibold); }
@@ -95,14 +95,14 @@
   html.vt-focus #vt-focus-pill .vt-focus-pill-exit-ico { display:none; }
   html.vt-focus #vt-focus-pill .vt-focus-pill-keys:not(:empty) {
     display:inline-block; padding:0 5px; border-radius:var(--radius-sm);
-    background:var(--menu-hover); color:var(--color-sub);
+    background:var(--color-state-hover); color:var(--color-sub);
     font:var(--weight-medium) var(--fs-3xs) / 16px var(--font-mono);
   }
   html.vt-focus #vt-focus-pill .vt-focus-pill-exit-label { display:inline; }
 
   .vt-focus-kbd {
     display:inline-block; margin-right:4px; padding:0 5px; border-radius:var(--radius-sm);
-    background:var(--menu-hover); color:var(--color-sub);
+    background:var(--color-state-hover); color:var(--color-sub);
     font:var(--weight-medium) var(--fs-3xs) / 16px var(--font-mono);
   }
 
@@ -125,7 +125,6 @@
     border-radius:8px; border:1px solid var(--color-line-strong); background:var(--color-bg-raised);
     box-shadow:var(--shadow-e2); color:var(--color-sub); cursor:pointer;
   }
-  .vt-focus-exit:focus-visible { outline:2px solid var(--color-acc); outline-offset:2px; }
 
   /* 토스트 카드는 집중 모드에서도 뜬다 — 상태 막대 자리가 0이라 창 아래 16. 상태 막대가 드러나면 그 위 16으로 비킨다. */
   html.vt-focus.vt-reveal-bottom #vt-toasts { bottom:calc(24px + 16px + env(safe-area-inset-bottom, 0px)); }
@@ -136,9 +135,9 @@
     width:28px; height:28px; padding:0; margin:0;
     border:0; border-radius:var(--radius-sm); background:transparent; color:var(--color-sub); cursor:pointer;
   }
-  .vt-tb-focus:hover { background:var(--menu-hover); color:var(--color-txt); }
+  .vt-tb-focus:hover { background:var(--color-state-hover); color:var(--color-txt); }
+  .vt-tb-focus:active { background:var(--color-state-press); }
   .vt-tb-focus.on { background:var(--color-surface-active); color:var(--color-txt); }
-  .vt-tb-focus:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

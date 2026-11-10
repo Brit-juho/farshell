@@ -14,7 +14,7 @@ home directory when `VT_BROWSE_ROOTS` covers it). Requests wait on that lock wit
 - the open port
 - `fsh status`
 
-The login gate then spins on 「연결을 확인하는 중」 indefinitely. Any scandir blocking in `open()` has the
+The login gate then spins on Checking connection (연결을 확인하는 중) indefinitely. Any scandir blocking in `open()` has the
 same root.
 
 Each link in that chain has its own guard:
@@ -44,7 +44,7 @@ Each link in that chain has its own guard:
 
 ## Pieces
 
-**`pools`.** Pool sizes: `fs` 4, `git` 6, `proc` 6, `net` 8, `slow` 3, `grep` 2 (file content search waits on its child process here so a 10 s search never holds an `fs` worker). `VT_POOL_<NAME>_SIZE` overrides a
+**`pools`.** Pool sizes: `fs` 4, `git` 6, `proc` 6, `net` 8, `slow` 3, `grep` 2 (file content search waits on its child process here so a 10 s search never holds an `fs` worker), `hooks` 2 (the agent-hook health check reads a few settings files; a hung read there cannot starve other pools). `VT_POOL_<NAME>_SIZE` overrides a
 size; `default` uses the stdlib formula.
 - Admission is capped at size × 5. Beyond that the call raises `Busy` immediately instead of queueing
   behind a stuck pool.
@@ -78,7 +78,7 @@ Risky mounts are NFS, SMB, AFP, WebDAV, FUSE (not `fuseblk`), 9p, virtiofs, auto
 `MNT_LOCAL`, plus the macOS File Provider roots (`~/Library/CloudStorage`, `~/Library/Mobile Documents`).
 Paths are classified by string prefix only.
 
-**macOS permission identity (`FarShell.app`).** On macOS, `fsh start` launches the server — and a tmux server it creates — through a tiny launcher app at `$VT_STATE_DIR/app/FarShell.app` (`macos/farshell-launcher.c`, built and ad-hoc signed as `com.farshell.server` by `lib/macos_app.sh`). The launcher re-spawns itself with `responsibility_spawnattrs_setdisclaim`, so it becomes the TCC "responsible process" for everything below it: permission prompts name **FarShell** instead of `python3.14`, and a decision survives restarts, releases and Python upgrades. Measured 2026-11-06 with a no-prompt probe (`~/Library/Mail`): without the launcher tccd logged `responsible=python3-…`, with it `responsible=com.farshell.server-test`. The app lives outside the repository and is rebuilt only when the launcher source or `macos/Info.plist` changes (a rebuild changes the signature and macOS asks again). The launcher forwards signals (not ones that were ignored — `nohup`'s SIGHUP), passes the exit code through, and writes the real command's pid to `FSH_APP_PIDFILE`; `bin/fsh` stores that in `server.pid`, so the watchdog, `fsh stop` and SIGUSR1 dumps still address the Python server. A tmux server that was already running keeps its old responsibility until it is restarted. `VT_MACOS_APP=0` switches back to launching Python directly; without `cc`/`codesign` the launcher is skipped. `fsh doctor` reports the state (「macOS 권한 이름」). Tests: `server/tests/test_macos_app.py`.
+**macOS permission identity (`FarShell.app`).** On macOS, `fsh start` launches the server — and a tmux server it creates — through a tiny launcher app at `$VT_STATE_DIR/app/FarShell.app` (`macos/farshell-launcher.c`, built and ad-hoc signed as `com.farshell.server` by `lib/macos_app.sh`). The launcher re-spawns itself with `responsibility_spawnattrs_setdisclaim`, so it becomes the TCC "responsible process" for everything below it: permission prompts name **FarShell** instead of `python3.14`, and a decision survives restarts, releases and Python upgrades. Measured 2026-11-06 with a no-prompt probe (`~/Library/Mail`): without the launcher tccd logged `responsible=python3-…`, with it `responsible=com.farshell.server-test`. The app lives outside the repository and is rebuilt only when the launcher source or `macos/Info.plist` changes (a rebuild changes the signature and macOS asks again). The launcher forwards signals (not ones that were ignored — `nohup`'s SIGHUP), passes the exit code through, and writes the real command's pid to `FSH_APP_PIDFILE`; `bin/fsh` stores that in `server.pid`, so the watchdog, `fsh stop` and SIGUSR1 dumps still address the Python server. A tmux server that was already running keeps its old responsibility until it is restarted. `VT_MACOS_APP=0` switches back to launching Python directly; without `cc`/`codesign` the launcher is skipped. `fsh doctor` reports the state (macOS permission name (macOS 권한 이름)). Tests: `server/tests/test_macos_app.py`.
 
 **macOS protected locations.** On macOS the automatic scans (repository discovery, file search, session cwd lookups) also skip the locations macOS guards with a permission prompt: `~/Desktop`, `~/Documents`, `~/Downloads`, `~/Pictures`, `~/Movies`, `~/Music`, all of `~/Library` (app data, Mail, iCloud) and `/Volumes`. Walking into them raised one prompt per category, several at once (2026-11-06). `VT_SCAN_INCLUDE_PROTECTED=1` puts them back (for a machine that granted Full Disk Access). A path a person opens in the file tab is not refused; macOS asks once, which is expected. A session cwd inside one of them reports `reason: protected`.
 
@@ -127,6 +127,8 @@ deadline and the breaker instead.
 
 ## Other places that follow the same rule
 
+- **Hook health check.** `hook_health` reads the agent settings only in the `hooks` pool under an 8 s deadline and holds its cache with a 2 s `TimedLock`. A read that misses the deadline returns the previous result (`stale`) and is never treated as a hook fault. Tests: `test_hook_health.py` (fake slow read keeps the loop ticking).
+- **Update check.** `update_check.py` runs its `git fetch` under `updater.hardened()` (`proc.run`) in the `net` pool with a 150 s deadline and a `TimedLock`; the automatic apply is a detached child process, never a server thread. Details: `docs/ref/dev.md`.
 - **Hook intake.** `/api/agent/event` and `/api/agent/report` resolve the pane in `proc` (5 s). On
   timeout or saturation the session is left unresolved.
 - **Status sweep.** `agent_status.sweep` never reads a screen on the event loop. On the loop the probe
@@ -171,7 +173,7 @@ After `VT_WATCHDOG_FAILS` (3) failures in a row:
 **Commands.**
 - `fsh status`: shows the ready verdict next to the port, plus stuck work, locks and quarantine, the
   watchdog line and the latest incident.
-- `fsh doctor`: adds the checks 서버 응답, 서버 워치독, 탐색 격리 and 장애 기록.
+- `fsh doctor`: adds the checks Server response (서버 응답), Server watchdog (서버 워치독), Scan quarantine (탐색 격리) and Incidents (장애 기록).
 - `fsh watchdog status|check|unquarantine`
 
 **launchd (macOS).** `fsh watchdog agent install` registers `com.farshell.server-watchdog`
@@ -186,11 +188,11 @@ After `VT_WATCHDOG_FAILS` (3) failures in a row:
 - **Request deadlines.** `vtFetch`/`apiFetch` time out at 15 s for GET and 30 s for writes; long calls such
   as voice, commit and worktree create get larger budgets. A timeout throws an error with `timeout: true`.
   `vtFetchConditional` (conditional GET for the file viewer, 304 is a success) shares the same deadline code.
-- **Banner.** A timeout counts as a reachability failure and shows the `hung` banner, 「서버가 응답하지 않습니다」.
+- **Banner.** A timeout counts as a reachability failure and shows the `hung` banner, Server isn't responding (서버가 응답하지 않습니다).
 - **Login gate.** Probes and submits time out at 8 s and show a retry block. A timeout never hides the gate;
   a real network error still does, so the offline shell can work.
 - **Polling.** `core/poll.js` drives every poller. It never overlaps a run, backs off up to 60 s on failure
-  and pauses while the tab is hidden. HUD, Rail and Fleet show 「갱신 지연」 when the last success is older
+  and pauses while the tab is hidden. HUD, Rail and Fleet show Updates delayed (갱신 지연) when the last success is older
   than max(2 × interval, 90 s).
 - **WebSockets.** `core/ws-watchdog.js` closes a socket that received nothing for 45 s (code 4000), so the
   normal reconnect and overlay path runs. The server sends `{"type":"ping"}` every 15 s on `/ws/{id}`,

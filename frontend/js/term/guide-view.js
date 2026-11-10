@@ -13,11 +13,11 @@ export function showGuide() {
   const sections = [
     { icon: 'rocket', title: t('시작하기'), rows: [
       { key: t('{key} 버튼', { key: '<kbd>+</kbd>' }), desc: t('새 세션 생성 (tmux 세션 또는 일반 터미널)') },
-      { key: t('탭'), desc: t('더블클릭 → 이름 변경 · {x} → 닫기(tmux는 detach만 됨, 완전 종료는 ⋯ 메뉴)', { x: icon('x', 12) }) },
-      { key: t('pane 분할'), desc: t('pane 헤더의 분할 버튼 → 화면을 나눠 여러 세션을 동시에 표시') },
+      { key: t('탭'), desc: t('더블클릭 → 이름 변경 · {x} → 닫기(tmux는 화면만 닫히고 세션은 남음, 완전 종료는 ⋯ 메뉴)', { x: icon('x', 12) }) },
+      { key: t('페인(pane) 분할'), desc: t('페인 헤더의 분할 버튼 → 화면을 나눠 여러 세션을 동시에 표시') },
     ]},
     { icon: 'mic', title: t('음성 입력'), rows: [
-      { key: t('마이크 버튼'), desc: t('상단 {mic} 탭 → 말하면 STT로 텍스트 입력', { mic: icon('mic', 14) }) },
+      { key: t('마이크 버튼'), desc: t('상단 {mic} 탭 → 말하면 받아쓰기로 텍스트 입력', { mic: icon('mic', 14) }) },
       { key: t('맥 핫키'), desc: t('{cmd} 실행 후 {combo} 토글', { cmd: '<code>fsh voice</code>', combo: kbdCtrlShiftV }) },
       { key: t('핸즈프리'), desc: t('모바일 반복 버튼 → 녹음·인식 연속 자동 반복') },
       { key: t('음성 전용'), desc: t('⋯ 메뉴 → 터미널 숨기고 큰 마이크만 표시(이어폰용)') },
@@ -31,7 +31,7 @@ export function showGuide() {
       { key: t('맥↔웹 동기화'), desc: t('tmux copy-mode 복사는 자동(OSC52). 그 밖(Safari 등)은 맥에서 {cmd} 실행', { cmd: '<code>fsh clip</code>' }) },
     ]},
     { icon: 'square-terminal', title: t('tmux 세션'), rows: [
-      { key: t('tmux 세션'), desc: t('⋯ 메뉴 → 기존 세션 목록 확인·attach') },
+      { key: t('tmux 세션'), desc: t('⋯ 메뉴 → 기존 세션 목록 확인·연결') },
       { key: t('새 세션을 맥에서도 열기'), desc: t('앞으로 만들 세션마다 맥 터미널 창도 함께 열림(토글). 지금 보고 있는 세션을 여는 것은 「지금 이 세션 맥에서 열기」') },
       { key: t('이 세션 열기'), desc: t('지금 보는 세션을 맥 터미널 새 창으로 열기') },
     ]},

@@ -119,10 +119,10 @@
 
   .vt-btn > svg { width: 14px; height: 14px; flex: none; }
 
-  .vt-btn:hover { background: var(--menu-hover); }
+  .vt-btn:hover { background: var(--color-state-hover); }
   /* 누름 피드백은 transform이 아니라 **배경 한 단계**로 준다. 이 버튼은 목록
    * 안에 촘촘히 놓이는 일이 많아서, scale을 주면 옆 행까지 흔들려 보인다. */
-  .vt-btn:active { background: var(--color-surface-active); }
+  .vt-btn:active { background: var(--color-state-press); }
   .vt-btn:disabled,
   .vt-btn[aria-disabled="true"] {
     opacity: .45;
@@ -145,7 +145,8 @@
     border-color: transparent;
     color: var(--color-sub);
   }
-  .vt-btn.quiet:hover { color: var(--color-txt); background: var(--menu-hover); }
+  .vt-btn.quiet:hover { color: var(--color-txt); background: var(--color-state-hover); }
+  .vt-btn.quiet:active { background:var(--color-state-press); }
 
   /* 위험한 동작(삭제·취소·강제 종료). 채움으로 만들지 않는다 — 실수로 누르기
    * 쉬운 자리에 가장 눈에 띄는 버튼을 두지 않는다. */
@@ -155,7 +156,7 @@
   .vt-btn.active {
     border-color: var(--color-acc-dim);
     color: var(--color-acc);
-    background: color-mix(in srgb, var(--color-acc) 12%, transparent);
+    background: var(--color-state-selected);
   }
 
   .vt-btn.danger { color: var(--color-st-error); border-color: var(--color-st-error); }
@@ -204,8 +205,8 @@
   .vt-icon-btn.lg { --icon-btn: 32px; }
   .vt-icon-btn.xl { --icon-btn: 44px; }
 
-  .vt-icon-btn:hover:not(:disabled) { background: var(--menu-hover); color: var(--color-txt); }
-  .vt-icon-btn:active:not(:disabled) { background: var(--color-surface-active); }
+  .vt-icon-btn:hover:not(:disabled) { background: var(--color-state-hover); color: var(--color-txt); }
+  .vt-icon-btn:active:not(:disabled) { background: var(--color-state-press); }
   .vt-icon-btn:disabled,
   .vt-icon-btn[aria-disabled="true"] { opacity: .45; cursor: not-allowed; background: transparent; }
   /* 파괴적 동작(pane 닫기·세션 종료·화면 끊기)은 **hover에서만** 에러색이 된다.
@@ -213,7 +214,7 @@
   .vt-icon-btn.danger:hover:not(:disabled) { color: var(--color-st-error); }
   /* 지금 켜져 있는 토글형 아이콘 버튼(코드 뷰어의 트리 접기 등). */
   .vt-icon-btn[aria-pressed="true"],
-  .vt-icon-btn.active { color: var(--color-acc); background: color-mix(in srgb, var(--color-acc) 12%, transparent); }
+  .vt-icon-btn.active { color: var(--color-acc); background: var(--color-state-selected); }
 
   /* ── 배지 ──────────────────────────────────────────────────────────────
    * 테두리만. 채우지 않는 이유는 규칙이라서가 아니라, 배지가 채워지면 그
@@ -243,7 +244,7 @@
   /* ── 입력 ──────────────────────────────────────────────────────────────
    * 2.1.6 이전에는 여섯 벌이었다(#search-bar input · .vt-q-compose textarea ·
    * .vt-q-target · #vt-sn-label · .vt-wtd-input/-select · .vt-fl-input).
-   * 배경이 --term과 --bar로 갈리고 모서리가 --trad(7px)와 --radius-sm(5px)로
+   * 배경이 --term과 --bar로 갈리고 모서리가 옛 --trad(7px)와 --radius-sm(5px)로
    * 갈려 있었다 — 같은 입력인데 화면마다 다른 상자였다.
    *
    * `.lg`가 있는 이유는 미감이 아니라 **iOS** 때문이다: 16px 미만인 입력에
@@ -258,14 +259,13 @@
     background: var(--color-bg-0);
     color: var(--color-txt);
     font: var(--weight-normal) var(--fs-sm) / var(--leading-row) var(--font-ui);
-    outline: none;
-    transition: border-color var(--dur-fast) var(--ease-out-quint);
+    transition: border-color var(--dur-fast) var(--ease-fast);
   }
   .vt-input.lg { font-size: var(--fs-md); }
   .vt-input.mono { font-family: var(--font-mono); }
   .vt-input:hover:not(:disabled) { border-color: var(--color-line-strong); }
-  /* 포커스는 테두리 색만 바꾼다 — 전역 :focus-visible 링이 이미 있어서
-   * 글로우까지 더하면 두 겹이 된다(DESIGN.md §0 "글로우 없음"). */
+  /* 포커스는 테두리 색 + 전역 포커스 링(inset, 00-tokens-reset.css)이다 —
+   * 글로우는 더하지 않는다(DESIGN.md §0 "글로우 없음"). */
   .vt-input:focus { border-color: var(--color-acc); }
   .vt-input:disabled { opacity: .45; cursor: not-allowed; }
   .vt-input::placeholder { color: var(--color-faint); }
@@ -323,7 +323,8 @@
    * 유일한 후보였는데 그건 죽은 코드였다). 필요해지면 그때 추가한다 — 소비자
    * 없는 변형을 미리 두면 그게 곧 다음 사람이 지울 죽은 코드다. */
 
-  .vt-segment:hover:not(:disabled) { background: var(--menu-hover); color: var(--color-txt); }
+  .vt-segment:hover:not(:disabled) { background: var(--color-state-hover); color: var(--color-txt); }
+  .vt-segment:active:not(:disabled) { background:var(--color-state-press); }
   .vt-segment[aria-selected="true"],
   .vt-segment.active {
     background: var(--color-acc-surface);
@@ -353,13 +354,14 @@
     transition: background var(--dur-fast) var(--ease-out-quint),
                 color var(--dur-fast) var(--ease-out-quint);
   }
-  .vt-host-btn:hover { background: var(--menu-hover); color: var(--color-txt); }
+  .vt-host-btn:hover { background: var(--color-state-hover); color: var(--color-txt); }
+  .vt-host-btn:active { background:var(--color-state-press); }
   /* 원격을 보고 있을 때만 액센트 — "지금 내 맥이 아니다"가 한눈에 보여야 한다. */
   .vt-host-btn.remote { color: var(--color-acc); }
   /* 꺼진 호스트: 흐리게. 취소선은 레일에서만 쓴다(폰은 줄이 좁아 글자가 뭉갠다). */
   .vt-host-btn.offline { opacity: .6; }
   /* 목록이 열려 있는 동안 버튼이 눌린 상태로 남는다. */
-  .vt-host-btn.open { background: var(--menu-hover); color: var(--color-txt); }
+  .vt-host-btn.open { background: var(--color-state-hover); color: var(--color-txt); }
 
   /* ── 고정 사이드 패널 ─────────────────────────────────────────────────
    * 화면 좌우 끝에 붙어 세로를 다 쓰는 패널. 지금은 작업대(#vt-workbench — 활동 막대 +
@@ -421,13 +423,14 @@
     padding: calc(var(--spacing) * 2) calc(var(--spacing) * 1.5);
   }
 
-  .vt-srow:hover { background: var(--menu-hover); }
+  .vt-srow:hover { background: var(--color-state-hover); }
+  .vt-srow:active { background:var(--color-state-press); }
   /* "지금 보고 있는 행"은 **두 신호**로 말한다: 표면이 한 단 올라오고
    * (--color-bg-3) 낮은 그림자가 얹힌다(--shadow-e1). 색 하나에 기대면
    * 스킨에 따라 사라진다 — farshell에서 배경 단차만으로는 1.06:1이라
    * 사실상 같은 색이었다(2.1.6에서 e1을 6스킨에 정의해 고쳤다). */
   .vt-srow.active {
-    background: var(--color-bg-3);
+    background: var(--color-state-selected);
     box-shadow: var(--shadow-e1);
     position: relative;
     z-index: 1;
@@ -523,15 +526,14 @@
   .vt-view-group-toggle svg { transition: transform var(--dur-fast) var(--ease-out-quint); }
   .vt-view-group-toggle.collapsed svg { transform: rotate(-90deg); }
   .vt-view-group-toggle:hover { color: var(--color-txt); }
-  .vt-view-group-toggle:focus-visible { outline: 2px solid var(--color-acc); outline-offset: 1px; }
   @media (prefers-reduced-motion: reduce) { .vt-view-group-toggle svg { transition: none; } }
   .vt-view-group-rename { display: inline-flex; align-items: center; justify-content: center; }
   .vt-view-group-title { flex: 1; min-width: 0; padding: 0; text-align: left; background: transparent; border: 0; color: var(--color-sub); font: var(--weight-medium) var(--fs-xs) / var(--leading-row) var(--font-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
   .vt-view-group-title:hover { color: var(--color-txt); }
   .vt-view-group-count { flex: none; color: var(--color-muted); font: var(--weight-normal) var(--fs-3xs) / 1 var(--font-mono); }
   .vt-view-group-rename { flex: none; padding: 0 var(--spacing); min-height: 24px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-sub); font: var(--weight-normal) var(--fs-3xs) / 1 var(--font-ui); cursor: pointer; }
-  .vt-view-group-rename:hover { background: var(--menu-hover); color: var(--color-txt); }
-  .vt-view-group-title:focus-visible, .vt-view-group-rename:focus-visible { outline: 2px solid var(--color-acc); outline-offset: 2px; }
+  .vt-view-group-rename:hover { background: var(--color-state-hover); color: var(--color-txt); }
+  .vt-view-group-rename:active { background:var(--color-state-press); }
   @media (hover: hover) and (pointer: fine) {
     .vt-view-group-rename { opacity: 0; }
     .vt-view-group-head:hover .vt-view-group-rename, .vt-view-group-head:focus-within .vt-view-group-rename { opacity: 1; }
@@ -539,7 +541,6 @@
   .vt-session-body { display: flex; flex: 1; min-width: 0; flex-direction: column; }
   .vt-session-body .vt-session-select { width: 100%; text-align: left; }
   .vt-session-meta { display: block; width: 100%; text-align: left; padding: 0; background: transparent; border: 0; font: inherit; font-size: var(--fs-xs); color: var(--color-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-  .vt-session-meta:focus-visible { outline: 2px solid var(--color-acc); }
   .vt-card button.card-meta { width: 100%; text-align: left; padding: 0; border: 0; background: transparent; cursor: pointer; }
   .vt-session-error { font-size: var(--fs-xs); color: var(--color-sub); }
   @media (pointer: coarse), (max-width: 719px) {
@@ -658,33 +659,85 @@
    * 버튼과 나누는 기준: 버튼은 자기 글자만큼 넓고 **가운데 정렬**, 이건 줄을
    * 꽉 채우고 **왼쪽 정렬**이다. 목록 안에서 위아래로 훑는 것이라 글자 시작
    * 위치가 일정해야 한다. */
-  .vt-menu-item {
-    --menu-item-h: 36px;
+  /* ── 메뉴 한 규격 (2026-11, 화면 점검 8절 4번) ─────────────────────────────
+   * 이전에는 FarShell 메뉴(12px·28px·아이콘 14)와 행 메뉴·「+」 메뉴(13px·36px·아이콘
+   * 없음)가 한 화면에 같이 떠서 규격이 둘이었다. 시안 menu 규격 하나로 합친다:
+   *   면    bg-raised · 1px line-strong · 반경 8(radius-lg) · 그림자 e2 · 패딩 4
+   *   항목  높이 28(폰·터치 44) · 글자 13(fs-sm) · 좌우 패딩 8 · 칸 간격 8 · 반경 4(radius-xs)
+   *   아이콘 14 · 색 muted(켜짐 acc · 위험 err)
+   *   오른쪽 열  단축키(.vt-mb-keys · .vt-ft-mi-k · .vt-menu-item-k = mono 12 muted) ·
+   *            부가 글자(.vt-menu-item-detail = ui 12 muted) — 둘 다 margin-left:auto
+   *   구분선  1px line, 좌우 −4로 면 끝까지(.vt-menu-sep · .vt-mb-sep)
+   *   섹션 라벨 11/600 muted(.vt-menu-label · .vt-pt-menu-label)
+   * 이 규칙을 따르는 메뉴(코드로 열거): RailRow.tsx의 Menu(세션 행 ⋯ · 호스트 · 카탈로그 ·
+   * 서브에이전트 · 제목 막대 호스트), term/session.js의 「+」 메뉴, TitleBar.tsx의 FarShell 메뉴
+   * (.vt-mb-pop), FileTree.tsx의 행 메뉴(.vt-ft-menu), ui/select.js의 드롭다운(.vt-dd-list),
+   * 포트 관리 시트(.vt-pt-menu), Fleet.tsx의 폰 시트 항목. 시트 껍데기(폰 아래 시트)는 자기 CSS가
+   * 맡고 항목만 이 규격이다. 새 메뉴는 클래스를 새로 만들지 말고 이 목록에 올려라
+   * (frontend/tests/menu-spec.test.js가 소비 파일의 규격 선언을 본다). */
+  .vt-menu, .vt-mb-pop, .vt-ft-menu {
+    --menu-item-h: 28px;
+    box-sizing: border-box;
+    padding: calc(var(--spacing) * 1);
+    background: var(--color-bg-raised);
+    color: var(--color-txt);
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-e2);
+    font: var(--weight-normal) var(--fs-sm) / var(--leading-row) var(--font-ui);
+    min-width: 200px;
+  }
+  .vt-menu-item, .vt-mb-item, .vt-ft-mi, .vt-pt-menu-item {
     display: flex;
     align-items: center;
-    gap: calc(var(--spacing) * 2.5);
+    gap: calc(var(--spacing) * 2);
+    box-sizing: border-box;
     width: 100%;
     min-height: var(--menu-item-h);
-    padding: 0 calc(var(--spacing) * 2.5);
+    padding: 0 calc(var(--spacing) * 2);
     border: 0;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-xs);
     background: transparent;
     color: var(--color-txt);
     font: var(--weight-normal) var(--fs-sm) / var(--leading-row) var(--font-ui);
     text-align: left;
+    white-space: nowrap;
     cursor: pointer;
-    transition: background var(--dur-fast) var(--ease-out-quint),
-                color var(--dur-fast) var(--ease-out-quint);
   }
-  .vt-menu-item.sm { --menu-item-h: 28px; font-size: var(--fs-xs); }
-  .vt-menu-item > svg { width: 16px; height: 16px; flex: none; color: var(--color-sub); }
+  .vt-menu-item.sm { --menu-item-h: 28px; }
+  .vt-menu-item > svg, .vt-menu-item-ico svg, .vt-mb-item > svg, .vt-ft-mi > svg, .vt-ft-mi .vt-ft-ic svg { width: 14px; height: 14px; flex: none; color: var(--color-muted); }
+  .vt-menu-item-ico { display: inline-flex; flex: none; }
+  .vt-menu-item-label, .vt-mb-label, .vt-ft-mi-l { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vt-menu-item-detail { margin-left: auto; padding-left: calc(var(--spacing) * 4); color: var(--color-muted); font: var(--weight-normal) var(--fs-xs) / 1 var(--font-ui); }
+  .vt-menu-item-k, .vt-mb-keys, .vt-ft-mi-k {
+    margin-left: auto; padding-left: calc(var(--spacing) * 4); flex: none; max-width: 40%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--color-muted); font: var(--weight-normal) var(--fs-xs) / 1 var(--font-mono);
+  }
+  /* 두 줄 항목(「+」 메뉴) — 아이콘 옆에 이름과 보조 설명이 위아래로 선다. */
+  .vt-menu-item.two { padding-block: calc(var(--spacing) * 1.5); align-items: flex-start; }
+  .vt-menu-item.two > .vt-menu-item-ico { margin-top: 3px; }
+  .vt-menu-item-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .vt-menu-item-sub { color: var(--color-muted); font: var(--weight-normal) var(--fs-2xs) / var(--leading-row) var(--font-ui); white-space: normal; }
+  .vt-menu-sep, .vt-mb-sep { height: 1px; margin: calc(var(--spacing) * 1) calc(var(--spacing) * -1); border: 0; background: var(--color-line); }
+  .vt-menu-label, .vt-pt-menu-label {
+    padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2) calc(var(--spacing) * 1);
+    color: var(--color-muted); font: var(--weight-semibold) var(--fs-3xs) / 1.3 var(--font-ui);
+  }
+  /* 폰·터치는 항목 44 (WCAG 2.5.5). 설정 왼쪽 내비(.vt-set-navitem)는 자기 목록 규격을 따른다. */
+  @media (max-width: 719.98px), (pointer: coarse) {
+    .vt-menu, .vt-mb-pop, .vt-ft-menu { --menu-item-h: 44px; }
+    .vt-menu-item:not(.vt-set-navitem), .vt-mb-item, .vt-ft-mi, .vt-pt-menu-item { --menu-item-h: 44px; }
+    .vt-menu-item.sm:not(.vt-set-navitem) { --menu-item-h: 44px; }
+  }
 
-  .vt-menu-item:hover:not(:disabled) { background: var(--menu-hover); }
-  .vt-menu-item:active:not(:disabled) { background: var(--color-surface-active); }
+  .vt-menu-item:hover:not(:disabled), .vt-mb-item:hover:not(:disabled), .vt-ft-mi:hover, .vt-pt-menu-item:hover { background: var(--color-state-hover); }
+  .vt-menu-item:active:not(:disabled), .vt-mb-item:active:not(:disabled), .vt-ft-mi:active, .vt-pt-menu-item:active { background: var(--color-state-press); }
+  .vt-menu-item:focus-visible, .vt-mb-item:focus-visible, .vt-ft-mi:focus-visible { background: var(--color-state-hover); }
   .vt-menu-item:disabled { opacity: .45; cursor: not-allowed; background: transparent; }
   /* "지금 이것" — 설정의 현재 섹션처럼 목록에서 선택된 항목. 액센트 글자가
    * 아니라 배경 한 단계로 말한다(액센트는 화면당 하나라는 규칙). */
-  .vt-menu-item.active { background: var(--color-surface-active); color: var(--color-txt); }
+  .vt-menu-item.active { background: var(--color-state-selected); color: var(--color-txt); }
   /* 값이 켜져 있는 토글형 항목(마이크·미디어키 등)은 그것만 액센트를 쓴다 —
    * 선택(어디 있나)과 켜짐(무엇이 동작하나)은 다른 뜻이다. */
   .vt-menu-item.on,
@@ -715,7 +768,7 @@
   .vt-menu-item.new { color: var(--ok); }
   /* 2026-09-23 — `.vt-btn.danger`와 같은 값의 목록-행 버전. 되돌릴 수 없는
    * 항목(세션 완전 종료 등) 하나만 위험색으로 눈에 띄게 한다. */
-  .vt-menu-item.danger { color: var(--color-st-error); }
+  .vt-menu-item.danger, .vt-menu-item.danger > svg, .vt-menu-item.danger .vt-menu-item-ico svg { color: var(--color-st-error); }
   .vt-menu-item.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--color-st-error) 14%, transparent); }
 
   /* ── 칩(필터) ──────────────────────────────────────────────────────────
@@ -740,12 +793,12 @@
                 color var(--dur-fast) var(--ease-out-quint);
   }
   .vt-chip:hover { color: var(--color-txt); border-color: var(--color-line-strong); }
-  .vt-chip:active { background: var(--color-surface-active); }
+  .vt-chip:active { background: var(--color-state-press); }
   .vt-chip[aria-pressed="true"],
   .vt-chip.active {
     border-color: var(--color-acc-dim);
     color: var(--color-acc);
-    background: color-mix(in srgb, var(--color-acc) 10%, transparent);
+    background: var(--color-state-selected);
   }
   .vt-chip:disabled { opacity: .45; cursor: not-allowed; }
   /* 작은 칩 — 한 행 안에 여러 개가 붙는 자리(MCP 서버 행의 태그·켬/끔). 24px
@@ -908,7 +961,6 @@
     -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round'%3E%3Cpath d='M5 12h14'/%3E%3C/svg%3E");
     mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round'%3E%3Cpath d='M5 12h14'/%3E%3C/svg%3E");
   }
-  input[type="checkbox"]:not([data-native]):focus-visible { outline: 2px solid var(--color-acc); outline-offset: 2px; }
   input[type="checkbox"]:not([data-native]):disabled { opacity: .45; cursor: not-allowed; }
   @media (prefers-reduced-motion: reduce) { input[type="checkbox"]:not([data-native])::after { transition: none; } }
 
@@ -1202,7 +1254,7 @@
   .vt-qo-backdrop {
     /* 뒤 화면을 한 단계 더 눌러 팔레트가 확실히 위에 있게 한다. 라이트
      * 스킨(notepad)에서는 기존 62% 합성이 거의 안 보였다. */
-    background: color-mix(in srgb, var(--crust) 78%, transparent);
+    background: var(--color-scrim);
     align-items: flex-start;
     padding-top: 12vh;
   }
@@ -1412,17 +1464,23 @@
     left: 0;
     top: 0;
     z-index: 1000;   /* 모달(600)·오버레이(700)·풀스크린(900) 위. 오프라인 배너(9999)만 위에 둔다. */
+    /* 제목과 부제는 위아래로 쌓고 같은 x에서 시작한다. 이전에는 한 줄(flex row, baseline)이라 부제가
+       제목 오른쪽에 붙고, 두 줄로 접히면 부제가 제목 아래 들여쓴 자리에 떨어졌다(2026-11 점검). */
     display: flex;
-    align-items: baseline;
-    gap: calc(var(--spacing) * 1.5);
-    max-width: 280px;
-    padding: calc(var(--spacing) * 1) calc(var(--spacing) * 2);
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    box-sizing: border-box;
+    max-width: min(280px, calc(100vw - 16px));
+    padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2);
+    /* 면 규격은 메뉴와 같다: bg-raised · 1px line-strong · 그림자 e2. 툴팁은 옆 패널 위에 뜨는 일이 있어
+       테두리가 안 보이면 반투명하게 겹쳐 읽혔다. 반경은 컨트롤과 같은 sm. */
     border: 1px solid var(--color-line-strong);
     border-radius: var(--radius-sm);
-    background: var(--menu);
-    box-shadow: var(--shadow-e1);
+    background: var(--color-bg-raised);
+    box-shadow: var(--shadow-e2);
     color: var(--color-txt);
-    font: var(--weight-medium) var(--fs-2xs) / 1.45 var(--font-ui);
+    font: var(--weight-medium) var(--fs-xs) / 1.45 var(--font-ui);
     /* nowrap이 아닌 이유: 경로처럼 긴 값을 그대로 싣는 자리가 있다(저장소
        표시 설정의 경로 줄). 280px에서 접히게 두고, 호출부가 명시한 \n만
        줄바꿈으로 존중한다. */
@@ -1435,8 +1493,8 @@
     opacity: 0;
     transform: scale(0.96);
     transition:
-      opacity var(--dur-fast) var(--ease-out-quint),
-      transform var(--dur-fast) var(--ease-out-quint),
+      opacity var(--dur-fast) var(--ease-fast),
+      transform var(--dur-fast) var(--ease-fast),
       visibility 0s linear var(--dur-fast);
   }
   .vt-tip.open {
@@ -1447,7 +1505,7 @@
   }
   .vt-tip-sub {
     color: var(--color-sub);
-    font-family: var(--font-mono);
+    font: var(--weight-normal) var(--fs-2xs) / 1.4 var(--font-mono);
     font-variant-numeric: tabular-nums;
   }
   /* 움직임만 걷어낸다(색·불투명도는 남긴다 — 그게 상태 전달이다). */
@@ -1590,7 +1648,6 @@
   .vt-authz-builtin li:first-child { border-top: 0; }
   .vt-authz-filters { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--spacing) * 2); margin: 0 0 calc(var(--spacing) * 3); }
   .vt-authz-in { flex: 1 1 140px; min-width: 0; box-sizing: border-box; min-height: 28px; padding: 0 calc(var(--spacing) * 2); color: var(--color-txt); background: var(--color-bg-2); border: 1px solid var(--color-line-strong); border-radius: var(--radius-sm); font: var(--weight-normal) var(--fs-sm) / var(--leading-row) var(--font-ui); }
-  .vt-authz-in:focus-visible { outline: 2px solid var(--color-acc); outline-offset: 1px; }
   .vt-authz-check { display: inline-flex; align-items: center; gap: calc(var(--spacing) * 1.5); color: var(--color-sub); font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui); }
   .vt-authz-check input { accent-color: var(--color-acc); }
   .vt-authz-chain { margin: 0 0 calc(var(--spacing) * 3); color: var(--color-sub); font: var(--weight-medium) var(--fs-xs) / var(--leading-row) var(--font-ui); }
@@ -1627,7 +1684,6 @@
   .vt-authz-toolbar { display: flex; justify-content: flex-end; margin: 0; }
   .vt-authz-tag { padding: 0 calc(var(--spacing) * 1.5); color: var(--color-sub); background: none; border: 1px solid var(--color-line-strong); border-radius: var(--radius-sm); font: var(--weight-medium) var(--fs-xs) / var(--leading-row) var(--font-ui); cursor: pointer; }
   .vt-authz-tag:hover { color: var(--color-txt); }
-  .vt-authz-tag:focus-visible, .vt-pair-row:focus-visible { outline: 2px solid var(--color-acc); outline-offset: 1px; }
   .vt-pair-row[data-ended="1"] .vt-authz-row-ask, .vt-pair-row[data-ended="1"] .vt-authz-row-detail { color: var(--color-sub); }
   .vt-pair-bundle-line { margin-top: 2px; color: var(--color-sub); font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui); overflow-wrap: anywhere; }
   .vt-pair-row .vt-authz-row-ask .vt-authz-sub { display: inline; margin-left: calc(var(--spacing) * 1.5); font-size: var(--fs-xs); }
@@ -1678,9 +1734,8 @@
 /* 가지: 위에서 내려와 아이콘 쪽으로 꺾이는 짧은 갈래, 다음 형제가 있으면 세로선이 이어진다. */
 .vt-native-row::before { content: ""; position: absolute; left: 19px; top: 0; width: 10px; height: 16px; border-left: 1px solid var(--color-line-strong); border-bottom: 1px solid var(--color-line-strong); border-bottom-left-radius: 5px; pointer-events: none; }
 .vt-native-row:not(:last-child)::after { content: ""; position: absolute; left: 19px; top: 16px; bottom: 0; border-left: 1px solid var(--color-line-strong); pointer-events: none; }
-.vt-native-row:hover, .vt-native-row:focus-within { background: var(--color-bg-3); }
+.vt-native-row:hover, .vt-native-row:focus-within { background: var(--color-state-hover); }
 .vt-native-open { flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 8px; padding: 6px 0 6px 36px; color: var(--color-txt); background: transparent; border: 0; text-align: start; cursor: pointer; }
-.vt-native-open:focus-visible { outline: 2px solid var(--color-acc); outline-offset: -2px; }
 .vt-native-state { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 20px; }
 /* 상태를 다시 확인해야 하는 하위(오래 소식 없음)는 아이콘만 한 단 흐리게 — 글자는 그대로 읽힌다. */
 .vt-native-state[data-stale] { opacity: .5; }
@@ -1697,7 +1752,8 @@
 .vt-native-menu-btn { flex: none; margin-top: 4px; opacity: 0; transition: opacity var(--dur-fast) var(--ease-out-quint); }
 .vt-native-row:hover .vt-native-menu-btn, .vt-native-row:focus-within .vt-native-menu-btn { opacity: 1; }
 .vt-native-fold { display: block; width: 100%; height: 28px; background: transparent; border: 0; color: var(--color-sub); padding: 0 6px 0 36px; text-align: start; cursor: pointer; font: var(--weight-normal) var(--fs-xs) / 28px var(--font-ui); }
-.vt-native-fold:hover { background: var(--color-bg-3); color: var(--color-txt); }
+.vt-native-fold:hover { background: var(--color-state-hover); color: var(--color-txt); }
+.vt-native-fold:active { background:var(--color-state-press); }
 /* 끝난 서브에이전트가 접혀 있어도 있다는 걸 알아보게: 완료 체크 아이콘 + 완료색 글자. */
 .vt-native-fold-ended { color: var(--color-st-done); font-weight: var(--weight-semibold); }
 .vt-native-fold-icon { display: inline-flex; vertical-align: middle; margin-inline-end: 4px; }
@@ -1709,7 +1765,8 @@
 
 /* 행 3줄의 칩(시안 `.chip`) — 높이 18 · 반경 4 · 11/500. 작업 중인 하위가 있으면 작업색 글자 + 같은 색 옅은 틴트. */
 .vt-native-chip { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 18px; border: 1px solid var(--color-line-strong); border-radius: var(--radius-xs); padding: 0 6px; background: transparent; color: var(--color-sub); font: var(--weight-medium) var(--fs-3xs) / 1 var(--font-ui); white-space: nowrap; cursor: pointer; text-align: start; transition: background var(--dur-fast) var(--ease-out-quint), color var(--dur-fast) var(--ease-out-quint); }
-.vt-native-chip:hover { color: var(--color-txt); background: var(--color-bg-3); }
+.vt-native-chip:hover { color: var(--color-txt); background: var(--color-state-hover); }
+.vt-native-chip:active { background:var(--color-state-press); }
 .vt-native-chip[data-working] { color: var(--color-st-working); border-color: color-mix(in srgb, var(--color-st-working) 30%, transparent); background: color-mix(in srgb, var(--color-st-working) 10%, transparent); }
 .vt-native-chip-icon { display: inline-flex; }
 
@@ -1725,7 +1782,8 @@
   border: 1px solid var(--color-line-strong); border-radius: var(--radius-sm); background: var(--color-bg-raised);
   color: var(--color-txt); font: var(--weight-medium) var(--fs-sm) / 1.2 var(--font-ui); white-space: nowrap;
 }
-.vt-agent-config .vt-chip:hover:not(:disabled) { background: var(--color-bg-3); }
+.vt-agent-config .vt-chip:hover:not(:disabled) { background: var(--color-state-hover); }
+.vt-agent-config .vt-chip:active:not(:disabled) { background:var(--color-state-press); }
 .vt-agent-config .vt-chip:disabled { opacity: .45; }
 .vt-agent-config .vt-chip.sm { min-height: 24px; padding: 0 8px; border-radius: var(--radius-xs); font-size: var(--fs-xs); }
 .vt-ac-top, .vt-ac-mode, .vt-ac-controls, .vt-ac-actions, .vt-ac-preset, .vt-ac-envrow, .vt-ac-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
@@ -1744,7 +1802,6 @@
   border: 1px solid var(--color-line-strong); border-radius: var(--radius-sm); background: var(--color-bg-2);
   color: var(--color-txt); font: var(--weight-normal) var(--fs-sm) / 1 var(--font-ui);
 }
-.vt-ac-field select:focus-visible, .vt-agent-config .vt-ac-search:focus-visible { outline: none; border-color: var(--color-acc); box-shadow: 0 0 0 3px var(--color-acc-soft); }
 .vt-agent-config .vt-ac-search { flex: 1 1 200px; min-width: 160px; max-width: 320px; }
 .vt-ac-context, .vt-ac-notice, .vt-ac-path, .vt-ac-review { white-space: pre-wrap; overflow-wrap: anywhere; }
 .vt-ac-context { margin: 0; font: var(--weight-normal) var(--fs-xs) / 1.5 var(--font-mono); color: var(--color-sub); }
@@ -1757,9 +1814,9 @@
   border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-sub);
   font: var(--weight-normal) var(--fs-sm) / 1 var(--font-ui); text-align: left; white-space: nowrap; cursor: pointer;
 }
-.vt-ac-navitem:hover { background: var(--menu-hover); color: var(--color-txt); }
-.vt-ac-navitem[aria-current="page"] { background: var(--color-bg-3); color: var(--color-txt); font-weight: var(--weight-semibold); }
-.vt-ac-navitem:focus-visible { outline: 2px solid var(--color-acc); outline-offset: -2px; }
+.vt-ac-navitem:hover { background: var(--color-state-hover); color: var(--color-txt); }
+.vt-ac-navitem:active { background:var(--color-state-press); }
+.vt-ac-navitem[aria-current="page"] { background: var(--color-state-selected); color: var(--color-txt); font-weight: var(--weight-semibold); }
 .vt-ac-navico { display: inline-flex; flex: none; color: var(--color-muted); }
 .vt-ac-navitem[aria-current="page"] .vt-ac-navico { color: var(--color-sub); }
 .vt-ac-navcount { margin-inline-start: auto; color: var(--color-muted); font: var(--weight-normal) var(--fs-3xs) / 1 var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -1774,13 +1831,13 @@
 /* 행 — 머리 56: 고르기 · (캐럿 · 이름 줄 / 원본 줄) · 상태 · 켜기/끄기. 펼치면 아래로 자세히. */
 .vt-ac-item { border-bottom: 0; }
 .vt-ac-entry { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; column-gap: 12px; align-items: start; padding: 0 8px; border-bottom: 1px solid var(--color-line); border-radius: var(--radius-sm); }
-.vt-ac-entry:hover { background: var(--menu-hover); }
+.vt-ac-entry:hover { background: var(--color-state-hover); }
+.vt-ac-entry:active { background:var(--color-state-press); }
 .vt-ac-entry > .vt-ac-item { grid-column: 2; grid-row: 1; min-width: 0; }
 .vt-ac-entry > .vt-ac-pick { grid-column: 1; grid-row: 1; min-height: 56px; font-size: 0; justify-content: center; }
 .vt-ac-entry > .vt-ac-quick { grid-column: 3; grid-row: 1; margin-top: 16px; }
 .vt-ac-itemhead { display: flex; align-items: center; gap: 8px 12px; min-height: 56px; padding: 0; cursor: pointer; list-style: none; }
 .vt-ac-itemhead::-webkit-details-marker { display: none; }
-.vt-ac-itemhead:focus-visible { outline: 2px solid var(--color-acc); outline-offset: -2px; border-radius: var(--radius-sm); }
 .vt-ac-chev { display: inline-flex; flex: none; color: var(--color-muted); transition: transform var(--dur-fast) var(--ease-out-quint); }
 .vt-ac-item[open] > .vt-ac-itemhead .vt-ac-chev { transform: rotate(90deg); }
 .vt-ac-headmain { display: flex; flex-direction: column; gap: 2px; flex: 1 1 0; min-width: 0; }
@@ -1856,7 +1913,6 @@
 
 /* Shared settings number input: native semantics, FarShell step buttons. */
 .vt-number-spinner { display:inline-flex; flex:none; align-items:stretch; border:1px solid var(--color-line); border-radius:var(--radius-sm); background:var(--color-term-bg); }
-.vt-number-spinner:focus-within { outline:2px solid var(--color-acc); outline-offset:2px; }
 .vt-number-spinner .vt-range-number { box-sizing:border-box; width:62px; min-width:0; height:28px; padding:0 6px; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--color-txt); font:500 var(--fs-xs) var(--font-mono); text-align:right; appearance:textfield; -moz-appearance:textfield; }
 .vt-number-spinner .vt-range-number:focus { outline:none; box-shadow:none; }
 .vt-number-spinner .vt-range-number::-webkit-inner-spin-button,
@@ -1864,9 +1920,9 @@
 .vt-number-steps { display:flex; flex-direction:column; }
 .vt-number-step { display:flex; align-items:center; justify-content:center; width:24px; height:14px; padding:0; border:0; border-radius:0; background:transparent; color:var(--color-sub); cursor:pointer; }
 .vt-number-step.up svg { transform:rotate(180deg); }
-.vt-number-step:hover:not(:disabled) { background:var(--color-bg-3); color:var(--color-txt); }
+.vt-number-step:hover:not(:disabled) { background:var(--color-state-hover); color:var(--color-txt); }
+.vt-number-step:active:not(:disabled) { background:var(--color-state-press); }
 .vt-number-step:disabled { opacity:.35; cursor:default; }
-.vt-number-step:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
 @media (pointer:coarse), (max-width:719px) {
   .vt-number-spinner .vt-range-number { height:44px; }
   .vt-number-steps { flex-direction:row; }
@@ -1960,7 +2016,7 @@
     padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2) calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5);
     border-radius: var(--radius-sm);
   }
-  .vt-sn-row:hover, .vt-sn-row:focus-within { background: var(--color-bg-3); }
+  .vt-sn-row:hover, .vt-sn-row:focus-within { background: var(--color-state-hover); }
   .vt-sn-head { display: flex; align-items: center; gap: calc(var(--spacing) * 1.5); min-width: 0; height: 24px; }
   .vt-sn-name {
     flex: 0 1 auto; min-width: 0;
@@ -2028,7 +2084,8 @@
     padding: calc(var(--spacing) * 2.5) calc(var(--spacing) * 3.5);
     border-bottom: 1px solid var(--color-line);
   }
-  .vt-q-row:hover { background: var(--color-bg-3); }
+  .vt-q-row:hover { background: var(--color-state-hover); }
+  .vt-q-row:active { background:var(--color-state-press); }
   .vt-q-head { display: flex; align-items: center; gap: calc(var(--spacing) * 1.5); min-width: 0; }
   .vt-q-idx { flex: none; color: var(--color-muted); font: var(--weight-normal) var(--fs-3xs) / 1 var(--font-mono); font-variant-numeric: tabular-nums; }
   .vt-q-tgt { display: inline-flex; align-items: center; gap: calc(var(--spacing) * 1); min-width: 0; color: var(--color-muted); }
@@ -2105,7 +2162,8 @@
   .vt-hudcfg-item.pinned { padding-left: calc(var(--spacing) * 3 + 14px + var(--spacing) * 2.5); }
   .vt-hudcfg-item.pinned:hover { background: transparent; }
   .vt-hudcfg-pin { flex: none; }
-  .vt-hudcfg-item:hover { background: var(--menu-hover); }
+  .vt-hudcfg-item:hover { background: var(--color-state-hover); }
+  .vt-hudcfg-item:active { background:var(--color-state-press); }
   .vt-hudcfg-item.dragging { opacity: .4; }
   .vt-hudcfg-grip { display: inline-flex; flex: none; color: var(--color-faint); cursor: grab; }
   .vt-hudcfg-item:active .vt-hudcfg-grip { cursor: grabbing; }

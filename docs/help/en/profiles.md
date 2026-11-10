@@ -1,6 +1,6 @@
 # FarShell launch profiles
 
-The Launch profiles tab in MCP, Skills and Plugins creates dedicated Claude and
+The Launch profiles tab in MCP · Skills · Plugins creates dedicated Claude and
 Codex settings roots. Several profiles can belong to one logical account; a
 shared label is not proof of provider identity.
 

@@ -53,8 +53,8 @@ export function NativeChildren(props: { row: SessionRow }) {
     setMenu({ x: r.left, y: r.bottom + 2, child });
   };
   const menuItems = (child: any) => [
-    { label: t('기록 보기'), run: () => void open(child) },
-    { label: t('부모 세션으로 이동'), run: () => (window as any).vtOpenSessionFromRail?.({ sessionId: props.row.sessionId, tmuxName: props.row.tmuxName }) },
+    { icon: 'history', label: t('기록 보기'), run: () => void open(child) },
+    { icon: 'corner-down-left', label: t('부모 세션으로 이동'), run: () => (window as any).vtOpenSessionFromRail?.({ sessionId: props.row.sessionId, tmuxName: props.row.tmuxName }) },
   ];
   // 하위 행(시안 D02 「내부 서브에이전트 하위 행」): 들여쓰기 24 + 가지선, 1줄 상태 아이콘 · 이름 · 경과,
   // 2줄 「내부 · 작업 중」. 도구 이름은 그리지 않는다 — 호출마다 생겼다 사라져 깜빡인다.

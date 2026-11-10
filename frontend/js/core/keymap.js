@@ -66,7 +66,7 @@ const ACTIONS = [
   // 뒀던 `Mod+Shift+W`도 **창** 닫기라 일반 탭에서는 똑같이 우리에게 오지 않았다
   // (2026-09-18 점검). mac은 브라우저가 안 쓰는 `Ctrl+Shift+…`로, 비-mac은 그
   // 자리(Ctrl=Mod)가 바로 그 창 닫기라 `Alt+Shift+…`로 간다.
-  { id: 'paneClose',  def: 'Ctrl+Shift+W', defNonMac: 'Alt+Shift+W',  label: t('pane 닫기') },
+  { id: 'paneClose',  def: 'Ctrl+Shift+W', defNonMac: 'Alt+Shift+W',  label: t('페인 닫기') },
   // 2026-09-18 — 분할 비율은 드래그로만 바뀌고 되돌릴 방법이 없었다.
   // 분할선 더블클릭은 그 분할 하나만, 이 키는 트리 전체를 반반으로 돌린다.
   { id: 'paneEven',   def: 'Mod+Alt+D',    defNonMac: 'Ctrl+Alt+D',   label: t('분할 균등 정렬') },

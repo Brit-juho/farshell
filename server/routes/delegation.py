@@ -20,6 +20,7 @@ from authz import principals as P
 import delegation
 import share_identity
 from delegation import DelegationError
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -191,14 +192,14 @@ async def close_by_cli(did: str, request: Request):
     sock = request.scope.get("fsh_sock") is True
     p = getattr(request.state, "fsh_principal", None) if sock else None
     if p is None:
-        return JSONResponse({"error": "socket_required", "reason": "이 경로는 unix socket 으로만 열려 있습니다"}, status_code=403)
+        return JSONResponse({"error": "socket_required", "reason": tr("이 경로는 unix socket 으로만 열려 있습니다")}, status_code=403)
     try:
         if P.is_cli(p):
             r = await asyncio.to_thread(delegation.close, did, reason="closed_by_user", actor=p)
         elif p.kind == "agent" and p.attrs.get("key") and not P.is_hook(p):
             r = await asyncio.to_thread(delegation.close, did, caller_key=p.attrs["key"])
         else:
-            return JSONResponse({"error": "forbidden", "reason": "이 주체는 위임을 닫을 수 없습니다"}, status_code=403)
+            return JSONResponse({"error": "forbidden", "reason": tr("이 주체는 위임을 닫을 수 없습니다")}, status_code=403)
     except DelegationError as e:
         return _err(e)
     import routes.system as _system_routes

@@ -33,7 +33,7 @@ export function showOnboarding() {
 <button class="vt-btn solid lg" data-action="onboarding.tmux">${t('tmux 세션 시작')}</button>
 <button class="vt-btn lg" data-action="onboarding.plain">${t('일반 터미널')}</button>
 </div>
-<p class="vt-ob-hint">${t('맥북에서 {combo}로 음성 입력 (voice daemon 실행 시)', { combo: displayComboHtml('Ctrl+Shift+M') })}</p>
+<p class="vt-ob-hint">${t('맥북에서 {combo}로 음성 입력 (음성 데몬 실행 시)', { combo: displayComboHtml('Ctrl+Shift+M') })}</p>
   `;
   document.body.appendChild(el);
   renderOnboardingSessions();

@@ -331,7 +331,7 @@ export function openSessionRecord(id, changed = () => {}, opts = {}) {
         }, { solid: !active && !blocked && !status.recheck, disabled: !!blocked || !!active, title: active ? t('실행 중인 세션입니다') : blocked, iconName: 'play' }));
       }
       acts.append(button(t('실행 종료'), async () => {
-        if (!await confirmDialog(t('이 실행의 모든 터미널 창과 pane을 종료합니다. 별도 하위 세션은 유지합니다. 계속할까요?'), { danger: true })) return false;
+        if (!await confirmDialog(t('이 실행의 모든 터미널 창과 페인을 종료합니다. 별도 하위 세션은 유지합니다. 계속할까요?'), { title: t('실행 종료'), okLabel: t('종료'), danger: true })) return false;
         await api('/api/session-catalog/sessions/' + sessionId + '/stop', { body: { operation_id: operationId(), force: true } });
       }, { danger: true, disabled: !active, iconName: 'square' }));
       acts.append(button(t('이름 변경'), () => renameSession(session, { signal: controller.signal })));

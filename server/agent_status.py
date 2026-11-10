@@ -580,7 +580,7 @@ def _ends_with_question(text) -> bool:
 _CLAUDE_WAIT_TOOLS = {"AskUserQuestion": KIND_CHOICE, "ExitPlanMode": KIND_PLAN}
 
 _HOOK_EVENTS = ("prompt", "user_prompt_submit", "permission", "permission_request",
-                "notification", "pre", "post", "session_start", "stop", "session_end",
+                "notification", "pre", "post", "post_failure", "session_start", "stop", "session_end",
                 "subagent_start", "subagent_stop", "stop_failure", "teammate_idle")
 
 
@@ -666,7 +666,7 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
     """훅 이벤트 처리.
 
     Args:
-        event: "pre" | "post" | "stop" | "permission" | "prompt" | "session_start" |
+        event: "pre" | "post" | "post_failure" | "stop" | "permission" | "prompt" | "session_start" |
                "session_end" | "notification" (그 외는 무시)
         payload: Claude Code / Codex hook stdin JSON
         host: 이 이벤트를 낸 호스트. 로컬 훅은 항상 "local"이고, 원격 호스트가
@@ -698,7 +698,7 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
     sub = payload.get("agent_id")
     if sub is not None and not subagents.valid_id(sub):
         return None
-    if sub and event not in {"pre", "post", "permission", "permission_request", "subagent_start", "subagent_stop", "stop_failure"}:
+    if sub and event not in {"pre", "post", "post_failure", "permission", "permission_request", "subagent_start", "subagent_stop", "stop_failure"}:
         return None
     if (sub or event in subagents.LIFECYCLE) and prev is None:
         return None  # A child cannot claim a missing/released parent's pane.
@@ -842,7 +842,9 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
         _clear_prompt(ent)
         return ent
 
-    if event == "post":
+    if event in ("post", "post_failure"):
+        # `post_failure`(PostToolUseFailure)는 도구가 실패·거절·오류로 끝났다는 뜻이다. 성공 post와
+        # 같게 다룬다 — 같은 tool_use_id의 대기를 풀고, 다른 도구의 실패는 풀지 않는다.
         # 상태는 그대로 둔다(파일 상단 규칙). 도구가 끝났을 뿐 다음 도구가
         # 곧바로 이어질 수 있어서다. 대기는 그 대기를 만든 도구의 post만 푼다.
         if ent.get("status") == WAITING:
@@ -855,6 +857,7 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
         ent["last_tool"] = ent.get("tool")
         ent["tool"] = None
         ent["last_done"] = time.time()
+        ent["_last_tool_failed"] = event == "post_failure"
         return ent
 
     if event == "session_start":

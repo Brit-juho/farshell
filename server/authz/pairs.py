@@ -581,9 +581,9 @@ def approval_item(pair: dict, now_: Optional[float] = None) -> dict:
     phrase = (pair.get("code") or {}).get("phrase") or ap.get("phrase") or ""
     el = [{"id": it, "label": elevated_label(it), "reasons": elevated_reasons(it)} for it in pair["bundle"]["elevated"]]
     sessions = [s.get("name") or "" for s in pair["bundle"]["sessions"]]
-    words = tr("세션 {sessions} · 폴더 {dirs} · lease {leases}",
+    words = tr("세션 {sessions} · 폴더 {dirs} · 폴더 점유 {leases}",
                sessions=", ".join(sessions) or tr("없음"), dirs=", ".join(pair["bundle"]["dirs"]) or tr("없음"),
-               leases=tr("잡음") if pair["bundle"]["leases"] else tr("잡지 않음"))
+               leases=tr("점유함") if pair["bundle"]["leases"] else tr("점유 안 함"))
     all_scopes = sorted({s for r in ROLES for s in role_caps(r)[0]} | {x for it in pair["bundle"]["elevated"] for x in elevated_caps(it)[2]})
     return {"id": _raw_req(pair), "kind": "pair", "state": ap.get("state") or "pending",
             "subject": {"kind": "agent", "id": None, "name": j.get("name") or ""},

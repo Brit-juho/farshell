@@ -123,6 +123,11 @@
   --ease-out-quint: cubic-bezier(0.16, 1, 0.3, 1);
   --dur-fast: 120ms;
   --dur-base: 200ms;
+  /* 상호작용 상태 전환(2026-11) — 호버·눌림·선택은 이 한 쌍으로만 전환한다.
+   * 바뀌는 속성은 background-color·color·opacity·border-color 뿐이고 폭·padding·
+   * 위치는 전환하지 않는다(레이아웃이 흔들린다). prefers-reduced-motion에서는
+   * styles/layers/states.css가 --dur-fast를 0으로 만든다. */
+  --ease-fast: ease-out;
 
   --breakpoint-regular: 720px;
   --breakpoint-wide:   1280px;
@@ -229,6 +234,49 @@
    * 전부에서 올라간 글자가 그 자리의 기준을 넘는지 계산한다. */
   --acc-soft-pct: 13%;
   --color-acc-soft: color-mix(in srgb, var(--color-acc) var(--acc-soft-pct), transparent);
+
+  /* ── 상호작용 상태 토큰 한 세트 (2026-11, 화면 점검 6절) ───────────────────
+   * 이전: 호버 바탕이 --menu-hover(스킨마다 알파 .04~.10)와 --color-bg-3 두 체계였고,
+   * 눌림(:active)은 호버의 1/8뿐이었으며, 포커스 링 오프셋이 −2/+1/+2/0 네 가지였다.
+   * 이제 상태는 이 토큰 하나씩이고 소비처는 이름만 쓴다(옛 --menu-hover·--crust·--wrad·--trad 별칭은 지웠다 — 사용자 CSS가 읽는 외부 변수가 아니다).
+   *
+   *   hover      rest 위에 ink를 6% 얹는다            (txt 6.0 · sub 4.0 · muted 2.9 이상)
+   *   press      ink 11% — hover보다 한 단계 진하다   (5.0 · 3.5 · 2.5)
+   *   selected   액센트 13% (= --color-acc-soft)
+   *   selected-hover/press   액센트 18% / 23% — 선택 위에서도 hover가 사라지지 않는다
+   *   waiting-hover/press    waiting 14% / 18% — 개입 필요 행(waiting 틴트 10%) 위의 hover·눌림
+   *
+   * ink는 어두운 스킨에서 흰색, 라이트 스킨(notepad)에서 검정, warp는 자기 보라
+   * 계열이다(skins.css). 퍼센트를 따로 빼 둔 이유는 --waiting-tint-pct와 같다:
+   * scripts/check_contrast.py·tokens-contrast.test.js가 이 값을 읽어 9스킨 전부에서
+   * 글자 대비와 단계 간 구분(hover<press, hover≠selected)을 계산한다.
+   * 선택·waiting 틴트 행은 hover 오버레이를 얹어도 틴트와 구분이 안 되므로(틴트
+   * 위 6% 흰색은 눈에 안 띈다) 그 행 전용 토큰(-selected-*, -waiting-*)으로 한 단계씩
+   * 더 진해진다. 이 매핑은 styles/screens/99-states.css 한 곳에 모여 있다. */
+  --state-ink: #ffffff;
+  --state-hover-pct: 6%;
+  --state-press-pct: 11%;
+  --state-selected-hover-pct: 18%;
+  --state-selected-press-pct: 23%;
+  --waiting-hover-pct: 14%;
+  --waiting-press-pct: 18%;
+  --color-state-hover: color-mix(in srgb, var(--state-ink) var(--state-hover-pct), transparent);
+  --color-state-press: color-mix(in srgb, var(--state-ink) var(--state-press-pct), transparent);
+  --color-state-selected: var(--color-acc-soft);
+  --color-state-selected-hover: color-mix(in srgb, var(--color-acc) var(--state-selected-hover-pct), transparent);
+  --color-state-selected-press: color-mix(in srgb, var(--color-acc) var(--state-selected-press-pct), transparent);
+  --color-state-waiting-hover: color-mix(in srgb, var(--color-st-waiting) var(--waiting-hover-pct), transparent);
+  --color-state-waiting-press: color-mix(in srgb, var(--color-st-waiting) var(--waiting-press-pct), transparent);
+
+  /* 포커스 링 — 두께·색·오프셋 하나씩. 규칙은 styles/screens/00-tokens-reset.css의
+   * :focus-visible 한 곳이다. 오프셋은 바깥 +2가 기본이고, 컨테이너 overflow에
+   * 잘리는 자리(막대·목록 행·입력)는 요소가 --focus-ring-offset을 inset으로
+   * 덮어쓴다(소비처가 outline을 따로 쓰지 않는다). 색은 액센트라 bg-0/1/2·raised
+   * 위에서 3:1 이상이다(check_contrast.py). */
+  --focus-ring-w: 2px;
+  --focus-ring-offset: 2px;
+  --focus-ring-inset: -2px;
+  --color-focus-ring: var(--color-acc);
 
   /* done은 액센트와 다른 색이어야 한다 — 시안 #8b9dff는 액센트 #7aa2ff와
    * ΔE 6.7로 「끝난 세션」 점이 선택 표시·주 버튼과 헷갈렸다. 하늘색 #5fb8f0

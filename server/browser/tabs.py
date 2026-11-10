@@ -28,6 +28,7 @@ from typing import Callable, Optional
 
 import store_lock
 import vt_paths
+from i18n import tr
 from authz import store as authz_store
 
 logger = logging.getLogger(__name__)
@@ -84,7 +85,7 @@ def txn():
     with store_lock.exclusive(root() / "tabs.lock"):
         d, bad = _read()
         if bad:
-            raise TabsError("tabs_unreadable", "탭 장부를 읽을 수 없어 조작을 거부했습니다 — 파일은 그대로 두었습니다", 503)
+            raise TabsError("tabs_unreadable", tr("탭 장부를 읽을 수 없어 조작을 거부했습니다 — 파일은 그대로 두었습니다"), 503)
         before = json.dumps(d, sort_keys=True)
         yield d
         if json.dumps(d, sort_keys=True) != before:
@@ -150,7 +151,7 @@ def new_id() -> str:
 def _read_strict() -> dict:
     d, bad = _read()
     if bad:
-        raise TabsError("tabs_unreadable", "탭 장부를 읽을 수 없어 조작을 거부했습니다 — 파일은 그대로 두었습니다", 503)
+        raise TabsError("tabs_unreadable", tr("탭 장부를 읽을 수 없어 조작을 거부했습니다 — 파일은 그대로 두었습니다"), 503)
     return d
 
 
@@ -167,7 +168,7 @@ def list_all() -> list:
 def create(*, adapter: str, ref: str, owner: Optional[str], owner_name: str = "", pair: Optional[str] = None,
            tab_id: Optional[str] = None, now: Optional[float] = None, **extra) -> dict:
     if _lease is None:
-        raise TabsError("no_lease", "브라우저 호스트 임대가 없습니다", 503)
+        raise TabsError("no_lease", tr("브라우저 호스트 임대가 없습니다"), 503)
     t = time.time() if now is None else now
     rec = {"id": tab_id or new_id(), "adapter": adapter, "ref": ref, "owner": owner, "ownerName": owner_name, "pair": pair,
            "state": OPEN, "hostGen": _lease["gen"], "created": round(t, 3), "lastUsed": round(t, 3), "humanTaken": False, **extra}

@@ -102,7 +102,7 @@ export function writeErrorShort(e) {
     case 'rate_limited': return t('요청이 너무 많습니다');
     case 'audit_unavailable': return t('감사 기록을 쓸 수 없습니다');
     case 'lease_conflict': return t('다른 세션이 쓰는 경로입니다');
-    case 'lease_unavailable': return t('lease 저장소를 읽을 수 없습니다');
+    case 'lease_unavailable': return t('폴더 점유 저장소를 읽을 수 없습니다');
     case 'changed': return t('경로가 바뀌었습니다');
     case 'conflict': return t('저장 전에 파일이 바뀌었습니다');
     case 'save_id_reused': return t('저장 번호가 겹쳤습니다 — 다시 저장하세요');
@@ -208,7 +208,7 @@ export async function renameDialog(path, host, opts = {}) {
   const dirKind = opts.kind === 'dir';
   const old = _base(path);
   const name = await promptDialog(t('새 이름. 같은 이름이 있으면 바꾸지 않습니다(덮어쓰지 않음).'),
-    { title: dirKind ? t('폴더 이름 바꾸기') : t('이름 바꾸기'), okLabel: t('바꾸기'), defaultValue: old });
+    { title: dirKind ? t('폴더 이름 바꾸기') : t('이름 바꾸기'), okLabel: t('이름 바꾸기'), defaultValue: old });
   if (name == null || name === old) return null;
   const bad = nameProblem(name);
   if (bad) { _toast(bad, 'warn'); return null; }

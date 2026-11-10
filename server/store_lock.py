@@ -33,6 +33,8 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
+from i18n import tr
+
 # 정직한 경쟁에 몇 초면 충분하다. 그보다 길다면 상대가 멈춘 것이지 붐비는 게 아니다.
 DEFAULT_DEADLINE = 5.0
 
@@ -62,7 +64,7 @@ def _acquire(lock_path: Path, deadline: float) -> int:
             if time.monotonic() >= end:
                 os.close(fd)
                 exc = LockContended if deadline <= 0 else LockTimeout
-                raise exc(f"{lock_path} 락을 {deadline}초 안에 얻지 못했다")
+                raise exc(tr("{path} 락을 {sec}초 안에 얻지 못했다", path=lock_path, sec=deadline))
             time.sleep(RETRY_SLEEP)
         except BaseException:
             os.close(fd)

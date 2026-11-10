@@ -219,7 +219,7 @@ def decide_request(request_id: str, decision: str, level: Optional[str], actor: 
     """사람의 결정. allow 면 hosts.json 과 저장소 사본에 적용, deny 면 쿨다운 시작. pane 없는 cli·에이전트·peer·기계 토큰은 승인할 수 없다
     (`approvals.check_authority`)."""
     if decision not in ("allow", "deny"):
-        raise ShareError("bad_decision", "decision 은 allow 또는 deny 입니다", 400)
+        raise ShareError("bad_decision", tr("decision 은 allow 또는 deny 입니다"), 400)
     if level not in (None, "read", "peer"):
         raise ShareError("bad_level", tr("이 요청에는 level 이 필요 없습니다"), 400)
     now = time.time()
@@ -233,7 +233,7 @@ def decide_request(request_id: str, decision: str, level: Optional[str], actor: 
             again = approvals.replay(docs, SOURCE, rid, decision, None, actor, now)
             if again is not None:
                 return again
-            raise ShareError("not_found", "대기 중인 요청이 없습니다(이미 처리됐거나 만료됐거나 세션이 종료됨)", 404)
+            raise ShareError("not_found", tr("대기 중인 요청이 없습니다(이미 처리됐거나 만료됐거나 세션이 종료됨)"), 404)
         if actor is None:
             raise ShareError("human_session_required", tr("사람(브라우저 로그인 세션)만 승인할 수 있습니다"), 403)
         action, pid = req["change"], req["peer_id"]

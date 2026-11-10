@@ -137,7 +137,7 @@ export function mountClients(container, tmuxName, remote = null, sessionId = act
       // 눌러서 실패하게 두지 말고 미리 비활성화한다.
       solo.disabled = !data.me_tty || readOnly || clients.length < 2;
       solo.hidden = readOnly;
-      solo.title = !data.me_tty ? t('이 화면의 tty를 확인할 수 없어 사용할 수 없습니다')
+      solo.title = !data.me_tty ? t('이 화면의 터미널 장치(tty)를 확인할 수 없어 사용할 수 없습니다')
         : clients.length < 2 ? t('다른 화면이 없습니다') : '';
       note.hidden = !readOnly;
       for (const c of clients) list.appendChild(row(c, detach, readOnly));
@@ -170,7 +170,7 @@ export function mountClients(container, tmuxName, remote = null, sessionId = act
   function _handleDenied(e) {
     if (remote && e && e.status === 403) {
       readOnly = true;
-      note.textContent = t("읽기 전용(view)으로 연결돼 있어 화면을 끊을 수 없습니다 — 그 호스트에서 'fsh host allow-control'로 켜세요.");
+      note.textContent = t("읽기 전용으로 연결돼 있어 화면을 끊을 수 없습니다 — 그 호스트에서 'fsh host allow-control'로 켜세요.");
       return true;
     }
     return false;

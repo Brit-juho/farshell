@@ -2223,6 +2223,13 @@ cmd_update() {
   (cd "$VT_DIR/server" && VT_DIR="$VT_DIR" "$VT_PYTHON" -m updater "$@")
 }
 
+# 업데이트 확인 결과 한 줄("available 2.10.2" | "latest 2.10.1" | "off" | "unknown") — server/update_check.py 가 서버 안에서 쓴
+# update-status.json 을 읽기만 한다(여기서는 네트워크 요청을 하지 않는다).
+_update_summary() {
+  [ -n "${VT_PYTHON:-}" ] && [ -x "$VT_PYTHON" ] || return 1
+  (cd "$VT_DIR/server" && VT_DIR="$VT_DIR" "$VT_PYTHON" -m updater status --line 2>/dev/null)
+}
+
 # tmux 설정 — 레포 config/vt-tmux.conf 가 기준, 개인 설정은 ~/.config/vt/tmux.local.conf.
 # 옛 사본 정리·다시 읽기·판정은 전부 server/tmux_conf.py 에 있다(install.sh·fsh sync 와 한 곳).
 # reload 는 떠 있는 tmux 서버에만 source-file 한다 — 서버를 띄우거나 죽이지 않는다.
@@ -2284,9 +2291,9 @@ cmd_hooks() {
       while IFS=$'\t' read -r event state cur; do
         [ -z "$event" ] && continue
         case "$state" in
-          ok)     printf "  ✓ %-14s %s\n" "$event" "$cur" ;;
-          add)    printf "  ✗ %-14s %s\n" "$event" "$(_t '미등록')" ;;
-          update) printf "  ⚠ %-14s %s\n" "$event" "$(_t '다른 경로/스크립트: {cur}' cur="$cur")" ;;
+          ok)     printf "  ✓ %-19s %s\n" "$event" "$cur" ;;
+          add)    printf "  ✗ %-19s %s\n" "$event" "$(_t '미등록')" ;;
+          update) printf "  ⚠ %-19s %s\n" "$event" "$(_t '다른 경로/스크립트: {cur}' cur="$cur")" ;;
         esac
       done <<< "$out"
       local claude_rc="$rc" codex_out codex_rc
@@ -3692,6 +3699,14 @@ print(('ok|' if sel and sel['ready'] else 'warn|') + (sel['label'] + ('|ready' i
         esac ;;
     esac
   fi
+  local _up _upc _upv
+  _up="$(_update_summary || true)"; _upc="${_up%% *}"; _upv="${_up#* }"
+  case "$_upc" in
+    available) _check "$(_t '업데이트')" warn "$(_t '{ver} 사용 가능 → fsh update' ver="$_upv")" ;;
+    latest)    _check "$(_t '업데이트')" ok "$(_t '최신입니다') ($_upv)" ;;
+    off)       _check "$(_t '업데이트')" ok "$(_t '확인 끔')" ;;
+    unknown)   _check "$(_t '업데이트')" ok "$(_t '아직 확인 전 — 서버가 뜬 뒤 몇 분 안에 확인합니다')" ;;
+  esac
   local _dinc
   _dinc="$(_server_health_summary 1 | sed -n 's/^INCIDENTS //p' | head -1)"
   [ -n "$_dinc" ] && _check "$(_t '장애 기록')" warn "$(_t '워치독이 남긴 진단 {n}건 — 최근: {path}' n="${_dinc%% *}" path="${_dinc#* }")"
@@ -3894,7 +3909,7 @@ print(('ok|' if sel and sel['ready'] else 'warn|') + (sel['label'] + ('|ready' i
     _ls="$(cd "$VT_DIR/server" && "$VT_PYTHON" -m authz lease --cwd "$_ls_cwd" doctor 2>/dev/null)"
     if [ -n "$_ls" ]; then
       IFS='|' read -r _ls_n _ls_guard _ls_skip _ls_enf _ls_saga <<<"$_ls"
-      _check "$(_t '폴더 lease')" ok "$(_t '활성 {n}개 · 쓰기 차단 {enf} (권고 모드면 서버는 막지 않음)' n="$_ls_n" enf="$([ "$_ls_enf" = 1 ] && echo on || echo off)")"
+      _check "$(_t '폴더 점유(lease)')" ok "$(_t '활성 {n}개 · 쓰기 차단 {enf} (권고 모드면 서버는 막지 않음)' n="$_ls_n" enf="$([ "$_ls_enf" = 1 ] && echo on || echo off)")"
       case "$_ls_guard" in
         installed|chained) _check "$(_t 'lease guard')" ok "$(_t '이 저장소에 설치됨 (서버가 안 닿으면 경고만, 최근 24h 건너뜀 {n}회)' n="${_ls_skip:-0}")" ;;
         absent)  _check "$(_t 'lease guard')" ok "$(_t "이 저장소에는 설치 안 됨 (선택) — 'fsh lease guard install'")" ;;
@@ -4031,6 +4046,28 @@ print(('ok|' if sel and sel['ready'] else 'warn|') + (sel['label'] + ('|ready' i
     if [ -n "$_codex_dups" ]; then
       _codex_dup_n="$(printf '%s\n' "$_codex_dups" | grep -c .)"
       _check "Codex hooks.json" warn "$(_t "FarShell 훅 {n}개 중복(앱 가져오기) — 이벤트가 두 번 들어옴. 'fsh hooks dedupe'" n="$_codex_dup_n")"
+    fi
+  fi
+
+  # 11-c2. 서버의 훅 자동 점검(server/hook_health.py) — 마지막으로 언제 확인했나. 서버가 떠 있을 때만 묻는다.
+  # (위 두 줄은 이 터미널이 설정 파일을 직접 읽은 결과, 여기는 돌고 있는 서버가 자기 눈으로 본 결과다.)
+  if [ -f "$VT_DIR/server/hook_health.py" ] && _port_in_use "$VT_PORT"; then
+    local _hh _hh_state _hh_at _hh_mon _hh_age _hh_ago
+    _hh="$("${VT_PYTHON:-python3}" "$VT_DIR/server/hook_health.py" last-check 2>/dev/null)"
+    if [ -n "$_hh" ]; then
+      IFS=$'\t' read -r _hh_state _hh_at _hh_mon <<< "$_hh"
+      if [ "$_hh_mon" = "0" ]; then
+        _check "$(_t '훅 자동 점검')" ok "$(_t '꺼 둠 (VT_HOOK_HEALTH=0)')"
+      elif [ -n "$_hh_at" ]; then
+        _hh_age=$(( $(date +%s) - ${_hh_at%.*} ))
+        [ "$_hh_age" -lt 0 ] && _hh_age=0
+        if [ "$_hh_age" -lt 120 ]; then _hh_ago="$(_t '{n}초 전' n="$_hh_age")"; else _hh_ago="$(_t '{n}분 전' n="$((_hh_age / 60))")"; fi
+        if [ "$_hh_state" = "ok" ]; then
+          _check "$(_t '훅 자동 점검')" ok "$(_t '서버가 {ago} 확인함 — 이상 없음' ago="$_hh_ago")"
+        else
+          _check "$(_t '훅 자동 점검')" warn "$(_t "서버가 {ago} 확인함 — 이상 있음. 'fsh hooks status' 로 보고 'fsh hooks install' 로 고치세요" ago="$_hh_ago")"
+        fi
+      fi
     fi
   fi
 
@@ -5606,6 +5643,13 @@ cmd_status() {
   fi
   echo "  $(_t '터널 워치독: ')$watchdog_status"
   _status_security_block
+  local _up _upc _upv
+  _up="$(_update_summary || true)"; _upc="${_up%% *}"; _upv="${_up#* }"
+  case "$_upc" in
+    available) echo "  $(_t '업데이트:    ')⚠ $(_t '{ver} 사용 가능 → fsh update' ver="$_upv")" ;;
+    latest)    echo "  $(_t '업데이트:    ')✓ $(_t '최신입니다') ($_upv)" ;;
+    off)       echo "  $(_t '업데이트:    ')- $(_t '확인 끔')" ;;
+  esac
   echo "  Tailscale:   $ts_status  ($(_t '이 맥에 SSH로 붙는 명령 안내: fsh ssh'))"
   echo "  Voice Daemon: $voice_status"
   echo "  Clipboard:   $clip_status"

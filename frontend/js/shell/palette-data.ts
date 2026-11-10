@@ -107,6 +107,8 @@ export const DEFAULT_COMMANDS: CommandDescriptor[] = [
   // 보기가 아니라(설정은 창, 연결된 화면은 모달) isPanel을 안 붙여 활동-팔레트 패리티(ADR-8) 대상에서 뺀다.
   // 「변경」은 리디자인 9단계부터 활동 막대 첫 도구라 패리티 대상이다.
   { label: t('설정'), action: 'settings.show' },
+  // 설정 > 업데이트(새 버전 확인·자동 업데이트). FarShell 메뉴의 「업데이트 있음」 줄도 같은 액션이다.
+  { label: t('업데이트 설정'), action: 'update.open' },
   { label: t('변경'), action: 'scm.show', isPanel: true },
   { label: t('연결된 화면'), action: 'clients.show' },
   // FarShell 메뉴(제목 막대)와 같은 액션 — core/app-session-lazy.js가 등록한다.

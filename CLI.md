@@ -44,6 +44,8 @@ fsh git-account [list|add --provider github|gitlab [--host H] --token-stdin|rm <
 fsh hotkey [list|set|reset|disable]  # view/change hotkeys
 fsh hooks [status|install|uninstall|dedupe [--dry-run]]  # register Claude Code + Codex hooks (status badges/queue; Claude/Codex Stop drive session-specific TTS); dedupe removes FarShell hooks the Codex app copied into ~/.codex/hooks.json
 fsh update [--channel stable|dev|devmode] [--to vX.Y.Z] [--check] [--restart] [--rollback]  # update by channel (stable = signed release tag, dev = origin/dev, devmode = manual pull) then re-sync hooks + skill; `update trust [--key <pubkey file>]` pins the release-signing key; `--rollback` returns to the previous commit
+fsh update status                                                      # result of the last server-side update check (no network request)
+fsh update auto [on|off|status] [--hour 0-23] [--yes]                  # automatic updates (off by default): signed stable releases only, in a quiet hour; `on` explains the risk and asks (`--yes` when not interactive)
 fsh sync [--dry-run]  # re-sync Claude Code/Codex hooks, the fsh skill link and the tmux config to the current code (use after a manual pull)
 fsh tmux [status|reload [--dry-run]|extkeys [on|off|status]]  # tmux config: the repo base + your ~/.config/vt/tmux.local.conf; reload re-reads it into the running tmux (sessions stay) and moves an old ~/.config/vt/tmux.conf copy aside; extkeys on|off|status is a trial switch for tmux extended keys (a marked block in tmux.local.conf, default stays off)
 fsh pane report [--state ...] [--agent ...]  # report this pane's state (for agents without managed hooks)
@@ -65,7 +67,7 @@ fsh tunnel expose 3000 "app name" [--mode public|session|pin] [--ttl 1h|24h|7d|3
                                    # only) — pass --mode public for the old unauthenticated behavior
                                    # Remote-control ports (Chrome DevTools 9222, Node inspector 9229, Docker API,
                                    # ngrok/cloudflared local APIs, FarShell's proxy range) need --force.
-                                   # A session share prints a "처음 열기" link that starts at the main origin's
+                                   # A session share prints a "First visit" (처음 열기) link that starts at the main origin's
                                    # /p/authorize — the public URL alone shows a notice to cookie-less visitors.
                                    # Expired exposures are torn down (tunnel + listener) within a minute.
                                    # Asks whether to auto re-expose unless --auto-renew/--no-auto-renew is given
@@ -183,7 +185,7 @@ fsh authz revoke <grant id>       # prints that a signed-in person revokes it in
 fsh authz panic                   # prints that an elevated person does this in the web/phone screen (exit 3)
 ```
 
-`audit` shows the hash chain state (`정상`/`깨짐`) and merges the denial log (`denials`) with the chain. For agents, the MCP tools
+`audit` shows the hash chain state (`Audit chain: OK` / `Audit chain: BROKEN` in English; `정상`/`깨짐` in Korean) and merges the denial log (`denials`) with the chain. For agents, the MCP tools
 `whoami`, `request_access {resource, scopes, reason?, ttl?}` and `list_my_grants` do the same from inside the session; `request_access` always
 returns «waiting for the user's approval». API and rules: `API.md` «Approval inbox, grants and audit», `docs/ref/auth.md`.
 
@@ -324,6 +326,7 @@ contract 5). The few that decide how you reach this Mac:
 | 18 | Pairs | Whether the pair switch (`VT_AUTHZ_ENFORCE=pair`) is on, how many pairs are in effect and how many wait for approval; a warning if the switch is off but pairs are still stored (their grants have no effect) |
 | 19 | Other-Mac permissions | Whether protocol v2 (`VT_AUTHZ_ENFORCE=peer`) is on; a warning if revoke notices could not be delivered or a secret rotation is unconfirmed (the server retries; `fsh host rotate` settles a rotation) |
 | 20 | Browser | Whether the browser broker switch (`VT_AUTHZ_ENFORCE=browser`) is on, how many adapters are enabled out of those available, and how many tabs are open; a warning if tabs can no longer be driven (orphaned, see `fsh browser tabs`) or the settings/tab ledger cannot be read. Read locally, so it answers even when the server is down |
+| 21 | Hook auto-check | Only while the server runs: when the server itself last checked the agent hooks (it re-reads the settings every 10 minutes and as soon as a settings file changes; `VT_HOOK_HEALTH=0` turns that off). A warning if its last check found a missing, mismatched or unreadable hook — fix with `fsh hooks install`. The server only checks; it never writes the settings |
 
 ---
 

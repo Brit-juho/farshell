@@ -619,9 +619,9 @@ def _outbox_read() -> dict:
         d = json.loads(p.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
         # 깨진 파일을 빈 것으로 덮으면 아직 못 보낸 회수 알림이 사라진다 — 거부하고 사람이 보게 둔다.
-        raise ShareError("outbox_unreadable", f"peer_outbox.json 을 읽지 못했습니다: {e}", 500) from e
+        raise ShareError("outbox_unreadable", tr("peer_outbox.json 을 읽지 못했습니다: {reason}", reason=e), 500) from e
     if not isinstance(d, dict) or not isinstance(d.get("items"), list):
-        raise ShareError("outbox_unreadable", "peer_outbox.json 형식이 올바르지 않습니다", 500)
+        raise ShareError("outbox_unreadable", tr("peer_outbox.json 형식이 올바르지 않습니다"), 500)
     return d
 
 

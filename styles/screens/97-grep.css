@@ -30,9 +30,9 @@
   background:transparent; color:var(--sub); cursor:pointer;
 }
 .vt-gr-opt.small { width:20px; height:20px; }
-.vt-gr-opt:hover { background:var(--menu-hover); color:var(--txt); }
-.vt-gr-opt[aria-pressed="true"] { border-color:var(--acc); color:var(--acc); background:color-mix(in srgb, var(--acc) 12%, transparent); }
-.vt-gr-opt:focus-visible { outline:1px solid var(--acc); outline-offset:1px; }
+.vt-gr-opt:hover { background:var(--color-state-hover); color:var(--txt); }
+.vt-gr-opt:active { background:var(--color-state-press); }
+.vt-gr-opt[aria-pressed="true"] { border-color:var(--acc); color:var(--acc); background:var(--color-state-selected); }
 
 .vt-gr-glob {
   display:flex; align-items:center; gap:calc(var(--spacing) * 1.5); min-width:0; flex:0 1 240px;
@@ -85,7 +85,8 @@
   padding:0 calc(var(--spacing) * 4); cursor:pointer;
   font:var(--weight-medium) var(--fs-xs) var(--mono); color:var(--txt);
 }
-.vt-gr-file:hover { background:var(--menu-hover); }
+.vt-gr-file:hover { background:var(--color-state-hover); }
+.vt-gr-file:active { background:var(--color-state-press); }
 .vt-gr-cv, .vt-gr-fic { display:inline-flex; flex:none; color:var(--sub); }
 .vt-gr-fn { flex:none; white-space:nowrap; }
 .vt-gr-fd { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--sub); font-weight:400; }
@@ -98,8 +99,9 @@
   padding:0 calc(var(--spacing) * 4) 0 calc(var(--spacing) * 6); cursor:pointer;
   font:400 var(--fs-xs) var(--mono); color:var(--color-term-fg);
 }
-.vt-gr-row:hover { background:var(--menu-hover); }
-.vt-gr-row.on { background:color-mix(in srgb, var(--acc) 14%, transparent); box-shadow:inset 2px 0 0 var(--acc); }
+.vt-gr-row:hover { background:var(--color-state-hover); }
+.vt-gr-row:active { background:var(--color-state-press); }
+.vt-gr-row.on { background:var(--color-state-selected); box-shadow:inset 2px 0 0 var(--acc); }
 .vt-gr-ln { flex:none; width:36px; text-align:right; color:var(--color-term-dim); font-variant-numeric:tabular-nums; }
 .vt-gr-tx { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:pre; }
 .vt-gr-tx mark { background:var(--color-term-hl); color:var(--color-term-bright); border-radius:2px; }

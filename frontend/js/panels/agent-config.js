@@ -115,7 +115,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
   }
 
   async function changeContext(change) {
-    if (selected.size && !(await confirmDialog(t('선택한 항목을 비우고 관리 대상을 바꿀까요?')))) return;
+    if (selected.size && !(await confirmDialog(t('선택한 항목을 비우고 관리 대상을 바꿀까요?'), { title: t('관리 대상 변경'), okLabel: t('비우고 변경') }))) return;
     selected.clear();
     change();
     envData = null;
@@ -192,7 +192,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
       plans.push({ target, plan });
     }
     const review = plans.map(({ target, plan }) => `${hostLabel(target)}\n${planText(plan)}`).join('\n\n');
-    if (!(await confirmDialog(`${t('아래 항목만 변경합니다. 나머지 구성은 유지합니다.')}\n\n${review}\n\n${t('전역·프로필 설정 변경은 다른 세션에도 영향을 줍니다. 프로젝트 공용 파일은 팀과 공유됩니다.')}`))) return;
+    if (!(await confirmDialog(`${t('아래 항목만 변경합니다. 나머지 구성은 유지합니다.')}\n\n${review}\n\n${t('전역·프로필 설정 변경은 다른 세션에도 영향을 줍니다. 프로젝트 공용 파일은 팀과 공유됩니다.')}`, { title: t('설정 변경 적용'), okLabel: t('적용') }))) return;
     const results = [];
     for (const { target, plan } of plans) {
       try {
@@ -208,14 +208,14 @@ export function mount(host, initialContext = {}, onLegacy = null) {
     await load();
     if (plans.length === 1 && plans[0].target === 'local' && view === 'session' && session
         && results.every((r) => r.includes(t('설정 저장됨 — 재시작 필요')))) {
-      if (await confirmDialog(t('선택한 CLI를 안전할 때 재시작해 같은 대화로 이어갈까요?'))) await scheduleRestart();
+      if (await confirmDialog(t('선택한 CLI를 안전할 때 재시작해 같은 대화로 이어갈까요?'), { title: t('CLI 재시작'), okLabel: t('재시작') })) await scheduleRestart();
     }
   }
 
   async function scheduleRestart() {
     if (!session || selectedHost === 'all') return;
     const plan = await api(selectedHost, 'restart-preview', { session });
-    if (!(await confirmDialog(`${plan.note}\n\n${plan.context.root}\n${plan.context.cwd}`))) return;
+    if (!(await confirmDialog(`${plan.note}\n\n${plan.context.root}\n${plan.context.cwd}`, { title: t('CLI 재시작'), okLabel: t('재시작') }))) return;
     const result = await applyPlan(selectedHost, 'restart-start', plan);
     if (result.status === 'pending') { notice = t('대상 호스트 승인 대기'); return; }
     job = { ...result, host: selectedHost };
@@ -237,9 +237,9 @@ export function mount(host, initialContext = {}, onLegacy = null) {
   }
 
   async function classify(row) {
-    const categoryValue = await promptDialog(t('용도 카테고리 — 예: 개발, 조사, 문서'), { defaultValue: row.metadata?.category || '' });
+    const categoryValue = await promptDialog(t('용도 카테고리 — 예: 개발, 조사, 문서'), { title: t('용도 분류'), okLabel: t('저장'), defaultValue: row.metadata?.category || '' });
     if (categoryValue === null) return;
-    const description = await promptDialog(t('이 항목의 용도와 관리 메모'), { defaultValue: row.metadata?.description || '' });
+    const description = await promptDialog(t('이 항목의 용도와 관리 메모'), { title: t('용도 분류'), okLabel: t('저장'), defaultValue: row.metadata?.description || '' });
     if (description === null) return;
     await api(row.host, 'metadata', { ...contextPayload(), id: row.id,
       values: { category: categoryValue, description, origin: row.metadata?.origin || row.origin || 'unknown' } });
@@ -264,7 +264,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
     detail.append(el('h3', null, row.name), el('p', 'vt-set-help', row.source), el('p', 'vt-set-help', info.note || t('스킬 원본을 편집합니다')), area);
     detail.appendChild(button(t('검토 후 저장'), () => perform(async () => {
       const plan = await api(row.host, 'edit-preview', { ...contextPayload(), id: row.id, revision: info.revision, content: area.value });
-      if (!(await confirmDialog(`${plan.name}\n${plan.source}\n${plan.note}`))) return;
+      if (!(await confirmDialog(`${plan.name}\n${plan.source}\n${plan.note}`, { title: t('스킬 편집 저장'), okLabel: t('저장') }))) return;
       const result = await applyPlan(row.host, 'edit-apply', plan);
       notice = result.status === 'ok' ? t('설정 저장됨 — 재시작 필요') : t('저장 결과를 확인하지 못했습니다');
       if (result.status === 'ok') editorState = null;
@@ -383,7 +383,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
     const save = button(t('프리셋으로 저장'), () => perform(async () => {
       const targets = new Set([...selected.values()].map((r) => r.host));
       if (targets.size !== 1 || !targets.has('local')) throw new Error(t('프리셋은 한 호스트의 항목으로 저장하세요. 원격 자료는 해당 호스트에서 관리합니다.'));
-      const name = await promptDialog(t('프리셋 이름'));
+      const name = await promptDialog(t('프리셋 이름'), { title: t('프리셋으로 저장'), okLabel: t('저장') });
       if (!name) return;
       const changes = [...selected.values()].map((r) => ({ id: r.id, enabled: r.enabled !== false }));
       await api('local', 'preset-save', { ...contextPayload(), name, changes });
@@ -395,7 +395,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
     save.title = t('켜짐 여부가 확인되지 않은 항목은 먼저 켬·끔을 지정하세요');
     const categorize = button(t('선택 항목 분류'), () => perform(async () => {
       if ([...selected.values()].some((r) => r.host !== 'local')) throw new Error(t('이 원격 작업은 대상 호스트에서 직접 수행하세요'));
-      const value = await promptDialog(t('용도 카테고리 — 예: 개발, 조사, 문서'));
+      const value = await promptDialog(t('용도 카테고리 — 예: 개발, 조사, 문서'), { title: t('용도 분류'), okLabel: t('저장') });
       if (value === null) return;
       await api('local', 'metadata-category', { ...contextPayload(), ids: [...selected.values()].map((r) => r.id), category: value });
       selected.clear();
@@ -433,7 +433,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
       row.append(el('strong', null, preset.name), el('span', 'vt-mcp-meta', `${hostLabel(preset.host)} · ${preset.changes.length}`));
       row.appendChild(button(t('검토 후 적용'), () => perform(() => applySelection(null, preset))));
       if (preset.host === 'local') row.appendChild(button(t('삭제'), () => perform(async () => {
-        if (!(await confirmDialog(t('이 프리셋을 삭제할까요? 설치된 자료는 유지됩니다.')))) return;
+        if (!(await confirmDialog(t('이 프리셋을 삭제할까요? 설치된 자료는 유지됩니다.'), { title: t('프리셋 삭제'), okLabel: t('삭제') }))) return;
         await api('local', 'preset-delete', { id: preset.id });
         await load();
       })));
@@ -456,7 +456,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
         const row = el('div', 'vt-ac-envrow');
         row.appendChild(el('code', null, `${variable.name} · ${t('값 저장됨')}`));
         row.appendChild(button(t('삭제'), () => perform(async () => {
-          if (!(await confirmDialog(t('{name}의 저장된 값을 삭제할까요?', { name: variable.name })))) return;
+          if (!(await confirmDialog(t('{name}의 저장된 값을 삭제할까요?', { name: variable.name }), { title: t('저장된 값 삭제'), okLabel: t('삭제') }))) return;
           await api('local', 'environment-set', { session, scope: scope.scope, name: variable.name, value: null, revision: envData.context.identity });
           envData = await api('local', 'environment', { session });
         })));
@@ -467,7 +467,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
         if (!name) return;
         const value = await promptDialog(t('환경변수 값 — 저장 후 다시 표시하지 않습니다'), { password: true });
         if (value === null) return;
-        if (!(await confirmDialog(`${title}\n${name}\n${t('이 범위의 CLI 재시작 후 적용됩니다')}`))) return;
+        if (!(await confirmDialog(`${title}\n${name}\n${t('이 범위의 CLI 재시작 후 적용됩니다')}`, { title: t('환경변수 저장'), okLabel: t('저장') }))) return;
         await api('local', 'environment-set', { session, scope: scope.scope, name, value, revision: envData.context.identity });
         envData = await api('local', 'environment', { session });
         notice = t('설정 저장됨 — 재시작 필요');
@@ -488,7 +488,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
     if (syncData.last_log_at) body.appendChild(el('p', 'vt-mcp-meta', `${t('최근 로그 기록')}: ${new Date(syncData.last_log_at * 1000).toLocaleString()}`));
     if (selectedHost === 'local') for (const scheduler of syncData.schedulers) {
       const btn = button(t('기존 동기화 실행'), () => perform(async () => {
-        if (!(await confirmDialog(t('기존 peer-sync 정책으로 양방향 동기화를 실행할까요?')))) return;
+        if (!(await confirmDialog(t('기존 peer-sync 정책으로 양방향 동기화를 실행할까요?'), { title: t('동기화 실행'), okLabel: t('실행') }))) return;
         const result = await api('local', 'sync-run', { id: scheduler.id });
         notice = result.note;
         syncData = await api('local', 'sync-status');
@@ -506,14 +506,14 @@ export function mount(host, initialContext = {}, onLegacy = null) {
       row.append(el('strong', null, `${request.peer} · ${request.action}`), el('pre', 'vt-ac-review', planText(request.summary) || request.summary.note));
       for (const [decision, label] of [['approve', t('승인 후 적용')], ['deny', t('거절')]]) {
         row.appendChild(button(label, () => perform(async () => {
-          if (!(await confirmDialog(`${request.peer}\n${planText(request.summary) || request.summary.note}\n${label}`))) return;
+          if (!(await confirmDialog(`${request.peer}\n${planText(request.summary) || request.summary.note}\n${label}`, { title: label, okLabel: label }))) return;
           // The target server requires both a human cookie and elevation.
           try {
             const result = await vtFetch(`/api/agent-config/requests/${request.id}/${decision}`, { method: 'POST' });
             notice = result.status || result.state || t('처리됨');
           } catch (e) {
             if (e.status !== 401) throw e;
-            const password = await promptDialog(t('설정을 변경하려면 비밀번호를 확인하세요'), { password: true });
+            const password = await promptDialog(t('설정을 변경하려면 비밀번호를 확인하세요'), { password: true, title: t('비밀번호 확인') });
             if (password === null) return;
             await vtFetch('/api/auth/elevate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
             const result = await vtFetch(`/api/agent-config/requests/${request.id}/${decision}`, { method: 'POST' });

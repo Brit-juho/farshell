@@ -25,7 +25,7 @@ function bundleHTML(req) {
   return `<dl class="vt-authz-facts vt-pair-bundle">
     <dt>${t('세션')}</dt><dd>${sessions.length ? sessions.map((s) => `<span class="vt-pair-chip">${vtEsc(s)}</span>`).join('') : vtEsc(t('없음'))}</dd>
     <dt>${t('폴더')}</dt><dd>${dirs.length ? dirs.map((d) => `<span class="vt-authz-code">${vtEsc(d)}</span>`).join('<br>') : vtEsc(t('없음'))}</dd>
-    <dt>${t('폴더 lease')}</dt><dd>${vtEsc(b.leases ? t('폴더마다 운전자 이름으로 잡습니다') : t('잡지 않음'))}</dd>
+    <dt>${t('폴더 점유(lease)')}</dt><dd>${vtEsc(b.leases ? t('폴더마다 운전자 이름으로 점유합니다') : t('점유 안 함'))}</dd>
   </dl>`;
 }
 
@@ -65,7 +65,7 @@ export function pairBodyHTML(req, ticks, errorMsg) {
     ${phrasesHTML(req)}
     ${elevatedHTML(req, ticks)}
     <div class="vt-authz-err" role="alert">${vtEsc(errorMsg || '')}</div>
-    <p class="vt-authz-note">${vtEsc((req.pair && req.pair.note) || t('승인하면 이 묶음 안에서 두 역할 중 하나를 각자 갖습니다. 나중에 권한을 넓히려면 새로 승인해야 합니다.'))}</p>
+    <p class="vt-authz-note">${vtEsc((req.pair && req.pair.note) || t('승인하면 이 묶음 안에서 운전자(driver)와 길잡이(navigator) 중 하나를 각자 갖습니다. 나중에 권한을 넓히려면 새로 승인해야 합니다.'))}</p>
     <p class="vt-authz-note">${t('허용한 권한은 설정의 「권한」에서 언제든 회수할 수 있습니다.')}</p>
     <div class="vt-dialog-actions vt-authz-acts vt-authz-foot vt-pair-acts">
       <button type="button" class="vt-btn lg vt-authz-act" data-act="deny">${t('거부')}</button>

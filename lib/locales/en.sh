@@ -213,12 +213,15 @@ _t_en_lookup() {
     '{n}개 노출 중 (위험 포트 없음)') _T_OUT='{n} exposed (no risky ports)' ;;
     '{n}개 자동 등록') _T_OUT='{n} registered automatically' ;;
     '{n}건') _T_OUT='{n}' ;;
+    '{n}분 전') _T_OUT='{n} min ago' ;;
+    '{n}초 전') _T_OUT='{n}s ago' ;;
     '{n}회') _T_OUT='{n}x' ;;
     '{opts} 는 이제 '\''fsh start'\'' 옵션입니다. '\''fsh start {opts}'\''를 실행한 뒤 QR을 보여드립니다.') _T_OUT='{opts} is now an '\''fsh start'\'' option. Running '\''fsh start {opts}'\'', then showing the QR code.' ;;
     '{path} 에 FarShell 훅 {n}개가 중복 등록돼 있습니다 — Codex 세션 이벤트가 두 번(claude 태그 포함) 들어옵니다.') _T_OUT='{path} has {n} duplicate FarShell hook(s) — Codex session events arrive twice (including the claude-tagged ones).' ;;
     '{path}에서 옛 fsh 라인 제거 (oh-my-tmux heredoc 보호)') _T_OUT='Removed the old fsh line from {path} (oh-my-tmux heredoc protection)' ;;
     '{port} 는 VT 서버 포트입니다 — 메인 터널(fsh start)이 이미 담당합니다') _T_OUT='{port} is the server port; the main tunnel (fsh start) already covers it' ;;
     '{svc} 종료 (PID {pid})') _T_OUT='{svc} stopped (PID {pid})' ;;
+    '{ver} 사용 가능 → fsh update') _T_OUT='{ver} available → fsh update' ;;
     '|ping <id>|rm <id>|rename <id|self> <별명>') _T_OUT='|ping <id>|rm <id>|rename <id|self> <alias>' ;;
     '~/.cloudflared/cert.pem 없음 — '\''cloudflared tunnel login'\'' 필요') _T_OUT='~/.cloudflared/cert.pem not found — run '\''cloudflared tunnel login'\''' ;;
     '~/.cloudflared/cert.pem 있음') _T_OUT='~/.cloudflared/cert.pem found' ;;
@@ -272,6 +275,7 @@ _t_en_lookup() {
     '기존 CLAUDE.md → CLAUDE.md.bak으로 백업') _T_OUT='Backed up existing CLAUDE.md → CLAUDE.md.bak' ;;
     '기존 레포 사용: {dir}') _T_OUT='Using existing repo: {dir}' ;;
     '기존 설정 유지 → ~/.vt.env') _T_OUT='Keeping existing config → ~/.vt.env' ;;
+    '꺼 둠 (VT_HOOK_HEALTH=0)') _T_OUT='off (VT_HOOK_HEALTH=0)' ;;
     '꺼 둠 (VT_MACOS_APP=0) — 권한 창에 Python 이름으로 뜹니다') _T_OUT='Off (VT_MACOS_APP=0) — permission prompts show the Python name' ;;
     '꺼 둠 (VT_SERVER_WATCHDOG=0)') _T_OUT='Off (VT_SERVER_WATCHDOG=0)' ;;
     '꺼져 있는데 저장된 pair {n}개가 남아 있습니다 — 권한은 효력이 없습니다') _T_OUT='The feature is off but {n} stored pair(s) remain - their permissions have no effect' ;;
@@ -440,6 +444,8 @@ _t_en_lookup() {
     '서버:        ') _T_OUT='Server:       ' ;;
     '서버가 FarShell.app 으로 떠 있습니다 — 권한 창에 FarShell 로 뜹니다') _T_OUT='The server runs under FarShell.app — permission prompts say FarShell' ;;
     '서버가 VT_AUTHZ_ENFORCE=peer 로 떠 있으면 이 명령은 서버에 변경을 요청합니다 (unix socket).') _T_OUT='When the server runs with VT_AUTHZ_ENFORCE=peer, these commands ask the server to make the change (unix socket).' ;;
+    '서버가 {ago} 확인함 — 이상 없음') _T_OUT='the server checked {ago} — all good' ;;
+    '서버가 {ago} 확인함 — 이상 있음. '\''fsh hooks status'\'' 로 보고 '\''fsh hooks install'\'' 로 고치세요') _T_OUT='the server checked {ago} — a problem was found. See '\''fsh hooks status'\'' and fix it with '\''fsh hooks install'\''' ;;
     '서버가 꺼져 있거나 소켓을 쓸 수 없거나 그 설정이 꺼져 있으면 예전처럼 ~/.vt/hosts.json 에 바로 씁니다.') _T_OUT='If the server is down, the socket is unusable or that setting is off, it writes ~/.vt/hosts.json directly as before.' ;;
     '서버가 떠 있지 않을 수 있습니다: fsh status') _T_OUT='The server may not be running: fsh status' ;;
     '서버가 실행 중이 아닙니다. 먼저 '\''fsh start'\''로 시작하세요.') _T_OUT='The server isn'\''t running. Start it first with '\''fsh start'\''.' ;;
@@ -495,6 +501,7 @@ _t_en_lookup() {
     '쓰기 실패 (원본 유지)') _T_OUT='Write failed (original kept)' ;;
     '쓰는데도 안 보이면: clauth 데몬이 떠 있는지 확인하세요.') _T_OUT='If you do use it and still don'\''t see this, check that the clauth daemon is running.' ;;
     '아래는 pip 출력의 마지막 부분입니다(전체: {log}).') _T_OUT='The end of the pip output follows (full log: {log}).' ;;
+    '아직 확인 전 — 서버가 뜬 뒤 몇 분 안에 확인합니다') _T_OUT='Not checked yet — checks a few minutes after the server starts' ;;
     '안내가 뜨면 곧바로 확인하려는 텍스트를 붙여넣으세요(60초 무응답 시 종료).') _T_OUT='When prompted, paste the text you want to check right away (exits after 60s of no input).' ;;
     '안전하지 않은 세션 이름: '\''{target}'\''') _T_OUT='Unsafe session name: '\''{target}'\''' ;;
     '알 수 없는 VT_TUNNEL_PROVIDER='\''{p}'\'' — cloudflare로 진행합니다') _T_OUT='Unknown VT_TUNNEL_PROVIDER='\''{p}'\''; continuing with cloudflare' ;;
@@ -507,6 +514,8 @@ _t_en_lookup() {
     '알릴 URL이 없습니다 (터널 미실행)') _T_OUT='No URL to report (tunnel isn'\''t running)' ;;
     '언어 설정을 ~/.vt.env 에 저장하지 못했습니다 — 나중에 설정 화면에서 바꿀 수 있습니다') _T_OUT='Couldn'\''t save the language to ~/.vt.env - you can change it later in Settings' ;;
     '업그레이드 전 서버가 옛 위치({old})로 돌고 있습니다 — fsh restart 를 한 번 실행하세요') _T_OUT='A server from before the upgrade is running from the old location ({old}) — run fsh restart once' ;;
+    '업데이트') _T_OUT='Update' ;;
+    '업데이트:    ') _T_OUT='Update:      ' ;;
     '없음') _T_OUT='None' ;;
     '없음. install.sh가 자동 생성') _T_OUT='not found. install.sh creates it' ;;
     '에이전트 훅 등록 상태') _T_OUT='Agent hook registration' ;;
@@ -632,6 +641,7 @@ _t_en_lookup() {
     '첫 실행 안내') _T_OUT='First run' ;;
     '최근 24h 토큰 사용 {n}건') _T_OUT='{n} machine-token requests in the last 24h' ;;
     '최근 장애 기록: ') _T_OUT='Latest incident: ' ;;
+    '최신입니다') _T_OUT='Up to date' ;;
     '추가 포트:') _T_OUT='Extra ports:' ;;
     '추가 포트는 임시 주소입니다(고정 도메인은 메인 터널이 씁니다)') _T_OUT='Extra ports get temporary URLs (the fixed domain belongs to the main tunnel)' ;;
     '치명적 문제 있음. ✗ 항목부터 해결하세요.') _T_OUT='Critical problems found. Fix the ✗ items first.' ;;
@@ -687,7 +697,7 @@ _t_en_lookup() {
     '포트는 열려 있지만 응답하지 않음 ({state}) — fsh restart') _T_OUT='Port is open but the server isn'\''t responding ({state}) — fsh restart' ;;
     '포트는 열려 있지만 일을 못 받음({state}) → fsh restart. 원인: {what}') _T_OUT='Port is open but the server can'\''t take work ({state}) → fsh restart. Cause: {what}' ;;
     '폰 접속') _T_OUT='Phone access' ;;
-    '폴더 lease') _T_OUT='folder lease' ;;
+    '폴더 점유(lease)') _T_OUT='folder lease' ;;
     '프런트엔드 빌드 완료 → frontend/dist/') _T_OUT='Frontend built → frontend/dist/' ;;
     '프런트엔드 빌드 중... (Vite + Tailwind, node {version})') _T_OUT='Building the frontend... (Vite + Tailwind, node {version})' ;;
     '프로필 {np}개, {age}초 전 갱신') _T_OUT='{np} profile(s), updated {age}s ago' ;;
@@ -714,6 +724,7 @@ _t_en_lookup() {
     '호스트명 (예: vt.example.com):') _T_OUT='Hostname (e.g. vt.example.com):' ;;
     '호스트명 필요') _T_OUT='A hostname is required' ;;
     '홑따옴표로 감싸지 않은 값이 있습니다 — bash가 $를 확장해 값이 깨질 수 있음') _T_OUT='some values aren'\''t single-quoted — bash may expand $ and corrupt them' ;;
+    '확인 끔') _T_OUT='Check off' ;;
     '확인 입력:') _T_OUT='Confirm:' ;;
     '환경변수와 설정 파일이 일치') _T_OUT='environment matches the config file' ;;
     '활성') _T_OUT='Enabled' ;;
@@ -726,6 +737,7 @@ _t_en_lookup() {
     '훅 등록 실패 — '\''fsh hooks install'\''로 다시 시도할 수 있습니다') _T_OUT='Hook registration failed - retry with '\''fsh hooks install'\''' ;;
     '훅 실패(rc={rc}){out}') _T_OUT='Hook failed (rc={rc}){out}' ;;
     '훅 실행{out}') _T_OUT='Hook ran{out}' ;;
+    '훅 자동 점검') _T_OUT='Hook auto-check' ;;
     '훅: {hook}') _T_OUT='Hook: {hook}' ;;
     *) return 1 ;;
   esac

@@ -9,7 +9,7 @@ export function renderPermissionsSection() {
   frag.append(
     group(t('승인 대기'), hosts.inbox),
     group(t('페어'), hosts.pairs),
-    group(t('폴더 lease'), hosts.leases),
+    group(t('폴더 점유(lease)'), hosts.leases),
     group(t('브라우저'), hosts.browser),
     group(t('허용된 권한'), hosts.grants),
     group(t('감사 기록'), hosts.audit),

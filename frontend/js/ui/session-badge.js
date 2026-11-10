@@ -10,7 +10,7 @@ export function tmuxStatus(s) {
   const attached = s.attached > 0;
   return {
     color: openInWeb ? 'var(--ok)' : attached ? 'var(--info)' : 'var(--sub)',
-    text: openInWeb ? t('웹에 열림') : attached ? t('데스크톱 attach') : t('열려 있지 않음'),
+    text: openInWeb ? t('웹에 열림') : attached ? t('데스크톱에 연결됨') : t('열려 있지 않음'),
   };
 }
 

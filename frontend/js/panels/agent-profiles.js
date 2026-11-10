@@ -39,7 +39,7 @@ export function mount(host) {
     try { return await vtFetch(path, opts); }
     catch (error) {
       if (error.status !== 401 || !/elevation_required/.test(JSON.stringify(error.data || error.message))) throw error;
-      const password = await promptDialog(t('설정을 변경하려면 비밀번호를 확인하세요'), { password: true });
+      const password = await promptDialog(t('설정을 변경하려면 비밀번호를 확인하세요'), { password: true, title: t('비밀번호 확인') });
       if (password === null || !alive()) throw new Error(t('변경을 취소했습니다'));
       await vtFetch('/api/auth/elevate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
       return vtFetch(path, opts);
@@ -107,7 +107,7 @@ export function mount(host) {
     const plan = await api('preview', { operation, payload });
     if (!alive()) return null;
     const detail = { ...plan }; delete detail.token; delete detail.expires_at;
-    if (!(await confirmDialog(`${t('변경 내용을 확인하세요')}\n${JSON.stringify(detail, null, 2)}`)) || !alive()) return null;
+    if (!(await confirmDialog(`${t('변경 내용을 확인하세요')}\n${JSON.stringify(detail, null, 2)}`, { title: t('변경 내용 확인'), okLabel: t('적용') })) || !alive()) return null;
     const result = await api('', { token: plan.token }, true);
     if (!alive()) return null;
     status = result.note || result.status || result.state || t('처리됨');
@@ -130,8 +130,8 @@ export function mount(host) {
       if (!tool) return;
       const existing = profiles.find(p => p.id === selected);
       let account = null;
-      if (existing?.tool === tool && await confirmDialog(t('선택한 프로필과 같은 논리 계정으로 묶을까요? 로그인은 별도로 진행합니다.'))) account = existing.account_id;
-      const purpose = await confirmDialog(t('로그인·갱신 검증용 테스트 프로필로 만들까요?')) ? 'test' : 'work';
+      if (existing?.tool === tool && await confirmDialog(t('선택한 프로필과 같은 논리 계정으로 묶을까요? 로그인은 별도로 진행합니다.'), { title: t('계정 묶기'), okLabel: t('묶기') })) account = existing.account_id;
+      const purpose = await confirmDialog(t('로그인·갱신 검증용 테스트 프로필로 만들까요?'), { title: t('프로필 용도'), okLabel: t('테스트로 만들기') }) ? 'test' : 'work';
       const result = await review('create', { name, tool, purpose, ...(account ? { account_id: account } : {}) });
       if (result?.id) { selected = result.id; data = null; }
     }));
@@ -174,7 +174,7 @@ export function mount(host) {
           if (!['apiKeyHelper', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_API_KEY'].includes(method)) throw new Error(t('API 키 전달 방식이 올바르지 않습니다'));
           const key = await promptDialog(t('새 API 키·토큰'), { password: true });
           if (!key) return;
-          const endpoint = await promptDialog(t('API endpoint: 비워 두면 현재 값 유지'));
+          const endpoint = await promptDialog(t('API 주소(endpoint): 비워 두면 현재 값을 유지합니다'));
           if (endpoint === null) return;
           const env = { ANTHROPIC_AUTH_TOKEN: null, ANTHROPIC_API_KEY: null };
           if (method !== 'apiKeyHelper') env[method] = key;
@@ -202,7 +202,7 @@ export function mount(host) {
       actions.appendChild(button(t('GitHub 플러그인 다운로드'), async () => {
         const repo = await promptDialog(t('공개 GitHub 저장소: owner/repo'));
         if (!repo) return;
-        const commit = await promptDialog(t('고정된 40자리 commit SHA'));
+        const commit = await promptDialog(t('고정된 40자리 커밋 SHA'));
         if (!commit) return;
         const subdir = await promptDialog(t('플러그인 하위 경로'), { defaultValue: '.' });
         if (subdir === null) return;

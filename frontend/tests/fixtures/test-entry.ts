@@ -5,7 +5,7 @@
 export { mountSmoke } from './smoke.js';
 export { SCHEMA as SETTINGS_SCHEMA } from '../../js/core/settings.js';
 export {
-  buildHudChips, formatResetsIn, formatRate, formatClock, HUD_KINDS, PINNED_HUD_KINDS, DEFAULT_HUD_LAYOUT, parseHudLayout, serializeHudLayout,
+  buildHudChips, formatResetsIn, formatRate, formatClock, HUD_KINDS, PINNED_HUD_KINDS, ALERT_HUD_KINDS, DEFAULT_HUD_LAYOUT, parseHudLayout, serializeHudLayout,
   sameHudLayout, hudZoneOf, moveHudKind, stepHudKind,
 } from '../../js/shell/hud-data.js';
 export {
@@ -20,7 +20,12 @@ export {
 export { ringSvg, subBadge } from '../../js/shell/compact-mark.js';
 export { logout, clearAppCache, pageAssetUrls } from '../../js/shell/app-session.js';
 export { collectSessionRows } from '../../js/shell/rail-fetch.js';
-export { mountRow, mountMenu, mountNativeChildren, mountFleetRow, mountViewGroup } from './row-mount.js';
+export { mountRow, mountMenu, mountNativeChildren, mountFleetRow, mountViewGroup, mountHoverCard } from './row-mount.js';
+export {
+  buildHoverCard, shortenPath, tildePath, NATIVE_MAX, KIDS_MAX, BODY_MAX_LINES,
+} from '../../js/shell/rail-hover-card.js';
+export { OPEN_DELAY as HC_OPEN_DELAY, CLOSE_GRACE as HC_CLOSE_GRACE, CARD_ID as HC_CARD_ID } from '../../js/shell/RailHoverCard.js';
+export { canShareName } from '../../js/shell/rail-data.js';
 export {
   parseQuery, fuzzyMatch, PLACEHOLDER, PREFIX_MODE, MODE_PREFIX, MODE_HINT,
   DEFAULT_COMMANDS, SETTINGS_COMMANDS, panelCommands,

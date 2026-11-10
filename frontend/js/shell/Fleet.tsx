@@ -32,7 +32,7 @@ import {
 } from './rail-data.js';
 import { createRailPrefs } from './rail-prefs.js';
 import { NativeChip } from './NativeChildren.js';
-import { MenuSummary, KeywordLine, OriginMark, ScreensMark, ShareMark, LineageMark, KidsToggle, AnswerButtons } from './RailRow.js';
+import { MenuSummary, KeywordLine, OriginMark, ScreensMark, ShareMark, LineageMark, KidsToggle, AnswerButtons, ROW_MENU_ICON } from './RailRow.js';
 import { ViewGroup } from './ViewGroup.js';
 import {
   buildHostMenu, hostDetail, LOCAL_HOST,
@@ -676,6 +676,7 @@ function Fleet(props: { deps: FleetDeps }) {
                             runMenuAction(() => runRowMenu(it.id, row, window, () => {}, (d) => fleetMove(row, d)));
                           }}
                         >
+                          <Show when={ROW_MENU_ICON[it.id]}><span class="vt-menu-item-ico" innerHTML={shellIcon(ROW_MENU_ICON[it.id], 14, 2)} /></Show>
                           {it.label}{it.detail ? ` · ${it.detail}` : ''}
                         </button>
                       )}

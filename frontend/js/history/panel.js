@@ -98,7 +98,7 @@ export function openHistory(options = {}) {
       const controls = node('div', 'vt-history-actions');
       if (!item.replica) {
         controls.append(button(t('이어가기'), async () => {
-          if (!await confirmDialog(t('같은 대화를 새 CLI 실행에서 이어갈까요? 마지막으로 기록된 bypass·YOLO ON/OFF와 권한 설정을 복원합니다. 설정을 확인할 수 없으면 시작하지 않습니다. FarShell 실행 권한은 자동 승계되지 않습니다.'))) return;
+          if (!await confirmDialog(t('같은 대화를 새 CLI 실행에서 이어갈까요? 마지막으로 기록된 bypass·YOLO 켜짐/꺼짐과 권한 설정을 복원합니다. 설정을 확인할 수 없으면 시작하지 않습니다. FarShell 실행 권한은 자동 승계되지 않습니다.'), { title: t('대화 이어가기'), okLabel: t('이어가기') })) return;
           const result = await api(path + '/resume', { body: { operation_id: operationId(), ...(options.sessionId ? { session_id: options.sessionId } : {}) } });
           status.textContent = t('CLI를 시작했습니다. 대화 식별자 확인을 기다립니다.'); emitChanged();
           notifyResumePolicy(result);
@@ -114,7 +114,7 @@ export function openHistory(options = {}) {
           const option = node('option', null, label); option.value = value; scope.append(option);
         }
         controls.append(scope, button(t('기록 삭제'), async () => {
-          if (!await confirmDialog(t('선택한 범위에서 기록을 숨기고 재수집을 막습니다. CLI 원본과 원본 보관 바이트는 지우지 않습니다. 계속할까요?'), {danger:true})) return;
+          if (!await confirmDialog(t('선택한 범위에서 기록을 숨기고 재수집을 막습니다. CLI 원본과 원본 보관 바이트는 지우지 않습니다. 계속할까요?'), { title: t('기록 숨기기'), okLabel: t('숨기기'), danger: true })) return;
           const result = await api(path, {body:{deleted:true,delete_scope:scope.value}});
           if (disposed) return;
           detail.replaceChildren(); selected = null;
@@ -137,7 +137,7 @@ export function openHistory(options = {}) {
         row.append(button(t('원본 내보내기'), () => download(manifest.id, item.replica ? item.origin : null)));
         if (!item.replica) row.append(button(t('CLI 원본 복구'), async () => {
           const preview = await api('/api/session-history/preview/restore', { body: { manifest_id: manifest.id } });
-          if (!await confirmDialog(t('이 위치에 대화 원본만 복구합니다. 기존 파일과 인증 설정은 덮어쓰지 않습니다.') + '\n' + preview.preview.root + '/' + preview.preview.relative_path)) return;
+          if (!await confirmDialog(t('이 위치에 대화 원본만 복구합니다. 기존 파일과 인증 설정은 덮어쓰지 않습니다.') + '\n' + preview.preview.root + '/' + preview.preview.relative_path, { title: t('원본 복구'), okLabel: t('복구') })) return;
           await api('/api/session-history/apply/restore', { body: { token: preview.token } });
           status.textContent = t('원본 파일을 복구했습니다. 실제 CLI 대화 재개는 별도로 확인해야 합니다.');
         }));
@@ -192,7 +192,7 @@ export function openHistory(options = {}) {
       else migration.append(button(t('선택한 권한 연결'),async () => {
         const selected=choices.filter(x=>x.check.checked && !x.check.disabled).map(x=>x.id);
         if (!selected.length) throw new Error(t('연결할 권한을 선택하세요'));
-        if (!await confirmDialog(t('선택한 권한을 현재 확인된 실행에 연결할까요?'))) return;
+        if (!await confirmDialog(t('선택한 권한을 현재 확인된 실행에 연결할까요?'), { title: t('권한 연결'), okLabel: t('연결') })) return;
         await api('/api/session-history/apply/identity',{body:{token:plan.token,selected}});
         await loadSettings();
       }));
@@ -213,7 +213,7 @@ export function openHistory(options = {}) {
     const root = node('input', 'vt-input'); root.placeholder = t('CLI 설정 홈 경로'); root.setAttribute('aria-label', t('CLI 설정 홈 경로'));
     const add = button(t('수집 경로 검토'), async () => {
       const plan = await api('/api/session-history/preview/source', { body: { provider: kind.value, root: root.value } });
-      if (!await confirmDialog(t('원본 사본에는 민감한 대화와 도구 출력이 포함될 수 있습니다. 이 경로의 기록을 자동 보존할까요?') + '\n' + plan.preview.root + '\n' + size(plan.preview.bytes))) return;
+      if (!await confirmDialog(t('원본 사본에는 민감한 대화와 도구 출력이 포함될 수 있습니다. 이 경로의 기록을 자동 보존할까요?') + '\n' + plan.preview.root + '\n' + size(plan.preview.bytes), { title: t('원본 사본 자동 보존'), okLabel: t('보존') })) return;
       await api('/api/session-history/apply/source', { body: { token: plan.token } }); await loadSettings(); await load();
     }); sourceForm.append(kind, root, add); sourceForm.addEventListener('submit', e => e.preventDefault()); settingsBody.append(sourceForm);
     const quotaRow = node('div', 'vt-history-source-form');
@@ -239,7 +239,7 @@ export function openHistory(options = {}) {
     const replication = node('details'); replication.append(node('summary', null, t('중앙 복제 연결')));
     const identity = node('pre', 'vt-history-key');
     replication.append(button(t('복제 수신 키 교체'),async () => {
-      if (!await confirmDialog(t('이전 키는 보존합니다. 새 공개키를 송신 호스트에서 다시 확인하고 승인해야 합니다. 교체할까요?'))) return;
+      if (!await confirmDialog(t('이전 키는 보존합니다. 새 공개키를 송신 호스트에서 다시 확인하고 승인해야 합니다. 교체할까요?'), { title: t('복제 수신 키 교체'), okLabel: t('교체') })) return;
       identity.textContent=JSON.stringify(await api('/api/session-history/replication/settings',{body:{rotate_key:true}}),null,2);
     }));
     if (data.replication_worker?.state==='degraded') replication.append(node('p','vt-history-status',t('복제가 지연되고 있습니다. 연결과 상대 서버의 수신 승인을 확인하세요.')));
@@ -257,7 +257,7 @@ export function openHistory(options = {}) {
     for (const [value, label] of [['send', t('이 서버에서 주 Mac으로 보내기')], ['receive', t('다른 Mac의 기록 받기')]]) { const option = node('option', null, label); option.value = value; direction.append(option); }
     direction.addEventListener('change',()=>{sourceSelect.disabled=direction.value==='receive';});
     replication.append(direction, button(t('복제 연결 승인'), async () => {
-      if (!await confirmDialog(t('양쪽 서버에서 공개 정보와 방향을 확인하세요. 원본 사본이 이 연결을 통해 복제됩니다.'))) return;
+      if (!await confirmDialog(t('양쪽 서버에서 공개 정보와 방향을 확인하세요. 원본 사본이 이 연결을 통해 복제됩니다.'), { title: t('복제 연결 승인'), okLabel: t('승인') })) return;
       const previous = data.replication.find(r => r.peer === fields.peer.value);
       await api('/api/session-history/replication/settings', { body: { peer: fields.peer.value, origin: fields.origin.value,
         public_key: fields.public_key.value, direction: direction.value, sources:direction.value==='send'?[sourceSelect.value]:['*'], enabled: true, revision: previous?.revision || 0 } }); await loadSettings();

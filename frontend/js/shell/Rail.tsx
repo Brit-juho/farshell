@@ -15,7 +15,7 @@ import { t } from '../core/i18n.js';
 import {
   buildRailLists, splitRunning, groupSessionRows, compactRailOrder, rowMenuItems, rowSummaryDetails, runRowMenu,
   ATTENTION_COLLAPSED_KEY, ATTENTION_SHOW_KEY, ORDER_KEY, LINEAGE_KEY, VIEW_KEY, encodeOrder, encodeLineagePrefs, encodeRailView, toggleGroupCollapsed,
-  buildSessionTree, kidsProgress, moveInOrder,
+  buildSessionTree, kidsProgress, moveInOrder, canShareName,
   type SessionRow, type RailSort, type TreeEntry,
 } from './rail-data.js';
 import {
@@ -29,7 +29,8 @@ import {
   createDiffWatcher, answerSessionPrompt,
 } from './rail-fetch.js';
 import { createRailPrefs } from './rail-prefs.js';
-import { Menu, Row, type MenuItem } from './RailRow.js';
+import { Menu, ROW_MENU_ICON, Row, type MenuItem } from './RailRow.js';
+import { RailHoverCard, type HoverCardSource } from './RailHoverCard.js';
 import { NativeChildren } from './NativeChildren.js';
 import { CatalogTree, RecentEnded, ArchiveEntry, ArchiveList, type CatalogSnapshot } from './CatalogTree.js';
 import { renameSession as renameCatalogSession } from '../history/session-actions.js';
@@ -301,6 +302,25 @@ export function Rail(props: RailProps) {
   const compact = createMemo(() => compactRailOrder(lists().attention, viewGroups(), tree(),
     { kidsCollapsed, closedOpen }));
 
+  // 접힌 띠 호버 카드가 칸의 열쇠(rowKey)로 세션 데이터를 찾는 함수 — 이미 들고 있는 행·호스트 값만 쓴다(요청 없음).
+  // 하위 세션은 부모의 tmux 이름을 가리키는 열린 위임(진행 중·보고됨)이다. 원격 호스트를 보고 있으면 그 호스트의 응답 상태도 싣는다.
+  const resolveCard = (key: string): HoverCardSource | null => {
+    const all = rows();
+    const row = all.find((r) => rowKey(r) === key);
+    if (!row) return null;
+    const kids = row.tmuxName
+      ? all.filter((r) => r.lineage && r.lineage.parent === row.tmuxName && (r.lineage.state === 'running' || r.lineage.state === 'reported'))
+          .sort((a, b) => (a.lineage?.createdAt || 0) - (b.lineage?.createdAt || 0))
+      : [];
+    const h = viewHostId !== LOCAL_HOST ? activeHost() : null;
+    return {
+      row, kids,
+      host: viewHostId === LOCAL_HOST ? null : { label: h?.label || viewHostId, online: h ? !!h.online : true, latencyMs: h?.latencyMs ?? null, reason: h?.reason ?? null },
+      shareable: viewHostId === LOCAL_HOST && canShareName(row.tmuxName),
+    };
+  };
+  let railEl: HTMLElement | undefined;
+
   // 수동 정렬 드래그. 최상위 항목(부모는 자식과 한 덩어리)만 옮긴다. 터미널 칸 분할 드래그(text/vt-tab-id)와
   // 같은 드래그에 두 형식을 함께 싣는다 — 레일 안에 놓으면 순서, 칸에 놓으면 분할이다.
   const ORDER_MIME = 'text/vt-rail-order';
@@ -405,7 +425,7 @@ export function Rail(props: RailProps) {
     const row = m.row;
     const linked = catalogOf(row);
     return rowMenuItems(row, { split: splitAvailable(row), share: viewHostId === LOCAL_HOST, record: !!linked }).map((it) => ({
-      label: it.label, detail: it.detail, danger: it.danger,
+      label: it.label, detail: it.detail, danger: it.danger, icon: ROW_MENU_ICON[it.id],
       run: () => {
         if (it.id === 'record' && linked) { void openRecordOf(linked, row.tmuxName); return; }
         // 열려 있지 않은 행은 웹 세션이 없어 제자리 편집이 안 된다 — 카탈로그 제목만 바꾼다.
@@ -438,6 +458,7 @@ export function Rail(props: RailProps) {
       detail: h.detail,
       dim: !h.online,
       checked: h.active,
+      icon: h.id === LOCAL_HOST ? 'laptop' : 'server',
       run: () => selectHost(h.id),
     }));
 
@@ -475,7 +496,9 @@ export function Rail(props: RailProps) {
   );
 
   return (
-    <aside id="vt-wgrail" classList={{ collapsed: collapsed() }} aria-label={t('세션')}>
+    <aside id="vt-wgrail" ref={railEl} classList={{ collapsed: collapsed() }} aria-label={t('세션')}>
+      {/* 접힌 48px 띠 칸의 상세 카드(body로 Portal). 이벤트는 이 aside에서 위임으로 받는다. */}
+      <RailHoverCard root={() => railEl} enabled={collapsed} resolve={resolveCard} />
       {/* 머리 36: 「세션 N」(호스트가 둘 이상이면 호스트 전환) · 대화 기록 · 레일 설정 · 새 세션 · 접기.
           접힌 48px 띠는 여닫기 버튼만 둔다. */}
       <div class="vt-wgrail-head">
@@ -513,8 +536,8 @@ export function Rail(props: RailProps) {
             <button
               type="button"
               class="vt-icon-btn sm vt-wgrail-settings"
-              aria-label={t('레일 설정')}
-              data-tip={t('레일 설정')}
+              aria-label={t('세션 목록 설정')}
+              data-tip={t('세션 목록 설정')}
               data-tip-sub={hiddenCount() ? t('저장소 {n}개 숨김', { n: hiddenCount() }) : t('구역 · 종료 세션 · 저장소')}
               data-tip-side="bottom"
               onClick={() => setRepoSheet(true)}
@@ -539,7 +562,7 @@ export function Rail(props: RailProps) {
             classList={{ collapsed: collapsed() }}
             onClick={toggleCollapse}
             aria-label={collapsed() ? t('펼치기') : t('접기')}
-            data-tip={collapsed() ? t('레일 펼치기') : t('레일 접기')}
+            data-tip={collapsed() ? t('세션 목록 펼치기') : t('세션 목록 접기')}
             data-tip-side="bottom"
             innerHTML={icon('chevron-down', 16, 2)}
           />
@@ -600,7 +623,7 @@ export function Rail(props: RailProps) {
                 class="vt-icon-btn sm vt-wgrail-group-act"
                 aria-label={t('이 구역 숨기기')}
                 data-tip={t('이 구역 숨기기')}
-                data-tip-sub={t('레일 설정에서 다시 켭니다')}
+                data-tip-sub={t('세션 목록 설정에서 다시 켭니다')}
                 data-tip-side="bottom"
                 onClick={hideAttention}
                 innerHTML={shellIcon('eye', 14, 2)}
@@ -720,7 +743,7 @@ export function Rail(props: RailProps) {
             </>}
           </Show>
           <Show when={rows().length > lists().sessions.length && !collapsed()}>
-            <div class="vt-wgrail-note">{t('레일 설정에서 {n}개를 숨겼습니다.', { n: rows().length - lists().sessions.length })}</div>
+            <div class="vt-wgrail-note">{t('세션 목록 설정에서 {n}개를 숨겼습니다.', { n: rows().length - lists().sessions.length })}</div>
           </Show>
         </Show>
         {/* §1 — 목록이 200개 상한에서 잘렸다. 여기 한 줄이 없으면 "몇 개가
@@ -792,7 +815,7 @@ export function Rail(props: RailProps) {
         <Portal>
           <RepoVisibility
             deps={props.deps}
-            title={t('레일 설정')}
+            title={t('세션 목록 설정')}
             lead={<RailSettingsLead />}
             onClose={() => setRepoSheet(false)}
             onChanged={() => reposPoll.kick()}

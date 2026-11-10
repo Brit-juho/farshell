@@ -103,7 +103,7 @@ def canonicalize(raw: str) -> str:
     try:
         real = fsguard.resolve_under_roots("/" + "/".join(static))
     except fsguard.FsDenied as e:
-        raise _err("outside_roots", tr("lease 는 열람 루트(VT_BROWSE_ROOTS) 안, 거부 목록·숨김 상태 폴더 밖의 경로에만 걸 수 있습니다: {why}",
+        raise _err("outside_roots", tr("폴더 점유는 열람 루트(VT_BROWSE_ROOTS) 안, 거부 목록·숨김 상태 폴더 밖의 경로에만 걸 수 있습니다: {why}",
                                        why=e.reason), 403)
     try:                                           # 아직 없는 경로여도 숨김 상태 폴더 이름이면 거부(fsguard 는 존재하는 디렉터리만 본다)
         rel = real.relative_to(fsguard._matching_root(real, fsguard.get_roots())).parts
@@ -112,7 +112,7 @@ def canonicalize(raw: str) -> str:
     for i, part in enumerate(rel):
         is_file = i == len(rel) - 1 and not rest and real.exists() and not real.is_dir()
         if fsguard.is_hidden_state_dir_name(part) and not is_file:
-            raise _err("outside_roots", tr("lease 는 열람 루트(VT_BROWSE_ROOTS) 안, 거부 목록·숨김 상태 폴더 밖의 경로에만 걸 수 있습니다: {why}",
+            raise _err("outside_roots", tr("폴더 점유는 열람 루트(VT_BROWSE_ROOTS) 안, 거부 목록·숨김 상태 폴더 밖의 경로에만 걸 수 있습니다: {why}",
                                            why=tr("거부된 디렉토리: {name}", name=part)), 403)
     for comp in rest:
         bad = None
@@ -121,7 +121,7 @@ def canonicalize(raw: str) -> str:
         if bad is None and fsguard.is_hidden_state_dir_name(comp):
             bad = tr("거부된 디렉토리: {name}", name=comp)
         if bad:
-            raise _err("outside_roots", tr("lease 는 열람 루트(VT_BROWSE_ROOTS) 안, 거부 목록·숨김 상태 폴더 밖의 경로에만 걸 수 있습니다: {why}",
+            raise _err("outside_roots", tr("폴더 점유는 열람 루트(VT_BROWSE_ROOTS) 안, 거부 목록·숨김 상태 폴더 밖의 경로에만 걸 수 있습니다: {why}",
                                            why=bad), 403)
     return str(real) + ("/" + "/".join(rest) if rest else "")
 
@@ -295,7 +295,7 @@ def reset_rate() -> None:
 
 def _rate(p: P.Principal) -> None:
     if not _RATE.hit(p.id):
-        raise _err("rate_limited", tr("lease 변경이 너무 잦습니다 — 분당 {n}회까지", n=limits.LIMITS["lease"][0]), 429, retryAfter=60)
+        raise _err("rate_limited", tr("폴더 점유 변경이 너무 잦습니다 — 분당 {n}회까지", n=limits.LIMITS["lease"][0]), 429, retryAfter=60)
 
 
 def _audit_strict(rec: dict) -> None:
@@ -347,7 +347,7 @@ def _decide(p: P.Principal, mode: str, glob: str, alive: Optional[set]):
 
 
 def _forbidden(scope: str, glob: str, d) -> LeaseError:
-    return _err("forbidden", tr("이 폴더에 lease 를 잡을 권한이 없습니다 — {scope} 권한이 필요합니다(request_access 로 요청)", scope=scope), 403,
+    return _err("forbidden", tr("이 폴더를 점유할 권한이 없습니다 — {scope} 권한이 필요합니다(request_access 로 요청)", scope=scope), 403,
                 need={"resource": "fs:local" + glob.rstrip("/") + ("/*" if not is_glob(glob) else ""), "scopes": [scope]},
                 why=getattr(d, "reason", ""))
 
@@ -424,7 +424,7 @@ def acquire(p: P.Principal, glob: str, *, mode: str = "write", exclusive: bool =
         items = docs["leases"]["items"]
         mine = [l for l in items if l["holder"] == p.id]
         if len(mine) >= MAX_PER_HOLDER and not system:
-            raise _err("too_many_leases", tr("lease 는 주체당 최대 {n}개입니다", n=MAX_PER_HOLDER), 429)
+            raise _err("too_many_leases", tr("폴더 점유는 주체당 최대 {n}개입니다", n=MAX_PER_HOLDER), 429)
         clashing = [l for l in items if clash(rec, l) and not _same_lineage(rec, l, items)]
         if clashing:
             _deny_log(p, "acquire", canon, "lease_conflict")
@@ -503,9 +503,9 @@ def renew(p: P.Principal, lid: str, ttl=None) -> dict:
         _reap_in_txn(docs, now, alive)
         l = _find(docs["leases"]["items"], lid)
         if l is None or not _can_manage(p, l):
-            raise _err("not_found", tr("그런 lease 가 없습니다"), 404)
+            raise _err("not_found", tr("그런 폴더 점유가 없습니다"), 404)
         if l.get("derived_from"):
-            raise _err("derived_lease", tr("상속받은 lease 는 갱신할 수 없습니다 — 부모 lease 를 갱신하세요"), 409)
+            raise _err("derived_lease", tr("상속받은 점유는 갱신할 수 없습니다 — 상위 점유를 갱신하세요"), 409)
         new = min(now + (t or int(l.get("ttl") or DEFAULT_TTL)), float(l.get("max_expires") or (float(l["created"]) + MAX_TTL)))
         capped = new < now + (t or int(l.get("ttl") or DEFAULT_TTL)) - 1
         l["expires"] = max(new, float(l.get("expires") or 0))     # 갱신은 줄이지 않는다
@@ -525,7 +525,7 @@ def release(p: P.Principal, lid: str, *, reason: str = "released") -> dict:
         items = docs["leases"]["items"]
         l = _find(items, lid)
         if l is None or not _can_manage(p, l):
-            raise _err("not_found", tr("그런 lease 가 없습니다"), 404)
+            raise _err("not_found", tr("그런 폴더 점유가 없습니다"), 404)
         gone = [l] + _descendants(items, lid)
         for g in gone:
             _audit_lease("release", p.id, g, result="ended", reason=reason if g is l else "parent_released")
@@ -557,7 +557,7 @@ def revoke_admin(actor: P.Principal, lid: str) -> dict:
     """관리자(사람)의 회수 — 속도 제한 없이."""
     gone = release_where(lambda l: l.get("id") == lid, who=actor.id, reason="revoked_by_admin")
     if not gone:
-        raise _err("not_found", tr("그런 lease 가 없습니다"), 404)
+        raise _err("not_found", tr("그런 폴더 점유가 없습니다"), 404)
     return {"ok": True, "id": lid, "released": len(gone)}
 
 
@@ -686,7 +686,7 @@ def enforce_write_sync(actor: Optional[P.Principal], paths: list, *, op: str, re
             actor = resolve()
         if actor is not None and actor.kind == P.HUMAN:
             return None, None
-        return {"error": "lease_unavailable", "reason": tr("lease 저장소를 읽을 수 없어 쓰기를 거부했습니다")}, None
+        return {"error": "lease_unavailable", "reason": tr("폴더 점유 저장소를 읽을 수 없어 쓰기를 거부했습니다")}, None
     act = _scan_blocked(paths)
     if act is None:
         return None, None
@@ -699,7 +699,7 @@ def enforce_write_sync(actor: Optional[P.Principal], paths: list, *, op: str, re
     if not rows:
         return None, None
     first = min(rows, key=lambda r: float(r.get("expires") or 0))
-    return {"error": "lease_conflict", "reason": tr("다른 세션의 lease 가 걸린 경로라 쓸 수 없습니다"), "holder": first["holder"],
+    return {"error": "lease_conflict", "reason": tr("다른 세션이 점유한 경로라 쓸 수 없습니다"), "holder": first["holder"],
             "expires": first["expires"], "paths": len(rows), "conflicts": rows[:10], "op": op}, None
 
 

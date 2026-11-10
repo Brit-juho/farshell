@@ -57,7 +57,7 @@ export async function historyApi(path, { body, signal, elevated = true, method }
   try { return await run(); }
   catch (error) {
     if (!elevated || error.status !== 401 || error.code !== 'elevation_required') throw error;
-    const password = await promptDialog(t('설정을 변경하려면 비밀번호를 확인하세요'), { password: true });
+    const password = await promptDialog(t('설정을 변경하려면 비밀번호를 확인하세요'), { password: true, title: t('비밀번호 확인') });
     if (password === null || signal?.aborted) throw new Error(t('변경을 취소했습니다'));
     await historyApi('/api/auth/elevate', { body: { password }, elevated: false, signal });
     return run();

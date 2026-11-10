@@ -671,7 +671,7 @@ export async function renderCommitFileDiff(container, repo, sha, file, opts = {}
   if (d.truncated) {
     const note = document.createElement('div');
     note.className = 'vt-vw-note warn';
-    note.textContent = t('diff가 커서 일부만 표시했습니다.');
+    note.textContent = t('변경 내용이 커서 일부만 표시했습니다.');
     container.appendChild(note);
   }
 }

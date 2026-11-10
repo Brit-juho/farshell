@@ -52,10 +52,10 @@ export function askSentence(item) {
   const name = presetName(item.preset);
   if (item.kind === 'pair' && item.pair) return pairSentence(item);
   if (item.kind === 'msg') return t('「{who}」이(가) 「{res}」 세션의 에이전트에게 메시지를 보내려 합니다', { who, res });
-  if (item.kind === 'peer') return t('「{who}」이(가) 호스트 「{res}」에 대한 권한 변경을 요청합니다 — 「{name}」', { who, res, name: name || t('{n}개 scope', { n: (item.scopes || []).length }) });
+  if (item.kind === 'peer') return t('「{who}」이(가) 호스트 「{res}」에 대한 권한 변경을 요청합니다 — 「{name}」', { who, res, name: name || t('권한 범위 {n}개', { n: (item.scopes || []).length }) });
   return name
     ? t('「{who}」이(가) 「{res}」에 「{name}」 권한을 요청합니다', { who, res, name })
-    : t('「{who}」이(가) 「{res}」에 {n}개 scope 를 요청합니다', { who, res, n: (item.scopes || []).length });
+    : t('「{who}」이(가) 「{res}」에 권한 범위(scope) {n}개를 요청합니다', { who, res, n: (item.scopes || []).length });
 }
 
 /** 승인함 행의 상세 줄 — 페어는 scope 목록 대신 묶음(세션·폴더·lease)을 말로, 나머지는 정확한 scope+조건. */
@@ -119,7 +119,7 @@ export function errorText(e) {
 // ── 권한 ─────────────────────────────────────────────────────────────────
 
 export function grantSummary(g) {
-  return g.preset ? presetName(g.preset) : t('{n}개 scope', { n: (g.scopes || []).length });
+  return g.preset ? presetName(g.preset) : t('권한 범위 {n}개', { n: (g.scopes || []).length });
 }
 
 const VIA_LABEL = { manual: t('직접 승인'), window: t('자동 승인 구간'), system: t('시스템'), migrated: t('이전된 권한') };
@@ -199,7 +199,7 @@ export function chainBadge(res) {
 
 // ── 페어 ─────────────────────────────────────────────────────────────────
 
-export const ROLE_LABEL = { driver: t('운전자(driver)'), navigator: t('길잡이(navigator)') };
+export const ROLE_LABEL = { driver: t('운전자'), navigator: t('길잡이') };
 export const roleLabel = (r) => ROLE_LABEL[r] || String(r || '');
 
 export const PAIR_STATE_LABEL = {
@@ -226,7 +226,7 @@ export function pairParties(req) {
 /** 역할이 받는 프리셋 `{name, detail}` — 이름은 보기/협업/운전/제어(일부면 「… 범위 안」), 상세는 정확한 scope+조건. */
 export function rolePreset(req, role) {
   const pr = ((req.pair && req.pair.presets) || {})[role] || {};
-  const name = presetName(pr.preset) || t('{n}개 scope', { n: (pr.scopes || []).length });
+  const name = presetName(pr.preset) || t('권한 범위 {n}개', { n: (pr.scopes || []).length });
   return { name, detail: detailLine({ scopes: pr.scopes || [], conds: pr.conds || {} }) };
 }
 
@@ -277,7 +277,7 @@ export function pairBundleText(p) {
   const bits = [];
   if (names.length) bits.push(t('세션 {list}', { list: names.join(', ') }));
   if (dirs.length) bits.push(t('폴더 {list}', { list: dirs.join(', ') }));
-  bits.push(b.leases ? t('폴더 lease 잡음') : t('lease 잡지 않음'));
+  bits.push(b.leases ? t('폴더 점유 시작') : t('점유 안 함'));
   return bits.join(' · ');
 }
 
@@ -299,8 +299,8 @@ const PAIR_ACTION = {
   'pair.handoff_offer': t('역할 교체 제안'), 'pair.handoff': t('역할 교체'), 'pair.end': t('페어 끝'),
 };
 const LEASE_ACTION = {
-  'lease.acquire': t('폴더 lease 잡음'), 'lease.renew': t('폴더 lease 연장'), 'lease.release': t('폴더 lease 놓음'),
-  'lease.revoke': t('폴더 lease 회수'), 'lease.expire': t('폴더 lease 만료'), 'lease.override': t('사람이 lease 경로에 직접 씀'),
+  'lease.acquire': t('폴더 점유 시작'), 'lease.renew': t('폴더 점유 연장'), 'lease.release': t('폴더 점유 해제'),
+  'lease.revoke': t('폴더 점유 회수'), 'lease.expire': t('폴더 점유 만료'), 'lease.override': t('사람이 점유 중인 경로에 직접 씀'),
 };
 const END_REASON = {
   denied: t('승인 거부'), phrase_mismatch: t('확인 문구 불일치'), member_gone: t('참여 세션이 사라짐'), panic: t('비상 정지'),
@@ -328,7 +328,7 @@ export function auditDetailText(e) {
     if (Number.isFinite(d.sessions) || Number.isFinite(d.dirs)) {
       bits.push(t('세션 {s}개 · 폴더 {d}개', { s: Number(d.sessions) || 0, d: Number(d.dirs) || 0 }));
     }
-    if (typeof d.leases === 'boolean') bits.push(d.leases ? t('lease 포함') : t('lease 없음'));
+    if (typeof d.leases === 'boolean') bits.push(d.leases ? t('폴더 점유 포함') : t('폴더 점유 없음'));
     if (Number.isFinite(d.elevated)) bits.push(d.elevated > 0 ? t('높은 권한 {n}개 요청', { n: d.elevated }) : t('높은 권한 없음'));
     if (d.state) bits.push(t('상태 {state}', { state: pairStateLabel(d.state) }));
     if (Number.isFinite(d.generation) && d.generation > 0) bits.push(t('교체 {n}회', { n: d.generation }));

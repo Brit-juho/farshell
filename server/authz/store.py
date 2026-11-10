@@ -36,6 +36,7 @@ from typing import Optional
 
 import store_lock
 import vt_paths
+from i18n import tr
 
 from . import scopes as S
 from .errors import ShareError
@@ -134,12 +135,12 @@ def diagnose(name: str) -> Optional[str]:
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
     except OSError as e:
-        return f"읽기 실패: {e.strerror or e}"
+        return tr("읽기 실패: {reason}", reason=e.strerror or e)
     except ValueError as e:
-        return f"JSON 파싱 실패: {e}"
+        return tr("JSON 파싱 실패: {reason}", reason=e)
     want = dict if name in _DICT_DOCS else list
     if not isinstance(data, dict) or not isinstance(data.get("items"), want):
-        return "모양이 올바르지 않음(items 없음)"
+        return tr("모양이 올바르지 않음(items 없음)")
     return None
 
 
@@ -178,9 +179,8 @@ def preserve_copy(name: str) -> Optional[Path]:
 
 def unreadable_error(names) -> StoreError:
     """쓰기를 거부하는 오류 — 어느 문서가 왜 막혔는지와 복구 방법을 사람 말로."""
-    from i18n import tr
     names = sorted(names)
-    detail = "; ".join(f"{n}.json ({diagnose(n) or '읽을 수 없음'})" for n in names)
+    detail = "; ".join(f"{n}.json ({diagnose(n) or tr('읽을 수 없음')})" for n in names)
     return StoreError("store_unreadable",
                       tr("권한 저장소를 읽을 수 없어 변경을 거부했습니다 — 파일은 그대로 두었습니다: {detail}. "
                          "복구: 파일을 고치거나 'fsh migrate-auth --status' 로 확인하세요", detail=detail),

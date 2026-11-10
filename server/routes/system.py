@@ -392,41 +392,11 @@ async def hooks_status():
     TTS 요약이 전부 **조용히** 동작하지 않으므로("왜 아무 일도 안 일어나지"의
     1번 원인), 사용자가 화면에서 확인할 수 있어야 한다.
     """
-    import claude_hooks
-    import codex_hooks
+    import hook_health
 
-    try:
-        settings = claude_hooks.load_settings(claude_hooks.settings_path())
-    except ValueError as e:
-        return {"ok": False, "error": "unreadable", "reason": str(e), "events": {}}
-    claude_plan = claude_hooks.plan(settings)
-    try:
-        codex_plan = codex_hooks.plan_text(codex_hooks.load_text(codex_hooks.settings_path()))
-        codex_error = None
-    except ValueError as e:
-        codex_plan = {}
-        codex_error = str(e)
-    tools = {
-        "claude": {
-            "ok": all(state == "ok" for state, _ in claude_plan.values()),
-            "events": {event: state for event, (state, _) in claude_plan.items()},
-        },
-        "codex": {
-            "ok": bool(codex_plan) and all(state == "ok" for state, _ in codex_plan.values()),
-            "events": {event: state for event, (state, _) in codex_plan.items()},
-        },
-    }
-    if codex_error:
-        tools["codex"]["error"] = codex_error
-    # hooks.json 에 복제된 FarShell 훅(Codex 앱 가져오기). 경고일 뿐 ok 에는 영향 없다.
-    dup_events = [event for event, _args, _tag in codex_hooks.find_foreign_farshell_hooks()]
-    tools["codex"]["duplicates"] = {"count": len(dup_events), "events": dup_events}
-    return {
-        "ok": all(tool["ok"] for tool in tools.values()),
-        # 기존 클라이언트 호환: 최상위 events는 계속 Claude 이벤트다.
-        "events": tools["claude"]["events"],
-        "tools": tools,
-    }
+    # 점검기(`hook_health`)의 캐시를 쓴다 — 설정 파일이 안 바뀌었으면 다시 읽지 않는다. 읽기는 전용 풀에서
+    # 기한을 두고 하므로 느린 홈 디렉터리가 이 라우트(와 이벤트 루프)를 붙잡지 않는다.
+    return await hook_health.status_payload()
 
 
 # N3(60-settings-palette.md §1) — 기기 스코프 설정. `/api/workspace`(전역)와

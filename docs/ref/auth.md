@@ -159,6 +159,8 @@ apply/export, the authz panic switch, and **file writes** (files-overhaul step 8
 |---|---|---|
 | `PUT /api/fs/file` (save), `POST /api/fs/new`, `POST /api/fs/mkdir`, `POST /api/fs/rename`, `POST /api/fs/delete` (to the OS trash; folders with `kind: "dir"`) | `require_human_session` + `require_elevated` | The first write path open over a public tunnel. A machine token, an agent (socket or token) or a peer is refused with 403 `human_session_required` before elevation is even asked — agents write with their own tools. A server without a password refuses them too (no human can be proven). Paths go through `fsguard.resolve_for_write` (folders through `resolve_dir_for_write`, which also refuses a root itself) (write boundary `VT_WRITE_ROOTS`, a boundary key read from `~/.vt.env` first). Not in the host relay allowlist (decision D7). Leases are a notice only: a human writing inside another holder's lease is allowed and audited as `lease.override`. Every write appends `fs.save` / `fs.new` / `fs.mkdir` / `fs.rename` / `fs.rename_dir` / `fs.trash` / `fs.trash_dir` to the audit chain (`started`, mandatory — 503 `audit_unavailable` if it cannot be written — then the result), with path sha8 and byte count only |
 
+| `PUT /api/update/settings` | `require_human_session` + `require_elevated` | Switches for the update check and **automatic update** (`check`, `auto`, `auto_hour`) — turning `auto` on lets the server replace its own code with a signature-verified release. Agents, peers, the machine token and relayed calls are refused; audited as `update.settings` (keys and new values). `GET /api/update/status` and `POST /api/update/check` need a human session only. Details: `docs/ref/dev.md` «Update check and automatic update». Tests: `server/tests/test_routes_update.py` |
+
 Tests: `server/tests/test_fs_write.py` (missing elevation, machine token, agent principal, cookie + token, cross-site
 Origin, audit rows), `test_authz_route_table.py` (the table matches the real gates).
 
@@ -651,7 +653,7 @@ mirrored) is **never overwritten**. Reads stay fail closed (agents, peers and th
 503 `store_unreadable` and nothing else in the same transaction is saved. Writes to other, healthy files are not blocked.
 The broken file is left exactly as it was (never deleted, never repaired); a copy of its bytes is kept next to it as
 `<name>.corrupt-<id>` (0600, one copy per distinct content). Fix or restore the file by hand (`fsh migrate-auth --restore <ts>`
-restores a backup), and the next change goes through. `fsh migrate-auth --status` prints a «저장소 읽기 불가» line per unreadable
+restores a backup), and the next change goes through. `fsh migrate-auth --status` prints a "store unreadable" (저장소 읽기 불가) line per unreadable
 file (reason, path, number of copies) and `fsh doctor` reports the same as a failed check.
 
 ## Deny log and the chain
@@ -728,7 +730,7 @@ as through the old `/api/agent/share/*` routes, which stay as shims. API detail:
 |---|---|
 | Who may call | Decide/revoke/panic: browser login session only (panic: elevated). Reads: login session, or the `fsh` CLI on the unix socket (a `cli` caller outside tmux) — the CLI never approves or revokes (`fsh authz revoke`/`panic` only point to the web/phone screen). An agent sees only its own requests and grants |
 | What a person chooses | `once` (a grant with `conds.max_uses = 1`, counted where an enforcement point consumes it), `session` (while the requester's and the resource's sessions live), or deny (5-minute cooldown). The approver can only narrow scopes and time, never widen |
-| Presets | The UI shows four bundles — 보기 (view), 협업 (collab), 운전 (drive), 제어 (control; elevated) — and the smallest bundle that covers a request or grant; scopes and conditions are on the detail view and in the audit |
+| Presets | The UI shows four bundles — View (보기), Collaborate (협업), Drive (운전), Control (제어; elevated bundle) — and the smallest bundle that covers a request or grant; scopes and conditions are on the detail view and in the audit |
 | `generic` grants | Written to `grants.json` with origin `authz:grant:<id>` (never projected to the old files), honoured by the engine wherever an enforcement point asks. With every flag off they change no response |
 | Requests by agents | `authz.request` is an agent default; 6 a minute per caller, 20 pending per caller, 200 in all, 24 h expiry, 5-minute cooldown after a refusal. `authz.request` and `authz.admin` cannot be requested; `pair.manage` can be requested only on a server with `pair` enforced. The agent's free-text `reason` is shown to the approver and never audited (length and sha8 only). A delegated child's request carries the parent delegation id |
 | Events | `authz_request`, `authz_resolved`, `authz_revoked` on `/ws-workspace` with ids and kinds only; the old `agent_share_request*` events are still sent for one release |

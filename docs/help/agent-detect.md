@@ -40,7 +40,7 @@ options = '^\s*[❯>]?\s*(\d+)\.\s+(.+?)\s*$'
 | 필드 | 의미 |
 |---|---|
 | `name` | 없으면 파일명(확장자 제외)을 쓴다. `claude.toml` → `claude` |
-| `enter` | 문자열 목록. 최근 출력 윈도우(16KiB)에 하나라도 나타나면 그 세션을 `waiting`으로 본다 |
+| `enter` | 문자열 목록. 최근 출력 윈도우(16KiB)에 하나라도 나타나고 **지금 tmux 화면 마지막 14줄에서도 프롬프트로 확인되면** 그 세션을 `waiting`으로 본다(문서·로그를 읽는 출력에 찍힌 인용 문구는 이력에만 남아 무시) |
 | `exit` | 문자열 목록. 나타나면 즉시 `waiting` 해제 — 프롬프트가 사라졌다는 신호 |
 | `[kinds]` | 표. 키 = waiting 유형(`approval`/`choice`/`plan`/`question`), 값 = 리터럴 문자열 목록(`enter`와 같은 리터럴 바이트 규칙). 여기 적힌 문구도 waiting 진입 신호다. `enter`에 걸리면 `approval`. 같은 윈도우에 여럿이면 plan → approval → enter → choice → question 순으로 이긴다 |
 | `ignore_exit_on` | kind 목록(예: `["choice"]`). 그 kind가 떠 있는 동안 `exit`를 무시한다 — Codex 질문 화면은 상태줄 `esc to interrupt`를 같이 그린다. 이 키는 `[kinds]` 표 **위**에 쓴다(TOML 규칙) |
@@ -68,6 +68,8 @@ toml을 본다. 우선순위는 훅 kind > 화면 kind > 폴백(`question`).
   (`"Yes"`, `"y/n"`)은 쓰지 않는다. 실제 프롬프트에만 나오는 긴 문구를 고른다.
 - `enter`/`exit`/`[kinds]`/`interrupt`/`[badge]`는 **리터럴 문자열**로 매칭한다(정규식이 아니다).
   `options`와 `interrupt_stale_after`만 정규식이다.
+- 프롬프트 문구가 **화면 맨 아래 14줄 안**에 있고 그 뒤에 `exit`(작업 중 표시)가 없어야 waiting이 된다. 선택지는
+  프롬프트 줄 아래(푸터형 `choice`는 바로 위)의 번호가 1씩 이어지는 마지막 묶음만 쓴다 — 앞선 번호 목록은 버튼이 되지 않는다.
 - 실제 터미널 출력에는 커서 이동·색상·줄지우기 ANSI 코드가 섞여 들어온다. 감지 윈도우는
   **ANSI를 벗기고 NBSP를 공백으로, 줄 머리로 가는 커서 이동(`\x1b[19;1H`)을 `\n`으로** 바꾼
   텍스트다(`_append_clean`) — 직접 이스케이프를 리터럴이나 정규식에 넣을 필요가 없다.

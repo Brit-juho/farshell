@@ -528,7 +528,7 @@ def scan_claude(worktree_path: Optional[str] = None, worktree_id: Optional[str] 
             continue
         notes = []
         if not worktree_path:
-            notes.append(tr("켜짐/꺼짐은 프로젝트마다 따로 기록된다 — 워크트리를 골라야 알 수 있다"))
+            notes.append(tr("켜짐/꺼짐은 프로젝트마다 따로 기록됩니다 — 워크트리를 골라야 알 수 있습니다"))
         servers.append(_entry(
             name=name, tool="claude", scope="global", path=path,
             enabled=(name not in disabled) if worktree_path else True,

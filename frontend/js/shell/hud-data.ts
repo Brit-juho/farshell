@@ -13,13 +13,13 @@ export type HudTone = 'ok' | 'warn' | 'err' | 'plain';
 // 배치(어떤 칩을 어느 쪽에 어떤 순서로)의 규칙은 hud-layout.js에 있다 — 설정 화면(일반 JS)도 같은 함수를
 // 써야 하는데 테스트 하네스가 .ts를 직접 못 읽어서다. 여기서는 타입과 함께 다시 내보내기만 한다.
 import {
-  HUD_KINDS, PINNED_HUD_KINDS, DEFAULT_HUD_LAYOUT, parseHudLayout, serializeHudLayout, sameHudLayout, hudZoneOf,
+  HUD_KINDS, PINNED_HUD_KINDS, ALERT_HUD_KINDS, DEFAULT_HUD_LAYOUT, parseHudLayout, serializeHudLayout, sameHudLayout, hudZoneOf,
   moveHudKind, stepHudKind,
 } from './hud-layout.js';
 import type { HudKind, HudLayout } from './hud-layout.js';
 
 export {
-  HUD_KINDS, PINNED_HUD_KINDS, DEFAULT_HUD_LAYOUT, parseHudLayout, serializeHudLayout, sameHudLayout, hudZoneOf,
+  HUD_KINDS, PINNED_HUD_KINDS, ALERT_HUD_KINDS, DEFAULT_HUD_LAYOUT, parseHudLayout, serializeHudLayout, sameHudLayout, hudZoneOf,
   moveHudKind, stepHudKind,
 };
 export type { HudKind, HudLayout };
@@ -37,6 +37,8 @@ export interface HudChip {
   dot?: boolean;
   /** 클릭 시 발동할 core/dom.js 액션 id. 없으면 클릭 불가. */
   action?: string;
+  /** 액션에 넘길 인자(예: `settings.section`의 섹션 id). */
+  actionArg?: string;
   side: 'left' | 'right';
   /**
    * 자리가 모자랄 때 **버티는 순서**. 낮을수록 끝까지 남는다(1이 최우선).
@@ -65,6 +67,8 @@ const PRIORITY = {
   usageAlert: 2,
   /** 나 말고 다른 화면이 붙음 — 화면이 오락가락하는 원인이라 경고로 취급한다. */
   screensAlert: 3,
+  /** 훅이 깨졌다 — 상태 배지·큐·TTS가 조용히 멎은 상태라 에이전트 개입 다음으로 끝까지 남는다. */
+  hooksAlert: 2,
   /** 평상시 사용량 — dock 사용량 탭에 같은 값이 더 자세히 있다. */
   usage: 5,
   /** 이 기계의 CPU·RAM·네트워크 — 임계를 넘으면 경고 순위(screensAlert와 같은 자리)로 올라온다. */
@@ -103,6 +107,8 @@ export interface HudInput {
   stats?: SystemStats | null;
   /** 에이전트 상태 집계(agent/state.js의 4상태). 셋 다 0이면 칩이 없다. */
   agents?: AgentCounts | null;
+  /** 훅 건강 점검(서버 hook_health) — CLI별 상태와 빠진·어긋난 이벤트 이름. 이상이 없으면 칩이 없다. */
+  hooks?: HooksHealth | null;
   /** 푸시 알림 상태. `unavailable`(이 브라우저에서 못 씀)·null(아직 모름)이면 칩이 없다. */
   push?: 'on' | 'off' | 'unavailable' | null;
   /** 시계 칩에 쓸 지금 시각(ms). 없으면 시계 칩이 없다 — 순수 함수라 시계를 직접 읽지 않는다. */
@@ -110,6 +116,8 @@ export interface HudInput {
   /** 시계 표기에 쓸 로케일(예: `ko-KR`). 비면 브라우저 기본. */
   locale?: string;
 }
+
+export type HooksHealth = Record<string, { state: string; events?: string[] }>;
 
 export interface AgentCounts {
   /** 입력 대기(승인·선택·질문) — 사람이 와야 풀린다. */
@@ -262,6 +270,26 @@ function agentsChip(c: AgentCounts): HudChip | null {
   };
 }
 
+// 훅 점검 칩 — 이상(빠짐·어긋남·읽기 실패)이 있는 CLI 이름만 값으로 적는다. 이상이 없거나 그 CLI를 안 쓰면(absent) 칩이 없다.
+const HOOK_BAD = new Set(['missing', 'mismatch', 'unreadable']);
+const HOOK_NAMES: Record<string, string> = { claude: 'Claude', codex: 'Codex' };
+function hooksChip(h: HooksHealth): HudChip | null {
+  const bad = Object.entries(h).filter(([, v]) => v && HOOK_BAD.has(v.state)).map(([cli]) => HOOK_NAMES[cli] || cli);
+  if (!bad.length) return null;
+  return {
+    id: 'hooks',
+    kind: 'hooks',
+    label: t('훅 점검 필요'),
+    value: bad.join(' · '),
+    tooltip: t('에이전트 훅이 빠졌거나 어긋났습니다 — 누르면 설정 → 정보에서 이유와 고치는 방법을 봅니다'),
+    tone: 'warn',
+    action: 'settings.section',
+    actionArg: 'about',
+    side: 'left',
+    priority: PRIORITY.hooksAlert,
+  };
+}
+
 export function buildHudChips(input: HudInput, layout: HudLayout = DEFAULT_HUD_LAYOUT): HudChip[] {
   const chips: HudChip[] = [];
 
@@ -322,6 +350,11 @@ export function buildHudChips(input: HudInput, layout: HudLayout = DEFAULT_HUD_L
     if (chip) chips.push(chip);
   }
 
+  if (input.hooks) {
+    const chip = hooksChip(input.hooks);
+    if (chip) chips.push(chip);
+  }
+
   // 푸시: 이 브라우저에서 못 쓰면(비보안 컨텍스트·미지원) 칩 자체가 없다 — 눌러 봐야 사유만 나오는 칩은 소음이다.
   if (input.push === 'on' || input.push === 'off') {
     const on = input.push === 'on';
@@ -347,7 +380,7 @@ export function buildHudChips(input: HudInput, layout: HudLayout = DEFAULT_HUD_L
   // 손으로 넘긴 경우) 두 번 그리지 않는다. 같은 종류의 칩이 여럿(사용량 프로필)이면 만든 순서를 유지한다.
   const pinned = new Set<string>(PINNED_HUD_KINDS);
   const placed: HudChip[] = [];
-  for (const kind of PINNED_HUD_KINDS) {
+  for (const kind of [...PINNED_HUD_KINDS, ...ALERT_HUD_KINDS]) {
     for (const c of chips) if (c.kind === kind) placed.push({ ...c, side: 'left' });
   }
   for (const side of ['left', 'right'] as const) {
