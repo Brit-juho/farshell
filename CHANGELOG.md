@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+- **Korean UI copy cleanup** (English text unchanged). English terms in Korean strings now follow the glossary: the Korean word with the English term in parentheses at first mention only (「폴더 점유(lease)」, 「권한 범위(scope)」), Korean afterwards; 「pane」 is 「페인」 and the internal word 「레일」 is 「세션 목록」. Internal numbers such as 「ADR-27」 no longer appear on screen. Confirm and prompt dialogs name their action (「삭제」「종료」「적용」「저장」…) instead of a bare 「확인」, and 「지우기/삭제」 are no longer mixed for one action. The rules (buttons, removal words, tone, periods) are in `docs/ref/i18n.md`.
+
 ---
 
 ## [2.10.1] — 2026-11-10
