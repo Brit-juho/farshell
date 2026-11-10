@@ -102,7 +102,7 @@ test('startPcmCapture: 48k 블록 → 16000바이트 청크, 레벨 콜백, stop
   assert.strictEqual(levels.length, 12);
   const rest = await cap.stop();
   assert.strictEqual(rest.length, 384);
-  assert.strictEqual(t.s.stopped, 1); assert.ok(a.state.closed); assert.deepStrictEqual(a.state.revoked, ['blob:x']);
+  assert.strictEqual(t.s.stopped, 1); assert.ok(a.state.closed); assert.deepStrictEqual(a.state.added, ['/static/js/voice/pcm-worklet.js']);   // Blob이 아닌 같은 출처 정적 파일(CSP script-src 'self')
   assert.strictEqual((await cap.stop()).length, 0);          // 두 번째 stop은 무해
 });
 
@@ -124,5 +124,15 @@ test('startPcmCapture: 컨텍스트가 돌지 않거나 addModule이 실패하�
   assert.ok(a.state.closed);
   const b = fakeAudio(48000); b.ctx.audioWorklet.addModule = async () => { throw new Error('blocked'); };
   await assert.rejects(startPcmCapture(b.ctx, tracks().stream, {}, b.g), /blocked/);
-  assert.ok(b.state.closed && b.state.revoked.length === 1);
+  assert.ok(b.state.closed);
+});
+
+test('워클릿 정적 파일: 이름·블록 크기가 pcm-worklet-src.js 상수와 같고 Blob/인라인 의존이 없다(CSP)', async () => {
+  const { readFileSync } = require('node:fs');
+  const { WORKLET_NAME, WORKLET_BLOCK, WORKLET_URL } = await load('pcm-worklet-src.js');
+  assert.strictEqual(WORKLET_URL, '/static/js/voice/pcm-worklet.js');
+  const src = readFileSync(path.join(__dirname, '../js/voice/pcm-worklet.js'), 'utf8');
+  assert.ok(src.includes(`registerProcessor('${WORKLET_NAME}'`));
+  assert.ok(src.includes(`new Float32Array(${WORKLET_BLOCK})`));
+  assert.ok(!src.includes('${'));
 });

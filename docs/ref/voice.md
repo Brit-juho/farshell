@@ -158,9 +158,8 @@ carry over. Two paths cover this:
 - **클라이언트**(`frontend/js/voice/`, 모두 voice 번들): `pcm-capture.js`(AudioContext + 워클릿, 입력 샘플레이트가
   16kHz가 아니면 `pcm.js`의 면적 평균 리샘플) → `pcm.js`(PCM16 LE, 16000바이트=500ms 청크) → `chunk-upload.js`
   (한 번에 한 요청, 누적 `ackSeq`로 정리, 실패는 같은 seq 재전송) → `pcm-session.js`가 묶는다. `recording.js`는
-  분기만 한다. 워클릿 소스는 문자열 상수(`pcm-worklet-src.js`)를 Blob URL로 올린다 — 별도 asset을 두면 고정
-  산출물 목록(`voice.js`)과 `sw.js` precache가 늘고, `?raw` import는 테스트용 `vm-esm` 로더가 못 읽는다. 서버 CSP는
-  `frame-ancestors`뿐이라 blob 모듈이 막히지 않는다. 워클릿 미지원·보안 컨텍스트 아님·`addModule` 실패 시
+  분기만 한다. 워클릿 본체는 정적 파일 `frontend/js/voice/pcm-worklet.js`(번들 밖 classic 스크립트, 녹음을 시작할 때만 요청)이고
+  `pcm-worklet-src.js`는 이름·블록 크기·주소 상수만 든다. 앱 문서 CSP가 `script-src 'self'`라 Blob URL 모듈은 막히기 때문이다(`docs/ref/auth.md`). 워클릿 미지원·보안 컨텍스트 아님·`addModule` 실패 시
   MediaRecorder + `/voice/input` 경로로 같은 스트림을 넘겨 폴백한다(콘솔 `[voice] 캡처 경로:` debug 로그에 어느 쪽인지 남는다).
   iOS Safari는 AudioContext를 제스처 안에서 만들어야 해서 `startRecording` 맨 앞(await 전)에서 만든다.
 - **재전송 한계**: 일시 실패(네트워크·429/502/503/504)는 backoff 3회 뒤에도 녹음을 쌓으며 25초까지 같은 seq를 다시 보낸다

@@ -6,13 +6,13 @@
 // 아니면 getUserMedia도 AudioWorklet도 없으므로 지원 안 함으로 본다.
 //
 // core/store.js·core/dom.js를 import하지 않는다(recording.js 상단 경고).
-import { WORKLET_NAME, WORKLET_SOURCE } from './pcm-worklet-src.js';
+import { WORKLET_NAME, WORKLET_URL } from './pcm-worklet-src.js';
 import { Resampler, floatToPcm16, Chunker, MAX_RECORD_BYTES } from './pcm.js';
 import { measure, createMeter } from './meter.js';
 
 export function supportsPcmCapture(g = globalThis) {
   const AC = g.AudioContext || g.webkitAudioContext;
-  return !!(AC && g.AudioWorkletNode && g.isSecureContext !== false && g.Blob && g.URL && g.URL.createObjectURL);
+  return !!(AC && g.AudioWorkletNode && g.isSecureContext !== false);
 }
 
 /** 사용자 제스처 안에서 호출한다. 지원하지 않으면 null. 컨텍스트는 호출부가 닫을 책임이 있다(startPcmCapture가 닫기도 한다). */
@@ -35,19 +35,17 @@ export function primeAudioContext(g = globalThis) {
  * @returns {{ stop(): Promise<Uint8Array> 마지막 남은 바이트, sampleRate }}
  */
 export async function startPcmCapture(ctx, stream, cb, g = globalThis) {
-  let url = null, node = null, src = null, sink = null;
+  let node = null, src = null, sink = null;
   const cleanup = () => {
     try { node && node.disconnect(); } catch {}
     try { src && src.disconnect(); } catch {}
     try { sink && sink.disconnect(); } catch {}
-    if (url) { try { g.URL.revokeObjectURL(url); } catch {} url = null; }
     try { ctx.close(); } catch {}
   };
   try {
     if (ctx.state === 'suspended') await ctx.resume();
     if (ctx.state !== 'running') throw new Error('audio context not running: ' + ctx.state);
-    url = g.URL.createObjectURL(new g.Blob([WORKLET_SOURCE], { type: 'text/javascript' }));
-    await ctx.audioWorklet.addModule(url);
+    await ctx.audioWorklet.addModule(WORKLET_URL);
     src = ctx.createMediaStreamSource(stream);
     node = new g.AudioWorkletNode(ctx, WORKLET_NAME, { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1], channelCount: 1, channelCountMode: 'explicit' });
     // 일부 브라우저(Safari)는 destination에 이어지지 않은 노드를 돌리지 않는다. 음량 0으로 잇는다.
