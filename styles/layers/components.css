@@ -1661,6 +1661,7 @@
     .vt-dialog .vt-share-ok,
     .vt-dialog .vt-share-cancel,
     .vt-dialog .vt-dialog-ok,
+    .vt-dialog .vt-dialog-discard,
     .vt-dialog .vt-dialog-cancel { --btn-h: 44px; }
     .vt-authz-later .vt-btn { --btn-h: 44px; }
     .vt-authz-in { min-height: 44px; }
