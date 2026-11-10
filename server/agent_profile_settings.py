@@ -190,11 +190,14 @@ def _active(profile_id):
         return True
 
 
-def sync(profile_id, *, dry_run=False, take_global=(), include_mcp=None):
+def sync(profile_id, *, dry_run=False, take_global=(), include_mcp=None, statusline_only=False):
     """Bring the profile's settings.json (and MCP server definitions) in line with the global ones.
 
     The report names key paths only, never values. MCP definitions are written to the
     profile's .claude.json only while no session of the profile is running.
+    `statusline_only` touches nothing but the usage-collecting statusLine wrapper (no other settings key,
+    no hooks, no MCP definitions, `.claude.json` is not even read) — what the automatic call at session
+    creation uses.
     """
     profile = profiles.get(profile_id)
     profiles.require_active(profile)
@@ -213,6 +216,8 @@ def sync(profile_id, *, dry_run=False, take_global=(), include_mcp=None):
         recorded, updated = base["settings"], dict(mine)
         for key in sorted(set(glob) | set(mine) | {STATUSLINE}):   # the wrapper is placed even with no global statusLine
             if key in PER_PROFILE_TOP or key == "hooks":
+                continue
+            if statusline_only and key != STATUSLINE:
                 continue
             g, p = glob.get(key, _MISSING), mine.get(key, _MISSING)
             if key in NESTED and isinstance(g if g is not _MISSING else {}, dict) and isinstance(p if p is not _MISSING else {}, dict):
@@ -254,12 +259,12 @@ def sync(profile_id, *, dry_run=False, take_global=(), include_mcp=None):
         # Hooks: event by event, leaving FarShell's own status hooks to its installer.
         vault = {}
         vpath = fsguard.profile_file(root, ".farshell-hooks-disabled.json")
-        if vpath.exists():
+        if vpath.exists() and not statusline_only:
             vault = json.loads(fsguard.read_profile_bytes(root, vpath.name))
         g_hooks = glob.get("hooks", {}) if isinstance(glob.get("hooks", {}), dict) else {}
         p_hooks = mine.get("hooks", {}) if isinstance(mine.get("hooks", {}), dict) else {}
         new_hooks = dict(p_hooks)
-        for event in sorted(set(g_hooks) | set(p_hooks)):
+        for event in (() if statusline_only else sorted(set(g_hooks) | set(p_hooks))):
             path = f"hooks.{event}"
             if f"settings.json:{event}" in vault:
                 report["skipped"].append(path)  # some of its hooks are switched off here: edit it in the manager
@@ -292,6 +297,11 @@ def sync(profile_id, *, dry_run=False, take_global=(), include_mcp=None):
                 from agent_profile_migration import _write_bytes
                 _write_bytes(spath, json.dumps(updated, ensure_ascii=False, indent=2).encode(), 0o600)
 
+        if statusline_only:
+            if not dry_run:
+                from agent_profile_migration import _write_bytes
+                _write_bytes(fsguard.profile_file(root, BASE), json.dumps(base).encode(), 0o600)
+            return {k: (sorted(v) if isinstance(v, list) else v) for k, v in report.items()} | {"dry_run": dry_run}
         # MCP server definitions (with the keys they carry) follow the global ones too.
         wants_mcp = (not dry_run) if include_mcp is None else include_mcp
         servers = _global_mcp()
