@@ -34,7 +34,8 @@ export function mcpContext() {
   return (tab && tab.worktreeId) || null;
 }
 
-export function showMcp() {
+// section — 열자마자 보일 화면(지금은 'profiles' = 실행 프로필만 받는다). 설정 › 에이전트 계정의 「실행 프로필 관리」가 쓴다.
+export function showMcp(section) {
   // 설정 위에 팝업이 겹치지 않도록 먼저 닫는다.
   closePanel('vt-settings');
   // openPanel이 이미 토글이다 — 같은 id로 열려 있으면 여기서 닫고 null을
@@ -60,7 +61,7 @@ export function showMcp() {
           if (panel.body.isConnected) legacy.mount(panel.body, mcpContext());
         }).catch(() => { panel.body.textContent = t('불러오지 못했습니다'); });
       };
-      manager = m.mount(panel.body, JSON.parse(ctx), openLegacy);
+      manager = m.mount(panel.body, { ...JSON.parse(ctx), ...(section === 'profiles' ? { section } : {}) }, openLegacy);
       // 팝업을 띄운 채 다른 칸을 누르면 그 칸 기준으로 다시 읽는다.
       unsub = onLayoutChange(() => {
         const next = JSON.stringify(agentConfigContext());

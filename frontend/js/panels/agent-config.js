@@ -62,7 +62,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
   let hosts = [];
   let snapshots = [];
   let rows = [];
-  let section = 'items';
+  let section = initialContext.section === 'profiles' ? 'profiles' : 'items';
   let profilePanel = null;
   let kind = 'all';
   let tool = 'all';

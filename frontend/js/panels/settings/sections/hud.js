@@ -35,6 +35,7 @@ function kindInfo() {
     ram: { name: 'RAM', desc: t('메모리 사용률. 80%부터 주의, 90%부터 경고 색입니다.'), sample: { label: 'RAM', value: '72%', tone: 'plain' } },
     net: { name: t('네트워크'), desc: t('초당 내려받기와 올리기 속도.'), sample: { label: 'NET', value: '↓12K ↑3K', tone: 'plain' } },
     usage: { name: t('사용량'), desc: t('AI 사용량 한도. 프로필마다 하나씩, 한도가 가까우면 앞자리로 올라옵니다.'), sample: { label: 'claude', value: '42%', hint: '· 4h12m', tone: 'plain' } },
+    account: { name: t('기본 계정'), desc: t('지금 기본 계정과 그 계정의 사용률. 눌러서 기본 계정을 바꿉니다. 등록된 계정이 없으면 보이지 않습니다.'), sample: { label: 'work', value: '5h 23%', hint: '· 3h10m', tone: 'plain', caret: true } },
     agents: { name: t('에이전트'), desc: t('입력을 기다리는·작업 중인·확인하지 않은 완료 세션 수. 개입이 필요하면 눌러서 가장 오래 기다린 세션으로 갑니다. 맨 왼쪽에 고정돼 옮길 수 없습니다.'), sample: { label: t('개입'), value: '2', hint: `· ${t('작업')} 1 · ${t('완료')} 1`, tone: 'warn' } },
     push: { name: t('알림'), desc: t('이 브라우저의 푸시 알림 켜짐·꺼짐. 눌러서 바꿉니다. 이 브라우저가 푸시를 못 쓰면 보이지 않습니다.'), sample: { label: t('알림'), value: t('켜짐'), tone: 'ok' } },
     clock: { name: t('시계'), desc: t('날짜와 시각. 오른쪽 끝에 두면 맥 메뉴바의 시계와 같은 자리입니다.'), sample: { label: '', value: t('11월 3일 (화) 14:05'), tone: 'plain' } },
@@ -61,6 +62,7 @@ function chipHTML(sample, kind) {
   if (sample.label) parts.push(`<span class="vt-hud-label">${vtEsc(sample.label)}</span>`);
   if (sample.value) parts.push(`<span class="vt-hud-value">${vtEsc(sample.value)}</span>`);
   if (sample.hint) parts.push(`<span class="vt-hud-hint">${vtEsc(sample.hint)}</span>`);
+  if (sample.caret) parts.push(`<span class="vt-hud-caret" aria-hidden="true">${icon('chevron-down', 10, 2)}</span>`);
   return `<span class="vt-hud-chip tone-${sample.tone}" data-chip="${vtEsc(kind || '')}">${parts.join('')}</span>`;
 }
 

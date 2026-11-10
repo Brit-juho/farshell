@@ -69,7 +69,7 @@ test('열기 — 섹션 목록과 첫 섹션이 그려진다', async () => {
   assert.ok(document.getElementById('vt-settings'), '패널이 열려야 한다');
   assert.deepEqual(
     Array.from(document.querySelectorAll('.vt-set-navitem')).map((b) => b.textContent),
-    ['터미널', '음성 및 알림', '에이전트', '키맵', '모양', '상태 막대 · 활동 막대', '권한', '계정 및 보안', '업데이트', '정보 및 진단'],
+    ['터미널', '음성 및 알림', '에이전트', '에이전트 계정', '키맵', '모양', '상태 막대 · 활동 막대', '권한', '계정 및 보안', '업데이트', '정보 및 진단'],
   );
   assert.ok(rowByLabel(document, '글자 크기'), '첫 섹션(터미널)이 그려져야 한다');
 });
@@ -181,7 +181,7 @@ test('compact — 더보기 첫 화면에 도구와 설정 진입점이 나온�
   const { document, P } = await build({ compact: true });
   P.showSettings();
   const links = Array.from(document.querySelectorAll('.vt-set-mobile-link strong')).map((e) => e.textContent);
-  assert.deepEqual(links, ['파일', '포트', '사용량', '터미널', '음성 및 알림', '에이전트', '키맵', '모양', '권한', '계정 및 보안', '업데이트', '정보 및 진단']);
+  assert.deepEqual(links, ['파일', '포트', '사용량', '터미널', '음성 및 알림', '에이전트', '에이전트 계정', '키맵', '모양', '권한', '계정 및 보안', '업데이트', '정보 및 진단']);
   assert.strictEqual(document.querySelector('.vt-set-nav'), null, 'compact 첫 화면은 숨은 가로 탭을 만들지 않는다');
 });
 
@@ -802,12 +802,83 @@ const hudZone = (document, zone) => Array.from(document.querySelectorAll(`.vt-hu
 const layoutOf = (S) => JSON.parse(S.get('ui.hud.layout'));
 const previewKinds = (document) => Array.from(document.querySelectorAll('.vt-hudcfg-preview .vt-hud-chip')).map((c) => c.dataset.chip);
 
+// 「계정」 — 도구별 기본 계정 지정/해제와 목록(인증·사용률·리셋·출처). 데이터는 선택기 목록(/api/agent-profiles/read/picker) 그대로다.
+const ACCOUNTS_PICKER = {
+  profiles: [
+    { id: 'a'.repeat(32), name: 'alice', tool: 'claude', purpose: 'work', auth: 'ok', selectable: true, reason: null, default: true,
+      usage: { windows: [{ id: 'five_hour', label: '5h', pct: 80, resets_in_sec: 7200 }, { id: 'seven_day', label: 'weekly', pct: 20, resets_in_sec: 90000 }], checked_at: 1000, stale: false, source: 'statusline' } },
+    { id: 'b'.repeat(32), name: 'work', tool: 'claude', purpose: 'work', auth: 'ok', selectable: true, reason: null, default: false, usage: null },
+    { id: 'c'.repeat(32), name: 'personal', tool: 'codex', purpose: 'work', auth: 'ok', selectable: true, reason: null, default: false,
+      usage: { windows: [{ id: 'primary', label: '5h', pct: 95, resets_in_sec: 60 }], checked_at: 1000, stale: false, source: 'app-server' } },
+    { id: 'd'.repeat(32), name: 'blank', tool: 'claude', purpose: 'work', auth: 'missing', selectable: false, reason: 'not signed in here', default: false, usage: null },
+  ],
+  defaults: { claude: { id: 'a'.repeat(32), valid: true } },
+};
+function accountsFetch(picker = ACCOUNTS_PICKER) {
+  const calls = [];
+  const fetchExtra = (u, opts) => {
+    if (u.includes('/api/agent-profiles/read/picker')) return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(picker) });
+    if (u.includes('/api/agent-profiles/default')) { calls.push(JSON.parse(opts.body)); return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) }); }
+    return null;
+  };
+  return { fetchExtra, calls };
+}
+
+test('계정 — 도구별로 묶어 기본 표시·인증·사용률·리셋·출처를 보이고, 쓸 수 없는 계정은 사유와 함께 지정만 막는다', async () => {
+  const { fetchExtra } = accountsFetch();
+  const { document, P } = await build({ fetchExtra });
+  P.showSettings();
+  sectionButton(document, '에이전트 계정').click();
+  await flush(); await flush();
+  const titles = Array.from(document.querySelectorAll('.vt-set-group-title')).map((h) => h.firstChild.textContent);
+  assert.deepEqual(titles, ['Claude 기본 계정', 'Codex 기본 계정', '계정 추가']);
+  const alice = rowByLabel(document, 'alice');
+  assert.strictEqual(alice.dataset.default, 'true');
+  assert.strictEqual(alice.querySelector('.vt-set-scope').textContent, '기본');
+  assert.match(alice.textContent, /5시간 80% · .* 뒤 리셋 · 주간 20%/);
+  assert.match(alice.textContent, /출처 statusline/);
+  assert.strictEqual(alice.querySelector('.vt-set-help').dataset.tone, 'warn', '75%부터 주의 색(상태 막대 칩과 같은 기준)');
+  assert.strictEqual(alice.querySelector('button').textContent, '해제');
+  assert.strictEqual(rowByLabel(document, 'personal').querySelector('.vt-set-help').dataset.tone, 'err', '90%부터 경고 색');
+  assert.strictEqual(rowByLabel(document, 'work').querySelector('button').textContent, '기본으로 지정');
+  assert.match(rowByLabel(document, 'work').textContent, /사용량 알 수 없음/, '값이 없으면 지어내지 않는다');
+  const blank = rowByLabel(document, 'blank');
+  assert.strictEqual(blank.querySelector('button').disabled, true);
+  assert.match(blank.textContent, /로그인 안 됨 · not signed in here/);
+  assert.match(document.body.textContent, /본인 계정만 등록하세요/);
+  assert.ok(Array.from(document.querySelectorAll('.vt-set-content button')).some((b) => b.textContent === '실행 프로필 관리 ›'));
+});
+
+test('계정 — 「기본으로 지정」·「해제」는 도구별 기본 계정 요청을 보낸다(세션 만들기 메뉴가 아니라 여기서)', async () => {
+  const { fetchExtra, calls } = accountsFetch();
+  const { document, P } = await build({ fetchExtra });
+  P.showSettings();
+  sectionButton(document, '에이전트 계정').click();
+  await flush(); await flush();
+  rowByLabel(document, 'work').querySelector('button').click();
+  await flush(); await flush();
+  assert.deepEqual(calls[0], { tool: 'claude', profile_id: 'b'.repeat(32) });
+  rowByLabel(document, 'alice').querySelector('button').click();
+  await flush(); await flush();
+  assert.deepEqual(calls[1], { tool: 'claude', profile_id: null });
+});
+
+test('계정 — 등록된 계정이 없으면 안내만, 폰(compact)에서도 섹션이 목록에 있다', async () => {
+  const { fetchExtra } = accountsFetch({ profiles: [], defaults: {} });
+  const { document, P } = await build({ fetchExtra, compact: true });
+  P.showSettings();
+  Array.from(document.querySelectorAll('.vt-set-mobile-link strong')).find((e) => e.textContent === '에이전트 계정').closest('button').click();
+  await flush(); await flush();
+  assert.match(document.querySelector('.vt-set-content').textContent, /등록된 계정이 없습니다/);
+  assert.strictEqual(document.querySelector('.vt-set-group-title').textContent, '계정 추가', '프로필 추가·로그인 링크는 계정이 없어도 있다');
+});
+
 test('상태 막대 — 기본 배치가 구역별 목록과 미리보기로 그려진다 (에이전트 고정, 서버는 사용 안 함)', async () => {
   const { document, P } = await build();
   P.showSettings();
   sectionButton(document, '상태 막대 · 활동 막대').click();
   assert.deepEqual(hudZone(document, 'left'), ['agents', 'e2e', 'safe-mode', 'screens']);
-  assert.deepEqual(hudZone(document, 'right'), ['cpu', 'gpu', 'ram', 'net', 'usage', 'push', 'version', 'clock']);
+  assert.deepEqual(hudZone(document, 'right'), ['cpu', 'gpu', 'ram', 'net', 'account', 'usage', 'push', 'version', 'clock']);
   assert.deepEqual(hudZone(document, 'off'), ['server']);
   const pinned = hudItem(document, 'agents');
   assert.ok(pinned.classList.contains('pinned'));
@@ -815,7 +886,7 @@ test('상태 막대 — 기본 배치가 구역별 목록과 미리보기로 그
   assert.strictEqual(pinned.querySelectorAll('.vt-icon-btn').length, 0, '고정 칩은 순서 버튼이 없다');
   assert.strictEqual(pinned.draggable, false, '고정 칩은 끌 수 없다');
   assert.strictEqual(pinned.querySelector('.vt-hudcfg-pin').textContent, '고정');
-  assert.strictEqual(previewKinds(document).length, 12, '미리보기는 켜진 칩만 그린다');
+  assert.strictEqual(previewKinds(document).length, 13, '미리보기는 켜진 칩만 그린다');
   assert.strictEqual(previewKinds(document)[0], 'agents', '미리보기도 에이전트가 맨 왼쪽');
   assert.strictEqual(document.querySelector('.vt-hudcfg-preview').getAttribute('aria-label'), '상태 막대 미리보기');
   assert.strictEqual(document.querySelector('.vt-hudcfg-foot .vt-btn').disabled, true, '기본이면 되돌릴 게 없다');
@@ -830,8 +901,8 @@ test('상태 막대 — 구역 선택을 바꾸면 저장되고 목록·미리�
   sel.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
   assert.deepEqual(hudZone(document, 'left'), ['agents', 'e2e', 'safe-mode', 'screens', 'server']);
   assert.deepEqual(layoutOf(S).left, ['e2e', 'safe-mode', 'screens', 'server'], '저장값에는 고정 칩이 없다');
-  assert.strictEqual(layoutOf(S).v, 3);
-  assert.strictEqual(previewKinds(document).length, 13);
+  assert.strictEqual(layoutOf(S).v, 4);
+  assert.strictEqual(previewKinds(document).length, 14);
 });
 
 test('상태 막대 — 위/아래 버튼은 같은 구역 안에서 한 칸 옮기고 끝에서는 눌리지 않는다(고정 칩 위로는 못 간다)', async () => {
@@ -859,7 +930,7 @@ test('상태 막대 — 기본값으로 버튼은 저장값을 비우고 기본 
   assert.strictEqual(reset.disabled, false);
   reset.click();
   assert.strictEqual(S.get('ui.hud.layout'), '');
-  assert.deepEqual(hudZone(document, 'right'), ['cpu', 'gpu', 'ram', 'net', 'usage', 'push', 'version', 'clock']);
+  assert.deepEqual(hudZone(document, 'right'), ['cpu', 'gpu', 'ram', 'net', 'account', 'usage', 'push', 'version', 'clock']);
 });
 
 test('상태 막대 — 옮길 수 있는 칩을 모두 꺼도 화면이 죽지 않고, 에이전트 칩만 남는다', async () => {
@@ -871,7 +942,7 @@ test('상태 막대 — 옮길 수 있는 칩을 모두 꺼도 화면이 죽지 
   sectionButton(document, '상태 막대 · 활동 막대').click();
   assert.deepEqual(previewKinds(document), ['agents']);
   assert.deepEqual(hudZone(document, 'left'), ['agents']);
-  assert.strictEqual(hudZone(document, 'off').length, 12);
+  assert.strictEqual(hudZone(document, 'off').length, 13);
   assert.ok(document.querySelector('.vt-hudcfg-zone[data-zone="right"] .vt-hudcfg-empty'), '빈 구역은 끌어 놓으라고 알린다');
 });
 

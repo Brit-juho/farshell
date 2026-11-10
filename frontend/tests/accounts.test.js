@@ -1,4 +1,4 @@
-// 새 세션 계정 선택(핫스왑 H1) — 순수 로직(term/accounts-data.js), 선택기 메뉴·요청(term/accounts.js),
+// 새 세션 계정 선택(핫스왑 H1) — 순수 로직(term/accounts-data.js·accounts-text.js), 요청(term/accounts.js)·선택기 메뉴(term/accounts-ui.js),
 // 레일 행 배지, 팔레트 줄. 자동 선택은 없다: 정렬은 목록 순서만 바꾸고, 값이 없으면 「알 수 없음」이다.
 'use strict';
 const { test, after } = require('node:test');
@@ -28,8 +28,10 @@ const SERVER = {
 async function dataModule() {
   const env = createDomEnv('<body></body>');
   _envs.push(env);
-  const mod = await importFresh(path.join(__dirname, '../js/term/accounts-data.js'), env.context, new Map());
-  return { mod, env };
+  const cache = new Map();
+  const data = await importFresh(path.join(__dirname, '../js/term/accounts-data.js'), env.context, cache);
+  const text = await importFresh(path.join(__dirname, '../js/term/accounts-text.js'), env.context, cache);
+  return { mod: { ...data, ...text }, env };
 }
 
 test('서버 목록을 정규화한다 — 모양이 틀린 줄은 버리고 비밀·경로 필드는 아예 읽지 않는다', async () => {
@@ -106,8 +108,9 @@ async function accountsModule({ reply, relayed = false } = {}) {
   const cache = new Map();
   await importFresh(path.join(__dirname, '../js/ui/toast.js'), env.context, cache);
   if (relayed) env.window.localStorage.setItem('vt.relayHost', 'm5');   // 부팅 때 한 번 읽는다(core/host-route.js)
-  const mod = await importFresh(path.join(__dirname, '../js/term/accounts.js'), env.context, cache);
-  return { ...env, calls, mod };
+  const core = await importFresh(path.join(__dirname, '../js/term/accounts.js'), env.context, cache);
+  const ui = await importFresh(path.join(__dirname, '../js/term/accounts-ui.js'), env.context, cache);
+  return { ...env, calls, mod: { ...core, ...ui } };
 }
 
 test('기본 계정이 정해져 있을 때만 생성 요청에 default를 싣는다 — 없거나 목록을 못 받으면 요청이 예전과 같다', async () => {
@@ -235,8 +238,9 @@ test('팔레트: 계정이 있으면 「<이름> 계정으로 새 세션」과 �
       { id: 'a'.repeat(32), name: 'alice', tool: 'claude', selectable: true },
       { id: 'd'.repeat(32), name: 'blank', tool: 'claude', selectable: false }] }),
     newSessionWithAccount: (id) => created.push(id),
-    openAccountMenu: (o) => opened.push(o.mode),
   };
+  // 기본 계정 바꾸기는 선택기를 열지 않고 설정 › 에이전트 계정을 연다.
+  deps.getAction = (name) => (name === 'settings.section' ? (section) => opened.push(section) : undefined);
   const api = mountPalette(root, deps);
   api.open();
   const rows = async () => { await flush(10); return [...document.querySelectorAll('.vt-qo-row')]; };
@@ -252,7 +256,7 @@ test('팔레트: 계정이 있으면 「<이름> 계정으로 새 세션」과 �
   list = await rows();
   list.find((r) => r.textContent.includes('기본 계정 바꾸기')).click();
   await flush();
-  assert.deepEqual(opened, ['default']);
+  assert.deepEqual(opened, ['accounts'], '기본 계정 바꾸기는 설정 › 에이전트 계정을 연다');
 });
 
 test('팔레트: 계정이 없거나 deps가 없으면 계정 줄이 없다(예전 그대로)', async () => {
@@ -267,7 +271,7 @@ test('팔레트: 계정이 없거나 deps가 없으면 계정 줄이 없다(예�
     splitActivePane: () => null, setPaneSession() {}, buildSessionCard: () => document.createElement('div'), updateSessionCard() {},
     setVtSkin() {}, vtSkins: () => ['farshell'], vtSkinLabel: (s) => s, listKeymapActions: () => [], invokeKeymapAction() {},
     displayCombo: (c) => c, showToast() {},
-    loadAccounts: async () => ({ ok: true, profiles: [] }), newSessionWithAccount() {}, openAccountMenu() {},
+    loadAccounts: async () => ({ ok: true, profiles: [] }), newSessionWithAccount() {},
   };
   const api = mountPalette(root, deps);
   api.open();

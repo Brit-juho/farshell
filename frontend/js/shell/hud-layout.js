@@ -15,14 +15,14 @@
 //
 // **에이전트 칩은 배치 밖이다**(세대 3). 상태 막대 맨 왼쪽에 고정이라 옮기거나 끌 수 없다 — 이 제품이 있는
 // 이유(개입이 필요한 세션)를 알리는 유일한 칩이고, 설정을 한 번 잘못 만져 그게 사라지면 되찾을 길을 모른다.
-/** @typedef {'server'|'screens'|'e2e'|'safe-mode'|'cpu'|'gpu'|'ram'|'net'|'usage'|'version'|'agents'|'hooks'|'push'|'clock'} HudKind */
+/** @typedef {'server'|'screens'|'e2e'|'safe-mode'|'cpu'|'gpu'|'ram'|'net'|'usage'|'version'|'agents'|'hooks'|'push'|'clock'|'account'} HudKind */
 /** @typedef {{ left: HudKind[], right: HudKind[] }} HudLayout */
 /** @typedef {'left'|'right'|'off'} HudZone */
 
 /** 배치로 옮길 수 있는 종류. @type {readonly HudKind[]} */
 export const HUD_KINDS = [
   'server', 'screens', 'e2e', 'safe-mode', 'cpu', 'gpu', 'ram', 'net', 'usage', 'version',
-  'push', 'clock',
+  'push', 'clock', 'account',
 ];
 
 /** 늘 상태 막대 맨 왼쪽에 고정된 종류(배치에 적지 않는다). @type {readonly HudKind[]} */
@@ -44,7 +44,7 @@ export const ALERT_HUD_KINDS = ['hooks'];
 export const DEFAULT_HUD_LAYOUT = {
   // 고정된 에이전트 칩 다음 — 연결·보안·화면 순(시안 D01: 서버 · E2E · 세이프모드 · 연결된 화면).
   left: ['e2e', 'safe-mode', 'screens'],
-  right: ['cpu', 'gpu', 'ram', 'net', 'usage', 'push', 'version', 'clock'],
+  right: ['cpu', 'gpu', 'ram', 'net', 'account', 'usage', 'push', 'version', 'clock'],
 };
 
 // 저장 형식의 세대. 2026-11 메뉴바 이전(세대 표시 없음)에 저장된 배치는 새 종류(agents·push·clock)가
@@ -54,7 +54,10 @@ export const DEFAULT_HUD_LAYOUT = {
 //
 // 세대 3(리디자인 2단계): 에이전트 칩이 배치 밖으로 나가 고정됐다. 옛 배치에 적힌 `agents`는 읽을 때 버리고
 // (모르는 종류처럼), 저장하면 세대 3이 적힌다. 세대 2 → 3에서 사용자가 옮길 수 있는 종류는 그대로라 따로 얹을 것은 없다.
-export const HUD_LAYOUT_VERSION = 3;
+//
+// 세대 4(계정 칩): `account`(지금 기본 계정과 사용률 — 누르면 기본 계정을 바꾼다)가 새 종류로 늘었다. 세대 3 이하 배치를 읽을 때
+// 「사용량」 앞(없으면 오른쪽 끝)에 **한 번** 얹는다. 계정이 하나도 없거나 다른 맥을 보는 중이면 값이 없어 칩이 안 그려진다.
+export const HUD_LAYOUT_VERSION = 4;
 /** @type {ReadonlyArray<{kind: HudKind, zone: 'left'|'right', front?: boolean}>} */
 const ADDED_IN_V2 = [
   { kind: 'push', zone: 'right' },
@@ -99,11 +102,17 @@ export function parseHudLayout(raw) {
   const out = { left, right: pick(v.right) };
   // 세대 표시가 없는(2 이전) 배치만 새 종류를 얹는다 — 세대 2는 이미 push·clock을 아는 배치다.
   const legacy = !(Number(v.v) >= 2);
-  if (legacy && (out.left.length || out.right.length)) {
+  const filled = out.left.length || out.right.length;
+  if (legacy && filled) {
     for (const { kind, zone, front } of ADDED_IN_V2) {
       if (seen.has(kind)) continue;
       if (front) out[zone].unshift(kind); else out[zone].push(kind);
     }
+  }
+  // 세대 4 미만: 계정 칩을 「사용량」 앞에(사용량을 끈 배치면 오른쪽 끝에). 전부 끈 배치는 사용자의 선택이라 건드리지 않는다.
+  if (!(Number(v.v) >= 4) && filled && !seen.has('account')) {
+    const at = out.right.indexOf('usage');
+    if (at >= 0) out.right.splice(at, 0, 'account'); else out.right.push('account');
   }
   return out;
 }

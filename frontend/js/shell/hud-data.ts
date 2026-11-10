@@ -7,6 +7,8 @@
 // "없음"이나 "—"를 그리지 않는다 — 2.0의 usage 게이팅과 같은 원칙이다.
 
 import { t } from '../core/i18n.js';
+import { TOOL_LABEL } from '../term/accounts-data.js';
+import { authLabel, usageText, sourceShort, updatedText } from '../term/accounts-text.js';
 
 export type HudTone = 'ok' | 'warn' | 'err' | 'plain';
 
@@ -37,6 +39,8 @@ export interface HudChip {
   dot?: boolean;
   /** 클릭 시 발동할 core/dom.js 액션 id. 없으면 클릭 불가. */
   action?: string;
+  /** 눌러서 메뉴가 열리는 칩 — 값 뒤에 ▾를 그린다. */
+  caret?: boolean;
   /** 액션에 넘길 인자(예: `settings.section`의 섹션 id). */
   actionArg?: string;
   side: 'left' | 'right';
@@ -71,6 +75,8 @@ const PRIORITY = {
   hooksAlert: 2,
   /** 평상시 사용량 — dock 사용량 탭에 같은 값이 더 자세히 있다. */
   usage: 5,
+  /** 지금 기본 계정 — 평상시에는 사용량보다 위(새 세션이 어느 계정으로 만들어지는지 알려 주는 유일한 자리). 한도가 임박하면 usageAlert 순위. */
+  account: 4,
   /** 이 기계의 CPU·RAM·네트워크 — 임계를 넘으면 경고 순위(screensAlert와 같은 자리)로 올라온다. */
   stats: 6,
   statsAlert: 3,
@@ -109,6 +115,8 @@ export interface HudInput {
   agents?: AgentCounts | null;
   /** 훅 건강 점검(서버 hook_health) — CLI별 상태와 빠진·어긋난 이벤트 이름. 이상이 없으면 칩이 없다. */
   hooks?: HooksHealth | null;
+  /** 계정 선택기 목록(term/accounts-data.js `normalizeAccounts`의 결과). 계정이 없거나 다른 맥을 보면 칩이 없다. */
+  accounts?: AccountsInput | null;
   /** 푸시 알림 상태. `unavailable`(이 브라우저에서 못 씀)·null(아직 모름)이면 칩이 없다. */
   push?: 'on' | 'off' | 'unavailable' | null;
   /** 시계 칩에 쓸 지금 시각(ms). 없으면 시계 칩이 없다 — 순수 함수라 시계를 직접 읽지 않는다. */
@@ -118,6 +126,15 @@ export interface HudInput {
 }
 
 export type HooksHealth = Record<string, { state: string; events?: string[] }>;
+
+export interface AccountsInput {
+  ok: boolean;
+  profiles: Array<{
+    id: string; name: string; tool: 'claude' | 'codex'; auth: string; selectable: boolean; reason: string | null;
+    usage: { windows: Array<{ id: string; label: string; pct: number; resetsInSec: number | null }>; checkedAt: number | null; stale: boolean; source: string } | null;
+  }>;
+  defaults: Record<string, { id: string; valid: boolean }>;
+}
 
 export interface AgentCounts {
   /** 입력 대기(승인·선택·질문) — 사람이 와야 풀린다. */
@@ -206,6 +223,47 @@ function usageChip(p: UsageProfile): HudChip | null {
     // 순위가 tone을 따라간다 — 한도가 임박했을 때만 앞자리로 올라온다.
     priority: tone === 'plain' ? PRIORITY.usage : PRIORITY.usageAlert,
   };
+}
+
+// 계정 칩 — 지금 기본 계정과 그 계정의 가장 많이 쓴 창 사용률. 눌러서 기본 계정을 바꾼다(선택기 메뉴, Hud.tsx가 연다).
+// 규칙: 계정이 하나도 없으면(또는 다른 맥을 보는 중이면) 칩이 없다 · 계정은 있는데 기본이 없으면 「계정 지정 안 함」 ·
+// 도구별 기본이 하나면 칩 하나(이름 · 사용률), Claude·Codex 둘 다 있으면 칩 둘(도구 이름을 앞에 붙인다).
+// 사용률 색은 사용량 칩과 같다(75% 주의 · 90% 경고). 기본 계정이 깨졌거나 로그인이 안 됐으면 주의 색으로 사유를 적는다.
+function accountChips(acc: AccountsInput, nowMs: number): HudChip[] {
+  if (!acc.ok || !acc.profiles.length) return [];
+  const base = { kind: 'account' as const, action: 'account.pick', caret: true, side: 'right' as const };
+  const tools = (['claude', 'codex'] as const).filter((tool) => acc.defaults[tool]);
+  if (!tools.length) {
+    return [{ ...base, id: 'account', label: t('계정 지정 안 함'), tone: 'plain', priority: PRIORITY.account,
+      tooltip: t('기본 계정이 없습니다 — 새 세션은 평소 환경 그대로 만들어집니다.\n누르면 기본 계정을 지정합니다') }];
+  }
+  return tools.map((tool): HudChip => {
+    const d = acc.defaults[tool];
+    const row = acc.profiles.find((p) => p.id === d.id);
+    const prefix = tools.length > 1 ? `${TOOL_LABEL[tool]} ` : '';
+    const name = row ? row.name : t('알 수 없음');
+    const label = `${prefix}${name}`;
+    const head = t('{tool} 기본 계정: {name}', { tool: TOOL_LABEL[tool], name });
+    const hint = t('누르면 기본 계정을 바꿉니다');
+    if (!row || !d.valid || row.auth !== 'ok') {
+      const why = !row || !d.valid ? t('기본 계정을 찾을 수 없음') : authLabel(row.auth);
+      return { ...base, id: `account:${tool}`, label, value: why, tone: 'warn', priority: PRIORITY.usageAlert,
+        tooltip: [head, row?.reason || '', hint].filter(Boolean).join('\n') };
+    }
+    const windows = (row.usage?.windows || []).filter((w) => Number.isFinite(w.pct));
+    const top = windows.length ? windows.reduce((a, b) => (b.pct > a.pct ? b : a)) : null;
+    const pct = top ? Math.round(top.pct) : null;
+    const tone: HudTone = pct === null ? 'plain' : pct >= 90 ? 'err' : pct >= 75 ? 'warn' : 'plain';
+    const resets = top ? formatResetsIn(top.resetsInSec) : '';
+    const detail = [usageText(row), sourceShort(row), updatedText(row, nowMs)].filter(Boolean).join(' · ');
+    return {
+      ...base, id: `account:${tool}`, label,
+      value: top && pct !== null ? `${top.label === 'weekly' ? t('주간') : (top.label || top.id)} ${pct}%` : undefined,
+      hint: resets ? `· ${resets}` : undefined,
+      tone, priority: tone === 'plain' ? PRIORITY.account : PRIORITY.usageAlert,
+      tooltip: [head, detail, hint].join('\n'),
+    };
+  });
 }
 
 // 초당 바이트 → "0" / "340K" / "1.2M" / "12M". 칩 폭을 지키려고 단위는 한 글자다(초당은 라벨이 말한다).
@@ -361,6 +419,8 @@ export function buildHudChips(input: HudInput, layout: HudLayout = DEFAULT_HUD_L
       if (chip) chips.push(chip);
     }
   }
+
+  if (input.accounts) chips.push(...accountChips(input.accounts, input.now ?? Date.now()));
 
   if (input.agents) {
     const chip = agentsChip(input.agents);
