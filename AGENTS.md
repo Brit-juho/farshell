@@ -14,6 +14,7 @@ npm test
 python3 scripts/check_docs.py --strict
 python3 scripts/check_css_vars.py --strict
 python3 scripts/check_i18n.py --strict
+python3 scripts/check_python_lock.py
 ```
 
 `npm test` includes TypeScript checking; Vite builds do not. Put server tests in
@@ -58,9 +59,14 @@ Verify affected behavior with actual responses, operations and logs.
     - **Done means** `python3 scripts/check_i18n.py --strict` passes and the change was seen in
       English (`VT_LANG=en`) as well as in Korean. A string added without its English entry is
       unfinished work. See [`docs/ref/i18n.md`](./docs/ref/i18n.md).
-12. Only `docs/help/`, `docs/ref/` and `docs/guide/` are tracked under `docs/`.
+12. Python dependencies install only from the hash-locked files in `locks/` with
+    `pip install --require-hashes` (`install.sh`, CI, `fsh update`). `requirements-*.txt` are
+    the lock's inputs, not an install path. After changing them run `scripts/lock_python.sh` and
+    commit `locks/`; never relax or drop `--require-hashes` to get an install through. See
+    [`docs/ref/dev.md`](./docs/ref/dev.md) "Python dependency lock".
+13. Only `docs/help/`, `docs/ref/` and `docs/guide/` are tracked under `docs/`.
     New `fsh help` topics need both a `bin/fsh` entry and a `docs/help/` file.
-13. `docs/ref/` describes **current behavior** only. Research notes, notes on other products,
+14. `docs/ref/` describes **current behavior** only. Research notes, notes on other products,
     plans, reports and design drafts stay local (`docs/local/`, or anywhere
     `.gitignore` already excludes) — never under `docs/ref/` or the repository root. The folder
     is allowed as a whole, so `.gitignore` alone does not stop a file placed there;

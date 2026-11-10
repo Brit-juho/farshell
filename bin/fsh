@@ -3582,7 +3582,7 @@ cmd_doctor() {
   if "$VT_PYTHON" -c "import fastapi, uvicorn" 2>/dev/null; then
     _check "core packages" ok "$(_t 'fastapi, uvicorn 설치됨')"
   else
-    _check "core packages" fail "pip install -r requirements-core.txt"
+    _check "core packages" fail "pip install --require-hashes -r locks/core.txt"
   fi
   if "$VT_PYTHON" -c "import edge_tts, sounddevice" 2>/dev/null; then
     # STT 엔진은 설정에서 고르는 모델에 따라 다르다 — 선택된 모델이 바로 쓸 수 있는 상태인지 서버 코드로 확인한다.

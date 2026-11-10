@@ -12,7 +12,7 @@ try:
 except ImportError:
     from i18n import tr
     sys.stderr.write(
-        tr("ERROR: textual 미설치. 설치: pip install textual\n또는: pip install -r requirements-core.txt\n")
+        tr("ERROR: textual 미설치. 설치: pip install textual\n또는: pip install --require-hashes -r locks/core.txt\n")
     )
     sys.exit(1)
 
