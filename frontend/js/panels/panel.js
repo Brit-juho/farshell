@@ -73,11 +73,50 @@ const MOBILE_ROUTE_IDS = new Set([
 // 「파일」 탭(파일 개편 단계 5)은 트리(`vt-dir`)와 첨부(`vt-files`) 둘 다 탭 화면이다 — 안쪽 「파일 | 첨부」 전환으로 오간다.
 const TAB_PANEL_IDS = new Set(['vt-dock-scm', 'vt-files', 'vt-dir', 'vt-settings']);
 
-function _withoutPanelState(state) {
-  if (!state || typeof state !== 'object') return state;
-  const next = { ...state };
-  delete next.vtPanel;
-  return next;
+// ── 모바일 history 칸 관리 ─────────────────────────────────────────────────
+// route 패널은 열 때 history 칸을 하나 쌓는다. 하단 탭 전환처럼 패널을 'replace'로 닫을 때
+// 칸을 그대로 두면 길이가 줄지 않아 다음 뒤로가기가 아무것도 안 닫는 헛누름이 된다.
+// 그래서 칸을 history.back()으로 실제로 되돌린다. back은 비동기(popstate)라서:
+//  - 우리가 부른 back의 popstate('self')는 popstate 핸들러가 무시한다(아래 패널을 닫으면 안 된다).
+//  - 되돌림이 진행 중일 때 들어온 pushState·X 닫기 back은 큐에 두었다가 순서대로 실행한다.
+//  - 표식(vtPanel) 없는 칸에서는 back하지 않는다(앱 밖으로 나가지 않게).
+//  - popstate가 안 오면 HIST_WAIT_MS 뒤에 대기를 풀고 진행한다.
+const HIST_WAIT_MS = 300;
+let _inflight = null; // 진행 중인 back 종류: 'self'(되돌림, 무시) | 'real'(X 닫기, 핸들러가 처리) | null
+let _undo = 0;        // 아직 되돌려야 할 칸 수
+let _jobs = [];       // 되돌림이 끝난 뒤 실행할 history 작업
+let _histTimer = null;
+
+function _histBusy() { return _inflight !== null || _undo > 0 || _jobs.length > 0; }
+
+function _histBack(kind) {
+  _inflight = kind;
+  clearTimeout(_histTimer);
+  _histTimer = setTimeout(() => { _histTimer = null; _inflight = null; _undo = 0; _histSettle(); }, HIST_WAIT_MS);
+  try { history.back(); } catch (_) { clearTimeout(_histTimer); _histTimer = null; _inflight = null; }
+}
+
+function _histSettle() {
+  while (_inflight === null) {
+    if (_undo > 0) {
+      if (history.state?.vtPanel) { _undo--; _histBack('self'); continue; }
+      _undo = 0; // 표식 없는 칸 — 되돌릴 칸이 없다
+    }
+    const job = _jobs.shift();
+    if (!job) return;
+    job();
+  }
+}
+
+function _histRun(job) {
+  if (_histBusy()) { _jobs.push(job); return; }
+  job();
+}
+
+function _pushPanelState(id) {
+  _histRun(() => {
+    try { history.pushState({ ...(history.state || {}), vtPanel: id }, '', location.href); } catch (_) {}
+  });
 }
 
 // picker.js의 세션 시트도 같은 트랩 로직을 쓴다(별도 모달 구현이라 openPanel을
@@ -252,9 +291,7 @@ export function openPanel(opts) {
       // (탭 안에서 열리는 하위 화면·파일 보기는 그대로 쌓는다.)
       if (mobileRoute && !TAB_PANEL_IDS.has(opts.id)) {
         el._vtMobileHistory = true;
-        try {
-          history.pushState({ ...(history.state || {}), vtPanel: opts.id }, '', location.href);
-        } catch (_) { /* history를 쓸 수 없는 임베디드 브라우저 */ }
+        _pushPanelState(opts.id); // 되돌림 중이면 큐에서 기다린다(칸만 늦게 쌓이고 패널은 즉시 열린다)
       }
       document.dispatchEvent(new CustomEvent('vt:panel-open', { detail: { id: opts.id, mobileRoute } }));
 
@@ -279,7 +316,7 @@ export function closePanel(idOrEl, options = {}) {
         if (ok !== true) {
           // 뒤로가기는 이미 history 항목을 꺼냈다 — 닫지 않으면 다시 쌓아 다음 뒤로가기도 이 패널을 닫게 한다.
           if (options.fromHistory && el._vtMobileHistory) {
-            try { history.pushState({ ...(history.state || {}), vtPanel: id }, '', location.href); } catch (_) {}
+            _pushPanelState(id);
           }
           if (ok && typeof ok.then === 'function') {
             // 답을 받았으면 다시 묻지 않는다(폰 뒤로가기로 돌아오는 두 번째 closePanel 포함).
@@ -294,11 +331,17 @@ export function closePanel(idOrEl, options = {}) {
       }
       if (el._vtMobileHistory && options.history !== 'replace' && options.fromHistory !== true) {
         try {
-          if (history.state?.vtPanel === id) { history.back(); return; }
+          if (_histBusy()) {
+            // 되돌림 중이면 끝난 뒤에 현재 칸을 보고 back한다. 칸이 이미 없으면 그냥 닫는다.
+            _histRun(() => {
+              if (!el.isConnected) return;
+              if (history.state?.vtPanel === id) _histBack('real');
+              else closePanel(el, { force: true, history: 'replace' });
+            });
+            return;
+          }
+          if (history.state?.vtPanel === id) { _histBack('real'); return; }
         } catch (_) { /* 즉시 닫기 폴백 */ }
-      }
-      if (el._vtMobileHistory && options.history === 'replace') {
-        try { history.replaceState(_withoutPanelState(history.state), '', location.href); } catch (_) {}
       }
       // 폴링을 멈춘다 — visibilitychange 리스너도 같이 뗀다(core/poll.js). 안 떼면 닫힌
       // 패널의 핸들러가 document에 남는다(탭을 오갈 때마다 쌓인다).
@@ -306,6 +349,8 @@ export function closePanel(idOrEl, options = {}) {
       if (el._vtLoadWatch) { clearTimeout(el._vtLoadWatch); el._vtLoadWatch = null; }
       el._vtDisposeKeys?.();
       el.remove();
+      // 'replace' 닫기는 이 패널이 쌓은 칸을 되돌린다(beforeClose가 거절했으면 여기까지 오지 않는다).
+      if (el._vtMobileHistory && options.history === 'replace') { _undo++; _histSettle(); }
       if (el._vtOnClose) el._vtOnClose();
       document.dispatchEvent(new CustomEvent('vt:panel-close', { detail: { id, mobileRoute: Boolean(el._vtMobileHistory) } }));
       // D7: 트리거로 포커스 복귀 — DOM에서 사라졌을 수 있으니(탭 닫힘 등) 방어.
@@ -326,8 +371,14 @@ export function topHistoryPanel() {
 }
 
 window.addEventListener('popstate', () => {
-  const el = topHistoryPanel();
-  if (el) closePanel(el.id, { fromHistory: true });
+  const kind = _inflight;
+  if (kind !== null) { _inflight = null; clearTimeout(_histTimer); _histTimer = null; }
+  // 'self'는 우리가 칸을 되돌리느라 부른 back이다 — 아래 패널을 닫으면 안 된다.
+  if (kind !== 'self') {
+    const el = topHistoryPanel();
+    if (el) closePanel(el.id, { fromHistory: true });
+  }
+  _histSettle();
 });
 
     // 패널이 열려 있는 동안만 도는 폴링 — 닫히면 스스로 정리한다.
