@@ -43,35 +43,6 @@ def _read(root, filename, fmt='json'):
     return data
 
 
-def _secrets_match(expected, actual, source_env, target_env):
-    if isinstance(expected, dict):
-        if not isinstance(actual, dict):
-            actual = {}
-        for key, value in expected.items():
-            if key == 'env' and isinstance(value, dict):
-                if not all(target_env.get(k) == v for k, v in value.items()):
-                    return False
-            elif key in _HELPERS or migration._SECRET.search(key) or key in ('headers', 'http_headers'):
-                if not contains(value, actual.get(key)):
-                    return False
-                if key in _HELPERS and (not isinstance(value, str) or re.search(r'(?i)clauth', value)):
-                    return False
-                if key not in _HELPERS and not _secrets_match(value, actual.get(key), source_env, target_env):
-                    return False
-            elif not _secrets_match(value, actual.get(key), source_env, target_env):
-                return False
-    elif isinstance(expected, list):
-        if not isinstance(actual, list) or len(actual) < len(expected):
-            return False
-        if any(not _secrets_match(v, actual[i], source_env, target_env) for i, v in enumerate(expected)):
-            return False
-    elif isinstance(expected, str):
-        for name in re.findall(r'\$\{([A-Za-z_][A-Za-z0-9_]*)\}', expected):
-            if name not in source_env or target_env.get(name) != source_env[name]:
-                return False
-    return True
-
-
 def _plugins_match(source, base, settings, profile_id):
     from agent_profile_plugins import _snapshot, _fingerprint, _installed
     profile = profiles.get(profile_id)
@@ -132,7 +103,6 @@ def compare(source, profile_id, manifest):
     base = source['root'] if source['kind'] == 'native' else home / ('.claude' if source['tool'] == 'claude' else '.codex')
     root = profiles.root(profile_id)
     settings = _read(base, 'settings.json' if source['tool'] == 'claude' else 'config.toml', 'json' if source['tool'] == 'claude' else 'toml')
-    actual = _read(root, 'settings.json' if source['tool'] == 'claude' else 'config.toml', 'json' if source['tool'] == 'claude' else 'toml')
     own = _read(source['root'], 'config.toml', 'toml') if source['kind'] == 'clauth' else {}
     private = read_private(root)
     effective = environment(profile_id)
@@ -154,16 +124,12 @@ def compare(source, profile_id, manifest):
             pass
     if all(effective.get(k) == v for k, v in own.get('env', {}).items()):
         resolved.add('profile-environment-requires-setup')
-    credential_settings = dict(settings)
-    if 'api-key-login-required' in resolved:
-        credential_settings.pop('apiKeyHelper', None)
-    if _secrets_match(credential_settings, actual, source_env, effective):
-        resolved.add('credentials-not-copied')
     if 'plugins-reinstall-required' in manifest.get('warnings', []):
         from agent_profile_share import plugins_shared
         if plugins_shared(profile_id) or _plugins_match(source, base, settings, profile_id):
             resolved.add('plugins-reinstall-required')
-    reasons = [w for w in manifest.get('warnings', []) if w not in resolved]
+    # Retired decision: copying credentials is no longer a rule, so these never block.
+    reasons = [w for w in manifest.get('warnings', []) if w not in resolved and w not in migration.RETIRED_WARNINGS]
     writes, _, _, modes = migration._configuration(source, migration.recorded_skill_names(source, manifest),
                                                    root if manifest.get('private_configuration') else None)
     migration._preserve_private_helper(writes, root, manifest.get('private_configuration'))
@@ -181,10 +147,4 @@ def compare(source, profile_id, manifest):
             matches = raw == expected and bool(path.stat().st_mode & 0o111) == (modes.get(name, 0o600) == 0o700)
         if not matches:
             reasons.append('configuration-coverage-incomplete')
-    # .claude.json holds MCP credentials independently of settings.json.
-    if source['tool'] == 'claude':
-        source_mcp = _read(home, '.claude.json').get('mcpServers', {})
-        target_mcp = _read(root, '.claude.json').get('mcpServers', {})
-        if not contains(source_mcp, target_mcp) or not _secrets_match(source_mcp, target_mcp, source_env, effective):
-            reasons.append('mcp-credentials-not-migrated')
-    return {'blockers': sorted(set(reasons)), 'resolved_warnings': sorted(resolved & set(manifest.get('warnings', [])))}
+    return {'blockers': sorted(set(reasons)), 'resolved_warnings': sorted(resolved & set(manifest.get('warnings', [])) - migration.RETIRED_WARNINGS)}

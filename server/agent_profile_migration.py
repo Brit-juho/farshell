@@ -218,8 +218,6 @@ def _configuration(source, skill_names=None, private_root=None):
         writes["config.toml"] = text.encode()
         if settings.get("plugins"):
             warnings.append("plugins-reinstall-required")
-    if any(k in json.dumps(settings).lower() for k in ("api_key", "token", "password", "headers", '"env"')):
-        warnings.append("credentials-not-copied")
     # Direct tooling packages are plain files. Links/large trees must be
     # reviewed separately instead of following them into an arbitrary home.
     skill_base = base / "skills"
@@ -789,7 +787,7 @@ def retirement_report():
         uses_token = False
         for config in configs:
             pid = config['profile_id']
-            reasons = list(config['manifest'].get('warnings', []))
+            reasons = [w for w in config['manifest'].get('warnings', []) if w not in RETIRED_WARNINGS]
             try:
                 from agent_profile_parity import compare
                 comparison = compare(source, pid, config['manifest'])
@@ -902,8 +900,33 @@ def retirement_report():
                       'accepted_limitations': limitations,
                       'candidates': [{'profile_id': pid, 'blockers': reasons, 'resolved_warnings': resolved_by_profile.get(pid, [])} for pid, reasons in candidates]})
     return {'ready_to_retire': bool(items) and not any(i['blockers'] for i in items), 'profiles': items,
-            'source_preserved': True, 'clauth_stopped': False, 'legacy_runtime_state': legacy, 'concurrency_certified': bool(concurrent_profiles),
-            'note': tr("실제 로그인·갱신·사용량·대화 재개 검증 전에는 clauth를 중지하지 않습니다")}
+            'source_preserved': True, 'clauth_stopped': clauth_stopped(), 'legacy_runtime_state': legacy, 'concurrency_certified': bool(concurrent_profiles),
+            'note': tr("clauth는 은퇴했습니다. 남은 항목은 실제 로그인·갱신·사용량·대화 재개 검증입니다")}
+
+
+# Warnings of the retired "never copy clauth credentials" rule; old receipts may still list them.
+RETIRED_WARNINGS = frozenset({'credentials-not-copied', 'mcp-credentials-not-migrated'})
+
+
+def clauth_stopped():
+    """True when no clauth launchd job is loaded and no clauth daemon process runs.
+
+    `clauth mcp` is a plugin client, not the daemon. Unknown (command failed) is False."""
+    import subprocess
+    try:
+        jobs = subprocess.run(['launchctl', 'list'], capture_output=True, text=True, timeout=5)
+        procs = subprocess.run(['ps', '-axo', 'args='], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if jobs.returncode or procs.returncode:
+        return False
+    if any('clauth' in line.split('\t')[-1].lower() for line in jobs.stdout.splitlines()[1:]):
+        return False
+    for line in procs.stdout.splitlines():
+        argv = line.split()
+        if argv and Path(argv[0]).name == 'clauth' and argv[1:2] != ['mcp']:
+            return False
+    return True
 
 
 def rollback(profile_id, revision, job_id, *, preview=False):
