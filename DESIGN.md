@@ -541,13 +541,13 @@ left sidebar. The setting is `ui.side.pinned` (device scope, the **panel id** su
 ### Session view — worktree rail (`#vt-wgrail`, `shell/Rail.tsx`)
 
 A row is **one tmux session** (docs/ref/terminal.md 「Rail」). Two zones: **개입 필요**
-(waiting sessions; collapsible, hideable with the eye button in its head or in 레일 설정, like VS
+(waiting sessions; collapsible, hideable with the eye button in its head or in 세션 목록 설정, like VS
 Code's Open Editors) and **실행 중** (every other running session, **name order** or manual drag
 order — no urgency sorting, so rows never jump). Below them, **최근 종료** (collapsible, newest N)
 and a one-line **보관함** that swaps the list in place. There are no 묶음 / 묶지 않음 / 잠자는 중 zones.
 
 **Header 36** (`.vt-wgrail-head`): 「세션 N」 12/600 (or the host switcher when there is more than one
-host) and four 24px icon buttons — 대화 기록 (`history`), 레일 설정 (`sliders-horizontal`), 새 세션
+host) and four 24px icon buttons — 대화 기록 (`history`), 세션 목록 설정 (`sliders-horizontal`), 새 세션
 (`plus`), 접기 (chevron). **Section heads 28** (`.vt-wgrail-group-head`): chevron 12 · name 12/600 ·
 count mono 11, actions on the right; 개입 필요 is amber. Grouped views use the same head with a
 `layout-panels` icon and a pencil (rename). **Footer 36**: a quiet 「+ 새 세션」 button.
@@ -601,7 +601,7 @@ their head and count). Both are device-scoped in `rail.view` (`runningCollapsed`
 newest 200).
 
 The ⋯ button and right-click open the same menu (`rowMenuItems`: 열기/닫기 · 이름 변경 ·
-맥에서 열기 · 연결된 화면 · 종료). **레일 설정** (sliders) holds 개입 필요 on/off, show or hide sessions
+맥에서 열기 · 연결된 화면 · 종료). **세션 목록 설정** (sliders) holds 개입 필요 on/off, show or hide sessions
 by origin — peer / external, and the 저장소 표시 list. Hiding an origin never hides a session that is
 open or waiting. The rail fills the sidebar; its width and collapse state belong to the workbench
 (above), and the header's chevron toggles the same collapse. **Collapsed (48px strip, ring design)**: 40×40 cells
@@ -924,7 +924,7 @@ and the accent edge bands (left 4, top/bottom 3) — that follows 가장자리�
 side by side above 720px with 32px item tiles and puts 「활동 막대 순서」 in the right column; 계정 및 보안 (O06) draws the device table with a 28 head and
 48 rows, this device on the selection tint.
 
-**Three settings, three icons.** 설정 = gear (reached from the FarShell menu, `Mod+,` and the activity bar's bottom gear), 레일 설정 = `sliders-horizontal` (rail header), 상태 막대 설정 = `panel-top` (FarShell menu item).
+**Three settings, three icons.** 설정 = gear (reached from the FarShell menu, `Mod+,` and the activity bar's bottom gear), 세션 목록 설정 = `sliders-horizontal` (rail header), 상태 막대 설정 = `panel-top` (FarShell menu item).
 
 Settings are split across two scopes — `frontend/js/core/settings.js`'s
 `SCHEMA` gives each key a `scope: 'global' | 'device'` (default `global`).

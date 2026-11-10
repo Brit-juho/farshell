@@ -45,7 +45,7 @@ function rowHTML(g) {
 export function mountGrants(host, { session = '' } = {}) {
   host.innerHTML = `
     <div class="vt-authz-filters" role="search">
-      <input type="search" class="vt-authz-in" data-f="subject" placeholder="${vtEsc(t('주체(이름·id)'))}" aria-label="${vtEsc(t('주체로 거르기'))}" autocomplete="off">
+      <input type="search" class="vt-authz-in" data-f="subject" placeholder="${vtEsc(t('주체(이름·ID)'))}" aria-label="${vtEsc(t('주체로 거르기'))}" autocomplete="off">
       <input type="search" class="vt-authz-in" data-f="resource" ${session ? 'hidden' : ''} placeholder="${vtEsc(t('리소스(앞부분)'))}" aria-label="${vtEsc(t('리소스로 거르기'))}" autocomplete="off">
       <select class="vt-authz-in" data-f="kind" aria-label="${vtEsc(t('종류로 거르기'))}">
         <option value="">${vtEsc(t('모든 종류'))}</option>
@@ -109,7 +109,7 @@ export function mountGrants(host, { session = '' } = {}) {
     const kind = row.dataset.kind;
     const msg = writeOnly
       ? t('이 에이전트의 입력 권한만 거두고 읽기는 남깁니다. 계속할까요?')
-      : kind === 'pair' ? t('이 권한을 회수하면 이 페어 전체가 끝납니다. 두 쪽이 받은 권한과 폴더 lease 가 모두 거두어집니다. 계속할까요?')
+      : kind === 'pair' ? t('이 권한을 회수하면 이 페어 전체가 끝납니다. 두 쪽이 받은 권한과 폴더 점유가 모두 거두어집니다. 계속할까요?')
       : kind === 'deleg' ? t('이 위임을 닫습니다. 하위 세션은 남지만 더 이상 지시를 받지 않습니다. 계속할까요?')
         : t('이 권한을 회수합니다. 에이전트는 다시 요청해야 쓸 수 있습니다. 계속할까요?');
     if (!(await confirmDialog(msg, { title: t('권한 회수'), okLabel: writeOnly ? t('입력만 회수') : t('회수'), danger: true }))) return;

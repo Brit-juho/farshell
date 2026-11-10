@@ -18,7 +18,7 @@ const pairItem = (id = 'pq-1', over = {}, pair = {}) => item(id, 'pair', {
   scopes: ['fs.read', 'fs.write', 'session.input', 'session.read'], preset: null, elevated: [],
   pair: {
     id: 'pr-1', phrases: { initiator: 'orchard river', joiner: 'orchard river' },
-    bundle: { sessions: ['alpha', 'beta'], dirs: ['/work/proj'], leases: true, summary: '세션 alpha, beta · 폴더 /work/proj · lease 잡음' },
+    bundle: { sessions: ['alpha', 'beta'], dirs: ['/work/proj'], leases: true, summary: '세션 alpha, beta · 폴더 /work/proj · 폴더 점유 점유함' },
     roles: { initiator: { name: '', kind: 'human', role: 'navigator' }, joiner: { name: 'beta', kind: 'agent', role: 'driver' } },
     presets: { driver: DRIVER, navigator: NAV }, elevatedItems: [], needsReauth: false, note: '서버 안내',
     ...pair,
@@ -47,14 +47,14 @@ test('한 화면: 누가 누구와(닉네임)·묶음을 말로·역할별 프�
   const t = await setup();
   t.entry.setPending([pairItem()]);
   assert.match(t.text(), /「사람\(나\)」와\(과\) 「beta」이\(가\) 같은 작업 묶음을 함께 하려 합니다/);
-  assert.match(t.text(), /beta.*에이전트 · 운전자\(driver\)/);
-  assert.match(t.text(), /사람\(나\).*사람 · 길잡이\(navigator\)/);
+  assert.match(t.text(), /beta.*에이전트 · 운전자/);
+  assert.match(t.text(), /사람\(나\).*사람 · 길잡이/);
   assert.match(t.text(), /운전 범위 안/);
   assert.match(t.text(), /협업 범위 안/);
   assert.match(t.text(), /fs\.read, fs\.write, session\.input · session\.input\[modes=line\]/);
   assert.match(t.text(), /alpha/);
   assert.match(t.text(), /\/work\/proj/);
-  assert.match(t.text(), /폴더마다 운전자 이름으로 잡습니다/);
+  assert.match(t.text(), /폴더마다 운전자 이름으로 점유합니다/);
   assert.match(t.text(), /서버 안내/);
 });
 
@@ -95,7 +95,7 @@ test('높은 권한 항목이 없으면 체크 영역도 없다', async () => {
 test('허용 버튼 글자는 줄 것을 그대로 말한다 — 체크가 바뀌면 바로 따라 바뀐다', async () => {
   const t = await setup();
   t.entry.setPending([pairItem('pq-1', {}, { elevatedItems: ELEV, needsReauth: true })]);
-  assert.match(t.act('allow').textContent, /허용 — 사람\(나\): 길잡이\(navigator\) · 협업 범위 안 \/ beta: 운전자\(driver\) · 운전 범위 안 · 높은 권한 없이/);
+  assert.match(t.act('allow').textContent, /허용 — 사람\(나\): 길잡이 · 협업 범위 안 \/ beta: 운전자 · 운전 범위 안 · 높은 권한 없이/);
   t.ticks()[0].checked = true; t.ticks()[0].dispatchEvent(new t.window.Event('change', { bubbles: true }));
   assert.match(t.act('allow').textContent, /높은 권한 raw 키 입력$/);
   t.ticks()[1].checked = true; t.ticks()[1].dispatchEvent(new t.window.Event('change', { bubbles: true }));
@@ -254,6 +254,6 @@ test('승인 대기 목록 행: 페어는 묶음을 말로 보이고 높은 권�
   t.document.dispatchEvent(new t.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   t.inbox.mountInboxList(host);
   assert.match(host.textContent, /페어/);
-  assert.match(host.textContent, /세션 alpha, beta · 폴더 \/work\/proj · lease 잡음/);
+  assert.match(host.textContent, /세션 alpha, beta · 폴더 \/work\/proj · 폴더 점유 점유함/);
   assert.match(host.textContent, /높은 권한/);
 });

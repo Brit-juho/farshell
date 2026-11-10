@@ -39,15 +39,15 @@ test('목록: 상태·구성원과 역할·묶음(말로)·남은 시간이 한 
   await waitFor(() => t.rows().length === 2);
   const [a, b] = t.rows();
   assert.match(a.textContent, /진행 중/);
-  assert.match(a.textContent, /alpha.*운전자\(driver\)/);
-  assert.match(a.textContent, /beta.*길잡이\(navigator\)/);
-  assert.match(a.textContent, /세션 alpha · lease 잡지 않음/);
+  assert.match(a.textContent, /alpha.*운전자/);
+  assert.match(a.textContent, /beta.*길잡이/);
+  assert.match(a.textContent, /세션 alpha · 점유 안 함/);
   assert.match(a.textContent, /2시간 남음/);
   assert.match(a.textContent, /역할 교체 2회/);
   assert.match(a.textContent, /높은 권한 1개 허용됨/);
   assert.ok(b.dataset.ended);
   assert.match(b.textContent, /사람이 회수/);
-  assert.match(b.textContent, /정리 중 — 남은 권한 2개 · lease 1개/);
+  assert.match(b.textContent, /정리 중 — 남은 권한 2개 · 폴더 점유 1개/);
   assert.strictEqual(b.querySelector('.vt-pair-act'), null, '끝난 페어에는 동작이 없다');
   assert.match(t.host.textContent, /최근에 끝난 페어/);
 });
@@ -194,7 +194,7 @@ test('lease 목록: 보유자·경로·모드·배타·만료·상속 표시와 
   assert.match(b.textContent, /beta/);
   assert.match(t.host.querySelector('.vt-lease-note').textContent, /권고 장치입니다\. 지금은 막지 않고/);
   assert.match(c.textContent, /상위에서 상속 · 읽기 전용/);
-  assert.match(c.textContent, /상위 lease l1/);
+  assert.match(c.textContent, /상위 점유 l1/);
   assert.strictEqual(c.querySelector('.vt-lease-revoke'), null, '상속된 lease 에는 놓기가 없다');
   assert.ok(a.querySelector('.vt-lease-revoke'));
 });
@@ -206,12 +206,12 @@ test('enforced 일 때도 FarShell 밖(셸·편집기) 쓰기는 못 막는다�
 
 test('빈 lease 목록 안내', async () => {
   const t = await mountLeases({ enforced: false, leases: [] });
-  await waitFor(() => /잡혀 있는 폴더 lease 가 없습니다/.test(t.host.textContent));
+  await waitFor(() => /점유 중인 폴더가 없습니다/.test(t.host.textContent));
 });
 
 test('놓기: 확인 → DELETE → 다시 읽기. 취소하면 아무것도 안 보낸다. 서버 오류는 이유를 보인다', async () => {
   let fail = false;
-  const t = await mountLeases({ enforced: false, leases: [lease('l1')] }, { 'DELETE /api/authz/leases/l1': () => (fail ? { status: 404, json: { error: 'not_found', reason: '그런 lease 가 없습니다' } } : { json: { ok: true } }) });
+  const t = await mountLeases({ enforced: false, leases: [lease('l1')] }, { 'DELETE /api/authz/leases/l1': () => (fail ? { status: 404, json: { error: 'not_found', reason: '그런 폴더 점유가 없습니다' } } : { json: { ok: true } }) });
   await waitFor(() => t.rows().length === 1);
   t.host.querySelector('.vt-lease-revoke').click();
   await answerConfirm(t.document, { accept: false });
@@ -220,7 +220,7 @@ test('놓기: 확인 → DELETE → 다시 읽기. 취소하면 아무것도 안
   fail = true;
   t.host.querySelector('.vt-lease-revoke').click();
   await answerConfirm(t.document, { accept: true });
-  await waitFor(() => /그런 lease 가 없습니다/.test(t.host.querySelector('.vt-authz-err').textContent));
+  await waitFor(() => /그런 폴더 점유가 없습니다/.test(t.host.querySelector('.vt-authz-err').textContent));
 });
 
 // ── 권한 목록의 페어 표시 ─────────────────────────────────────────────────
@@ -280,15 +280,15 @@ test('감사: 페어·lease 줄은 읽기 쉬운 말(개수·상태만), 원래 
   const [a, e, c, l, o] = [...host.querySelectorAll('.vt-authz-audit-row')];
   assert.strictEqual(a.querySelector('.vt-authz-audit-act').textContent, '페어 승인');
   assert.strictEqual(a.querySelector('.vt-authz-audit-act').title, 'pair.approve');
-  assert.match(a.textContent, /세션 2개 · 폴더 1개 · lease 포함 · 높은 권한 2개 요청 · 상태 진행 중 · 교체 1회/);
+  assert.match(a.textContent, /세션 2개 · 폴더 1개 · 폴더 점유 포함 · 높은 권한 2개 요청 · 상태 진행 중 · 교체 1회/);
   assert.match(a.textContent, /높은 권한 2개 허용/);
   assert.ok(!/LEAK/.test(host.textContent));
   assert.match(e.textContent, /페어 끝/);
   assert.match(e.textContent, /참여 세션이 사라짐/);
   assert.ok(!/issued/.test(c.textContent), '줄 이름이 이미 말하는 reason 은 숨긴다');
-  assert.match(l.textContent, /폴더 lease 잡음/);
+  assert.match(l.textContent, /폴더 점유 시작/);
   assert.match(l.textContent, /쓰기 · 배타/);
-  assert.match(o.textContent, /사람이 lease 경로에 직접 씀/);
+  assert.match(o.textContent, /사람이 점유 중인 경로에 직접 씀/);
 });
 
 // ── 이벤트(중복 없이 한 번) ───────────────────────────────────────────────

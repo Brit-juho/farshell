@@ -351,7 +351,7 @@ test('뷰어 — CSV는 표(머리 고정, 칸은 글자로만), SVG는 <img>로
   assert.strictEqual(u.pathname + u.search, '/api/fs/raw?path=%2Frepo%2Flogo.svg');
   assert.strictEqual(h2.querySelector('svg script'), null);
   assert.strictEqual(h2.querySelectorAll('script').length, 0);
-  assert.match(h2.querySelector('.vt-vw-bar').textContent, /sandbox/);
+  assert.match(h2.querySelector('.vt-vw-bar').textContent, /격리된 그림/);
   assert.ok(h2.querySelector('.vt-vw-svg .vt-vw-zoom-bar'), 'SVG 그림에도 맞춤 / 100%');
   assert.strictEqual(h2.querySelectorAll('.vt-vw-svg img').length, 1, '그림은 여전히 <img> 하나');
 });

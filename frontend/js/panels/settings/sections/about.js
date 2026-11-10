@@ -67,7 +67,7 @@ export function renderAboutSection() {
     if (missing) {
       const hint = document.createElement('div');
       hint.className = 'vt-set-help';
-      hint.textContent = t("터미널에서 'fsh hooks install'을 실행하면 등록됩니다. 등록 전에는 상태 배지·프롬프트 큐 자동 투입·TTS 요약이 동작하지 않습니다.");
+      hint.textContent = t("터미널에서 'fsh hooks install'을 실행하면 등록됩니다. 등록 전에는 상태 배지·프롬프트 큐 자동 투입·응답 읽기(TTS) 요약이 동작하지 않습니다.");
       hooks.appendChild(hint);
     }
   }).catch(() => { hooks.textContent = t('훅 상태를 확인할 수 없습니다.'); });
@@ -99,7 +99,7 @@ export function renderAboutSection() {
 
     const reason = cap.available ? null : cap.reason;
     const hint = reason === 'disabled' ? t('설정에서 껐습니다 (VT_USAGE_PROVIDER=none).')
-      : reason === 'schema' ? t('사용량 피드 형식(schema {seen})을 이 버전이 모릅니다. 지원: {supported}. clauth 또는 FarShell을 올리세요.', {
+      : reason === 'schema' ? t('사용량 피드 형식(스키마 {seen})을 이 버전이 모릅니다. 지원: {supported}. clauth 또는 FarShell을 올리세요.', {
         seen: cap.schema_seen ?? '?', supported: (cap.schema_supported || []).join(', ') || '-' })
       : reason === 'permission' ? t('사용량 피드를 읽을 권한이 없습니다 (~/.clauth/status.json).')
       : reason === 'broken' ? t('사용량 피드가 깨져 있습니다 (쓰는 중일 수 있습니다).')

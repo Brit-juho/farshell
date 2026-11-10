@@ -34,7 +34,7 @@ test('목록: 종류·프리셋(또는 scope 개수)·주체·리소스·승인�
   assert.match(r1.querySelector('.vt-authz-preset').textContent, /협업/);
   assert.match(r1.textContent, /session\.input, session\.read, session\.view · session\.input\[modes=line\]/);
   assert.match(r1.textContent, /user:alice · 직접 승인 · 만료 없음 · 위임된 하위 세션 · 위임 dg-1/);
-  assert.match(r2.querySelector('.vt-authz-preset').textContent, /1개 scope/, '프리셋이 없으면 scope 개수');
+  assert.match(r2.querySelector('.vt-authz-preset').textContent, /권한 범위 1개/, '프리셋이 없으면 권한 범위 개수');
   assert.match(r2.textContent, /agent-b/);
   assert.match(r2.textContent, /2시간 뒤 만료/);
   assert.match(r3.textContent, /자동 승인 구간/);

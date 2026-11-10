@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+- **Korean UI copy cleanup** (English text unchanged). English terms in Korean strings now follow the glossary: the Korean word with the English term in parentheses at first mention only (「폴더 점유(lease)」, 「권한 범위(scope)」), Korean afterwards; 「pane」 is 「페인」 and the internal word 「레일」 is 「세션 목록」. Internal numbers such as 「ADR-27」 no longer appear on screen. Confirm and prompt dialogs name their action (「삭제」「종료」「적용」「저장」…) instead of a bare 「확인」, and 「지우기/삭제」 are no longer mixed for one action. The rules (buttons, removal words, tone, periods) are in `docs/ref/i18n.md`.
+
 ### Fixed
 - **429 lockout caused by a login page's own requests.** The pre-auth failure limit now counts the same wrong cookie/token once per 60 s per source (a different value is still counted every time), a 401 for a `vt_session` cookie whose signature does not verify deletes that cookie, and the frontend holds API calls and the workspace/fs-watch/notify sockets until login completes (`/api/auth*` and `/api/health/live` excepted). Before, opening the page with a cookie from another FarShell port on the same host sent ~18 unauthenticated calls and locked the correct password out for 5 minutes. Two FarShells on one host still share the cookie name (documented in `docs/ref/auth.md`).
 - **Phone: opening a viewer and then tapping a bottom tab no longer leaves a dead history entry.** Closing a route panel with `history:'replace'` left its history entry behind, so the next Back press closed nothing. The entry is now actually popped (one step per panel, only while the current entry carries the panel marker, with a 300 ms wait guard); history pushes that arrive meanwhile are queued in order.

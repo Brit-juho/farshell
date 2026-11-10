@@ -31,7 +31,7 @@ export async function resumeSession(id, { signal } = {}) {
 }
 
 export async function renameSession(session, { signal } = {}) {
-  const title = await promptDialog(t('작업 이름'), { defaultValue: session.title });
+  const title = await promptDialog(t('작업 이름'), { title: t('작업 이름 변경'), okLabel: t('저장'), defaultValue: session.title });
   if (title === null || title.trim() === session.title) return false;
   await historyApi(`/api/session-catalog/sessions/${session.id}`, { body: { title, revision: session.revision }, signal });
   notify();
@@ -46,7 +46,7 @@ export async function setSessionArchived(session, archived, { signal } = {}) {
 
 /** 보관함의 세션 기록 한 줄을 지운다. 대화 보관함의 대화와 원본 사본은 남는다. 확인창에서 취소하면 false. */
 export async function deleteSession(session, { signal } = {}) {
-  if (!await confirmDialog(t('「{title}」 세션 기록을 삭제합니다. 대화 보관함의 대화와 원본은 남습니다. 계속할까요?', { title: session.title }))) return false;
+  if (!await confirmDialog(t('「{title}」 세션 기록을 삭제합니다. 대화 보관함의 대화와 원본은 남습니다. 계속할까요?', { title: session.title }), { title: t('세션 기록 삭제'), okLabel: t('삭제') })) return false;
   await historyApi(`/api/session-catalog/sessions/${session.id}`, { method: 'DELETE', body: { revision: session.revision }, signal });
   notify();
   return true;

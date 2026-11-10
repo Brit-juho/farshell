@@ -663,7 +663,7 @@ def tool_lease_release(args: dict) -> tuple[str, bool]:
     status, data = _api("DELETE", f"/api/leases/{urllib.parse.quote(str(args.get('id', '')), safe='')}", headers=_identity_headers())
     if status != 200:
         return f"실패: {_fail(status, data)}", True
-    return "lease 를 놓았습니다", False
+    return "폴더 점유를 해제했습니다", False
 
 
 def tool_lease_list(args: dict) -> tuple[str, bool]:

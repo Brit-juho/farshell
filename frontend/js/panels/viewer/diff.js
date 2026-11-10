@@ -543,7 +543,7 @@ function _queuedFootEl() {
   const foot = document.createElement('div');
   foot.className = 'vt-psec vt-vw-dqueued';
   foot.hidden = true;
-  foot.innerHTML = `${icon('clipboard', 12)}<span>${vtEsc(t('이 diff에서 큐에 넣은 지시'))}</span><span class="n">0</span>`
+  foot.innerHTML = `${icon('clipboard', 12)}<span>${vtEsc(t('이 변경 내용에서 큐에 넣은 지시'))}</span><span class="n">0</span>`
     + `<span class="note">${vtEsc(t('작업이 끝나면 전송'))}</span>`;
   return foot;
 }
@@ -625,7 +625,7 @@ export async function renderFileDiff(container, repo, file, staged, opts = {}) {
   if (d.truncated) {
     const note = document.createElement('div');
     note.className = 'vt-vw-note warn';
-    note.textContent = t('diff가 커서 일부만 표시했습니다.');
+    note.textContent = t('변경 내용이 커서 일부만 표시했습니다.');
     container.appendChild(note);
   }
   container.appendChild(_queuedFootEl());

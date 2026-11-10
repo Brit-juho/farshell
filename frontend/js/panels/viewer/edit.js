@@ -654,7 +654,7 @@ export function syncConflict(container, st) {
   const b = document.createElement('b');
   b.textContent = c.gone ? t('다른 곳에서 이 파일이 지워졌거나 옮겨졌습니다') : t('다른 곳에서 이 파일이 바뀌었습니다');
   const s = document.createElement('span');
-  s.textContent = ` ${t('({time}, 디스크 rev …{rev}). 내가 고친 내용은 그대로 있습니다.', {
+  s.textContent = ` ${t('({time}, 디스크 버전 …{rev}). 내가 고친 내용은 그대로 있습니다.', {
     time: _hhmm(c.at || new Date()), rev: String(c.rev || '-').slice(-4),
   })}`;
   tx.append(b, s);

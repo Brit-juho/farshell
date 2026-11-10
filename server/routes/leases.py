@@ -74,7 +74,7 @@ async def _caller(request: Request) -> P.Principal:
         p = getattr(request.state, "fsh_principal", None)
         if p is not None and (p.kind == P.AGENT or P.is_cli(p)) and not P.is_hook(p):
             return p
-        raise leases.LeaseError("request_not_allowed", tr("lease 를 다룰 수 없는 호출자입니다"), 403)
+        raise leases.LeaseError("request_not_allowed", tr("폴더 점유를 다룰 수 없는 호출자입니다"), 403)
     p = await asyncio.to_thread(leases.identify, request)
     if p is not None and (p.kind in (P.HUMAN, P.AGENT)):
         return p

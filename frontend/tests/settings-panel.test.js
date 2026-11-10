@@ -398,7 +398,7 @@ test('정보 — 모르는 피드 schema면 본 값과 지원 범위를 적는�
   sectionButton(document, '정보 및 진단').click();
   await flush();
   const help = Array.from(document.querySelectorAll('.vt-set-about .vt-set-help')).at(-1);
-  assert.match(help.textContent, /schema 3/);
+  assert.match(help.textContent, /스키마 3/);
   assert.match(help.textContent, /1, 2/);
 });
 
@@ -566,7 +566,7 @@ test('에이전트 — "보통 이하" 경고 문장이 그대로 노출된다',
   sectionButton(document, '에이전트').click();
   await flush();
   const texts = Array.from(document.querySelectorAll('.vt-set-help')).map((e) => e.textContent);
-  assert.ok(texts.some((t) => t.startsWith('"보통" 이하는 레일에서 입력 대기를 놓칠 수 있다는 뜻입니다.')));
+  assert.ok(texts.some((t) => t.startsWith('"보통" 이하는 세션 목록에서 입력 대기를 놓칠 수 있다는 뜻입니다.')));
   // N9 — 훅이 없는 CLI에도 올라갈 길이 있다는 사실을 같은 자리에서 알려준다.
   assert.ok(texts.some((t) => t.includes('fsh pane report')));
 });
@@ -678,13 +678,13 @@ test('보안 — 설정 변경 UI(입력·버튼)를 두지 않는다', async ()
   assert.strictEqual(content.querySelector('button'), null);
 });
 
-test('보안 — 승격은 ADR-27로 쓰는 경로가 없다는 설명이 함께 나온다', async () => {
+test('보안 — 승격을 쓰는 경로가 아직 없다는 설명이 함께 나온다', async () => {
   const { document } = await openSecurity({ elevation: { elevated: false, elevated_until: 0, unused: true } });
   const row = Array.from(document.querySelectorAll('.vt-set-secrow'))
     .find((r) => r.querySelector('.vt-set-label').firstChild.textContent === '승격 세션');
   assert.ok(row);
   assert.strictEqual(row.querySelector('.vt-set-secstate').textContent, '승격 안 됨');
-  assert.ok(row.querySelector('.vt-set-help').textContent.includes('ADR-27'));
+  assert.ok(row.querySelector('.vt-set-help').textContent.includes('승격을 요구하는 조작이 아직 없어'));
 });
 
 test('보안 — 승격 중이면 남은 시간을 분으로 보여준다', async () => {

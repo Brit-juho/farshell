@@ -27,7 +27,7 @@ function toggleMediaKeyTrigger() {
   if (mediaKeyTriggerOn) {
     // ON: Media Session 핸들러 등록 + 무음 오디오 재생
     setupMediaSession();
-    micStatus.textContent = t('이어폰 Play/Pause = 녹음 토글');
+    micStatus.textContent = t('이어폰 재생/일시정지 버튼 = 녹음 켜기/끄기');
   } else {
     // OFF: 핸들러 해제 + 무음 완전 정지 → OS가 기본 미디어 컨트롤 가짐
     if ('mediaSession' in navigator) {

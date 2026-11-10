@@ -697,7 +697,7 @@ _t_en_lookup() {
     '포트는 열려 있지만 응답하지 않음 ({state}) — fsh restart') _T_OUT='Port is open but the server isn'\''t responding ({state}) — fsh restart' ;;
     '포트는 열려 있지만 일을 못 받음({state}) → fsh restart. 원인: {what}') _T_OUT='Port is open but the server can'\''t take work ({state}) → fsh restart. Cause: {what}' ;;
     '폰 접속') _T_OUT='Phone access' ;;
-    '폴더 lease') _T_OUT='folder lease' ;;
+    '폴더 점유(lease)') _T_OUT='folder lease' ;;
     '프런트엔드 빌드 완료 → frontend/dist/') _T_OUT='Frontend built → frontend/dist/' ;;
     '프런트엔드 빌드 중... (Vite + Tailwind, node {version})') _T_OUT='Building the frontend... (Vite + Tailwind, node {version})' ;;
     '프로필 {np}개, {age}초 전 갱신') _T_OUT='{np} profile(s), updated {age}s ago' ;;

@@ -461,7 +461,7 @@ export function renderVoiceInput() {
       const models = (r && r.models) || [];
       const bins = (r && r.binaries) || [];
       manageEl.textContent = '';
-      if (!models.length && !bins.length) { manageEl.textContent = t('받아 둔 항목이 없습니다.'); return; }
+      if (!models.length && !bins.length) { manageEl.textContent = t('내려받은 파일이 없습니다.'); return; }
       const add = (name, size, selected, payload, warnSel) => {
         const it = el('div', 'vt-set-model-item');
         const lab = el('span', 'vt-set-model-name', `${name} · ${fmtBytes(size || 0)}`);
@@ -471,16 +471,16 @@ export function renderVoiceInput() {
         del.setAttribute('aria-label', t('{name} 삭제', { name }));
         del.addEventListener('click', async () => {
           const warn = selected
-            ? t('지금 선택 중인 모델입니다. 지우면 다시 받기 전까지 음성 입력을 쓸 수 없습니다.')
+            ? t('지금 선택 중인 모델입니다. 삭제하면 다시 받기 전까지 음성 입력을 쓸 수 없습니다.')
             : warnSel;
-          const ok = await confirmDialog(t('{name}({size})을(를) 지울까요?\n\n{warn}', { name, size: fmtBytes(size || 0), warn }),
+          const ok = await confirmDialog(t('{name}({size})을(를) 삭제할까요?\n\n{warn}', { name, size: fmtBytes(size || 0), warn }),
             { title: t('삭제'), okLabel: t('삭제'), danger: true });
           if (!ok) return;
           try {
             const d = await vtFetch('/voice/stt/model', {
               method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
             });
-            toast(d && d.freed_bytes ? t('지웠습니다 · {size} 확보', { size: fmtBytes(d.freed_bytes) }) : t('지웠습니다'));
+            toast(d && d.freed_bytes ? t('삭제했습니다 · {size} 확보', { size: fmtBytes(d.freed_bytes) }) : t('삭제했습니다'));
           } catch (e) { toast(e.message || t('삭제하지 못했습니다'), 'error'); }
           if (alive) { refreshStatus(); reload(); refreshManage(); }
         });
@@ -492,8 +492,8 @@ export function renderVoiceInput() {
     } catch (e) { manageEl.textContent = t('상태를 확인할 수 없습니다.'); }
   }
 
-  const manageGroup = group(t('받아 둔 항목 관리'), row(t('내려받은 파일'), manageEl,
-    t('모델과 엔진 파일을 지워 저장 공간을 돌려받습니다. 자동으로 받지 않으며, 지운 것은 다시 받아야 합니다.')));
+  const manageGroup = group(t('내려받은 파일 관리'), row(t('내려받은 파일'), manageEl,
+    t('모델과 엔진 파일을 삭제해 저장 공간을 돌려받습니다. 자동으로 받지 않으며, 삭제한 것은 다시 받아야 합니다.')));
   // 호출부가 구역 순서를 정할 수 있게 둘로 나눠 돌려준다.
   const input = group(t('음성 입력'), frag);
   reload();
