@@ -196,7 +196,7 @@ precache stays valid:
 - `frontend/dist/app.js` + `frontend/dist/app.css` — the main entry
   (`frontend/js/main.js`). `app.js` is only the boot wiring; everything needed at
   boot is in `core.js`, and **app.js + core.js is the initial payload**, capped at
-  358,400 B (`frontend/tests/build-output.test.js`, CI). Everything else is a
+  307,200 B (`frontend/tests/build-output.test.js`, CI). Everything else is a
   fixed-name lazy chunk chosen by `chunkOf()` in `vite.config.mjs`: `shell`
   (Solid + `js/shell/` — workbench, title bar, status bar, palette, fleet, focus),
   `panels`, `settings`, `files`, `editor`/`editor-*`, `preview`, `panel`, `screens`,
@@ -234,7 +234,7 @@ precache stays valid:
 ### Root
 | File | Responsibility |
 |---|---|
-| `vite.config.mjs` | Frontend build config — library mode, two independent entries (see above), no hashing, whitespace-only minify (identifiers are kept) |
+| `vite.config.mjs` | Frontend build config — library mode, two independent entries (see above), no hashing, minify with whitespace/comment stripping and `compress` but no `mangle` (identifiers are kept) |
 | `styles/` | `main.css` (Tailwind entry), `layers/` (reset/components/patterns/history), `screens/` (the pre-Tailwind hand-written CSS, kept unlayered so it always wins the cascade), `theme/` (`tokens.css`, `skins.css`) |
 | `install.sh` | Creates Python venv, installs per-profile packages, symlinks fsh, initializes ~/.vt.env, runs `npm ci && npm run build` (skipped when a prebuilt `frontend/dist/` from a release tarball is present) |
 | `requirements-core.txt` | Terminal-only (~50MB) — input of the hash lock, not an install path |
