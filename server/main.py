@@ -191,10 +191,9 @@ class TokenAuthMiddleware:
             if rejected is not None:
                 await rejected(scope, receive, send)
                 return
-        token = (
-            request.cookies.get("vt_session", "")
-            or request.query_params.get("token", "")
-        )
+        cookie_token = request.cookies.get("vt_session", "")
+        token = cookie_token or request.query_params.get("token", "")
+        from_cookie = bool(cookie_token)
         if not token:
             authz = request.headers.get("authorization", "")
             if authz.startswith("Bearer "):
@@ -203,9 +202,14 @@ class TokenAuthMiddleware:
         authz_hooks.middleware(request, authenticated)   # shadow — 응답 불변
         if not authenticated:
             # 제시했는데 틀린 자격만 센다(자격 없음·서명은 맞는데 만료된 쿠키는 추측이 아니다).
-            if token and not auth.session_signed(token):
-                authz_preauth.fail(authz_preauth.source_of(request), "credential")
+            # 같은 틀린 값은 60초 안에 한 번만 센다 — 다른 포트 FarShell 이 준 쿠키로 페이지를 열면 API 가 수십 번 나간다.
+            unsigned = bool(token) and not auth.session_signed(token)
+            if unsigned:
+                authz_preauth.fail_once(authz_preauth.source_of(request), "credential", token)
             response = JSONResponse({"error": "unauthorized"}, status_code=401)
+            if unsigned and from_cookie:
+                # 서명이 안 맞는 vt_session 은 이 서버가 준 적 없는 값이라 지운다(로그아웃과 같은 속성). 만료된 서명 쿠키는 그대로.
+                response.delete_cookie("vt_session", path="/")
             await response(scope, receive, send)
             return
         # 호출자 종류를 라우트가 볼 수 있게 남긴다(`request.state.auth_kind`). 사람 전용 라우트는

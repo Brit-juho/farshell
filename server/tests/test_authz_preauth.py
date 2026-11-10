@@ -145,8 +145,62 @@ def test_invalid_cookie_and_token_failures_count_but_stale_signed_cookies_do_not
 def test_forged_cookie_counts(clock, app_auth):
     c = client()
     for i in range(10):
-        c.get("/api/capabilities", headers={"Cookie": "vt_session=v2.9999999999.-.deadbeef"})
+        c.get("/api/capabilities", headers={"Cookie": f"vt_session=v2.9999999999.-.deadbeef{i}"})
     assert c.get("/api/capabilities").status_code == 429
+
+
+def _cookie_del(r):
+    return [h for h in r.headers.get_list("set-cookie") if h.startswith("vt_session=") and "Max-Age=0" in h]
+
+
+def test_same_wrong_cookie_is_counted_once_per_window(clock, app_auth):
+    c = client()
+    hdr = {"Cookie": "vt_session=v2.9999999999.-.deadbeef"}
+    for _ in range(20):
+        assert c.get("/api/capabilities", headers=hdr).status_code == 401
+    assert preauth.LIMITER.lock_remaining("testclient") == 0
+    assert c.post("/api/auth", json={"token": "pw-" + "preauth"}).status_code == 200
+
+
+def test_ten_distinct_wrong_cookies_still_lock(clock, app_auth):
+    c = client()
+    for i in range(10):
+        c.get("/api/capabilities", headers={"Cookie": f"vt_session=bad-{i}"})
+    assert c.get("/api/capabilities").status_code == 429
+
+
+def test_same_wrong_value_counts_again_after_the_window(clock):
+    lim = preauth.LIMITER
+    assert lim.note_failure_once("9.9.9.9", "v") == (True, 0)
+    clock.t += 59
+    assert lim.note_failure_once("9.9.9.9", "v") == (False, 0)      # 창 안 — 세지 않는다
+    clock.t += 2                                                     # 처음 센 뒤 61초
+    assert lim.note_failure_once("9.9.9.9", "v") == (True, 0)       # 다시 센다
+    assert lim.note_failure_once("9.9.9.9", "w") == (True, 0)
+    assert len(lim._failures["9.9.9.9"]) == 2      # 처음 센 것은 창 밖으로 빠졌다
+
+
+def test_unsigned_cookie_401_deletes_the_cookie(clock, app_auth):
+    c = client()
+    r = c.get("/api/capabilities", headers={"Cookie": "vt_session=foreign-cookie"})
+    assert r.status_code == 401
+    dels = _cookie_del(r)
+    assert len(dels) == 1 and "Path=/" in dels[0]
+
+
+def test_bearer_or_query_wrong_value_does_not_delete_cookie(clock, app_auth):
+    c = client()
+    r = c.get("/api/capabilities", headers={"Authorization": "Bearer wrong-bearer"})
+    assert r.status_code == 401 and not r.headers.get_list("set-cookie")
+    r = c.get("/api/capabilities?token=wrong-query")
+    assert r.status_code == 401 and not r.headers.get_list("set-cookie")
+
+
+def test_expired_signed_cookie_is_not_deleted(clock, app_auth):
+    c = client()
+    stale = app_auth.make_session("", ttl=-10)
+    r = c.get("/api/capabilities", headers={"Cookie": f"vt_session={stale}"})
+    assert r.status_code == 401 and not r.headers.get_list("set-cookie")
 
 
 def test_peer_signature_failures_count_and_lock_the_source(clock, app_auth):

@@ -4,6 +4,7 @@
 // ui/toast.js)가 소유해 bare identifier로 읽는다.
 import { get as setting } from '../core/settings.js';
 import { t } from '../core/i18n.js';
+import { waitForAuthentication } from '../core/auth-state.js';
 
 const _vToken = new URLSearchParams(location.search).get('token') || '';
 const _vTokenQ = _vToken ? `?token=${_vToken}` : '';
@@ -14,7 +15,19 @@ let pendingMeta = null;
 let _notifyRetries = 0;
 let _notifyStableTimer = null;
 
+// 로그인 화면이 떠 있는 동안은 붙지 않는다(인증 없는 접속이 사전 인증 실패로 세어진다). 재연결 타이머도 여기를 지난다.
+let _notifyWaitingAuth = false;
 function connectNotify() {
+  if (window.__vtAuthed === false) {
+    if (_notifyWaitingAuth) return;
+    _notifyWaitingAuth = true;
+    waitForAuthentication().then((ok) => { _notifyWaitingAuth = false; if (ok) connectNotify(); });
+    return;
+  }
+  _connectNotifyNow();
+}
+
+function _connectNotifyNow() {
   // C2: 상한 도달 후 영구 포기하지 않는다(모바일 장시간 세션의 flap에도 알림 유지).
   // [회귀 fb827a6] 단, onopen에서 _notifyRetries를 '즉시' 0으로 리셋하면 서버가 accept
   // 직후 닫는 half-open flap에서 지수 백오프가 자라지 못해 2초마다 영구 재연결한다
