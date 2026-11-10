@@ -1,5 +1,5 @@
 import { vtFetch } from '../../../core/api.js';
-import { statusLine, secRow, fmtWhen } from '../controls.js';
+import { statusLine, secRow, fmtWhen, group } from '../controls.js';
 import { t } from '../../../core/i18n.js';
 
 // ── 「보안」 ──────────────────────────────────────────────────────────────
@@ -22,34 +22,31 @@ export function renderSecuritySection() {
   const authHost = document.createElement('div');
   authHost.className = 'vt-set-sechost';
   authHost.appendChild(statusLine(t('인증 상태 확인 중…')));
-  frag.appendChild(authHost);
-
-  const devTitle = document.createElement('div');
-  devTitle.className = 'vt-set-label';
-  devTitle.textContent = t('등록 기기');
-  frag.appendChild(devTitle);
+  frag.appendChild(group(t('로그인'), authHost));
 
   const devHost = document.createElement('div');
   devHost.className = 'vt-set-sechost';
   devHost.appendChild(statusLine(t('기기 목록 확인 중…')));
-  frag.appendChild(devHost);
+  frag.appendChild(group(t('등록 기기'), devHost));
 
   const elevHost = document.createElement('div');
   elevHost.className = 'vt-set-sechost';
   elevHost.appendChild(statusLine(t('승격 상태 확인 중…')));
-  frag.appendChild(elevHost);
+  frag.appendChild(group(t('높은 권한 확인'), elevHost));
 
   // 로그아웃은 비밀번호가 실제로 걸려 있을 때만 의미가 있다 — 인증이 없는
   // 설치에서는 끊을 세션 자체가 없으므로 버튼을 그리지 않는다(누르면 아무 일도
   // 안 일어나는 버튼을 두지 않는다).
   const outHost = document.createElement('div');
   outHost.className = 'vt-set-sechost';
-  frag.appendChild(outHost);
+  const outGroup = group(t('로그아웃'), outHost);
+  outGroup.hidden = true;
+  frag.appendChild(outGroup);
 
   vtFetch('/api/auth/status').then((r) => {
     authHost.innerHTML = '';
     const pw = !!(r && r.password_set);
-    if (pw) outHost.appendChild(_logoutRow());
+    if (pw) { outHost.appendChild(_logoutRow()); outGroup.hidden = false; }
     authHost.appendChild(secRow(
       t('웹 로그인 비밀번호'),
       pw ? t('설정됨') : t('설정 안 됨'),
