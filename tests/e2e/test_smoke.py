@@ -1093,6 +1093,41 @@ def _close_overlay(page):
     page.evaluate("() => { const el = document.getElementById('vt-file'); if (el) window.closePanel(el, { force: true }); }")
 
 
+def _mobile_state(page):
+    return page.evaluate(
+        """() => ({
+          panels: [...document.querySelectorAll('.vt-viewer-backdrop')].map((e) => e.id),
+          pressed: [...document.querySelectorAll('#vt-mnav-bottom [data-mnav]')]
+            .filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.dataset.mnav),
+          tab: document.documentElement.dataset.mobileTab,
+        })"""
+    )
+
+
+def test_폰에서_파일_뷰어는_X와_뒤로가기_한_번에_닫히고_하단_탭이_그대로다(page):
+    """폰 실기기 회귀(2.10.0~2.10.1) — 「파일」 탭 위에 뷰어를 열고 X나 뒤로가기를 누르면 popstate가 DOM 순서상
+    첫 `.vt-mobile-route`(탭 화면 vt-dir)를 닫아 하단 탭이 「터미널」로 바뀌고 뷰어는 남았다. 한 번에 뷰어만 닫혀야 한다."""
+    page.set_viewport_size(COMPACT)
+    page.click('#vt-mnav-bottom .vt-mnav-btn[data-mnav="files"]')
+    page.wait_for_selector("#vt-dir", timeout=15000)
+    path = _viewer_file("rows.txt")
+    try:
+        for how in ("x", "back"):
+            page.evaluate("(p) => window.openFile(p)", path)
+            page.wait_for_selector("#vt-file .cm-line", timeout=15000)
+            assert _mobile_state(page)["panels"] == ["vt-dir", "vt-file"]
+            if how == "x":
+                page.click("#vt-file .vt-vw-x")
+            else:
+                page.go_back()
+            page.wait_for_selector("#vt-file", state="detached", timeout=3000)
+            page.wait_for_timeout(300)
+            got = _mobile_state(page)
+            assert got == {"panels": ["vt-dir"], "pressed": ["files"], "tab": "files"}, f"{how}: {got}"
+    finally:
+        page.evaluate("() => { const el = document.getElementById('vt-dir'); if (el) window.closePanel(el, { history: 'replace' }); }")
+
+
 _DOC = "document.querySelector('#vt-file .vt-vw-code-pane')._vtEditor.view.state.doc"
 
 
