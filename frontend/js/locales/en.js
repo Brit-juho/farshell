@@ -5421,5 +5421,10 @@ window.__VT_I18N = {
   "프로필 폴더를 찾지 못했습니다": "The profile folder was not found",
   "프로필 폴더의 위치·소유자·권한이 안전하지 않습니다": "The profile folder's location, owner or permissions are not safe",
   "프로필을 확인하지 못했습니다": "Could not check the profile",
-  "프로필의 도구가 일치하지 않습니다": "The profile's tool does not match"
+  "프로필의 도구가 일치하지 않습니다": "The profile's tool does not match",
+  "cols·rows는 1에서 1000 사이의 정수여야 합니다": "cols and rows must be integers from 1 to 1000",
+  "세션 이름은 영문자·숫자·_·-만 쓸 수 있습니다(80자까지)": "A session name may use only letters, digits, _ and - (up to 80 characters)",
+  "엔드포인트가 http:// 입니다. 키가 암호화되지 않고 네트워크로 전송됩니다": "The endpoint is http://. The key is sent over the network unencrypted.",
+  "이 계정의 사용량을 읽는 중입니다. 잠시 뒤 다시 시도하세요": "This account's usage is being read. Try again in a moment.",
+  "프로필을 지금 쓸 수 없습니다. 프로필 상태를 확인하세요": "The profile cannot be used right now. Check the profile's state."
 };

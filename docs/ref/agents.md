@@ -73,7 +73,49 @@ copied or swapped, and nothing switches automatically.
   `injected_sessions`. The launch panel's `sessions` table is left alone.
 - **Who may.** A browser login session only (`require_human_session`). The default/pick routes are not elevated and
   need no password. Peers, machine tokens, the unix socket and agent MCP cannot choose accounts; the UI hides the
-  feature while another host is being viewed.
+  feature while another host is being viewed. Changing the default account is not elevated either, so every change
+  leaves one line in `~/.vt/agent_access.log` (`profile_default_set` / `profile_default_clear`, result `ok` or
+  `failed`, `kind` = tool, `request` = profile id; no name, no path, no value).
+- **Same-UID limit (read this before trusting the boundary).** A session's environment holds the account's
+  long-lived token or API key, and the profile folder holds the token file, so any process of the same OS user can read
+  them: `tmux show-environment -t <session>`, `.farshell-token.json`, the registry. An agent in the session (or one a
+  prompt-injected page talks into it) can therefore print or send the token, and FarShell cannot stop that. «An agent
+  cannot choose an account» is a policy of the REST, MCP and delegation paths (human session required, `profile` and
+  its three sibling fields refused in a delegation, the child's account taken only from the server's own record, never
+  from the `@fsh_profile` marker). It is **not an OS boundary**: an agent that runs `tmux new-session` itself, or edits
+  the registry, is not stopped. Register only accounts you are willing to expose to the agents you run in that
+  session.
+- **Variables the injection does not let a profile set.** An API-endpoint profile's environment (import and edit share
+  one check, `agent_profile_migration._private_configuration`, compared case-insensitively) refuses: `HOME`, `PATH`,
+  `TMPDIR`, `SHELL`, `ZDOTDIR`, `PROMPT_COMMAND`, `PS4`, `IFS`, `BASH_ENV`, `ENV`, `SHELLOPTS`, `PYTHONPATH`,
+  `PYTHONHOME`, `NODE_OPTIONS`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `CLAUDE_CODE_OAUTH_TOKEN`, every `*_PROXY`
+  (`HTTP_PROXY`, `https_proxy`, `ALL_PROXY`, `NO_PROXY` ...), `SSL_CERT_*`, `NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE`,
+  `CURL_CA_BUNDLE`, `SSH_AUTH_SOCK`, `SSH_ASKPASS`, and the prefixes `VT_`, `FSH_`, `LD_`, `DYLD_`, `GIT_`. They would
+  redirect traffic, change which certificate authorities are trusted, or change what the shell and its tools load.
+  An `http://` endpoint that is not this machine (`localhost`, `127.0.0.1`, `::1`) is **accepted but flagged**
+  (`plaintext_endpoint: true` and a warning in the provider review): a trusted LAN gateway is a legitimate setup,
+  so refusing would only push people to disable the check; the key crosses the network unencrypted there.
+- **The statusLine is refreshed when a session is created.** For a chosen Claude profile the server places the
+  usage wrapper in the profile's `settings.json` (`session_profile.sync_settings` ->
+  `agent_profile_settings.sync(..., statusline_only=True)`) so a moved checkout or a changed global statusLine is
+  followed. It touches that one key only: other settings, hooks and MCP definitions (with their keys) follow the
+  global files **only** through the explicit `fsh profile sync-settings` or the managed launch. The global
+  `~/.claude` is only read. A failure is logged as a warning (exception type only) and the session is still created.
+- **Names.** A session created with `profile` must be named `[A-Za-z0-9_-]{1,80}` (`400 invalid_name`): tmux expands
+  formats in a `-s` value, so `#{session_id}` would create a session under another name that the failed-create cleanup
+  cannot find. `session_profile.spawn` enforces the same rule for every caller (delegation names are already
+  sanitized). A profile name is 1..80 characters once trimmed and may not hold control or format characters (DEL,
+  bidi controls U+202A-202E/U+2066-2069, zero-width U+200B-200D/U+FEFF, U+2028/2029). Two active profiles of one tool
+  may share a name (`fsh claude <name>` then asks for the ID), so create/rename succeed but report
+  `duplicate_name: true`.
+- **Concurrency with the usage app-server (Codex).** The usage app-server and a new session of the same Codex profile
+  take one per-profile guard (`usage.appserver.hold`): session creation waits up to 12 s for a running app-server and is
+  refused as `profile_busy` if it is still running; the app-server does not start (`busy`) while a session is being
+  created. Without this the two could refresh the same rotating refresh token.
+- **Records.** `injected_sessions` is capped at 500 rows, but a row whose session (`#{session_id}:#{session_created}`)
+  is still alive in tmux is never pruned (a delegated child of a long-lived parent needs it); if tmux cannot be
+  listed nothing is pruned. A profile folder that disappears between the check and the launch is the fixed refusal
+  `profile_unavailable` (no path in the message).
 
 ## Features
 
@@ -431,8 +473,8 @@ card, the picker row, the HUD chip tooltip and the usage panel show value, reset
 | `oauth-usage` | Claude | the existing `oauth/usage` call (90 s cache), native OAuth profiles only | Used when the statusline has no value for a window |
 | `codex-usage` | Codex | the existing `wham/usage` call | Used when the app-server has no value for a window |
 
-**Statusline wrapper.** The settings sync (`agent_profile_settings.sync`, run before a managed launch, before a new
-session is created with a profile, and by `fsh profile sync-settings`) writes the PROFILE's `statusLine` as
+**Statusline wrapper.** The settings sync (`agent_profile_settings.sync`, run before a managed launch and by
+`fsh profile sync-settings`; at session creation only its `statusline_only` form) writes the PROFILE's `statusLine` as
 global value G -> `wrap(G)`: the same object with `command` replaced by
 `<repo>/bin/fsh-statusline --profile <id> --dir <usage dir> -- '<G command>'`; with no global statusLine the
 wrapper alone (it prints nothing). The global `~/.claude/settings.json` is never written. A value that is G itself

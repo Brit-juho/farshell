@@ -83,6 +83,14 @@ Verify affected behavior with actual responses, operations and logs.
     `~/.claude/settings.json` and `~/.codex/config.toml` (read-only plan functions) and reports; repair is always the user's
     `fsh hooks install`/`fsh sync`. Do not add an auto-repair: it races with the user, gstack and clauth, gives a remotely
     reachable process write access to agent settings, and resurrects hooks the user removed on purpose.
+    **The one exception is FarShell's own managed profile folders** (`~/.vt/agent-profiles/<id>/`), never the global
+    `~/.claude`/`~/.codex` (those are only read). Two person-initiated paths write there: the explicit
+    `fsh profile sync-settings` / the managed launch (`fsh claude <profile>`), and creating a new session with an account
+    a person chose (`session_profile.sync_settings`), which places **only the usage statusLine wrapper** in that
+    profile's `settings.json` (`agent_profile_settings.sync(..., statusline_only=True)`: no other key, no hooks, no MCP
+    definitions, `.claude.json` untouched). A failure is logged without values or paths and never blocks the session.
+    Do not widen the automatic call: a global hook or MCP definition (with its keys) must never spread to every
+    profile without a person running the sync. Details: `docs/ref/agents.md` «Account choice for new sessions».
 17. **Automatic update runs network code — keep it bounded.** `update.auto` is off by default and only ever applies
     a signature-verified `stable` release tag (`updater.resolve_target`, trust file outside the repo, `origin/master`
     history), never on the dev channel, devmode, an unset channel, a tree with local changes, a major-version jump or
