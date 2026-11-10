@@ -45,7 +45,7 @@ Endpoint contracts: [API.md](../../API.md).
 Item states: `pending` → `sending` → removed on success, or `blocked`. A `sending` item stays in place and **cannot be deleted or cleared** (409 `item_sending`). Transient reasons (waiting, human typing, missing pane, tmux/remote failure) are retried: the sweep (`VT_QUEUE_SWEEP_SEC`, default 60 sec) returns them to `pending` after 5·10·20·40 sec (cap 300), up to 5 attempts, then sends a Web Push and stops. A retried item with an explicit local target is drained right away only if that session is known `idle`/`done`; otherwise the next `done` drains it. safe_mode blocks are never retried. A `sending` item older than 30 sec, or one left over from a server restart, becomes `blocked` without retry — it may already have been typed. Every transition is appended to `~/.vt/queue_transitions.jsonl` (rotated at 1 MB; `fsh queue log`).
 
 Text injection: every automatic path (queue, targeted voice, `/api/peer/input`) goes through `tmux_target.send_to_tmux`, which loads a uniquely named tmux buffer and runs `paste-buffer -p -r -d -t <pane id>`, waits `VT_PASTE_ENTER_GAP_MS` (default 200), then sends Enter separately. Multi-line text arrives as one bracketed paste instead of being submitted line by line. All automatic writers, including `send_to_session` and `type_to_tmux`, hold a per-pane lock so one writer's Enter cannot land inside another's text. `send_to_session` also returns 409 `target_human_typing` while a person is typing in that session. Untargeted voice input still writes to the attached PTY directly. Target resolution uses the same rules as voice (`server/tmux_target.py`). Stored at `~/.vt/queue.json` (0600), with concurrent writes serialized via flock. A remote item uses `POST /api/peer/input` and needs `control` level on the other side. |
-| Prompt snippets | The dock's **Snippets** tab (also the left rail button and `Mod+K` → "Prompt snippets"; on compact it opens as a sheet). The iTerm2 Snippets idea: save a frequently used instruction or command block and fire it into a pane. **Distinct from the queue** — the queue is a waiting line ("run this when the agent is free"), a snippet has no waiting concept at all, it goes in immediately. So `snippet_store.py` is pure CRUD with no status/target/drain state machine. **The run method is chosen when you run it, not when you save it**: each row has "Type into this session" and "New session". **The snippet's own text decides the last Enter** — a line break is an Enter keypress, and a single trailing `\n` means "press Enter after the last line" (`snippet_store.normalize_text` / `frontend/js/snippets-util.js`; every line break, and the final one, is drawn as a `↵` marker in the live preview under the editor). The editor's 「전송 방식」 choice (끝에 Enter / 입력만) sets or removes that trailing newline; typing a trailing line break selects 끝에 Enter. "Type into this session" sends the body as one paste (`sendPaste`, server-side marker handling) and then one Enter if the text ends with a newline; "New session" splits the active pane to the right, creates a tmux session in the same cwd and types the text line by line. The new session name is typed in an inline field (blank = the snippet's name, then the cwd folder name); a taken name becomes `name-1`, `name-2` (`POST /api/tmux/create` `unique_name`, numbered under a lock). Names are reduced to `[A-Za-z0-9_-]` because other endpoints reject anything else; the UI toasts when the name changed. Stored at `~/.vt/snippets.json` (0600 + flock, same rules as the queue), capped at 100 items / 8000 chars. Search, edit (name/text/scope/send mode, a sub-screen of the panel) and delete (a confirm dialog) are in the panel. **Web UI only — there is no `fsh snippet` subcommand** |
+| Prompt snippets | The dock's **Snippets** tab (also the left rail button and `Mod+K` → "Prompt snippets"; on compact it opens as a sheet). The iTerm2 Snippets idea: save a frequently used instruction or command block and fire it into a pane. **Distinct from the queue** — the queue is a waiting line ("run this when the agent is free"), a snippet has no waiting concept at all, it goes in immediately. So `snippet_store.py` is pure CRUD with no status/target/drain state machine. **The run method is chosen when you run it, not when you save it**: each row has "Type into this session" and "New session". **The snippet's own text decides the last Enter** — a line break is an Enter keypress, and a single trailing `\n` means "press Enter after the last line" (`snippet_store.normalize_text` / `frontend/js/snippets-util.js`; every line break, and the final one, is drawn as a `↵` marker in the live preview under the editor). The editor's Send mode (전송 방식) choice (Enter at end (끝에 Enter) / Type only (입력만)) sets or removes that trailing newline; typing a trailing line break selects Enter at end. "Type into this session" sends the body as one paste (`sendPaste`, server-side marker handling) and then one Enter if the text ends with a newline; "New session" splits the active pane to the right, creates a tmux session in the same cwd and types the text line by line. The new session name is typed in an inline field (blank = the snippet's name, then the cwd folder name); a taken name becomes `name-1`, `name-2` (`POST /api/tmux/create` `unique_name`, numbered under a lock). Names are reduced to `[A-Za-z0-9_-]` because other endpoints reject anything else; the UI toasts when the name changed. Stored at `~/.vt/snippets.json` (0600 + flock, same rules as the queue), capped at 100 items / 8000 chars. Search, edit (name/text/scope/send mode, a sub-screen of the panel) and delete (a confirm dialog) are in the panel. **Web UI only — there is no `fsh snippet` subcommand** |
 | Detection coverage trust | The table in Settings → "Agents". `trust: high` means a **first-party signal** exists — a Claude Code or Codex hook (`hook`) or `fsh pane report --agent <name>` self-reporting (`report`). A CLI without a hook stays at mid however many patterns it has. Self-reporting is recorded in `~/.vt/agent-report-seen.json` — the same kind of durable fact as "a hook is installed" (status entries expire on a TTL, which would make the grade flicker) |
 | Stale-server warning | `fsh doctor` and `fsh status` compare the newest mtime under `server/` (`.py` files) against the server process start time and tell you to restart when the code is newer. Python loads modules at import time, so without a restart a fix is **not** live at all — a stale server is easily mistaken for a code bug |
 
@@ -100,18 +100,18 @@ A `waiting` entry carries `kind` = `approval | choice | plan | question` (`GET /
 - **`enter` hits are `approval`**; `[kinds]` literals are waiting triggers too. Order when several hit: plan, approval, `enter`, choice, question (the generic `Enter to select` footer must lose to a specific prompt).
 - **Codex choice ignores `esc to interrupt`** (`ignore_exit_on = ["choice"]`): the question screen keeps the working status line on screen.
 - **Codex (measured on 0.160.0 — evidence in `session-view-measurements.md` section 1):** declining an approval, ESC while working and ESC on the question overlay emit no hook and leave `■ Conversation interrupted - use /feedback ...`; `interrupt = ["Conversation interrupted"]` ends them as `done`. That line stays in scrollback and tmux partial redraws re-send it during the next turn, so `interrupt_stale_after` (a regex in `codex.toml`) ignores the phrase when a new `› ` input or `• ` answer line follows it. The Plan-mode `Stop` hook comes ~40-130 ms **before** the `Implement this plan?` overlay, so `on_waiting` lets a `plan` screen reopen a `done` entry for `PLAN_AFTER_DONE_SEC` (10 s); other kinds still cannot revive `done`. Approval keys are any one letter or `esc` (`(y)`, `(p)`, `(a)`); plan/question overlays have no `(key)` and use the digit shown. `_strip_ansi` turns cursor-forward (`ESC [ n C`) into blanks so overlay columns stay apart. Pressing `3` on a Codex approval menu chooses "No": the request is cancelled, the file is not created, and the screen shows `■ Conversation interrupted`.
-- **agy** has no hooks; `exit` stays empty (`esc to cancel` is always on screen). `/artifact to review` is a `[badge]` (`badge: "plan"`), never waiting. agy has no end-of-turn signal, so the badge sits on a **working** entry (measured) and the rail/Fleet row shows 「계획 있음」 as a secondary mark next to 작업 중 (`stateKeyword` in `rail-data.ts` shows badges on working and done; the state itself is untouched).
+- **agy** has no hooks; `exit` stays empty (`esc to cancel` is always on screen). `/artifact to review` is a `[badge]` (`badge: "plan"`), never waiting. agy has no end-of-turn signal, so the badge sits on a **working** entry (measured) and the rail/Fleet row shows Has plan (계획 있음) as a secondary mark next to Working (작업 중) (`stateKeyword` in `rail-data.ts` shows badges on working and done; the state itself is untouched).
 - **`badge: "question"`**: Stop/done whose `last_assistant_message` ends with `?` (rhetorical questions and quotes make promoting it to waiting too risky — it would block the queue). Cleared on the next prompt/tool/session start.
 - **Notification hook** (`permission_prompt|idle_prompt`, registered by `fsh hooks install`): recorded as `last_notification` only — never used to decide kind or status. Re-run `fsh hooks install` to register it; until then `fsh hooks status`/`doctor` show Notification as `add` and coverage reports Claude as `pty`, not `hook`.
 - **`PermissionRequest` (registered by `fsh hooks install`):** fires just before Claude Code shows a permission dialog; the script exits with no output, so it never allows or denies anything and the normal dialog appears. It gives the server the exact `tool_name` (kind) at once instead of waiting for the screen. There is no "approved/denied" event, so clearing is still the next pre/post/stop or the screen's exit pattern. Existing installs must re-run `fsh hooks install`; until then Claude's kinds come from screen patterns (`kindSources` reports that honestly).
 
 ### Session owner and waiting release
 
-Code: `server/agent_status.py` (module note «세션 소유자»).
+Code: `server/agent_status.py` (module note "session owner", «세션 소유자»).
 
 - **One owner per tmux session.** A tmux session's state is the state of the one agent session (hook `session_id`) that owns it — not the most urgent of every entry carrying that name. Without a single owner, `/clear`/`--resume`/restart would leave the previous session's entry behind for 30-60 minutes, and because `done` outranks `working` a working session would show as done. The owner is set by SessionStart (`startup`/`resume`/`clear`), or by the first event when there is no owner. The previous owner is **retired**: its entry is deleted and its late hooks are ignored for an hour (`resume` brings a retired conversation back).
 - **Non-owner events are ignored** (`/api/agent/event` returns `state: null`, `resolved_by: "ignored"`; no queue drain, delegation event or completion voice). This covers child processes that inherit the pane's `TMUX_PANE` (`claude -p` from a Bash tool or an MCP server). A `startup` from another session while the owner is `working`/`waiting` does not take over when the owner's process identity is unknown (`verified` is none); a hook whose process is confirmed takes over at once — an interactive replacement comes as `clear`/`resume`, or as `startup` after SessionEnd released the pane.
-- **SessionEnd releases.** It deletes the entry instead of marking it `done`, so `/clear` does not produce a 30-minute 「완료」 badge plus a queue drain. Clients receive an `agent_event` whose state has `released: true` and drop that entry.
+- **SessionEnd releases.** It deletes the entry instead of marking it `done`, so `/clear` does not produce a 30-minute Done (완료) badge plus a queue drain. Clients receive an `agent_event` whose state has `released: true` and drop that entry.
 - **Expiry checks the screen first** (`agent_status.sweep`, `set_screen_probe` ← `deps._screen_probe`, `agent_prompt_detect.screen_state`). The TTLs assume a hook was lost (`waiting` 2 min → `working`, `working` 15 min → `idle`, `idle` +30 min → deleted), which would turn a question a person simply has not answered yet into `idle`. Right before expiring, the server reads that session's visible tmux screen (last 14 lines only, so a quoted prompt phrase higher up cannot fool it; `tmux capture-pane`, 1 s timeout): a `waiting` whose screen still shows the prompt stays `waiting`; a `working` whose screen still shows `esc to interrupt` stays `working`; a `working` whose screen shows a prompt becomes `waiting` (self-heal for a lost PreToolUse). If the screen cannot be read the plain TTL behavior applies, and a `waiting` is capped at 24 h. The agents loop also runs `recover_from_screens` (hook CLIs only, per session at most every 30 s): a session the server has no entry for (the state is memory-only, so a restart empties it) whose screen shows a prompt is revived as a screen-made `waiting` placeholder (`pane:<name>`) that the next real hook takes over. The Claude `choice` literals in `detect/claude.toml` include `Enter to select · ↑/↓ to navigate` (the footer of the live `AskUserQuestion` screen on Claude Code 2.1.318) and `Enter to select · Tab/Arrow keys to navigate`.
 - **Acknowledging a `done`** (clicking the session) sets it to `idle` locally and calls `POST /api/agent/ack` (`agent_status.ack_session`, browser session only). The server keeps `done` for 30 minutes otherwise, and the next snapshot would turn the local `idle` back into `done` + an unseen mark.
 - Self-report (`fsh pane report`) and screen-detection placeholder entries (`pane:<name>`) are used only for sessions with no hook owner; a hook claiming the session drops the placeholder. `GET /api/agent/status` `all` and the `/ws-agent` snapshots leave out non-owner entries of owned sessions (`agent_status.visible_state`).
@@ -216,7 +216,7 @@ auto-feed and TTS just stop; a gstack setup once wrote a vanishing `runtime-*` p
   deadline keeps the previous result and never counts as a fault.
 - **Alerts.** Only when the per-CLI state or the list of affected events **changes**: a content-free `hooks_health` event on
   `/ws-workspace` (CLI name, state and event names — no paths or settings values). The status bar shows a pinned
-  「훅 점검 필요」 chip (next to the agent chip, `frontend/js/shell/hud-data.ts` `hooksChip`) that disappears when the hooks are
+  Hook check needed (훅 점검 필요) chip (next to the agent chip, `frontend/js/shell/hud-data.ts` `hooksChip`) that disappears when the hooks are
   healthy again; clicking it opens Settings → About, which says why and points at `fsh hooks install`. Web Push is **off by
   default** (`VT_HOOK_HEALTH_PUSH=1` sends one push on an ok → problem transition). The first result after start is a baseline
   and alerts nobody.
@@ -277,26 +277,26 @@ The user shares an ordinary tmux session (nickname + `read`/`readwrite`) and the
 
 - With `VT_AUTHZ_ENFORCE=browser` the MCP server also offers isolated-browser tools — `browser_list_adapters`, `browser_open`, `browser_navigate`, `browser_snapshot`, `browser_screenshot`, `browser_click`, `browser_type`, `browser_close`, `browser_tabs`, `browser_handoff`, and `browser_eval` only for an agent that holds `browser.js`. They appear only when `whoami` announces `features.browser` and the agent holds `browser`; elements are addressed by the `e1`… numbers from `browser_snapshot`. Rules and limits: `docs/ref/auth.md` «Browser broker» User-profile attach and downloads are not offered.
 
-### MCP 갱신·출처 추적
+### MCP refresh and source tracking
 
-- 각 설정 항목에 `source_id`, 파일 revision, 원문 hash, 소유자, 쓰기 가능 여부,
-  설정 상태와 실효 우선순위를 제공한다. OpenCode의 같은 이름 정의는 필드 병합 참여
-  출처로 표시한다. JSONC와 추가 디렉터리 정의는 읽기 전용이다.
-- 보관함 가져오기·원본 갱신·배포·동기화는 서버에 보관한 300초 단회 계획을 검토한
-  뒤 적용한다. 원문 명령·인자·URL·자격증명 값은 미리보기 응답에 포함하지 않는다.
-- 새 배포는 기본 꺼짐이다. Claude는 전역 또는 비공유 프로젝트 설정(`~/.claude.json`)에 배포하고 공유 `.mcp.json`에는 쓰지 않는다. agy는 전역만 지원한다.
-  의미를 보존할 수 없는 자격증명 참조·추가 필드는 복제를 거절한다.
-- 원본 추적은 FarShell이 배포한 대상만 선택적으로 켤 수 있다. 조회 때 원본 변경을
-  발견하지만 쓰기는 사용자의 미리보기 확인 이후에만 한다. 대상 직접 편집은
-  `diverged`로 중단한다. 적용 직전 대상 락 안에서 원본과 대상 revision을 재검사한다.
-  flock은 협조적 락이라 락을 지키지 않는 외부 작성자(Claude Code 자신 포함)는
-  막지 못한다. 막는 대신 교체 직전에 mtime·크기를 다시 확인하고 교체 뒤 다시
-  읽어 의도한 상태인지 검사하며, 확인에 실패하면 `unknown`으로 보고한다.
-- 설정 켬/끔, 독립 검사, 실제 CLI 실행 상태는 별개다. 독립 HTTP 검사에서 401/403은
-  인증 필요이며, initialize 응답 형식을 확인한다. 리다이렉트·과대 응답을 거절하고
-  SSE 검사는 미지원으로 표시한다. 응답의 실제 실행 상태(`runtime_state`)는 항상 `unknown`이다.
-- 플러그인 번들의 MCP 이름은 플러그인 아래 읽기 전용으로 표시한다. 인증·플러그인
-  설치·스킬 설치의 양방향 동기화는 수행하지 않는다.
+- Each setting entry carries `source_id`, the file revision, the original hash, the owner, whether it is writable,
+  the setting state and the effective precedence. A same-name definition in OpenCode is shown as a source that takes
+  part in field merging. JSONC and extra-directory definitions are read-only.
+- Library (보관함) import, source refresh, deployment and sync are applied only after you review a single-use plan of 300 seconds
+  kept on the server. The original commands, arguments, URLs and credential values are never included in the preview response.
+- New deployment is off by default. Claude deploys to the global or non-shared project settings (`~/.claude.json`) and never writes to the shared `.mcp.json`. agy supports global only.
+  Credential references and extra fields whose meaning can't be preserved are refused for replication.
+- Source tracking can be turned on selectively, only for targets that FarShell deployed. A lookup
+  detects source changes, but a write happens only after the user confirms the preview. A direct edit of the target
+  stops with `diverged`. Right before applying, the source and target revisions are re-checked inside the target lock.
+  flock is a cooperative lock, so it can't stop outside writers that don't honor it (Claude Code itself included).
+  Instead of blocking, it re-checks mtime and size right before the swap and re-reads after the swap
+  to verify the intended state, and reports `unknown` if the verification fails.
+- The config being on/off (On (켬)/Off (끔)), the independent check and the real CLI run state are separate things. In the independent HTTP check, 401/403 means
+  authentication is required, and the initialize response format is verified. Redirects and oversized responses are refused, and
+  the SSE check is shown as unsupported. The response's actual run state (`runtime_state`) is always `unknown`.
+- MCP names in a plugin bundle are shown read-only under the plugin. Two-way sync of authentication, plugin
+  installation and skill installation is not performed.
 
 
 ## Native subagents
@@ -304,15 +304,15 @@ The user shares an ordinary tmux session (nickname + `read`/`readwrite`) and the
 Native CLI children appear below their parent in the expanded desktop rail; Fleet shows
 a count chip. These are read-only records, separate from delegated tmux sessions. A row shows name, state and elapsed time only — the child's current tool is not drawn (it appears and vanishes with every call, so it flickered); the record still lists tool calls.
 
-Records open in the **「작업 기록」 window** (`history/session-record.js`, redesign phase 6), which merges the session record and the
-subagent record that used to be two windows. Left (460): the session — status, 이어서 시작 · 실행 종료 · 이름 변경 · 세션 보관 ·
-삭제, linked conversations, delegation (parent / delegated children with their report state), internal subagents, run history.
+Records open in the **Task history (작업 기록) window** (`history/session-record.js`, redesign phase 6), which merges the session record and the
+subagent record that used to be two windows. Left (460): the session — status, Resume (이어서 시작) · Stop execution (실행 종료) · Rename (이름 변경) · Archive session (세션 보관) ·
+Delete (삭제), linked conversations, delegation (parent / delegated children with their report state), internal subagents, run history.
 Right: the selected internal subagent (polled transcript, `panels/subagent-viewer.js` `mountSubagentTranscript` +
 `subagent-poll.js`) or delegated session (its latest linked conversation from the conversation archive, plus the report text when
-opened from 「보고 보기」), filterable by kind (전체 / 지시 · 답변 / 도구만), with 새로고침. Every entry point opens the same window
-and only preselects the right side: row menu 「작업 기록」 → the most recent subagent, else the most recent delegated child;
-child row 「보고 보기」 → the parent's record with that child selected; 「기록 보기」 on a subagent row → that subagent; the internal
-chip → the first working subagent. The separate 「서브에이전트 기록」 / 「에이전트 내부」 windows (`#vt-subagent`) are gone.
+opened from View report (보고 보기)), filterable by kind (All (전체) / Prompts · answers (지시 · 답변) / Tools only (도구만)), with Refresh (새로고침). Every entry point opens the same window
+and only preselects the right side: row menu Task history → the most recent subagent, else the most recent delegated child;
+child row View report → the parent's record with that child selected; View transcript (기록 보기) on a subagent row → that subagent; the internal
+chip → the first working subagent. The separate 「서브에이전트 기록」 / Inside the agent (에이전트 내부) windows (`#vt-subagent`) are gone.
 Catalog routes are direct-host only, so while viewing another host the left side shows the name and internal subagents only.
 All record text (instructions, responses, tool calls/results, titles) is inserted as literal text.
 Thinking/reasoning is excluded by the server. API details live in [API.md](../../API.md#native-subagent-transcripts).
