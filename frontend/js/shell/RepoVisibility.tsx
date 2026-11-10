@@ -309,12 +309,15 @@ export function RepoVisibility(props: Props) {
           {/* §3 — "왜 이것들이 목록에 있나"의 답. 지금까지 화면 어디에도 없었다.
               경계 자체는 **읽기 전용**이다: `~/.vt.env`는 `lib/vt_env.sh`가 단일
               소유자이고, 설정 파일을 다른 경로로 고쳐 쓰지 않는다는 규칙이 있다. */}
-          <div class="vt-repovis-foot">
-            <span class="vt-repovis-foot-label">{t('탐색 경계')}</span>
-            <span class="vt-repovis-foot-value" data-tip="VT_BROWSE_ROOTS" data-tip-sub="~/.vt.env">
-              {roots().join(' · ') || '—'}
-            </span>
-          </div>
+          {/* 구역 「탐색 경계」 — 예전에는 시트 바닥 한 줄이었다. 구역 머리(12/600 + 선) + 경로마다 한 줄. 읽기 전용. */}
+          <section class="vt-repovis-sec">
+            <h3 class="vt-repovis-sec-head">{t('탐색 경계')}</h3>
+            <Show when={roots().length} fallback={<div class="vt-repovis-root">—</div>}>
+              <For each={roots()}>
+                {(root) => <div class="vt-repovis-root" data-tip="VT_BROWSE_ROOTS" data-tip-sub="~/.vt.env">{root}</div>}
+              </For>
+            </Show>
+          </section>
         </div>
       </div>
       <Show when={wtDialogRepo()}>
