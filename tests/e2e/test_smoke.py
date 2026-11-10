@@ -823,6 +823,25 @@ def test_테마_칩이_서로_다른_색을_보인다(page):
     assert len(set(colors)) == len(SKINS), f"칩 색이 안 갈린다: {colors}"
 
 
+def test_설정_정보_및_진단의_캐시_지우기_단추가_확인_대화상자를_띄운다(page):
+    """폰에는 FarShell 메뉴가 없어 설정 › 정보 및 진단 › 앱 파일에도 「캐시 지우기」를 둔다.
+    단추는 기존 `app.clear-cache` 액션을 부른다 — 여기서는 확인 대화상자가 뜨는 것까지만 보고 취소로 끝낸다
+    (실제로 지우는 단계는 frontend/tests/app-session.test.js)."""
+    page.wait_for_selector(".vt-mb-menu", timeout=10000)
+    page.locator(".vt-mb-menu").click()
+    page.get_by_role("menuitem", name=re.compile(r"^설정")).click()
+    page.wait_for_selector("#vt-settings .vt-set-navitem", timeout=15000)
+    page.locator("#vt-settings .vt-set-navitem", has_text="정보 및 진단").first.click()
+    btn = page.locator("#vt-settings .vt-set-clearcache")
+    btn.wait_for(timeout=10000)
+    assert btn.inner_text().strip() == "캐시 지우기"
+    btn.click()
+    dlg = page.locator(".vt-dialog", has_text="저장된 앱 파일(캐시)을 지우고 새로고침할까요?")
+    dlg.wait_for(timeout=10000)
+    dlg.locator(".vt-dialog-cancel").click()
+    dlg.wait_for(state="detached", timeout=5000)
+
+
 # ── 상태 표시가 색 단독이 아닌가 ──────────────────────────────────────────
 
 # 옛 `test_레일_상태막대가_색_단독이_아니고_실제로_그려진다`는 지웠다 — 행 왼쪽 3px 상태 막대(`.vt-srow-mark`,

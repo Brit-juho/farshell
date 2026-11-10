@@ -209,6 +209,9 @@
   .vt-settings .vt-set-row > .vt-range:not(.has-presets) input[type="range"] { display:none; }
   .vt-settings .vt-set-row > .vt-range:not(.has-presets) { gap:6px; }
   .vt-settings .vt-set-row .vt-number-spinner .vt-range-number { width:48px; text-align:center; }
+  /* 정보 및 진단 › 앱 파일 「캐시 지우기」 — 폰에서 누르는 대상은 44px(데스크톱 28px 규칙보다 구체적). */
+  .vt-settings .vt-set-content .vt-btn.sm.vt-set-clearcache { --btn-h:44px; height:44px; padding:0 16px; align-self:center; }
+  .vt-settings .vt-set-row:has(> .vt-set-clearcache) .vt-set-label { word-break:keep-all; }
   /* 스위치·세그먼트의 터치 크기(스위치 40×24 / 누르는 영역 52×44, 세그먼트 44)는 컴포넌트(.vt-switch · .vt-segmented, components.css)가 정한다. */
 
   /* ── 키바 90 — 키 44×36 · 간격 6 · 패딩 6 ─────────────────────────────── */
