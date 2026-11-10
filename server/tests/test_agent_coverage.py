@@ -228,3 +228,28 @@ def test_corrupt_report_file_is_treated_as_empty(client, monkeypatch, tmp_path):
     assert r.status_code == 200
     rows = {row["cli"]: row for row in r.json()}
     assert rows["codex"]["path"] == "none"
+
+
+def test_twelve_hooks_are_pty_until_the_failure_hook_is_installed(client, monkeypatch, tmp_path):
+    """PostToolUseFailure 추가 전의 12개 설치는 hook/high 가 아니라 pty — `fsh hooks install` 뒤 hook."""
+    import json
+    import claude_hooks
+
+    cfg = tmp_path / "claude"
+    cfg.mkdir()
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(cfg))
+    detect_dir = tmp_path / "detect"
+    detect_dir.mkdir()
+    _write_toml(detect_dir / "claude.toml", "claude", enter=["Do you want to proceed?"], exit_=["esc to interrupt"])
+    monkeypatch.setattr(detect, "DETECT_DIR", detect_dir)
+    full, _ = claude_hooks.apply_install({})
+    legacy = json.loads(json.dumps(full))
+    legacy["hooks"].pop("PostToolUseFailure")
+    (cfg / "settings.json").write_text(json.dumps(legacy))
+
+    row = {r["cli"]: r for r in client.get("/api/agents/coverage").json()}["claude"]
+    assert row["path"] == "pty" and row["trust"] == "mid"
+
+    claude_hooks.write_settings(claude_hooks.settings_path(), full)
+    row = {r["cli"]: r for r in client.get("/api/agents/coverage").json()}["claude"]
+    assert row["path"] == "hook" and row["trust"] == "high"

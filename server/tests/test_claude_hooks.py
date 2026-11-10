@@ -156,3 +156,39 @@ def test_uninstall_on_clean_config_is_noop(cfg):
     before = cfg.read_text()
     assert ch._cmd_uninstall() == 0
     assert cfg.read_text() == before
+
+
+# ── PostToolUseFailure (2026-11-10): 12개만 설치된 사용자가 13개로 올라가는 길 ──────────────
+def _legacy_twelve(cfg):
+    """PostToolUseFailure 이전 버전이 만든 설정 — 남의 훅 하나를 섞어 둔다."""
+    ch._cmd_install()
+    data = json.loads(cfg.read_text())
+    data["hooks"].pop("PostToolUseFailure")
+    data["hooks"].setdefault("Stop", []).append({"hooks": [{"type": "command", "command": "/home/x/other_stop.sh"}]})
+    cfg.write_text(json.dumps(data))
+    return data
+
+
+def test_failure_event_is_registered_with_post_failure_arg(cfg):
+    assert ch.EVENTS["PostToolUseFailure"] == "post_failure" and len(ch.EVENTS) == 13
+    ch._cmd_install()
+    data = json.loads(cfg.read_text())
+    assert _cmds(data, "PostToolUseFailure")[0].endswith("agent_hook.sh post_failure claude")
+    assert data["hooks"]["PostToolUseFailure"][0]["matcher"] == "*"
+
+
+def test_twelve_installed_shows_one_missing_then_install_adds_it(cfg, capsys):
+    _legacy_twelve(cfg)
+    st = ch.plan(json.loads(cfg.read_text()))
+    assert {e for e, (s, _) in st.items() if s != "ok"} == {"PostToolUseFailure"}
+    assert ch._cmd_status() == 1
+    assert "PostToolUseFailure\tadd" in capsys.readouterr().out
+    before = cfg.read_text()
+    assert ch._cmd_install() == 0
+    after = json.loads(cfg.read_text())
+    assert all(s == "ok" for s, _ in ch.plan(after).values())
+    assert ch._cmd_status() == 0
+    assert "/home/x/other_stop.sh" in _cmds(after, "Stop"), "남의 훅은 그대로"
+    assert cfg.with_suffix(".json.vtbak").read_text() == before, "백업은 설치 직전 원본"
+    again = cfg.read_text()
+    assert ch._cmd_install() == 0 and cfg.read_text() == again, "멱등"

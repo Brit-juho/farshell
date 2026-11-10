@@ -28,6 +28,10 @@ Claude Code의 `~/.claude/settings.json`에는 도구 시작·종료, 완료, �
 Codex의 `~/.codex/config.toml`에는 prompt/permission/tool/stop/subagent/session 8종이 등록된다.
 두 설정 모두 FarShell 항목만 관리하고 기존 훅은 보존한다.
 
+Claude Code 훅은 13종이다(`PostToolUseFailure` 포함 — 질문·도구가 거절·오류로 끝났을 때 「선택 요청」 대기를 바로 푼다).
+예전 버전으로 12종만 등록해 둔 경우 `fsh hooks status`에 `PostToolUseFailure`가 「미등록」으로 보이고 감지 범위가 `pty`로 내려가 있으니
+`fsh hooks install`(또는 업데이트 때 도는 `fsh sync`)로 맞춘다.
+
 **Codex 앱의 「Claude 설정 가져오기」를 눌렀다면** `~/.codex/hooks.json`에 Claude의
 FarShell 훅(`agent_hook.sh … claude`)이 복제된다. Codex는 `config.toml`과 `hooks.json`을
 모두 읽으므로 한 이벤트가 두 번(그중 하나는 `claude` 태그로) 들어와 에이전트 라벨이
