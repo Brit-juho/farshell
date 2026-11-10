@@ -124,7 +124,9 @@ test('「이번만 다른 계정」 메뉴: 계정 줄·사유·정렬 토글, �
   assert.match(items()[3].textContent, /not signed in here/);
   items()[3].click();
   assert.deepEqual(picked, [], '쓸 수 없는 계정은 눌러도 아무 일도 없다');
+  await new Promise((r) => setTimeout(r, 5));   // 바깥 클릭 감시는 한 틱 뒤에 붙는다
   menu.querySelector('[role="menuitemcheckbox"]').click();
+  assert.ok(document.getElementById('account-menu'), '정렬을 켜도 메뉴는 열려 있다(줄을 다시 그려도 안쪽 클릭이다)');
   assert.deepEqual(items().map((i) => i.querySelector('.vt-menu-item-label').textContent), ['personal', 'alice', 'blank', 'work', '계정 지정 없이']);
   items()[1].click();
   assert.deepEqual(picked, ['a'.repeat(32)]);

@@ -4194,3 +4194,137 @@ def test_일반_터미널의_OSC52는_기본_차단되고_설정을_켜면_클�
     finally:
         page.evaluate("() => window.vtSettingsSet('terminal.osc52Untrusted', false)")
         page.evaluate("(id) => window.removeSession && window.removeSession(id)", sid)
+
+
+# --- 계정 핫스왑 H1: 새 세션에 계정 주입 --------------------------------------------------
+# 격리 서버의 레지스트리(VT_STATE_DIR)에 가짜 프로필(가짜 토큰 문자열)만 만든다. 실제 claude/codex는 실행하지 않고,
+# 실제 계정·키체인은 읽지 않는다(토큰 프로필은 키체인을 보지 않는다).
+
+_FAKE_PROFILE_TOKEN = "sk-ant-oat01-" + "E2e0" * 14
+
+
+def _seed_profiles(tmp_state: Path) -> dict:
+    """프로필 셋: alice·work(가짜 장기 토큰), gone(폴더가 사라진 프로필). {이름: id}."""
+    code = (
+        "import json, shutil, sys\n"
+        "import agent_profiles as p, agent_profile_token as t\n"
+        "ids = {}\n"
+        "for name in ('alice', 'work', 'gone'):\n"
+        "    ids[name] = p.create(name, 'claude')['id']\n"
+        "for name in ('alice', 'work'):\n"
+        f"    t.set_token(ids[name], {_FAKE_PROFILE_TOKEN!r})\n"
+        "shutil.rmtree(p.root(ids['gone']))\n"
+        "print(json.dumps(ids))\n"
+    )
+    home = tmp_state.parent / "seed-home"
+    home.mkdir(exist_ok=True)
+    env = {k: v for k, v in os.environ.items() if not k.startswith("VT_")}
+    env.update(HOME=str(home), VT_STATE_DIR=str(tmp_state), VT_CONFIG=str(home / "none.env"), PYTHONPATH=str(ROOT / "server"))
+    out = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, out.stderr[-600:]
+    return json.loads(out.stdout.strip().splitlines()[-1])
+
+
+def _tmux_for(base: str, *args) -> str:
+    port = int(base.rsplit(":", 1)[1])
+    return subprocess.run(["tmux", "-u", "-L", _tmux_socket(port), *args], capture_output=True, text=True, timeout=10).stdout
+
+
+def _tmux_env(base: str, name: str) -> dict:
+    out = {}
+    for line in _tmux_for(base, "show-environment", "-t", f"={name}").splitlines():
+        key, sep, value = line.partition("=")
+        out[key] = value if sep else None
+    return out
+
+
+def _tmux_name_of(page, sid: str) -> str:
+    return page.evaluate("(id) => { const s = window.getSession(id); return s.tmuxName || s.tmux_name; }", sid)
+
+
+def _new_session_menu(page) -> None:
+    page.locator(".vt-wgrail-new").click()
+    page.wait_for_selector("#add-menu .vt-menu-accounts", timeout=10000)
+
+
+def _pick_account_row(page, label: str) -> None:
+    page.wait_for_selector("#account-menu", timeout=10000)
+    page.locator("#account-menu .vt-menu-item.two", has=page.locator(".vt-menu-item-label", has_text=re.compile(f"^{label}$"))).click()
+
+
+def test_계정을_고르면_그_세션_환경에만_고른_폴더가_들어가고_실행_중_세션은_안_바뀐다(isolated_page, server):
+    if _LOCAL_STATE_DIR is None:
+        pytest.skip("외부 서버(VT_E2E_URL)에는 가짜 프로필을 만들 수 없다")
+    base, _ = server
+    page = isolated_page
+    ids = _seed_profiles(_LOCAL_STATE_DIR)
+    root = lambda name: str(_LOCAL_STATE_DIR / "agent-profiles" / ids[name] / "claude")  # noqa: E731
+    # tmux 전역 환경에 덮어쓰기 변수를 둔다 — 새 세션에서 **지워져야** 한다.
+    _tmux_for(base, "start-server", ";", "set-environment", "-g", "ANTHROPIC_API_KEY", "e2e-ambient-key")
+    before = set(page.evaluate("() => Object.keys(window.allSessions())"))
+    try:
+        page.reload()
+        _boot(page, f"{base}/")
+        # 1) 기본 계정 바꾸기 — 메뉴 → 선택기 → alice
+        _new_session_menu(page)
+        page.locator("#add-menu .vt-menu-item", has_text="기본 계정 바꾸기").click()
+        _pick_account_row(page, "alice")
+        page.get_by_text(re.compile("Claude 기본 계정: alice")).first.wait_for(timeout=8000)
+        picker = page.evaluate("""async () => (await (await fetch('/api/agent-profiles/read/picker', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'})).json())""")
+        assert picker["defaults"]["claude"]["id"] == ids["alice"]
+        assert {p["name"]: p["selectable"] for p in picker["profiles"]} == {"alice": True, "work": True, "gone": False}
+        assert _FAKE_PROFILE_TOKEN not in json.dumps(picker) and str(_LOCAL_STATE_DIR) not in json.dumps(picker)
+
+        # 2) 기본 계정이 있으니 평범한 「새 세션」이 alice로 만들어진다
+        page.evaluate("() => window.createTmuxSession()")
+        page.wait_for_function("(n) => Object.keys(window.allSessions()).length > n", arg=len(before), timeout=15000)
+        first = next(iter(set(page.evaluate("() => Object.keys(window.allSessions())")) - before))
+        first_name = _tmux_name_of(page, first)
+        env1 = _tmux_env(base, first_name)
+        assert env1["CLAUDE_CONFIG_DIR"] == root("alice")
+        assert env1["FSH_PROFILE_ID"] == ids["alice"]
+        assert env1["CLAUDE_CODE_OAUTH_TOKEN"] == _FAKE_PROFILE_TOKEN          # 이 세션에만(출력하지 않고 비교만)
+        assert env1.get("ANTHROPIC_API_KEY") is None, "전역 환경의 덮어쓰기 변수가 남았다"
+
+        # 3) 이번만 다른 계정 — work로 만들되 기본(alice)과 실행 중 세션은 그대로
+        _new_session_menu(page)
+        page.locator("#add-menu .vt-menu-item", has_text="이번만 다른 계정").click()
+        page.wait_for_selector("#account-menu", timeout=10000)
+        assert page.locator("#account-menu [aria-disabled='true']").count() == 1, "폴더가 사라진 프로필은 사유와 함께 비활성으로 남는다"
+        _pick_account_row(page, "work")
+        page.wait_for_function("(n) => Object.keys(window.allSessions()).length > n", arg=len(before) + 1, timeout=15000)
+        second = next(iter(set(page.evaluate("() => Object.keys(window.allSessions())")) - before - {first}))
+        env2 = _tmux_env(base, _tmux_name_of(page, second))
+        assert env2["CLAUDE_CONFIG_DIR"] == root("work") and env2["FSH_PROFILE_ID"] == ids["work"]
+        assert _tmux_env(base, first_name) == env1, "실행 중이던 세션의 환경이 바뀌었다"
+        picker = page.evaluate("""async () => (await (await fetch('/api/agent-profiles/read/picker', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'})).json())""")
+        assert picker["defaults"]["claude"]["id"] == ids["alice"], "「이번만」이 기본 계정을 바꿨다"
+
+        # 4) 레일 행 배지 — 서버가 기록한 이름만
+        page.wait_for_function("() => [...document.querySelectorAll('.vt-srow-profile-name')].map(e => e.textContent).sort().join() === 'alice,work'", timeout=15000)
+        assert page.locator(".vt-srow-profile").first.get_attribute("data-tip") == "생성 시 계정"
+
+        # 5) 폴더 없는 프로필은 거부 — 세션이 늘지 않고 사유 토스트가 뜬다(기본 환경으로 대체하지 않는다)
+        count = page.evaluate("() => Object.keys(window.allSessions()).length")
+        page.evaluate("(id) => window.createTmuxSession({ profile: id })", ids["gone"])
+        page.get_by_text(re.compile("계정 문제로 세션을 만들지 않았습니다")).first.wait_for(timeout=8000)
+        assert page.evaluate("() => Object.keys(window.allSessions()).length") == count
+        assert ids["gone"] not in _tmux_for(base, "list-sessions", "-F", "#{@fsh_profile}")
+    finally:
+        for sid in set(page.evaluate("() => Object.keys(window.allSessions())")) - before:
+            name = _tmux_name_of(page, sid)
+            page.evaluate("(id) => window.removeSession(id)", sid)
+            if name:
+                _tmux_for(base, "kill-session", "-t", f"={name}")
+        _tmux_for(base, "set-environment", "-g", "-u", "ANTHROPIC_API_KEY")
+        import shutil
+        shutil.rmtree(_LOCAL_STATE_DIR / "agent-profiles", ignore_errors=True)   # 뒤 시험이 빈 레지스트리에서 시작하게
+
+
+def test_계정이_없으면_새_세션_메뉴는_예전_그대로다(isolated_page, server):
+    page = isolated_page
+    page.locator(".vt-wgrail-new").click()
+    page.wait_for_selector("#add-menu", timeout=10000)
+    page.wait_for_timeout(600)   # 목록 요청이 끝날 시간
+    assert page.locator("#add-menu .vt-menu-accounts").count() == 0
+    assert page.locator("#add-menu .vt-menu-item").count() == 2

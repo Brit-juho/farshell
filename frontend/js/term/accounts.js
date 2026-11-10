@@ -173,15 +173,19 @@ export async function openAccountMenu({ mode, anchor = null, onPick = null }) {
   document.body.appendChild(menu);
   const place = () => {
     const r = anchor ? anchor.getBoundingClientRect() : null;
+    // 폰의 하단 내비가 화면 아래를 덮는다 — 그 위까지만 쓴다.
+    const nav = document.getElementById('vt-mnav-bottom');
+    const reserve = nav && nav.getClientRects().length ? nav.getBoundingClientRect().height : 0;
+    const floor = window.innerHeight - reserve - 8;
     menu.style.right = 'auto';
     menu.style.maxWidth = `${Math.max(240, window.innerWidth - 16)}px`;
-    menu.style.maxHeight = `${Math.max(200, window.innerHeight - 16)}px`;
+    menu.style.maxHeight = `${Math.max(200, floor - 8)}px`;
     menu.style.overflowY = 'auto';
     menu.style.left = `${Math.round(r ? r.left : Math.max(8, (window.innerWidth - menu.offsetWidth) / 2))}px`;
     menu.style.top = `${Math.round(r ? r.bottom + 6 : window.innerHeight * 0.18)}px`;
     const rect = menu.getBoundingClientRect();
     if (rect.right > window.innerWidth - 8) menu.style.left = `${Math.max(8, Math.round(window.innerWidth - 8 - rect.width))}px`;
-    if (rect.bottom > window.innerHeight - 8) menu.style.top = `${Math.max(8, Math.round(window.innerHeight - 8 - rect.height))}px`;
+    if (rect.bottom > floor) menu.style.top = `${Math.max(8, Math.round(floor - rect.height))}px`;
   };
   place();
   document.addEventListener('keydown', onKey, true);
@@ -189,7 +193,8 @@ export async function openAccountMenu({ mode, anchor = null, onPick = null }) {
   setTimeout(() => {
     document.addEventListener('click', function away(ev) {
       if (!document.body.contains(menu)) { document.removeEventListener('click', away); return; }
-      if (!menu.contains(ev.target)) { close(); document.removeEventListener('click', away); }
+      // 정렬 토글처럼 메뉴가 줄을 다시 그리면 눌린 요소는 이미 떨어져 있다 — 눌린 경로(composedPath)로 안쪽인지 본다.
+      if (!menu.contains(ev.target) && !ev.composedPath().includes(menu)) { close(); document.removeEventListener('click', away); }
     });
   }, 0);
 }

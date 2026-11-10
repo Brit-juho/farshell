@@ -256,7 +256,8 @@ def tmux(sandbox, monkeypatch, tmp_path):
         return real(args, timeout=timeout, input=input)
     monkeypatch.setattr(tmux_runner, 'run', spy)
     yield types.SimpleNamespace(socket=socket, out=out, argv=argv_log)
-    subprocess.run(['tmux', '-L', socket, 'kill-server'], capture_output=True)
+    import tmux_sockets
+    tmux_sockets.kill_server(socket)      # 서버를 죽이고 소켓 파일까지 지운다
 
 
 def _dump(tmux):
@@ -299,7 +300,8 @@ def test_override_variables_are_really_unset_not_emptied(sandbox, tmux, monkeypa
     # Present in tmux's GLOBAL environment only (the server was started with them) ...
     for name in DANGEROUS:
         monkeypatch.setenv(name, 'global-' + name)
-    assert tmux_runner.run(['new-session', '-d', '-s', 'pre'])[0] == 0
+    # `sleep`, not the dumping shell: only the session under test may write the environment file.
+    assert tmux_runner.run(['new-session', '-d', '-s', 'pre', 'sleep 60'])[0] == 0
     # ... and not in this process any more, so only `show-environment -g` can tell.
     for name in DANGEROUS:
         monkeypatch.delenv(name)
@@ -356,7 +358,7 @@ def test_two_defaults_inject_both_tools(sandbox, tmux):
 
 def test_a_failed_spawn_leaves_no_half_configured_session(sandbox, tmux):
     pid = _make('alice')
-    assert tmux_runner.run(['new-session', '-d', '-s', 'taken'])[0] == 0
+    assert tmux_runner.run(['new-session', '-d', '-s', 'taken', 'sleep 60'])[0] == 0
     rc, reason, _ = _spawn('taken', session_profile.select(pid))          # duplicate name
     assert rc != 0 and reason == ''
     assert tmux_runner.has_session('taken')   # the pre-existing session is not what we cleaned up ...
