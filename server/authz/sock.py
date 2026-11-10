@@ -51,6 +51,7 @@ from typing import Callable, Optional
 
 import fsh_client
 import vt_paths
+from i18n import tr
 
 from . import principals as P
 
@@ -241,20 +242,20 @@ class Resolver:
         import share_identity
         uid, pid = peer.get("uid"), peer.get("pid")
         if not isinstance(uid, int) or not isinstance(pid, int) or pid <= 1:
-            raise Reject(403, "peer_unidentified", "peer 자격을 읽지 못했습니다")
+            raise Reject(403, "peer_unidentified", tr("peer 자격을 읽지 못했습니다"))
         key = (pid, svc_claim)
         hit = self._cache.get(key)
         now = time.monotonic()
         if hit and now - hit[0] < self.TTL:
             return hit[1]
         if not _alive(pid):
-            raise Reject(403, "peer_gone", "요청한 프로세스가 이미 없습니다")
+            raise Reject(403, "peer_gone", tr("요청한 프로세스가 이미 없습니다"))
         rows = self._rows()
         if rows is None:
-            raise Reject(503, "identity_unavailable", "tmux 상태를 읽지 못했습니다")
+            raise Reject(503, "identity_unavailable", tr("tmux 상태를 읽지 못했습니다"))
         parent = self._parent_fn()
         if parent(pid) is None:       # 표에 없다 = 방금 죽었거나 읽지 못했다 — 체인을 만들 수 없으니 분류하지 않는다
-            raise Reject(403, "peer_gone", "프로세스 부모 체인을 읽지 못했습니다")
+            raise Reject(403, "peer_gone", tr("프로세스 부모 체인을 읽지 못했습니다"))
         chain = share_identity.ancestors(pid, parent=parent)
         cs = set(chain)
         row = next((r for r in rows if r.pane_pid in cs), None)
@@ -312,24 +313,24 @@ class Gate:
                                    headers.get("x-fsh-svc", "").strip().lower(),
                                    op="authz.sock.resolve", timeout=RESOLVE_TIMEOUT)
         except (pools.Busy, pools.OpTimeout):
-            raise Reject(503, "principal_unavailable", "호출자를 지금 확인하지 못했습니다 — 잠시 뒤 다시 시도하세요")
+            raise Reject(503, "principal_unavailable", tr("호출자를 지금 확인하지 못했습니다 — 잠시 뒤 다시 시도하세요"))
 
     async def _handle(self, scope, receive, send):
         peer = scope.get("fsh_peer")
         if not isinstance(peer, dict) or peer.get("uid") is None:
-            raise Reject(403, "peer_unidentified", "peer 자격을 읽지 못했습니다")
+            raise Reject(403, "peer_unidentified", tr("peer 자격을 읽지 못했습니다"))
         if peer["uid"] != os.geteuid():
-            raise Reject(403, "peer_uid_mismatch", "다른 사용자의 연결입니다")
+            raise Reject(403, "peer_uid_mismatch", tr("다른 사용자의 연결입니다"))
         method, path = scope.get("method", "GET").upper(), scope.get("path", "")
         if path == SELFTEST_PATH and not self.armed and method == "GET":
             await _respond(send, 200, {"uid": peer["uid"], "pid": peer["pid"]})
             return
         if not self.armed:
-            raise Reject(503, "socket_not_armed", "소켓 자가 시험이 끝나지 않았습니다")
+            raise Reject(503, "socket_not_armed", tr("소켓 자가 시험이 끝나지 않았습니다"))
         headers = _headers(scope)
         amb = ambiguous_credential(scope, headers)
         if amb:
-            raise Reject(400, "ambiguous_principal", f"소켓 요청에 {amb} 자격이 함께 실렸습니다")
+            raise Reject(400, "ambiguous_principal", tr("소켓 요청에 {cred} 자격이 함께 실렸습니다", cred=amb))
         if path == WHOAMI_PATH and method == "GET":
             p = await self._resolve(peer, headers)
             try:
@@ -341,7 +342,7 @@ class Gate:
             await _respond(send, 200, body)
             return
         if not route_allowed(method, path):
-            raise Reject(403, "socket_route_not_allowed", f"{method} {path} 는 소켓으로 열려 있지 않습니다")
+            raise Reject(403, "socket_route_not_allowed", tr("{method} {path} 는 소켓으로 열려 있지 않습니다", method=method, path=path))
         p = await self._resolve(peer, headers)
         state = dict(scope.get("state") or {})
         state["fsh_principal"] = p
@@ -593,7 +594,7 @@ def status_report(port=None) -> dict:
                    server_pid=rec.get("pid"))
         spid = rec.get("pid")
         if rec.get("state") == "listening" and isinstance(spid, int) and not _alive(spid):
-            out.update(state="stale", reason="상태 파일의 서버 프로세스가 없습니다")
+            out.update(state="stale", reason=tr("상태 파일의 서버 프로세스가 없습니다"))
     except (OSError, ValueError):
         pass
     try:

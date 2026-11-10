@@ -275,7 +275,7 @@ def _warn_skipped(reason: str, files: int) -> int:
 
 def cmd_check(argv: list[str], cwd: str) -> int:
     ap = argparse.ArgumentParser(prog="fsh lease check")
-    ap.add_argument("--staged", action="store_true", help="스테이지된 파일을 확인(pre-commit guard)")
+    ap.add_argument("--staged", action="store_true", help=tr("스테이지된 파일을 확인(pre-commit guard)"))
     ap.add_argument("--holder", default="")
     ap.add_argument("paths", nargs="*")
     args = ap.parse_args(argv)

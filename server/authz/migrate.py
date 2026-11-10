@@ -49,6 +49,7 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 import vt_paths
+from i18n import tr
 
 from . import audit, defaults, store
 from . import scopes as S
@@ -277,9 +278,9 @@ def _read_json(p: Path) -> tuple[Optional[dict], Optional[str]]:
     try:
         d = json.loads(p.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
-        return None, f"{p.name}: 읽기 실패({e}) — 이 파일은 건너뜀"
+        return None, tr("{name}: 읽기 실패({reason}) — 이 파일은 건너뜀", name=p.name, reason=e)
     if not isinstance(d, dict):
-        return None, f"{p.name}: 형식이 dict 가 아님 — 건너뜀"
+        return None, tr("{name}: 형식이 dict 가 아님 — 건너뜀", name=p.name)
     return d, None
 
 
@@ -368,12 +369,12 @@ def plan(*, now: Optional[float] = None, tmux: Optional[dict] = "probe", stamp: 
         if isinstance(cur, dict) and cur.get("level") != s["level"]:
             from . import ceilings
             low = ceilings.lower(ceilings.level_of(cur), s["level"])
-            warnings.append(f"공유 등급 불일치 {row.get('name')}({k}): 저장소 {cur.get('level')} ≠ tmux {s['level']} "
-                            f"→ 낮은 쪽 {low}")
+            warnings.append(tr("공유 등급 불일치 {name}({key}): 저장소 {store} ≠ tmux {tmux} → 낮은 쪽 {low}",
+                               name=row.get("name"), key=k, store=cur.get("level"), tmux=s["level"], low=low))
             s = {**s, "level": low}
         shares[k] = {**s, "origin": f"legacy:tmux:{k}"}
     if tmux is None:
-        warnings.append("tmux 를 읽지 못함 — 공유 정책 snapshot 없음, 죽은 세션 정리 안 함")
+        warnings.append(tr("tmux 를 읽지 못함 — 공유 정책 snapshot 없음, 죽은 세션 정리 안 함"))
 
     logs = sorted(p.name for p in sd.glob("*") if p.is_file() and p.name.startswith(LEGACY_LOG_PREFIXES)
                   and not p.name.endswith(".lock"))
@@ -509,7 +510,7 @@ def list_backups() -> list[dict]:
             j = json.loads(m.read_text(encoding="utf-8"))
             out.append({"ts": j.get("ts"), "created": j.get("created"), "files": len(j.get("files") or {})})
         except (OSError, ValueError):
-            out.append({"ts": m.name[:-len(".manifest.json")], "error": "manifest 손상"})
+            out.append({"ts": m.name[:-len(".manifest.json")], "error": tr("manifest 손상")})
     return out
 
 
@@ -523,28 +524,28 @@ def _allowed_member(name: str) -> bool:
 
 def _load_backup(ts: str) -> tuple[dict, dict[str, bytes]]:
     if not ts or "/" in ts or ts.startswith(".") or "\x00" in ts:
-        raise MigrateError(f"잘못된 백업 이름: {ts!r}")
+        raise MigrateError(tr("잘못된 백업 이름: {ts}", ts=repr(ts)))
     d = backup_dir()
     mp, tp = d / f"{ts}.manifest.json", d / f"{ts}.tgz"
     if not mp.is_file() or not tp.is_file():
-        raise MigrateError(f"백업 {ts} 이 없습니다(fsh migrate-auth --status 로 목록 확인)")
+        raise MigrateError(tr("백업 {ts} 이 없습니다(fsh migrate-auth --status 로 목록 확인)", ts=ts))
     manifest = json.loads(mp.read_text(encoding="utf-8"))
     raw = tp.read_bytes()
     if _sha(raw) != manifest.get("tgz_sha256"):
-        raise MigrateError(f"백업 {ts}.tgz 의 sha256 이 manifest 와 다릅니다 — 복원 중단")
+        raise MigrateError(tr("백업 {ts}.tgz 의 sha256 이 manifest 와 다릅니다 — 복원 중단", ts=ts))
     members: dict[str, bytes] = {}
     with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as tf:
         for m in tf.getmembers():
             if not m.isfile() or not _allowed_member(m.name):
-                raise MigrateError(f"백업에 허용되지 않은 항목: {m.name!r} — 복원 중단")
+                raise MigrateError(tr("백업에 허용되지 않은 항목: {name} — 복원 중단", name=repr(m.name)))
             f = tf.extractfile(m)
             members[m.name] = f.read() if f else b""
     files = manifest.get("files") or {}
     if set(files) != set(members):
-        raise MigrateError("백업 항목 목록이 manifest 와 다릅니다 — 복원 중단")
+        raise MigrateError(tr("백업 항목 목록이 manifest 와 다릅니다 — 복원 중단"))
     for n, b in members.items():
         if _sha(b) != files[n].get("sha256") or len(b) != files[n].get("size"):
-            raise MigrateError(f"{n} 의 sha256/크기가 manifest 와 다릅니다 — 복원 중단")
+            raise MigrateError(tr("{name} 의 sha256/크기가 manifest 와 다릅니다 — 복원 중단", name=n))
     return manifest, members
 
 
@@ -660,7 +661,7 @@ def apply(*, now: Optional[float] = None, tmux: Optional[dict] = "probe") -> dic
                           "detail": {"file": f"legacy/{bk['ts']}/{name}", "lines": n}})
     except OSError as e:
         # authz 변경은 감사 실패 시 fail closed 지만, 이전은 이미 백업이 있고 shadow 단계라 경고로 둔다.
-        result["warnings"].append(f"감사 기록 실패: {e}")
+        result["warnings"].append(tr("감사 기록 실패: {reason}", reason=e))
     return result
 
 

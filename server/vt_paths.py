@@ -25,6 +25,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from i18n import tr
+
 
 class PathOverrideError(ValueError):
     """거부된 경로 override. 변수 이름·원본 값·이유를 모두 담는다.
@@ -37,7 +39,7 @@ class PathOverrideError(ValueError):
         self.variable = variable
         self.value = value
         self.reason = reason
-        super().__init__(f'{variable}는 {reason} — 받은 값: "{value}"')
+        super().__init__(tr('{variable}는 {reason} — 받은 값: "{value}"', variable=variable, reason=reason, value=value))
 
 
 def _raw(name: str) -> str | None:
@@ -69,7 +71,7 @@ def user_home() -> Path:
     try:
         return Path.home()
     except RuntimeError as e:
-        raise PathOverrideError("HOME", "", "홈 디렉터리를 확인할 수 없다") from e
+        raise PathOverrideError("HOME", "", tr("홈 디렉터리를 확인할 수 없다")) from e
 
 
 def _expand(name: str, raw: str) -> Path:
@@ -84,7 +86,7 @@ def _expand(name: str, raw: str) -> Path:
         return user_home() / raw[2:]
     p = Path(raw)
     if not p.is_absolute():
-        raise PathOverrideError(name, raw, "절대경로여야 한다")
+        raise PathOverrideError(name, raw, tr("절대경로여야 한다"))
     return p
 
 
@@ -126,11 +128,11 @@ def check_private_dir(path: Path) -> None:
         return  # 아직 없다 — 만드는 쪽(bin/fsh)이 0700으로 만든다
     import stat as _stat
     if _stat.S_ISLNK(st.st_mode):
-        raise UnsafeRunDir(f"{path} 가 심볼릭 링크다")
+        raise UnsafeRunDir(tr("{path} 가 심볼릭 링크다", path=path))
     if not _stat.S_ISDIR(st.st_mode):
-        raise UnsafeRunDir(f"{path} 가 폴더가 아니다")
+        raise UnsafeRunDir(tr("{path} 가 폴더가 아니다", path=path))
     if st.st_uid != os.getuid():
-        raise UnsafeRunDir(f"{path} 의 소유자(uid {st.st_uid})가 내가 아니다")
+        raise UnsafeRunDir(tr("{path} 의 소유자(uid {uid})가 내가 아니다", path=path, uid=st.st_uid))
     if st.st_mode & 0o077:
         os.chmod(path, 0o700)
 

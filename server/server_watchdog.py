@@ -42,6 +42,7 @@ if str(_HERE) not in sys.path:
 import fsh_client  # noqa: E402
 import vt_env  # noqa: E402
 import vt_paths  # noqa: E402
+from i18n import tr  # noqa: E402
 
 logger = logging.getLogger("server-watchdog")
 if not logger.handlers:
@@ -361,11 +362,11 @@ def write_plist(path: str) -> None:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", default="fsh", choices=["fsh", "launchd"])
-    ap.add_argument("--once", action="store_true", help="한 번만 판정하고 결과를 출력한다(진단용)")
-    ap.add_argument("--summary", action="store_true", help="fsh status/doctor 용 사람이 읽는 요약(여러 줄)")
-    ap.add_argument("--quarantine", action="store_true", help="탐색 격리 목록을 출력한다")
-    ap.add_argument("--unquarantine", action="store_true", help="탐색 격리 목록을 비우고 푼 개수를 출력한다")
-    ap.add_argument("--write-plist", metavar="PATH", help="launchd 감독용 plist 를 쓴다(fsh watchdog agent install)")
+    ap.add_argument("--once", action="store_true", help=tr("한 번만 판정하고 결과를 출력한다(진단용)"))
+    ap.add_argument("--summary", action="store_true", help=tr("fsh status/doctor 용 사람이 읽는 요약(여러 줄)"))
+    ap.add_argument("--quarantine", action="store_true", help=tr("탐색 격리 목록을 출력한다"))
+    ap.add_argument("--unquarantine", action="store_true", help=tr("탐색 격리 목록을 비우고 푼 개수를 출력한다"))
+    ap.add_argument("--write-plist", metavar="PATH", help=tr("launchd 감독용 plist 를 쓴다(fsh watchdog agent install)"))
     args = ap.parse_args(argv)
 
     if args.once:
