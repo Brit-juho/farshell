@@ -20,6 +20,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Changed
 - **Collapsed session bar redesign.** The 48px strip now shows each session as the agent mark inside a 2px state ring (both in the state colour; the ring shape — dotted idle, dashed waiting, rotating working, solid done — carries the state), with 「not seen yet」 as a small dot, a count badge for working internal sub-agents, and delegation children indented under their parent with a branch line.
 - **Collapsed order matches expanded.** The collapsed strip uses the expanded rail's tree order (개입 필요 first, then your sort / manual order / split groups, children under their parents) instead of always sorting by name, and its first icon lines up with the expanded first row.
+- **Subagents with the same name are told apart.** They are numbered by start time (`general-purpose #1`, `#2`) with the first 4 characters of the id, and the 「Finished subagents N」 fold button carries a check icon and the done color.
 - **A session made by another Mac says which one** (「Made on m5-studio」) instead of 「Made on another Mac」. The server records the verified grant label in the tmux option `@fsh_origin_host` and returns it as `originHost`; sessions without a record and older servers keep the old wording.
 - The voice install no longer installs `pyobjc-framework-Cocoa` separately; it is part of `requirements-voice.txt` and the lock.
 - Already downloaded voice models are reused when their hashes match (no re-download). Custom `custom:` models are not pinned.
@@ -27,6 +28,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Fixed
 - The viewer's top-bar buttons, the encoding picker and the Markdown 「Copy address」 button no longer render with the old near-black background in the new design.
 - A quiet remote-host pane no longer drops and reconnects every 45 s.
+- A native subagent that never appeared in the parent's Stop-hook `background_tasks` list is no longer marked done just because it is absent; completion now comes from `subagent_stop`/`stop_failure` or from a listed row disappearing. A one-time per-session warning (id prefixes and counts only) is logged when the list and the rows disagree.
 
 ### Security
 - **The app document is served with a Content-Security-Policy that includes `script-src 'self'`** (`server/security_headers.py` `APP_CSP`). Inline scripts, `on*=` handlers, `eval`, off-origin scripts and Blob modules are blocked; the theme boot, the `?e2e=1` loader and the voice AudioWorklet moved to static files and the login, upload and onboarding handlers became listeners / `data-action`. The `window.uploadFile` bridge is gone. Remote relay responses keep their own policy.
