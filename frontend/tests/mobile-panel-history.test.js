@@ -48,5 +48,95 @@ test('하단 내비로 화면을 바꿀 때는 기존 패널과 history 표식�
   openQueue(panel);
   panel.closePanel('vt-queue', { history: 'replace' });
   assert.strictEqual(document.getElementById('vt-queue'), null);
-  assert.strictEqual(window.history.state.vtPanel, undefined);
+  await new Promise((resolve) => setTimeout(resolve, 80)); // 칸 되돌림(popstate)이 끝날 때까지
+  assert.strictEqual(window.history.state?.vtPanel, undefined);
+});
+
+// ── 'replace' 닫기는 쌓았던 history 칸을 실제로 되돌린다 ──
+async function until(cond, ms = 1000) {
+  const end = Date.now() + ms;
+  while (!cond()) {
+    if (Date.now() > end) throw new Error('until: 시간 초과');
+    await new Promise((r) => setTimeout(r, 5));
+  }
+}
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const open = (panel, id) => panel.openPanel({ id, ariaLabel: id, headHTML: id, bodyId: `${id}-b` });
+
+test('탭 화면 위 뷰어를 replace로 닫으면 첫 칸으로 되돌아가고 탭 화면은 남는다', async () => {
+  const { window, document, panel } = await build();
+  open(panel, 'vt-dir');
+  open(panel, 'vt-file');
+  assert.strictEqual(window.history.state.vtPanel, 'vt-file');
+  panel.closePanel('vt-file', { history: 'replace' });
+  await until(() => !window.history.state?.vtPanel);
+  assert.ok(document.getElementById('vt-dir'), '탭 화면은 닫히지 않는다');
+  assert.strictEqual(document.getElementById('vt-file'), null);
+  window.history.forward();
+  await until(() => window.history.state?.vtPanel === 'vt-file');
+});
+
+test('칸 쌓는 패널 둘을 replace 루프로 닫으면 첫 칸까지 되돌아간다', async () => {
+  const { window, document, panel } = await build();
+  open(panel, 'vt-queue');
+  open(panel, 'vt-file');
+  for (const el of Array.from(document.querySelectorAll('.vt-mobile-route'))) {
+    panel.closePanel(el, { history: 'replace' });
+  }
+  await until(() => !window.history.state?.vtPanel);
+  await wait(30);
+  assert.strictEqual(document.querySelectorAll('.vt-mobile-route').length, 0);
+  assert.ok(!window.history.state?.vtPanel);
+  window.history.forward();
+  await until(() => window.history.state?.vtPanel === 'vt-queue');
+});
+
+test('replace로 닫고 곧바로 다시 열면 vtPanel 칸 하나만 남고 뒤로가기 1회로 닫힌다', async () => {
+  const { window, document, panel } = await build();
+  open(panel, 'vt-file');
+  const len0 = window.history.length;
+  panel.closePanel('vt-file', { history: 'replace' });
+  open(panel, 'vt-file');
+  assert.ok(document.getElementById('vt-file'), '패널은 즉시 열린다');
+  await wait(80); // 되돌림 popstate가 오고 큐의 push가 실행될 시간
+  assert.strictEqual(window.history.state?.vtPanel, 'vt-file');
+  assert.strictEqual(window.history.length, len0);
+  window.history.back();
+  await until(() => document.getElementById('vt-file') === null);
+  assert.ok(!window.history.state?.vtPanel);
+});
+
+test('vtPanel 표식이 없는 칸에서는 replace로 닫아도 back하지 않는다', async () => {
+  const { window, panel } = await build();
+  open(panel, 'vt-file');
+  window.history.replaceState({}, '', window.location.href);
+  let backs = 0;
+  const orig = window.history.back.bind(window.history);
+  window.history.back = () => { backs++; orig(); };
+  panel.closePanel('vt-file', { history: 'replace' });
+  await wait(60);
+  assert.strictEqual(backs, 0);
+  assert.strictEqual(window.history.length, 2);
+});
+
+test('beforeClose가 거절하면 replace 닫기여도 칸을 유지한다', async () => {
+  const { window, document, panel } = await build();
+  panel.openPanel({ id: 'vt-file', ariaLabel: 'f', headHTML: 'f', bodyId: 'f-b', beforeClose: () => false });
+  panel.closePanel('vt-file', { history: 'replace' });
+  await wait(60);
+  assert.ok(document.getElementById('vt-file'));
+  assert.strictEqual(window.history.state.vtPanel, 'vt-file');
+});
+
+test('popstate가 안 오면 300ms 뒤 대기를 풀고 이후 push가 정상 동작한다', async () => {
+  const { window, document, panel } = await build();
+  open(panel, 'vt-file');
+  window.history.back = () => {};
+  panel.closePanel('vt-file', { history: 'replace' });
+  const len0 = window.history.length;
+  open(panel, 'vt-queue');
+  assert.ok(document.getElementById('vt-queue'));
+  assert.strictEqual(window.history.length, len0, '되돌림 대기 중에는 칸이 아직 안 쌓인다');
+  await until(() => window.history.length === len0 + 1, 1000);
+  assert.strictEqual(window.history.state.vtPanel, 'vt-queue');
 });

@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+- **Phone: opening a viewer and then tapping a bottom tab no longer leaves a dead history entry.** Closing a route panel with `history:'replace'` left its history entry behind, so the next Back press closed nothing. The entry is now actually popped (one step per panel, only while the current entry carries the panel marker, with a 300 ms wait guard); history pushes that arrive meanwhile are queued in order.
+
 ---
 
 ## [2.10.1] — 2026-11-10
