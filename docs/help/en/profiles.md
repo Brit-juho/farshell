@@ -100,6 +100,22 @@ endpoint can be chosen too: the endpoint, auth values, headers and model names i
 session only (a key never appears in a command line, log or screen) and every other account's authentication variable is
 removed. Usage is unknown for these profiles. A profile whose setup file is malformed, or that also has a long-lived
 token, is refused with a reason.
+**If the endpoint is `http://` (and not this Mac itself), the key crosses the network unencrypted.** A trusted
+LAN gateway can be a deliberate setup, so it is not refused; the review screen only warns. Use `https://` when you can.
+Proxy (`*_PROXY`), certificate (`SSL_CERT_*`, `NODE_EXTRA_CA_CERTS`), shell (`SHELL`, `ZDOTDIR`), `PATH` and `GIT_*`
+variables cannot be put into a profile's environment.
+
+An account's token sits in that session's environment, so **any process of the same user (including an agent running
+in that session) can read it.** "An agent cannot choose an account" is a rule of the FarShell screen, API and
+delegation paths, not an OS barrier, and an agent fooled by a prompt injection could send the token out. Register only
+accounts you are willing to hand to the agents you run in that session. Creating a session also refreshes that
+profile's statusLine wrapper automatically (the global `~/.claude` is only read; other settings, hooks and MCP follow
+only when you run `fsh profile sync-settings`), and a session created with an account may be named only with letters,
+digits, `_` and `-`.
+
+Profile names may repeat within one tool and are still created, but they are confusing in the picker and name tags, so
+keep them distinct (with a repeat, `fsh claude <name>` asks for the ID and creation shows a "same name exists" flag).
+Names with control, bidi-control or zero-width characters are refused.
 
 Long-lived token: register a refresh-token-free `claude setup-token` value with
 `fsh profile token set <id>` and the profile's sessions run on it instead of a login. With nothing

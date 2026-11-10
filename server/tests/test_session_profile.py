@@ -231,15 +231,21 @@ def _call(route, body, kind='session', monkeypatch=None):
     return Request()
 
 
+def _same_function(a, b):
+    """Identity by module and qualified name. Another test may re-import `auth` (a fresh module object with
+    fresh function objects), so `is` would depend on test order; the name still says WHICH guard it is."""
+    return (a.__module__, a.__qualname__) == (b.__module__, b.__qualname__)
+
+
 def test_default_route_needs_a_human_session_and_has_no_elevation(sandbox, monkeypatch):
     import auth
     from starlette.exceptions import HTTPException
     import routes.agent_profiles as route
     a = _make('alice')
     for dependency in route.router.dependencies:
-        assert dependency.dependency is auth.require_human_session
+        assert _same_function(dependency.dependency, auth.require_human_session)
     default = next(r for r in route.router.routes if r.path == '/api/agent-profiles/default')
-    assert not any(d.dependency is auth.require_elevated for d in default.dependencies)
+    assert not any(_same_function(d.dependency, auth.require_elevated) for d in default.dependencies)
     request = _call(route, {'tool': 'claude', 'profile_id': a}, 'session', monkeypatch)
     assert asyncio.run(route.set_default(request)) == {'tool': 'claude', 'default': a}
     for kind in ('machine', 'none'):
@@ -634,3 +640,188 @@ def test_session_list_never_touches_the_registry_without_tags(sandbox, monkeypat
     monkeypatch.setattr(tmux_runner, 'run_text_async', fake)
     assert asyncio.run(tmux_route.collect_tmux_sessions())[0]['profile'] is None
     assert not (sandbox[0] / '.vt-test' / 'agent-profiles').exists()
+
+
+# --- independent security review (hotswap-review) -------------------------------------------
+
+def _global_agent_files(home):
+    """A global ~/.claude with a hook, an unrelated setting and an MCP server that carries a key."""
+    (home / '.claude').mkdir(exist_ok=True)
+    (home / '.claude' / 'settings.json').write_text(json.dumps({
+        'model': 'global-model', 'hooks': {'PreToolUse': [{'matcher': '*', 'hooks': [{'type': 'command', 'command': '/opt/x/hook.sh'}]}]}}))
+    (home / '.claude.json').write_text(json.dumps({'mcpServers': {'leaky': {'command': 'node', 'args': ['x'], 'env': {'KEY': 'global-secret-value'}}}}))
+
+
+def test_automatic_sync_places_only_the_statusline_and_moves_no_mcp_or_hook(sandbox):
+    home, _ = sandbox
+    _global_agent_files(home)
+    pid = _make('alice')
+    folder = profiles.root(pid)
+    before_claude_json = (folder / '.claude.json').read_bytes() if (folder / '.claude.json').exists() else None
+    session_profile.sync_settings(session_profile.select(pid))
+    settings = json.loads((folder / 'settings.json').read_text())
+    assert 'statusLine' in settings                                   # the usage wrapper is still placed
+    assert 'model' not in settings and '/opt/x/hook.sh' not in json.dumps(settings)   # nothing else followed the global file
+    after = (folder / '.claude.json').read_bytes() if (folder / '.claude.json').exists() else None
+    assert after == before_claude_json and b'global-secret-value' not in (after or b'')   # no global MCP definition reached the profile
+    # The explicit command still does the whole job (the person's decision).
+    import agent_profile_settings
+    agent_profile_settings.sync(pid)
+    assert 'global-secret-value' in (folder / '.claude.json').read_text()
+    assert '/opt/x/hook.sh' in (folder / 'settings.json').read_text()
+
+
+def test_a_failed_automatic_sync_is_logged_without_values_or_paths_and_never_stops_a_session(sandbox, monkeypatch, caplog):
+    import agent_profile_settings
+    pid = _make('alice')
+
+    def boom(profile_id, **kwargs):
+        raise OSError('/home/example/.claude/settings.json: secret-detail')
+    monkeypatch.setattr(agent_profile_settings, 'sync', boom)
+    with caplog.at_level('WARNING'):
+        session_profile.sync_settings(session_profile.select(pid))
+    text = ' '.join(r.getMessage() for r in caplog.records)
+    assert 'statusLine sync skipped' in text and 'OSError' in text
+    assert 'secret-detail' not in text and '/home/example/' not in text
+
+
+@pytest.mark.parametrize('name', ['#{session_id}', '#(echo hi)', 'a b', 'x;y', 'a.b', 'a:b', '한글', 'x' * 81, '#{pane_id}-x'])
+def test_create_with_a_profile_refuses_names_outside_the_app_rule_and_leaves_no_session(create, tmux, sandbox, name):
+    pid = _make('alice')
+    response = create({'name': name, 'profile': pid})
+    assert (response.status_code, _body(response)['error']) == (400, 'invalid_name')
+    listed = tmux_runner.run_text(['list-sessions', '-F', '#{session_name}']) or ''
+    assert listed.strip() == ''                                       # no orphan session under any name
+    with pytest.raises(session_profile.SlotRefused) as error:          # the lowest layer refuses too (delegation uses it)
+        _spawn(name, session_profile.select(pid))
+    assert error.value.code == 'invalid_name' and error.value.status == 400
+    assert (tmux_runner.run_text(['list-sessions', '-F', '#{session_name}']) or '').strip() == ''
+
+
+@pytest.mark.parametrize('cols,rows', [('abc', 24), (80, 'x'), (-5, 24), (0, 24), (80, 0), (5000, 24), (80, 1001), (True, 24), (80.5, 24), (None, 24), ([80], 24)])
+def test_create_with_a_profile_validates_dimensions(create, tmux, sandbox, cols, rows):
+    pid = _make('alice')
+    response = create({'name': 'sized', 'profile': pid, 'cols': cols, 'rows': rows})
+    assert (response.status_code, _body(response)['error']) == (400, 'invalid_dimensions')
+    assert not tmux_runner.has_session('sized')
+
+
+def test_create_with_a_profile_accepts_the_dimension_range_edges(create, tmux, sandbox):
+    pid = _make('alice')
+    assert create({'name': 'edge', 'profile': pid, 'cols': 1, 'rows': 1000})['tmux_session'] == 'edge'
+
+
+def test_a_profile_folder_that_vanishes_is_a_fixed_refusal_not_an_exception_text(sandbox, tmux, monkeypatch):
+    import fsguard
+    pid = _make('alice')
+    selection = session_profile.select(pid)
+    leak = '/home/example/.vt/agent-profiles/' + pid
+    for error in (fsguard.FsDenied(leak), profiles.Refused(leak), FileNotFoundError(2, 'No such file', leak)):
+        def gone(profile_id, error=error):
+            raise error
+        monkeypatch.setattr(profiles, 'root', gone)
+        with pytest.raises(session_profile.SlotRefused) as caught:
+            _spawn('vanish', selection)
+        assert caught.value.code == 'profile_unavailable' and leak not in caught.value.message and 'home/example' not in caught.value.message
+        monkeypatch.setattr(session_profile, '_parent_ids', lambda key, error=error: (_ for _ in ()).throw(error))
+        with pytest.raises(session_profile.SlotRefused) as inherited:
+            session_profile.inherit('$1:1', '%1', 'claude')
+        assert inherited.value.code == 'profile_unavailable' and leak not in inherited.value.message
+    assert not tmux_runner.has_session('vanish')
+
+
+def test_create_reports_a_vanished_folder_without_a_path(create, tmux, sandbox, monkeypatch):
+    import fsguard
+    pid = _make('alice')
+    selection = session_profile.select(pid)
+    monkeypatch.setattr(session_profile, 'select', lambda ref: selection)
+    real = profiles.root
+
+    def flaky(profile_id):
+        raise fsguard.FsDenied('/home/example/private/' + profile_id)
+    monkeypatch.setattr(profiles, 'root', flaky)
+    response = create({'name': 'gone', 'profile': pid})
+    body = _body(response)
+    monkeypatch.setattr(profiles, 'root', real)
+    assert response.status_code == 409 and body['error'] == 'profile_unavailable'
+    assert '/home/example/' not in json.dumps(body)
+    assert not tmux_runner.has_session('gone')
+
+
+def test_the_record_cap_never_drops_a_live_session_but_prunes_dead_ones(sandbox, tmux):
+    pid = _make('alice')
+    selection = session_profile.select(pid)
+    rc, _, _ = _spawn('alive', selection)
+    assert rc == 0
+    session_profile.record('alive', selection)
+    live_key = tmux_runner.run_text(['display-message', '-p', '-t', '=alive:', '#{session_id}:#{session_created}']).strip()
+    later = time.time() + 100
+    with profiles.database() as db:
+        for n in range(520):             # 520 newer records of sessions that no longer exist
+            db.execute('INSERT INTO injected_sessions VALUES (?,?,?,?,?)', (f'dead-{n}', f'$9{n}:1', pid, 1, later + n))
+    session_profile.record('alive', selection)      # the cap runs; 'alive' is now far older than 500 other rows
+    with profiles.database() as db:
+        keys = {r['created'] for r in db.execute('SELECT created FROM injected_sessions')}
+        total = db.execute('SELECT count(*) FROM injected_sessions').fetchone()[0]
+    assert live_key in keys                           # the live session keeps its record (delegation needs it)
+    assert total <= 501 and not {f'$9{n}:1' for n in range(0, 20)} & keys    # dead, older rows beyond the cap are gone
+
+
+def test_the_record_cap_prunes_nothing_when_tmux_cannot_be_listed(sandbox, tmux, monkeypatch):
+    pid = _make('alice')
+    selection = session_profile.select(pid)
+    with profiles.database() as db:
+        db.execute('CREATE TABLE IF NOT EXISTS injected_sessions (name TEXT NOT NULL, created TEXT NOT NULL, profile_id TEXT NOT NULL REFERENCES profiles(id), '
+                   'profile_revision INTEGER NOT NULL, started_at REAL NOT NULL, PRIMARY KEY (name, created, profile_id))')
+        for n in range(520):
+            db.execute('INSERT INTO injected_sessions VALUES (?,?,?,?,?)', (f'old-{n}', f'$1{n}:1', pid, 1, float(n)))
+    real = tmux_runner.run_text
+    monkeypatch.setattr(tmux_runner, 'run_text', lambda args, timeout=2.0: None if args[0] == 'list-sessions' else real(args, timeout))
+    session_profile.record('ghost', selection)
+    with profiles.database() as db:
+        assert db.execute('SELECT count(*) FROM injected_sessions').fetchone()[0] >= 520
+
+
+def test_changing_the_default_account_leaves_one_audit_line_without_a_name(sandbox, monkeypatch):
+    import agent_share
+    import routes.agent_profiles as route
+    a = _make('secret-looking-name')
+    request = _call(route, {'tool': 'claude', 'profile_id': a}, 'session', monkeypatch)
+    assert asyncio.run(route.set_default(request)) == {'tool': 'claude', 'default': a}
+    lines = [json.loads(x) for x in agent_share._audit_path().read_text().splitlines()]
+    assert len(lines) == 1
+    line = lines[0]
+    assert (line['action'], line['result'], line['by'], line['kind'], line['request']) == ('profile_default_set', 'ok', 'user', 'claude', a)
+    assert 'secret-looking-name' not in json.dumps(line)
+    asyncio.run(route.set_default(_call(route, {'tool': 'claude', 'profile_id': None}, monkeypatch=monkeypatch)))
+    asyncio.run(route.set_default(_call(route, {'tool': 'claude', 'profile_id': 'zz'}, monkeypatch=monkeypatch)))   # refused
+    actions = [(json.loads(x)['action'], json.loads(x)['result']) for x in agent_share._audit_path().read_text().splitlines()]
+    assert actions == [('profile_default_set', 'ok'), ('profile_default_clear', 'ok')]
+
+
+def test_a_new_codex_session_waits_for_a_running_app_server_and_is_refused_if_it_stays(sandbox, tmux, monkeypatch):
+    from usage import appserver
+    pid = _make('personal', 'codex')
+    selection = session_profile.select(pid)
+    assert appserver.hold(pid, 0)                       # an app-server run (or a session creation) owns the home
+    monkeypatch.setattr(session_profile, 'APPSERVER_WAIT', 0.3)
+    started = time.monotonic()
+    with pytest.raises(session_profile.SlotRefused) as error:
+        _spawn('waits', selection)
+    assert error.value.code == 'profile_busy' and time.monotonic() - started >= 0.25
+    assert not tmux_runner.has_session('waits')
+    appserver.release(pid)
+    monkeypatch.setattr(session_profile, 'APPSERVER_WAIT', 5)
+    assert _spawn('waits', selection)[0] == 0           # free again: created, and the guard is released afterwards
+    assert appserver.hold(pid, 0)
+    appserver.release(pid)
+
+
+def test_a_claude_session_never_waits_on_the_codex_guard(sandbox, tmux, monkeypatch):
+    from usage import appserver
+    pid = _make('alice')
+    assert appserver.hold(pid, 0)
+    try:
+        assert _spawn('claude-ok', session_profile.select(pid))[0] == 0
+    finally:
+        appserver.release(pid)

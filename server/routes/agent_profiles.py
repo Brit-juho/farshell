@@ -328,9 +328,28 @@ async def set_default(request: Request):
         profile_id = body.get("profile_id")
         if profile_id is not None:
             profile_id = profiles.identifier(profile_id)
-        return await asyncio.to_thread(agent_profile_local.set_default_for, body.get("tool"), profile_id)
+        tool = body.get("tool")
+        try:
+            result = await asyncio.to_thread(agent_profile_local.set_default_for, tool, profile_id)
+        except (ValueError, TypeError, OSError, RuntimeError, sqlite3.Error, fsguard.FsDenied):
+            _audit_default(tool, profile_id, "failed")
+            raise
+        _audit_default(tool, profile_id, "ok")
+        return result
     except (ValueError, TypeError, OSError, RuntimeError, sqlite3.Error, fsguard.FsDenied) as exc:
         return _error(exc)
+
+
+def _audit_default(tool, profile_id, result):
+    """One line in the access log for a default-account change (no elevation is asked, so the trail is the
+    check): the tool and the profile id only, no name, no path, no value."""
+    try:
+        import agent_share
+        agent_share.audit("profile_default_set" if profile_id else "profile_default_clear", result, by="user",
+                          kind=tool if tool in ("claude", "codex") else None,
+                          request=profile_id if isinstance(profile_id, str) else None)
+    except Exception:  # noqa: BLE001 — a log problem never blocks the change
+        pass
 
 
 @elevated_router.post("/api/agent-profiles/apply", response_model=dict)

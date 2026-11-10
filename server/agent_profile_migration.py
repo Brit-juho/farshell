@@ -121,6 +121,18 @@ def _toml(data):
     return text
 
 
+def plaintext_endpoint(url):
+    """True for an `http://` endpoint that is not this machine: the key would cross the network unencrypted.
+    Warned about, not refused — a trusted LAN gateway is a legitimate setup (docs/help/profiles.md)."""
+    from urllib.parse import urlsplit
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        return False
+    host = (parsed.hostname or '').lower()
+    return parsed.scheme == 'http' and host not in ('localhost', '127.0.0.1', '::1') and not host.endswith('.localhost')
+
+
 def _private_configuration(own, root):
     """Match clauth base/model/env precedence without copying OAuth material."""
     from urllib.parse import urlsplit
@@ -147,10 +159,17 @@ def _private_configuration(own, root):
         value = env.get(name)
         if value is not None and (not isinstance(value, str) or not value or any(c.isspace() or ord(c) < 33 or ord(c) == 127 for c in value)):
             raise profiles.Refused(tr("API 키 형식이 올바르지 않습니다"))
-    protected = {'HOME', 'PATH', 'PYTHONPATH', 'PYTHONHOME', 'NODE_OPTIONS', 'BASH_ENV', 'ENV', 'SHELLOPTS', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'CLAUDE_CODE_OAUTH_TOKEN', 'TMPDIR'}
+    # Names that would change where the session's traffic goes, which shell/startup file it runs, which
+    # certificate authorities it trusts, or how it loads code. Compared case-insensitively (`https_proxy`).
+    protected = {'HOME', 'PATH', 'PYTHONPATH', 'PYTHONHOME', 'NODE_OPTIONS', 'BASH_ENV', 'ENV', 'SHELLOPTS', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME',
+                 'CLAUDE_CODE_OAUTH_TOKEN', 'TMPDIR', 'SHELL', 'ZDOTDIR', 'PROMPT_COMMAND', 'PS4', 'IFS', 'NODE_EXTRA_CA_CERTS',
+                 'REQUESTS_CA_BUNDLE', 'CURL_CA_BUNDLE', 'SSH_AUTH_SOCK', 'SSH_ASKPASS', 'ALL_PROXY', 'HTTP_PROXY', 'HTTPS_PROXY',
+                 'NO_PROXY', 'FTP_PROXY'}
+    protected_prefixes = ('VT_', 'FSH_', 'LD_', 'DYLD_', 'SSL_CERT_', 'GIT_')
     for name, value in env.items():
+        upper = name.upper() if isinstance(name, str) else name
         if (not isinstance(name, str) or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', name)
-            or name in protected or name.startswith(('VT_', 'FSH_', 'LD_', 'DYLD_'))
+            or upper in protected or upper.startswith(protected_prefixes) or upper.endswith('_PROXY')
             or not isinstance(value, str) or len(value) > 32768 or '\0' in value):
             raise profiles.Refused(tr("프로필 환경변수에 격리 경계를 바꾸는 값이 있습니다"))
     if 'ANTHROPIC_BASE_URL' in env:

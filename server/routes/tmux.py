@@ -356,6 +356,9 @@ def _lineage_by_name(keys: dict[str, str]) -> dict[str, dict]:
     return out
 
 
+_PROFILE_NAME_RE = re.compile(r"[A-Za-z0-9_-]{1,80}")
+
+
 @router.post("/api/tmux/create")
 async def create_tmux_session(request: Request):
     body = await request.json()
@@ -399,6 +402,13 @@ async def create_tmux_session(request: Request):
         if not isinstance(profile_ref, str):
             return JSONResponse({"error": "invalid_profile", "reason": tr("프로필 값이 올바르지 않습니다")}, status_code=400)
         if profile_ref != "none":
+            # 계정을 주입하는 생성은 tmux 설정 파일(`source-file`)을 거친다 — tmux는 `-s` 값을 서식으로 확장하므로
+            # (`#{session_id}` 등) 앱의 세션 이름 규칙 밖 이름은 세션이 남기 전에 거절한다. 크기도 정수 범위만.
+            if requested_name and not unique_name and not _PROFILE_NAME_RE.fullmatch(requested_name):
+                return JSONResponse({"error": "invalid_name", "reason": tr("세션 이름은 영문자·숫자·_·-만 쓸 수 있습니다(80자까지)")}, status_code=400)
+            for dimension in (cols, rows):
+                if type(dimension) is not int or not 1 <= dimension <= 1000:
+                    return JSONResponse({"error": "invalid_dimensions", "reason": tr("cols·rows는 1에서 1000 사이의 정수여야 합니다")}, status_code=400)
             import session_profile
             try:
                 selection = await asyncio.to_thread(session_profile.select, profile_ref)

@@ -1784,3 +1784,82 @@ def test_clauth_stopped_checks_launchd_and_daemon_but_not_mcp_client(monkeypatch
         raise OSError('no launchctl')
     monkeypatch.setattr(subprocess, 'run', boom)
     assert migration.clauth_stopped() is False
+
+
+# --- independent security review (hotswap-review) -------------------------------------------
+
+@pytest.mark.parametrize('name', [
+    'SHELL', 'ZDOTDIR', 'PROMPT_COMMAND', 'PS4', 'IFS', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY', 'FTP_PROXY',
+    'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy', 'Https_Proxy', 'SOCKS_PROXY', 'GRPC_PROXY',
+    'SSL_CERT_FILE', 'SSL_CERT_DIR', 'ssl_cert_file', 'NODE_EXTRA_CA_CERTS', 'REQUESTS_CA_BUNDLE', 'CURL_CA_BUNDLE',
+    'SSH_AUTH_SOCK', 'SSH_ASKPASS', 'GIT_SSH_COMMAND', 'GIT_CONFIG_GLOBAL', 'git_dir', 'LD_LIBRARY_PATH', 'DYLD_INSERT_LIBRARIES',
+    'PATH', 'path', 'HOME', 'Home', 'TMPDIR', 'BASH_ENV', 'ENV', 'SHELLOPTS', 'PYTHONPATH', 'NODE_OPTIONS'])
+def test_an_api_profile_cannot_set_variables_that_redirect_traffic_trust_or_the_shell(sandbox, name):
+    with pytest.raises(ValueError):
+        migration._private_configuration({'api_key': 'sample-key', 'env': {name: 'value'}}, sandbox[0])
+
+
+def test_an_api_profile_still_takes_the_ordinary_variables(sandbox):
+    raw, _ = migration._private_configuration(
+        {'api_key': 'sample-key', 'base_url': 'https://gateway.example.invalid',
+         'env': {'API_TIMEOUT_MS': '600000', 'DISABLE_TELEMETRY': '1', 'CLAUDE_CODE_USE_BEDROCK': '1', 'HOMEBREW_NO_AUTO_UPDATE': '1'}}, sandbox[0])
+    env = json.loads(raw)['env']
+    assert env['API_TIMEOUT_MS'] == '600000' and env['ANTHROPIC_BASE_URL'] == 'https://gateway.example.invalid'
+
+
+@pytest.mark.parametrize('url,plain', [
+    ('http://gateway.example.invalid/v1', True), ('http://192.0.2.10:8080', True), ('HTTP://Gateway.Example.Invalid', True),
+    ('https://gateway.example.invalid', False), ('http://localhost:4000', False), ('http://127.0.0.1:4000', False),
+    ('http://[::1]:4000', False), ('http://dev.localhost', False), ('', False), ('not a url', False)])
+def test_plain_http_to_another_machine_is_flagged_but_not_refused(sandbox, url, plain):
+    assert migration.plaintext_endpoint(url) is plain
+    if url.startswith(('http://', 'HTTP://')):
+        migration._private_configuration({'api_key': 'sample-key', 'base_url': url, 'env': {}}, sandbox[0])   # accepted: a LAN gateway is legitimate
+
+
+def test_the_provider_review_warns_about_a_plain_http_endpoint(sandbox):
+    import agent_profile_provider as provider
+    profile = profiles.create('gateway', 'claude')
+    _, helper = migration._private_configuration({'api_key': 'sample-key', 'env': {}}, profiles.root(profile['id']))
+    root = profiles.root(profile['id'])
+    for name, raw in (('.farshell-provider.json', json.dumps({'version': 1, 'api_key': 'sample-key', 'env': {}}).encode()),):
+        (root / name).write_bytes(raw)
+        (root / name).chmod(0o600)
+    plain = provider.preview(profile['id'], profiles.get(profile['id'])['revision'], {'base_url': 'http://gateway.example.invalid'})
+    secure = provider.preview(profile['id'], profiles.get(profile['id'])['revision'], {'base_url': 'https://gateway.example.invalid'})
+    assert plain['plaintext_endpoint'] is True and 'http://' in plain['warning']
+    assert secure['plaintext_endpoint'] is False and 'http://' not in secure['warning']
+    assert 'sample-key' not in json.dumps(plain) and helper is not None
+
+
+@pytest.mark.parametrize('name', [
+    'a\x7fb', 'evil‮txt.exe', 'a⁦b', 'a⁩b', 'zero​width', 'a‌b', 'a‍b', '﻿name', 'a b', 'a b',
+    'tab\tname', 'new\nline', '', '   ', 'x' * 81])
+def test_profile_names_refuse_control_format_and_separator_characters(sandbox, name):
+    with pytest.raises(profiles.Refused):
+        profiles.create(name, 'claude')
+    with pytest.raises(profiles.Refused):
+        profiles.create('fine', 'claude', account_label=name)
+    row = profiles.create('okay', 'claude')
+    with pytest.raises(profiles.Refused):
+        profiles.metadata_change(row['id'], row['revision'], row['metadata_revision'], 'rename', name)
+
+
+def test_profile_names_keep_ordinary_unicode_and_spaces(sandbox):
+    for name in ('Alice Work', '개인 계정', 'Büro 2', 'a-b_c.d', '  padded  '):
+        assert profiles.create(name, 'claude')['name'] == name.strip()
+
+
+def test_a_duplicate_name_in_one_tool_is_allowed_but_flagged(sandbox):
+    first = profiles.create('team', 'claude')
+    assert first['duplicate_name'] is False
+    assert profiles.create(' TEAM ', 'claude')['duplicate_name'] is True        # same tool, case and padding ignored
+    assert profiles.create('team', 'codex')['duplicate_name'] is False          # another tool: not a clash
+    other = profiles.create('solo', 'claude')
+    renamed = profiles.metadata_change(other['id'], other['revision'], other['metadata_revision'], 'rename', 'team')
+    assert renamed['duplicate_name'] is True and renamed['name'] == 'team'
+    again = profiles.metadata_change(other['id'], other['revision'], renamed['metadata_revision'], 'rename', 'team')
+    assert again['duplicate_name'] is True                                        # the twin is the OTHER profile, never itself
+    solo = profiles.create('only-one', 'claude')
+    same = profiles.metadata_change(solo['id'], solo['revision'], solo['metadata_revision'], 'rename', 'only-one')
+    assert same['duplicate_name'] is False                                        # renaming to its own name is not a clash

@@ -56,19 +56,38 @@ def _window(raw, wid, label, now, updated_at):
             "source": SOURCE, "updated_at": updated_at}
 
 
+def read_private(file, limit):
+    """`(bytes, mtime)` of a file only this user can have written, or None. The parent directory must be this
+    user's and closed to others (0700), the file is opened with `O_NOFOLLOW` (a link swapped in after a check
+    is not followed; `O_NONBLOCK` so a FIFO cannot hang the reader) and judged by `fstat` of the opened
+    descriptor: a regular file, this user's, no group/other permission bits, not larger than `limit`."""
+    file = os.fspath(file)
+    parent = os.lstat(os.path.dirname(file))
+    if not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.getuid() or parent.st_mode & 0o077:
+        return None
+    fd = os.open(file, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0))
+    try:
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077
+                or info.st_size > limit):
+            return None
+        with os.fdopen(fd, "rb", closefd=False) as stream:
+            return stream.read(limit + 1), info.st_mtime
+    finally:
+        os.close(fd)
+
+
 def read(profile_id, now):
     """`{windows, updated_at, source}` or None when the profile has no usable value."""
     try:
-        file = path(profile_id)
-        info = os.lstat(file)
-        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_size > MAX_BYTES:
+        got = read_private(path(profile_id), MAX_BYTES)
+        if got is None or len(got[0]) > MAX_BYTES:
             return None
-        with open(file, "rb") as stream:
-            value = json.loads(stream.read(MAX_BYTES + 1))
+        value, mtime = json.loads(got[0]), got[1]
     except (OSError, ValueError):
         return None
     limits = value.get("rate_limits") if isinstance(value, dict) else None
     if not isinstance(limits, dict):
         return None
-    windows = [w for key, label in WINDOWS if (w := _window(limits.get(key), key, label, now, info.st_mtime))]
-    return {"windows": windows, "updated_at": info.st_mtime, "source": SOURCE} if windows else None
+    windows = [w for key, label in WINDOWS if (w := _window(limits.get(key), key, label, now, mtime))]
+    return {"windows": windows, "updated_at": mtime, "source": SOURCE} if windows else None

@@ -20,6 +20,8 @@ key given as `api_key` is not an environment value at all (the profile's `apiKey
 """
 from __future__ import annotations
 
+import contextlib
+import logging
 import os
 import re
 import secrets
@@ -33,6 +35,8 @@ import fsguard
 import tmux_runner
 import vt_paths
 from i18n import tr
+
+logger = logging.getLogger(__name__)
 
 OPTION = "@fsh_profile"
 
@@ -50,6 +54,7 @@ API_EXTRA_OVERRIDES = ("ANTHROPIC_MODEL", "ANTHROPIC_SMALL_FAST_MODEL", "ANTHROP
                        "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL",
                        "ANTHROPIC_DEFAULT_FABLE_MODEL", "CLAUDE_CODE_SUBAGENT_MODEL")
 TOOL_VARIABLE = {"claude": "CLAUDE_CONFIG_DIR", "codex": "CODEX_HOME"}
+NAME = re.compile(r"[A-Za-z0-9_-]{1,80}")
 MIN_TMUX = (3, 2)   # `new-session -e`
 
 
@@ -250,7 +255,20 @@ def _parent_ids(key):
     return list(dict.fromkeys(ids)), mismatch
 
 
+def _unavailable():
+    return SlotRefused("profile_unavailable", tr("프로필을 지금 쓸 수 없습니다. 프로필 상태를 확인하세요"))
+
+
 def inherit(parent_key, parent_pane, agent):
+    """See `_inherit`. A folder that vanished or became unsafe between checks is a refusal with a fixed
+    message — never an exception text that could quote a path."""
+    try:
+        return _inherit(parent_key, parent_pane, agent)
+    except (profiles.Refused, fsguard.FsDenied, OSError):
+        raise _unavailable() from None
+
+
+def _inherit(parent_key, parent_pane, agent):
     """The account a delegated child must run under: the parent session's, never one the caller names.
 
     Returns a Selection restricted to the child agent's tool (a Claude child needs only the parent's Claude
@@ -336,20 +354,61 @@ def _session_id(name):
 
 
 def sync_settings(selection):
-    """Bring each chosen Claude profile's settings in line with the global ones, which also places the
-    usage-collecting statusLine wrapper (hotswap H2). The global files are only read. A settings problem
-    never stops a session from being created; `fsh profile sync-settings --dry-run` shows it."""
+    """Place the usage-collecting statusLine wrapper in each chosen Claude profile's `settings.json`
+    (hotswap H2) — and nothing else: no other settings key, no hooks, no MCP definitions (`.claude.json`
+    is not touched). The rest is the person's explicit `fsh profile sync-settings`. The global files are
+    only read. A settings problem never stops a session from being created; it is logged (no values, no
+    paths) and `fsh profile sync-settings --dry-run` shows it."""
     import agent_profile_settings
     for profile in selection.profiles:
         if profile["tool"] == "claude":
             try:
-                agent_profile_settings.sync(profile["id"])
-            except Exception:  # noqa: BLE001
-                pass
+                agent_profile_settings.sync(profile["id"], statusline_only=True)
+            except Exception as error:  # noqa: BLE001
+                logger.warning("profile statusLine sync skipped (%s)", type(error).__name__)
 
 
 def spawn(name, cols, rows, cwd, selection):
-    """Create the session with the chosen account. Returns `(rc, error_text, info)`."""
+    """See `_spawn`; the same fixed-message conversion as `inherit` (the profile folder can vanish between
+    the slot check and the launch)."""
+    try:
+        with _codex_guard(selection):
+            return _spawn(name, cols, rows, cwd, selection)
+    except (profiles.Refused, fsguard.FsDenied, OSError):
+        raise _unavailable() from None
+
+
+APPSERVER_WAIT = 12.0   # a little over the app-server's own deadline (`usage.appserver.TIMEOUT`)
+
+
+@contextlib.contextmanager
+def _codex_guard(selection):
+    """Hold the per-profile guard of every chosen Codex profile while the session is created. The usage
+    app-server (`usage/appserver.py`) holds the same guard while it runs and checks for sessions of the home
+    first, so the two cannot both own one CODEX_HOME's login (a rotating refresh token would break). A new
+    session waits for a running app-server (seconds); if it does not finish, the creation is refused."""
+    from usage import appserver
+    held = []
+    try:
+        for profile in selection.profiles:
+            if profile["tool"] != "codex":
+                continue
+            if not appserver.hold(profile["id"], APPSERVER_WAIT):
+                raise SlotRefused("profile_busy", tr("이 계정의 사용량을 읽는 중입니다. 잠시 뒤 다시 시도하세요"))
+            held.append(profile["id"])
+        yield
+    finally:
+        for pid in held:
+            appserver.release(pid)
+
+
+def _spawn(name, cols, rows, cwd, selection):
+    """Create the session with the chosen account. Returns `(rc, error_text, info)`.
+
+    The name must follow the app's session-name rule: tmux expands formats (`#{session_id}`, `#(..)`) in a
+    `-s` value, which would create a session under another name that the cleanup below cannot find."""
+    if not isinstance(name, str) or not NAME.fullmatch(name):
+        raise SlotRefused("invalid_name", tr("세션 이름은 영문자·숫자·_·-만 쓸 수 있습니다(80자까지)"), 400)
     sync_settings(selection)
     version = tmux_version()
     if version is None or version < MIN_TMUX:
@@ -391,8 +450,17 @@ def record(name, selection):
         for profile in selection.profiles:
             db.execute("INSERT OR REPLACE INTO injected_sessions VALUES (?,?,?,?,?)",
                        (name, created, profile["id"], profile["revision"], now))
-        db.execute("DELETE FROM injected_sessions WHERE rowid NOT IN "
-                   "(SELECT rowid FROM injected_sessions ORDER BY started_at DESC LIMIT 500)")
+        # Cap the table, but never drop the record of a session that is still alive: its delegated children
+        # are refused as `parent_profile_unverified` when the marker has no server record. If the live
+        # sessions cannot be listed, nothing is pruned this time.
+        live = tmux_runner.run_text(["list-sessions", "-F", "#{session_id}:#{session_created}"])
+        if live is not None:
+            alive = {line.strip() for line in live.splitlines() if line.strip()}
+            old_rows = db.execute("SELECT rowid, created FROM injected_sessions WHERE rowid NOT IN "
+                                  "(SELECT rowid FROM injected_sessions ORDER BY started_at DESC LIMIT 500)").fetchall()
+            for row in old_rows:
+                if row["created"] not in alive:
+                    db.execute("DELETE FROM injected_sessions WHERE rowid=?", (row["rowid"],))
 
 
 # --- naming the badge (session list) ----------------------------------------------------

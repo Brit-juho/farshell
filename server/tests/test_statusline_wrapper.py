@@ -228,3 +228,17 @@ def test_the_global_files_are_byte_identical_after_every_run(sandbox):
     sync.sync(pid, dry_run=True)
     sync.sync(pid)
     assert (_sha(gpath), _sha(mcp)) == before
+
+
+def test_an_existing_folder_open_to_others_is_closed_but_a_linked_one_is_never_used(usage_dir, tmp_path):
+    usage_dir.mkdir(parents=True)
+    usage_dir.chmod(0o755)
+    run(["--profile", PID, "--dir", str(usage_dir), "--", "cat"], LIMITS)
+    assert stat.S_IMODE(usage_dir.stat().st_mode) & 0o077 == 0          # group/other bits are gone (hotswap-review)
+    assert (usage_dir / f"{PID}.json").exists()
+    real = tmp_path / "real"
+    real.mkdir()
+    link = tmp_path / "link"
+    link.symlink_to(real)
+    result = run(["--profile", PID, "--dir", str(link), "--", "echo through"], LIMITS)
+    assert result.stdout.decode() == "through\n" and not list(real.iterdir())   # the command still runs; nothing is written through a link
