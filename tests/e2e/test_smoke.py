@@ -4107,3 +4107,42 @@ def test_모바일_파일_트리와_뷰어_본문은_칸_면_bg0이고_검정이
         _dfx_shot(pg, "dfx-raw-390")
     finally:
         ctx.close()
+
+
+def test_접힌_세션_띠_칸에_올리면_상세_호버_카드가_뜬다(isolated_page):
+    """접힌 48px 띠의 칸에 마우스를 올리면 공용 툴팁이 아니라 상세 카드(#vt-rail-card)가 뜬다 — 열고 닫기 규칙은
+    jsdom 테스트(frontend/tests/rail-hover-card.test.js)가 보고, 여기서는 **실제 레이아웃**에서 칸 옆 뷰포트 안에
+    그려지는 것·공용 툴팁이 같이 안 뜨는 것·Esc로 닫히는 것만 본다."""
+    page = isolated_page
+    page.evaluate("() => window.createSession && window.createSession()")
+    page.wait_for_selector(".vt-pane .vt-pane-body", timeout=15000)
+    sid = ""
+    try:
+        sid = page.evaluate("() => Object.keys(window.allSessions())[0]")
+        page.evaluate("() => window.vtSettingsSet('ui.side.activity', 'sessions')")
+        page.wait_for_selector("#vt-wgrail .vt-wgrail-collapse", timeout=15000)
+        page.locator("#vt-wgrail .vt-wgrail-collapse").click()   # 레일 머리의 접기 버튼 — 48px 띠로
+        page.wait_for_selector("#vt-wgrail.collapsed .vt-wgrail-row[data-card-key]", timeout=15000)
+        cell = page.locator("#vt-wgrail.collapsed .vt-wgrail-row[data-card-key]").first
+        assert cell.get_attribute("data-tip") is None, "접힌 칸에는 공용 data-tip이 없다(이중 툴팁 방지)"
+        cell.hover()
+        page.wait_for_selector("#vt-rail-card.open", timeout=3000)
+        r = page.evaluate(
+            """() => {
+              const c = document.getElementById('vt-rail-card').getBoundingClientRect();
+              const s = document.getElementById('vt-wgrail').getBoundingClientRect();
+              return { x: c.left, y: c.top, w: c.width, h: c.height, strip: s.right, vw: innerWidth, vh: innerHeight,
+                       tip: !!document.querySelector('#vt-tip.open'), name: document.querySelector('#vt-rail-card .vt-hc-name')?.textContent || '' };
+            }"""
+        )
+        assert r["name"], f"카드 머리에 세션 이름이 있어야 한다: {r}"
+        assert r["x"] >= r["strip"], f"카드는 띠 오른쪽에 뜬다: {r}"
+        assert r["w"] == 300, f"카드 폭은 고정 300: {r}"
+        assert 0 <= r["y"] and r["y"] + r["h"] <= r["vh"], f"카드는 뷰포트 안: {r}"
+        assert not r["tip"], "공용 툴팁이 같이 뜨면 안 된다"
+        assert cell.get_attribute("aria-describedby") == "vt-rail-card"
+        page.keyboard.press("Escape")
+        page.wait_for_selector("#vt-rail-card:not(.open)", timeout=2000)
+    finally:
+        if sid:
+            page.evaluate("(id) => window.removeSession && window.removeSession(id)", sid)
