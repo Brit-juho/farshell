@@ -370,12 +370,27 @@ async def _no_notify(_msg: dict) -> None:
     return None
 
 
+def _env_sec(name: str, default: float, lo: float) -> float:
+    try:
+        return max(lo, float(os.environ.get(name, "")))
+    except ValueError:
+        return default
+
+
+def tick_sec() -> float:
+    """틱 주기. 격리 왕복 시험이 5분을 기다리지 않게 `VT_UPDATE_TICK_SEC` 로 줄일 수 있다(시험용, 최소 1초)."""
+    return _env_sec("VT_UPDATE_TICK_SEC", TICK_SEC, 1.0)
+
+
 class LoopState:
     """점검기 한 벌의 메모리 상태. 시험은 시계와 난수를 직접 준다."""
 
     def __init__(self, now: float, rng: random.Random | None = None):
         self.rng = rng or random.Random()
-        self.first_due = now + self.rng.uniform(*FIRST_DELAY)
+        # `VT_UPDATE_FIRST_DELAY_SEC`(시험용): 첫 점검 지터를 0~이 값 초로 바꾼다.
+        fixed = os.environ.get("VT_UPDATE_FIRST_DELAY_SEC", "").strip()
+        lo, hi = (0.0, _env_sec("VT_UPDATE_FIRST_DELAY_SEC", FIRST_DELAY[1], 0.0)) if fixed else FIRST_DELAY
+        self.first_due = now + self.rng.uniform(lo, hi)
         self.did_first = False
 
 
@@ -597,7 +612,7 @@ async def run_loop(root: Path, notify: Notify = _no_notify) -> None:
             raise
         except Exception as e:  # noqa: BLE001
             logger.warning(f"[update] 틱 실패: {type(e).__name__}: {e}")
-        await asyncio.sleep(TICK_SEC)
+        await asyncio.sleep(tick_sec())
 
 
 async def manual_check(root: Path, notify: Notify = _no_notify) -> tuple[dict, bool]:
