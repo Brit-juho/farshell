@@ -49,9 +49,16 @@
   .vt-viewer-backdrop.vt-mobile-route .vt-viewer-head {
     min-height:48px; padding:0 4px 0 16px; background:var(--color-bg-1); border-bottom:1px solid var(--color-line);
   }
+  /* 하단 탭 화면(변경 · 파일/첨부 · 설정)의 머리 줄은 좌우 거터 16(+safe-area) 하나다. 오른쪽이 4px이던 건 44px 아이콘 버튼의
+     투명 여백을 가정한 값인데 실제 컨트롤은 24~28px(새로고침 · 올리기 71×24)라 화면 가장자리에 붙었고 포커스 링은 끝까지 갔다
+     (2026-11-10 실기기). 버튼 크기는 이 규칙의 범위가 아니다. 파일 뷰어 같은 비탭 route 머리는 건드리지 않는다. */
+  .vt-viewer-backdrop.vt-mobile-route.vt-tab-panel .vt-viewer-head {
+    padding-left:calc(16px + env(safe-area-inset-left,0px)); padding-right:calc(16px + env(safe-area-inset-right,0px));
+  }
   .vt-viewer-backdrop.vt-mobile-route .vt-viewer-head .vt-vw-title { font:600 var(--fs-base) / 20px var(--font-ui); }
   /* 머리의 마지막 글자(설정 「변경 사항 자동 저장」)가 오른쪽 끝에서 4px에 붙었다(점검 7-2, 386/390) — 본문 gutter 16과 맞춘다. */
-  .vt-viewer-backdrop.vt-mobile-route .vt-viewer-head > .vt-set-save { margin-right:12px; }
+  /* 위 머리 규칙이 오른쪽을 16으로 만들었으므로 따로 밀지 않는다. */
+  .vt-viewer-backdrop.vt-mobile-route .vt-viewer-head > .vt-set-save { margin-right:0; }
 
   /* ── 세션 탭(Fleet) ─────────────────────────────────────────────────── */
   #vt-fleet-slot { background:var(--color-bg-0); padding:0 0 calc(var(--spacing) * 4); }
