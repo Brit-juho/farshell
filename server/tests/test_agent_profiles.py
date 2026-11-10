@@ -1535,16 +1535,21 @@ def test_private_remediation_resolves_only_matching_api_and_environment_warnings
     with profiles.database() as db:
         manifest = json.loads(db.execute("SELECT manifest FROM receipts WHERE kind='config'").fetchone()[0])
     first = compare(source, row['id'], manifest)
-    assert 'api-key-login-required' in first['blockers'] and 'credentials-not-copied' in first['blockers']
+    assert 'api-key-login-required' in first['blockers']
+    assert not {'credentials-not-copied', 'mcp-credentials-not-migrated'} & set(first['blockers'])
     monkeypatch.setattr(runtime, 'require_inactive', lambda _: None)
     patch = {'api_key': 'source-api-secret', 'base_url': 'https://proxy.example.invalid', 'env': {'TOKEN': 'source-env-secret', 'FEATURE': 'on'}}
     provider.apply(provider.preview(row['id'], 2, patch)['token'])
     result = compare(source, row['id'], manifest)
     assert result['blockers'] == []
-    assert {'api-key-login-required', 'credentials-not-copied', 'profile-environment-requires-setup'} <= set(result['resolved_warnings'])
+    assert {'api-key-login-required', 'profile-environment-requires-setup'} <= set(result['resolved_warnings'])
+    assert 'credentials-not-copied' not in result['resolved_warnings']
     patch['env']['TOKEN'] = 'different-private-value'
     provider.apply(provider.preview(row['id'], 3, patch)['token'])
-    assert 'credentials-not-copied' in compare(source, row['id'], manifest)['blockers']
+    changed = compare(source, row['id'], manifest)
+    assert not {'credentials-not-copied', 'mcp-credentials-not-migrated'} & (set(changed['blockers']) | set(changed['resolved_warnings']))
+    stale = dict(manifest, warnings=[*manifest['warnings'], 'credentials-not-copied', 'mcp-credentials-not-migrated'])
+    assert 'credentials-not-copied' not in compare(source, row['id'], stale)['blockers']
     assert 'private-value' not in json.dumps(result) and 'source-api-secret' not in json.dumps(result)
 
 
@@ -1760,3 +1765,22 @@ def test_codex_install_verification_uses_actual_cache_not_marketplace_source(san
     assert plugins._installed(row, 'sample@fixture') == cache
     with pytest.raises(ValueError):
         plugins._installed(row, 'sample@fixture', verify_source=True)
+
+
+def test_clauth_stopped_checks_launchd_and_daemon_but_not_mcp_client(monkeypatch):
+    import subprocess
+    def fake(jobs, procs):
+        def run(cmd, **kw):
+            return subprocess.CompletedProcess(cmd, 0, stdout=jobs if cmd[0] == 'launchctl' else procs, stderr='')
+        return run
+    head = 'PID\tStatus\tLabel\n'
+    monkeypatch.setattr(subprocess, 'run', fake(head + '1\t0\tcom.example.other\n', '/bin/zsh -l\nclauth mcp\n'))
+    assert migration.clauth_stopped() is True
+    monkeypatch.setattr(subprocess, 'run', fake(head + '1\t0\tcom.clauth.daemon\n', 'x\n'))
+    assert migration.clauth_stopped() is False
+    monkeypatch.setattr(subprocess, 'run', fake(head, '/usr/local/bin/clauth daemon\n'))
+    assert migration.clauth_stopped() is False
+    def boom(*a, **k):
+        raise OSError('no launchctl')
+    monkeypatch.setattr(subprocess, 'run', boom)
+    assert migration.clauth_stopped() is False

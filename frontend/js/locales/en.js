@@ -4059,7 +4059,7 @@ window.__VT_I18N = {
   "스킬 원본이 사용자 홈의 유효한 스킬 디렉터리가 아닙니다": "The source is not a valid skill directory inside the user home",
   "스킬 파일 수 또는 크기가 한도를 넘었습니다": "The skill exceeds the file count or size limit",
   "스킬 패키지에 자격증명 파일이 있습니다. 가져오지 않습니다": "The skill package contains a credential file and cannot be imported",
-  "실제 로그인·갱신·사용량·대화 재개 검증 전에는 clauth를 중지하지 않습니다": "Keep clauth running until login, refresh, usage and conversation resume have been verified",
+  "clauth는 은퇴했습니다. 남은 항목은 실제 로그인·갱신·사용량·대화 재개 검증입니다": "clauth is retired. What remains is verifying real login, refresh, usage and conversation resume",
   "실제 실행 확인": "Verify the running session",
   "실행 프로필": "Launch profiles",
   "실행할 훅 명령": "Hook command to run",

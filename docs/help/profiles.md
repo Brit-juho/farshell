@@ -122,7 +122,10 @@ HTTPS endpoint의 DeepSeek·OpenRouter 잔액, Z.ai·MiniMax international quota
 필요할 수 있습니다. 운영 프로필에는 적용할 수 없습니다.
 
 「clauth 대체 준비 확인」은 구성·실제 호출·갱신·사용량·세션·대화 재개에서
-부족한 증거를 표시합니다. 이 결과만으로 clauth를 삭제하거나 중지하지 않습니다.
+부족한 증거를 표시합니다. 이 결과가 clauth를 삭제하거나 중지하지는 않으며, `clauth_stopped`는
+launchd 작업과 clauth 데몬 프로세스(`clauth mcp` 플러그인 클라이언트는 제외)가 없을 때만 참입니다.
+설정 안의 키·토큰을 옮기지 않는다는 이유의 항목(`credentials-not-copied`,
+`mcp-credentials-not-migrated`)은 더 이상 차단 사유로 나오지 않습니다.
 원본 OAuth 프로필은 별도 검토로 기존 access token을 공식 계정 조회에만 사용하여
 대상 계정과 비교합니다. 원본 토큰을 복사하거나 갱신하지 않습니다.
 동시 사용 확인: 갱신되는 로그인은 같은 계정의 서로 다른 프로필 두 개가 동시에 실행될 때만 인정합니다.

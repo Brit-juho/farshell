@@ -138,7 +138,9 @@ profiles cannot use this operation.
 
 Check clauth replacement readiness lists missing configuration, inference,
 refresh, usage, session and conversation-resume evidence. It does not delete or
-stop clauth. A separate source OAuth review uses the existing access token only
+stop clauth; `clauth_stopped` is true only when no clauth launchd job or daemon process
+exists (the `clauth mcp` plugin client does not count). The `credentials-not-copied` and
+`mcp-credentials-not-migrated` items no longer appear as blockers. A separate source OAuth review uses the existing access token only
 for official account identity lookup and comparison with the target. It never
 copies or refreshes source tokens. Concurrency: a refreshing login counts only when two different profiles on one account run at the same time.
 A long-lived token or API key profile has nothing to refresh, so two sessions of the same profile running at once
