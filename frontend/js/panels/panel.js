@@ -316,8 +316,17 @@ export function closePanel(idOrEl, options = {}) {
       try { setTimeout(() => window.fitAndResize(window.activeId), 60); } catch (_) {}
     }
 
+// 뒤로가기가 닫는 것은 history 항목을 쌓은 **맨 위** 화면 하나다. 탭 화면(`vt-dir` 등)은 항목을 쌓지 않고
+// 뷰어(`vt-file`)보다 DOM에서 앞에 있으므로, 클래스만으로 첫 요소를 고르면 탭 화면이 대신 닫혀(하단 탭이
+// 「터미널」로 돌아가고) 뷰어는 남는다(2.10.0~2.10.1 폰 버그). 쌓은 순서 = DOM에 붙인 순서라 마지막 것이 맨 위다.
+export function topHistoryPanel() {
+  const els = Array.from(document.querySelectorAll('.vt-viewer-backdrop.vt-mobile-route'))
+    .filter((e) => e._vtMobileHistory);
+  return els.length ? els[els.length - 1] : null;
+}
+
 window.addEventListener('popstate', () => {
-  const el = document.querySelector('.vt-viewer-backdrop.vt-mobile-route');
+  const el = topHistoryPanel();
   if (el) closePanel(el.id, { fromHistory: true });
 });
 
