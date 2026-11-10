@@ -231,15 +231,21 @@ def _call(route, body, kind='session', monkeypatch=None):
     return Request()
 
 
+def _same_function(a, b):
+    """Identity by module and qualified name. Another test may re-import `auth` (a fresh module object with
+    fresh function objects), so `is` would depend on test order; the name still says WHICH guard it is."""
+    return (a.__module__, a.__qualname__) == (b.__module__, b.__qualname__)
+
+
 def test_default_route_needs_a_human_session_and_has_no_elevation(sandbox, monkeypatch):
     import auth
     from starlette.exceptions import HTTPException
     import routes.agent_profiles as route
     a = _make('alice')
     for dependency in route.router.dependencies:
-        assert dependency.dependency is auth.require_human_session
+        assert _same_function(dependency.dependency, auth.require_human_session)
     default = next(r for r in route.router.routes if r.path == '/api/agent-profiles/default')
-    assert not any(d.dependency is auth.require_elevated for d in default.dependencies)
+    assert not any(_same_function(d.dependency, auth.require_elevated) for d in default.dependencies)
     request = _call(route, {'tool': 'claude', 'profile_id': a}, 'session', monkeypatch)
     assert asyncio.run(route.set_default(request)) == {'tool': 'claude', 'default': a}
     for kind in ('machine', 'none'):
