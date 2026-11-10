@@ -2,7 +2,7 @@ import { renderSessionVoice, renderVoiceDefaults } from './voice-session.js';
 import { vtFetch } from '../../../core/api.js';
 import { activeSessionId, getSession } from '../../../core/store.js';
 import { mountClients } from '../../../layout/clients.js';
-import { row, statusLine, toast, renderItems, group, boolControl, selectControl } from '../controls.js';
+import { row, statLine, toast, group, boolControl, selectControl } from '../controls.js';
 import { scopeOf } from '../../../core/settings.js';
 import { bindPinSelect } from '../../../voice/target-pin.js';
 import { renderVoiceInput, cleanupVoiceModels } from './voice-models.js';
@@ -36,7 +36,7 @@ export function renderVoiceSection() {
   // (Rail.tsx)로 대체되며 사라져 도달 불가능해졌다 — id(`push-btn`/`push-label`)는
   // pushui.js가 그대로 찾으므로 유지한다.
   const subBtn = document.createElement('button');
-  subBtn.type = 'button'; subBtn.id = 'push-btn'; subBtn.className = 'vt-btn sm quiet vt-set-reset';
+  subBtn.type = 'button'; subBtn.id = 'push-btn'; subBtn.className = 'vt-btn sm';
   const subLabel = document.createElement('span');
   subLabel.id = 'push-label';
   subLabel.textContent = t('구독');
@@ -45,21 +45,22 @@ export function renderVoiceSection() {
   subBtn.addEventListener('click', () => togglePush());
 
   const pushBtn = document.createElement('button');
-  pushBtn.type = 'button'; pushBtn.className = 'vt-btn sm quiet vt-set-reset'; pushBtn.textContent = t('테스트 발송');
+  pushBtn.type = 'button'; pushBtn.className = 'vt-btn sm'; pushBtn.textContent = t('테스트 발송');
   const pushBtns = document.createElement('div');
   pushBtns.className = 'vt-set-btns';
   pushBtns.append(subBtn, pushBtn);
-  const pushRow = row(t('웹 푸시'), pushBtns);
-  const pushStatus = statusLine(t('확인 중…'));
-  pushRow.querySelector('.vt-set-label').appendChild(pushStatus);
-  notif.appendChild(pushRow);
+  const pushRow = row(t('웹 푸시'), pushBtns, t('이 브라우저로 완료·승인 알림을 받습니다.'));
+  const pushStatus = statLine(t('확인 중…'));
+  notif.append(pushRow, pushStatus);
   refreshPushLabel();
   vtFetch('/api/push/status').then((r) => {
     if (!r) return;
-    pushStatus.textContent = r.available
+    pushStatus.vtSetText(r.available
       ? t('구독 {n}대 · VAPID {vapid}', { n: r.subscriptions, vapid: r.configured ? t('확인됨') : t('미설정') })
-      : t('사용 불가 (pywebpush 미설치)');
-  }).catch(() => { pushStatus.textContent = t('상태를 확인할 수 없습니다.'); });
+      : t('사용 불가 (pywebpush 미설치)'));
+    // 정상은 조용한 회색 체크, 문제만 호박색.
+    pushStatus.dataset.state = r.available && r.configured ? 'ok' : 'warn';
+  }).catch(() => { pushStatus.vtSetText(t('상태를 확인할 수 없습니다.')); pushStatus.dataset.state = 'warn'; });
   pushBtn.addEventListener('click', async () => {
     try {
       const r = await vtFetch('/api/push/test', { method: 'POST' });
@@ -75,7 +76,7 @@ export function renderVoiceSection() {
   // 3. 음성 입력 + 받아 둔 항목 관리 — voice-models.js
   const vm = renderVoiceInput();
   const statusBtn = document.createElement('button');
-  statusBtn.type = 'button'; statusBtn.className = 'vt-btn sm quiet';
+  statusBtn.type = 'button'; statusBtn.className = 'vt-btn sm';
   statusBtn.textContent = t('음성 상태 열기');
   statusBtn.addEventListener('click', () => getAction('voice.status')?.());
   // 입력 대상 고정(이 기기만) + 확인 후 전송(서버 전체). 모바일에서는 dock이 없으니 설정에서도 고를 수 있다.
@@ -113,7 +114,7 @@ export function renderVoiceSection() {
   // 찾으므로 유지.
   const voiceOnlyBtn = document.createElement('button');
   voiceOnlyBtn.type = 'button'; voiceOnlyBtn.id = 'voiceonly-btn';
-  voiceOnlyBtn.className = 'vt-btn sm quiet vt-set-reset needs-voice';
+  voiceOnlyBtn.className = 'vt-btn sm needs-voice';
   const paintVoiceOnly = () => {
     const isOn = document.body.classList.contains('voice-only-mode');
     voiceOnlyBtn.textContent = isOn ? t('끄기') : t('켜기');
@@ -132,6 +133,6 @@ export function renderVoiceSection() {
   const activeTmux = activeSess && (activeSess.tmuxName || activeSess.tmux_name);
   if (activeTmux) _voiceClientsCleanup = mountClients(clientsHost, activeTmux, activeSess && activeSess.remote, activeSessionId());
 
-  frag.append(sessionVoice.element, defaults.element, group(t('알림'), notif), vm.input, vm.manage, group(t('데스크톱 음성'), desk));
+  frag.append(group(t('알림'), notif), sessionVoice.element, defaults.element, vm.input, vm.manage, group(t('데스크톱 음성'), desk));
   return frag;
 }
