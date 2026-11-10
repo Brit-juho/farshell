@@ -148,6 +148,10 @@
   .vt-session-sheet::before {
     content:""; display:block; width:36px; height:4px; margin:4px auto 4px; border-radius:2px; background:var(--color-surface-active);
   }
+  /* 꾹 누른 손가락 밑에 시트가 뜨면 OS가 제목(「server」)을 단어로 선택해 핸들이 남는다(2026-11-10 실기기). 시트는 버튼 모음이지
+     읽을 글이 아니다 — 선택·콜아웃을 끈다(세션 행 .vt-fleet-row와 같은 처방, 60-mobile-hud.css). 이름 변경 입력은 편집 중 선택이 필요하다. */
+  .vt-session-sheet { -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
+  .vt-session-sheet .vt-input { -webkit-user-select:text; user-select:text; }
   .vt-session-sheet .vt-session-head { margin:0; padding:8px 20px; }
   .vt-session-sheet .vt-session-head h2 { font:600 var(--fs-md) / 24px var(--font-ui); }
   .vt-fleet-menu-sheet .vt-session-list { gap:0; padding:4px 0; border-top:1px solid var(--color-line); }
