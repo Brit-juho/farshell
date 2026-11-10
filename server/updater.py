@@ -28,9 +28,12 @@ import shutil
 import struct
 import subprocess
 import sys
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 import config_io
+import store_lock
 from i18n import tr
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -64,6 +67,24 @@ def _prev_file() -> Path:
     return state_dir() / "update-prev.json"
 
 
+def lock_file() -> Path:
+    return state_dir() / "update.lock"
+
+
+@contextmanager
+def update_lock():
+    """코드를 바꾸는 작업(`fsh update`·`--rollback`·서버의 자동 적용)은 한 번에 하나만 돈다.
+
+    flock 이라 프로세스가 죽으면 커널이 풀어 준다(낡은 잠금 회수 불필요). 기다리지 않고 바로 거절한다 —
+    수동 업데이트와 자동 적용이 서로 체크아웃을 밟는 것이 위험이지, 잠깐 기다리는 것이 이득이 아니다.
+    """
+    try:
+        with store_lock.try_exclusive(lock_file()):
+            yield
+    except store_lock.LockContended:
+        raise UpdateError(tr("다른 업데이트가 이미 진행 중입니다 — 끝난 뒤에 다시 시도하세요."))
+
+
 def signers_file() -> Path:
     return state_dir() / "update-signers"
 
@@ -81,6 +102,21 @@ def write_channel(channel: str) -> None:
 
 
 # ── git ───────────────────────────────────────────────────────────────────
+# 서버 안에서 부르는 읽기 전용 점검(update_check)은 `proc.run` 으로 git 을 돌린다 — 새 세션에서 띄우고 기한에 그룹째 죽이며,
+# 죽지 않는 자식은 버리고 돌아온다(docs/ref/reliability.md). CLI 는 예전 그대로 `subprocess.run` 이다(ssh 암호 입력이
+# 제어 터미널을 써야 하는 원격이 있다).
+_HARDENED: ContextVar[bool] = ContextVar("updater_hardened", default=False)
+
+
+@contextmanager
+def hardened():
+    token = _HARDENED.set(True)
+    try:
+        yield
+    finally:
+        _HARDENED.reset(token)
+
+
 def _git_env() -> dict:
     env = dict(os.environ)
     env["GIT_TERMINAL_PROMPT"] = "0"  # 자격 증명을 묻느라 멈추지 않게
@@ -95,7 +131,11 @@ def git(root: Path, *args: str, check: bool = True, timeout: int = 120,
         cmd += ["-c", c]
     cmd += list(args)
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=_git_env())
+        if _HARDENED.get():
+            from resilience import proc
+            p = proc.run(cmd, timeout=timeout, env=_git_env(), text=True)
+        else:
+            p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=_git_env())
     except FileNotFoundError:
         raise UpdateError(tr("git 을 찾을 수 없습니다."))
     except subprocess.TimeoutExpired:
@@ -263,10 +303,18 @@ def cmd_trust(root: Path, key: str | None, replace: bool, yes: bool) -> int:
 
 
 # ── 대상 정하기 ───────────────────────────────────────────────────────────
-def fetch(root: Path) -> None:
+def fetch(root: Path, timeout: int = 180) -> None:
     if git(root, "remote", "get-url", "origin", check=False).returncode != 0:
         raise UpdateError(tr("origin 원격이 없습니다 — git 으로 받은 설치만 업데이트할 수 있습니다."))
-    git(root, "fetch", "--quiet", "--tags", "origin", timeout=180)
+    git(root, "fetch", "--quiet", "--tags", "origin", timeout=timeout)
+
+
+def effective_channel(root: Path, channel_arg: str | None = None) -> str | None:
+    """인자 → 저장된 채널 → (master 위라면) stable. 정해지지 않았고 master 도 아니면 None."""
+    channel = channel_arg or read_channel()
+    if channel is None and current_branch(root) in (None, "master"):
+        channel = "stable"
+    return channel
 
 
 def resolve_target(root: Path, channel: str, to_tag: str | None) -> tuple[str, str]:
@@ -438,16 +486,13 @@ def _sync_skill(root: Path, claude_dir: Path, dry_run: bool) -> int:
 
 # ── 명령 ──────────────────────────────────────────────────────────────────
 def cmd_update(root: Path, channel_arg: str | None, to_tag: str | None, check: bool,
-               restart: bool, do_sync: bool = True) -> int:
+               restart: bool, do_sync: bool = True, result: dict | None = None) -> int:
+    """`result` 를 주면 결과(`ok`·`reason`·`rolled_back`)를 거기에 남긴다 — 자동 적용(update_check)이 이유를 기록하려고 쓴다."""
     stored = read_channel()
-    channel = channel_arg or stored
+    channel = effective_channel(root, channel_arg)
     if channel is None:
-        br = current_branch(root)
-        if br in (None, "master"):
-            channel = "stable"
-        else:
-            raise UpdateError(tr("채널이 정해지지 않았고 지금 브랜치({br})는 릴리스가 아닙니다 — "
-                                 "--channel stable|dev|devmode 로 정하세요.", br=br))
+        raise UpdateError(tr("채널이 정해지지 않았고 지금 브랜치({br})는 릴리스가 아닙니다 — "
+                             "--channel stable|dev|devmode 로 정하세요.", br=current_branch(root)))
     if channel not in CHANNELS:
         raise UpdateError(tr("채널은 stable, dev, devmode 중 하나입니다."))
     cur = rev(root, "HEAD")
@@ -493,10 +538,14 @@ def cmd_update(root: Path, channel_arg: str | None, to_tag: str | None, check: b
         print(f"  ✗ {e}")
         print(tr("  원래 커밋({sha})으로 되돌립니다 (이미 설치된 파이썬/노드 패키지는 되돌리지 않습니다).", sha=cur[:8]))
         _restore(root, prev)
+        if result is not None:
+            result.update(ok=False, reason=str(e), rolled_back=True)
         return 1
     if channel_arg and (channel_arg != stored) and not to_tag:
         write_channel(channel)
     print(tr("  ✓ {old} → {new}", old=prev["version"], new=version_of(root)))
+    if result is not None:
+        result.update(ok=True, reason=None, rolled_back=False, **{"from": prev["version"], "to": version_of(root)})
     rc = sync(root) if do_sync else 0
     if restart:
         rc |= subprocess.run([str(root / "bin" / "fsh"), "restart"]).returncode
@@ -546,6 +595,13 @@ def main(argv: list[str] | None = None) -> int:
     tr_.add_argument("--yes", action="store_true")
     sy = sub.add_parser("sync")
     sy.add_argument("--dry-run", action="store_true")
+    # 자동 업데이트 설정·상태(update_check.py). on 은 위험을 설명하고 확인을 받는다.
+    au = sub.add_parser("auto", help=tr("자동 업데이트 켜기/끄기/상태"))
+    au.add_argument("mode", choices=("on", "off", "status"), nargs="?", default="status")
+    au.add_argument("--yes", action="store_true")
+    au.add_argument("--hour", type=int, metavar="0-23")
+    ck = sub.add_parser("status", help=tr("마지막 업데이트 확인 결과"))
+    ck.add_argument("--line", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
     root = Path(os.environ.get("VT_DIR") or ROOT)
     try:
@@ -553,9 +609,18 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_trust(root, args.key, args.replace, args.yes)
         if args.action == "sync":
             return sync(root, args.dry_run)
+        if args.action in ("auto", "status"):
+            import update_check
+            if args.action == "status":
+                return update_check.cmd_status(line=args.line)
+            return update_check.cmd_auto(root, args.mode, yes=args.yes, hour=args.hour)
         if args.rollback:
-            return cmd_rollback(root)
-        return cmd_update(root, args.channel, args.to, args.check, args.restart)
+            with update_lock():
+                return cmd_rollback(root)
+        if args.check:
+            return cmd_update(root, args.channel, args.to, args.check, args.restart)
+        with update_lock():
+            return cmd_update(root, args.channel, args.to, args.check, args.restart)
     except UpdateError as e:
         print(f"  ✗ {e}", file=sys.stderr)
         return 1

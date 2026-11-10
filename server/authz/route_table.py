@@ -437,6 +437,10 @@ _ROWS: tuple = (
     ("POST", "/api/mcp/deploy", human(elevated=True)),
     ("POST", "/api/mcp/plugins/toggle", human(elevated=True)),
     ("POST", "/api/mcp/servers/{scope}/{name}/verify", human(elevated=True)),
+# --- routes/update.py (업데이트 확인·자동 적용 — 사람 세션만, 설정 변경은 승격 · 호스트 중계 밖: 이 맥의 업데이트는 이 맥 화면에서만)
+    ("GET", "/api/update/status", human()),
+    ("POST", "/api/update/check", human()),
+    ("PUT", "/api/update/settings", human(elevated=True)),
 # --- main.py
     ("GET", "/", public("login gate page; has to render unauthenticated")),
     ("GET", "/sw.js", public("static asset of the login gate")),

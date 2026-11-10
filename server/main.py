@@ -83,6 +83,7 @@ from routes.leases import router as leases_router
 from routes.pairs import router as pairs_router
 from routes.browser import router as browser_router
 from routes.health import router as health_router
+from routes.update import router as update_router, elevated_router as update_elevated_router
 from resilience import pools as _res_pools, watch as _res_watch
 
 logging.basicConfig(level=logging.INFO)
@@ -503,6 +504,11 @@ async def lifespan(_app: FastAPI):
     # 다른 Mac 에 못 보낸 회수 알림 재시도(`VT_AUTHZ_ENFORCE=peer` 일 때만 일한다).
     from authz import remote as authz_remote
     remote_outbox_task = asyncio.create_task(authz_remote.outbox_loop())
+    # 업데이트 확인(읽기 전용, 24시간마다)과 자동 적용(기본 꺼짐) — update_check.py. 점검은 `net` 풀·기한 안에서만 돈다.
+    # 시험은 conftest 가 VT_UPDATE_CHECK=0 으로 고정한다(실제 원격에 fetch 하면 안 된다).
+    from routes import update as _update_routes
+    import update_check
+    update_task = asyncio.create_task(update_check.run_loop(_update_routes.root(), _update_routes.notify))
     # 브라우저 broker(`VT_AUTHZ_ENFORCE` 의 `browser`) — 호스트 임대·세대를 잡고(옛 탭은 orphaned) 회수 saga 에 탭 단계를 끼운다. 꺼져 있으면 아무것도 하지 않는다.
     from browser import broker as browser_broker
     if browser_broker.enabled():
@@ -569,7 +575,7 @@ async def lifespan(_app: FastAPI):
         delegation_sweep_task.cancel()
         with suppress(asyncio.CancelledError):
             await delegation_sweep_task
-        for _t in (lease_sweep_task, saga_sweep_task, pair_sweep_task, remote_outbox_task):
+        for _t in (lease_sweep_task, saga_sweep_task, pair_sweep_task, remote_outbox_task, update_task):
             _t.cancel()
             with suppress(asyncio.CancelledError):
                 await _t
@@ -710,6 +716,8 @@ app.include_router(leases_router)
 app.include_router(pairs_router)
 app.include_router(browser_router)
 app.include_router(health_router)
+app.include_router(update_router)
+app.include_router(update_elevated_router)
 app.include_router(share_elevated_router)
 app.include_router(share_public_router)
 app.include_router(peer_router)

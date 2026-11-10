@@ -32,6 +32,9 @@ os.environ["VT_LANG"] = "ko"
 # unix socket 서버(authz/sock.py)는 시험에서 기본으로 끈다 — lifespan 을 도는 TestClient 가 임시 HOME 아래에
 # 소켓을 열면 경로 길이(AF_UNIX 100바이트)와 병렬 실행에 의존하게 된다. 소켓을 시험하는 파일이 직접 켠다.
 os.environ["VT_AUTHZ_SOCKET"] = "0"
+# 업데이트 점검기(update_check.py)는 lifespan 에서 돌며 원격에 fetch 한다 — 시험에서는 어떤 네트워크 요청도 하지 않게 끈다.
+# 점검기를 시험하는 파일이 monkeypatch 로 직접 켠다.
+os.environ["VT_UPDATE_CHECK"] = "0"
 os.environ.pop("VT_AUTHZ_SOCKET_PATH", None)
 
 # ⚠ 이 스위트는 **개발자의 실제 ~/.vt.env를 절대 읽지 않는다.**

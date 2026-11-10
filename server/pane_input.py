@@ -63,6 +63,13 @@ def note_human_input(tmux_name: str | None) -> None:
         _human_input_at[tmux_name] = time.monotonic()
 
 
+def last_human_input_age() -> float:
+    """어느 세션이든 사람이 마지막으로 입력한 뒤 몇 초 지났는가. 한 번도 없으면 무한대(자동 업데이트의 「한가함」 판정)."""
+    if not _human_input_at:
+        return float("inf")
+    return time.monotonic() - max(_human_input_at.values())
+
+
 def human_typing(tmux_name: str | None, window: float | None = None) -> bool:
     """최근 `window`초 안에 사람이 이 세션에 입력했는가. 세션을 모르면 False."""
     if not tmux_name:
