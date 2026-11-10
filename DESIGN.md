@@ -606,13 +606,16 @@ open or waiting. The rail fills the sidebar; its width and collapse state belong
 (radius 6) with the agent mark 18 centred in the **state colour** inside a 2px state ring (idle dotted · waiting dashed and
 breathing · working rotating arc · done solid — the shape says the state, not only the colour; motion stops under
 `prefers-reduced-motion`). 「Not seen yet」 is a 6px dot at the mark's lower right (2px cut-out in the cell colour); a 12px badge at the
-upper right counts working internal sub-agents (tooltip only). Delegation children sit under their parent as 0.8× cells with a 2px branch on
+upper right counts working internal sub-agents (name only; the details are in the hover card). Delegation children sit under their parent as 0.8× cells with a 2px branch on
 the left. The order is the **expanded rail's tree order** (개입 필요 first, then the configured sort / manual order / split groups, children
 under parents), and the first icon's centre lines up with the expanded first row's (body top padding 24, 32 between sections). Colours are
 the `--color-st-*` tokens, 3:1 or better on every cell background in all 9 skins (`tokens-contrast.test.js`); the badge text uses
 `--color-on-st-working`. **Menu size** (Settings › 모양, `ui.side.scale`, desktop only): small / normal / large = activity bar and strip
 44 / 48 / 52, cell 36 / 40 / 44, session rows one text step smaller / as is / larger, default sidebar width 320 / 360 / 392 (a stored
 `ui.side.width` always wins); one `data-vt-side-scale` attribute on `<html>` drives `--vt-act-w` and `--vt-cell`.
+Hovering or keyboard-focusing a collapsed cell opens a **detail card** (300px, `bg-raised` + 1px `line-strong` + radius 8 + `--shadow-e2`, 12/13 text, mono + tabular
+numbers for paths and counts, row height 20 on a `[14px icon | value | right value]` grid, 8 between sections, opacity-only 120ms entrance and none under
+`prefers-reduced-motion`; text uses only `txt`/`sub`, state colours only on shape glyphs). Content and rules: [terminal.md](docs/ref/terminal.md) (「Hover card on the collapsed strip」).
 
 ### Tool views — dock body (`#vt-dock`, `shell/Dock.tsx`)
 

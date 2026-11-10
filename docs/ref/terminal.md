@@ -181,8 +181,21 @@ There is no tab strip; the rail and Fleet represent views. `viewSegments` in `de
   「main waiting, sub-agents working」 reads at a glance. Delegation children (S3-b) are 0.8× cells directly under the parent, same column
   centre, with a 2px branch on the left (ㄴ for the last; merged = done colour, failed = error colour, closed = faint). Vertical alignment: the
   strip's body top padding is `28 + 6 + line1/2 − cell/2` (24 at normal size), so the first icon centre equals the expanded first row's, and the
-  gap between sections is 32 (header 28 + 4). `aria-label` on the ring is the state (+ 「아직 확인 안 함」), the tooltip is name / branch ·
-  status · internal agents · other screens · share. The expanded rail also shows each session once: a waiting session appears only under 「개입 필요」 (`splitRunning`).
+  gap between sections is 32 (header 28 + 4). `aria-label` on the ring is the state (+ 「아직 확인 안 함」); the cell's own `aria-label` is the session name.
+  The expanded rail also shows each session once: a waiting session appears only under 「개입 필요」 (`splitRunning`).
+- **Hover card on the collapsed strip** (`shell/RailHoverCard.tsx` + `shell/rail-hover-card.ts`, `styles/screens/71-rail-hover-card.css`). A cell has **no** `data-tip`
+  (the shared tooltip stays for everything else); hovering it for 250ms (immediately when a card is already open or just closed) or keyboard-focusing it
+  (`:focus-visible`, no delay) opens one 300px-wide card to the right of the strip (`position:fixed`, portalled to `<body>`, max height 380, nudged to stay
+  inside the viewport; size is independent of `ui.side.scale`). Rows, all from values the client already holds — no request on hover — and **a row with no value is not drawn**:
+  head (agent mark in the state colour · name · elapsed) → state chip (shape + word; waiting adds the kind 승인 요청/선택 요청/계획 확인/질문, working/done the
+  badge 질문 있음/계획 있음) → tool (working only) → location (directory with `~` and a middle ellipsis keeping the last 3→2→1 segments, branch with 「워크트리」 tag and +N −N
+  or 「파일 N」, the remote host with its latency/offline reason when viewing another Mac) → internal agents (「내부 에이전트 N개 · 작업 중 M」, up to 5 rows ordered working → idle → failed → done,
+  same names numbered `#N` by start time over the whole list, 「외 K개」) → delegated children (「하위 세션 N · 보고 M/N」, up to 3 rows, waiting first) and, for a child, 「부모: 이름」 + its task →
+  meta (다른 화면/터미널 N, 공유 · nick · mode or 「공유 안 함」 for shareable names on this Mac, 「{맥}에서 만듦」, 「아직 확인 안 함」). Over the line budget (14 body rows) it is cut meta → children → internal agents; location is never cut.
+  The tool name is a **snapshot taken when the card opens**, refreshed only when the session's state changes — a live tool name would flicker with every call (same reason `NativeChildren` draws none).
+  Rules (WCAG 1.4.13): hoverable (the pointer may cross to the card; 160ms grace + a transparent bridge), dismissable (Esc closes it and it does not reopen until the pointer leaves the cell or focus moves),
+  persistent (no timeout; pointer/focus leaving, a press, scrolling or resizing closes it). Touch pointers never open it (a phone has no strip); the row menu summary is the touch path. While open the cell gets
+  `aria-describedby="vt-rail-card"`. Layout: every row is the same 3-column grid `[14px icon | value | right value]`, row height 20, 8 between sections.
 - **Menu size** (`ui.side.scale`, device scope, Settings › 모양 › 메뉴 크기: small / normal / large; desktop only). One `<html data-vt-side-scale>`
   drives `--vt-act-w` (activity bar and collapsed strip 44 / 48 / 52), `--vt-cell` (collapsed cell 36 / 40 / 44, ring and mark scale with it),
   the rail's `--vt-line1`/`--vt-line` and `--fs-xs/sm` one step (rows 18·16 / 20·18 / 22·20) and the **default** sidebar width 320 / 360 / 392 (`SIDE_SCALES` in
@@ -203,7 +216,7 @@ There is no tab strip; the rail and Fleet represent views. `viewSegments` in `de
 - **Shared mark.** A session shared with agents shows `ShareMark` on line 3 (`shell/RailRow.tsx`, shared with Fleet): an
   icon and the nickname — eye = read-only, pen = read/write (`share-read`/`share-write` in `ui/icons.js`); read/write also
   gets the word 「쓰기」 and the waiting colour, so the risky mode differs by shape, text and colour. It is a security state,
-  so there is **no rail-settings switch** for it. The 48px rail shows it in the tooltip, the menu summary line in
+  so there is **no rail-settings switch** for it. The 48px rail shows it in the hover card, the menu summary line in
   「공유 · 닉네임 · 읽기 전용/읽기·쓰기」 (`shareSentence`), which is what a touch screen reads.
 - The sliders button in the rail header is **rail settings** (`RailSettings.tsx` on top of `RepoVisibility.tsx`, one
   sheet): 개입 필요 on/off (`rail.attention.show`; collapse state `rail.attention.collapsed`), per-origin visibility
