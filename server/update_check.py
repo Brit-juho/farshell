@@ -555,6 +555,8 @@ def restart_server(root: Path) -> None:
 
 def _apply_record(result: str, *, frm: str | None = None, to: str | None = None, reason: str | None = None,
                   rolled_back: bool = False) -> dict:
+    if reason:
+        reason = " ".join(str(reason).split())[:300]    # 빌드 오류는 여러 줄이다 — 한 줄로 펴서 화면에 그대로 보이게
     return {"result": result, "at": time.time(), "from": frm, "to": to, "reason": reason, "rolled_back": rolled_back}
 
 
@@ -681,7 +683,7 @@ def cmd_status(line: bool = False) -> int:
         print(tr("  업데이트: 최신입니다 ({cur})", cur=st["current"]))
     if st["checked_at"]:
         print(tr("    마지막 확인: {when}", when=time.strftime("%Y-%m-%d %H:%M", time.localtime(st["checked_at"]))))
-    print(tr("    자동 업데이트: {mode} (시각 {hour:02d}시)", mode=s["auto"], hour=s["auto_hour"]))
+    print(tr("    자동 업데이트: {mode} (시각 {hour}시)", mode=s["auto"], hour=f"{s['auto_hour']:02d}"))
     la = st["last_apply"]
     if la:
         print(tr("    마지막 자동 적용: {result} {frm} → {to}", result=la.get("result"), frm=la.get("from"), to=la.get("to"))
@@ -692,7 +694,7 @@ def cmd_status(line: bool = False) -> int:
 def cmd_auto(root: Path, mode: str, *, yes: bool = False, hour: int | None = None) -> int:
     if mode == "status":
         s, st = load_settings(), read_status()
-        print(tr("  자동 업데이트: {mode} (시각 {hour:02d}시, 한가함 {n:g}분)", mode=s["auto"], hour=s["auto_hour"], n=idle_minutes()))
+        print(tr("  자동 업데이트: {mode} (시각 {hour}시, 한가함 {n}분)", mode=s["auto"], hour=f"{s['auto_hour']:02d}", n=f"{idle_minutes():g}"))
         if s["auto"] == "stable-only":
             blocked = auto_blockers(root, st["latest_tag"] or "v999999.0.0", s) if st["latest_tag"] else None
             if st["latest_tag"] and blocked:
@@ -710,8 +712,8 @@ def cmd_auto(root: Path, mode: str, *, yes: bool = False, hour: int | None = Non
     else:
         print(tr("  자동 업데이트를 켜면 FarShell 이 네트워크에서 받은 새 릴리스 코드로 스스로 바뀌고 서버를 다시 시작합니다."))
         print(tr("    - 서명 검증을 통과한 stable 릴리스 태그만, 메이저 버전이 오르지 않을 때만 적용합니다."))
-        print(tr("    - 지역 시간 {hour:02d}시 안에, 최근 {n:g}분 입력이 없고 작업 중인 에이전트가 없을 때만 합니다.",
-                 hour=patch.get("auto_hour", load_settings()["auto_hour"]), n=idle_minutes()))
+        print(tr("    - 지역 시간 {hour}시 안에, 최근 {n}분 입력이 없고 작업 중인 에이전트가 없을 때만 합니다.",
+                 hour=f"{patch.get('auto_hour', load_settings()['auto_hour']):02d}", n=f"{idle_minutes():g}"))
         print(tr("    - dev 채널·devmode·로컬 변경이 있는 설치는 절대 자동 적용하지 않습니다. 열린 화면은 잠시 끊겼다 다시 붙습니다(tmux 세션은 유지)."))
         print(tr("    - 서명 키는 사람이 'fsh update trust' 로 고정해야 합니다. 서명 키를 믿는 만큼 릴리스 계정이 침해되면 영향을 받습니다."))
         if not yes:
