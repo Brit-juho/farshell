@@ -74,15 +74,15 @@ const _THEME = EditorView.theme({
   },
   '.cm-panel.cm-search label': { fontSize: 'inherit', color: 'var(--sub)' },
   '.cm-textfield': {
-    backgroundColor: 'var(--crust)', color: 'var(--txt)', border: '1px solid var(--line)',
+    backgroundColor: 'var(--color-bg-2)', color: 'var(--txt)', border: '1px solid var(--line)',
     borderRadius: 'var(--radius-sm)', font: 'inherit', padding: 'calc(var(--spacing) * 0.5) calc(var(--spacing) * 1.5)',
   },
   '.cm-button': {
-    backgroundColor: 'var(--crust)', backgroundImage: 'none', color: 'var(--txt)', border: '1px solid var(--line)',
+    backgroundColor: 'var(--color-bg-2)', backgroundImage: 'none', color: 'var(--txt)', border: '1px solid var(--line)',
     borderRadius: 'var(--radius-sm)', font: 'inherit',
   },
-  '.cm-button:hover': { backgroundColor: 'var(--menu-hover)' },
-  '.cm-button:active': { backgroundImage: 'none', backgroundColor: 'var(--menu-hover)' },
+  '.cm-button:hover': { backgroundColor: 'var(--color-state-hover)' },
+  '.cm-button:active': { backgroundImage: 'none', backgroundColor: 'var(--color-state-press)' },
   '.cm-panel button[name=close]': { color: 'var(--sub)' },
   '.cm-vt-target': { backgroundColor: 'color-mix(in srgb, var(--acc) 16%, transparent)' },
 });

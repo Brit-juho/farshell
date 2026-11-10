@@ -301,6 +301,7 @@ function HostSwitcher(props: { deps: TitleBarDeps; hostname: () => string }) {
       detail: h.detail,
       dim: !h.online,
       checked: h.active,
+      icon: h.id === LOCAL_HOST ? 'laptop' : 'server',
       run: () => { if (h.id !== relayed) (window as any).vtSwitchHost?.(h.id); },
     }));
 

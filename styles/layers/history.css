@@ -20,7 +20,9 @@
   .vt-history-list { border-right: 1px solid var(--color-line); padding-right: 12px; }
   .vt-history-item { display: flex; width: 100%; flex-direction: column; gap: 5px; padding: 12px 10px; font-size: var(--fs-base); background: none;
     border: 0; color: var(--color-txt); text-align: left; cursor: pointer; overflow-wrap: anywhere; }
-  .vt-history-item:hover, .vt-history-item[aria-pressed="true"] { background: var(--color-bg-3); }
+  .vt-history-item:hover { background: var(--color-state-hover); }
+  .vt-history-item:active { background: var(--color-state-press); }
+  .vt-history-item[aria-pressed="true"] { background: var(--color-state-selected); }
   .vt-history-item[aria-pressed="true"] { box-shadow: inset 2px 0 var(--color-acc); }
   .vt-history-detail { min-width: 0; }
   .vt-history-detail h3 { margin: 0 0 8px; overflow-wrap: anywhere; }

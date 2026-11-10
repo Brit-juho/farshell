@@ -27,8 +27,9 @@
 //   뒤집고, 그래도 안 되면 들어가는 변을 찾는다.
 
 import { displayComboHtml } from '../core/keymap.js';
+import { computePlacement } from './tooltip-place.js';
 
-const OPEN_DELAY = 400;   // 처음 머물렀을 때. 스쳐 지나가는 커서에는 안 뜬다.
+const OPEN_DELAY = 400;   // 처음 머물렀을 때. 스쳐 지나가는 커서에는 안 뜬다(방금 닫혔거나 떠 있으면 WARM_MS 안에서 즉시).
 const WARM_MS = 300;      // 방금 닫힌 직후 옆 버튼으로 옮기면 지연 없이 뜬다.
 const GAP = 8;            // 트리거와의 간격
 const EDGE = 8;           // 뷰포트 가장자리 여백
@@ -44,6 +45,17 @@ let wired = false;
 const liveObserver = typeof MutationObserver === 'function'
   ? new MutationObserver(() => { if (current) render(current); })
   : null;
+
+// 트리거가 사이드바·도크 같은 패널 안에 있으면 그 패널의 안쪽 사각형 — 툴팁이 옆 패널로 넘어가지
+// 않게 한다(tooltip-place.js). 활동 막대는 패널을 밖으로 여는 것이 설계라(항목 이름이 옆 사이드바 위에
+// 뜬다) 제한하지 않는다. 호출부가 data-tip-free를 달면 제한을 건너뛴다.
+function panelBounds(trigger) {
+  if (trigger.closest('.vt-activitybar, [data-tip-free]')) return null;
+  const host = trigger.closest('.vt-sidepanel, .vt-dock, #vt-dock');
+  if (!host) return null;
+  const b = host.getBoundingClientRect();
+  return b.width > 0 ? { left: b.left + 4, right: b.right - 4, top: b.top, bottom: b.bottom } : null;
+}
 
 function ensureEl() {
   if (tipEl && tipEl.isConnected) return tipEl;
@@ -62,32 +74,15 @@ function ensureEl() {
 function place(trigger, side) {
   const el = ensureEl();
   const r = trigger.getBoundingClientRect();
-  const w = el.offsetWidth, h = el.offsetHeight;
-  const vw = window.innerWidth, vh = window.innerHeight;
-  const fits = {
-    top: r.top - GAP - h >= EDGE,
-    bottom: r.bottom + GAP + h <= vh - EDGE,
-    left: r.left - GAP - w >= EDGE,
-    right: r.right + GAP + w <= vw - EDGE,
-  };
-  const opposite = { top: 'bottom', bottom: 'top', left: 'right', right: 'left' };
-  let s = side;
-  if (!fits[s]) s = fits[opposite[s]] ? opposite[s] : (['bottom', 'top', 'left', 'right'].find((k) => fits[k]) || side);
-
-  let x, y;
-  if (s === 'top' || s === 'bottom') {
-    x = r.left + r.width / 2 - w / 2;
-    y = s === 'top' ? r.top - GAP - h : r.bottom + GAP;
-  } else {
-    x = s === 'left' ? r.left - GAP - w : r.right + GAP;
-    y = r.top + r.height / 2 - h / 2;
-  }
-  // 가장자리로 밀리면 화면 안으로 당긴다(뒤집기로 해결 안 되는 축).
-  x = Math.max(EDGE, Math.min(x, vw - EDGE - w));
-  y = Math.max(EDGE, Math.min(y, vh - EDGE - h));
+  const { x, y } = computePlacement({
+    rect: r, w: el.offsetWidth, h: el.offsetHeight, side,
+    vw: window.innerWidth, vh: window.innerHeight, gap: GAP, edge: EDGE, bounds: panelBounds(trigger),
+  });
 
   // 화살표를 안 쓰는 대신 **트리거 쪽에서 자라게** 해서 출처를 남긴다. 화살표는
   // 6개 스킨의 배경·테두리를 각각 따라가야 해서 항상 한 스킨에서 어긋난다.
+  const w = el.offsetWidth;
+  const h = el.offsetHeight;
   el.style.transformOrigin = `${Math.max(0, Math.min(r.left + r.width / 2 - x, w))}px ${Math.max(0, Math.min(r.top + r.height / 2 - y, h))}px`;
   el.style.left = `${Math.round(x)}px`;
   el.style.top = `${Math.round(y)}px`;

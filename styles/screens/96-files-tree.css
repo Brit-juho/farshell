@@ -33,7 +33,7 @@
   background:var(--menu); color:var(--txt); border:1px solid var(--line); border-radius:var(--radius-sm);
   font:400 var(--fs-xs) var(--mono);
 }
-.vt-ft-inp:focus { outline:none; border-color:var(--acc); }
+.vt-ft-inp:focus { border-color:var(--acc); }
 .vt-ft-inp::placeholder { color:var(--sub); font-family:var(--ui); }
 .vt-ft-btn { flex:none; width:28px; height:28px; }
 .vt-ft-filter { position:relative; }
@@ -56,7 +56,8 @@
   padding:0 calc(var(--spacing) * 3) 0 calc(var(--spacing) * 7); background:none; border:0; color:var(--txt);
   cursor:pointer; text-align:left; font:inherit; line-height:var(--ft-row, 28px);
 }
-.vt-ft-recent-row:hover { background:var(--menu-hover); }
+.vt-ft-recent-row:hover { background:var(--color-state-hover); }
+.vt-ft-recent-row:active { background:var(--color-state-press); }
 .vt-ft-recent-dir { color:var(--sub); font:400 var(--fs-2xs) var(--mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
 .vt-ft-recent-clear { align-self:flex-end; margin:0 calc(var(--spacing) * 3); background:none; border:0; color:var(--sub); cursor:pointer; font:400 var(--fs-2xs) var(--ui); }
 .vt-ft-recent-clear:hover { color:var(--txt); }
@@ -71,11 +72,13 @@
   touch-action:manipulation; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
   contain:layout style;
 }
-.vt-ft-row:hover { background:var(--menu-hover); }
-.vt-ft-row.sel { background:color-mix(in srgb, var(--acc) 14%, transparent); }
+.vt-ft-row:hover { background:var(--color-state-hover); }
+.vt-ft-row:active { background:var(--color-state-press); }
+.vt-ft-row.sel { background:var(--color-state-selected); }
 .vt-ft-row.foc { box-shadow:inset 0 0 0 1px var(--acc); }
 .vt-ft-row.k-loading, .vt-ft-row.k-empty, .vt-ft-row.k-error, .vt-ft-row.k-capped { cursor:default; }
-.vt-ft-row.k-loading:hover, .vt-ft-row.k-empty:hover, .vt-ft-row.k-capped:hover { background:none; }
+.vt-ft-row.k-loading:hover, .vt-ft-row.k-empty:hover, .vt-ft-row.k-capped:hover,
+.vt-ft-row.k-loading:active, .vt-ft-row.k-empty:active, .vt-ft-row.k-capped:active { background:none; }
 .vt-ft-row.k-more { color:var(--acc); }
 .vt-ft-row.k-error { color:var(--err); cursor:pointer; }
 
@@ -120,25 +123,15 @@
 
 /* ── 행 메뉴 260 · 항목 28 / 폰 시트 · 항목 44 ─────────────────────────────── */
 .vt-ft-scrim { position:fixed; inset:0; z-index:900; background:transparent; }
-.vt-ft-scrim.sheet { background:color-mix(in srgb, var(--crust) 50%, transparent); }
+.vt-ft-scrim.sheet { background:var(--color-scrim); }
 .vt-ft-menu {
   position:fixed; z-index:901; width:260px; max-width:calc(100vw - 16px);
-  display:flex; flex-direction:column; padding:calc(var(--spacing) * 1) 0;
-  background:var(--menu); border:1px solid var(--line); border-radius:var(--radius-lg);
-  box-shadow:0 8px 24px color-mix(in srgb, var(--crust) 40%, transparent);
+  display:flex; flex-direction:column;
 }
 .vt-ft-menu-path {
   padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3); border-bottom:1px solid var(--line); margin-bottom:calc(var(--spacing) * 1);
   font:500 var(--fs-2xs) var(--mono); color:var(--sub); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left;
 }
-.vt-ft-mi {
-  display:flex; align-items:center; gap:calc(var(--spacing) * 2); height:28px; padding:0 calc(var(--spacing) * 3);
-  background:none; border:0; color:var(--txt); font:400 var(--fs-sm) var(--ui); text-align:left; cursor:pointer;
-}
-.vt-ft-mi:hover, .vt-ft-mi:focus { background:var(--menu-hover); outline:none; }
-.vt-ft-mi-l { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.vt-ft-mi-k { flex:none; color:var(--sub); font:400 var(--fs-2xs) var(--mono); max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-
 .vt-ft-menu.sheet {
   left:0; right:0; bottom:0; top:auto; width:auto; max-width:none;
   border-radius:var(--radius-lg) var(--radius-lg) 0 0; border-bottom:0;
@@ -150,6 +143,7 @@
 .vt-ft-menu-title b { font:500 var(--fs-base) var(--mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .vt-ft-menu-title span { font:400 var(--fs-xs) var(--mono); color:var(--sub); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .vt-ft-menu.sheet .vt-ft-mi { height:44px; padding:0 calc(var(--spacing) * 5); font-size:var(--fs-base); }
+.vt-ft-menu.sheet .vt-ft-mi .vt-ft-ic svg { width:20px; height:20px; }
 .vt-ft-menu-cancel { margin:calc(var(--spacing) * 2) calc(var(--spacing) * 4) 0; height:44px; }
 
 /* ── 폰: 행 44 · 들여쓰기 16 · 아이콘 20 ───────────────────────────────────── */

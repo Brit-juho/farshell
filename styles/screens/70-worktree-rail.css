@@ -199,8 +199,9 @@
 #vt-wgrail.collapsed .vt-srow.vt-wgrail-row[data-state="done"] { --st0:var(--color-st-done); }
 #vt-wgrail.collapsed .vt-srow.vt-wgrail-row.is-waiting { background:var(--color-st-waiting-tint); box-shadow:none; --rb:color-mix(in srgb, var(--color-st-waiting) var(--waiting-tint-pct), var(--bar)); }
 /* 선택 칸은 상태색을 본문색 쪽으로 20% 당긴다 — 선택 틴트 위에서 notepad·vscode의 링이 3:1 아래로 내려가는 것을 막는다(tokens-contrast.test.js). */
-#vt-wgrail.collapsed .vt-srow.vt-wgrail-row.active { background:var(--color-acc-soft); box-shadow:none; --rb:color-mix(in srgb, var(--color-acc) var(--acc-soft-pct), var(--bar)); --st:color-mix(in srgb, var(--st0) 80%, var(--color-txt)); }
-#vt-wgrail.collapsed .vt-srow.vt-wgrail-row:hover { background:var(--color-bg-3); --rb:var(--color-bg-3); }
+#vt-wgrail.collapsed .vt-srow.vt-wgrail-row.active { background:var(--color-state-selected); box-shadow:none; --rb:color-mix(in srgb, var(--color-acc) var(--acc-soft-pct), var(--bar)); --st:color-mix(in srgb, var(--st0) 80%, var(--color-txt)); }
+#vt-wgrail.collapsed .vt-srow.vt-wgrail-row:hover { background:var(--color-state-hover); --rb:color-mix(in srgb, var(--state-ink) var(--state-hover-pct), var(--bar)); }
+#vt-wgrail.collapsed .vt-srow.vt-wgrail-row:active { background:var(--color-state-press); --rb:color-mix(in srgb, var(--state-ink) var(--state-press-pct), var(--bar)); }
 /* 상태 링 — 칸 안에 --ring(칸의 85%)으로 가운데. */
 #vt-wgrail.collapsed .vt-srow.vt-wgrail-row > .vt-srow-state.vt-wgrail-ring {
   position:absolute; left:50%; top:50%; width:var(--ring); height:var(--ring); margin:calc(var(--ring) / -2) 0 0 calc(var(--ring) / -2);
@@ -261,8 +262,8 @@
   color:var(--color-sub); font:var(--weight-medium) var(--fs-sm) / 1 var(--font-ui);
   text-align:left; cursor:pointer;
 }
-.vt-wgrail-new:hover { background:var(--color-bg-3); color:var(--color-txt); }
-.vt-wgrail-new:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
+.vt-wgrail-new:hover { background:var(--color-state-hover); color:var(--color-txt); }
+.vt-wgrail-new:active { background:var(--color-state-press); }
 #vt-wgrail.collapsed .vt-wgrail-footer { justify-content:center; padding:0; }
 #vt-wgrail.collapsed .vt-wgrail-new { flex:none; width:var(--vt-cell); height:32px; justify-content:center; padding:0; }
 .vt-wgrail-new-mark { display:inline-flex; flex:none; }
@@ -369,7 +370,8 @@
   border:1px solid var(--line); border-radius:4px; background:none;
   color:var(--color-txt); font:400 var(--fs-xs) var(--font-mono); cursor:pointer;
 }
-.vt-repovis-session:hover { background:var(--menu-hover); }
+.vt-repovis-session:hover { background:var(--color-state-hover); }
+.vt-repovis-session:active { background:var(--color-state-press); }
 .vt-repovis-add-wt { align-self:flex-start; }
 /* "왜 이것들이 목록에 있나"의 답. 읽기 전용이다 — ~/.vt.env의 단일 소유자는
    lib/vt_env.sh다(§3). */
@@ -443,7 +445,8 @@ label.vt-railset-row { cursor:pointer; }
   border:0; border-radius:var(--radius-sm); background:transparent; cursor:pointer;
   color:var(--color-muted); font:var(--weight-normal) var(--fs-3xs) / 1 var(--font-ui);
 }
-.vt-lin-fold-btn:hover { color:var(--color-sub); background:var(--menu-hover); }
+.vt-lin-fold-btn:hover { color:var(--color-sub); background:var(--color-state-hover); }
+.vt-lin-fold-btn:active { background:var(--color-state-press); }
 .vt-lin-fold-caret { display:inline-flex; transform:rotate(-90deg); transition:transform var(--dur-fast) var(--ease-out-quint); }
 .vt-lin-fold-btn[aria-expanded="true"] .vt-lin-fold-caret { transform:none; }
 /* 부모 행: 「하위 보고 1/2」 칩 겸 접기 토글. */
@@ -456,7 +459,6 @@ label.vt-railset-row { cursor:pointer; }
 .vt-srow-kids:hover { color:var(--color-txt); }
 .vt-srow-kids-caret { display:inline-flex; transition:transform var(--dur-fast) var(--ease-out-quint); }
 .vt-srow-kids.collapsed .vt-srow-kids-caret { transform:rotate(-90deg); }
-.vt-srow-kids:focus-visible, .vt-lin-fold-btn:focus-visible { outline:2px solid var(--color-acc); outline-offset:1px; }
 /* 하위 행의 위임 상태 키워드. */
 .vt-srow-lineage { flex:none; font-weight:var(--weight-medium); color:var(--color-st-working); }
 .vt-srow-lineage[data-lstate="reported"] { color:var(--color-st-done); }
@@ -472,7 +474,6 @@ label.vt-railset-row { cursor:pointer; }
   color:var(--color-muted); font:var(--weight-medium) var(--fs-3xs) / 1 var(--font-ui);
 }
 .vt-rail-sort-opt[aria-checked="true"] { background:var(--color-bg-3); color:var(--color-txt); }
-.vt-rail-sort-opt:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
 /* 수동 정렬 드롭 위치. */
 .vt-lin.drop-before::before, .vt-lin.drop-after::after {
   content:""; position:absolute; left:calc(var(--spacing) * 2); right:calc(var(--spacing) * 2); height:2px; z-index:1;
@@ -491,7 +492,7 @@ label.vt-railset-row { cursor:pointer; }
 .vt-fleet-edit-btn { flex:none; width:30px; height:30px; position:relative; }
 /* 시각 크기는 작게, 터치 영역은 44px로 넓힌다. */
 .vt-fleet-edit-btn::before { content:''; position:absolute; inset:50% auto auto 50%; width:44px; height:44px; transform:translate(-50%,-50%); }
-.vt-fleet-edit-btn.active { color:var(--acc); background:var(--menu-hover); }
+.vt-fleet-edit-btn.active { color:var(--acc); background:var(--color-state-hover); }
 .vt-fleet-order { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1.5); }
 .vt-fleet-group-head-sort .vt-rail-sort-opt { min-height:28px; padding:0 calc(var(--spacing) * 2.5); font-size:var(--fs-2xs); }
 
@@ -558,9 +559,9 @@ label.vt-railset-row { cursor:pointer; }
 #vt-wgrail .vt-wgrail-group-head + .vt-lin > .vt-srow,
 #vt-wgrail .vt-wgrail-group-head + .vt-catalog-stopped > .vt-srow,
 #vt-wgrail .vt-view-group-head + .vt-srow { box-shadow:none; }
-#vt-wgrail .vt-srow:hover { background:var(--color-bg-3); }
-#vt-wgrail .vt-srow:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
-#vt-wgrail .vt-srow.active { background:var(--color-acc-soft); box-shadow:inset 2px 0 0 var(--color-acc); }
+#vt-wgrail .vt-srow:hover { background:var(--color-state-hover); }
+#vt-wgrail .vt-srow:active { background:var(--color-state-press); }
+#vt-wgrail .vt-srow.active { background:var(--color-state-selected); box-shadow:inset 2px 0 0 var(--color-acc); }
 #vt-wgrail .vt-srow.is-waiting { background:var(--color-st-waiting-tint); box-shadow:inset 2px 0 0 var(--color-st-waiting); }
 #vt-wgrail .vt-srow > .vt-srow-state { flex:none; width:16px; height:var(--vt-line1); margin:0; justify-content:center; }
 #vt-wgrail .vt-srow-main { gap:2px; }

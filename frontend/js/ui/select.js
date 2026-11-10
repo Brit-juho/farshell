@@ -167,7 +167,7 @@ export function enhanceSelect(sel) {
     for (const child of Array.from(sel.children)) {
       if (child.tagName === 'OPTGROUP') {
         const head = document.createElement('div');
-        head.className = 'vt-dd-group';
+        head.className = 'vt-menu-label vt-dd-group';
         head.textContent = child.label;
         list.append(head);
         for (const o of Array.from(child.children)) if (o.tagName === 'OPTION') addOption(o, list);

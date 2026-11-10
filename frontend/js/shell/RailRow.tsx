@@ -443,7 +443,19 @@ export interface MenuItem {
   checked?: boolean;
   /** 되돌릴 수 없는 항목(종료). */
   danger?: boolean;
+  /** 항목 앞 14px 아이콘 이름(icons.js · icons-shell.js). 메뉴 한 규격(components.css)이 아이콘 칸을 둔다. */
+  icon?: string;
+  /** 위에 구분선을 긋는다. 생략하면 위험 항목(danger)만 — 첫 항목이 아닐 때 — 자동으로 선이 선다. */
+  sepBefore?: boolean;
 }
+
+/** 행 메뉴 항목 id → 아이콘. 레일 메뉴(Rail.tsx)와 폰 시트(Fleet.tsx)가 같이 쓴다. */
+export const ROW_MENU_ICON: Record<string, string> = {
+  open: 'play', close: 'x', rename: 'pencil', openOnMac: 'laptop', screens: 'monitor-smartphone',
+  kill: 'trash-2', splitRight: 'columns-2', splitDown: 'rows-2', sessionAccess: 'shield', share: 'share-read',
+  moveUp: 'arrow-up', moveDown: 'arrow-down', report: 'file-text', closeDelegation: 'x',
+  openParent: 'corner-down-left', record: 'history',
+};
 
 /** 레일과 모바일 시트가 공유하는 선택 불가 정보 헤더. */
 export function MenuSummary(props: { summary: string | RowSummaryDetails }) {
@@ -510,7 +522,8 @@ export function Menu(props: { x: number; y: number; onClose: () => void; items: 
         <MenuSummary summary={props.summary!} />
       </Show>
       <For each={props.items}>
-        {(it) => (
+        {(it, i) => (<>
+          <Show when={it.sepBefore ?? (!!it.danger && i() > 0)}><div class="vt-menu-sep" role="separator" /></Show>
           <div
             class="vt-menu-item"
             role="button" tabindex="0"
@@ -521,10 +534,11 @@ export function Menu(props: { x: number; y: number; onClose: () => void; items: 
             classList={{ dim: !!it.dim, checked: !!it.checked, danger: !!it.danger }}
             onClick={() => { props.onClose(); it.run(); }}
           >
+            <Show when={it.icon}><span class="vt-menu-item-ico" innerHTML={shellIcon(it.icon!, 14, 2)} /></Show>
             <span class="vt-menu-item-label">{it.checked ? '✓ ' : ''}{it.label}</span>
             <Show when={it.detail}><span class="vt-menu-item-detail">{it.detail}</span></Show>
           </div>
-        )}
+        </>)}
       </For>
     </div>
   );

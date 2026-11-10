@@ -275,7 +275,7 @@ test('활동 막대의 활성 항목이 hover와 같은 배경으로 표시되�
   const legacy = readScreens();
   const active = legacy.match(/\.vt-act\.active\s*\{([^}]*)\}/);
   assert.ok(active, '.vt-act.active 규칙이 없다');
-  assert.doesNotMatch(active[1], /background:var\(--menu-hover\)/,
+  assert.doesNotMatch(active[1], /background:var\(--color-state-hover\)/,
     'hover와 같은 배경이면 포인터 장치에서 활성 항목과 구분이 안 된다');
 });
 
@@ -529,6 +529,84 @@ test('done 점이 강조색과 다른 색이다 (ΔE ≥ 15, 9스킨)', () => {
   for (const [skin, t] of Object.entries(RAW)) {
     const d = deltaE(solidOf(t, '--color-st-done'), solidOf(t, '--color-acc'));
     if (d < 15) fails.push(`${skin} ΔE(done, acc) = ${d.toFixed(1)}`);
+  }
+  assert.deepStrictEqual(fails, [], fails.join('\n'));
+});
+
+// ── 2026-11 상호작용 상태 토큰(hover · 눌림 · 선택 · 선택 위 hover · waiting 위 hover · 포커스 링) ──
+//
+// 같은 기준이 scripts/check_contrast.py에도 있다(두 검사가 같은 숫자를 본다). 상태 면은 rest 면
+// 위에 반투명으로 얹히므로 바탕 4단(bg-0/1/2/raised) 각각과 합성해서 본다.
+
+const STATE_SURFACES = [
+  ['--color-state-hover', [6.0, 4.0, 2.9]],
+  ['--color-state-press', [5.0, 3.5, 2.5]],
+  ['--color-state-selected-hover', [6.0, 4.0, 2.9]],
+  ['--color-state-selected-press', [5.0, 3.5, 2.5]],
+  ['--color-state-waiting-hover', [6.0, 4.0, 2.9]],
+  ['--color-state-waiting-press', [5.0, 3.5, 2.5]],
+];
+const STATE_BGS = ['--color-bg-0', '--color-bg-1', '--color-bg-2', '--color-bg-raised'];
+
+test('상태 토큰이 9스킨 전부에서 색으로 풀린다', () => {
+  const names = ['--color-state-hover', '--color-state-press', '--color-state-selected',
+    '--color-state-selected-hover', '--color-state-selected-press', '--color-state-waiting-hover',
+    '--color-state-waiting-press', '--color-focus-ring'];
+  const fails = [];
+  for (const [skin, t] of Object.entries(RAW)) {
+    for (const n of names) if (!rgbaOf(t, n)) fails.push(`${skin} ${n}`);
+  }
+  assert.deepStrictEqual(fails, [], fails.join('\n'));
+});
+
+test('hover·눌림·선택 위 hover·waiting 위 hover 면에서 txt/sub/muted가 기준을 넘는다 (9스킨 × 바탕 4단)', () => {
+  const fails = [];
+  let checked = 0;
+  for (const [skin, t] of Object.entries(RAW)) {
+    for (const [sf, mins] of STATE_SURFACES) {
+      for (const bg of STATE_BGS) {
+        ['--color-txt', '--color-sub', '--color-muted'].forEach((fg, i) => {
+          const r = ratioOn(t, fg, sf, bg);
+          checked += 1;
+          if (r < mins[i]) fails.push(`${skin} ${fg} on ${sf}(${bg}) = ${r.toFixed(2)} < ${mins[i]}`);
+        });
+      }
+    }
+  }
+  assert.strictEqual(checked, 9 * STATE_SURFACES.length * 4 * 3);
+  assert.deepStrictEqual(fails, [], fails.join('\n'));
+});
+
+test('hover 면이 바탕에서 보이고(대비비 ≥ 1.08), 단계끼리 눈으로 갈라진다 (ΔE)', () => {
+  const fails = [];
+  for (const [skin, t] of Object.entries(RAW)) {
+    for (const bg of STATE_BGS) {
+      const r = contrast(solidOf(t, '--color-state-hover', bg), solidOf(t, bg));
+      if (r < 1.08) fails.push(`${skin} hover on ${bg} = ${r.toFixed(3)} < 1.08`);
+    }
+    const on1 = (n) => solidOf(t, n, '--color-bg-1');
+    for (const [a, b, min, label] of [
+      ['--color-state-hover', '--color-state-press', 4.0, 'hover ≠ 눌림'],
+      ['--color-state-hover', '--color-state-selected', 5.0, 'hover ≠ 선택'],
+      ['--color-state-selected', '--color-state-selected-hover', 3.0, '선택 ≠ 선택 위 hover'],
+      ['--color-st-waiting-tint', '--color-state-waiting-hover', 3.0, 'waiting ≠ waiting 위 hover'],
+    ]) {
+      const d = deltaE(on1(a), on1(b));
+      if (d < min) fails.push(`${skin} ${label} ΔE ${d.toFixed(1)} < ${min}`);
+    }
+  }
+  assert.deepStrictEqual(fails, [], fails.join('\n'));
+});
+
+test('포커스 링이 바탕 4단과 모든 상태 면 위에서 3:1을 넘는다 (WCAG 1.4.11)', () => {
+  const fails = [];
+  for (const [skin, t] of Object.entries(RAW)) {
+    const ring = solidOf(t, '--color-focus-ring');
+    const on = [...STATE_BGS, ...STATE_SURFACES.map(([n]) => n), '--color-acc-soft', '--color-st-waiting-tint'];
+    for (const bg of on) {
+      const r = contrast(ring, solidOf(t, bg, '--color-bg-1'));
+      if (r < 3) fails.push(`${skin} focus-ring on ${bg} = ${r.toFixed(2)} < 3`);
+    }
   }
   assert.deepStrictEqual(fails, [], fails.join('\n'));
 });

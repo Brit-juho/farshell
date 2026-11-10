@@ -29,6 +29,7 @@ import { updateSessionPicker } from '../picker.js';
 import { setPaneSession, revealSessionPane, openLayoutTab, clearSessionFromLayout, replaceSessionId } from '../layout/store.js';
 import { saveLayoutNow } from '../layout/persist.js';
 import { t } from '../core/i18n.js';
+import { icon } from '../ui/icons.js';
 
 // opts.place — 새 세션을 어디에 놓나(addSession 주석). 기본은 새 단독 뷰.
 export async function createSession({ place = 'view' } = {}) {
@@ -85,17 +86,47 @@ export function showAddMenu(el, e) {
   menu.id = 'add-menu';
   menu.className = 'vt-menu';
   // 누른 버튼 바로 아래에 정렬 (기본 .vt-menu는 우측 고정이라 left로 재배치)
-  const r = el ? el.getBoundingClientRect() : { left: 8, bottom: 44 };
+  const r = el ? el.getBoundingClientRect() : { left: 8, right: 8, top: 44, bottom: 44 };
+  // 사이드바 머리의 「+」는 바로 밑에 「이름순」 같은 조작 줄이 붙어 있어, 아래로 펼치면 그 줄을 덮는다
+  // (2026-11 화면 점검). 머리 막대의 버튼이면 사이드바 바깥(오른쪽)으로 연다.
+  const inHead = !!(el && el.closest && el.closest('.vt-wgrail-head'));
   menu.style.right = 'auto';
-  menu.style.left = `${Math.round(r.left)}px`;
-  menu.style.top = `${Math.round(r.bottom + 6)}px`;
-  menu.style.minWidth = '200px';
+  // 머리 막대 오른쪽에는 접기 버튼이 더 있으므로 버튼이 아니라 **사이드바 패널의 오른쪽 가장자리**를 기준으로 연다.
+  const panelRight = inHead ? (el.closest('.vt-sidepanel') || el).getBoundingClientRect().right : 0;
+  menu.style.left = `${Math.round(inHead ? panelRight + 6 : r.left)}px`;
+  menu.style.top = `${Math.round(inHead ? r.top : r.bottom + 6)}px`;
 
+  // 항목은 메뉴 한 규격(.vt-menu-item.two — components.css): 아이콘 14 + 이름 + 보조 설명.
+  const ICONS = new Map([[createPlainSession, 'terminal'], [createTmuxSession, 'square-terminal']]);
   const mkItem = (label, hint, onClick) => {
     const it = document.createElement('div');
-    it.className = 'vt-menu-item';
-    it.innerHTML = `<div>${label}</div><div style="opacity:.55;font-size:11px;margin-top:2px;">${hint}</div>`;
-    it.onclick = () => { menu.remove(); onClick(); };
+    it.className = 'vt-menu-item two';
+    it.setAttribute('role', 'button');
+    it.tabIndex = 0;
+    const ico = document.createElement('span');
+    ico.className = 'vt-menu-item-ico';
+    ico.innerHTML = icon(ICONS.get(onClick) || 'terminal', 14, 2);
+    const body = document.createElement('span');
+    body.className = 'vt-menu-item-body';
+    const name = document.createElement('span');
+    name.className = 'vt-menu-item-label';
+    name.textContent = label;
+    const sub = document.createElement('span');
+    sub.className = 'vt-menu-item-sub';
+    sub.textContent = hint;
+    body.append(name, sub);
+    it.append(ico, body);
+    const run = () => { menu.remove(); onClick(); };
+    it.onclick = run;
+    it.onkeydown = (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); run(); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); menu.remove(); el?.focus?.(); }
+      else if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+        ev.preventDefault();
+        const all = [...menu.querySelectorAll('.vt-menu-item')];
+        all[(all.indexOf(it) + (ev.key === 'ArrowDown' ? 1 : -1) + all.length) % all.length]?.focus();
+      }
+    };
     return it;
   };
   menu.appendChild(mkItem(t('일반 터미널'), t('단발 셸 (tmux 아님)'), createPlainSession));
@@ -105,9 +136,14 @@ export function showAddMenu(el, e) {
   // 레일 하단 버튼처럼 뷰포트 맨 아래에 붙은 경우, 아래로 펼치면 body의
   // overflow:hidden에 잘려 안 보인다 — 실제 높이를 측정해 필요하면 위로 뒤집는다.
   const menuHeight = menu.offsetHeight;
-  if (r.bottom + 6 + menuHeight > window.innerHeight) {
+  if (!inHead && r.bottom + 6 + menuHeight > window.innerHeight) {
     menu.style.top = `${Math.round(r.top - menuHeight - 6)}px`;
   }
+  // 뷰포트 안으로 당긴다(오른쪽·아래로 넘치지 않게).
+  const rect = menu.getBoundingClientRect();
+  if (rect.right > window.innerWidth - 8) menu.style.left = `${Math.max(8, Math.round(window.innerWidth - 8 - rect.width))}px`;
+  if (rect.bottom > window.innerHeight - 8) menu.style.top = `${Math.max(8, Math.round(window.innerHeight - 8 - rect.height))}px`;
+  menu.querySelector('.vt-menu-item')?.focus();
 
   setTimeout(() => {
     document.addEventListener('click', function _close(ev) {

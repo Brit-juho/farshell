@@ -50,12 +50,12 @@ export function StoppedRow(p: { session: any; workspaces: any[]; onOpen: () => v
   const recheck = () => run(async () => { const r = await recheckCatalog(); if (!r.complete) throw new Error(t('아직 터미널 상태를 읽지 못했습니다. 잠시 뒤 다시 시도하세요')); });
   const items = (): MenuItem[] => {
     const out: MenuItem[] = [];
-    if (resumable()) out.push({ label: t('이어서 시작'), run: () => { void run(() => resumeSession(s().id)); } });
-    if (s().archived) out.push({ label: t('보관 해제'), run: () => { void run(() => setSessionArchived(s(), false)); } });
-    out.push({ label: t('작업 기록'), run: p.onOpen });
-    out.push({ label: t('이름 변경'), run: () => { void run(() => renameSession(s())); } });
-    if (!s().archived && s().ended != null) out.push({ label: t('세션 보관'), run: () => { void run(() => setSessionArchived(s(), true)); } });
-    if (s().archived) out.push({ label: t('삭제'), detail: t('되돌릴 수 없음'), danger: true, run: () => { void run(() => deleteSession(s())); } });
+    if (resumable()) out.push({ icon: 'play', label: t('이어서 시작'), run: () => { void run(() => resumeSession(s().id)); } });
+    if (s().archived) out.push({ icon: 'archive', label: t('보관 해제'), run: () => { void run(() => setSessionArchived(s(), false)); } });
+    out.push({ icon: 'history', label: t('작업 기록'), run: p.onOpen });
+    out.push({ icon: 'pencil', label: t('이름 변경'), run: () => { void run(() => renameSession(s())); } });
+    if (!s().archived && s().ended != null) out.push({ icon: 'archive', label: t('세션 보관'), run: () => { void run(() => setSessionArchived(s(), true)); } });
+    if (s().archived) out.push({ icon: 'trash-2', label: t('삭제'), detail: t('되돌릴 수 없음'), danger: true, run: () => { void run(() => deleteSession(s())); } });
     return out;
   };
   const openMenu = (e: MouseEvent) => {
