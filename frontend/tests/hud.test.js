@@ -303,7 +303,7 @@ test('parseHudLayout: 비었거나 깨졌으면 기본 배치, 모르는 종류�
     assert.deepStrictEqual(plain(parseHudLayout(bad)), plain(DEFAULT_HUD_LAYOUT), `입력: ${String(bad)}`);
   }
   assert.deepStrictEqual(
-    plain(parseHudLayout('{"v":2,"left":["cpu","nope",7,"cpu"],"right":["cpu","version","version"]}')),
+    plain(parseHudLayout('{"v":4,"left":["cpu","nope",7,"cpu"],"right":["cpu","version","version"]}')),
     { left: ['cpu'], right: ['version'] },
     '먼저 나온 쪽만 남고 모르는 종류는 버려진다');
   assert.deepStrictEqual(plain(parseHudLayout('{"left":[],"right":[]}')), { left: [], right: [] },
@@ -316,16 +316,117 @@ test('parseHudLayout: 메뉴바 이전(세대 표시 없음)에 저장된 배치
   const plain = (l) => JSON.parse(JSON.stringify(l));
   const legacy = '{"left":["screens"],"right":["cpu","version"]}';
   assert.deepStrictEqual(plain(parseHudLayout(legacy)),
-    { left: ['screens'], right: ['cpu', 'version', 'push', 'clock'] },
-    'push·clock은 오른쪽 끝(에이전트는 배치 밖 고정이라 얹지 않는다)');
+    { left: ['screens'], right: ['cpu', 'version', 'push', 'clock', 'account'] },
+    'push·clock·account는 오른쪽 끝(에이전트는 배치 밖 고정이라 얹지 않는다)');
   // 이미 직접 배치해 둔 새 종류는 건드리지 않는다.
   assert.deepStrictEqual(plain(parseHudLayout('{"left":["screens"],"right":["clock","cpu"]}')),
-    { left: ['screens'], right: ['clock', 'cpu', 'push'] });
+    { left: ['screens'], right: ['clock', 'cpu', 'push', 'account'] });
   // 한 번 저장하면 세대가 적혀서 다시 얹지 않는다 — 사용자가 새 칩을 끈 선택이 되살아나지 않는다.
   const saved = serializeHudLayout(parseHudLayout(legacy));
-  assert.strictEqual(JSON.parse(saved).v, 3);
+  assert.strictEqual(JSON.parse(saved).v, 4);
   const off = serializeHudLayout({ left: ['screens'], right: ['cpu'] });
   assert.deepStrictEqual(plain(parseHudLayout(off)), { left: ['screens'], right: ['cpu'] });
+});
+
+test('세대 4: 계정 칩은 세대 3 이하 배치를 읽을 때 「사용량」 앞에 한 번 얹힌다 — 전부 끈 배치·이미 4인 배치는 그대로', async () => {
+  const { parseHudLayout, serializeHudLayout } = await mod();
+  const plain = (l) => JSON.parse(JSON.stringify(l));
+  assert.deepStrictEqual(plain(parseHudLayout('{"v":3,"left":["screens"],"right":["cpu","usage","clock"]}')),
+    { left: ['screens'], right: ['cpu', 'account', 'usage', 'clock'] });
+  assert.deepStrictEqual(plain(parseHudLayout('{"v":3,"left":[],"right":["cpu"]}')), { left: [], right: ['cpu', 'account'] }, '사용량을 끈 배치는 오른쪽 끝');
+  assert.deepStrictEqual(plain(parseHudLayout('{"v":3,"left":[],"right":[]}')), { left: [], right: [] }, '전부 끈 배치는 사용자의 선택이다');
+  assert.deepStrictEqual(plain(parseHudLayout('{"v":4,"left":[],"right":["cpu","usage"]}')), { left: [], right: ['cpu', 'usage'] }, '세대 4에서 계정 칩을 끈 선택은 되살아나지 않는다');
+  assert.deepStrictEqual(plain(parseHudLayout('{"v":3,"left":["account"],"right":["usage"]}')), { left: ['account'], right: ['usage'] }, '이미 둔 자리는 건드리지 않는다');
+  assert.strictEqual(JSON.parse(serializeHudLayout({ left: [], right: ['account'] })).v, 4);
+});
+
+// 계정 칩 — 기본 계정 이름 + 가장 많이 쓴 창 사용률. 계정이 없으면 칩이 없다.
+const ACC = (over = {}) => ({
+  ok: true,
+  profiles: [
+    { id: 'a1', name: 'alice', tool: 'claude', auth: 'ok', selectable: true, reason: null,
+      usage: { windows: [{ id: 'five_hour', label: '5h', pct: 23.4, resetsInSec: 11400 }, { id: 'seven_day', label: 'weekly', pct: 9, resetsInSec: 90000 }], checkedAt: 1000, stale: false, source: 'statusline' } },
+    { id: 'b1', name: 'work', tool: 'codex', auth: 'ok', selectable: true, reason: null,
+      usage: { windows: [{ id: 'primary', label: '5h', pct: 91, resetsInSec: 600 }], checkedAt: 1000, stale: false, source: 'app-server' } },
+    { id: 'c1', name: 'spare', tool: 'claude', auth: 'missing', selectable: false, reason: 'not signed in', usage: null },
+  ],
+  defaults: {},
+  ...over,
+});
+
+test('계정 칩: 계정이 없거나 목록을 못 받았으면 칩이 없다', async () => {
+  const { buildHudChips } = await mod();
+  assert.deepStrictEqual(ids(buildHudChips({ accounts: null })), []);
+  assert.deepStrictEqual(ids(buildHudChips({ accounts: { ok: false, profiles: [], defaults: {} } })), []);
+  assert.deepStrictEqual(ids(buildHudChips({ accounts: { ok: true, profiles: [], defaults: {} } })), []);
+});
+
+test('계정 칩: 계정은 있는데 기본이 없으면 「계정 지정 안 함」, 누르면 선택기', async () => {
+  const { buildHudChips } = await mod();
+  const [chip, ...rest] = Array.from(buildHudChips({ accounts: ACC() }));
+  assert.strictEqual(rest.length, 0);
+  assert.strictEqual(chip.id, 'account');
+  assert.strictEqual(chip.label, '계정 지정 안 함');
+  assert.strictEqual(chip.action, 'account.pick');
+  assert.strictEqual(chip.caret, true);
+  assert.strictEqual(chip.tone, 'plain');
+  assert.ok(!chip.value);
+});
+
+test('계정 칩: 기본이 하나면 칩 하나 — 이름 · 가장 많이 쓴 창 사용률 · 리셋, 도구 이름은 앞에 안 붙인다', async () => {
+  const { buildHudChips } = await mod();
+  const [chip, ...rest] = Array.from(buildHudChips({ accounts: ACC({ defaults: { claude: { id: 'a1', valid: true } } }), now: 1000 * 1000 }, { left: [], right: ['account'] }));
+  assert.strictEqual(rest.length, 0);
+  assert.strictEqual(chip.id, 'account:claude');
+  assert.strictEqual(chip.label, 'alice');
+  assert.strictEqual(chip.value, '5h 23%');
+  assert.strictEqual(chip.hint, '· 3h10m');
+  assert.strictEqual(chip.tone, 'plain');
+  assert.match(chip.tooltip, /Claude 기본 계정: alice/);
+  assert.match(chip.tooltip, /출처 statusline/);
+  assert.match(chip.tooltip, /누르면 기본 계정을 바꿉니다/);
+});
+
+test('계정 칩: Claude·Codex 둘 다 기본이면 칩 둘 — 도구 이름을 앞에 붙이고 칩마다 자기 사용률 색을 쓴다', async () => {
+  const { buildHudChips } = await mod();
+  const chips = Array.from(buildHudChips({ accounts: ACC({ defaults: { claude: { id: 'a1', valid: true }, codex: { id: 'b1', valid: true } } }) }));
+  assert.deepStrictEqual(chips.map((c) => `${c.id}|${c.label}|${c.value}|${c.tone}|${c.priority}`),
+    ['account:claude|Claude alice|5h 23%|plain|4', 'account:codex|Codex work|5h 91%|err|2']);
+});
+
+test('계정 칩: 사용률 색은 사용량 칩과 같다 — 75% 주의, 90% 경고, 값이 없으면 이름만', async () => {
+  const { buildHudChips } = await mod();
+  const withPct = (pct) => {
+    const acc = ACC({ defaults: { claude: { id: 'a1', valid: true } } });
+    acc.profiles[0].usage.windows = [{ id: 'five_hour', label: '5h', pct, resetsInSec: null }];
+    return Array.from(buildHudChips({ accounts: acc }))[0];
+  };
+  assert.strictEqual(withPct(74.4).tone, 'plain');
+  assert.strictEqual(withPct(75).tone, 'warn');
+  assert.strictEqual(withPct(89.4).tone, 'warn', '사용량 칩처럼 반올림한 값으로 본다');
+  assert.strictEqual(withPct(90).tone, 'err');
+  assert.strictEqual(withPct(75).priority, 2, '임박하면 순위가 앞으로 온다');
+  const none = ACC({ defaults: { claude: { id: 'a1', valid: true } } });
+  none.profiles[0].usage = null;
+  const [chip] = Array.from(buildHudChips({ accounts: none }));
+  assert.strictEqual(chip.label, 'alice');
+  assert.ok(!chip.value && !chip.hint, '값을 지어내지 않는다');
+});
+
+test('계정 칩: 기본 계정이 로그인 안 됐거나 사라졌으면 주의 색으로 사유를 적는다', async () => {
+  const { buildHudChips } = await mod();
+  const [out] = Array.from(buildHudChips({ accounts: ACC({ defaults: { claude: { id: 'c1', valid: true } } }) }));
+  assert.deepStrictEqual([out.label, out.value, out.tone], ['spare', '로그인 안 됨', 'warn']);
+  const [gone] = Array.from(buildHudChips({ accounts: ACC({ defaults: { claude: { id: 'zzz', valid: false } } }) }));
+  assert.deepStrictEqual([gone.label, gone.value, gone.tone], ['알 수 없음', '기본 계정을 찾을 수 없음', 'warn']);
+});
+
+test('계정 칩: 배치(account 종류)를 따른다 — 기본은 오른쪽 「사용량」 앞, 배치에서 빼면 사라진다', async () => {
+  const { buildHudChips, DEFAULT_HUD_LAYOUT } = await mod();
+  const input = { accounts: ACC({ defaults: { claude: { id: 'a1', valid: true } } }), usage: { available: true, profiles: [{ name: 'alice', windows: [{ label: '5h', pct: 10 }] }] } };
+  assert.deepStrictEqual(ids(buildHudChips(input)), ['account:claude', 'usage:alice']);
+  assert.ok(Array.from(DEFAULT_HUD_LAYOUT.right).includes('account'));
+  assert.deepStrictEqual(ids(buildHudChips(input, { left: [], right: ['usage'] })), ['usage:alice']);
 });
 
 test('세대 3: 에이전트 칩은 배치 밖 고정 — 옛 배치의 agents는 버리고, 옮길 수 없고, 늘 맨 왼쪽이다', async () => {
@@ -334,7 +435,7 @@ test('세대 3: 에이전트 칩은 배치 밖 고정 — 옛 배치의 agents�
   assert.deepStrictEqual(Array.from(PINNED_HUD_KINDS), ['agents']);
   assert.ok(!Array.from(HUD_KINDS).includes('agents'), '설정 화면이 옮기는 종류에 없다');
   // 세대 2에서 사용자가 오른쪽 끝으로 옮겼거나 껐던 agents — 읽을 때 버린다(그래도 칩은 맨 왼쪽에 나온다).
-  assert.deepStrictEqual(plain(parseHudLayout('{"v":2,"left":["screens"],"right":["cpu","agents"]}')),
+  assert.deepStrictEqual(plain(parseHudLayout('{"v":4,"left":["screens"],"right":["cpu","agents"]}')),
     { left: ['screens'], right: ['cpu'] });
   const base = { left: ['screens'], right: ['cpu'] };
   assert.strictEqual(moveHudKind(base, 'agents', 'right', 0), base, '고정 종류는 어떤 경로로도 안 움직인다');

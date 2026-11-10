@@ -754,6 +754,17 @@ default), a spacer, and the right chips (CPU · GPU · RAM · NET · usage · No
 unavailable) and **`clock`** (date + 24-hour time, rebuilt only when the minute changes). Clickable chips are
 `role="button"` with Enter/Space.
 
+**Account chip (`account`, `hud-data.ts` `accountChips`).** Shows the current default account and its most-used usage window
+(`alice 5h 23% · 3h10m ▾`), right side, ahead of the usage chips; clicking opens the account chooser **above** the chip as a
+«set as default» menu (`term/accounts-ui.js` `openAccountMenu({mode:'default', placement:'above'})`, a menu in the Hud chunk, not a core
+action). Rules: no registered account (or viewing another Mac) → no chip; accounts but no default → `계정 지정 안 함 ▾`; one tool
+with a default → one chip, name only; Claude and Codex both have defaults → two chips, tool name prefixed (`Claude alice …`,
+`Codex lab …`). Usage tone is the usage chip's (≥75% warn, ≥90% err; rounded value), priority 4 → 2 when alerting; a default that
+is signed out or gone is warn-toned with the reason. Data = `/api/agent-profiles/read/picker` (15 s cache, one call per HUD poll);
+the chip refreshes at once on the `vt:accounts-changed` window event that `setDefaultAccount` fires. Choosing the default account
+is a **setting**, not part of creating a session: the «+ New session» menu keeps only «Another account, this time only»
+(default account shown as its sub text) and the palette's «Change default account» row opens Settings › Account.
+
 Polled every 30s (CPU/network every 3s, connected screens every 5s), plus immediate refresh on `/ws-notify`
 events. A chip with no value is **hidden** (no usage provider → no chip). Reset wording appears in tooltips; GPU
 chips show only usage.
@@ -761,7 +772,7 @@ chips show only usage.
 **Which chips show, on which side and in what order is the user's choice**
 (Settings → Status bar · activity bar (상태 막대 · 활동 막대); device-scoped `ui.hud.layout`, JSON
 `{"v":3,"left":[…],"right":[…]}`). The unit is a *kind* (`server`, `screens`, `e2e`, `safe-mode`,
-`cpu`, `gpu`, `ram`, `net`, `usage`, `version`, `push`, `clock`), not a chip id — usage profiles come and go,
+`cpu`, `gpu`, `ram`, `net`, `account`, `usage`, `version`, `push`, `clock`), not a chip id — usage profiles come and go,
 so the setting names «usage» once. A kind that is in neither list is hidden, so a new kind
 starts off until someone turns it on. The default layout leaves out `server`: seeing the
 screen already proves the server is up. The rules (parse, move, step) live in
@@ -773,9 +784,10 @@ edits the layout three ways — drag, a position select and up/down buttons — 
 preview with sample values (the status bar as it will look, agents chip first), and is hidden in compact
 (there is no status bar there). The settings section is **Status bar · activity bar** (id `hud`). The agents chip is
 `PINNED_HUD_KINDS` — shown at the top of Left (왼쪽) with a Pinned (고정) tag, no grip, select or arrows. The saved layout
-carries a generation (`{"v":3,…}`): a layout without `v` gets the newer kinds (`push`, `clock`) added once at their
+carries a generation (`{"v":4,…}`): a layout without `v` gets the newer kinds (`push`, `clock`) added once at their
 default places when it is read (not an all-off layout, which is a choice); from generation 3 an `agents` entry in
-an old layout is dropped on read (it is pinned now); saving writes `v`.
+an old layout is dropped on read (it is pinned now); a layout older than generation 4 gets `account` once, just before `usage`
+(or at the right end); saving writes `v`.
 
 **"No value" hides a chip; "no room" drops the least important one.** These are
 two different axes. The first is `buildHudChips` declining to emit a chip. The
@@ -970,6 +982,14 @@ and the accent edge bands (left 4, top/bottom 3) — that follows Show bars at s
 (가장자리 반응 시간) and explains them in the caption; it never turns focus mode on. Status bar · activity bar (상태 막대 · 활동 막대) (O05) lays its three zones
 side by side above 720px with 32px item tiles and puts Activity bar order (활동 막대 순서) in the right column; Account and security (계정 및 보안) (O06) draws the device table with a 28 head and
 48 rows, this device on the selection tint.
+
+**Account (`accounts`, `settings/sections/accounts.js`).** Between Agents and Keymap, desktop and phone alike (on a phone it is
+the only place to change the default account — there is no status bar). One group per tool (`Claude 기본 계정`, `Codex 기본 계정`),
+one standard `.vt-set-row` per profile: name + a `기본` tag on the default (or the sign-in state tag when not `ok`), help lines
+for usage · reset (toned warn/err by the chip's thresholds) and source · updated-at, and a `.vt-btn.sm` on the right (`기본으로 지정`,
+`해제` on the default; disabled with the reason when the profile is not usable). Last group «Add accounts» holds the
+«register only your own accounts» note and a link to the run-profile manager (MCP window › 실행 프로필, `showMcp('profiles')`). Values are
+the server's picker list as is — unknown stays «알 수 없음», nothing is auto-picked.
 
 **Three settings, three icons.** Settings (설정) = gear (reached from the FarShell menu, `Mod+,` and the activity bar's bottom gear), Rail settings (세션 목록 설정) = `sliders-horizontal` (rail header), Status bar settings (상태 막대 설정) = `panel-top` (FarShell menu item).
 

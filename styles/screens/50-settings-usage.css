@@ -110,6 +110,10 @@
    align-items:flex-start로 버튼이 행 전체 폭으로 안 늘어나게 한다. */
 .vt-set-logoutrow { display:flex; flex-direction:column; align-items:flex-start; gap:calc(var(--spacing) * 1.5); }
 .vt-set-logoutrow .vt-set-help { margin-top:0; }
+.vt-set-accounts-note { margin-top:4px; }
+.vt-settings .vt-set-help.vt-set-accounts-note { margin-top:4px; padding-bottom:0; }
+.vt-set-help[data-tone="warn"] { color:var(--warn); }
+.vt-set-help[data-tone="err"] { color:var(--err); }
 .vt-set-default {
   display:block; margin-top:6px; padding:0; border:0; background:transparent;
   color:var(--acc); font:500 var(--fs-xs) var(--ui); cursor:pointer;

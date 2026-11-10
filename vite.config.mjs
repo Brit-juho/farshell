@@ -157,6 +157,10 @@ function chunkOf(id) {
     if (p.endsWith('/frontend/js/snippets-util.js')) return 'settings';
     // 시스템 패널 — panels/system-lazy.js(core 스텁)가 열 때만 지연 import한다.
     if (p.endsWith('/frontend/js/panels/system.js')) return 'panels';
+    // 계정 선택기 메뉴·기본 계정 변경(accounts-ui)과 줄 글(accounts-text) — 상태 막대 칩(shell)·설정 「계정」(settings)·「+ 새 세션」 메뉴의
+    // 「이번만 다른 계정으로」(core → import())만 쓴다. 규칙이 없으면 포괄 규칙이 core로 보내 초기 페이로드가 는다.
+    if (p.endsWith('/frontend/js/term/accounts-ui.js')) return 'shell';
+    if (p.endsWith('/frontend/js/term/accounts-text.js')) return 'shell';
     // 숫자 스피너 — shell(Solid) 청크와 settings 청크만 쓴다. 둘 다 core를 거치지 않고 shell을 먼저 받는다.
     if (p.endsWith('/frontend/js/ui/number-spinner.js')) return 'shell';
     // 모달 뼈대(panels/panel.js)와 확인·입력·알림 대화상자 본체(core/dialog.js) — 부팅에 필요 없다.

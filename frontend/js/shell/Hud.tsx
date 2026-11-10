@@ -18,6 +18,9 @@ import { buildHudChips, parseHudLayout, type AgentCounts, type HudChip, type Hud
 // core/poll.js는 상태를 갖지 않는 순수 모듈이라 이 지연 청크에 복제돼도 문제없다(위 ⚠의 예외).
 import { createPoll, isStale } from '../core/poll.js';
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
+import { icon } from '../ui/icons.js';
+import { loadAccounts, accountsSnapshot } from '../term/accounts.js';
+import { openAccountMenu, ACCOUNTS_CHANGED } from '../term/accounts-ui.js';
 
 const POLL_MS = 30000;
 const SCREEN_POLL_MS = 5000;
@@ -84,6 +87,8 @@ async function collect(deps: HudDeps): Promise<HudInput> {
     deps.pushState
       ? withTimeout(deps.pushState(), PUSH_STATE_TIMEOUT_MS, 'unavailable' as const)
       : Promise.resolve(null),
+    // 계정 칩 — 선택기 목록(15초 캐시). 실패·다른 맥을 보는 중이면 「계정 없음」이라 칩이 안 그려진다.
+    loadAccounts().catch(() => null),
   ] as const);
   const val = <T,>(r: PromiseSettledResult<T>): T | null => (r.status === 'fulfilled' ? r.value : null);
   const caps = val(settled[0]);
@@ -93,6 +98,7 @@ async function collect(deps: HudDeps): Promise<HudInput> {
   const stats = val(settled[4]);
   const hooksStatus = val(settled[5]);
   const push = val(settled[6]);
+  const accounts = val(settled[7]);
 
   return {
     push,
@@ -101,6 +107,7 @@ async function collect(deps: HudDeps): Promise<HudInput> {
     e2e: deps.e2eEnabled,
     safeMode,
     usage,
+    accounts,
     screens: clients?.clients?.length ?? null,
     stats,
     hooks: hooksStatus?.health
@@ -111,9 +118,14 @@ async function collect(deps: HudDeps): Promise<HudInput> {
 
 function Chip(props: { chip: HudChip; deps: HudDeps }) {
   const clickable = () => !!props.chip.action;
-  const fire = () => {
+  const fire = (e: Event) => {
     const id = props.chip.action;
     if (!id) return;
+    // 계정 칩 — 선택기는 이 청크 안의 메뉴라 core 액션을 거치지 않는다(core 예산). 칩 위로 펼친다.
+    if (id === 'account.pick') {
+      void openAccountMenu({ mode: 'default', anchor: e.currentTarget as HTMLElement, placement: 'above' });
+      return;
+    }
     const fn = props.deps.getAction(id);
     if (typeof fn === 'function') (fn as (arg?: string) => void)(props.chip.actionArg);
   };
@@ -128,7 +140,7 @@ function Chip(props: { chip: HudChip; deps: HudDeps }) {
       data-priority={props.chip.priority}
       onClick={clickable() ? fire : undefined}
       onKeyDown={clickable() ? (e: KeyboardEvent) => {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fire(); }
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fire(e); }
       } : undefined}
       role={clickable() ? 'button' : undefined}
       tabindex={clickable() ? 0 : undefined}
@@ -144,6 +156,9 @@ function Chip(props: { chip: HudChip; deps: HudDeps }) {
       </Show>
       <Show when={props.chip.hint}>
         <span class="vt-hud-hint">{props.chip.hint}</span>
+      </Show>
+      <Show when={props.chip.caret}>
+        <span class="vt-hud-caret" aria-hidden="true" innerHTML={icon('chevron-down', 10, 2)} />
       </Show>
     </span>
   );
@@ -292,6 +307,16 @@ function Hud(props: { deps: HudDeps; root: HTMLElement }) {
   };
   props.root.addEventListener('click', onPushClick);
   onCleanup(() => props.root.removeEventListener('click', onPushClick));
+
+  // 기본 계정이 다른 화면(설정 › 계정·선택기)에서 바뀌면 30초를 기다리지 않고 칩을 다시 만든다.
+  const onAccounts = () => {
+    if (!snapshot) return;
+    const acc = accountsSnapshot();
+    snapshot = { ...snapshot, accounts: acc.ok ? acc : null };
+    publish();
+  };
+  window.addEventListener(ACCOUNTS_CHANGED, onAccounts);
+  onCleanup(() => window.removeEventListener(ACCOUNTS_CHANGED, onAccounts));
 
   // attach/detach는 사용량보다 빨리 변한다. 다른 HUD 데이터의 30초 주기는
   // 유지하고 화면 수만 목록 패널과 같은 5초 간격으로 갱신한다.

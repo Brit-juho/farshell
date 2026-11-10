@@ -4287,11 +4287,20 @@ def test_계정을_고르면_그_세션_환경에만_고른_폴더가_들어가�
     try:
         page.reload()
         _boot(page, f"{base}/")
-        # 1) 기본 계정 바꾸기 — 메뉴 → 선택기 → alice
+        # 1) 기본 계정 지정 — 상태 막대의 계정 칩(기본이 없으면 「계정 지정 안 함」) → 선택기 → alice.
+        #    「+ 새 세션」 메뉴에는 「기본 계정 바꾸기」가 없다(그건 설정이다).
+        chip = page.locator('#vt-hud .vt-hud-chip[data-chip="account"]')
+        chip.wait_for(timeout=15000)
+        assert "계정 지정 안 함" in chip.inner_text()
         _new_session_menu(page)
-        page.locator("#add-menu .vt-menu-item", has_text="기본 계정 바꾸기").click()
+        assert page.locator("#add-menu .vt-menu-item", has_text="기본 계정 바꾸기").count() == 0
+        page.locator("#add-menu .vt-menu-item", has_text="이번만 다른 계정으로").wait_for()
+        page.keyboard.press("Escape")
+        page.evaluate("() => document.getElementById('add-menu')?.remove()")
+        chip.click()
         _pick_account_row(page, "alice")
         page.get_by_text(re.compile("Claude 기본 계정: alice")).first.wait_for(timeout=8000)
+        page.wait_for_function("() => document.querySelector('#vt-hud .vt-hud-chip[data-chip^=\"account\"]')?.textContent.includes('alice')", timeout=8000)
         picker = page.evaluate("""async () => (await (await fetch('/api/agent-profiles/read/picker', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'})).json())""")
         assert picker["defaults"]["claude"]["id"] == ids["alice"]
         assert {p["name"]: p["selectable"] for p in picker["profiles"]} == {"alice": True, "work": True, "gone": False}

@@ -60,7 +60,6 @@ export interface PaletteDeps {
   /** 계정(핫스왑 H1) — 없으면 계정 줄을 그리지 않는다. */
   loadAccounts?: () => Promise<{ ok: boolean; profiles: { id: string; name: string; tool: string; selectable: boolean }[] }>;
   newSessionWithAccount?: (profile: string) => void;
-  openAccountMenu?: (opts: { mode: 'once' | 'default'; anchor?: HTMLElement | null }) => void;
 }
 
 interface Row {
@@ -507,11 +506,11 @@ function PaletteBody(props: PaletteBodyProps) {
         const cmdRows = DEFAULT_COMMANDS.map(commandRow).filter(Boolean) as Row[];
         // 계정(핫스왑 H1) — 등록된 계정이 있을 때만. 「<이름> 계정으로 새 세션」은 쓸 수 있는 계정만(깨진 계정은 선택기에서 사유와 함께 본다).
         const accts = accountRows();
-        if (accts && accts.length && deps.newSessionWithAccount && deps.openAccountMenu) {
-          const open = deps.openAccountMenu;
+        if (accts && accts.length && deps.newSessionWithAccount) {
           const create = deps.newSessionWithAccount;
-          cmdRows.push({ key: 'cmd:account-default', kind: 'command', label: t('기본 계정 바꾸기'),
-            onOpen: () => { props.onRequestClose(); open({ mode: 'default' }); } });
+          // 기본 계정은 설정이다 — 세션을 만드는 메뉴가 아니라 설정 › 계정을 연다.
+          cmdRows.push({ key: 'cmd:account-default', kind: 'command', label: t('기본 계정 바꾸기'), hint: t('설정 › 계정'),
+            onOpen: () => { props.onRequestClose(); deps.getAction('settings.section')?.('accounts'); } });
           for (const a of accts) {
             cmdRows.push({ key: `cmd:account-new:${a.id}`, kind: 'command', label: t('{name} 계정으로 새 세션', { name: a.name }),
               onOpen: () => { props.onRequestClose(); create(a.id); } });

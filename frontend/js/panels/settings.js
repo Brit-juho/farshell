@@ -19,6 +19,7 @@ import { renderKeymapSection } from './settings/sections/keymap.js';
 import { renderVoiceSection, cleanupVoiceClients } from './settings/sections/voice.js';
 import { renderAppearanceSection } from './settings/sections/appearance.js';
 import { renderAgentsSection } from './settings/sections/agents.js';
+import { renderAccountsSection } from './settings/sections/accounts.js';
 import { renderSecuritySection } from './settings/sections/security.js';
 import { renderPermissionsSection } from './settings/sections/permissions.js';
 import { renderAboutSection } from './settings/sections/about.js';
@@ -57,6 +58,7 @@ const SECTION_RENDERERS = {
   terminal: renderTerminalSection,
   voice: renderVoiceSection,
   agents: renderAgentSection,
+  accounts: renderAccountsSection,
   keymap: () => renderKeymapSection(rerender),
   appearance: renderAppearanceSection,
   hud: renderHudSection,

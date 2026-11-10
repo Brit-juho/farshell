@@ -30,7 +30,8 @@ import { setPaneSession, revealSessionPane, openLayoutTab, clearSessionFromLayou
 import { saveLayoutNow } from '../layout/persist.js';
 import { t } from '../core/i18n.js';
 import { icon } from '../ui/icons.js';
-import { accountsSnapshot, loadAccounts, openAccountMenu, profileForCreate, refusalText, menuDefaultLine } from './accounts.js';
+import { accountsSnapshot, loadAccounts, profileForCreate, refusalText } from './accounts.js';
+import { defaultLine } from './accounts-data.js';
 import { isRelayed } from '../core/host-route.js';
 
 // opts.place — 새 세션을 어디에 놓나(addSession 주석). 기본은 새 단독 뷰.
@@ -136,23 +137,17 @@ export function showAddMenu(el, e) {
   menu.appendChild(mkItem(t('일반 터미널'), t('단발 셸 (tmux 아님)'), createPlainSession));
   menu.appendChild(mkItem(t('tmux 세션'), t('화면을 닫아도 유지 · 맥/모바일 공유'), () => createTmuxSession(), 'square-terminal'));
   // 계정(핫스왑 H1) — 등록된 계정이 하나라도 있을 때만 보인다(없으면 이 메뉴는 예전 그대로). 다른 맥을 보는 중이면 숨긴다.
+  // 기본 계정을 바꾸는 곳은 상태 막대의 계정 칩과 설정 › 계정이다 — 여기는 「이번만」 한 줄이고, 지금 기본 계정은 보조 글에 적는다.
   const addAccountRows = (acc) => {
     if (menu.querySelector('.vt-menu-accounts') || isRelayed() || !acc.ok || !acc.profiles.length) return false;
     const group = document.createElement('div');
     group.className = 'vt-menu-accounts';
     const sep = document.createElement('div');
     sep.className = 'vt-menu-sep';
-    const label = document.createElement('div');
-    label.className = 'vt-menu-label';
-    label.textContent = `${t('계정')} · ${menuDefaultLine(acc)}`;
-    group.append(sep, label);
+    const once = mkItem(t('이번만 다른 계정으로'), defaultLine(acc),
+      () => import('./accounts-ui.js').then((m) => m.openAccountMenu({ mode: 'once', anchor: el, onPick: (id) => createTmuxSession({ profile: id }) })), 'user');
+    group.append(sep, once);
     menu.appendChild(group);
-    const host = group;
-    const once = mkItem(t('이번만 다른 계정'), t('고른 계정으로 tmux 세션 하나를 만듭니다'),
-      () => openAccountMenu({ mode: 'once', anchor: el, onPick: (id) => createTmuxSession({ profile: id }) }), 'user');
-    const change = mkItem(t('기본 계정 바꾸기'), t('앞으로 만드는 새 세션에 적용 · 실행 중인 세션은 그대로'),
-      () => openAccountMenu({ mode: 'default', anchor: el }), 'user');
-    host.append(once, change);
     return true;
   };
   addAccountRows(accountsSnapshot());

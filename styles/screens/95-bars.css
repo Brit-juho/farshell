@@ -144,6 +144,9 @@
 .vt-hud-label { color:var(--sub); }
 .vt-hud-value { color:var(--txt); font-weight:var(--weight-semibold); font-variant-numeric:tabular-nums; }
 .vt-hud-hint  { color:var(--color-muted); }
+/* 계정 칩(hud-data.ts의 `account`) — 눌러서 메뉴가 열리는 칩이라 값 뒤에 ▾를 둔다. 값이 없는 「계정 지정 안 함」은 라벨이 본문이다. */
+.vt-hud-caret { display:inline-flex; align-items:center; color:var(--color-muted); margin-left:calc(var(--spacing) * -0.5); }
+.vt-hud-caret svg { width:10px; height:10px; }
 .vt-hud-chip.tone-ok    .vt-hud-value { color:var(--ok); }
 .vt-hud-chip.tone-warn  .vt-hud-value { color:var(--warn); }
 .vt-hud-chip.tone-err   .vt-hud-value { color:var(--err); }
