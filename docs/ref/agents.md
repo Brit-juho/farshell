@@ -298,6 +298,23 @@ hour after ending; idle rows expire one hour after becoming idle. Working rows w
 event for 15 minutes become stale idle, which does not establish completion. Codex Stop
 means idle between turns. Completed rows are evicted before idle rows; working rows are
 never evicted for a new child. If all 32 are working, the UI reports the display limit.
+
+**What marks a child `done`.** A `subagent_stop` event (or `stop_failure` for `failed`) is the
+confirmation. The parent's Stop hook `background_tasks` list (`subagents.fold`) only supports that
+in two ways: a listed `running` subagent stays `working`, and a row that **was listed once** and then
+disappears (or is listed with another status) becomes `done`. A non-teammate row that has never
+appeared in the list is **not** finished by its absence — nothing proves the hook `agent_id` equals
+the list `id` (the format of real `agent_id`s, `a` + 16 hex, passes `ID_RE`, but the list's ids are
+unmeasured here), so such a row stays `working` until a stop event or the 15-minute stale rule.
+When the list holds no running subagent id while rows are still working, the server logs one
+warning per parent with the row count and the first 6 characters of up to three ids (never any
+prompt, message or path), so a mismatch shows up in the log. Teammate-shaped ids keep their own
+rules (`teammate_idle`, listed-team handling).
+
+Two children with the same name stay separate rows (the roster is keyed by id). The rail numbers
+them by start time (`general-purpose #1`, `#2`, counted over active and finished rows together) and
+shows the first 4 characters of the id after 「내부 · 상태」; the 「끝난 서브에이전트 N」 fold button
+carries a check icon and the done colour.
 A server restart clears the roster; a later Start or child tool hook can rebuild it.
 
 Parent ownership and child event ordering are checked independently. Child permission

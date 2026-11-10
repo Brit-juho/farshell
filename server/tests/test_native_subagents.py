@@ -290,3 +290,36 @@ def test_new_turn_discards_previous_hook_answer():
     S.accept(ent, "pre", {"agent_id": "child"}, "codex")
     assert not ent["_subagents"]["child"].get("_last_message")
     assert ent["_subagents"]["child"]["last_message"] == ""
+
+
+def test_fold_keeps_never_listed_rows_working_on_empty_roster(caplog):
+    ent = {}
+    for aid in ("a1111111111111111", "a2222222222222222"):
+        S.accept(ent, "subagent_start", {"agent_id": aid, "agent_type": "general-purpose"}, "claude")
+    with caplog.at_level("WARNING", logger="subagents"):
+        S.fold(ent, {"background_tasks": []})
+        S.fold(ent, {"background_tasks": []})
+    assert {r["state"] for r in ent["_subagents"].values()} == {"working"}
+    msgs = [r.getMessage() for r in caplog.records if "subagent fold" in r.getMessage()]
+    assert len(msgs) == 1 and "a11111" in msgs[0] and "general-purpose" not in msgs[0]
+
+
+def test_fold_finishes_listed_row_that_disappears_and_stop_is_immediate():
+    ent = {}
+    for aid in ("a1111111111111111", "a2222222222222222"):
+        S.accept(ent, "subagent_start", {"agent_id": aid, "agent_type": "general-purpose"}, "claude")
+    S.fold(ent, {"background_tasks": [{"id": "a1111111111111111", "type": "subagent", "status": "running"}]})
+    S.fold(ent, {"background_tasks": []})
+    assert ent["_subagents"]["a1111111111111111"]["state"] == "done"
+    assert ent["_subagents"]["a2222222222222222"]["state"] == "working"
+    S.accept(ent, "subagent_stop", {"agent_id": "a2222222222222222"}, "claude")
+    assert ent["_subagents"]["a2222222222222222"]["state"] == "done"
+
+
+def test_same_label_children_keep_distinct_ids():
+    ent = {}
+    for aid in ("a1111111111111111", "a2222222222222222"):
+        S.accept(ent, "subagent_start", {"agent_id": aid, "agent_type": "general-purpose"}, "claude")
+    items = S.public(ent)["items"]
+    assert [i["label"] for i in items] == ["general-purpose"] * 2
+    assert len({i["id"] for i in items}) == 2

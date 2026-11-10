@@ -88,3 +88,16 @@ test('transcript renders hostile text literally and replaces the temporary final
   assert.equal(typeof mod.showSubagent, 'undefined', '예전 별도 창 진입점은 없다');
   assert.equal(typeof mod.showSubagents, 'undefined');
 });
+
+test('같은 label 이 둘 이상이면 시작 시각 순으로 번호를 매기고, 하나뿐이면 번호가 없다', async () => {
+  const { mod } = await load('shell/native-subagents.js');
+  const r = mod.normalizeSubagents({ items: [
+    { id: 'b', label: 'general-purpose', state: 'working', started_at: 20 },
+    { id: 'a', label: 'general-purpose', state: 'done', started_at: 10 },
+    { id: 'c', label: 'explore', state: 'working', started_at: 5 },
+  ] });
+  const o = mod.sameLabelOrdinals(r.items);
+  assert.equal(o.get('a'), 1);
+  assert.equal(o.get('b'), 2);
+  assert.equal(o.has('c'), false);
+});
