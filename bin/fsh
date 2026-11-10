@@ -4034,6 +4034,28 @@ print(('ok|' if sel and sel['ready'] else 'warn|') + (sel['label'] + ('|ready' i
     fi
   fi
 
+  # 11-c2. 서버의 훅 자동 점검(server/hook_health.py) — 마지막으로 언제 확인했나. 서버가 떠 있을 때만 묻는다.
+  # (위 두 줄은 이 터미널이 설정 파일을 직접 읽은 결과, 여기는 돌고 있는 서버가 자기 눈으로 본 결과다.)
+  if [ -f "$VT_DIR/server/hook_health.py" ] && _port_in_use "$VT_PORT"; then
+    local _hh _hh_state _hh_at _hh_mon _hh_age _hh_ago
+    _hh="$("${VT_PYTHON:-python3}" "$VT_DIR/server/hook_health.py" last-check 2>/dev/null)"
+    if [ -n "$_hh" ]; then
+      IFS=$'\t' read -r _hh_state _hh_at _hh_mon <<< "$_hh"
+      if [ "$_hh_mon" = "0" ]; then
+        _check "$(_t '훅 자동 점검')" ok "$(_t '꺼 둠 (VT_HOOK_HEALTH=0)')"
+      elif [ -n "$_hh_at" ]; then
+        _hh_age=$(( $(date +%s) - ${_hh_at%.*} ))
+        [ "$_hh_age" -lt 0 ] && _hh_age=0
+        if [ "$_hh_age" -lt 120 ]; then _hh_ago="$(_t '{n}초 전' n="$_hh_age")"; else _hh_ago="$(_t '{n}분 전' n="$((_hh_age / 60))")"; fi
+        if [ "$_hh_state" = "ok" ]; then
+          _check "$(_t '훅 자동 점검')" ok "$(_t '서버가 {ago} 확인함 — 이상 없음' ago="$_hh_ago")"
+        else
+          _check "$(_t '훅 자동 점검')" warn "$(_t "서버가 {ago} 확인함 — 이상 있음. 'fsh hooks status' 로 보고 'fsh hooks install' 로 고치세요" ago="$_hh_ago")"
+        fi
+      fi
+    fi
+  fi
+
   # 11-d. clauth 사용량 피드 (U4) — 있으면 신선도까지, 없으면 조용히 넘어간다
   # (clauth를 안 쓰는 환경이 정상이다. 경고로 띄우면 노이즈가 된다).
   local _clauth_feed="${VT_CLAUTH_STATUS:-$HOME/.clauth/status.json}"

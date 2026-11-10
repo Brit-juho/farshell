@@ -29,6 +29,9 @@ Codex의 `~/.codex/config.toml`에는 prompt/permission/tool/stop/subagent/sessi
 두 설정 모두 FarShell 항목만 관리하고 기존 훅은 보존한다.
 
 Claude Code 훅은 13종이다(`PostToolUseFailure` 포함 — 질문·도구가 거절·오류로 끝났을 때 「선택 요청」 대기를 바로 푼다).
+서버는 훅이 지금도 제대로 걸려 있는지 10분마다(그리고 설정 파일이 바뀌면 바로) 스스로 점검합니다 — 읽기만 하고 설정 파일을 고치지 않습니다.
+이상이 있으면 상태 막대에 「훅 점검 필요」 칩이 뜨고(눌러서 설정 → 정보에서 이유 확인), 고치면 사라집니다. 끄려면 `~/.vt.env`에 `VT_HOOK_HEALTH=0`.
+
 예전 버전으로 12종만 등록해 둔 경우 `fsh hooks status`에 `PostToolUseFailure`가 「미등록」으로 보이고 감지 범위가 `pty`로 내려가 있으니
 `fsh hooks install`(또는 업데이트 때 도는 `fsh sync`)로 맞춘다.
 

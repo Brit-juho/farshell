@@ -198,6 +198,33 @@ writes the in-memory entry directly and a repeated call overwrites the previous 
 `SessionStart` matches `"startup|resume|clear"` (not `compact`, which the server also ignores);
 `PreToolUse`/`PostToolUse`/`PostToolUseFailure` use matcher `"*"`, so a user's tool-specific hook fires alongside ours.
 
+### Hook health check (read-only)
+
+`server/hook_health.py` keeps checking that the hooks are **still** registered correctly — the manual `fsh hooks status` /
+`fsh doctor` / Settings → About only help when someone looks, and a broken hook fails silently (the status badges, queue
+auto-feed and TTS just stop; a gstack setup once wrote a vanishing `runtime-*` path into `settings.json`).
+
+- **When.** Once at server start, every 10 minutes, and at once when the `stat` stamp of `~/.claude/settings.json`,
+  `~/.codex/config.toml` or `~/.codex/hooks.json` changes (a 5 s stamp poll). `VT_HOOK_HEALTH=0` turns the periodic check and
+  the alerts off (`GET /api/hooks/status` then reads on every request, as before).
+- **How.** The read-only plan functions `claude_hooks.plan` / `codex_hooks.plan_text`, run in the dedicated `hooks` pool
+  with an 8 s deadline (`docs/ref/reliability.md`). Per CLI: `ok`, `missing` (events not registered — `fsh hooks install`),
+  `mismatch` (registered with another path or script; `transient` when the path contains `runtime-`), `unreadable` (broken
+  JSON/TOML or no permission) or `absent` (no settings folder — the CLI is not used, not a problem). A read that misses its
+  deadline keeps the previous result and never counts as a fault.
+- **Alerts.** Only when the per-CLI state or the list of affected events **changes**: a content-free `hooks_health` event on
+  `/ws-workspace` (CLI name, state and event names — no paths or settings values). The status bar shows a pinned
+  「훅 점검 필요」 chip (next to the agent chip, `frontend/js/shell/hud-data.ts` `hooksChip`) that disappears when the hooks are
+  healthy again; clicking it opens Settings → About, which says why and points at `fsh hooks install`. Web Push is **off by
+  default** (`VT_HOOK_HEALTH_PUSH=1` sends one push on an ok → problem transition). The first result after start is a baseline
+  and alerts nobody.
+- **`GET /api/hooks/status`** is served from the checker's cache while the settings files are unchanged; its old shape is kept
+  and `health`, `checkedAt`, `monitor` are added ([`API.md`](../../API.md)). `fsh doctor` prints the server's last check time.
+- **No auto-repair, on purpose.** The server never writes `settings.json`/`config.toml` (`AGENTS.md` contract 16): it would race
+  with the user, gstack and clauth, give a remotely reachable process write access to agent settings, and revive hooks the
+  user removed deliberately. Fixing is the user's `fsh hooks install` (or `fsh sync`). Tests: `test_hook_health.py`
+  (including a static guard that the module calls no write function).
+
 ## Agent-to-agent messages
 
 One agent sends a message to another agent's tmux session, on this Mac or a paired one.  The pieces are an MCP server, peer delivery, a store and a CLI; nothing in `frontend/js` calls the message endpoints.

@@ -29,6 +29,9 @@ In Codex's `~/.codex/config.toml`, 8 kinds are registered: prompt/permission/too
 Both manage only FarShell entries and keep your existing hooks.
 
 Claude Code registers 13 hooks, including `PostToolUseFailure` (it clears a pending "choice" wait as soon as a question or tool is rejected or errors out).
+The server also checks on its own that the hooks are still registered correctly, every 10 minutes and as soon as a settings file changes — it only reads and never edits your settings.
+If something is wrong, a "Hook check needed" chip appears in the status bar (click it for the reason in Settings → About) and goes away once it is fixed. Turn it off with `VT_HOOK_HEALTH=0` in `~/.vt.env`.
+
 If you only have the older 12, `fsh hooks status` shows `PostToolUseFailure` as not registered and detection coverage drops to `pty`;
 run `fsh hooks install` (or `fsh sync`, which `fsh update` runs) to bring it to 13.
 
