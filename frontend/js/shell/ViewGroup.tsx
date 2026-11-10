@@ -11,7 +11,7 @@ import type { SessionGroup } from './rail-data.js';
 export function ViewGroup(props: { group: SessionGroup; onOpen: () => void; children: JSX.Element; collapsed?: boolean; onToggle?: () => void }) {
   const rename = async () => {
     const id = props.group.id;
-    const next = await promptDialog(t('묶음 뷰 제목'), { title: t('묶음 이름 변경'), defaultValue: props.group.label });
+    const next = await promptDialog(t('묶음 뷰 제목'), { title: t('묶음 이름 변경'), okLabel: t('저장'), defaultValue: props.group.label });
     if (next === null || !next.trim()) return;
     if (!(window as any).vtRenameTab?.(id, next.trim())) (window as any).showToast?.(t('묶음 이름을 저장하지 못했습니다. 제목은 128자까지 입력할 수 있습니다.'));
   };

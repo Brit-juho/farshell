@@ -146,7 +146,7 @@ export function RecentEnded(p: {
   const archiveLegacy = async () => {
     const list = legacy();
     if (bulkBusy() || !list.length) return;
-    if (!await confirmDialog(`${list.length}${t('개의 과거 기록을 세션 보관함으로 옮깁니다. 삭제하지 않으며 보관함에서 해제할 수 있습니다. 계속할까요?')}`)) return;
+    if (!await confirmDialog(`${list.length}${t('개의 과거 기록을 세션 보관함으로 옮깁니다. 삭제하지 않으며 보관함에서 해제할 수 있습니다. 계속할까요?')}`, { title: t('세션 보관'), okLabel: t('보관') })) return;
     setBulkBusy(true); setError('');
     try {
       const { failed } = await archiveMany(list);
@@ -193,7 +193,7 @@ export function ArchiveList(p: { data: CatalogSnapshot; onBack: () => void; onCh
   const empty = async () => {
     const list = sessions();
     if (busy() || !list.length) return;
-    if (!await confirmDialog(t('보관함의 세션 기록 {n}개를 삭제합니다. 대화 보관함의 대화와 원본은 남고, 위임 관계가 있는 세션은 삭제하지 않습니다. 계속할까요?', { n: list.length }))) return;
+    if (!await confirmDialog(t('보관함의 세션 기록 {n}개를 삭제합니다. 대화 보관함의 대화와 원본은 남고, 위임 관계가 있는 세션은 삭제하지 않습니다. 계속할까요?', { n: list.length }), { title: t('세션 기록 삭제'), okLabel: t('삭제') })) return;
     setBusy(true); setError('');
     try {
       const { failed } = await deleteMany(list);

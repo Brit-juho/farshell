@@ -740,7 +740,7 @@ async function insertFile(item) {
       });
       showToast(r.typed
         ? (r.reused ? t('{host}에 전송 후 경로 삽입됨 (이미 있던 파일 재사용)', { host }) : t('{host}에 전송 후 경로 삽입됨', { host }))
-        : t('{host}에 전송됨 — pane을 못 찾아 경로는 못 넣었습니다', { host }), r.typed ? 'success' : 'error');
+        : t('{host}에 전송됨 — 페인을 못 찾아 경로는 못 넣었습니다', { host }), r.typed ? 'success' : 'error');
     } catch (e) {
       showToast(t('전송 실패: {msg}', { msg: e.message }), 'error');
     }

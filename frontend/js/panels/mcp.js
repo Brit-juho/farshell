@@ -429,7 +429,7 @@ function tagEditor(name, tags) {
   add.textContent = t('+ 태그');
   add.title = t('같은 이름의 서버가 이 태그를 공유합니다. 그룹 켜고 끄기는 선택한 도구에만 적용됩니다.');
   add.addEventListener('click', async () => {
-    const input = await promptDialog(t('「{name}」에 붙일 그룹 이름', { name }), { title: t('그룹 추가') });
+    const input = await promptDialog(t('「{name}」에 붙일 그룹 이름', { name }), { title: t('그룹 추가'), okLabel: t('추가') });
     if (input == null) return;
     if (!input.trim()) return;
     add.disabled = true;
@@ -506,7 +506,7 @@ function credRow(group, slot, creds) {
       const secret = await promptDialog(
         `${t('{name} · {key} 값', { name: group.name, key: slot.key })}\n\n`
         + t('FarShell이 ~/.vt/mcp.json(0600)에 평문으로 보관합니다. 암호화하지 않습니다 — 무인으로 도는 서버는 자기가 쓰는 값을 언제든 읽을 수 있어야 하기 때문입니다. GitHub 토큰과 같은 수준입니다.'),
-        { title: t('값 보관'), password: true });
+        { title: t('값 보관'), okLabel: t('저장'), password: true });
       if (!secret) return;
       add.disabled = true;
       try {
@@ -710,7 +710,7 @@ function renderServer(group, facts, tags, data) {
     body.appendChild(row);
     const hasWorktree = !!(data && data.worktree);
     for (const note of entry.notes || []) {
-      if (!hasWorktree && note === t('켜짐/꺼짐은 프로젝트마다 따로 기록된다 — 워크트리를 골라야 알 수 있다')) continue;
+      if (!hasWorktree && note === t('켜짐/꺼짐은 프로젝트마다 따로 기록됩니다 — 워크트리를 골라야 알 수 있습니다')) continue;
       body.appendChild(help(note));
     }
   }

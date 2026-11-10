@@ -257,7 +257,7 @@ function _viewToggle(container, st, bar, kind) {
       ? t('1MB를 넘어 표 대신 원문으로 보여 줍니다.')
       : t('1MB를 넘어 렌더 대신 원문으로 보여 줍니다.')));
   } else if (kind === 'svg' && st.preview) {
-    bar.appendChild(_span(t('그림으로만 보여 줍니다 — SVG 안의 스크립트와 외부 불러오기는 실행되지 않습니다(sandbox).')));
+    bar.appendChild(_span(t('격리된 그림으로만 보여 줍니다 — SVG 안의 스크립트와 외부 불러오기는 실행되지 않습니다.')));
   } else if (kind === 'md' && st.preview) {
     bar.appendChild(_span(t('원문 HTML은 글자로 보이고, 링크는 새 탭으로 열립니다. 외부 이미지는 막습니다.')));
   }
