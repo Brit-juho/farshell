@@ -497,6 +497,9 @@ async def lifespan(_app: FastAPI):
     # 위임 점검 — 세션이 사라진 위임 정리, 재시작 전에 못 보낸 결과 재전송.
     import delegation
     delegation_sweep_task = asyncio.create_task(delegation.sweep_loop())
+    # 에이전트 훅 건강 점검(읽기 전용) — 기동 시 1회 + 10분 + 설정 파일 변화 시. 서버는 설정 파일을 쓰지 않는다.
+    import hook_health
+    hook_health_task = asyncio.create_task(hook_health.run_loop())
     # 폴더 lease 정리(수명이 끝난 것)와, 서버가 도중에 죽어 멈춘 회수 saga 이어하기.
     from authz import leases as authz_leases, saga as authz_saga
     lease_sweep_task = asyncio.create_task(authz_leases.sweep_loop())
@@ -573,6 +576,9 @@ async def lifespan(_app: FastAPI):
         delegation_sweep_task.cancel()
         with suppress(asyncio.CancelledError):
             await delegation_sweep_task
+        hook_health_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await hook_health_task
         for _t in (lease_sweep_task, saga_sweep_task, pair_sweep_task, remote_outbox_task):
             _t.cancel()
             with suppress(asyncio.CancelledError):

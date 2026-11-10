@@ -44,7 +44,7 @@ Each link in that chain has its own guard:
 
 ## Pieces
 
-**`pools`.** Pool sizes: `fs` 4, `git` 6, `proc` 6, `net` 8, `slow` 3, `grep` 2 (file content search waits on its child process here so a 10 s search never holds an `fs` worker). `VT_POOL_<NAME>_SIZE` overrides a
+**`pools`.** Pool sizes: `fs` 4, `git` 6, `proc` 6, `net` 8, `slow` 3, `grep` 2 (file content search waits on its child process here so a 10 s search never holds an `fs` worker), `hooks` 2 (the agent-hook health check reads a few settings files; a hung read there cannot starve other pools). `VT_POOL_<NAME>_SIZE` overrides a
 size; `default` uses the stdlib formula.
 - Admission is capped at size × 5. Beyond that the call raises `Busy` immediately instead of queueing
   behind a stuck pool.
@@ -127,6 +127,7 @@ deadline and the breaker instead.
 
 ## Other places that follow the same rule
 
+- **Hook health check.** `hook_health` reads the agent settings only in the `hooks` pool under an 8 s deadline and holds its cache with a 2 s `TimedLock`. A read that misses the deadline returns the previous result (`stale`) and is never treated as a hook fault. Tests: `test_hook_health.py` (fake slow read keeps the loop ticking).
 - **Hook intake.** `/api/agent/event` and `/api/agent/report` resolve the pane in `proc` (5 s). On
   timeout or saturation the session is left unresolved.
 - **Status sweep.** `agent_status.sweep` never reads a screen on the event loop. On the loop the probe

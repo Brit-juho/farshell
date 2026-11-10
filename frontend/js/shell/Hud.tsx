@@ -17,6 +17,7 @@ import { t } from '../core/i18n.js';
 import { buildHudChips, parseHudLayout, type AgentCounts, type HudChip, type HudInput, type HudLayout } from './hud-data.js';
 // core/poll.js는 상태를 갖지 않는 순수 모듈이라 이 지연 청크에 복제돼도 문제없다(위 ⚠의 예외).
 import { createPoll, isStale } from '../core/poll.js';
+import { onWorkspaceEvent } from '../core/workspace-ws.js';
 
 const POLL_MS = 30000;
 const SCREEN_POLL_MS = 5000;
@@ -79,6 +80,7 @@ async function collect(deps: HudDeps): Promise<HudInput> {
       ? safeFetch<{ clients?: unknown[] }>(deps, clientsPath)
       : Promise.resolve(null),
     safeFetch<HudInput['stats']>(deps, '/api/system/stats'),
+    safeFetch<{ health?: Record<string, { state: string; missing?: string[]; mismatch?: string[] }> }>(deps, '/api/hooks/status'),
     deps.pushState
       ? withTimeout(deps.pushState(), PUSH_STATE_TIMEOUT_MS, 'unavailable' as const)
       : Promise.resolve(null),
@@ -89,7 +91,8 @@ async function collect(deps: HudDeps): Promise<HudInput> {
   const usage = val(settled[2]);
   const clients = val(settled[3]);
   const stats = val(settled[4]);
-  const push = val(settled[5]);
+  const hooksStatus = val(settled[5]);
+  const push = val(settled[6]);
 
   return {
     push,
@@ -100,6 +103,9 @@ async function collect(deps: HudDeps): Promise<HudInput> {
     usage,
     screens: clients?.clients?.length ?? null,
     stats,
+    hooks: hooksStatus?.health
+      ? Object.fromEntries(Object.entries(hooksStatus.health).map(([cli, h]) => [cli, { state: h.state, events: [...(h.missing || []), ...(h.mismatch || [])] }]))
+      : null,
   };
 }
 
@@ -109,7 +115,7 @@ function Chip(props: { chip: HudChip; deps: HudDeps }) {
     const id = props.chip.action;
     if (!id) return;
     const fn = props.deps.getAction(id);
-    if (typeof fn === 'function') (fn as () => void)();
+    if (typeof fn === 'function') (fn as (arg?: string) => void)(props.chip.actionArg);
   };
 
   return (
@@ -239,6 +245,15 @@ function Hud(props: { deps: HudDeps; root: HTMLElement }) {
     publish();
     if (!tr.ok()) throw new Error('hud: no response');
   };
+
+  // 훅 건강 점검의 알림(`/ws-workspace`의 hooks_health) — 30초 폴링을 기다리지 않고 칩을 바로 켜고 끈다.
+  // 내용은 CLI별 상태와 이벤트 이름뿐이다(서버가 경로·설정 값을 싣지 않는다).
+  const offHooks = onWorkspaceEvent('hooks_health', (msg: { tools?: HudInput['hooks'] }) => {
+    if (!snapshot || !msg || typeof msg.tools !== 'object') return;
+    snapshot = { ...snapshot, hooks: msg.tools };
+    publish();
+  });
+  onCleanup(() => offHooks());
 
   // 에이전트 상태는 이벤트로 오고 짧은 시간에 여러 번 바뀐다 — 한 프레임에 한 번만 다시 만든다.
   let agentRaf = 0;

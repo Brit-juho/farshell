@@ -301,6 +301,7 @@ fsh queue clear                 # 전체 비우기
 | 18 | pair | pair 스위치(`VT_AUTHZ_ENFORCE=pair`) 켜짐 여부, 효력 중인 pair 수와 승인 대기 수. 스위치가 꺼졌는데 저장된 pair 가 남아 있으면 경고(그 grant 는 효력이 없음) |
 | 19 | 다른 Mac 권한 | 프로토콜 v2(`VT_AUTHZ_ENFORCE=peer`)가 켜졌는지. 회수 알림을 못 보냈거나 secret 회전이 확인되지 않았으면 경고(서버가 다시 시도하고, 회전은 `fsh host rotate` 로 정리) |
 | 20 | 브라우저 | 브라우저 broker 스위치(`VT_AUTHZ_ENFORCE=browser`)가 켜졌는지, 사용 가능한 어댑터 중 켠 수, 열린 탭 수. 조작할 수 없게 된 탭(orphaned, `fsh browser tabs`)이 있거나 설정·탭 장부를 못 읽으면 경고. 서버에 묻지 않고 직접 읽어서 서버가 꺼져 있어도 답한다 |
+| 21 | 훅 자동 점검 | 서버가 떠 있을 때만: 서버가 직접 에이전트 훅을 마지막으로 확인한 시각(10분마다, 설정 파일이 바뀌면 바로 다시 읽습니다. `VT_HOOK_HEALTH=0`이면 꺼집니다). 마지막 점검에서 훅이 빠졌거나 어긋났거나 읽을 수 없으면 경고 — `fsh hooks install`로 고칩니다. 서버는 점검만 하고 설정 파일을 쓰지 않습니다 |
 
 ---
 

@@ -136,6 +136,9 @@
 /* 맨 왼쪽 고정 — 에이전트 칩(-4) · 토스트 메시지 칸(-3, components.css) · 나머지(0). */
 .vt-hud-chip[data-chip="agents"] { order:-4; color:var(--txt); }
 .vt-hud-chip[data-chip="agents"].tone-warn { background:color-mix(in srgb, var(--warn) 10%, transparent); }
+/* 훅 점검 칩(hud-data.ts의 `hooks`) — 에이전트 칩 바로 다음에 고정. 값이 아니라 라벨이 본문이라 라벨을 주의 색으로 쓴다. */
+.vt-hud-chip[data-chip="hooks"] { order:-4; color:var(--txt); background:color-mix(in srgb, var(--warn) 10%, transparent); }
+.vt-hud-chip[data-chip="hooks"] .vt-hud-label { color:var(--warn); font-weight:var(--weight-semibold); }
 .vt-hud-label { color:var(--sub); }
 .vt-hud-value { color:var(--txt); font-weight:var(--weight-semibold); font-variant-numeric:tabular-nums; }
 .vt-hud-hint  { color:var(--color-muted); }
@@ -154,7 +157,7 @@
 /* info/success 토스트가 메시지 칸(#vt-hud-msg)을 띄우는 동안(toast.js가 .vt-hud-busy) 다른 칩은 비켜선다.
    에이전트 칩은 남는다 — 개입이 필요한 세션이 있다는 사실은 토스트 몇 초 동안에도 가려지면 안 된다. 칩은 DOM에서
    빼지 않고 숨기기만 한다(Solid <For>의 노드를 뒤에서 지우면 실제 DOM과 어긋난다). */
-#vt-hud.vt-hud-busy .vt-hud-chip:not([data-chip="agents"]),
+#vt-hud.vt-hud-busy .vt-hud-chip:not([data-chip="agents"]):not([data-chip="hooks"]),
 #vt-hud.vt-hud-busy .vt-hud-spacer,
 #vt-hud.vt-hud-busy .vt-hud-stale { display:none; }
 

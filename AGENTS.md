@@ -79,6 +79,10 @@ Verify affected behavior with actual responses, operations and logs.
     `data-action` + `registerAction`, and keep the policy string in that one place. Verify any change that
     could add one in a real browser against an isolated server (console must show no CSP violation).
     `style-src` still allows inline styles. Details: [`docs/ref/auth.md`](./docs/ref/auth.md) «Security headers».
+16. The server never writes agent configuration files automatically — it only checks them. `server/hook_health.py` reads
+    `~/.claude/settings.json` and `~/.codex/config.toml` (read-only plan functions) and reports; repair is always the user's
+    `fsh hooks install`/`fsh sync`. Do not add an auto-repair: it races with the user, gstack and clauth, gives a remotely
+    reachable process write access to agent settings, and resurrects hooks the user removed on purpose.
 
 ## Branches and releases
 

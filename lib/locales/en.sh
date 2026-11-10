@@ -213,6 +213,8 @@ _t_en_lookup() {
     '{n}개 노출 중 (위험 포트 없음)') _T_OUT='{n} exposed (no risky ports)' ;;
     '{n}개 자동 등록') _T_OUT='{n} registered automatically' ;;
     '{n}건') _T_OUT='{n}' ;;
+    '{n}분 전') _T_OUT='{n} min ago' ;;
+    '{n}초 전') _T_OUT='{n}s ago' ;;
     '{n}회') _T_OUT='{n}x' ;;
     '{opts} 는 이제 '\''fsh start'\'' 옵션입니다. '\''fsh start {opts}'\''를 실행한 뒤 QR을 보여드립니다.') _T_OUT='{opts} is now an '\''fsh start'\'' option. Running '\''fsh start {opts}'\'', then showing the QR code.' ;;
     '{path} 에 FarShell 훅 {n}개가 중복 등록돼 있습니다 — Codex 세션 이벤트가 두 번(claude 태그 포함) 들어옵니다.') _T_OUT='{path} has {n} duplicate FarShell hook(s) — Codex session events arrive twice (including the claude-tagged ones).' ;;
@@ -272,6 +274,7 @@ _t_en_lookup() {
     '기존 CLAUDE.md → CLAUDE.md.bak으로 백업') _T_OUT='Backed up existing CLAUDE.md → CLAUDE.md.bak' ;;
     '기존 레포 사용: {dir}') _T_OUT='Using existing repo: {dir}' ;;
     '기존 설정 유지 → ~/.vt.env') _T_OUT='Keeping existing config → ~/.vt.env' ;;
+    '꺼 둠 (VT_HOOK_HEALTH=0)') _T_OUT='off (VT_HOOK_HEALTH=0)' ;;
     '꺼 둠 (VT_MACOS_APP=0) — 권한 창에 Python 이름으로 뜹니다') _T_OUT='Off (VT_MACOS_APP=0) — permission prompts show the Python name' ;;
     '꺼 둠 (VT_SERVER_WATCHDOG=0)') _T_OUT='Off (VT_SERVER_WATCHDOG=0)' ;;
     '꺼져 있는데 저장된 pair {n}개가 남아 있습니다 — 권한은 효력이 없습니다') _T_OUT='The feature is off but {n} stored pair(s) remain - their permissions have no effect' ;;
@@ -440,6 +443,8 @@ _t_en_lookup() {
     '서버:        ') _T_OUT='Server:       ' ;;
     '서버가 FarShell.app 으로 떠 있습니다 — 권한 창에 FarShell 로 뜹니다') _T_OUT='The server runs under FarShell.app — permission prompts say FarShell' ;;
     '서버가 VT_AUTHZ_ENFORCE=peer 로 떠 있으면 이 명령은 서버에 변경을 요청합니다 (unix socket).') _T_OUT='When the server runs with VT_AUTHZ_ENFORCE=peer, these commands ask the server to make the change (unix socket).' ;;
+    '서버가 {ago} 확인함 — 이상 없음') _T_OUT='the server checked {ago} — all good' ;;
+    '서버가 {ago} 확인함 — 이상 있음. '\''fsh hooks status'\'' 로 보고 '\''fsh hooks install'\'' 로 고치세요') _T_OUT='the server checked {ago} — a problem was found. See '\''fsh hooks status'\'' and fix it with '\''fsh hooks install'\''' ;;
     '서버가 꺼져 있거나 소켓을 쓸 수 없거나 그 설정이 꺼져 있으면 예전처럼 ~/.vt/hosts.json 에 바로 씁니다.') _T_OUT='If the server is down, the socket is unusable or that setting is off, it writes ~/.vt/hosts.json directly as before.' ;;
     '서버가 떠 있지 않을 수 있습니다: fsh status') _T_OUT='The server may not be running: fsh status' ;;
     '서버가 실행 중이 아닙니다. 먼저 '\''fsh start'\''로 시작하세요.') _T_OUT='The server isn'\''t running. Start it first with '\''fsh start'\''.' ;;
@@ -726,6 +731,7 @@ _t_en_lookup() {
     '훅 등록 실패 — '\''fsh hooks install'\''로 다시 시도할 수 있습니다') _T_OUT='Hook registration failed - retry with '\''fsh hooks install'\''' ;;
     '훅 실패(rc={rc}){out}') _T_OUT='Hook failed (rc={rc}){out}' ;;
     '훅 실행{out}') _T_OUT='Hook ran{out}' ;;
+    '훅 자동 점검') _T_OUT='Hook auto-check' ;;
     '훅: {hook}') _T_OUT='Hook: {hook}' ;;
     *) return 1 ;;
   esac

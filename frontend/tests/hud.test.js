@@ -458,3 +458,27 @@ test('새 칩은 모두 순위를 갖는다 (agents·push·clock)', async () => 
   assert.strictEqual(chips.length, 3);
   for (const c of chips) assert.ok(Number.isInteger(c.priority) && c.priority > 0, `${c.id} 순위`);
 });
+
+test('훅 점검 칩: 이상이 있는 CLI만 적고, 정상·absent면 칩이 없다 — 배치 밖이라 배치를 꺼도 남는다', async () => {
+  const { buildHudChips, moveHudKind, HUD_KINDS, ALERT_HUD_KINDS } = await mod();
+  const none = { left: [], right: [] };
+  assert.deepStrictEqual(ids(buildHudChips({ hooks: { claude: { state: 'ok' }, codex: { state: 'absent' } } }, none)), []);
+  assert.deepStrictEqual(ids(buildHudChips({ hooks: null }, none)), []);
+  const chips = buildHudChips({
+    hooks: { claude: { state: 'missing', events: ['Stop'] }, codex: { state: 'unreadable', events: [] } },
+    agents: { waiting: 1, working: 0, done: 0 },
+    screens: 2,
+  }, { left: ['screens'], right: [] });
+  assert.deepStrictEqual(sides(chips), ['left:agents', 'left:hooks', 'left:screens']);
+  const hooks = chips.find((c) => c.id === 'hooks');
+  assert.strictEqual(hooks.label, '훅 점검 필요');
+  assert.strictEqual(hooks.value, 'Claude · Codex');
+  assert.strictEqual(hooks.tone, 'warn');
+  assert.strictEqual(hooks.action, 'settings.section');
+  assert.strictEqual(hooks.actionArg, 'about');
+  const only = buildHudChips({ hooks: { claude: { state: 'ok' }, codex: { state: 'mismatch', events: ['Stop'] } } }, none);
+  assert.strictEqual(only.find((c) => c.id === 'hooks').value, 'Codex');
+  const base = { left: ['screens'], right: [] };
+  assert.ok(!Array.from(HUD_KINDS).includes('hooks') && Array.from(ALERT_HUD_KINDS).includes('hooks'), '설정 목록에는 없고 경고 종류다');
+  assert.strictEqual(moveHudKind(base, 'hooks', 'right', 0), base, '배치 밖 종류는 옮길 수 없다');
+});

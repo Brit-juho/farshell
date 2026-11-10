@@ -324,6 +324,7 @@ contract 5). The few that decide how you reach this Mac:
 | 18 | Pairs | Whether the pair switch (`VT_AUTHZ_ENFORCE=pair`) is on, how many pairs are in effect and how many wait for approval; a warning if the switch is off but pairs are still stored (their grants have no effect) |
 | 19 | Other-Mac permissions | Whether protocol v2 (`VT_AUTHZ_ENFORCE=peer`) is on; a warning if revoke notices could not be delivered or a secret rotation is unconfirmed (the server retries; `fsh host rotate` settles a rotation) |
 | 20 | Browser | Whether the browser broker switch (`VT_AUTHZ_ENFORCE=browser`) is on, how many adapters are enabled out of those available, and how many tabs are open; a warning if tabs can no longer be driven (orphaned, see `fsh browser tabs`) or the settings/tab ledger cannot be read. Read locally, so it answers even when the server is down |
+| 21 | Hook auto-check | Only while the server runs: when the server itself last checked the agent hooks (it re-reads the settings every 10 minutes and as soon as a settings file changes; `VT_HOOK_HEALTH=0` turns that off). A warning if its last check found a missing, mismatched or unreadable hook — fix with `fsh hooks install`. The server only checks; it never writes the settings |
 
 ---
 
