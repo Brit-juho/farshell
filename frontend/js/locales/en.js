@@ -2337,7 +2337,7 @@ window.__VT_I18N = {
   "스크린 리더 모드": "Screen reader mode",
   "스킨": "Skin",
   "스킨 변경": "Change skin",
-  "스킨, 화면 언어, 파일 뷰어 표시 방식, 집중 모드를 고릅니다.": "Pick a skin, display language, file viewer style and focus mode.",
+  "스킨, 화면 언어, 메뉴 크기, 파일 뷰어 표시 방식, 집중 모드를 고릅니다.": "Pick a skin, display language, menu size, file viewer style and focus mode.",
   "스킬 {n}": {
     "one": "1 skill",
     "other": "{n} skills"
@@ -5095,5 +5095,10 @@ window.__VT_I18N = {
   "{keys} 잠김": "{keys} locked",
   "{keys} 다음 키만": "{keys} next key only",
   "인증 코드 {n}번째 자리": "Code digit {n}",
-  "편집 보조 키": "Editing keys"
+  "편집 보조 키": "Editing keys",
+  "메뉴 크기": "Menu size",
+  "작게": "Small",
+  "크게": "Large",
+  "활동 막대, 사이드바, 접힌 세션 띠와 세션 목록의 크기입니다. 끌어서 정한 사이드바 폭은 그대로입니다.": "Size of the activity bar, sidebar, collapsed session strip and session list. A sidebar width you set by dragging stays as it is.",
+  "사이드바 활동 막대 세션 목록 글자 크기 작게 보통 크게 확대 축소 scale": "sidebar activity bar session list text size small medium large zoom scale"
 };

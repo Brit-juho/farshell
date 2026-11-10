@@ -17,9 +17,23 @@ export const SIDE_DEFAULT = 360;
 export const SIDE_REGULAR_CAP = 260;
 /** 사이드바가 창에서 가져갈 수 있는 최대 비율(40vw). */
 export const SIDE_VW_RATIO = 0.4;
-/** 활동 막대와 접힌 세션 띠의 폭. */
+/** 활동 막대와 접힌 세션 띠의 폭(보통 크기). 「메뉴 크기」는 아래 SIDE_SCALES. */
 export const ACTIVITY_W = 48;
 export const STRIP_W = 48;
+
+// 설정 › 모양 「메뉴 크기」(데스크톱만). 값은 90-workbench.css의 `[data-vt-side-scale]` 블록과 같아야 한다(테스트가 대조).
+//   activity  활동 막대·접힌 띠 폭 · cell 접힌 세션 칸(링·마크는 칸에 비례) · width 사이드바 **기본** 폭(저장한 ui.side.width는 그대로)
+export const SIDE_SCALE_KEY = 'ui.side.scale';
+export const SIDE_SCALES = {
+  small: { activity: 44, cell: 36, width: 320 },
+  normal: { activity: 48, cell: 40, width: SIDE_DEFAULT },
+  large: { activity: 52, cell: 44, width: 392 },
+};
+/** 저장된 크기. 모르는 값은 보통. */
+export function readSideScale(get) {
+  const v = get(SIDE_SCALE_KEY);
+  return typeof v === 'string' && Object.prototype.hasOwnProperty.call(SIDE_SCALES, v) ? v : 'normal';
+}
 
 export const SIDE_WIDTH_KEY = 'ui.side.width';
 export const SIDE_ACTIVITY_KEY = 'ui.side.activity';
@@ -29,10 +43,10 @@ export const SIDE_WIDTH_FALLBACK_KEYS = ['ui.dock.width', 'ui.rail.width'];
 export const SIDE_COLLAPSED_FALLBACK_KEYS = ['ui.rail.collapsed'];
 export const SESSIONS_ACTIVITY = 'sessions';
 
-/** 저장 폭을 240~480 정수로. 숫자가 아니면 기본 360. */
-export function clampSideWidth(n) {
+/** 저장 폭을 240~480 정수로. 숫자가 아니면 기본(보통 360, 「메뉴 크기」에 따라 320/392). */
+export function clampSideWidth(n, fallback = SIDE_DEFAULT) {
   const v = Number(n);
-  if (!Number.isFinite(v)) return SIDE_DEFAULT;
+  if (!Number.isFinite(v)) return fallback;
   return Math.min(SIDE_MAX, Math.max(SIDE_MIN, Math.round(v)));
 }
 
@@ -42,10 +56,12 @@ function firstStored(keys, get, has) {
   return null;
 }
 
-/** 펼쳤을 때 쓰고 싶은 폭(사용자 의도). 새 키 → `ui.dock.width` → `ui.rail.width` → 360. */
-export function readSideWidth(get, has) {
+/** 펼쳤을 때 쓰고 싶은 폭(사용자 의도). 새 키 → `ui.dock.width` → `ui.rail.width` → 기본(「메뉴 크기」: 320/360/392).
+ * 저장값이 하나라도 있으면 크기와 무관하게 그 값이다 — 끌어 정한 폭을 설정이 덮지 않는다. */
+export function readSideWidth(get, has, scale = 'normal') {
   const hit = firstStored([SIDE_WIDTH_KEY, ...SIDE_WIDTH_FALLBACK_KEYS], get, has);
-  return hit ? clampSideWidth(hit.value) : SIDE_DEFAULT;
+  const def = (SIDE_SCALES[scale] || SIDE_SCALES.normal).width;
+  return hit ? clampSideWidth(hit.value, def) : def;
 }
 
 /**
@@ -90,10 +106,10 @@ export function sideMode(collapsed, activity) {
  *   open: min(저장 폭, 40vw), regular(720~1279)는 거기에 260을 한 번 더 건다.
  *   compact(<720)는 작업대 자체가 없어 0.
  */
-export function renderedSideWidth(mode, stored, viewportWidth, compactMax = 720) {
+export function renderedSideWidth(mode, stored, viewportWidth, compactMax = 720, scale = 'normal') {
   const vw = Number(viewportWidth) || 0;
   if (vw < compactMax) return 0;
-  if (mode === 'strip') return STRIP_W;
+  if (mode === 'strip') return (SIDE_SCALES[scale] || SIDE_SCALES.normal).activity;
   if (mode === 'closed') return 0;
   let w = Math.min(clampSideWidth(stored), Math.floor(vw * SIDE_VW_RATIO));
   if (vw < REGULAR_MAX) w = Math.min(w, SIDE_REGULAR_CAP);
