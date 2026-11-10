@@ -4401,3 +4401,68 @@ def test_선택기_줄에_statusline_사용률과_출처와_갱신_시각이_보
         file.unlink(missing_ok=True)
         import shutil
         shutil.rmtree(_LOCAL_STATE_DIR / "agent-profiles", ignore_errors=True)
+
+
+# ── 폰 실기기 지적(2026-11-10) — 시트와 하단 탭 겹침 · 머리 거터 · 훅 표 폭 · 선택 ───────────────────────────────
+_HIT_ALL = """(root) => {
+  const bad = [];
+  for (const e of document.querySelector(root).querySelectorAll('button, input, a[href]')) {
+    const r = e.getBoundingClientRect(); if (!r.width || !r.height) continue;
+    const hit = document.elementFromPoint(r.x + r.width / 2, Math.min(r.y + r.height / 2, innerHeight - 1));
+    if (!hit || !(hit === e || e.contains(hit))) bad.push([(e.textContent || '').trim().slice(0, 12), Math.round(r.top), Math.round(r.bottom)]);
+  }
+  return bad;
+}"""
+
+
+def test_폰_꾹_눌러_메뉴_시트는_하단_탭을_덮어_취소와_모든_항목이_터치된다(phone_page):
+    """실기기: 시트 「취소」(y 716~760)가 하단 탭(725~)에 가려 터치가 탭으로 갔다. 시트는 body 로 Portal 되고 막이 탭 위(z 655)에
+    놓여야 한다. elementFromPoint 로 취소·모든 항목이 시트 자신이고, 시트가 하단 탭을 덮으며, 제목에 선택이 남지 않는다."""
+    pg = phone_page
+    _phone_terminal(pg)
+    pg.locator('#vt-mnav-bottom [data-mnav="fleet"]').click()
+    pg.wait_for_selector("#vt-fleet .vt-fleet-row", timeout=15000)
+    pg.wait_for_timeout(400)
+    pg.evaluate("""() => { const e = document.querySelector('#vt-fleet .vt-fleet-row'); const r = e.getBoundingClientRect();
+      e.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch', clientX: r.x + 100, clientY: r.y + 20, isPrimary: true })); }""")
+    pg.wait_for_selector(".vt-fleet-menu-sheet", timeout=5000)
+    pg.wait_for_timeout(400)
+    nav, sheet, cancel = _rect(pg, "#vt-mnav-bottom"), _rect(pg, ".vt-fleet-menu-sheet"), _rect(pg, ".vt-session-footer-item")
+    # 시트는 Portal 로 body 안(#vt-fleet-slot 쌓임 맥락 밖)에 있다.
+    assert pg.evaluate("() => !document.querySelector('.vt-fleet-menu-backdrop').closest('#vt-fleet-slot') && document.body.contains(document.querySelector('.vt-fleet-menu-backdrop'))")
+    assert round(sheet["b"]) == PHONE["height"] and sheet["b"] >= nav["b"] - 1, (sheet, nav)   # 시트가 탭 바 자리까지 내려와 덮는다
+    assert cancel["h"] >= 44 and cancel["b"] <= PHONE["height"], cancel
+    assert pg.evaluate(_HIT_ALL, ".vt-fleet-menu-sheet") == [], "시트의 모든 버튼은 elementFromPoint 가 자기 자신이어야 한다"
+    # 하단 탭 영역을 눌러도 탭 바가 아니라 시트·막이 받는다 — 탭 전환이 일어나지 않는다.
+    top = pg.evaluate("(y) => { const h = document.elementFromPoint(195, y); return !!h && !h.closest('#vt-mnav-bottom'); }", nav["y"] + 20)
+    assert top, "시트가 떠 있는 동안 하단 탭이 터치를 가져가면 안 된다"
+    got = pg.evaluate("""() => ({ sel: String(getSelection()), us: getComputedStyle(document.querySelector('.vt-fleet-menu-sheet .vt-session-head h2')).userSelect,
+      row: getComputedStyle(document.querySelector('#vt-fleet .vt-fleet-row')).userSelect })""")
+    assert got == {"sel": "", "us": "none", "row": "none"}, got
+    pg.locator(".vt-session-footer-item").tap()
+    pg.wait_for_selector(".vt-fleet-menu-sheet", state="detached", timeout=3000)
+
+
+def test_폰_하단_탭_화면_머리는_오른쪽_거터가_16이고_훅_표_배경이_거터를_넘지_않는다(phone_page):
+    """실기기: 변경·파일·첨부 머리의 오른쪽 컨트롤이 화면 오른쪽에서 4px, 정보 및 진단 훅 표 배경이 좌우 6px 거터 밖으로 번졌다."""
+    pg = phone_page
+    for tab in ("changes", "files"):
+        pg.locator(f'#vt-mnav-bottom [data-mnav="{tab}"]').click()
+        pg.wait_for_selector(".vt-viewer-backdrop.vt-tab-panel .vt-viewer-head", timeout=8000)
+        pg.wait_for_timeout(500)
+        gap = pg.evaluate("""() => { const h = [...document.querySelectorAll('.vt-viewer-backdrop.vt-tab-panel .vt-viewer-head')].find(e => e.getClientRects().length);
+          const hs = getComputedStyle(h); const last = [...h.children].filter(c => c.getClientRects().length).pop().getBoundingClientRect();
+          return { pr: hs.paddingRight, pl: hs.paddingLeft, gap: Math.round(innerWidth - last.right) }; }""")
+        assert gap == {"pr": "16px", "pl": "16px", "gap": 16}, (tab, gap)
+    pg.locator('#vt-mnav-bottom [data-mnav="more"]').click()
+    pg.wait_for_selector(".vt-set-mobile-link", timeout=8000)
+    pg.locator(".vt-set-mobile-link", has_text="정보 및 진단").first.click()
+    pg.wait_for_selector(".vt-set-hookrow", state="attached", timeout=10000)
+    pg.wait_for_timeout(500)
+    head = pg.evaluate("() => { const h = document.querySelector('.vt-settings .vt-viewer-head > .vt-set-save').getBoundingClientRect(); return Math.round(innerWidth - h.right); }")
+    assert head == 16, head
+    rows = pg.evaluate("""() => [...document.querySelectorAll('.vt-set-hookrow')].filter(r => r.getClientRects().length).map(r => {
+        const b = r.getBoundingClientRect(); return [Math.round(b.left), Math.round(innerWidth - b.right)]; })""")
+    assert rows, "보이는 훅 행이 있어야 한다(격리 HOME 에는 훅이 없어 전부 미등록 행)"
+    assert all(left >= 16 and right >= 16 for left, right in rows), rows[:3]
+    assert pg.evaluate("() => document.documentElement.scrollWidth <= innerWidth")
