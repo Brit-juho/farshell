@@ -80,6 +80,19 @@ clauth runtime path are skipped. A remote MCP server that signs in with OAuth st
 profile's own config directory, so each profile signs in to it once (copying a refresh token would put two
 holders on one chain). MCP definitions are applied the next time when a session is running.
 
+Choosing an account for a new session: the `+` menu's "Another account, this time only" creates a new tmux
+session with the chosen account, and "Change default account" (or `fsh profile default <name>`) sets, per tool
+(Claude, Codex), the default for sessions you create from now on. Only that session gets the profile's config
+folder (`CLAUDE_CONFIG_DIR` / `CODEX_HOME`), and variables that would override the chosen account
+(`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `OPENAI_API_KEY`, ...) are removed from it.
+Running sessions are not changed and nothing switches automatically. A profile whose folder is missing, that is not
+signed in or whose token has expired is refused with a reason; the session is never created on the default
+`~/.claude` instead. The list shows the account name, auth state, usage and reset (when a value was already read,
+otherwise "unknown") and when it was updated, and can be sorted by "most headroom first". The small name tag on a
+rail row or session card is the account chosen **at creation** (the shell can change its own environment). It works
+only when you are connected directly to this Mac; register only your own accounts. Profiles set up with an API
+endpoint are not supported by this route; use "run with this account".
+
 Long-lived token: register a refresh-token-free `claude setup-token` value with
 `fsh profile token set <id>` and the profile's sessions run on it instead of a login. With nothing
 to refresh, sessions cannot be signed out by racing on one refresh chain. The token is kept

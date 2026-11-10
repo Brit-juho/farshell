@@ -31,6 +31,39 @@ its file scope and merge policy are not changed.
 User workflow and limits: [customization manager](../guide/agent-config.md).
 Endpoint contracts: [API.md](../../API.md).
 
+## Account choice for new sessions
+
+Registered profiles (`~/.vt/agent-profiles`) can be chosen when a tmux session is created
+(`server/session_profile.py`, `POST /api/tmux/create` `profile`, [API.md](../../API.md)).
+Only the new session's environment changes; nothing running is touched, no credential file is
+copied or swapped, and nothing switches automatically.
+
+- **Slot check (refuse, never fall back).** The profile must exist, not be archived, be `ready`, have a
+  folder of ours (owner/permissions/no links) and a usable login: a long-lived token file that has not
+  expired, `.credentials.json` / a keychain item (Claude) or `auth.json` (Codex). Otherwise the call fails
+  with a reason code and no session is created. API-endpoint profiles (`.farshell-provider.json`) are not
+  supported here; use "run with this account".
+- **Environment.** `new-session` runs from a tmux config file read by `source-file`: `-e` sets
+  `CLAUDE_CONFIG_DIR` or `CODEX_HOME` and `FSH_PROFILE_ID`; the shell is started as
+  `unset <overrides>; exec $SHELL -l` because tmux can only set variables, not unset them, and
+  `set-environment -r` keeps new windows/panes from getting them back from tmux's global environment. Claude profiles
+  clear `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_BASE_URL`,
+  `ANTHROPIC_CUSTOM_HEADERS`; Codex profiles clear `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_ORG_ID`. The response
+  lists which of them existed (`cleared_env`).
+- **Secrets stay out of `ps` and logs.** A long-lived token is written to a 0600 file under
+  `agent-profiles/launch/` that tmux reads and the server deletes at once (the same private-file idea as
+  `agent_config_launch.py`). tmux's own error text is never passed on. The value lives in that session's
+  environment like any variable, so processes of the same user in it can read it.
+- **Default.** `defaults.json` (also `fsh profile default`) marks one profile per tool; `profile: "default"` injects
+  the marked ones only (a lone profile is not guessed). A marked default that cannot be used is refused
+  (`default_invalid`) rather than replaced.
+- **Record.** tmux option `@fsh_profile` (comma-separated ids; shown as the rail/Fleet badge, tooltip
+  "account at creation" because the shell can change its own environment) and the registry table
+  `injected_sessions`. The launch panel's `sessions` table is left alone.
+- **Who may.** A browser login session only (`require_human_session`). The default/pick routes are not elevated and
+  need no password. Peers, machine tokens, the unix socket and agent MCP cannot choose accounts; the UI hides the
+  feature while another host is being viewed.
+
 ## Features
 
 | Feature | Description |
