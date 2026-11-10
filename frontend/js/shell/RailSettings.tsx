@@ -60,7 +60,7 @@ export function RailSettingsLead() {
       <div class="vt-wtd-section-title">{t('종료한 세션')}</div>
       <Toggle
         label={t('저장소별로 묶기')}
-        hint={t('실행 중과 종료한 세션을 저장소 아래에 함께 보여줍니다. 이 보기에서는 이름순·수동 정렬과 위임 트리를 쓰지 않습니다')}
+        hint={t('실행 중과 종료한 세션을 저장소 아래에 함께 보여줍니다. 이 보기에서는 이름순·수동 정렬과 위임 트리를 쓰지 않습니다.')}
         checked={prefs().view.byRepo}
         onChange={(v) => setView({ byRepo: v })}
       />

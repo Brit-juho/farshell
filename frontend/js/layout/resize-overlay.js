@@ -71,7 +71,7 @@ function _tick() {
   const deferEl = el.querySelector('.vt-ro-defer');
   const pending = surface.pendingCount();
   if (pending > 0) {
-    deferEl.textContent = t('SIGWINCH 활성 pane만 · 나머지 {n}개 유예', { n: pending });
+    deferEl.textContent = t('SIGWINCH는 활성 페인에만 · 나머지 {n}개 유예', { n: pending });
     deferEl.hidden = false;
   } else {
     deferEl.hidden = true;

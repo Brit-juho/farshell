@@ -513,8 +513,8 @@ export function Rail(props: RailProps) {
             <button
               type="button"
               class="vt-icon-btn sm vt-wgrail-settings"
-              aria-label={t('레일 설정')}
-              data-tip={t('레일 설정')}
+              aria-label={t('세션 목록 설정')}
+              data-tip={t('세션 목록 설정')}
               data-tip-sub={hiddenCount() ? t('저장소 {n}개 숨김', { n: hiddenCount() }) : t('구역 · 종료 세션 · 저장소')}
               data-tip-side="bottom"
               onClick={() => setRepoSheet(true)}
@@ -539,7 +539,7 @@ export function Rail(props: RailProps) {
             classList={{ collapsed: collapsed() }}
             onClick={toggleCollapse}
             aria-label={collapsed() ? t('펼치기') : t('접기')}
-            data-tip={collapsed() ? t('레일 펼치기') : t('레일 접기')}
+            data-tip={collapsed() ? t('세션 목록 펼치기') : t('세션 목록 접기')}
             data-tip-side="bottom"
             innerHTML={icon('chevron-down', 16, 2)}
           />
@@ -600,7 +600,7 @@ export function Rail(props: RailProps) {
                 class="vt-icon-btn sm vt-wgrail-group-act"
                 aria-label={t('이 구역 숨기기')}
                 data-tip={t('이 구역 숨기기')}
-                data-tip-sub={t('레일 설정에서 다시 켭니다')}
+                data-tip-sub={t('세션 목록 설정에서 다시 켭니다')}
                 data-tip-side="bottom"
                 onClick={hideAttention}
                 innerHTML={shellIcon('eye', 14, 2)}
@@ -720,7 +720,7 @@ export function Rail(props: RailProps) {
             </>}
           </Show>
           <Show when={rows().length > lists().sessions.length && !collapsed()}>
-            <div class="vt-wgrail-note">{t('레일 설정에서 {n}개를 숨겼습니다.', { n: rows().length - lists().sessions.length })}</div>
+            <div class="vt-wgrail-note">{t('세션 목록 설정에서 {n}개를 숨겼습니다.', { n: rows().length - lists().sessions.length })}</div>
           </Show>
         </Show>
         {/* §1 — 목록이 200개 상한에서 잘렸다. 여기 한 줄이 없으면 "몇 개가
@@ -792,7 +792,7 @@ export function Rail(props: RailProps) {
         <Portal>
           <RepoVisibility
             deps={props.deps}
-            title={t('레일 설정')}
+            title={t('세션 목록 설정')}
             lead={<RailSettingsLead />}
             onClose={() => setRepoSheet(false)}
             onChanged={() => reposPoll.kick()}

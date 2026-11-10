@@ -469,7 +469,7 @@ function _renderLeaf(node, activePaneId, isRootOnly, placement, labelSuffix = ''
     nameEl.setAttribute('data-tip', t('{host}에 연결할 수 없습니다', { host: node.unreachable.host }));
     _renderUnreachableBody(bodyEl, node);
   } else {
-    nameEl.textContent = t('빈 pane') + labelSuffix;
+    nameEl.textContent = t('빈 페인') + labelSuffix;
     _renderEmptyBody(bodyEl, node.id);
   }
   return paneEl;

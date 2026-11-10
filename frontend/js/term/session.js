@@ -99,7 +99,7 @@ export function showAddMenu(el, e) {
     return it;
   };
   menu.appendChild(mkItem(t('일반 터미널'), t('단발 셸 (tmux 아님)'), createPlainSession));
-  menu.appendChild(mkItem(t('tmux 세션'), t('detach 유지 · 맥/모바일 공유'), createTmuxSession));
+  menu.appendChild(mkItem(t('tmux 세션'), t('화면을 닫아도 유지 · 맥/모바일 공유'), createTmuxSession));
   document.body.appendChild(menu);
 
   // 레일 하단 버튼처럼 뷰포트 맨 아래에 붙은 경우, 아래로 펼치면 body의
@@ -198,7 +198,7 @@ export function addSession(id, displayName, opts = null) {
   const { place = 'view', ...recordOpts } = opts || {};
   // 방어: id 없이 호출되면(서버 오류 응답 등) 유령 탭 + /ws/undefined 무한재연결이
   // 생기므로 무시한다.
-  if (!id) { showToast(t('세션 생성 실패 (id 없음)')); return; }
+  if (!id) { showToast(t('세션 생성 실패 (ID 없음)')); return; }
   // 빈 상태 온보딩이 떠 있으면 제거 — 안 그러면 새 터미널이 온보딩 뒤에 가려져
   // 탭은 생겼는데 이동/조작이 안 되는 것처럼 보인다.
   document.getElementById('onboarding')?.remove();
@@ -292,7 +292,7 @@ export async function renameSession(id, rawName, previousNameOverride) {
       // "웹 라벨만 조용히 바꾸는" 폴백이 없어졌다: 서버가 거절한 이유를
       // 그대로 보여준다.
       const msg = data?.error === 'tmux session name must be alphanumeric/dash/underscore only'
-        ? t('세션 이름은 영숫자·dash·underscore만 가능합니다(tmux 제약)')
+        ? t('세션 이름은 영숫자·하이픈(-)·밑줄(_)만 가능합니다(tmux 제약)')
         : data?.error === 'tmux session name already exists'
         ? t('이미 있는 이름입니다')
         : t('세션 이름 변경 실패');
