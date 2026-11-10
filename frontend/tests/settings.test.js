@@ -406,3 +406,10 @@ test('firstLoad — 두 번째 load()는 promise를 다시 만들지 않는다',
   await S.load();
   assert.strictEqual(S.firstLoad(), first);
 });
+
+// OSC 52 허용은 보안 옵트인이다 — 기본 꺼짐, 기기 스코프(폰에서 켠 허용이 다른 기기로 번지지 않는다).
+test('terminal.osc52Untrusted는 기본 꺼짐 + 기기 스코프', async () => {
+  const { S } = await load();
+  assert.strictEqual(S.scopeOf('terminal.osc52Untrusted'), 'device');
+  assert.strictEqual(S.get('terminal.osc52Untrusted'), false);
+});

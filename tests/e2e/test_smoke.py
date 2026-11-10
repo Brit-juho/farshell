@@ -4107,3 +4107,51 @@ def test_모바일_파일_트리와_뷰어_본문은_칸_면_bg0이고_검정이
         _dfx_shot(pg, "dfx-raw-390")
     finally:
         ctx.close()
+
+
+def test_일반_터미널의_OSC52는_기본_차단되고_설정을_켜면_클립보드를_바꾼다(isolated_page):
+    """term/osc52.js — tmux 없는 일반 세션이 출력으로 보낸 OSC 52(클립보드 쓰기)는 기본으로
+    막고(경고 토스트 1회), 설정 `terminal.osc52Untrusted`를 켜면 복사한다. 실제 셸이 printf로
+    시퀀스를 내보내는 경로 전체(PTY → WS → xterm 파서 → 핸들러)를 본다."""
+    import base64
+
+    page = isolated_page
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"])
+    page.evaluate("() => window.createSession && window.createSession()")
+    page.wait_for_selector(".vt-pane .vt-pane-body .xterm", timeout=15000)
+    page.wait_for_timeout(800)
+    sid = page.evaluate("() => Object.keys(window.allSessions())[0]")
+
+    def emit(text: str) -> None:
+        b64 = base64.b64encode(text.encode()).decode()
+        # 셸 입력 줄에는 `\033`이 글자 그대로 에코될 뿐 — 실제 ESC는 printf가 만든다.
+        page.evaluate(
+            "([id, cmd]) => window.getSession(id).term.input(cmd + '\\r', true)",
+            [sid, f"printf '\\033]52;c;{b64}\\a'"],
+        )
+
+    def clip() -> str:
+        return page.evaluate("() => navigator.clipboard.readText()")
+
+    try:
+        assert page.evaluate("(id) => !window.getSession(id).tmuxName", sid), "일반(tmux 아님) 세션이어야 한다"
+        assert page.evaluate("() => window.vtSettingsGet('terminal.osc52Untrusted')") is False
+        page.evaluate("() => navigator.clipboard.writeText('SENTINEL')")
+
+        emit("pwned-1")
+        warn = page.get_by_text(re.compile("막았습니다|was blocked"))
+        warn.first.wait_for(timeout=8000)
+        page.wait_for_timeout(500)
+        assert clip() == "SENTINEL", "기본 설정에서 일반 터미널의 OSC52가 클립보드를 바꿨다"
+        emit("pwned-2")
+        page.wait_for_timeout(1000)
+        assert clip() == "SENTINEL"
+        assert warn.count() == 1, "경고는 세션마다 한 번만 떠야 한다"
+
+        page.evaluate("() => window.vtSettingsSet('terminal.osc52Untrusted', true)")
+        emit("allowed-text")
+        page.wait_for_function("() => navigator.clipboard.readText().then((t) => t === 'allowed-text')", timeout=8000)
+        page.get_by_text(re.compile(r'allowed-text.*· 12')).first.wait_for(state='attached', timeout=5000)  # 미리보기 + 글자 수 토스트
+    finally:
+        page.evaluate("() => window.vtSettingsSet('terminal.osc52Untrusted', false)")
+        page.evaluate("(id) => window.removeSession && window.removeSession(id)", sid)

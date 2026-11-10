@@ -42,6 +42,8 @@ export const SCHEMA = {
   'terminal.fontSize':      { type: 'int',  def: 14, min: 8, max: 28, migrate: 'vt_font_size', scope: 'device' },
   'terminal.cursorStyle':   { type: 'enum', def: 'block', values: ['block', 'underline', 'bar'] },
   'terminal.cursorBlink':   { type: 'bool', def: true },
+  // 보안 옵트인 — 기기마다 따로 허용한다(폰에서 켠 허용이 다른 기기로 번지지 않게).
+  'terminal.osc52Untrusted': { type: 'bool', def: false, scope: 'device' },
   'terminal.scrollback':    { type: 'int',  def: 2000, min: 500, max: 10000 },
   // S1 spike 성공 — off면 앱의 마우스 리포팅을 무시하고 항상 로컬 선택(iTerm2 기본 동작).
   // 문서 §1 표의 "mouse.forward"에 대응 — 기기 성능/입력 방식에 달린 값이라 device.
