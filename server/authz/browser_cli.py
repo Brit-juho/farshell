@@ -103,7 +103,7 @@ def cmd_enable(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="fsh browser enable")
     ap.add_argument("name")
     ap.add_argument("--off", action="store_true")
-    ap.add_argument("--yes", action="store_true", help="첫 사용 동의를 명시한다")
+    ap.add_argument("--yes", action="store_true", help=tr("첫 사용 동의를 명시한다"))
     args = ap.parse_args(argv)
     body = {"enabled": not args.off, "consent": bool(args.yes)}
     r = _request("POST", f"/api/browser/adapters/{args.name}/enable", body)

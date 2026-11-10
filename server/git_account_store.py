@@ -34,6 +34,7 @@ from urllib.request import urlopen
 import store_lock
 import git_safe
 import vt_paths
+from i18n import tr
 
 PROVIDERS = {"github", "gitlab"}
 AUTH_TYPES = {"pat"}
@@ -164,16 +165,16 @@ def add_account(
     """
     if provider not in PROVIDERS:
         return {"ok": False, "error": "invalid_provider",
-                "reason": f"provider는 {sorted(PROVIDERS)} 중 하나여야 합니다"}
+                "reason": tr("provider는 {list} 중 하나여야 합니다", list=sorted(PROVIDERS))}
     if auth_type not in AUTH_TYPES:
         return {"ok": False, "error": "invalid_auth_type",
-                "reason": "auth.type은 pat만 지원합니다"}
+                "reason": tr("auth.type은 pat만 지원합니다")}
     host = (host or "").strip()
     login = (login or "").strip()
     token = (token or "").strip()
     if not host or not login or not token:
         return {"ok": False, "error": "missing_fields",
-                "reason": "host/login/token은 비어있을 수 없습니다"}
+                "reason": tr("host/login/token은 비어있을 수 없습니다")}
 
     with _locked(_accounts_lock_path()):
         accounts = _read_accounts_unlocked()

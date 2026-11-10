@@ -37,6 +37,8 @@ import tempfile
 import time
 from pathlib import Path
 
+from i18n import tr
+
 
 def _p(s: str = "") -> None:
     print(s)
@@ -56,31 +58,33 @@ def _dry_run(as_json: bool) -> int:
         out["diff"] = d
         _p(json.dumps(out, ensure_ascii=False, indent=1, default=str))
         return 0
-    _p(f"fsh migrate-auth --dry-run  (저장소 {store.root()}, 쓰지 않음)")
-    _p(f"  tmux 읽기: {'됨 — 세션 ' + str(p['tmux_sessions']) + '개' if p['tmux_readable'] else '안 됨 - 죽은 세션 정리 안 함'}")
-    _p("이전 대상:")
+    _p(tr("fsh migrate-auth --dry-run  (저장소 {root}, 쓰지 않음)", root=store.root()))
+    _p(tr("  tmux 읽기: 됨 — 세션 {n}개", n=p["tmux_sessions"]) if p["tmux_readable"]
+       else tr("  tmux 읽기: 안 됨 - 죽은 세션 정리 안 함"))
+    _p(tr("이전 대상:"))
     kinds: dict[str, int] = {}
     for g in p["grants"]:
         k = g["origin"].split(":")[1]
         kinds[k] = kinds.get(k, 0) + 1
     for k, n in sorted(kinds.items()):
         _p(f"  grant ← {k:<14} {n}")
-    _p(f"  approval(대기·거절 쿨다운)  {len(p['approvals'])}")
-    _p(f"  공유 정책(shares)          {len(p['shares'])}")
-    _p(f"  peer 등록부                {len(p['peers'])}  (secret 은 sha256 만 — 1단계)")
-    _p(f"  가져올 옛 로그             {', '.join(p['logs']) or '없음'}")
+    _p(tr("  approval(대기·거절 쿨다운)  {n}", n=len(p["approvals"])))
+    _p(tr("  공유 정책(shares)          {n}", n=len(p["shares"])))
+    _p(tr("  peer 등록부                {n}  (secret 은 sha256 만 — 1단계)", n=len(p["peers"])))
+    _p(tr("  가져올 옛 로그             {logs}", logs=", ".join(p["logs"]) or tr("없음")))
     dr = p["dropped"]
-    _p(f"버림: 죽은 세션 {dr['dead_session']}, 만료 요청 {dr['expired']}, 빈 grant {dr['empty']}")
-    _p("저장소에 적용하면(+추가 ~갱신 -제거 =같음):")
+    _p(tr("버림: 죽은 세션 {dead}, 만료 요청 {expired}, 빈 grant {empty}",
+          dead=dr["dead_session"], expired=dr["expired"], empty=dr["empty"]))
+    _p(tr("저장소에 적용하면(+추가 ~갱신 -제거 =같음):"))
     for k, st in d.items():
         _p(_fmt_stats(k, st))
     for g in p["grants"]:
         _p(f"    {g['origin']:<40} {g['subject']} → {g['resource']}  [{', '.join(g['scopes'])}]")
     if p["warnings"]:
-        _p("경고:")
+        _p(tr("경고:"))
         for w in p["warnings"]:
             _p(f"  ! {w}")
-    _p("적용: fsh migrate-auth --apply   (먼저 ~/.vt/authz/backup/<ts>.tgz 백업)")
+    _p(tr("적용: fsh migrate-auth --apply   (먼저 ~/.vt/authz/backup/<ts>.tgz 백업)"))
     return 0
 
 
@@ -90,10 +94,10 @@ def _apply(as_json: bool) -> int:
     if as_json:
         _p(json.dumps(r, ensure_ascii=False, indent=1, default=str))
         return 0
-    _p(f"이전 완료 — 백업 {r['backup']}")
+    _p(tr("이전 완료 — 백업 {backup}", backup=r["backup"]))
     for k in ("grants", "approvals", "shares", "peers"):
         _p(_fmt_stats(k, r[k]))
-    _p(f"  옛 로그 복사 {r['logs']['copied']}, 이미 가져옴 {r['logs']['skipped']}")
+    _p(tr("  옛 로그 복사 {copied}, 이미 가져옴 {skipped}", copied=r["logs"]["copied"], skipped=r["logs"]["skipped"]))
     for w in r["warnings"]:
         _p(f"  ! {w}")
     return 0
@@ -108,11 +112,11 @@ def _replay_matrix() -> tuple[str, dict | None]:
     """(상태, 차이) — 상태: ok | diff | skipped:<이유> | error:<요약>."""
     t = _repo_tests()
     if t is None:
-        return "skipped:개발 체크아웃이 아님(server/tests/authz_char 없음)", None
+        return tr("skipped:개발 체크아웃이 아님(server/tests/authz_char 없음)"), None
     try:
         import pytest  # noqa: F401
     except ImportError:
-        return "skipped:pytest 없음(.venv 의 dev 의존성)", None
+        return tr("skipped:pytest 없음(.venv 의 dev 의존성)"), None
     with tempfile.TemporaryDirectory(prefix="fsh-authz-verify-") as td:
         report = Path(td) / "report.json"
         env = {**os.environ, "VT_AUTHZ_VERIFY_ONLY": "store", "VT_AUTHZ_VERIFY_REPORT": str(report),
@@ -137,12 +141,13 @@ def _verify(as_json: bool) -> int:
         _p(json.dumps({"store": s, "matrix": {"status": status, "diffs": found}}, ensure_ascii=False, indent=1,
                       default=str))
     else:
-        _p(f"(1) 저장소 ↔ 옛 저장소 번역: {'일치' if s['clean'] else '차이 있음'}")
+        _p(tr("(1) 저장소 ↔ 옛 저장소 번역: 일치") if s["clean"] else tr("(1) 저장소 ↔ 옛 저장소 번역: 차이 있음"))
         for k, st in s["diff"].items():
             _p(_fmt_stats(k, st))
         for n, r in (s.get("schema") or {}).items():
-            _p(f"    스키마 {n}: version={r.get('version')} 항목 {r.get('items')}개 (옛 이름 {r.get('legacy_items')}개 - 읽을 때 변환)")
-        _p(f"(2) matrix.json 재생(이전된 저장소, store 소스): {status}")
+            _p(tr("    스키마 {name}: version={version} 항목 {items}개 (옛 이름 {legacy}개 - 읽을 때 변환)",
+                  name=n, version=r.get("version"), items=r.get("items"), legacy=r.get("legacy_items")))
+        _p(tr("(2) matrix.json 재생(이전된 저장소, store 소스): {status}", status=status))
         for cid, rows in (found or {}).items():
             for r in rows:
                 _p(f"    {cid}: {r.get('site')} {r.get('scope')} {r.get('resource')} "
@@ -159,23 +164,26 @@ def _status(as_json: bool) -> int:
         return 0
     m = st["meta"]
     when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(m["applied_at"])) if st["migrated"] else "-"
-    _p(f"이전: {'됨 ' + when if st['migrated'] else '안 됨'}  {m.get('counts') or ''}")
-    _p(f"shadow 불일치 기록: {st['shadow_mismatches']}줄")
+    counts = m.get("counts") or ""
+    _p(tr("이전: 됨 {when}  {counts}", when=when, counts=counts) if st["migrated"] else tr("이전: 안 됨  {counts}", counts=counts))
+    _p(tr("shadow 불일치 기록: {n}줄", n=st["shadow_mismatches"]))
     for n, r in st["schema"].items():
-        _p(f"스키마 {n}: version={r.get('version')} 항목 {r.get('items')}개, 옛 이름 형태 {r.get('legacy_items')}개 "
-           f"(코드 스키마 {st['schema_version']})")
+        _p(tr("스키마 {name}: version={version} 항목 {items}개, 옛 이름 형태 {legacy}개 (코드 스키마 {code})",
+              name=n, version=r.get("version"), items=r.get("items"), legacy=r.get("legacy_items"), code=st["schema_version"]))
     for u in st["unreadable"]:
-        _p(f"저장소 읽기 불가: {u['name']} — {u['reason']} (변경 거부 중 · 파일은 그대로, 복사본 {len(u['copies'])}개) {u['path']}")
+        _p(tr("저장소 읽기 불가: {name} — {reason} (변경 거부 중 · 파일은 그대로, 복사본 {copies}개) {path}",
+              name=u["name"], reason=u["reason"], copies=len(u["copies"]), path=u["path"]))
     a = st["audit"]
-    _p(f"감사 체인: {'온전' if a['ok'] else '깨짐 seq=' + str(a['broken_seq'])} ({a['lines']}줄)")
-    _p("백업:")
-    for b in st["backups"] or [{"ts": "없음"}]:
-        _p(f"  {b.get('ts')}  {b.get('error') or str(b.get('files', '')) + '개 파일'}")
+    _p(tr("감사 체인: 온전 ({lines}줄)", lines=a["lines"]) if a["ok"]
+       else tr("감사 체인: 깨짐 seq={seq} ({lines}줄)", seq=a["broken_seq"], lines=a["lines"]))
+    _p(tr("백업:"))
+    for b in st["backups"] or [{"ts": tr("없음")}]:
+        _p(f"  {b.get('ts')}  {b.get('error') or tr('{n}개 파일', n=b.get('files', ''))}")
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="fsh migrate-auth", description="옛 권한 저장소 → authz 이전")
+    ap = argparse.ArgumentParser(prog="fsh migrate-auth", description=tr("옛 권한 저장소 → authz 이전"))
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--dry-run", action="store_true")
     g.add_argument("--apply", action="store_true")
@@ -189,7 +197,7 @@ def main(argv: list[str] | None = None) -> int:
     from . import migrate, store
     try:
         if args.finalize:
-            _p("--finalize 는 8단계(옛 저장소 제거)에 생깁니다 — 지금은 쓸 수 없습니다.")
+            _p(tr("--finalize 는 8단계(옛 저장소 제거)에 생깁니다 — 지금은 쓸 수 없습니다."))
             return 2
         if args.apply:
             return _apply(args.json)
@@ -197,15 +205,16 @@ def main(argv: list[str] | None = None) -> int:
             return _verify(args.json)
         if args.backup:
             m = migrate.backup()
-            _p(json.dumps(m, indent=1) if args.json else f"백업 {m['ts']} ({len(m['files'])}개 파일) → {migrate.backup_dir()}")
+            _p(json.dumps(m, indent=1) if args.json else tr("백업 {ts} ({n}개 파일) → {dir}", ts=m["ts"], n=len(m["files"]), dir=migrate.backup_dir()))
             return 0
         if args.restore:
             r = migrate.restore(args.restore)
             if args.json:
                 _p(json.dumps(r, ensure_ascii=False, indent=1))
             else:
-                _p(f"복원 완료 — {r['from']} ({len(r['restored'])}개 복원, {len(r['removed'])}개 제거)")
-                _p(f"  복원 전 상태는 {r['pre_restore_backup']} 로 백업됨. 서버를 재시작하세요(fsh restart).")
+                _p(tr("복원 완료 — {src} ({restored}개 복원, {removed}개 제거)",
+                      src=r["from"], restored=len(r["restored"]), removed=len(r["removed"])))
+                _p(tr("  복원 전 상태는 {path} 로 백업됨. 서버를 재시작하세요(fsh restart).", path=r["pre_restore_backup"]))
             return 0
         if args.status:
             return _status(args.json)

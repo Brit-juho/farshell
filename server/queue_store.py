@@ -235,10 +235,38 @@ def blocked_text(reason: str) -> str:
     return ""
 
 
+def _stored_reason_text(reason: str) -> str:
+    """파일에 한국어 원문으로 저장된 고정 사유의 현재 언어 문구. 저장 시점의 언어를 박지 않으려고 읽을 때 번역한다
+    (한국어에서는 원문과 같다). 해당하지 않으면 빈 문자열."""
+    if reason == "타깃이 승인 대기 중":
+        return tr("타깃이 승인 대기 중")
+    if reason == "원격 항목에 세션이 없음":
+        return tr("원격 항목에 세션이 없음")
+    if reason == "원격 전송 실패":
+        return tr("원격 전송 실패")
+    if reason == "타깃 tmux 세션 없음":
+        return tr("타깃 tmux 세션 없음")
+    if reason == "사용자가 입력하는 중":
+        return tr("사용자가 입력하는 중")
+    if reason == "tmux 전송 실패":
+        return tr("tmux 전송 실패")
+    if reason == "서버 재시작으로 전송이 중단됨 — 이미 들어갔는지 확인 후 해제하세요":
+        return tr("서버 재시작으로 전송이 중단됨 — 이미 들어갔는지 확인 후 해제하세요")
+    if reason == "전송이 끝나지 않았습니다 — 들어갔는지 확인 후 해제하세요":
+        return tr("전송이 끝나지 않았습니다 — 들어갔는지 확인 후 해제하세요")
+    return ""
+
+
+def display_reason(reason: str) -> str:
+    """막힘 사유를 사람에게 보일 문구로 — 안정 코드 → 고정 사유 → 원문 그대로."""
+    return blocked_text(reason) or _stored_reason_text(reason) or reason
+
+
 def with_blocked_text(item: dict) -> dict:
     """막힘 코드가 있는 항목이면 `blocked_text` 를 더한 복사본, 아니면 그대로. 저장된 항목은 바꾸지 않는다."""
-    t = blocked_text(str(item.get("blocked_reason") or ""))
-    return {**item, "blocked_text": t} if t else item
+    reason = str(item.get("blocked_reason") or "")
+    t = blocked_text(reason) or _stored_reason_text(reason)
+    return {**item, "blocked_text": t} if t and t != reason else item
 
 
 def list_items() -> list[dict]:
@@ -570,7 +598,7 @@ def _cli(argv: list[str]) -> int:
                         tail = tr("{sec}초 뒤 재시도 ({tries}/{max})", sec=left, tries=x.get('attempts', 0), max=MAX_ATTEMPTS)
                     else:
                         tail = tr("해제: vt queue unblock {id}", id=x['id'][:8])
-                    print("         └ " + tr("차단됨: {reason} — {tail}", reason=blocked_text(x['blocked_reason']) or x['blocked_reason'], tail=tail))
+                    print("         └ " + tr("차단됨: {reason} — {tail}", reason=display_reason(x['blocked_reason']), tail=tail))
             print()
             print("  " + tr("실행: vt queue run   삭제: vt queue rm <id>   비우기: vt queue clear   기록: vt queue log [id]"))
         print()

@@ -9,6 +9,8 @@ import os
 import re
 from typing import Optional
 
+from i18n import tr
+
 DANGEROUS_PATTERNS = [
     # rm -rf 시스템 루트/디렉토리 (사용자 디렉토리는 허용)
     (re.compile(r"\brm\s+-[rRf]+\s+(/(\s|$|\*)|/(etc|usr|var|bin|sbin|lib|System|Library|Applications|home|root|opt|boot)\b)"), "rm -rf 시스템 경로"),
@@ -45,5 +47,5 @@ def check(cmd: str) -> tuple[bool, Optional[str]]:
 
     for pat, label in DANGEROUS_PATTERNS:
         if pat.search(cmd_check):
-            return False, label
+            return False, (tr("rm -rf 시스템 경로") if label == "rm -rf 시스템 경로" else label)
     return True, None

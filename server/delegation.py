@@ -209,9 +209,9 @@ def _read() -> dict:
         data = json.loads(p.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
         # 깨진 장부를 빈 것으로 덮어쓰면 소유 관계가 전부 사라진다 — 거부한다.
-        raise DelegationError("store_corrupt", f"위임 장부를 읽지 못했습니다: {e}", 500) from e
+        raise DelegationError("store_corrupt", tr("위임 장부를 읽지 못했습니다: {reason}", reason=e), 500) from e
     if not isinstance(data, dict):
-        raise DelegationError("store_corrupt", "위임 장부 형식이 올바르지 않습니다", 500)
+        raise DelegationError("store_corrupt", tr("위임 장부 형식이 올바르지 않습니다"), 500)
     data.setdefault("items", [])
     data.setdefault("spawns", [])
     return data
@@ -853,7 +853,7 @@ def close(did: str, *, caller_key: Optional[str] = None, reason: str = "closed_b
         if caller_key is None:
             item = next((x for x in data["items"] if x["id"] == did), None)
             if item is None:
-                raise DelegationError("not_found", "그런 위임이 없습니다", 404)
+                raise DelegationError("not_found", tr("그런 위임이 없습니다"), 404)
             if system:
                 who = "system:saga"
             elif enforced():
@@ -862,7 +862,7 @@ def close(did: str, *, caller_key: Optional[str] = None, reason: str = "closed_b
                     actor = P.cli(os.getuid(), os.getpid())
                 who = actor.id
                 if not _svc().authorize_actor(actor, did, op="close").allow:
-                    raise DelegationError("forbidden", "이 주체는 위임을 닫을 수 없습니다", 403)
+                    raise DelegationError("forbidden", tr("이 주체는 위임을 닫을 수 없습니다"), 403)
         else:
             item = _owned(data, did, caller_key, "parent", op="close")
         if item["state"] in (CLOSED,):
