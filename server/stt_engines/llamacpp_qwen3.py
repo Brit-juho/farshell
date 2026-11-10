@@ -24,7 +24,7 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
-from . import hfcache, llama_release
+from . import hfcache, llama_release, pins
 from .base import Engine, NotReady, Progress, Requirement
 from .env import HostEnv
 from i18n import tr
@@ -91,8 +91,16 @@ class LlamaCppQwen3Engine(Engine):
             raise NotReady(str(e)) from e
 
     # ── 모델 ───────────────────────────────────────────────────────
-    def _files(self, spec) -> Optional[tuple]:
-        """(모델 gguf, mmproj gguf) 캐시 경로. 하나라도 없으면 None."""
+    def _files(self, spec, verify: bool = False) -> Optional[tuple]:
+        """(모델 gguf, mmproj gguf) 캐시 경로. 하나라도 없으면 None. 카탈로그(고정) 모델은 verify=True일 때 해시까지 본다."""
+        if pins.pin_for(spec.repo) is not None:
+            snap = pins.verified_snapshot(spec.repo) if verify else pins.complete_snapshot(spec.repo)
+            if snap is None:
+                return None
+            ns = list(spec.files)
+            model = next((snap / n for n in ns if not n.startswith("mmproj")), None)
+            mmproj = next((snap / n for n in ns if n.startswith("mmproj")), None)
+            return (model, mmproj) if model and mmproj else None
         names = spec.files or _guess_files(spec.repo)
         if not names:
             return None
@@ -107,10 +115,14 @@ class LlamaCppQwen3Engine(Engine):
         return self._files(spec) is not None
 
     def download_model(self, spec, progress: Progress) -> None:
-        from huggingface_hub import snapshot_download
         from ._progress import poll_cache_progress
-        patterns = list(spec.files) or _repo_gguf_patterns(spec.repo)
         total = (spec.size_mb or 0) * 1_000_000 or None   # 카탈로그 용량은 십진 MB
+        if pins.pin_for(spec.repo) is not None:
+            with poll_cache_progress(spec.repo, total, progress):
+                pins.download_pinned(spec.repo)           # 커밋 고정 + SHA-256 검증
+            return
+        from huggingface_hub import snapshot_download      # 직접 입력한 모델 — 고정 못 함
+        patterns = list(spec.files) or _repo_gguf_patterns(spec.repo)
         with poll_cache_progress(spec.repo, total, progress):
             snapshot_download(spec.repo, allow_patterns=patterns)
 
@@ -133,7 +145,7 @@ class LlamaCppQwen3Engine(Engine):
             binary = llama_release.find_binary()
             if binary is None:
                 raise NotReady(tr("llama.cpp(llama-server)가 없습니다 — 설정 「음성 및 알림」에서 먼저 받아 주세요"))
-            files = self._files(spec)
+            files = self._files(spec, verify=True)       # PinError(NotReady)면 해시 불일치
             if files is None:
                 raise NotReady(tr("음성 인식 모델 '{model}'을(를) 아직 받지 않았습니다 — 설정 「음성 및 알림」에서 먼저 받아 주세요", model=spec.label))
             port = _free_port()

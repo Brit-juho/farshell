@@ -1,7 +1,7 @@
 // R6 — 파일 업로드의 **유일한 구현**(전송·대기열·취소는 이 파일, 드롭 판별·창 기본 동작 차단·브리지 스텁은 upload-lite.js).
 // 이 파일은 `upload` 청크라 첫 업로드 때 받는다. 진입점은 셋이다:
 //   1. `#file-input`  — 키바 📎 · 팔레트 · 파일 패널 「올리기」가 공유하는 그 input
-//      (picker.js의 `uploadFile()`이 인라인 onchange로 받아 여기로 넘긴다)
+//      (picker.js의 `uploadFile()`이 change 위임 리스너가 받아 여기로 넘긴다)
 //   2. 터미널 칸에 OS 파일 드롭   — layout/dnd.js
 //   3. 파일 패널에 OS 파일 드롭   — panels/files/files.js (지연 청크 → window 브리지)
 //

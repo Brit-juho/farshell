@@ -237,8 +237,10 @@ precache stays valid:
 | `vite.config.js` | Frontend build config — library mode, two independent entries (see above), no hashing, whitespace-only minify (identifiers are kept) |
 | `styles/` | `main.css` (Tailwind entry), `layers/` (reset/components/patterns/history), `screens/` (the pre-Tailwind hand-written CSS, kept unlayered so it always wins the cascade), `theme/` (`tokens.css`, `skins.css`) |
 | `install.sh` | Creates Python venv, installs per-profile packages, symlinks fsh, initializes ~/.vt.env, runs `npm ci && npm run build` (skipped when a prebuilt `frontend/dist/` from a release tarball is present) |
-| `requirements-core.txt` | Terminal-only (~50MB) |
-| `requirements-voice.txt` | Additional voice dependencies (hundreds of MB; speech models are downloaded later from Settings) |
+| `requirements-core.txt` | Terminal-only (~50MB) — input of the hash lock, not an install path |
+| `requirements-voice.txt` | Additional voice dependencies (hundreds of MB; speech models are downloaded later from Settings) — input of the hash lock |
+| `locks/core.txt`, `voice.txt`, `dev.txt` | Hash-locked (`--generate-hashes`, universal) versions of the three requirement files; the only thing `install.sh`, CI and `fsh update` install from (`pip --require-hashes`) |
+| `scripts/lock_python.sh`, `scripts/check_python_lock.py` | Regenerate the lock (needs `uv`), and check offline that it matches `requirements-*.txt` |
 | `.github/workflows/ci.yml`, `release.yml` | CI — `npm test`/`pytest` on PR/push, frontend build-artifact shape verification (no hashed filenames, size cap); release workflow |
 
 ### `.claude/skills/` — Claude Code skills

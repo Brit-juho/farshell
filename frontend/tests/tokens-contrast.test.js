@@ -485,6 +485,28 @@ test('틴트 행(waiting·선택)에서 한 단계 올라간 글자가 그 자�
   assert.deepStrictEqual(fails, [], fails.join('\n'));
 });
 
+test('접힌 세션 칸(링 · 상태색 마크)이 칸의 바탕에서 3:1을 넘는다, 개수 배지 글자는 4.5', () => {
+  // 칸 바탕: 기본(bar = bg-1) · hover(bg-3) · waiting 틴트(waiting 상태만) · 선택(acc-soft, 상태색을 본문색 쪽으로 20% 당김).
+  // 틴트는 bg-1 위에 합성한다.
+  const mix = (a, b, pct) => a.map((v, i) => Math.round(v * pct + b[i] * (1 - pct)));
+  const fails = [];
+  let checked = 0;
+  const STATES = ['--color-st-idle', '--color-st-working', '--color-st-waiting', '--color-st-done'];
+  for (const [skin, t] of Object.entries(RAW)) {
+    const check = (label, fg, bg) => { const r = contrast(fg, bg); checked += 1; if (r < 3) fails.push(`${skin} ${label} = ${r.toFixed(2)} < 3`); };
+    for (const st of STATES) {
+      for (const bg of ['--color-bg-1', '--color-bg-3']) check(`${st} on ${bg}`, solidOf(t, st), solidOf(t, bg, '--color-bg-1'));
+      check(`${st}(선택 20% 당김) on acc-soft`, mix(solidOf(t, st), solidOf(t, '--color-txt'), 0.8), solidOf(t, '--color-acc-soft', '--color-bg-1'));
+    }
+    check('st-waiting on waiting-tint', solidOf(t, '--color-st-waiting'), solidOf(t, '--color-st-waiting-tint', '--color-bg-1'));
+    // 작업 중 배지는 working 면 위에 --color-on-st-working 글자(8.5px 굵게).
+    const rb = ratioOn(t, '--color-on-st-working', '--color-st-working');
+    if (rb < 4.5) fails.push(`${skin} on-st-working on st-working(배지 글자) = ${rb.toFixed(2)} < 4.5`);
+  }
+  assert.strictEqual(checked, 9 * (4 * 3 + 1));
+  assert.deepStrictEqual(fails, [], fails.join('\n'));
+});
+
 // CIE76 ΔE — 나란히 두면 누구나 다른 색이라 말하는 거리(≥ 15).
 function lab(rgb) {
   const lin = rgb.map((v) => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });

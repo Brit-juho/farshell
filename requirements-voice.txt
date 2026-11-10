@@ -8,3 +8,5 @@ sounddevice>=0.4
 numpy>=1.24
 pynput>=1.7
 av>=11.0  # pyav: in-process audio decode (Phase 9 #10), ffmpeg subprocess 대체
+# macOS 핫키·클립보드 데몬(install.sh 가 예전엔 이것만 따로 설치했다 — 해시 잠금 파일에 함께 담으려고 여기로 옮겼다).
+pyobjc-framework-Cocoa>=10.0; sys_platform == "darwin"

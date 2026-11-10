@@ -43,6 +43,7 @@ import port_proxy
 import tunnel
 import vt_paths
 from host_guard import HostGuardMiddleware
+import security_headers
 from security_headers import SecurityHeadersMiddleware
 from deps import pty_mgr, output_watcher
 from routes.pty import router as pty_router, on_task_complete
@@ -763,7 +764,11 @@ async def index():
     if lang != "ko" and dict_file.exists():
         version = str(int(dict_file.stat().st_mtime))
         dictionary = i18n.load_dict(dict_file)
-    return HTMLResponse(i18n.render_index(p.read_text(encoding="utf-8"), lang, version, dictionary))
+    # 앱 문서만 전체 CSP(script-src 'self')를 받는다 — 정책 문자열은 security_headers.APP_CSP 한 곳.
+    return HTMLResponse(
+        i18n.render_index(p.read_text(encoding="utf-8"), lang, version, dictionary),
+        headers={"Content-Security-Policy": security_headers.APP_CSP},
+    )
 
 
 @app.get("/sw.js")

@@ -501,7 +501,7 @@ right column at ≥1100px and below the status bar zones when narrower (the same
 - **Accessibility:** the top group is `role="tablist"` with `aria-orientation="vertical"`; each activity is
   `role="tab"` with `aria-selected` and roving `tabindex`. ↑↓/Home/End move focus only; Enter/Space
   (the button's own click) opens it. The bottom group is a plain `role="group"`.
-- **The sidebar width is shared by every activity** (default 360, 240~480, ≤ 40vw; `ui.side.width`).
+- **The sidebar width is shared by every activity** (default 360 — 320/392 with the small/large 「메뉴 크기」 —, 240~480, ≤ 40vw; `ui.side.width`).
   Switching activities therefore never changes the pane sizes — no terminal refit, no SIGWINCH. The
   sessions activity shows the worktree rail below; tool activities show the dock body (below). Both stay
   **mounted** and only toggle `hidden`, so the rail keeps its polling and in-place editing state.
@@ -602,10 +602,17 @@ The ⋯ button and right-click open the same menu (`rowMenuItems`: 열기/닫기
 맥에서 열기 · 연결된 화면 · 종료). **레일 설정** (sliders) holds 개입 필요 on/off, show or hide sessions
 by origin — peer / external, and the 저장소 표시 list. Hiding an origin never hides a session that is
 open or waiting. The rail fills the sidebar; its width and collapse state belong to the workbench
-(above), and the header's chevron toggles the same collapse. **Collapsed (48px strip)**: 40×40 cells
-(radius 6) with the state icon 16 centred and the agent mark 12 in the bottom-right corner, waiting
-first on the amber tint, a 24×1 separator, then the rest; the tooltip carries name / branch · state ·
-다른 화면 N · share.
+(above), and the header's chevron toggles the same collapse. **Collapsed (48px strip, ring design)**: 40×40 cells
+(radius 6) with the agent mark 18 centred in the **state colour** inside a 2px state ring (idle dotted · waiting dashed and
+breathing · working rotating arc · done solid — the shape says the state, not only the colour; motion stops under
+`prefers-reduced-motion`). 「Not seen yet」 is a 6px dot at the mark's lower right (2px cut-out in the cell colour); a 12px badge at the
+upper right counts working internal sub-agents (tooltip only). Delegation children sit under their parent as 0.8× cells with a 2px branch on
+the left. The order is the **expanded rail's tree order** (개입 필요 first, then the configured sort / manual order / split groups, children
+under parents), and the first icon's centre lines up with the expanded first row's (body top padding 24, 32 between sections). Colours are
+the `--color-st-*` tokens, 3:1 or better on every cell background in all 9 skins (`tokens-contrast.test.js`); the badge text uses
+`--color-on-st-working`. **Menu size** (Settings › 모양, `ui.side.scale`, desktop only): small / normal / large = activity bar and strip
+44 / 48 / 52, cell 36 / 40 / 44, session rows one text step smaller / as is / larger, default sidebar width 320 / 360 / 392 (a stored
+`ui.side.width` always wins); one `data-vt-side-scale` attribute on `<html>` drives `--vt-act-w` and `--vt-cell`.
 
 ### Tool views — dock body (`#vt-dock`, `shell/Dock.tsx`)
 

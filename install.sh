@@ -283,16 +283,42 @@ fi
 source "$VENV/bin/activate"
 pip install --quiet --upgrade pip
 
-# 3. 프로필별 패키지 설치
-echo "▸ $(_t '패키지 설치 중...')"
-pip install --quiet -r "$VT_DIR/requirements-core.txt"
-if [ "$PROFILE" = "voice" ]; then
-  pip install --quiet -r "$VT_DIR/requirements-voice.txt"
-  if [ "$(uname)" = "Darwin" ]; then
-    pip install --quiet pyobjc-framework-Cocoa
+# 3. 프로필별 패키지 설치 — 해시로 잠근 파일(locks/)로만 설치한다.
+# 버전·해시가 저장소에 고정돼 있어, PyPI 에서 파일이 바뀌거나 중간에서 변조되면 설치가 멈춘다(`pip --require-hashes`).
+# 잠금 파일은 requirements-*.txt 에서 scripts/lock_python.sh 로 만든다(설치 때는 순수 pip 만 쓴다).
+_inst_pip_locked() {
+  local f log="" rc=0 args=()
+  for f in "$@"; do
+    if [ ! -f "$VT_DIR/locks/$f.txt" ]; then
+      echo "✗ $(_t '잠금 파일이 없습니다: {file}' file="$VT_DIR/locks/$f.txt")"
+      echo "    $(_t '저장소가 불완전합니다. 다시 내려받거나 git pull 로 최신 상태로 맞춘 뒤 재실행하세요.')"
+      exit 1
+    fi
+    args+=(-r "$VT_DIR/locks/$f.txt")
+  done
+  log="$(mktemp "${TMPDIR:-/tmp}/fsh-pip.XXXXXX")"
+  pip install --quiet --require-hashes "${args[@]}" >"$log" 2>&1 || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "✗ $(_t '파이썬 패키지 설치에 실패했습니다.')"
+    if grep -qi 'do not match the hashes' "$log"; then
+      echo "    $(_t '내려받은 파일의 해시가 잠금 파일(locks/)과 다릅니다. 네트워크 중간 장치(프록시·미러)의 변조, 또는 PyPI 의 파일 교체일 수 있어 설치를 멈췄습니다.')"
+      echo "    $(_t '다른 네트워크에서 다시 시도하고, 같은 오류가 반복되면 이슈로 알려 주세요. 해시 검사를 끄고 설치하지는 마세요.')"
+    else
+      echo "    $(_t '아래는 pip 출력의 마지막 부분입니다(전체: {log}).' log="$log")"
+      tail -n 12 "$log" | sed 's/^/      /'
+      echo "    $(_t '네트워크 연결, Python 버전(3.11 이상), 컴파일러(Linux 음성 모드의 evdev)를 확인하세요.')"
+    fi
+    exit 1
   fi
+  rm -f "$log"
+}
+
+echo "▸ $(_t '패키지 설치 중...')"
+if [ "$PROFILE" = "voice" ]; then
+  _inst_pip_locked core voice
   echo "✓ $(_t '터미널 + 음성 모드 의존성 설치 완료')"
 else
+  _inst_pip_locked core
   echo "✓ $(_t "터미널 의존성 설치 완료 (음성 모드는 './install.sh voice'로 추가)")"
 fi
 

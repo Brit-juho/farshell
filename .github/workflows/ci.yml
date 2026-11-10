@@ -11,8 +11,9 @@ on:
     # master는 릴리스된 것만, dev는 개발이 쌓이는 곳이다(AGENTS.md 「Branches and releases」).
     branches: [master, dev]
   schedule:
-    # 매주 일요일 03:00 KST — requirements-core.txt에 상한 핀이 없어서(§0-c),
-    # 업스트림 릴리스만으로 install.sh가 사용자보다 먼저 깨질 수 있다.
+    # 매주 일요일 03:00 KST. 예전엔 requirements-core.txt에 상한 핀이 없어 업스트림 릴리스만으로 install.sh가
+    # 깨지는 걸 보려는 것이었다. 지금은 설치가 locks/*.txt(해시 고정)라 의존성은 움직이지 않고, 이 일정은
+    # 러너 이미지·Python 패치 버전 변화만 잡는다.
     - cron: '0 18 * * 0'
 
 # 이 저장소가 공개되면 PR 에서도 이 워크플로가 돈다 — 토큰은 읽기 전용으로 못박는다(기본값에 기대지 않는다).
@@ -106,14 +107,18 @@ jobs:
         with:
           python-version: '3.13'
           cache: 'pip'
-          cache-dependency-path: requirements-core.txt
+          cache-dependency-path: locks/core.txt
       # P2-3(ADR-38) — check_api_contract가 `server/main.py`를 프로세스 안에서
       # 임포트해 FastAPI openapi 스펙을 꺼낸다. fastapi가 없으면 임포트가
       # 실패해 "스킵 + 경고"로만 떨어지고(app_openapi의 계약) 이 검사 전체가
       # 조용히 장식이 된다 — 그래서 이 잡도 core를 설치한다.
-      - run: pip install -r requirements-core.txt
+      # 파이썬 의존성은 해시 잠금 파일로만 설치한다(--require-hashes) — 사용자 install.sh 와 같은 방식이다.
+      - run: pip install --require-hashes -r locks/core.txt
       - name: 문서 일관성 검사 (I3)
         run: python3 scripts/check_docs.py --strict
+      # requirements-*.txt 를 고치고 scripts/lock_python.sh 를 안 돌렸거나, 잠금 파일에 해시 없는 줄이 섞이면 여기서 막는다.
+      - name: 파이썬 해시 잠금 점검
+        run: python3 scripts/check_python_lock.py
 
   # E1: 실브라우저 스모크. 정적 검사가 원리상 못 보는 것 — 캐스케이드가 합성된
   # 결과(자식이 부모 밖으로 나가는가, 구간별 표시/숨김) — 만 본다.
@@ -146,12 +151,12 @@ jobs:
           # 액션 쪽 동작이 바뀐 것이고, 우리 파일명은 처음부터 안 맞았다.
           # 이 잡이 실제로 설치하는 파일만 적는다.
           cache-dependency-path: |
-            requirements-core.txt
-            requirements-dev.txt
+            locks/core.txt
+            locks/dev.txt
       # 프런트 산출물이 있어야 페이지가 뜬다 — dist/는 커밋하지 않는다(ADR-2).
       - run: npm ci
       - run: npm run build
-      - run: pip install -r requirements-core.txt -r requirements-dev.txt
+      - run: pip install --require-hashes -r locks/core.txt -r locks/dev.txt
       # 브라우저 바이너리만. --with-deps는 시스템 패키지까지 깔아 느리고,
       # ubuntu-latest 러너에는 chromium이 필요로 하는 라이브러리가 이미 있다.
       - run: python -m playwright install chromium
@@ -211,11 +216,11 @@ jobs:
           cache: 'pip'
           # 위 e2e 잡의 주석 참고 — 파일명이 requirements.txt가 아니면 이 액션은
           # 에러로 끝난다. 이 잡은 core 하나만 설치하므로 그것만 적는다.
-          cache-dependency-path: requirements-core.txt
-      # requirements-voice.txt는 설치하지 않는다 — STT 엔진·모델 의존성이 무겁다(엔진 테스트는 가짜 엔진으로 돈다).
+          cache-dependency-path: locks/core.txt
+      # locks/voice.txt는 설치하지 않는다 — STT 엔진·모델 의존성이 무겁다(엔진 테스트는 가짜 엔진으로 돈다).
       # 2026-09-03 실측: voice 없이 332 passed / 2 skipped (Python 3.12/3.14 확인).
-      # pytest·httpx 는 이미 requirements-core.txt 에 있어 추가 설치 불필요.
-      - run: pip install -r requirements-core.txt
+      # pytest·httpx 는 이미 locks/core.txt 에 있어 추가 설치 불필요.
+      - run: pip install --require-hashes -r locks/core.txt
       # 멈춘 자리를 로그로 받아내는 두 장치. `faulthandler_timeout`(pytest 내장)은
       # 한 테스트가 60초를 넘기면 모든 스레드의 스택을 찍고, 바깥 `timeout`은
       # 8분에 SIGABRT로 끊어 **스텝이 스스로 끝나게** 한다 — 잡이 밖에서

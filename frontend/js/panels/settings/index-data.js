@@ -65,6 +65,14 @@ export const FOCUS_ITEMS = [
     labels: { 0: t('바로'), 250: '250ms', 500: '500ms' } },
 ];
 
+// 설정 › 모양 「메뉴 크기」 — 데스크톱의 활동 막대 · 사이드바 · 접힌 세션 띠 · 세션 행 크기(작게 44/36 · 보통 48/40 · 크게 52/44).
+// 폰은 이 값과 무관하다. 값별 치수는 shell/side-prefs.js SIDE_SCALES, 스타일은 90-workbench.css · 70-worktree-rail.css.
+export const SIDE_SCALE_ITEMS = [
+  { key: 'ui.side.scale', label: t('메뉴 크기'), kind: 'select',
+    labels: { small: t('작게'), normal: t('보통'), large: t('크게') },
+    help: t('활동 막대, 사이드바, 접힌 세션 띠와 세션 목록의 크기입니다. 끌어서 정한 사이드바 폭은 그대로입니다.') },
+];
+
 // 섹션의 이름·설명. 렌더 함수(custom)는 settings.js가 id로 붙인다 — 렌더러를 여기서
 // import하면 이 파일이 화면 전체를 끌고 들어와 팔레트 청크가 부풀기 때문이다.
 export const SECTION_META = [
@@ -72,7 +80,7 @@ export const SECTION_META = [
   { id: 'voice', label: t('음성 및 알림'), description: t('알림과 음성 입력 엔진을 관리합니다.') },
   { id: 'agents', label: t('에이전트'), description: t('에이전트 감지 상태를 확인합니다.') },
   { id: 'keymap', label: t('키맵'), description: t('단축키와 터미널 전달 여부를 바꿉니다.') },
-  { id: 'appearance', label: t('모양'), description: t('스킨, 화면 언어, 파일 뷰어 표시 방식, 집중 모드를 고릅니다.') },
+  { id: 'appearance', label: t('모양'), description: t('스킨, 화면 언어, 메뉴 크기, 파일 뷰어 표시 방식, 집중 모드를 고릅니다.') },
   { id: 'hud', label: t('상태 막대 · 활동 막대'), description: t('화면 맨 아래 상태 막대의 칩과, 왼쪽 활동 막대의 순서를 고릅니다.'), desktopOnly: true },
   { id: 'permissions', label: t('권한'), description: t('에이전트의 승인 요청, 페어, 폴더 lease, 허용된 권한, 감사 기록을 봅니다.') },
   { id: 'security', label: t('계정 및 보안'), description: t('로그인, OTP, 등록 기기와 현재 세션을 확인합니다.') },
@@ -88,7 +96,7 @@ export const SEARCH_ITEMS = [
   ['voice', t('현재 세션 음성')], ['voice', t('음성 전용 모드')], ['voice', t('확인 후 전송')], ['voice', t('입력 대상')],
   ['agents', t('에이전트 감지 상태')],
   ['keymap', t('단축키와 터미널 전달')],
-  ['appearance', t('스킨')], ['appearance', t('화면 언어')], ['appearance', t('파일 뷰어 표시 방식')],
+  ['appearance', t('스킨')], ['appearance', t('화면 언어')], ['appearance', t('메뉴 크기')], ['appearance', t('파일 뷰어 표시 방식')],
   ['appearance', t('집중 모드')], ['appearance', t('가장자리에 막대 띄우기')], ['appearance', t('개입 표시')], ['appearance', t('가장자리 반응 시간')],
   ['hud', t('상태 막대 칩')], ['hud', t('활동 막대 순서')],
   ['permissions', t('승인 대기')], ['permissions', t('페어')], ['permissions', t('폴더 lease')], ['permissions', t('허용된 권한')], ['permissions', t('감사 기록')], ['permissions', t('비상 정지')],
@@ -118,6 +126,7 @@ export const SEARCH_ALIASES = {
   [t('비상 정지')]: t('panic 모든 에이전트 권한 회수'),
   [t('화면 언어')]: t('언어 language 한국어 영어 english'),
   [t('집중 모드')]: t('전체 화면 막대 숨기기 젠 zen focus'),
+  [t('메뉴 크기')]: t('사이드바 활동 막대 세션 목록 글자 크기 작게 보통 크게 확대 축소 scale'),
   [t('상태 막대 칩')]: t('메뉴바 하단바 hud 칩 시계 cpu'),
   [t('활동 막대 순서')]: t('활동 숨기기 아이콘 순서 왼쪽 막대'),
   [t('에이전트 훅')]: 'hook codex claude',
@@ -158,13 +167,15 @@ export function buildSettingEntries(shownSectionIds) {
     }
   }
   if (visible('appearance')) {
-    for (const it of FOCUS_ITEMS) {
-      inlineLabels.add(it.label);
-      entries.push({
-        id: `s:${it.key}`, key: it.key, label: it.label, kind: it.kind, labels: it.labels, help: it.help,
-        section: 'appearance', path: `${sectionLabel('appearance')} › ${t('집중 모드')}`,
-        aliases: SEARCH_ALIASES[it.label] || '',
-      });
+    for (const [items, groupLabel] of [[SIDE_SCALE_ITEMS, t('메뉴')], [FOCUS_ITEMS, t('집중 모드')]]) {
+      for (const it of items) {
+        inlineLabels.add(it.label);
+        entries.push({
+          id: `s:${it.key}`, key: it.key, label: it.label, kind: it.kind, labels: it.labels, help: it.help,
+          section: 'appearance', path: `${sectionLabel('appearance')} › ${groupLabel}`,
+          aliases: SEARCH_ALIASES[it.label] || '',
+        });
+      }
     }
   }
   for (const r of RAIL_TOGGLES) {

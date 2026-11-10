@@ -195,6 +195,15 @@ After `VT_WATCHDOG_FAILS` (3) failures in a row:
 - **WebSockets.** `core/ws-watchdog.js` closes a socket that received nothing for 45 s (code 4000), so the
   normal reconnect and overlay path runs. The server sends `{"type":"ping"}` every 15 s on `/ws/{id}`,
   `/ws-agent`, `/ws-workspace` and `/ws-fs-watch`.
+- **Remote panes** (`/ws/remote/{host}/{tmux}`, `routes/peer_proxy.py`). The owner's `/api/peer/ws` sends no
+  `ping` and a quiet terminal sends no bytes, so before 2026-11 the browser's 45 s watchdog closed an idle remote
+  pane every 45 s. Now both hops are watched with the local-pane constants (`VT_WS_HEARTBEAT_INTERVAL` 15 s,
+  `VT_WS_HEARTBEAT_TIMEOUT` 45 s): the proxy sends `{"type":"ping"}` to the browser every 15 s and closes with 1001
+  when nothing (the browser's `pong` or any frame) arrived for 45 s or a send blocks for 2 s; the upstream socket
+  runs protocol ping/pong every 15 s with a 15 s answer deadline (`upstream_keepalive()`, also used by the host
+  relay WebSocket), so a dead owner closes it with 1011 within ~30 s. Both ends end with a reconnectable code (1000/1001),
+  never 4001/4004, so the browser takes the normal backoff path and an offline host keeps its layout. Tests:
+  `test_peer_proxy_watchdog.py`.
 
 ## Tests
 

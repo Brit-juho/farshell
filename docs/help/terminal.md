@@ -74,6 +74,7 @@ FarShell 의 tmux 는 레포의 `config/vt-tmux.conf` 를 늘 기준으로 씁�
 ```
 fsh tmux reload    # 떠 있는 tmux 에 설정을 다시 읽힘 (세션은 그대로)
 fsh tmux status    # 지금 적용 상태
+fsh tmux extkeys on|off|status   # 확장 키(Shift+Enter 등) 시험 스위치
 ```
 
 - 예전 설치가 남긴 `~/.config/vt/tmux.conf` 사본은 `fsh tmux reload`(그리고 `fsh sync`) 가 치웁니다.
@@ -82,3 +83,7 @@ fsh tmux status    # 지금 적용 상태
 - 다시 읽어도 설정에서 **지운** 값은 실행 중인 tmux 에 남습니다. 완전히 새로 읽히려면
   tmux 서버를 재시작해야 하고, 그러면 세션이 모두 닫힙니다.
 - `fsh doctor` 의 「tmux 설정」 줄이 같은 상태를 보여 줍니다.
+- `fsh tmux extkeys on` 은 `~/.config/vt/tmux.local.conf` 에 `# >>> fsh extkeys` … `# <<< fsh extkeys` 구간
+  (`extended-keys on` + `terminal-features` 의 `extkeys`)을 쓰고 바로 다시 읽힙니다. `off` 는 그 구간만 지우고
+  떠 있는 tmux 에도 끕니다. 내가 쓴 다른 줄은 건드리지 않고, 몇 번 해도 결과가 같습니다. 기본은 꺼져 있습니다.
+  tmux 3.2 이상이 필요합니다. 이미 붙어 있는 화면은 늦게 적용될 수 있으니 안 되면 탭이나 pane 을 다시 여세요.

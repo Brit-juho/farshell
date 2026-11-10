@@ -28,7 +28,7 @@ import { availableActivities, activityById } from './activity-data.js';
 import { ACTIVITY_LAYOUT_KEY, parseActivityLayout, orderedActivities, bottomOrderOf } from './activity-layout.js';
 import {
   SESSIONS_ACTIVITY, SIDE_WIDTH_KEY, SIDE_ACTIVITY_KEY, SIDE_COLLAPSED_KEY, SIDE_PINNED_KEY,
-  readSideWidth, readSideActivity, readSideCollapsed, readSidePinned, effectiveActivity, effectivePinned, sideMode,
+  readSideScale, SIDE_SCALE_KEY, readSideWidth, readSideActivity, readSideCollapsed, readSidePinned, effectiveActivity, effectivePinned, sideMode,
   nextOnActivityClick, clampSideWidth,
 } from './side-prefs.js';
 import { t } from '../core/i18n.js';
@@ -71,7 +71,9 @@ function Workbench(props: { deps: WorkbenchDeps }) {
   const [waitingCount, setWaitingCount] = createSignal(0);
   const allBadges = createMemo(() => ({ ...badges(), waiting: waitingCount() }));
   // 펼쳤을 때 쓰고 싶은 폭(사용자 의도). 화면에 그리는 폭은 CSS가 창 폭으로 한 번 더 누른다.
-  const [storedWidth, setStoredWidth] = createSignal(readSideWidth(_sGet, _sHas));
+  // 「메뉴 크기」(설정 › 모양) — 활동 막대·접힌 띠·세션 행 크기와 사이드바 **기본** 폭(저장한 폭은 그대로)이 따라온다.
+  const [scale, setScale] = createSignal(readSideScale(_sGet));
+  const [storedWidth, setStoredWidth] = createSignal(readSideWidth(_sGet, _sHas, scale()));
   const [activity, setActivity] = createSignal(readSideActivity(_sGet, _sHas));
   const [collapsed, setCollapsed] = createSignal(readSideCollapsed(_sGet, _sHas, window.innerWidth));
 
@@ -169,12 +171,23 @@ function Workbench(props: { deps: WorkbenchDeps }) {
     const root = document.documentElement;
     root.style.setProperty('--vt-side-stored', `${storedWidth()}px`);
     root.dataset.vtSide = mode();
+    root.dataset.vtSideScale = scale();
   });
   onCleanup(() => {
     const root = document.documentElement;
     root.style.removeProperty('--vt-side-stored');
     delete root.dataset.vtSide;
+    delete root.dataset.vtSideScale;
   });
+  // 크기를 바꾸면 막대·사이드바 폭이 한 번에 바뀐다 — 칸마다 따로 refit하지 않게 refit 게이트(폭 끌기와 같은 길) 한 번으로 묶는다.
+  // 저장한 폭이 없을 때만 기본 폭이 따라간다(readSideWidth). 폭이 안 바뀌는 쪽(막대 폭만 바뀜)도 칸 시작 x가 움직이므로 같이 묶는다.
+  const unsubScale = (window as any).vtSettingsSubscribe?.((changed: Record<string, unknown> | null) => {
+    if (changed && !(SIDE_SCALE_KEY in changed)) return;
+    const next = readSideScale(_sGet);
+    if (next === scale()) return;
+    withRefitGate(() => batch(() => { setScale(next); setStoredWidth(readSideWidth(_sGet, _sHas, next)); }));
+  });
+  onCleanup(() => unsubScale?.());
 
   // ── 도구 활동을 칸으로 끌어내기(N4 3단계) ─────────────────────────────────
   // 배선은 core(layout/dnd.js)에 있고 여기서는 브리지로 부른다. 끌어낸 도구가 지금 사이드바에

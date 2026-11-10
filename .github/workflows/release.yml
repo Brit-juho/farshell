@@ -133,6 +133,9 @@ jobs:
           # 사용자는 node를 요구받게 되고, 이 릴리스의 목적 자체가 무너진다.
           tar tzf "$NAME.tar.gz" | grep -q "$NAME/frontend/dist/app.js"
           tar tzf "$NAME.tar.gz" | grep -q "$NAME/frontend/dist/THIRD_PARTY_NOTICES.md"
+          # install.sh 는 locks/*.txt(해시 고정)로만 설치한다 — 빠지면 사용자 설치가 처음부터 실패한다.
+          tar tzf "$NAME.tar.gz" | grep -q "$NAME/locks/core.txt"
+          tar tzf "$NAME.tar.gz" | grep -q "$NAME/locks/voice.txt"
           # 받은 사람이 파일이 온전한지 확인할 수 있게 해시를 같이 올린다(`shasum -a 256 -c`).
           shasum -a 256 "$NAME.tar.gz" > "$NAME.tar.gz.sha256"
           cat "$NAME.tar.gz.sha256"

@@ -21,9 +21,9 @@ environment. Check `install.sh` for platform dependencies and the supported Pyth
 
 ```bash
 python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements-core.txt
-# Optional voice packages:
-.venv/bin/python -m pip install -r requirements-voice.txt
+.venv/bin/python -m pip install --require-hashes -r locks/core.txt
+# Optional voice packages (install together with core so versions stay the same):
+.venv/bin/python -m pip install --require-hashes -r locks/core.txt -r locks/voice.txt
 
 npm ci
 npm run build
@@ -60,6 +60,40 @@ mkdir -p ~/.claude/skills/fsh
 cp .claude/skills/fsh/SKILL.md ~/.claude/skills/fsh/SKILL.md
 ```
 
+### Python dependency lock
+
+Python packages install **only** from `locks/core.txt`, `locks/voice.txt` and `locks/dev.txt`
+with `pip install --require-hashes` (`install.sh`, CI, `fsh update`). Each line pins an exact
+version and carries the sha256 of every wheel and source archive of that version, so a file
+that changed on PyPI or in transit makes pip stop instead of installing it. `install.sh`
+turns that into a readable message; do not turn hash checking off to get past it.
+
+- Inputs: `requirements-core.txt`, `requirements-voice.txt`, `requirements-dev.txt` (version
+  ranges, edited by hand). They are not an install path.
+- The locks are universal: one file covers macOS arm64/x86_64 and Linux x86_64/aarch64 on
+  Python 3.11 or newer, with environment markers choosing the right pin and pip picking the
+  matching wheel. `voice` and `dev` are resolved against `core`, so one package has one version;
+  install `core` and `voice` in the same pip call.
+- Regenerate after changing a requirements file, or to take newer versions (needs
+  [`uv`](https://docs.astral.sh/uv/) on the developer's machine only; users and CI never need it):
+
+```bash
+scripts/lock_python.sh                          # keep current pins, apply requirement changes
+scripts/lock_python.sh --upgrade                # take the newest of everything
+scripts/lock_python.sh --upgrade-package httpx  # one package
+python3 scripts/check_python_lock.py            # offline check (also run by scripts/lock_python.sh and CI)
+```
+
+  Commit the changed `locks/` together with the requirements change. CI fails when a
+  requirement is missing from its lock or no longer satisfied, or when a lock line has no hash.
+  Dependabot version-update PRs for pip stay off (`.github/dependabot.yml`); security
+  advisories are handled by running `scripts/lock_python.sh --upgrade-package <name>`.
+- A package with no wheel for a platform is built from its source archive (hash still checked):
+  `cryptography` has no Intel-Mac wheel in current releases (needs a Rust toolchain), and
+  `evdev` (voice on Linux) needs a C compiler.
+- The `pip` inside the venv is upgraded by `install.sh` before the locked install and is
+  not itself hash-locked.
+
 ## Running the server
 
 `./run_server.sh` runs the backend in the foreground using the configured Python.
@@ -81,7 +115,7 @@ Port 7777 is the default; use your configured port if different.
 channel: `stable` = newest `vX.Y.Z` tag whose SSH signature matches `~/.vt/update-signers`
 (also: tag name == signed name, commit in `origin/master` history), `dev` = fast-forward to
 `origin/dev`, `devmode` = never moves. Order: clean-tree check, fetch, resolve + verify,
-detached checkout, `post_checkout` (pip when `requirements-core.txt` changed; `npm run build`
+detached checkout, `post_checkout` (pip `--require-hashes` from `locks/core.txt` when it changed, plus `locks/voice.txt` when voice is installed; `npm run build`
 when frontend inputs changed or `frontend/dist` is missing, preceded by `npm ci` when
 `package-lock.json` changed or `node_modules` is missing), `dev` branch
 advance, `sync`. Any failure before the branch advance returns to the saved commit/branch

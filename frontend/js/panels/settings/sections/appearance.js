@@ -2,7 +2,7 @@ import { vtSkins, vtSkinLabel, getVtSkin } from '../../../theme.js';
 import { renderItems, group, row, toast } from '../controls.js';
 import { icon } from '../../../ui/icons.js';
 import { t, lang } from '../../../core/i18n.js';
-import { FOCUS_ITEMS } from '../index-data.js';
+import { FOCUS_ITEMS, SIDE_SCALE_ITEMS } from '../index-data.js';
 import { timedFetch } from '../../../core/api.js';
 
 // 화면 언어 — 서버 전역 값(VT_LANG, server/i18n.py)이라 설정 스토어 스키마가 아니다.
@@ -103,6 +103,10 @@ export function renderAppearanceSection() {
   // ADR-44 — 시트 높이·창 위치는 여기 안 낸다. 드래그가 그 값의 입력 수단이다.
   frag.appendChild(group(t('언어'), row(t('화면 언어'), renderLangControl(),
     t('웹 화면과 fsh 명령이 함께 따릅니다. 바꾸면 페이지를 다시 불러옵니다.'), { scope: 'global' })));
+
+  // 메뉴 크기 — 활동 막대 · 사이드바 · 세션 목록(데스크톱 전용, 폰은 무관).
+  const desktopUi = typeof window.matchMedia === 'function' ? window.matchMedia('(min-width: 720px)').matches : true;
+  if (desktopUi) frag.appendChild(group(t('메뉴'), renderItems({ items: SIDE_SCALE_ITEMS })));
 
   frag.appendChild(group(t('파일 뷰어'), renderItems({ items: [
     { key: 'viewer.surface', label: t('파일 뷰어 표시 방식'), kind: 'select',

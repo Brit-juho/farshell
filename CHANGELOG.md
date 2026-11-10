@@ -10,6 +10,32 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- **Menu size setting** (Settings › 모양 › 메뉴 크기: small / normal / large, desktop only, `ui.side.scale`). It scales the activity bar and collapsed strip (44 / 48 / 52), the collapsed session cells (36 / 40 / 44), the session row text and line heights by one step, and the default sidebar width (320 / 360 / 392). A sidebar width you set by dragging is never overridden; changing the size refits each terminal once.
+- **「Clear cache」 and 「Log out」 in the FarShell menu** (and the command palette: `app.clear-cache`, `session.logout`). Clear cache unregisters the service worker, empties Cache Storage, re-fetches the app files and reloads; your `ui.*` settings stay, and push notifications are re-subscribed if they were on. Log out ends only this browser's web login (`POST /api/auth/logout`); the registered device is kept.
+- **`fsh tmux extkeys on|off|status`**: a trial switch for tmux extended keys (Shift+Enter and friends). It edits only the marked block in `~/.config/vt/tmux.local.conf` (idempotent, your other lines are kept) and reloads. The default stays off. Trial checklist in `docs/ref/terminal.md`.
+- **Remote pane proxy watchdog.** The proxy sends the browser an app `ping` every 15 s and closes a pane that has been silent for 45 s or whose send blocks for over 2 s; the upstream host link uses protocol ping/pong (15 s interval, 15 s deadline). The host-switch relay gets the same upstream check.
+- `scripts/lock_python.sh` (regenerates the hash locks; needs `uv`) and `scripts/check_python_lock.py` (CI check that requirements and locks agree).
+
+### Changed
+- **Collapsed session bar redesign.** The 48px strip now shows each session as the agent mark inside a 2px state ring (both in the state colour; the ring shape — dotted idle, dashed waiting, rotating working, solid done — carries the state), with 「not seen yet」 as a small dot, a count badge for working internal sub-agents, and delegation children indented under their parent with a branch line.
+- **Collapsed order matches expanded.** The collapsed strip uses the expanded rail's tree order (개입 필요 first, then your sort / manual order / split groups, children under their parents) instead of always sorting by name, and its first icon lines up with the expanded first row.
+- **Subagents with the same name are told apart.** They are numbered by start time (`general-purpose #1`, `#2`) with the first 4 characters of the id, and the 「Finished subagents N」 fold button carries a check icon and the done color.
+- **A session made by another Mac says which one** (「Made on m5-studio」) instead of 「Made on another Mac」. The server records the verified grant label in the tmux option `@fsh_origin_host` and returns it as `originHost`; sessions without a record and older servers keep the old wording.
+- The voice install no longer installs `pyobjc-framework-Cocoa` separately; it is part of `requirements-voice.txt` and the lock.
+- Already downloaded voice models are reused when their hashes match (no re-download). Custom `custom:` models are not pinned.
+
+### Fixed
+- The viewer's top-bar buttons, the encoding picker and the Markdown 「Copy address」 button no longer render with the old near-black background in the new design.
+- A quiet remote-host pane no longer drops and reconnects every 45 s.
+- A native subagent that never appeared in the parent's Stop-hook `background_tasks` list is no longer marked done just because it is absent; completion now comes from `subagent_stop`/`stop_failure` or from a listed row disappearing. A one-time per-session warning (id prefixes and counts only) is logged when the list and the rows disagree.
+
+### Security
+- **The app document is served with a Content-Security-Policy that includes `script-src 'self'`** (`server/security_headers.py` `APP_CSP`). Inline scripts, `on*=` handlers, `eval`, off-origin scripts and Blob modules are blocked; the theme boot, the `?e2e=1` loader and the voice AudioWorklet moved to static files and the login, upload and onboarding handlers became listeners / `data-action`. The `window.uploadFile` bridge is gone. Remote relay responses keep their own policy.
+- **Python dependencies are hash-locked** (`locks/core.txt`, `voice.txt`, `dev.txt`). `install.sh`, CI and `fsh update` install only with `pip install --require-hashes`, so a changed or tampered upstream file stops the install.
+- **Voice models are pinned** to a Hugging Face commit and per-file SHA-256 (`server/stt_engines/model_pins.json`, 4 catalog models). Hashes are checked after download and again right before a model loads; a mismatching file is deleted and reported.
+- Tests: an e2e regression test opens the viewers, worklet, service worker and a port-preview iframe and fails on any CSP violation.
+
 ---
 
 ## [2.10.0] — 2026-11-10

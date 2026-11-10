@@ -147,7 +147,7 @@ async def peer_sessions(request: Request, grant: dict):
     def _collect() -> list[dict]:
         # `@fsh_origin`을 같은 호출에서 읽는다(로컬 `/api/tmux/sessions`와 같은 방식 — 추가
         # tmux 호출 없음). 이 호스트가 기록한 값이라 상대가 아니라 **이 호스트의 사실**이다.
-        fmt = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{@fsh_origin}"
+        fmt = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{@fsh_origin}\t#{@fsh_origin_host}"
         text = tmux_runner.run_text(["list-sessions", "-F", fmt], timeout=2.0)
         if not text:
             return []
@@ -173,6 +173,9 @@ async def peer_sessions(request: Request, grant: dict):
                 # local|peer|agent|external — 로컬 목록과 같은 값. 기록이 없거나 모르는 값은
                 # external(`normalize_origin`). 옛 서버는 이 필드를 안 주고, 받는 쪽이 local로 본다.
                 "origin": tmux_runner.normalize_origin(parts[3] if len(parts) > 3 else ""),
+                # peer가 만든 세션이면 **이 호스트가 아는** 만든 맥의 이름. 옛 서버는 이 필드가 없고 받는 쪽은 무시한다.
+                "originHost": tmux_runner.origin_host_of(
+                    tmux_runner.normalize_origin(parts[3] if len(parts) > 3 else ""), parts[4] if len(parts) > 4 else ""),
             })
         return out
 
@@ -487,7 +490,8 @@ async def peer_sessions_create(request: Request, grant: dict):
             status_code=500,
         ), f"생성 실패: {name}"
     # 만든 곳 기록 — 서명 검증을 통과한 peer 경로이므로 서버가 "peer"로 정한다(본문 값은 안 본다).
-    await tmux_runner.set_origin_async(name, "peer")
+    # 만든 맥의 이름은 서명한 grant의 라벨(없으면 id) — 요청 본문 값은 안 믿는다.
+    await tmux_runner.set_origin_async(name, "peer", grant.get("label") or grant.get("id") or "")
     return {"ok": True, "name": name}, name
 
 

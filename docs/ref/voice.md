@@ -140,6 +140,13 @@ carry over. Two paths cover this:
   (설정 UI가 확인 창을 거쳐 부른 요청)에서만. llama.cpp 실행 파일은 버전 고정·sha256 검증(`llama_release.py`).
 - Whisper(faster-whisper)는 지원하지 않는다 — 같은 정확도에서 맥은 CPU 전용이라 느리고(문장당 1.14초 vs MLX 0.1초),
   llama.cpp CPU 엔진이 모든 플랫폼을 덮는다. 저사양 서버(RAM 4GB 이하)에서 약 2GB를 쓰는 llama.cpp가 부담일 수 있다.
+- **모델 고정(공급망)**: 카탈로그의 HF 모델은 이름이 아니라 **커밋 해시(revision)와 파일별 SHA-256**으로 받는다.
+  표는 `stt_engines/model_pins.json` 한 곳(`stt_engines/pins.py`가 읽는다). 받기는 `snapshot_download(revision=<40자>,
+  allow_patterns=<표의 파일>)` 뒤 모든 파일을 해시 대조하고, 불일치하면 **그 revision 스냅샷의 불일치 파일만** 지우고 오류로 알린다
+  (다른 revision·사용자의 옛 캐시는 건드리지 않는다). `load`도 쓰기 직전에 해시를 확인한다 — 이미 받아 둔 옛 캐시도 해시가 맞으면
+  그대로 재사용하고(네트워크 없음), 결과는 `<state>/engines/pin_verified.json`에 (크기, mtime)과 함께 적어 다시 해시하지 않는다.
+  표에는 HF API의 `sha`와 LFS `oid`를 쓰고, LFS가 아닌 작은 파일은 그 커밋에서 받아 해시했다. 표를 바꾸는 것은 모델을 바꾸는
+  결정이라 코드 변경(리뷰)으로만 한다. **직접 입력한 모델(`custom:`)은 고정하지 않는다**(이름만으로 받고 UI가 「검증 안 됨」을 표시).
 - 폴더 밖 공유 캐시(`hub/blobs/`)까지 지우고(`hfcache.py`), 용량은 링크 중복 없이 센다.
 - `/voice/input`은 `X-Voice-Id`로 재전송 중복을 건너뛴다(최근 120초). 단계별 시간은 응답 `timing`과 서버 로그.
 
@@ -151,9 +158,8 @@ carry over. Two paths cover this:
 - **클라이언트**(`frontend/js/voice/`, 모두 voice 번들): `pcm-capture.js`(AudioContext + 워클릿, 입력 샘플레이트가
   16kHz가 아니면 `pcm.js`의 면적 평균 리샘플) → `pcm.js`(PCM16 LE, 16000바이트=500ms 청크) → `chunk-upload.js`
   (한 번에 한 요청, 누적 `ackSeq`로 정리, 실패는 같은 seq 재전송) → `pcm-session.js`가 묶는다. `recording.js`는
-  분기만 한다. 워클릿 소스는 문자열 상수(`pcm-worklet-src.js`)를 Blob URL로 올린다 — 별도 asset을 두면 고정
-  산출물 목록(`voice.js`)과 `sw.js` precache가 늘고, `?raw` import는 테스트용 `vm-esm` 로더가 못 읽는다. 서버 CSP는
-  `frame-ancestors`뿐이라 blob 모듈이 막히지 않는다. 워클릿 미지원·보안 컨텍스트 아님·`addModule` 실패 시
+  분기만 한다. 워클릿 본체는 정적 파일 `frontend/js/voice/pcm-worklet.js`(번들 밖 classic 스크립트, 녹음을 시작할 때만 요청)이고
+  `pcm-worklet-src.js`는 이름·블록 크기·주소 상수만 든다. 앱 문서 CSP가 `script-src 'self'`라 Blob URL 모듈은 막히기 때문이다(`docs/ref/auth.md`). 워클릿 미지원·보안 컨텍스트 아님·`addModule` 실패 시
   MediaRecorder + `/voice/input` 경로로 같은 스트림을 넘겨 폴백한다(콘솔 `[voice] 캡처 경로:` debug 로그에 어느 쪽인지 남는다).
   iOS Safari는 AudioContext를 제스처 안에서 만들어야 해서 `startRecording` 맨 앞(await 전)에서 만든다.
 - **재전송 한계**: 일시 실패(네트워크·429/502/503/504)는 backoff 3회 뒤에도 녹음을 쌓으며 25초까지 같은 seq를 다시 보낸다

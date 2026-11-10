@@ -322,4 +322,8 @@
    * 전부 흰 텍스트로 충분한 명도 대비를 내므로 스킨별 오버라이드 불필요.
    */
   --color-on-solid: #ffffff;
+
+  /* 접힌 세션 칸의 「작업 중 내부 에이전트 N」 배지 글자 — --color-st-working 면 위. 어두운 스킨은 바탕색이 맞고
+   * 밝은 스킨(notepad)은 st-working이 진해 바탕색으로는 4.5가 안 나와 skins.css가 덮는다(tokens-contrast.test.js). */
+  --color-on-st-working: var(--color-bg-0);
 }

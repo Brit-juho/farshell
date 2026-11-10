@@ -1,4 +1,5 @@
 """MLX 엔진 — 가짜 mlx_qwen3_asr 모듈 주입으로 load/transcribe/unload 검증."""
+import hashlib
 import importlib.machinery
 import os
 import sys
@@ -6,7 +7,7 @@ import types
 
 import pytest
 
-from stt_engines import catalog, hfcache
+from stt_engines import catalog, hfcache, pins
 from stt_engines import mlx_qwen3 as mod
 from stt_engines.base import NotReady
 from stt_engines.env import HostEnv
@@ -15,10 +16,19 @@ from stt_engines.mlx_qwen3 import MlxQwen3Engine
 SPEC = catalog.get("qwen3-asr-0.6b-mlx")
 
 
+_FILES = {"model.safetensors": b"w", "config.json": b"{}"}
+
+
 @pytest.fixture
 def hub(tmp_path, monkeypatch):
     h = tmp_path / "hub"
     monkeypatch.setattr(hfcache, "cache_dir", lambda: h)
+    # 카탈로그 모델은 고정(pins) 표의 파일 목록·크기·해시와 맞아야 쓴다. 검증 로직은 그대로 두고
+    # 표에 가짜 모델의 항목(아래 _snapshot 이 만드는 파일)을 주입한다 — 실제 해시 검증을 통과해야 한다.
+    monkeypatch.setenv("VT_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setitem(pins.PINS, SPEC.repo, pins.Pin(
+        SPEC.repo, "f" * 40,
+        {n: (len(d), hashlib.sha256(d).hexdigest()) for n, d in _FILES.items()}))
     return h
 
 
@@ -49,9 +59,9 @@ def eng():
 def _snapshot(hub, config=True):
     snap = hfcache.repo_dir(SPEC.repo, hub) / "snapshots" / "rev"
     snap.mkdir(parents=True)
-    (snap / "model.safetensors").write_bytes(b"w")
+    (snap / "model.safetensors").write_bytes(_FILES["model.safetensors"])
     if config:
-        (snap / "config.json").write_text("{}")
+        (snap / "config.json").write_bytes(_FILES["config.json"])
     return snap
 
 

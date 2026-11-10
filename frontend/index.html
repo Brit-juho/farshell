@@ -64,22 +64,7 @@
        라이트 모드면 다크 스킨을 강제로 들이밀지 않고 유일한 라이트 스킨인
        notepad로 떨어진다(prefers-color-scheme 추종, D1 체크리스트) —
        사용자가 명시적으로 스킨을 고르면 그게 항상 이긴다. -->
-  <script>
-    (function(){
-      try {
-        var stored = localStorage.getItem('vt-skin');
-        var valid = ['farshell','macos','catppuccin','windows','vscode','notepad','warp','linear','vercel'];
-        var s;
-        if (stored && valid.indexOf(stored) >= 0) {
-          s = stored;
-        } else {
-          var prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
-          s = prefersLight ? 'notepad' : 'farshell';
-        }
-        document.documentElement.setAttribute('data-skin', s);
-      } catch(e){}
-    })();
-  </script>
+  <script src="/static/js/theme-boot.js"></script>
   <!-- 로그인 게이트 스타일.
        인라인으로 남는 이유는 예전과 같다 — 이 화면은 번들 CSS 도착 여부와
        무관하게 첫 페인트에 완성돼 있어야 한다(FOUC 방지). 대신 색은 전부
@@ -314,12 +299,12 @@
         <label class="login-label" for="login-pass" data-i18n>비밀번호</label>
         <!-- type=text + CSS 마스킹: Chrome이 type=password 필드에만 붙이는 "비밀번호 저장" 팝업을 피하면서
              화면 상 노출은 -webkit-text-security로 그대로 가린다.
-             readonly+onfocus 해제: Chrome은 autocomplete=off를 로그인성 필드에서 종종 무시하고
+             readonly + 포커스 시 해제(gate.js): Chrome은 autocomplete=off를 로그인성 필드에서 종종 무시하고
              자동완성 드롭다운을 띄운다 — 포커스 전까지 readonly로 막아 Chrome이 아예 자동완성
              대상으로 인식하지 못하게 한다(포커스 즉시 해제되므로 타이핑에는 영향 없음). -->
         <input id="login-pass" type="text" name="vt-key" autocomplete="off"
           autocorrect="off" autocapitalize="off" spellcheck="false"
-          readonly onfocus="this.removeAttribute('readonly')"
+          readonly
           aria-label="비밀번호" aria-describedby="login-pass-state"  data-i18n-attr="aria-label"/>
         <!-- 입력 상태 — Caps Lock·한글 입력 중일 때만 뜬다(gate.js). 키를 누르기 전에는
              브라우저가 알려 주지 않아서 "영문"이라고 미리 말하지 않는다. -->
@@ -483,7 +468,7 @@
        DOM 밑에 있을 필요가 없다 — 최상위에 숨겨서 둔다. -->
   <!-- R6 — multiple: 드롭은 원래 여러 개가 오는데 선택 대화상자만 하나면
        같은 기능의 규칙이 진입점마다 달라진다. term/upload.js가 순차로 올린다. -->
-  <input type="file" id="file-input" hidden multiple onchange="uploadFile(this)" />
+  <input type="file" id="file-input" hidden multiple />
 
   <!-- 음성 상태 패널: voice/status-panel.js가 기존 상태 노드를 이 안에 유지한다.
        리디자인 6단계(시안 O16-F, 정돈 배치 440): 머리 48(마이크 · 제목 · 서버 상태 점 · ×), 입력 대상 줄, 음량 막대,
@@ -647,12 +632,7 @@
   <script src="/static/vendor/addon-webgl.min.js"></script>
   <!-- E2E 암호화(nacl, ~20KB)는 ?e2e=1/#e2e=1일 때만 필요 — 그 경우에만 동기 로드해서
        terminal.js가 실행될 때 이미 window.nacl이 준비돼 있게 한다(P1). -->
-  <script>
-    if (/[?&#]e2e=1(&|$)/.test(location.search + location.hash)) {
-      document.write('<scr' + 'ipt src="/static/vendor/nacl.min.js"></scr' + 'ipt>');
-      document.write('<scr' + 'ipt src="/static/vendor/nacl-util.min.js"></scr' + 'ipt>');
-    }
-  </script>
+  <script src="/static/js/e2e-boot.js"></script>
   <!-- 코드 뷰어 문법 하이라이팅(P2, 127KB) — 코드 뷰어를 실제로 열 때만 viewer.js가
        동적으로 불러온다(P1). 테마 CSS는 쓰지 않는다 — 색은 app.css에서 스킨
        토큰으로 매핑해야 notepad(라이트)까지 따라간다. -->

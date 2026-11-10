@@ -65,9 +65,8 @@ async function openSessionOnMac(explicitSessionId) {
 }
 
 // --- 파일 업로드 ---
-// index.html의 <input type="file" onchange="uploadFile(this)">가 직접 부른다 —
-// 인라인 핸들러라 window 브리지가 필요하다(F3(c)에서도 data-action으로 못 옮긴
-// 것과 같은 종류: change 이벤트 위임은 F3(c)의 클릭 위임 범위 밖이었다).
+// index.html의 <input type="file" id="file-input">의 change를 아래 위임 리스너가 받는다 —
+// 인라인 onchange는 CSP(script-src 'self')가 막으므로 쓰지 않는다.
 //
 // R6 — 알맹이는 term/upload.js 하나다. 드롭(터미널 칸·파일 패널)과 이 input이
 // **같은 코드**를 타야 "여러 개를 올렸을 때 경로가 어떻게 들어가는가" 같은
@@ -77,7 +76,10 @@ async function uploadFile(input) {
   await uploadFiles(input.files, { insertPath: true });
   input.value = '';
 }
-window.uploadFile = uploadFile;
+document.addEventListener('change', (e) => {
+  const el = e.target;
+  if (el && el.id === 'file-input') uploadFile(el);
+});
 
 // F3(c): data-action 위임용 등록. (인자 없이 호출 — 대상은 항상 activeSession.)
 // 상단 세션 이름 — 팝업이 아니라 하단 「세션」 탭 전환이다(layout/mobile-nav.js가 받는다).

@@ -113,6 +113,8 @@ export const SCHEMA = {
   'ui.side.width':          { type: 'int',  def: 360, min: 240, max: 480, scope: 'device' },
   'ui.side.activity':       { type: 'enum', def: 'sessions', values: ['sessions', 'scm', 'dir', 'queue', 'files', 'snippets', 'ports', 'usage', 'system'], scope: 'device' },
   'ui.side.collapsed':      { type: 'bool', def: false, scope: 'device' },
+  // 「메뉴 크기」(설정 › 모양, 데스크톱만) — 값별 치수는 shell/side-prefs.js SIDE_SCALES.
+  'ui.side.scale':          { type: 'enum', def: 'normal', values: ['small', 'normal', 'large'], scope: 'device' },
   // 리디자인 9단계 — 오른쪽 고정 사이드바의 패널 id(''이면 없음). 값 목록은 도구 활동의 panelId와 같아야 한다
   // (shell/activity-data.ts, 테스트가 대조). 폭은 300 고정이라 키가 없다(shell/side-prefs.js).
   'ui.side.pinned':         { type: 'enum', def: '', values: ['', 'vt-dock-scm', 'vt-dir', 'vt-queue', 'vt-files', 'vt-snippets', 'vt-ports', 'vt-usage', 'vt-system'], scope: 'device' },

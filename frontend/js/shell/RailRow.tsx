@@ -15,13 +15,16 @@
 import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 
 import { agentLabel, icon, stateIcon } from '../ui/icons.js';
+import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
+import { ringSvg, subBadge } from './compact-mark.js';
+import { normalizeSubagents } from './native-subagents.js';
 import { shellIcon } from '../ui/icons-shell.js';
 import { agentMark } from './agent-mark.js';
 import { t } from '../core/i18n.js';
 import { NativeChip } from './NativeChildren.js';
 import {
   stateKeyword, formatRelativeTime, statusSentence, diffLabel, lineageLabel,
-  ORIGIN_ICON, ORIGIN_LABEL, ORIGIN_SHORT, SHARE_MODE_LABEL, shareSentence, type SessionRow, type Origin, type ShareInfo, type RowSummaryDetails,
+  ORIGIN_ICON, originLabel, originShort, SHARE_MODE_LABEL, shareSentence, type SessionRow, type Origin, type ShareInfo, type RowSummaryDetails,
 } from './rail-data.js';
 
 /** 경과 시간을 행 DOM을 다시 만들지 않고 갱신하는 시계(30초). */
@@ -35,8 +38,9 @@ function createNow() {
 /** 만든 곳 아이콘(local은 없다). 레일 행과 Fleet 행이 같이 쓴다.
  * `withText`면 아이콘 뒤에 짧은 글(「다른 맥에서 만듦」·「직접 만듦」)을 붙인다 — 레일 행 3줄(시안 D02). 글이 있으면
  * 아이콘은 장식이고 글이 읽힌다(같은 말을 두 번 읽지 않게). 툴팁은 늘 긴 문장이다. */
-export function OriginMark(props: { origin: Origin; withText?: boolean }) {
-  const short = () => ORIGIN_SHORT[props.origin as Exclude<Origin, 'local'>];
+export function OriginMark(props: { origin: Origin; host?: string | null; withText?: boolean }) {
+  const short = () => originShort(props.origin, props.host);
+  const label = () => originLabel(props.origin, props.host);
   const ico = () => icon(ORIGIN_ICON[props.origin as Exclude<Origin, 'local'>], 12, 2);
   return (
     <Show when={props.origin !== 'local'}>
@@ -46,10 +50,10 @@ export function OriginMark(props: { origin: Origin; withText?: boolean }) {
           <span
             class="vt-srow-origin"
             data-origin={props.origin}
-            data-tip={ORIGIN_LABEL[props.origin]}
+            data-tip={label()}
             data-tip-side="right"
             role="img"
-            aria-label={ORIGIN_LABEL[props.origin]}
+            aria-label={label()}
             innerHTML={ico()}
           />
         }
@@ -57,7 +61,7 @@ export function OriginMark(props: { origin: Origin; withText?: boolean }) {
         <span
           class="vt-srow-origin with-text"
           data-origin={props.origin}
-          data-tip={ORIGIN_LABEL[props.origin]}
+          data-tip={label()}
           data-tip-side="right"
         >
           <span class="vt-srow-origin-ico" aria-hidden="true" innerHTML={ico()} />
@@ -267,11 +271,19 @@ export function Row(props: {
   const diff = () => diffLabel(props.row);
   const answers = () => !props.compact && !!props.onAnswer && props.row.status === 'waiting' && props.row.open && !!props.row.sessionId;
 
-  // 48px 접힘에서는 이름·상태 문장이 숨는다. 그 정보는 툴팁(이름 / 브랜치 · 키워드 · 다른 화면 · 공유)이 맡는다.
+  // 접힘 칸 오른쪽 위 개수 배지(S1) — 작업 중인 내부 서브에이전트 수. 누를 곳이 아니라 툴팁만 둔다(칸을 누르면 세션이 열린다).
+  const sub = () => normalizeSubagents(props.row.subagents);
+  const subWorking = () => sub().items.filter((r: any) => r.state === 'working').length;
+  const subTip = () => sub().limited ? t('내부 에이전트 · 표시 한도 도달') : subWorking() > 0 ? t('내부 에이전트 {n} 작업 중', { n: subWorking() }) : '';
+  const badge = () => props.compact ? subBadge(subWorking(), sub().limited) : null;
+  // 접힘 칸의 상태 이름(스크린리더) — 링은 모양뿐이라 이름이 없으면 읽히지 않는다. 펼침의 stateIcon과 같은 문장.
+  const ringLabel = () => STATE_LABEL[normalizeState(props.row.status) as keyof typeof STATE_LABEL] + (unseen() ? ' · ' + t('아직 확인 안 함') : '');
+
+  // 48px 접힘에서는 이름·상태 문장이 숨는다. 그 정보는 툴팁(이름 / 브랜치 · 키워드 · 내부 에이전트 · 다른 화면 · 공유)이 맡는다.
   const compactSub = () => {
     if (!props.compact) return undefined;
     const screens = props.row.otherScreens > 0 ? t('다른 화면 {n}', { n: props.row.otherScreens }) : '';
-    return [branch(), statusSentence(props.row, now()), screens, shareSentence(props.row.share)].filter(Boolean).join(' · ') || undefined;
+    return [branch(), statusSentence(props.row, now()), subTip(), screens, shareSentence(props.row.share)].filter(Boolean).join(' · ') || undefined;
   };
 
   // div에 role=button만 붙이면 Enter·Space가 아무 일도 안 한다 — 직접 붙인다.
@@ -308,15 +320,19 @@ export function Row(props: {
       data-tip-sub={compactSub()}
       data-tip-side="right"
     >
-      {/* 상태 아이콘은 행의 첫 열(16px)이다 — 펼침에서는 1줄 높이(20)에 맞추고, 48px 띠에서는
-          가운데에 두고 에이전트 마크를 오른쪽 아래 모서리에 얹는다. */}
-      <span class="vt-srow-state" innerHTML={stateIcon(props.row.status, 16, unseen())} />
-      <Show when={props.compact && props.row.agent}>
-        <span
-          class="vt-srow-agent vt-wgrail-agent vt-wgrail-agent-compact"
-          data-state={props.row.status}
-          innerHTML={agentMark(props.row.agent!)}
-        />
+      {/* 펼침: 상태 아이콘은 행의 첫 열(16px)이다. 접힘(링형, 시안 3-B): 에이전트 마크 가운데 + 둘레 상태 링.
+          링과 마크는 둘 다 상태색이고, 상태는 링 모양이 말한다. 읽지 않음(unseen)은 링을 상태가 쓰므로 마크 오른쪽 아래 점. */}
+      <Show
+        when={props.compact}
+        fallback={<span class="vt-srow-state" innerHTML={stateIcon(props.row.status, 16, unseen())} />}
+      >
+        <span class="vt-srow-state vt-wgrail-ring" data-state={normalizeState(props.row.status)} role="img" aria-label={ringLabel()} innerHTML={ringSvg(props.row.status)} />
+        {/* 에이전트를 아직 모르거나 셸이면 셸 프롬프트 마크 — 칸이 비면 링만 덩그러니 남는다. */}
+        <span class="vt-srow-agent vt-wgrail-agent vt-wgrail-agent-compact" data-state={props.row.status} innerHTML={agentMark(props.row.agent || 'shell')} />
+        <Show when={unseen()}><span class="vt-wgrail-unseen" aria-hidden="true" /></Show>
+        <Show when={badge()}>
+          {(b) => <span class="vt-wgrail-subbadge" classList={{ limited: b().limited }} role="img" aria-label={subTip()}>{b().text}</span>}
+        </Show>
       </Show>
       <Show when={!props.compact}>
         <div class="vt-srow-main vt-wgrail-row-main">
@@ -403,7 +419,7 @@ export function Row(props: {
             </Show>
             <NativeChip row={props.row} />
             <ShareMark share={props.row.share} />
-            <OriginMark origin={props.row.origin} withText />
+            <OriginMark origin={props.row.origin} host={props.row.originHost} withText />
           </div>
           {/* 4줄(있을 때만): 다른 화면 N · 웹이 아닌 터미널 연결 수. */}
           <Show when={props.row.otherScreens > 0 || props.row.otherClients > 0}>

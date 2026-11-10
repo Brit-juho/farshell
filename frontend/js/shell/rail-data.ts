@@ -60,6 +60,8 @@ export interface SessionRow {
   isMainWorktree?: boolean;
   worktreeId?: string | null;
   origin: Origin;
+  /** peer가 만든 세션이면 만든 맥의 표시 이름(서버 `originHost`). 기록 없음·구버전 서버는 없다/빈 값. */
+  originHost?: string;
   /** 에이전트 공유 표시. 공유 안 된 세션·구버전 서버는 없다/null. */
   share?: ShareInfo | null;
   /** 이 세션이 속한 묶음 뷰의 이름(묶음이 아니면 null). */
@@ -215,11 +217,23 @@ export const ORIGIN_LABEL: Record<Origin, string> = {
   external: t('직접 만듦 (CLI·tmux)'),
 };
 /** 행 3줄에 아이콘과 함께 쓰는 짧은 글(시안 D02). 긴 문장(ORIGIN_LABEL)은 툴팁과 스크린 리더가 읽는다.
- * 서버가 peer 세션을 만든 맥의 이름을 기록하지 않아 「m5-studio에서 만듦」이 아니라 「다른 맥에서 만듦」이다. */
+ * 만든 맥의 이름이 기록된 세션은 `originShort`가 「{host}에서 만듦」으로 바꾼다. 이 상수는 이름 기록이 없을 때의 문구다. */
 export const ORIGIN_SHORT: Record<Exclude<Origin, 'local'>, string> = {
   peer: t('다른 맥에서 만듦'),
   external: t('직접 만듦'),
 };
+
+/** 만든 곳 문구. peer 세션에 만든 맥의 이름(`originHost`)이 기록돼 있으면 「{host}에서 만듦」, 없으면(옛 세션·옛 서버) 「다른 맥에서 만듦」 그대로. */
+export function originShort(origin: Origin, host?: string | null): string {
+  if (origin === 'local') return '';
+  const h = typeof host === 'string' ? host.trim() : '';
+  if (origin === 'peer' && h) return t('{host}에서 만듦', { host: h });
+  return ORIGIN_SHORT[origin];
+}
+export function originLabel(origin: Origin, host?: string | null): string {
+  const h = typeof host === 'string' ? host.trim() : '';
+  return origin === 'peer' && h ? t('{host}에서 만듦', { host: h }) : ORIGIN_LABEL[origin];
+}
 
 /** 서버 값이 없거나(구버전 서버) 모르는 값이면 local — 모든 행에 외부 아이콘이 붙는 것보다 안전하다. */
 export function normalizeOrigin(v: unknown): Origin {
@@ -459,22 +473,54 @@ export function buildRailLists<T extends Pick<SessionRow, 'name' | 'status' | 'o
   return { attention, sessions };
 }
 
+export interface CompactEntry<T> {
+  row: T;
+  /** 하위 세션(lineage 자식)이면 부모 밑 가지선을 그리는 데 쓰는 값. 최상위·개입 필요 행은 null. */
+  kid: { last: boolean; merged: boolean; failed: boolean; closed: boolean } | null;
+}
+
 /**
- * 접힌 레일(48px)은 구역 머리글이 없다 — 「개입 필요」와 「세션」을 따로 그리면 waiting 세션이
- * 두 번 보인다. 하나의 목록으로: 개입 필요 세션이 위(이름순), 나머지가 그 아래(이름순).
- * `split`은 둘 사이에 경계선을 그릴 위치(위쪽 개수, 0이면 경계선 없음).
- * 펼친 레일은 이 함수를 안 쓴다 — 거기서는 waiting이 두 구역에 모두 남는 게 규칙이다.
+ * 접힌 레일(48px 띠)의 칸 순서 — **펼친 레일과 같은 트리 순서**다. 순서의 출처를 새로 만들지 않고
+ * 펼침이 쓰는 값(개입 필요 목록 · 분할 묶음 · `buildSessionTree`의 정렬·수동 순서·부모 밑 자식)을 그대로 받아 평평하게 편다.
+ *
+ *   개입 필요(waiting, 이름순) → 분할 묶음 구성원 → 트리(설정된 정렬 · 수동 순서, 하위 세션은 부모 바로 아래)
+ *
+ * 구역 머리글이 없어 waiting 세션은 한 번만 나온다(「개입 필요」에 올라간 행은 `groups`·`tree`에 이미 없다).
+ * 하위 세션이 waiting이면 개입 필요로 올라가 평평하게 나오므로 부모 밑에 없다 — 펼침과 같다.
+ * 부모가 하위를 접어 둔 것(`kidsCollapsed`)과 닫힌 하위(`closedOpen`을 펼쳐야 보임)도 펼침과 같은 규칙을 따른다.
+ * `split`은 개입 필요와 나머지 사이에 경계선을 그릴 위치(위쪽 개수, 0이면 없음).
+ * 펼친 레일은 이 함수를 안 쓴다 — 거기서는 구역 머리글 아래에 그대로 그린다.
  */
-export function compactRailRows<T>(lists: RailLists<T>): { rows: T[]; split: number } {
-  const top = new Set<T>(lists.attention);
-  const rest = lists.sessions.filter((r) => !top.has(r));
-  return { rows: [...lists.attention, ...rest], split: rest.length > 0 ? top.size : 0 };
+export function compactRailOrder<T extends { lineage?: Lineage | null }>(
+  attention: T[],
+  groups: SessionGroup<T>[],
+  tree: TreeEntry<T>[],
+  opts: { kidsCollapsed?: (r: T) => boolean; closedOpen?: (r: T) => boolean } = {},
+): { entries: CompactEntry<T>[]; split: number } {
+  const entries: CompactEntry<T>[] = attention.map((row) => ({ row, kid: null }));
+  const top = entries.length;
+  for (const g of groups) if (g.id) for (const row of g.rows) entries.push({ row, kid: null });
+  for (const e of tree) {
+    entries.push({ row: e.row, kid: null });
+    if (opts.kidsCollapsed?.(e.row)) continue;
+    const shown = [...e.kids, ...(opts.closedOpen?.(e.row) ? e.closedKids : [])];
+    shown.forEach((row, i) => entries.push({
+      row,
+      kid: {
+        last: i === shown.length - 1,
+        merged: row.lineage?.state === 'reported',
+        failed: row.lineage?.outcome === 'failed',
+        closed: row.lineage?.state === 'closed',
+      },
+    }));
+  }
+  return { entries, split: entries.length > top ? top : 0 };
 }
 
 /**
  * 「실행 중」 구역 = 「세션」 전체에서 「개입 필요」에 이미 올라간 행을 뺀 것.
  * 개입 필요 구역이 꺼져 있으면(`attention`이 비어 있다) 빼는 것이 없다.
- * 접힌 레일(compactRailRows)은 이 함수를 안 쓴다 — 거기는 이미 한 번씩만 나온다.
+ * 접힌 레일(compactRailOrder)은 이 함수의 결과(펼침의 「실행 중」)를 그대로 받아 쓴다.
  */
 export function splitRunning<T>(lists: RailLists<T>): T[] {
   if (lists.attention.length === 0) return lists.sessions;
@@ -520,14 +566,14 @@ export interface RowMenuItem {
  * 만든 곳 · 브랜치. 값이 없는 조각은 건너뛴다. 선택 불가 헤더 행(`.vt-menu-summary`)에 그린다.
  */
 export function rowSummary(
-  row: Pick<SessionRow, 'status' | 'kind' | 'otherClients' | 'origin' | 'branch'> & { share?: ShareInfo | null; cwd?: string },
+  row: Pick<SessionRow, 'status' | 'kind' | 'otherClients' | 'origin' | 'originHost' | 'branch'> & { share?: ShareInfo | null; cwd?: string },
 ): string {
   const s = normalizeState(row.status);
   const parts: string[] = [(STATE_LABEL as Record<string, string>)[s]];
   if (s === 'waiting') parts.push(KIND_LABEL[normalizeKind(row.kind)]);
   if (row.share) parts.push(shareSentence(row.share));
   if (row.otherClients > 0) parts.push(t('웹 외 {n}', { n: row.otherClients }));
-  parts.push(ORIGIN_LABEL[normalizeOrigin(row.origin)]);
+  parts.push(originLabel(normalizeOrigin(row.origin), row.originHost));
   if (row.cwd) parts.push(row.cwd);
   if (row.branch) parts.push(row.branch);
   return parts.join(' · ');
