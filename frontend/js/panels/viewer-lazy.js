@@ -1,5 +1,5 @@
 // ADR-26/N35 — 파일 렌더러(panels/viewer/*)를 지연 청크로 뺀다. **이 파일만
-// 앱 본체(app.js)에 남는다** — 나머지는 vite.config.js의 manualChunks가
+// 앱 본체(app.js)에 남는다** — 나머지는 vite.config.mjs의 manualChunks가
 // `panels.js`(고정 이름 지연 청크)로 보낸다. 파일 본문·diff 하이라이트(CodeMirror ·
 // lezer)는 다시 그 안에서 `editor` 청크로 나뉜다 — 파일을 실제로 열기 전에는 내려받지 않는다.
 //

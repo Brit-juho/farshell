@@ -103,7 +103,7 @@ jobs:
           test -f frontend/dist/core.js
           test -f frontend/dist/app.css
           test -f frontend/dist/voice.js
-          test -f frontend/dist/THIRD_PARTY_NOTICES.md   # 제3자 고지(줄이기가 @license 주석을 지운다 — vite.config.js)
+          test -f frontend/dist/THIRD_PARTY_NOTICES.md   # 제3자 고지(줄이기가 @license 주석을 지운다 — vite.config.mjs)
           ! ls frontend/dist | grep -E '\-[0-9a-f]{8}\.'
           # 2.1.6: ci.yml과 같은 이유로 초기 페이로드 합계를 잰다.
           [ "$(( $(wc -c < frontend/dist/app.js) + $(wc -c < frontend/dist/core.js) ))" -le 307200 ]

@@ -3564,7 +3564,7 @@ cmd_doctor() {
   fi
 
   # 2-2. 프런트엔드 빌드 산출물 (Vite/Tailwind, F1. voice.js는 F4에서 별도 lib
-  # entry로 분리됐다 — vite.config.js 주석 참고)
+  # entry로 분리됐다 — vite.config.mjs 주석 참고)
   if [ -f "$VT_DIR/frontend/dist/app.js" ] && [ -f "$VT_DIR/frontend/dist/app.css" ] && [ -f "$VT_DIR/frontend/dist/voice.js" ]; then
     # 소스(frontend/js, styles/)가 산출물보다 최신이면 재빌드가 필요할 수 있다.
     local newest_src

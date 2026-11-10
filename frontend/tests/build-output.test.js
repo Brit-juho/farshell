@@ -19,7 +19,7 @@ const DIST = path.join(REPO_ROOT, 'frontend/dist');
 // 별도 산출물을 쓴다) — 무겁지만(약 0.5초) 산출물 검사엔 진짜 산출물이 필요하다.
 //
 // ⚠ **voice 빌드까지 이어서 돌려야 한다.** app 빌드는 emptyOutDir이라 dist를
-// 통째로 비우는데(vite.config.js), 여기서 app만 돌리면 `frontend/dist/voice.js`가
+// 통째로 비우는데(vite.config.mjs), 여기서 app만 돌리면 `frontend/dist/voice.js`가
 // 지워진 채 남는다. 게이트 순서가 `npm run build && npm test`라 **테스트를 돌린
 // 뒤의 트리는 항상 voice.js가 없는 상태**가 되고, 그 트리로 서버를 띄우면
 // 브라우저가 매번 `/static/dist/voice.js` 404를 찍는다(실브라우저 스모크의
@@ -38,11 +38,11 @@ const screensJs = fs.readFileSync(path.join(DIST, 'screens.js'), 'utf8');
 const shareJs = fs.readFileSync(path.join(DIST, 'share.js'), 'utf8');
 
 // 2.1.6 — 상한의 대상이 app.js 하나에서 **초기 페이로드 합계**로 바뀌었다.
-// 청크 규칙을 뒤집으면서(vite.config.js) app.js는 부팅 배선만 남은 2KB가 되고
+// 청크 규칙을 뒤집으면서(vite.config.mjs) app.js는 부팅 배선만 남은 2KB가 되고
 // 상시 코드는 전부 core.js로 갔다. 여기서 app.js만 재면 상한이 아무것도
 // 막지 못한다 — 숫자는 그대로 두되 **재는 대상**을 뜻에 맞춘다.
 // 2026-11-04 — 상한을 300KiB(307200)에서 350KiB(358400)로 올렸다(c05a174가 공백 제거를 잃은 회귀 탓).
-// 2026-11-10 — 공백·주석 제거를 복구(vite.config.js output.minify)해 300KiB(307200)로 되돌렸다. 존재 이유는 vendor(xterm 약 290KB)가
+// 2026-11-10 — 공백·주석 제거를 복구(vite.config.mjs output.minify)해 300KiB(307200)로 되돌렸다. 존재 이유는 vendor(xterm 약 290KB)가
 // 초기 번들로 새는 것을 잡는 안전장치다(docs/ref/session-view-measurements.md §4).
 const EAGER_LIMIT = 307200;
 
@@ -93,7 +93,7 @@ test('core.js는 실제 세션 싱글톤을 그대로 갖고 있다(위 검사�
 
 test('settings 청크(설정·MCP 팝업·스니펫·사용량)도 core 싱글톤을 복제하지 않는다', () => {
   // panels.js와 같은 규칙. 이 청크는 dock 화면과 **일부러 분리**돼 있다 —
-  // 「큐」탭 한 번에 설정 7개 섹션까지 받게 하지 않으려고(vite.config.js).
+  // 「큐」탭 한 번에 설정 7개 섹션까지 받게 하지 않으려고(vite.config.mjs).
   assert.doesNotMatch(settingsJs, /\bsessions\s*=\s*\{\}/, 'core/store.js의 세션 저장소가 복제됐다');
   assert.doesNotMatch(settingsJs, /\bactiveId\s*=\s*null/, 'core/store.js의 activeId가 복제됐다');
   assert.doesNotMatch(settingsJs, /const registry\s*=\s*new Map\(\)/, 'core/dom.js의 액션 레지스트리가 복제됐다');
@@ -117,7 +117,7 @@ test('voice.js도 함께 남는다 — app 빌드가 dist를 비우고 끝나면
 });
 
 test('제3자 고지(THIRD_PARTY_NOTICES.md)가 dist에 있고, 번들한 라이브러리의 라이선스 본문을 담는다', () => {
-  // 줄이기가 `@license` 주석을 지우므로 고지는 이 파일이 맡는다(vite.config.js `build.license`). dist째 릴리스
+  // 줄이기가 `@license` 주석을 지우므로 고지는 이 파일이 맡는다(vite.config.mjs `build.license`). dist째 릴리스
   // tarball에 실린다. voice 빌드가 같은 outDir에 이어 쓰면서 이 파일을 덮어쓰지 않았는지도 본다.
   const p = path.join(DIST, 'THIRD_PARTY_NOTICES.md');
   assert.ok(fs.existsSync(p), 'frontend/dist/THIRD_PARTY_NOTICES.md가 없다');
@@ -132,7 +132,7 @@ test('제3자 고지(THIRD_PARTY_NOTICES.md)가 dist에 있고, 번들한 라이
 });
 
 test('세션 탭의 뷰 편집기(layout/session-order.js)는 screens 청크에 있고 core에는 없다', () => {
-  // vite.config.js manualChunks에 이름이 없으면 포괄 규칙이 core로 보내 상시 로드가 ~5KB 늘어난다
+  // vite.config.mjs manualChunks에 이름이 없으면 포괄 규칙이 core로 보내 상시 로드가 ~5KB 늘어난다
   // (빌드·테스트는 통과하고 상한만 조용히 줄어든다 — 이 파일을 옮길 때 실제로 겪었다).
   assert.match(screensJs, /function renderOrderEditor/);
   assert.doesNotMatch(coreJs, /function renderOrderEditor/);
@@ -170,7 +170,7 @@ test('업로드 본체(term/upload.js)와 사용 가이드 본문은 지연 청�
 });
 
 test('에이전트 공유의 대화상자와 통합 승인함(모달·권한·감사)은 share 청크에 있고 core 에는 없다(core 에는 이벤트 수신·배지·import() 만)', () => {
-  // vite.config.js manualChunks 의 `/frontend/js/share/` 규칙이 빠지면 포괄 규칙이 core 로 보내
+  // vite.config.mjs manualChunks 의 `/frontend/js/share/` 규칙이 빠지면 포괄 규칙이 core 로 보내
   // 상시 로드가 ~18KB 늘어난다(빌드·테스트는 통과하고 상한만 조용히 줄어든다).
   assert.match(shareJs, /function openShareDialog/);
   assert.match(shareJs, /function mountPermissions/);
@@ -191,7 +191,7 @@ test('에이전트 공유의 대화상자와 통합 승인함(모달·권한·�
 
 
 test('코드 뷰어 본문(CodeMirror 6)은 editor 지연 청크에만 있고, panels는 import()로만 받는다', () => {
-  // 파일 개편 단계 2. vite.config.js의 editor 규칙이 빠지면 CM(약 590KB)이 panels로 가거나 해시 붙은 청크가
+  // 파일 개편 단계 2. vite.config.mjs의 editor 규칙이 빠지면 CM(약 590KB)이 panels로 가거나 해시 붙은 청크가
   // 생긴다. 언어 팩은 언어마다 고정 이름 청크다(연 언어만 받는다).
   const editorJs = fs.readFileSync(path.join(DIST, 'editor.js'), 'utf8');
   assert.match(editorJs, /class EditorView\b/);

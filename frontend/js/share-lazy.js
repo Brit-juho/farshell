@@ -1,5 +1,5 @@
 // 에이전트 세션 공유 + 승인함 — 상시 로드되는 얇은 진입점(queue-lazy.js 와 같은 구조).
-// 공유 대화상자는 `share/entry.js`, 승인함(모달·권한·감사)은 `authz/entry.js` 이고 둘 다 `share` 청크(vite.config.js)다.
+// 공유 대화상자는 `share/entry.js`, 승인함(모달·권한·감사)은 `authz/entry.js` 이고 둘 다 `share` 청크(vite.config.mjs)다.
 // 여기는 이벤트 수신, 배지, import() 몇 줄뿐이다. 승인은 이 맥에서만 된다(중계 허용 목록에 없다) — 다른 맥을 보는 화면은 듣지 않는다.
 import { onWorkspaceEvent } from './core/workspace-ws.js';
 import { isRelayed } from './core/host-route.js';

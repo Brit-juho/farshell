@@ -3,7 +3,7 @@
 // 미디어 세션을 인식하려면 무음 오디오가 재생 중이어야 한다.
 //
 // core/dom.js는 여기서 import하지 않는다 — voice.js는 app.js와 완전히 분리된
-// 별도 lib entry로 빌드되므로(vite.config.js), import하면 core/dom.js의 mutable
+// 별도 lib entry로 빌드되므로(vite.config.mjs), import하면 core/dom.js의 mutable
 // 레지스트리(`registry` Map)까지 통째로 새 사본이 인라인돼 `window.registerAction`이
 // app.js 쪽 진짜 인스턴스를 덮어쓴다(recording.js 상단 주석에 상세 — 실측으로
 // 확인한 사고). `window.registerAction`을 bare로 그대로 쓴다.

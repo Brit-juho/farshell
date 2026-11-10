@@ -1,7 +1,7 @@
 // 도구 패널(리디자인 5단계 「정돈」)이 새로 쓰는 아이콘 — ui/icons.js에 없는 것만 둔다.
 //
 // icons.js는 core 청크라 path 하나만 늘어도 초기 페이로드(상한 358,400B)가 는다. 패널 화면 청크(panels·settings)는
-// 모두 panels/panel.js(`panel` 청크)를 이미 정적으로 받으므로, 이 파일도 같은 `panel` 청크에 둔다(vite.config.js
+// 모두 panels/panel.js(`panel` 청크)를 이미 정적으로 받으므로, 이 파일도 같은 `panel` 청크에 둔다(vite.config.mjs
 // `chunkOf`). ui/icons-shell.js(shell 청크)를 빌려 쓰면 폰에서 패널 하나를 열 때 작업대 청크까지 받게 된다.
 //
 // path는 Lucide(ISC)의 24x24 stroke 좌표를 그대로 옮겼다. 고정 데이터라 sanitize 불필요.

@@ -1,5 +1,5 @@
 // 코드 뷰어(CodeMirror 6) 보조 — CM을 import하지 않는 순수 함수만 둔다(jsdom 시험이 그대로 부를 수 있게).
-// editor.js와 같은 `editor` 지연 청크에 들어간다(vite.config.js chunkOf).
+// editor.js와 같은 `editor` 지연 청크에 들어간다(vite.config.mjs chunkOf).
 
 /**
  * 옛 내용에서 새 내용으로 가는 가장 작은 한 덩어리 교체를 구한다. 같으면 null.
