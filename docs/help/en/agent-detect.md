@@ -41,7 +41,7 @@ options = '^\s*[❯>]?\s*(\d+)\.\s+(.+?)\s*$'
 | Field | Meaning |
 |---|---|
 | `name` | Falls back to the file name without the extension. `claude.toml` → `claude` |
-| `enter` | String list. If any one appears in the recent output window (16KiB), the session counts as `waiting` |
+| `enter` | String list. If any one appears in the recent output window (16KiB) **and is also confirmed as a prompt in the last 14 lines of the tmux screen right now**, the session counts as `waiting` (quoted text printed by output that reads docs or logs stays only in history and is ignored) |
 | `exit` | String list. If any appears, `waiting` is cleared immediately: the signal that the prompt is gone |
 | `[kinds]` | Table. Key = waiting kind (`approval`/`choice`/`plan`/`question`), value = list of literal strings (same literal-byte rule as `enter`). Text listed here is also a signal to enter waiting. A match in `enter` counts as `approval`. If several match in the same window, the winner order is plan → approval → enter → choice → question |
 | `ignore_exit_on` | List of kinds (e.g. `["choice"]`). While that kind is showing, `exit` is ignored, because the Codex question screen also draws the status line `esc to interrupt`. Write this key **above** the `[kinds]` table (TOML rule) |
@@ -70,6 +70,8 @@ kind > fallback (`question`).
   or diffs (`"Yes"`, `"y/n"`). Pick longer text that appears only in the real prompt.
 - `enter`/`exit`/`[kinds]`/`interrupt`/`[badge]` match as **literal strings** (not regex).
   Only `options` and `interrupt_stale_after` are regexes.
+- The prompt text must be **within the bottom 14 lines of the screen**, with no `exit` (a working indicator) after it, for the session to become waiting. For choices, only the last run of
+  numbers that count up by 1 below the prompt line (just above it for a footer-style `choice`) is used; an earlier numbered list does not become buttons.
 - Real terminal output is mixed with ANSI codes for cursor movement, color and line erase. The
   detection window is text with **ANSI stripped, NBSP turned into a space, and cursor moves to the
   start of a line (`\x1b[19;1H`) turned into `\n`** (`_append_clean`), so you never need to put
