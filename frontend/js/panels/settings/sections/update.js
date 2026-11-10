@@ -5,43 +5,14 @@
 // 웹 비밀번호 재확인(승격)이 필요하다: 네트워크에서 받은 코드를 실행하게 만드는 스위치이기 때문이다.
 import { vtFetch } from '../../../core/api.js';
 import { t } from '../../../core/i18n.js';
-import { icon } from '../../../ui/icons.js';
 import { withElevation } from '../../../authz/elevate.js';
-import { row, group, toast, fmtWhen } from '../controls.js';
+import { row, group, toast, fmtWhen, switchButton, choiceControl } from '../controls.js';
 import { reasonText, blockedText, AUTO_HOURS } from '../../../shell/update-data.js';
 
-function switchControl(on, disabled, onToggle) {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'vt-toggle';
-  btn.setAttribute('role', 'switch');
-  btn.setAttribute('aria-checked', on ? 'true' : 'false');
-  btn.disabled = !!disabled;
-  const a = document.createElement('span'); a.textContent = 'ON';
-  const b = document.createElement('span'); b.textContent = 'OFF';
-  btn.append(a, b);
-  btn.addEventListener('click', () => onToggle(btn.getAttribute('aria-checked') !== 'true'));
-  return btn;
-}
-
-function selectControl(options, value, disabled, onChange) {
-  const wrap = document.createElement('div');
-  wrap.className = 'vt-select-wrap';
-  const sel = document.createElement('select');
-  sel.className = 'vt-select';
-  sel.disabled = !!disabled;
-  for (const [v, label] of options) {
-    const opt = document.createElement('option');
-    opt.value = String(v);
-    opt.textContent = label;
-    sel.appendChild(opt);
-  }
-  sel.value = String(value);
-  sel.addEventListener('change', () => onChange(sel.value));
-  wrap.appendChild(sel);
-  wrap.insertAdjacentHTML('beforeend', icon('chevron-down', 12, 2));
-  return wrap;
-}
+// 스위치·선택 컨트롤은 설정 공용 빌더(controls.js)를 쓴다 — 여기서 모양을 따로 만들지 않는다.
+const switchControl = (on, disabled, onToggle) => switchButton({ checked: on, disabled, onChange: onToggle });
+const selectControl = (options, value, disabled, onChange) =>
+  choiceControl({ options, value, disabled, onChange: (v) => onChange(String(v)) });
 
 function note(text, cls = 'vt-set-help') {
   const el = document.createElement('div');

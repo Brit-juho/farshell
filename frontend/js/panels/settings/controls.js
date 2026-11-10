@@ -22,12 +22,12 @@ export function row(label, controlEl, help, options = {}) {
   const base = `vt-set-row-${++_rowId}`;
   left.id = `${base}-label`;
   left.appendChild(document.createTextNode(label));
-  if (options.scope) {
+  if (options.scope || options.scopeText) {
     const badge = document.createElement('span');
     badge.className = 'vt-tag vt-set-scope';
-    badge.textContent = options.scope === 'device'
+    badge.textContent = options.scopeText || (options.scope === 'device'
       ? ({ mobile: t('모바일'), mac: 'Mac', windows: 'Windows', linux: 'Linux' })[DEVICE_PROFILE]
-      : t('모든 기기');
+      : t('모든 기기'));
     left.appendChild(badge);
   }
   let helpId = null;
@@ -57,9 +57,10 @@ export function row(label, controlEl, help, options = {}) {
   // 행 안의 주 설정 컨트롤만 라벨에 연결한다. 실행 버튼 여러 개가 든 행은 각
   // 버튼의 동사 자체가 이름이므로 덮어쓰지 않는다.
   let primary = null;
-  if (controlEl.matches?.('input, select, textarea, [role="switch"]')) primary = controlEl;
+  if (controlEl.matches?.('input, select, textarea, [role="switch"], [role="radiogroup"]')) primary = controlEl;
   else if (controlEl.classList?.contains('vt-range')) primary = controlEl.querySelector('input[type="range"]');
   else if (controlEl.classList?.contains('vt-select-wrap')) primary = controlEl.querySelector('select');
+  else if (controlEl.classList?.contains('vt-segmented')) primary = controlEl;
   if (primary) {
     primary.setAttribute('aria-labelledby', left.id);
     if (helpId) primary.setAttribute('aria-describedby', helpId);
@@ -76,34 +77,124 @@ export function row(label, controlEl, help, options = {}) {
   return el;
 }
 
-// 2.1.6 — 네이티브 체크박스에서 [ON][OFF] 세그먼트로 바꿨다
-// (20-design-system.md §3: "ON/OFF가 글자로 먼저 읽히는 세그먼트, 스위치 아님").
-// 체크박스는 "켜짐"만 표시하고 꺼짐은 빈 네모라, 이 화면처럼 항목이 세로로
-// 늘어선 곳에서는 무엇이 꺼져 있는지 훑어서 알기 어려웠다.
+// ── 스위치 · 세그먼트 — 설정 컨트롤의 단일 빌더 ──────────────────────────────
+// 설정 화면의 켜기/끄기와 3개 이하 선택은 **이 두 함수로만** 만든다(섹션마다 따로 그리지 않는다).
+// 모양은 styles/layers/components.css 의 .vt-switch · .vt-segmented 가 정한다. 되돌리려면
+// 여기의 클래스 이름만 바꾸면 된다(옛 ON | OFF 알약 = .vt-toggle 규칙은 스니펫 스코프용으로 남아 있다).
 //
-// role="switch" + aria-checked를 쓰는 이유: <button>이라 스페이스·엔터가 브라우저
-// 기본으로 동작하고, 스크린리더가 "켜짐/꺼짐"을 그대로 읽는다. div로 만들었다면
-// 키보드 처리와 포커스 관리를 전부 직접 짜야 하고 대개 빠뜨린다.
-export function boolControl(key) {
+// 스위치는 <button role="switch" aria-checked> 라 스페이스·엔터가 브라우저 기본으로 동작하고
+// 스크린리더가 켜짐/꺼짐을 그대로 읽는다. 세그먼트는 role="radiogroup" + 한 칸에 하나의
+// role="radio" 버튼(roving tabindex, 방향키로 이동 = 선택).
+export function switchButton({ checked = false, onChange, label, disabled = false } = {}) {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'vt-toggle';
+  btn.className = 'vt-switch';
   btn.setAttribute('role', 'switch');
-  const on = document.createElement('span');
-  on.textContent = 'ON';
-  const off = document.createElement('span');
-  off.textContent = 'OFF';
-  btn.append(on, off);
+  if (label) btn.setAttribute('aria-label', label);
+  btn.disabled = !!disabled;
   const paint = (v) => { btn.setAttribute('aria-checked', v ? 'true' : 'false'); };
-  paint(!!setting(key));
+  paint(!!checked);
   btn.addEventListener('click', () => {
     const next = btn.getAttribute('aria-checked') !== 'true';
     paint(next);
-    setSetting(key, next);
+    onChange?.(next);
     btn.dispatchEvent(new Event('vt-setting-value'));
   });
   btn.vtSetValue = (v) => paint(!!v);
+  btn.vtSetDisabled = (v) => { btn.disabled = !!v; };
   return btn;
+}
+
+// options: [[value, label], …]. 값은 문자열로 비교한다(스키마 값이 숫자여도 된다).
+export function segmentedControl({ options, value, onChange, label, disabled = false } = {}) {
+  const wrap = document.createElement('div');
+  wrap.className = 'vt-segmented';
+  wrap.setAttribute('role', 'radiogroup');
+  if (label) wrap.setAttribute('aria-label', label);
+  const opts = options.map(([v, text]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'vt-segmented-opt';
+    b.setAttribute('role', 'radio');
+    b.dataset.value = String(v);
+    b.textContent = text;
+    return b;
+  });
+  let current = String(value);
+  const paint = (v) => {
+    current = String(v);
+    let tab = opts.find((o) => o.dataset.value === current) || opts[0];
+    for (const o of opts) {
+      o.setAttribute('aria-checked', o === tab && o.dataset.value === current ? 'true' : 'false');
+      o.tabIndex = o === tab ? 0 : -1;
+    }
+  };
+  const choose = (o, focus) => {
+    if (o.dataset.value === current) { if (focus) o.focus(); return; }
+    paint(o.dataset.value);
+    if (focus) o.focus();
+    onChange?.(options.find(([v]) => String(v) === o.dataset.value)[0]);
+    wrap.dispatchEvent(new Event('vt-setting-value'));
+  };
+  for (const o of opts) {
+    o.addEventListener('click', () => choose(o, false));
+    o.addEventListener('keydown', (e) => {
+      const i = opts.indexOf(o);
+      const to = { ArrowRight: i + 1, ArrowDown: i + 1, ArrowLeft: i - 1, ArrowUp: i - 1, Home: 0, End: opts.length - 1 }[e.key];
+      if (to === undefined) return;
+      e.preventDefault();
+      choose(opts[(to + opts.length) % opts.length], true);
+    });
+  }
+  wrap.append(...opts);
+  paint(value);
+  wrap.vtSetValue = paint;
+  wrap.vtSetDisabled = (v) => {
+    if (v) wrap.setAttribute('aria-disabled', 'true'); else wrap.removeAttribute('aria-disabled');
+    for (const o of opts) o.disabled = !!v;
+  };
+  if (disabled) wrap.vtSetDisabled(true);
+  return wrap;
+}
+
+// 선택지가 3개 이하이고 글자가 짧으면 세그먼트, 아니면 select. 한 곳에서 정한다.
+export const SEGMENT_MAX_OPTIONS = 3;
+export const SEGMENT_MAX_LABEL = 10;
+export const SEGMENT_MAX_TOTAL = 24;
+export function prefersSegment(texts) {
+  return texts.length >= 2 && texts.length <= SEGMENT_MAX_OPTIONS
+    && texts.every((x) => x.length <= SEGMENT_MAX_LABEL) && texts.join('').length <= SEGMENT_MAX_TOTAL;
+}
+
+/** 값이 하나씩 갈리는 선택 컨트롤(스키마 없이 값·콜백만). 세그먼트 또는 select. */
+export function choiceControl({ options, value, onChange, label, disabled = false }) {
+  if (prefersSegment(options.map(([, text]) => text))) return segmentedControl({ options, value, onChange, label, disabled });
+  const wrap = document.createElement('div');
+  wrap.className = 'vt-select-wrap';
+  const sel = document.createElement('select');
+  sel.className = 'vt-select';
+  if (label) sel.setAttribute('aria-label', label);
+  for (const [v, text] of options) {
+    const opt = document.createElement('option');
+    opt.value = String(v);
+    opt.textContent = text;
+    sel.appendChild(opt);
+  }
+  sel.value = String(value);
+  sel.disabled = !!disabled;
+  sel.addEventListener('change', () => {
+    onChange?.(options.find(([v]) => String(v) === sel.value)[0]);
+    wrap.dispatchEvent(new Event('vt-setting-value'));
+  });
+  wrap.appendChild(sel);
+  wrap.insertAdjacentHTML('beforeend', icon('chevron-down', 12, 2));
+  wrap.vtSetValue = (v) => { sel.value = String(v); };
+  wrap.vtSetDisabled = (v) => { sel.disabled = !!v; };
+  return wrap;
+}
+
+export function boolControl(key) {
+  return switchButton({ checked: !!setting(key), onChange: (next) => setSetting(key, next) });
 }
 
 export function rangeControl(key, step, unit = '', presets = []) {
@@ -132,8 +223,9 @@ export function rangeControl(key, step, unit = '', presets = []) {
   const suffix = document.createElement('span');
   suffix.className = 'vt-range-unit';
   suffix.textContent = unit === '줄' ? t('줄') : unit;
+  let quickSeg = null;
   const paint = (v) => {
-    input.value = v; spinner.setValue(Number(v));
+    input.value = v; spinner.setValue(Number(v)); quickSeg?.vtSetValue(Number(v));
     input.setAttribute('aria-valuetext', unit === '줄' ? t('{n}줄', { n: Number(v).toLocaleString() }) : `${v}${unit}`);
   };
   paint(input.value);
@@ -144,19 +236,20 @@ export function rangeControl(key, step, unit = '', presets = []) {
   input.addEventListener('change', () => setSetting(key, input.value));
   wrap.append(input, spinner.element, suffix);
   if (presets.length) {
+    // 빠른 선택은 세그먼트 한 벌(2,000줄 · 5,000줄 · 10,000줄). 현재 값이 목록에 없으면 아무 칸도 선택되지 않는다.
     wrap.classList.add('has-presets');
     const quick = document.createElement('div');
     quick.className = 'vt-range-presets';
-    for (const preset of presets) {
-      const b = document.createElement('button');
-      b.type = 'button'; b.className = 'vt-btn sm quiet';
-      b.textContent = unit === '줄' ? t('{n}줄', { n: Number(preset).toLocaleString() }) : `${preset}${unit}`;
-      b.addEventListener('click', () => {
+    quickSeg = segmentedControl({
+      label: t('빠른 선택'),
+      options: presets.map((preset) => [preset, unit === '줄' ? t('{n}줄', { n: Number(preset).toLocaleString() }) : `${preset}${unit}`]),
+      value: Number(setting(key)),
+      onChange: (preset) => {
         setSetting(key, preset); paint(setting(key));
         wrap.dispatchEvent(new Event('vt-setting-value'));
-      });
-      quick.appendChild(b);
-    }
+      },
+    });
+    quick.appendChild(quickSeg);
     wrap.appendChild(quick);
   }
   input.addEventListener('change', () => wrap.dispatchEvent(new Event('vt-setting-value')));
@@ -164,31 +257,16 @@ export function rangeControl(key, step, unit = '', presets = []) {
   return wrap;
 }
 
-// <select>는 그대로 두고 OS 화살표만 지운다(appearance:none) — 직접 만든
-// 드롭다운으로 바꾸면 키보드 탐색·타이핑 점프·모바일 네이티브 피커를 전부
-// 다시 짜야 하고, 그렇게 만든 것이 네이티브보다 나은 경우는 드물다.
-// 화살표는 아이콘 레지스트리의 chevron-down 하나를 쓴다(라이브러리 혼용 금지).
+// 값 목록은 스키마(spec.values)에서 온다. 글자가 짧은 3개 이하는 세그먼트(choiceControl이 정한다).
+// 그 밖에는 <select>를 그대로 두고 OS 화살표만 지운다(appearance:none) — 직접 만든
+// 드롭다운은 키보드 탐색·타이핑 점프·모바일 네이티브 피커를 다시 짜야 한다.
 export function selectControl(key, labels) {
   const spec = SCHEMA[key] || {};
-  const wrap = document.createElement('div');
-  wrap.className = 'vt-select-wrap';
-  const sel = document.createElement('select');
-  sel.className = 'vt-select';
-  for (const v of spec.values || []) {
-    const opt = document.createElement('option');
-    opt.value = v;
-    opt.textContent = (labels && labels[v]) || v;
-    sel.appendChild(opt);
-  }
-  sel.value = setting(key);
-  sel.addEventListener('change', () => {
-    setSetting(key, sel.value);
-    wrap.dispatchEvent(new Event('vt-setting-value'));
-  });
-  wrap.appendChild(sel);
-  wrap.insertAdjacentHTML('beforeend', icon('chevron-down', 12, 2));
-  wrap.vtSetValue = (v) => { sel.value = v; };
-  return wrap;
+  const options = (spec.values || []).map((v) => [v, (labels && labels[v]) || String(v)]);
+  const cur = setting(key);
+  const el = choiceControl({ options, value: cur, onChange: (v) => setSetting(key, v) });
+  // 스키마 값이 숫자여도(가장자리 반응 시간) 저장은 원래 타입으로 한다 — choiceControl이 options의 원본 값을 돌려준다.
+  return el;
 }
 
 export function renderItems(section) {
@@ -203,16 +281,61 @@ export function renderItems(section) {
   return frag;
 }
 
-export function group(title, content) {
+// 구역 머리 28(12/600 + 아래 선). aside 는 머리 오른쪽에 붙는 칩·버튼·상태 글자(선택).
+export function group(title, content, aside) {
   const el = document.createElement('section');
   el.className = 'vt-set-group';
   const h = document.createElement('h3');
   h.className = 'vt-set-group-title';
   h.textContent = title;
+  if (aside) h.append(aside);
   el.append(h, content);
   return el;
 }
 
+// 상태 한 줄 — state: 'ok'(조용한 회색 체크) | 'warn'(호박색) | 'err'(빨강) | 없으면 글자만.
+export function statLine(text, state) {
+  const el = document.createElement('div');
+  el.className = 'vt-set-stat';
+  if (state) el.dataset.state = state;
+  const ic = { ok: 'check', warn: 'alert-triangle', err: 'alert-triangle' }[state];
+  if (ic) el.insertAdjacentHTML('beforeend', icon(ic, 12, 2));
+  const span = document.createElement('span');
+  span.textContent = text;
+  el.appendChild(span);
+  el.vtSetText = (v) => { span.textContent = v; };
+  return el;
+}
+
+// 명령 한 줄(코드 상자) + 복사 버튼. 클립보드를 못 쓰면 알려 주고 직접 선택하게 한다.
+export function codeLine(command, ariaLabel) {
+  const el = document.createElement('div');
+  el.className = 'vt-set-code';
+  const p = document.createElement('span'); p.className = 'vt-set-code-p'; p.textContent = '$'; p.setAttribute('aria-hidden', 'true');
+  const code = document.createElement('code'); code.textContent = command;
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'vt-btn sm quiet vt-set-code-copy';
+  b.innerHTML = icon('clipboard-copy', 14, 2);
+  b.append(document.createTextNode(t('복사')));
+  b.setAttribute('aria-label', ariaLabel || t('{command} 명령 복사', { command }));
+  b.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(command); toast(t('복사했습니다')); }
+    catch (_) { toast(t('복사하지 못했습니다. 직접 선택해 복사해 주세요'), 'error'); }
+  });
+  el.append(p, code, b);
+  return el;
+}
+
+/** 컨트롤 + 뒤에 붙는 단위 글자(예: 「초」). */
+export function withUnit(controlEl, unit) {
+  const wrap = document.createElement('div');
+  wrap.className = 'vt-set-unitwrap';
+  const u = document.createElement('span');
+  u.className = 'vt-range-unit';
+  u.textContent = unit;
+  wrap.append(controlEl, u);
+  return wrap;
+}
 
 export function toast(msg, type) {
   if (typeof window.showToast === 'function') window.showToast(msg, type);

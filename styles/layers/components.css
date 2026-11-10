@@ -853,6 +853,65 @@
   .vt-toggle:hover { border-color: var(--color-acc-dim); }
   .vt-toggle:disabled { opacity: .45; cursor: not-allowed; }
 
+  /* ── 스위치 · 세그먼트 (설정 화면 컨트롤 한 벌, 2026-11 정돈) ───────────────────────
+   * 설정 화면의 켜기/끄기와 3개 이하 선택은 이 둘뿐이다. 빌더는 panels/settings/controls.js
+   * (switchButton · segmentedControl) 한 곳이고, 섹션은 모양을 직접 만들지 않는다. 되돌리려면
+   * 그 빌더의 클래스만 .vt-toggle 로 바꾸면 된다(.vt-toggle 규칙은 스니펫 스코프 때문에 남아 있다).
+   *
+   * DOM 계약:
+   *   <button class="vt-switch" role="switch" aria-checked="true|false">
+   *   <div class="vt-segmented" role="radiogroup"><button class="vt-segmented-opt" role="radio" aria-checked>…
+   * 켜짐은 색(액센트 면)과 손잡이 위치 두 가지로, 선택은 면 + 굵은 글자 두 가지로 말한다.
+   * 데스크톱 스위치 28×16(누르는 영역 36×28), 터치 40×24(누르는 영역 52×44), 세그먼트 28 / 터치 44. */
+  .vt-switch {
+    position: relative; flex: none; display: inline-block;
+    width: 36px; height: 28px; padding: 0; border: 0; border-radius: var(--radius-sm);
+    background: transparent; touch-action: manipulation;
+  }
+  .vt-switch::before {
+    content: ""; position: absolute; left: 4px; top: 6px; width: 28px; height: 16px; border-radius: 8px;
+    background: var(--color-bg-3); box-shadow: inset 0 0 0 1px var(--color-line-strong);
+    transition: background-color var(--dur-fast) var(--ease-fast), box-shadow var(--dur-fast) var(--ease-fast);
+  }
+  .vt-switch::after {
+    content: ""; position: absolute; left: 6px; top: 8px; width: 12px; height: 12px; border-radius: 6px;
+    background: var(--color-sub); transition: transform var(--dur-fast) var(--ease-fast), background-color var(--dur-fast) var(--ease-fast);
+  }
+  .vt-switch[aria-checked="true"]::before { background: var(--color-acc-surface); box-shadow: none; }
+  .vt-switch[aria-checked="true"]::after { transform: translateX(12px); background: var(--color-acc-ink); }
+  .vt-switch:hover:not(:disabled)::before { box-shadow: 0 0 0 3px var(--color-state-hover); }
+  .vt-switch[aria-checked="false"]:hover:not(:disabled)::before { box-shadow: inset 0 0 0 1px var(--color-line-strong), 0 0 0 3px var(--color-state-hover); }
+  .vt-switch:active:not(:disabled)::before { box-shadow: 0 0 0 3px var(--color-state-press); }
+  .vt-switch[aria-checked="false"]:active:not(:disabled)::before { box-shadow: inset 0 0 0 1px var(--color-line-strong), 0 0 0 3px var(--color-state-press); }
+  .vt-switch:disabled { opacity: .45; cursor: not-allowed; }
+
+  .vt-segmented {
+    display: inline-flex; flex: none; align-items: stretch; box-sizing: border-box; height: 28px; padding: 1px; gap: 1px;
+    border-radius: var(--radius-sm); background: var(--color-bg-2); border: 1px solid var(--color-line-strong);
+  }
+  .vt-segmented-opt {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 0; padding: 0 10px;
+    border: 0; border-radius: 4px; background: transparent; color: var(--color-sub); white-space: nowrap;
+    font: var(--weight-medium) var(--fs-xs) / 1 var(--font-ui); touch-action: manipulation;
+  }
+  .vt-segmented-opt:hover:not(:disabled):not([aria-checked="true"]) { background: var(--color-state-hover); color: var(--color-txt); }
+  .vt-segmented-opt:active:not(:disabled):not([aria-checked="true"]) { background: var(--color-state-press); }
+  .vt-segmented-opt[aria-checked="true"] {
+    background: var(--color-bg-raised); color: var(--color-txt); font-weight: var(--weight-semibold);
+    box-shadow: 0 0 0 1px var(--color-line-strong);
+  }
+  .vt-segmented[aria-disabled="true"] { opacity: .45; }
+  .vt-segmented[aria-disabled="true"] .vt-segmented-opt { cursor: not-allowed; pointer-events: none; }
+
+  @media (max-width: 719px), (pointer: coarse) {
+    .vt-switch { width: 52px; height: 44px; min-height: 44px; }
+    .vt-switch::before { left: 6px; top: 10px; width: 40px; height: 24px; border-radius: 12px; }
+    .vt-switch::after { left: 9px; top: 13px; width: 18px; height: 18px; border-radius: 9px; }
+    .vt-switch[aria-checked="true"]::after { transform: translateX(16px); }
+    .vt-segmented { height: 44px; padding: 3px; }
+    .vt-segmented-opt { min-height: 36px; padding: 0 12px; font-size: var(--fs-sm); }
+  }
+
   /* ── 셀렉트 ────────────────────────────────────────────────────────────
    * appearance:none으로 OS 화살표만 지우고 <select> 자체는 그대로 쓴다.
    * 직접 만든 드롭다운으로 바꾸지 않는 이유: 키보드 탐색·타이핑 점프·모바일

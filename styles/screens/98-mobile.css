@@ -187,32 +187,18 @@
   .vt-settings .vt-set-note { margin:12px 0 0; }
   .vt-settings .vt-set-row { min-height:56px; box-sizing:border-box; padding:10px 0; gap:8px; }
   /* 라벨이 160 아래로 줄어야 할 만큼 컨트롤이 넓으면(긴 선택값) 컨트롤만 다음 줄로 내린다 — 값을 자르지 않는다. */
-  .vt-settings .vt-set-row:has(> .vt-toggle, > .vt-select-wrap, > .vt-dd, > .vt-range:not(.has-presets), > .vt-number-spinner, > input[type="checkbox"]) {
+  .vt-settings .vt-set-row:has(> .vt-toggle, > .vt-switch, > .vt-segmented, > .vt-select-wrap, > .vt-dd, > .vt-range:not(.has-presets), > .vt-number-spinner, > .vt-set-unitwrap, > .vt-set-btns, > .vt-btn, > input[type="checkbox"]) {
     flex-direction:row; flex-wrap:wrap; align-items:center; gap:8px 12px;
   }
   .vt-settings .vt-set-row > .vt-set-meta { flex:1 1 160px; }
+  /* 세로로 쌓이는 행(컨트롤이 다음 줄)에서는 flex-basis 160 이 높이로 읽혀 빈 블록이 생긴다 — 그런 행은 내용 높이만큼만. */
+  .vt-settings .vt-set-row:not(:has(> .vt-toggle, > .vt-switch, > .vt-segmented, > .vt-select-wrap, > .vt-dd, > .vt-range:not(.has-presets), > .vt-number-spinner, > .vt-set-unitwrap, > .vt-set-btns, > .vt-btn, > input[type="checkbox"])) > .vt-set-meta { flex:none; }
   .vt-settings .vt-set-row > .vt-select-wrap, .vt-settings .vt-set-row > .vt-dd { flex:0 1 auto; max-width:100%; }
   /* 숫자 행 — 시안은 「− 14 +」 하나. 슬라이더는 접고 입력 + 단추만 남긴다(직접 입력 · 한 칸씩 둘 다 된다). */
   .vt-settings .vt-set-row > .vt-range:not(.has-presets) input[type="range"] { display:none; }
   .vt-settings .vt-set-row > .vt-range:not(.has-presets) { gap:6px; }
   .vt-settings .vt-set-row .vt-number-spinner .vt-range-number { width:48px; text-align:center; }
-  /* 스위치 40×24(터치 52×44) — ON/OFF 두 칸 대신 손잡이 하나. 상태는 role=switch + aria-checked가 그대로 말한다. */
-  .vt-settings .vt-set-row > .vt-toggle {
-    position:relative; flex:none; align-self:center; width:52px; height:44px; min-height:44px;
-    padding:0; border:0; border-radius:var(--radius-lg); background:transparent; overflow:visible;
-  }
-  .vt-settings .vt-set-row > .vt-toggle > span { display:none; }
-  .vt-settings .vt-set-row > .vt-toggle::before {
-    content:""; position:absolute; left:6px; top:10px; width:40px; height:24px; border-radius:12px;
-    background:var(--color-bg-3); box-shadow:inset 0 0 0 1px var(--color-line-strong);
-    transition:background-color var(--dur-fast) ease;
-  }
-  .vt-settings .vt-set-row > .vt-toggle::after {
-    content:""; position:absolute; left:9px; top:13px; width:18px; height:18px; border-radius:9px;
-    background:var(--color-sub); transition:transform var(--dur-fast) ease;
-  }
-  .vt-settings .vt-set-row > .vt-toggle[aria-checked="true"]::before { background:var(--color-acc-surface); box-shadow:none; }
-  .vt-settings .vt-set-row > .vt-toggle[aria-checked="true"]::after { transform:translateX(16px); background:var(--color-acc-ink); }
+  /* 스위치·세그먼트의 터치 크기(스위치 40×24 / 누르는 영역 52×44, 세그먼트 44)는 컴포넌트(.vt-switch · .vt-segmented, components.css)가 정한다. */
 
   /* ── 키바 90 — 키 44×36 · 간격 6 · 패딩 6 ─────────────────────────────── */
   #keybar {
