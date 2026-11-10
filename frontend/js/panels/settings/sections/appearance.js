@@ -92,11 +92,9 @@ function renderSkinRow() {
 export function renderAppearanceSection() {
   const frag = document.createDocumentFragment();
 
-  const skinTitle = document.createElement('div');
-  skinTitle.className = 'vt-set-label';
-  skinTitle.textContent = t('스킨');
-  frag.appendChild(skinTitle);
-  frag.appendChild(renderSkinRow());
+  // 스킨도 다른 묶음(언어 · 파일 뷰어 …)과 같은 `group()`이다 — 맨 아래 위 여백(첫 묶음 16/12)과 제목 모양이 공용 규칙 하나다.
+  // 예전엔 떠 있는 `.vt-set-label`이라 머리 줄에 붙어 다른 섹션보다 위 여백이 좁았다(2026-11-10 실기기 03-appearance).
+  frag.appendChild(group(t('스킨'), renderSkinRow()));
   // registerAction('theme.set', ...)이 data-action 위임으로 클릭을 처리한다
   // (core/dom.js) — 여기서 직접 리스너를 달 필요가 없다.
 

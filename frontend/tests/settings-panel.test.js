@@ -753,6 +753,19 @@ test('모양 — 기본 스킨 9개가 #theme-row 칩으로 나온다', async ()
 });
 
 
+test('모양 — 첫 묶음(스킨)도 다른 묶음과 같은 .vt-set-group 이라 위 여백·제목 모양이 공용 규칙 하나다', async () => {
+  // 2026-11-10 실기기 — 스킨 제목이 떠 있는 .vt-set-label 이라 머리 줄에 붙어 다른 섹션보다 위 여백이 좁았다.
+  const { document, P } = await build({});
+  P.showSettings();
+  sectionButton(document, '모양').click();
+  const content = document.querySelector('.vt-set-content');
+  const first = content.querySelector('.vt-set-intro').nextElementSibling;
+  assert.ok(first.classList.contains('vt-set-group'), `첫 묶음이 group() 이어야 한다: ${first.className}`);
+  assert.strictEqual(first.querySelector('.vt-set-group-title').textContent, '스킨');
+  assert.ok(first.querySelector('#theme-row'), '스킨 칩이 그 묶음 안에 있다');
+  assert.strictEqual(content.querySelectorAll(':scope > .vt-set-label').length, 0, '묶음 밖에 떠 있는 제목이 없다');
+});
+
 test('전용 숫자 스피너는 저장·슬라이더·기본값 복원과 동기화된다', async () => {
   const { document, P, S, window, puts } = await build();
   P.showSettings();
