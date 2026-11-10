@@ -65,8 +65,8 @@ doesn't call the hook.
 Example stdin:
 
 ```
-터미널 (VT)	https://example-one.trycloudflare.com
-개발 앱	https://example-two.trycloudflare.com
+Terminal (FarShell)	https://example-one.trycloudflare.com
+Dev app	https://example-two.trycloudflare.com
 ```
 
 **If the hook fails, the tunnel keeps working.** A non-zero exit code only prints a warning.

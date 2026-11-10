@@ -32,7 +32,7 @@ Everything about using FarShell in the browser. (For the CLI see `fsh help conce
   saved app files and reloads — your settings and login stay. "Sign out" ends this browser's login only; the device registration stays), the **Mac** this screen shows (if you have
   paired Macs, click it to switch the whole screen to another one), and the active pane's **repository › branch ›
   session** (hidden below 1280px). Click the **Search or run a command** field in the middle, or press `Cmd+K`, to open
-  the palette. The focus mode button (four-corners icon), the keyboard toggle (touch devices) and window buttons sit on the right.
+  the palette. The focus mode button (four-corners icon), the key bar button (touch devices) and window buttons sit on the right.
 - **Status bar** (bottom): the **agents chip** (`Needs you N · Working N · Done N`; when something
   needs you, click it to jump to the session that has waited longest) is pinned at the left end, and short messages
   (copied, saved…) appear briefly just to its right. Then E2E, safe mode and connected screens, and on the right CPU,
@@ -49,10 +49,10 @@ Everything about using FarShell in the browser. (For the CLI see `fsh help conce
   the approval dialog and the palette still appear. In Settings → Appearance, "Focus mode" sets showing bars at the edges, the
   needs-you pill and the edge reveal delay (instant / 250ms / 500ms). Tablets without a mouse use an exit button at the bottom
   left instead of the edges. Reloading the page or crossing 720px in window width turns it off.
-- **Phone mic**: the round mic floating at the bottom right of the Terminal tab (above the bottom tabs, or above the keybar when it is open)
+- **Phone mic**: the round mic floating at the bottom right of the Terminal tab (above the bottom tabs, or above the key bar when it is open)
   starts recording; tap again to stop. A dot on it means voice needs setting up (long-press for the voice panel).
 - **Phone focus mode**: the first button in the Terminal tab's top bar (the four-corners icon) hides the top bar and bottom tabs and leaves
-  the terminal and keybar. The mic moves to the first keybar key. A small pill at the top right shows a session waiting for approval as
+  the terminal and key bar. The mic moves to the first key bar key. A small pill at the top right shows a session waiting for approval as
   "Needs you N name"; tap it to open that session. To leave, tap the pill's exit button or pull down from the very top edge and let go
   (a short pull snaps back).
 
@@ -91,7 +91,7 @@ Each row has three lines: status, agent, name / branch, change count / status ke
 - **Kill** ends the tmux session, and the claude or shell inside it, with no undo. A confirmation always appears,
   and it warns you if the session is working or waiting for input. Panes open in other browser tabs become empty panes.
 - **Mobile session management**: tap the header session name to switch between the Sessions tab and the terminal. Use each session row's menu to open, close, rename or stop it.
-- **Mobile navigation order**: swipe left/right, the next/previous tab keys, the header's `n/m`, and the palette use the same order.
+- **Mobile navigation order**: swipe left/right, the header's `n/m`, and the palette use the same order.
   It goes view order → pane order within a view (top left first), skips empty panes, and wraps from the end to the start. Navigating never moves a session;
   it only goes to that session's view and pane. To change the order, enable Edit views on the mobile Sessions tab
   and use the up/down buttons per view. A group view moves as one.
@@ -99,15 +99,16 @@ Each row has three lines: status, agent, name / branch, change count / status ke
   shows the start screen). Each view's pane count (empty, file and panel panes included) is shown there too. Opening the Sessions tab on a phone automatically cleans up empty single views ("Empty screen").
 - **Agents and session sharing**: lets an agent (Claude Code, for example) read and type into **only the sessions you've shared** through the FarShell MCP tools.
   Agents can't create or close sessions.
-  - **Sharing**: row menu "Share with agent…" → choose a nickname (1-32 characters: letters, digits, `_`, `-`) and a mode (Read-only / Read & write).
+  - **Sharing**: row menu "Sharing and permissions…" → in the "Sharing and permissions · session name" dialog choose a nickname (1-32 characters: letters, digits, `_`, `-`) and a mode (Read-only / Read & write), then press "Share".
     A shared row shows an eye (read-only) or pen (read & write) icon with the nickname, and it also appears in the summary line at the top of the menu.
-    To change it, use "Sharing settings…"; to end it, use "Unshare" (every permission for that session disappears immediately).
+    To change it, edit the nickname or mode in the same dialog and press "Save"; to end it, press "Unshare" (every permission and pending request for that session disappears immediately).
   - **Approving**: the first time an agent uses a shared session, an "Agent access request" dialog appears. Read and write are asked separately,
     and a write request also offers "Allow read only". The default choice is Deny, and for a moment after the dialog appears, presses are ignored
     (so keys you were typing don't approve it). Once allowed, that agent keeps access even if it runs `/new` or `/clear`.
-    "Later" (Esc) is a deferral, not a denial. Reopen it from "Waiting for approval" in the row menu's "Agent permissions…".
-  - **Revoking**: in the row menu's "Agent permissions…", use "Revoke all" or "Revoke write" per agent. You'll also see the last-used time and recent access log there
-    (character count and the first 8 characters of the hash only. The text that was typed isn't stored). After a revoke, the agent's next call goes back to waiting for approval.
+    "Later" (Esc) is a deferral, not a denial. Reopen it from Settings > Permissions > "Waiting for approval" (the number badge on the Settings button is the pending count).
+  - **Revoking**: in the row menu's "Sharing and permissions…", under "Permissions granted for this session", press "Revoke input only" (keeps read) or "Revoke" for each permission.
+    The full list can be filtered in Settings > Permissions > "Granted access", and recent access is in "Audit log"
+    (what was typed, shown or sent is never recorded — only its length and the first 8 characters of a hash). After a revoke, the agent's next call goes back to waiting for approval.
   - **Limits**: once shared, an agent reads **everything visible on that session's screen**. Don't share if passwords or tokens are visible.
     Read & write means the agent can run commands in that terminal. Text on the screen was printed by that program,
     so you can trust it only as far as you trust the program (prompt injection is possible), and sharing applies to just one active pane.
@@ -222,13 +223,13 @@ More troubleshooting: `fsh help troubleshoot`
 
 ## Permissions when resuming a conversation
 
-Resume on a session and Continue in Conversation archive also restore the last recorded permissions.
+Resume and Conversation archive's Continue conversation also restore the last recorded permissions.
 Claude bypass and Codex YOLO stay on or off as recorded. OFF is applied explicitly, so a later change
 to global settings cannot turn it on. Codex also restores its approval policy, sandbox and approval reviewer.
 A notice shows the restored mode after launch.
 
 If records are missing, corrupt, conflicting or unsupported, FarShell refuses to start and explains why.
-Old Claude records without a verified profile are insufficient; resume directly in the CLI to record a new owner hook.
+If only older Claude records saved without a profile distinction exist, resume directly in the CLI to record a new hook.
 Legacy hooks without the PID needed for process verification still report state, but cannot supply a resume policy.
 Codex permission restoration requires version 0.164.0 or newer. Unsupported Codex settings include custom permission profiles and network access in read-only mode.
 Changes the CLI never recorded cannot be restored. FarShell execution grants are not inherited.

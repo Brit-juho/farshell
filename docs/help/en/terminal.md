@@ -30,7 +30,7 @@ fsh terminal unset            # back to automatic selection
 - The command runs with `exec`, so when the tmux session ends the terminal app closes the window. The exception is **Ghostty: a window opened through AppleScript stays open after the process exits** (close it yourself). Also, with tmux's `detach-on-destroy off`, killing a session just moves the client to another session and the window stays open.
 - `fsh start`/`restart`/`mobile`/`voice` don't open a window.
 - If no window opens: run the manual command fsh prints (`tmux -L fsh new -A -s dev`) in any terminal,
-  then check the "terminal app" item in `fsh doctor` and the macOS Automation permission.
+  then check the "Terminal apps" item in `fsh doctor` and the macOS Automation permission.
 
 ## Saved sessions and conversation archives
 

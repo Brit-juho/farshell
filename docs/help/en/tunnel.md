@@ -44,12 +44,12 @@ fsh tunnel auto 3000 <on|off>        # turn auto re-expose on or off (credential
 | `pin` | Only people who know the access code |
 | `public` | Anyone with the URL (no auth) |
 
-`expose` asks for confirmation because it opens something to the public internet. Remote-control ports such as Chrome remote debugging (9222) open only with `--force`. In the web ports panel, when the server reports a dangerous port a confirmation window explains why, and the Expose button turns on only after you **type the port number exactly** (focus starts on Cancel; Esc cancels).
-For a `session` share, opening the public address directly shows only an instruction screen. Start from the "first open" link in the `expose` output (or the FarShell port panel). An exposure whose time has run out is taken down, tunnel included, within a minute.
+`expose` asks for confirmation because it opens something to the public internet. Remote-control ports such as Chrome remote debugging (9222) open only with `--force`. In the web Ports panel, when the server reports a dangerous port a confirmation window explains why, and the Expose button turns on only after you **type the port number exactly** (focus starts on Cancel; Esc cancels).
+For a `session` share, opening the public address directly shows only an instruction screen. Start from the "First visit" link in the `expose` output (or the FarShell Ports panel). An exposure whose time has run out is taken down, tunnel included, within a minute.
 
 ### Auto re-expose
 
-Without an option, `expose` asks "Re-open this port automatically when it expires or after a reboot?" (default no). Off a terminal (scripts, autostart) it doesn't ask and leaves it off. The web port panel's expose dialog has the same choice, and an open tunnel's row has an "Auto on/off" button to change it later.
+Without an option, `expose` asks "Re-open this port automatically when it expires or after a reboot?" (default no). Off a terminal (scripts, autostart) it doesn't ask and leaves it off. The web Ports panel's expose dialog has the same choice, and you can change it later from the open tunnel's row menu ("Turn on/off auto re-expose").
 
 When it's on, the exposure is extended by its `--ttl` at expiry instead of being taken down (the access code and signed-in devices keep working). If the tunnel goes away (reboot, `fsh stop`, cloudflared exiting), the server re-opens it within a minute. A quick tunnel **comes back with a new address**, so pick it up with the URL-change hook. Nothing is re-opened when the access scope isn't `all`. To end it, run `fsh tunnel unexpose`.
 

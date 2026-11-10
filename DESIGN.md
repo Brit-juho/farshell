@@ -12,9 +12,9 @@ Visual rules, tokens and component guidance for FarShell. See
 These are the rules this project actually holds itself to. Read this before
 drawing a new screen.
 
-### Structural principles (구조 원칙)
+### Structural principles
 
-Redesign 「작업대」 (2026-11) replaced "restraint is taste" with structure: the screen is
+Redesign "Workbench" (작업대) (2026-11) replaced "restraint is taste" with structure: the screen is
 read from its **frame** — activity bar, sidebar, title bar 36, panes, status bar 24 — and
 every new element first has to find its place in that frame before it gets a colour, a
 border or a motion. Concretely:
@@ -175,7 +175,7 @@ as does the `<meta name="theme-color">` in `index.html`. The icon art itself
 (`frontend/icon-192.png`, `icon-512.png`, the favicon) is still the old purple tile — there
 is no generator script in the repository, so redrawing it is deferred.
 
-Switched from Settings → 모양, or the theme chip in the command
+Switched from Settings → Appearance (모양), or the theme chip in the command
 palette (`Mod+K`, shows up mixed into a bare search, or under the `>`
 settings mode). A boot-time inline script in `<head>` commits `data-skin`
 before first paint (anti-FOUC).
@@ -503,7 +503,7 @@ split button goes disabled **with the reason in its tooltip**.
 ### View tabs
 
 **There is no tab strip.** The rail switches between sessions and grouped views (clicking a row goes to
-that view and focuses its pane), names a group (the group header's 편집) and closes, so a strip would be a second copy
+that view and focuses its pane), names a group (the group header's Edit (편집)) and closes, so a strip would be a second copy
 of the same navigation. There is no `#vt-wtabs`, per-tab state bar or tooltip, right-click tab menu or drag-to-reorder. The **view model** remains:
 a view is still one tab in `layout/store.js` that owns one pane tree, because grouped layouts, a viewer/panel pane that
 belongs to a session and the remembered closed groups are all stored per view (docs/ref/terminal.md「Session and view
@@ -519,41 +519,41 @@ still uses `layout/dnd.js`.
 ### Activity bar 48px + sidebar (`#vt-workbench`, `shell/Workbench.tsx`)
 
 The workbench is the left edge of the desktop shell: an **activity bar** (48px, `shell/ActivityBar.tsx`)
-and **one sidebar** beside it. The bar's top group are the activities, in this order: 세션 (`list`) ·
-변경 (`git-branch`) · 파일 (`folder`) · 큐 (`clipboard`) · 첨부 (`paperclip`) · 스니펫 (`braces`) · 포트
-(`plug`, capability-gated) · 사용량 (`gauge`, capability-gated) · 시스템 (`bar-chart`)
-(`shell/activity-data.ts`). The bottom group are actions that do not change the sidebar: MCP · 스킬 관리
-(`box`, the lazy `ui/icons-shell.js`), 음성 (the `#mic-btn-wrap` node itself, moved into
+and **one sidebar** beside it. The bar's top group are the activities, in this order: Sessions (세션) (`list`) ·
+Changes (변경) (`git-branch`) · Files (파일) (`folder`) · Queue (큐) (`clipboard`) · Attachments (첨부) (`paperclip`) · Snippets (스니펫) (`braces`) · Ports (포트)
+(`plug`, capability-gated) · Usage (사용량) (`gauge`, capability-gated) · System (시스템) (`bar-chart`)
+(`shell/activity-data.ts`). The bottom group are actions that do not change the sidebar: Manage MCP · skills (MCP · 스킬 관리)
+(`box`, the lazy `ui/icons-shell.js`), Voice (음성) (the `#mic-btn-wrap` node itself, moved into
 `#vt-activity-mic-home` by `term/keybar.js` `placeMicButton` from its hidden parking slot `#vt-mic-park`)
-and 설정 (opens Settings; the approval-pending badge from `share-lazy.js` sits on its icon corner).
+and Settings (설정) (opens Settings; the approval-pending badge from `share-lazy.js` sits on its icon corner).
 
-**Order and hiding are the user's choice** (Settings → 상태 막대 · 활동 막대, right column 「활동 막대 순서」, mock
+**Order and hiding are the user's choice** (Settings → Status bar · activity bar (상태 막대 · 활동 막대), right column Activity bar order (활동 막대 순서), mock
 O05; device-scoped `ui.activity.layout`, JSON `{"v":1,"order":[…],"hidden":[…],"bottom":[…]}`, `''` = default).
-세션 is pinned first and cannot be hidden. A hidden activity leaves only the bar: the palette and keymap still open
+Sessions (세션) is pinned first and cannot be hidden. A hidden activity leaves only the bar: the palette and keymap still open
 it and the sidebar shows it as usual (`available` keeps it; only the bar's `items` drop it). The bottom group can
 be reordered but not hidden (hiding the gear would remove the way back) — by CSS `order`, because the mic slot is
 the node `voice.js` caches. An activity missing from a saved layout (a newer version's) is appended in default
 order; unknown ids are dropped. Rules: `shell/activity-layout.js` (plain JS, like `hud-layout.js`). The editor
-(`panels/settings/sections/activity-order.js`) is grip + icon 14 + name, a 「맨 위 고정」 or 「숨김」 tag, an eye
+(`panels/settings/sections/activity-order.js`) is grip + icon 14 + name, a Pinned to top (맨 위 고정) or Hidden (숨김) tag, an eye
 toggle (`aria-pressed`) for the top group and ↑↓ 24; drag and the arrows share `moveActivity`. It sits in the
 right column at ≥1100px and below the status bar zones when narrower (the same editor drawn twice, CSS picks one).
 
 - **Item** 48×44, icon 20 (stroke 1.75), name only in `aria-label` and the tooltip (`data-tip`, shown to
   the right; second line = badge count, plus the `railToggle` key on the current activity). **Active** =
   a 2px `--color-acc` bar on the left edge (10px inset top and bottom, `::before`), no fill. A badge
-  (waiting sessions on 세션, queue waiting, open ports) is a `.vt-badge` 15px high on the icon's top-right
-  corner. The 세션 badge counts every waiting session — even with the 개입 필요 zone hidden — and is amber
+  (waiting sessions on Sessions (세션), queue waiting, open ports) is a `.vt-badge` 15px high on the icon's top-right
+  corner. The Sessions badge counts every waiting session — even with the Needs attention (개입 필요) zone hidden — and is amber
   (`data-state="waiting"`); the others are neutral. The rail reports the count (`onWaitingCount`); it is
   not polled separately.
 - **Accessibility:** the top group is `role="tablist"` with `aria-orientation="vertical"`; each activity is
   `role="tab"` with `aria-selected` and roving `tabindex`. ↑↓/Home/End move focus only; Enter/Space
   (the button's own click) opens it. The bottom group is a plain `role="group"`.
-- **The sidebar width is shared by every activity** (default 360 — 320/392 with the small/large 「메뉴 크기」 —, 240~480, ≤ 40vw; `ui.side.width`).
+- **The sidebar width is shared by every activity** (default 360 — 320/392 with the small/large Menu size (메뉴 크기) —, 240~480, ≤ 40vw; `ui.side.width`).
   Switching activities therefore never changes the pane sizes — no terminal refit, no SIGWINCH. The
   sessions activity shows the worktree rail below; tool activities show the dock body (below). Both stay
   **mounted** and only toggle `hidden`, so the rail keeps its polling and in-place editing state.
 - **Collapse:** clicking the current activity while the sidebar is open collapses it, as does `railToggle`
-  (⌘B / Alt+Shift+B, 「사이드바 토글」; `window.vtSideToggle`). Sessions collapse to the rail's 48px strip;
+  (⌘B / Alt+Shift+B, Toggle sidebar (사이드바 토글); `window.vtSideToggle`). Sessions collapse to the rail's 48px strip;
   a tool collapses to 0 (only the activity bar remains). Clicking any activity while collapsed opens it.
   Stored as `ui.side.activity` (default `sessions`) and `ui.side.collapsed`.
 - **Resizing:** one resizer on the sidebar's right edge. While dragging, the refit gate in
@@ -567,13 +567,13 @@ right column at ≥1100px and below the status bar zones when narrower (the same
 
 ### Right pinned sidebar (`#vt-side-right`, `ui.side.pinned`)
 
-A tool panel can be pinned as a **second sidebar on the right** (mock D01: sessions on the left, 변경 on the
-right). The panel head's 「오른쪽에 고정(나란히 보기)」 button (`panel-right`, inserted before the close X by
+A tool panel can be pinned as a **second sidebar on the right** (mock D01: sessions on the left, Changes (변경) on the
+right). The panel head's Pin to the right (side by side) (오른쪽에 고정(나란히 보기)) button (`panel-right`, inserted before the close X by
 `Dock.tsx`) pins it; the same button — now `panel-left`, `aria-pressed="true"`, accent — unpins it back into the
 left sidebar. The setting is `ui.side.pinned` (device scope, the **panel id** such as `vt-dock-scm`, `''` = none).
 
 - **Width 300, fixed** (no resizer). The left sidebar keeps its shared-width rule; pinning moves the left sidebar
-  back to 세션 without changing its width.
+  back to Sessions (세션) without changing its width.
 - **Wide (≥1280):** takes 300 beside the panes (`--vt-pin-w`, body `padding-right`). **Regular (720~1279):** a
   floating drawer over the panes with `--shadow-e2`, so pane sizes do not change. **Compact:** none (panels are
   sheets). Focus mode hides it (`--vt-pin-w: 0`).
@@ -587,36 +587,36 @@ left sidebar. The setting is `ui.side.pinned` (device scope, the **panel id** su
 
 ### Session view — worktree rail (`#vt-wgrail`, `shell/Rail.tsx`)
 
-A row is **one tmux session** (docs/ref/terminal.md 「Rail」). Two zones: **개입 필요**
-(waiting sessions; collapsible, hideable with the eye button in its head or in 세션 목록 설정, like VS
-Code's Open Editors) and **실행 중** (every other running session, **name order** or manual drag
-order — no urgency sorting, so rows never jump). Below them, **최근 종료** (collapsible, newest N)
-and a one-line **보관함** that swaps the list in place. There are no 묶음 / 묶지 않음 / 잠자는 중 zones.
+A row is **one tmux session** (docs/ref/terminal.md 「Rail」). Two zones: **Needs attention (개입 필요)**
+(waiting sessions; collapsible, hideable with the eye button in its head or in Rail settings (세션 목록 설정), like VS
+Code's Open Editors) and **Running (실행 중)** (every other running session, **name order** or manual drag
+order — no urgency sorting, so rows never jump). Below them, **Recently ended (최근 종료)** (collapsible, newest N)
+and a one-line **Library (보관함)** that swaps the list in place. There are no "grouped" (묶음) / "ungrouped" (묶지 않음) / "sleeping" (잠자는 중) zones.
 
-**Header 36** (`.vt-wgrail-head`): 「세션 N」 12/600 (or the host switcher when there is more than one
-host) and four 24px icon buttons — 대화 기록 (`history`), 세션 목록 설정 (`sliders-horizontal`), 새 세션
-(`plus`), 접기 (chevron). **Section heads 28** (`.vt-wgrail-group-head`): chevron 12 · name 12/600 ·
-count mono 11, actions on the right; 개입 필요 is amber. Grouped views use the same head with a
-`layout-panels` icon and a pencil (rename). **Footer 36**: a quiet 「+ 새 세션」 button.
+**Header 36** (`.vt-wgrail-head`): 「Sessions N」 (세션 N) 12/600 (or the host switcher when there is more than one
+host) and four 24px icon buttons — Conversation history (대화 기록) (`history`), Rail settings (세션 목록 설정) (`sliders-horizontal`), New session (새 세션)
+(`plus`), Collapse (접기) (chevron). **Section heads 28** (`.vt-wgrail-group-head`): chevron 12 · name 12/600 ·
+count mono 11, actions on the right; Needs attention (개입 필요) is amber. Grouped views use the same head with a
+`layout-panels` icon and a pencil (rename). **Footer 36**: a quiet 「+ New session」 (+ 새 세션) button.
 
 **Row anatomy** (redesign phase 4; specimen D02): padding 6/6/6/12, a 16px icon column + 8 gap, lines
 20/18/18/18. Rows are separated by a 1px `--color-line` (not after a section head).
 
 1. **State icon** (`stateIcon` 16, in its own column; a ring around it = unseen) · agent mark 14 ·
-   **name** 13/600 (edited in place) · the delegation toggle 「위임 보고 1/2」 · **elapsed** (mono 12,
+   **name** 13/600 (edited in place) · the delegation toggle Delegation reports 1/2 (위임 보고 1/2) · **elapsed** (mono 12,
    right) · ⋯ (shown on hover, focus or when active; always on touch).
 2. Mono 12: `WT` (separate worktree) · directory · `git-branch` + branch — **main is shown too** — ·
    change size (`+add` in `st-working`, `−del` in `st-error`, or `파일 N`). With no context yet:
-   「정보 갱신 대기」 (`faint`).
-3. **State keyword** 12/600 · 도구: name (the one place allowed to ellipsize) · badge chip · internal
-   subagent chip (「내부 2 작업 중」, `st-working` tint) · share mark · **origin icon + short text** (local has none;
-   `laptop` 「다른 맥에서 만듦」, `square-terminal` 「직접 만듦」; the text ellipsizes first, the tooltip keeps the long
-   sentence). The server does not record which Mac created a peer session, so the mock's 「m5-studio에서 만듦」
-   reads 「다른 맥에서 만듦」. The phone's Fleet keeps the icon only.
-4. Only when applicable: 「다른 화면 N」 (`monitor-smartphone`) and the non-web attach count (`terminal`).
+   Waiting for update (정보 갱신 대기) (`faint`).
+3. **State keyword** 12/600 · Tools (도구): name (the one place allowed to ellipsize) · badge chip · internal
+   subagent chip (2 internal working (내부 2 작업 중), `st-working` tint) · share mark · **origin icon + short text** (local has none;
+   `laptop` Created on another Mac (다른 맥에서 만듦), `square-terminal` Created directly (직접 만듦); the text ellipsizes first, the tooltip keeps the long
+   sentence). The server does not record which Mac created a peer session, so the mock's Created on m5-studio (m5-studio에서 만듦)
+   reads Created on another Mac (다른 맥에서 만듦). The phone's Fleet keeps the icon only.
+4. Only when applicable: Other screens N (다른 화면 N) (`monitor-smartphone`) and the non-web attach count (`terminal`).
 
-The state keyword is short and fixed so it is never truncated: 승인 요청 / 선택 요청 / 계획 확인 / 질문
-for waiting (server `kind`), 유휴 / 작업 중 / 완료 (+ 「질문 있음」 / 「계획 있음」 from the server `badge`,
+The state keyword is short and fixed so it is never truncated: Approval request (승인 요청) / Choice requested (선택 요청) / Plan review (계획 확인) / Question (질문)
+for waiting (server `kind`), Idle (유휴) / Working (작업 중) / Done (완료) (+ Has question (질문 있음) / Has plan (계획 있음) from the server `badge`,
 which working rows show too — agy's plan badge rides a working entry). There is no left status bar, repo
 color bar, tmux plug icon or `? question` line — state is the icon's colour **and** shape.
 
@@ -628,7 +628,7 @@ steps up one level** (muted → sub, sub → txt; §2 「Tinted rows」). Idle r
 
 **Inline answers.** A waiting row that is open in this tab gets an answer line below its text: one 24px
 button per detected option (「1 · 예」 「3 · 아니오」, long labels ellipsize with the full text in the
-tooltip) and a quiet 「터미널로」 that opens the session. It is the same `AnswerButtons` component and the
+tooltip) and a quiet Go to terminal (터미널로) that opens the session. It is the same `AnswerButtons` component and the
 same `answerSessionPrompt` call (`shell/rail-fetch.ts`, with `prompt_id`) as the phone's Fleet; clicks
 never bubble to the row, and the buttons lock until the reply returns.
 
@@ -636,30 +636,30 @@ never bubble to the row, and the buttons lock until the reply returns.
 x=36), joined by a 1px `--color-line-strong` branch line on x=19 (the parent icon's axis); the short turn into
 each child takes the child's branch colour (merged `--color-st-done`, failed `--color-st-error`, closed
 `--color-line-strong`, otherwise the parent's lane), the same classes as the collapsed rail and the phone Fleet; their line 3
-is the delegation state plus 「별도 터미널」. Native subagent rows (`NativeChildren.tsx`) use the same
-indent and line: state icon 16 · name 13/500 · elapsed, then 「내부 · 작업 중」 in the state colour.
+is the delegation state plus Separate terminal (별도 터미널). Native subagent rows (`NativeChildren.tsx`) use the same
+indent and line: state icon 16 · name 13/500 · elapsed, then Internal · Working (내부 · 작업 중) in the state colour.
 Ended rows (`StoppedRow`) use the same columns with the dashed state circle and a `sub` name; their
-action line (다시 확인 · 보관 해제 · 이어서 시작 — only 이어서 시작 is accent-filled) appears on hover or
+action line (Check again (다시 확인) · Unarchive (보관 해제) · Resume (이어서 시작) — only Resume is accent-filled) appears on hover or
 focus with a fine pointer and is always shown on touch.
 
-**Collapsing.** The 「실행 중」 head is a toggle like 「개입 필요」 (caret · label · count; the sort switch stays), and
+**Collapsing.** The Running (실행 중) head is a toggle like Needs attention (개입 필요) (caret · label · count; the sort switch stays), and
 each grouped view has its own caret before the group icon (the title still opens the group; collapsed groups keep
 their head and count). Both are device-scoped in `rail.view` (`runningCollapsed`, `groupsCollapsed` = view ids,
 newest 200).
 
-The ⋯ button and right-click open the same menu (`rowMenuItems`: 열기/닫기 · 이름 변경 ·
-맥에서 열기 · 연결된 화면 · 종료). **세션 목록 설정** (sliders) holds 개입 필요 on/off, show or hide sessions
-by origin — peer / external, and the 저장소 표시 list. Hiding an origin never hides a session that is
+The ⋯ button and right-click open the same menu (`rowMenuItems`: Open (열기)/Close (닫기) · Rename (이름 변경) ·
+Open on Mac (맥에서 열기) · Connected screens (연결된 화면) · Kill (종료)). **Rail settings (세션 목록 설정)** (sliders) holds Needs attention (개입 필요) on/off, show or hide sessions
+by origin — peer / external, and the repository display list (저장소 표시). Hiding an origin never hides a session that is
 open or waiting. The rail fills the sidebar; its width and collapse state belong to the workbench
 (above), and the header's chevron toggles the same collapse. **Collapsed (48px strip, ring design)**: 40×40 cells
 (radius 6) with the agent mark 18 centred in the **state colour** inside a 2px state ring (idle dotted · waiting dashed and
 breathing · working rotating arc · done solid — the shape says the state, not only the colour; motion stops under
 `prefers-reduced-motion`). 「Not seen yet」 is a 6px dot at the mark's lower right (2px cut-out in the cell colour); a 12px badge at the
 upper right counts working internal sub-agents (name only; the details are in the hover card). Delegation children sit under their parent as 0.8× cells with a 2px branch on
-the left. The order is the **expanded rail's tree order** (개입 필요 first, then the configured sort / manual order / split groups, children
+the left. The order is the **expanded rail's tree order** (Needs attention first, then the configured sort / manual order / split groups, children
 under parents), and the first icon's centre lines up with the expanded first row's (body top padding 24, 32 between sections). Colours are
 the `--color-st-*` tokens, 3:1 or better on every cell background in all 9 skins (`tokens-contrast.test.js`); the badge text uses
-`--color-on-st-working`. **Menu size** (Settings › 모양, `ui.side.scale`, desktop only): small / normal / large = activity bar and strip
+`--color-on-st-working`. **Menu size** (Settings › Appearance (모양), `ui.side.scale`, desktop only): small / normal / large = activity bar and strip
 44 / 48 / 52, cell 36 / 40 / 44, session rows one text step smaller / as is / larger, default sidebar width 320 / 360 / 392 (a stored
 `ui.side.width` always wins); one `data-vt-side-scale` attribute on `<html>` drives `--vt-act-w` and `--vt-cell`.
 Hovering or keyboard-focusing a collapsed cell opens a **detail card** (300px, `bg-raised` + 1px `line-strong` + radius 8 + `--shadow-e2`, 12/13 text, mono + tabular
@@ -717,12 +717,12 @@ changes the pane sizes (no refit, no SIGWINCH). `body { padding-top }` and the s
 Three columns (`grid-template-columns: minmax(0,1fr) auto minmax(0,1fr)`, equal side padding) so the palette field
 sits exactly at the window centre and the sides shrink first:
 
-- **Left:** `#vt-mb-lead` (macOS traffic lights) · the **FarShell menu** (`MenuButton`, class `.vt-mb-menu`: 새 세션 ·
-  빠른 열기 · 집중 모드 · 접속 주소 복사 · 설정 · 상태 막대 설정; the dropdown is a `Portal` into `body`; Esc/outside click/↑↓/Home/End
+- **Left:** `#vt-mb-lead` (macOS traffic lights) · the **FarShell menu** (`MenuButton`, class `.vt-mb-menu`: New session (새 세션) ·
+  Quick open (빠른 열기) · Focus mode (집중 모드) · Copy access URL (접속 주소 복사) · Settings (설정) · Status bar settings (상태 막대 설정); the dropdown is a `Portal` into `body`; Esc/outside click/↑↓/Home/End
   work; the approval-pending badge from `share-lazy.js` attaches to `.vt-mb-menu`) · the **host** (`#vt-workspace-chip`:
   the Mac the active pane shows — `laptop` icon locally, `server` + accent when it is another Mac; with two or more
   registered hosts it is a button that opens the host list and switches the whole screen, like the rail header's
-  switcher; with one host it is a plain label) · the **breadcrumb** 저장소 › 브랜치 › 세션 of the active pane's session
+  switcher; with one host it is a plain label) · the **breadcrumb** Repository (저장소) › Branch (브랜치) › Sessions (세션) of the active pane's session
   (`layout/branch-chips.js` — the same source as the pane-header branch chip; the repository is the *main*
   worktree's folder name; unknown parts are omitted; hidden in regular).
 - **Centre:** the **palette field** (`#vt-tb-palette`, 360×24; 280 in regular; below 900px only the icon and `⌘K`).
@@ -733,7 +733,7 @@ sits exactly at the window centre and the sides shrink first:
   are static nodes in `index.html`; after mount `TitleBar.tsx` moves them into its own childless elements so Solid
   never re-renders over them.
 
-**접속 주소 복사** copies the public tunnel URL if one is running, else `location.origin`; it never mints a
+**Copy access URL (접속 주소 복사)** copies the public tunnel URL if one is running, else `location.origin`; it never mints a
 device-registration QR/OTP — that stays in `fsh mobile`.
 
 ### Status bar 24px (`shell/Hud.tsx`, element `#vt-hud`)
@@ -749,7 +749,7 @@ Left to right: the **agents chip** (`개입 N · 작업 N · 완료 N`; zeros ar
 ranks 1 and jumps to the longest-waiting `waiting` session via the `agents.jump` action; `완료` counts only
 completions not yet seen on this browser) — **pinned leftmost**, outside the layout setting — then the toast
 **message slot** (`#vt-hud-msg`), then the left chips (E2E · safe mode · connected screens; `server` is off by
-default), a spacer, and the right chips (CPU · GPU · RAM · NET · usage · 알림 · version · clock). More chip kinds:
+default), a spacer, and the right chips (CPU · GPU · RAM · NET · usage · Notifications (알림) · version · clock). More chip kinds:
 **`push`** (`알림 켜짐/꺼짐` for this browser's Web Push subscription, click toggles; hidden where push is
 unavailable) and **`clock`** (date + 24-hour time, rebuilt only when the minute changes). Clickable chips are
 `role="button"` with Enter/Space.
@@ -759,7 +759,7 @@ events. A chip with no value is **hidden** (no usage provider → no chip). Rese
 chips show only usage.
 
 **Which chips show, on which side and in what order is the user's choice**
-(Settings → 상태 막대 · 활동 막대; device-scoped `ui.hud.layout`, JSON
+(Settings → Status bar · activity bar (상태 막대 · 활동 막대); device-scoped `ui.hud.layout`, JSON
 `{"v":3,"left":[…],"right":[…]}`). The unit is a *kind* (`server`, `screens`, `e2e`, `safe-mode`,
 `cpu`, `gpu`, `ram`, `net`, `usage`, `version`, `push`, `clock`), not a chip id — usage profiles come and go,
 so the setting names «usage» once. A kind that is in neither list is hidden, so a new kind
@@ -771,8 +771,8 @@ chip» and the squeeze order below still hold wherever a chip is placed. The set
 edits the layout three ways — drag, a position select and up/down buttons — all through the same
 `moveHudKind`/`stepHudKind` (the select and buttons are the keyboard path, not an extra), shows a
 preview with sample values (the status bar as it will look, agents chip first), and is hidden in compact
-(there is no status bar there). The settings section is **상태 막대 · 활동 막대** (id `hud`). The agents chip is
-`PINNED_HUD_KINDS` — shown at the top of 「왼쪽」 with a 「고정」 tag, no grip, select or arrows. The saved layout
+(there is no status bar there). The settings section is **Status bar · activity bar** (id `hud`). The agents chip is
+`PINNED_HUD_KINDS` — shown at the top of Left (왼쪽) with a Pinned (고정) tag, no grip, select or arrows. The saved layout
 carries a generation (`{"v":3,…}`): a layout without `v` gets the newer kinds (`push`, `clock`) added once at their
 default places when it is read (not an all-off layout, which is a choice); from generation 3 an `agents` entry in
 an old layout is dropped on read (it is pinned now); saving writes `v`.
@@ -806,8 +806,8 @@ One switch for both widths: the device setting `ui.focus.active` (**not persiste
 `core/settings.js`, memory only, so a reload always starts with the bars) toggles `<html class="vt-focus">`, and
 `focus.toggle` is registered **once**, in `layout/focus.js`. Entry points: `focusMode` (⌘. on macOS,
 Alt+Shift+. elsewhere — matched on the physical Period key because Shift turns `.` into `>`; user rebinds win), the
-title-bar button, the FarShell menu, the palette (`:` keymap row 「집중 모드」, `>` 모양 › 집중 모드) and Settings →
-모양. On phones (<720) the same switch drives the phone focus mode (§7). **Crossing 720px while on ends focus mode**
+title-bar button, the FarShell menu, the palette (`:` keymap row Focus mode (집중 모드), `>` Appearance (모양) › Focus mode) and Settings →
+Appearance. On phones (<720) the same switch drives the phone focus mode (§7). **Crossing 720px while on ends focus mode**
 (either direction) — the two widths hide different bars, so the other layout never starts without its bars.
 
 - **What hides (≥720).** Only the four *reservations* go to 0 — `--vt-activity-w`, `--vt-side-w`, `--titlebar-h`,
@@ -826,10 +826,10 @@ title-bar button, the FarShell menu, the palette (`:` keymap row 「집중 모�
   input keeps it), at once on Esc or when a session row is picked. One side at a time.
 - **Needs-you pill** — the same `#vt-focus-pill` element as the phone (`layout/mobile-focus.js`), styled for desktop
   by `98-focus.css`: only while a session waits and `ui.focus.pill` is on; right 12 · top 40 (44 while the title bar
-  is revealed) · 28 high · radius 14 · raised · 45% amber border. Left 「개입 N · name · kind ›」 goes to the
+  is revealed) · 28 high · radius 14 · raised · 45% amber border. Left 「Needs you N · name · kind ›」 (개입 N · name · kind ›) goes to the
   longest-waiting session (`oldestWaiting` / `jumpToWaiting` in `focus.js`, the same pick as the status bar's
-  `agents.jump`); right 「⌘. 끝내기」 exits (the shown combo follows the keymap).
-- **Entry hint** — bottom centre, 32 high, 3s, 「집중 모드 · 화면 가장자리에 마우스를 대면 막대가 나타납니다 · ⌘. 끝내기」;
+  `agents.jump`); right 「⌘. End」 (⌘. 끝내기) exits (the shown combo follows the keymap).
+- **Entry hint** — bottom centre, 32 high, 3s, "Focus mode · Move the pointer to a screen edge to show the bars · ⌘. End" (집중 모드 · 화면 가장자리에 마우스를 대면 막대가 나타납니다 · ⌘. 끝내기);
   skipped after it has been shown three times on this device (`ui.focus.hintCount`).
 - **Touch without hover** (tablets): no edge strips; a 36×36 exit button sits at the bottom left
   (`.vt-focus-exit`), besides the title-bar button and shortcut.
@@ -861,7 +861,7 @@ media key and the guide are palette commands. What remains is **read fallbacks**
 
 ## 4. Code viewer / file pane
 
-Where a file opens is the `viewer.surface` setting (Settings → 모양, per
+Where a file opens is the `viewer.surface` setting (Settings → Appearance (모양), per
 device):
 
 - **`sheet`** (default) — a card pinned to the top of the terminal area,
@@ -878,7 +878,7 @@ outside the card pass through to the terminal; Esc closes the card only while
 focus is inside it (in the terminal it still belongs to vim/less). Opening
 another file replaces the content instead of toggling the card closed. The
 header carries the file name, a shortened directory (full path in the
-tooltip) and a 「페인으로」 button (`columns-2` icon) that moves the file into
+tooltip) and a "Open in pane" (페인으로) button (`columns-2` icon) that moves the file into
 a side-by-side pane. On compact (< 720px) every surface becomes the
 full-screen bottom sheet that closes with the back button. The card reuses
 `.vt-viewer-card`'s tokens; its CSS lives in `styles/screens/30-viewer.css`
@@ -909,7 +909,7 @@ the danger/failure colour for buttons and toasts.
   small dot**, never the whole element (`opacity`/`transform` are
   compositor-only, so there's no repaint).
 - **One definition of labels and aggregation**, `design/state-classes.js`: labels
-  are 유휴 / 작업 중 / **입력 대기** / 완료 (waiting reads 입력 대기 everywhere). A tab or group is represented by one state with the
+  are Idle (유휴) / Working (작업 중) / **Waiting (입력 대기)** / Done (완료) (waiting reads Waiting everywhere). A tab or group is represented by one state with the
   priority `waiting > done(unseen) > working > done(seen) = idle`
   (`representativeState`, shared by the favicon and rail; the view tab does not fold — it draws one segment per session). Among entries of
   one tmux session the server's `_URGENCY` order decides.
@@ -959,19 +959,19 @@ pre-load fallback.
 ### Settings (`Mod+,` / FarShell menu)
 
 **Window (mock O04–O06, redesign phase 9):** 1240×788 (88vh cap), radius 8, `--color-bg-raised`, `--shadow-e2`.
-Head 44: gear 16 + 「설정」 15/600, the auto-save status on the right (12, muted). Left nav 220 on `bg-1` with
+Head 44: gear 16 + Settings (설정) 15/600, the auto-save status on the right (12, muted). Left nav 220 on `bg-1` with
 the search field (28) on top; items 32 high, 13px, radius 6, the current section on the selection tint
 (`acc-soft`) in 600. Content padding 20/28, left-aligned (max 760): title 22/600, description 13 muted, group
 heads 12/600 muted 20 above, rows padded 12/0 with a 1px line below, label 13/500, help 12 muted, scope tag
 11/500 muted with a 1px `line-strong` border and no fill. The right preview column is 300 wide, padded 20, on
 `bg-1` (terminal and appearance sections only; hidden below 1100px). Appearance adds a **focus mode preview**
-under the skin preview (mock O04-B): a 170px static sketch — two panes in terminal colours, the 「개입 1」 pill
-and the accent edge bands (left 4, top/bottom 3) — that follows 가장자리에 막대 띄우기 · 개입 표시 · 가장자리
-반응 시간 and explains them in the caption; it never turns focus mode on. 상태 막대 · 활동 막대 (O05) lays its three zones
-side by side above 720px with 32px item tiles and puts 「활동 막대 순서」 in the right column; 계정 및 보안 (O06) draws the device table with a 28 head and
+under the skin preview (mock O04-B): a 170px static sketch — two panes in terminal colours, the Needs you 1 (개입 1) pill
+and the accent edge bands (left 4, top/bottom 3) — that follows Show bars at screen edges (가장자리에 막대 띄우기) · Needs-you pill (개입 표시) · Edge reveal delay
+(가장자리 반응 시간) and explains them in the caption; it never turns focus mode on. Status bar · activity bar (상태 막대 · 활동 막대) (O05) lays its three zones
+side by side above 720px with 32px item tiles and puts Activity bar order (활동 막대 순서) in the right column; Account and security (계정 및 보안) (O06) draws the device table with a 28 head and
 48 rows, this device on the selection tint.
 
-**Three settings, three icons.** 설정 = gear (reached from the FarShell menu, `Mod+,` and the activity bar's bottom gear), 세션 목록 설정 = `sliders-horizontal` (rail header), 상태 막대 설정 = `panel-top` (FarShell menu item).
+**Three settings, three icons.** Settings (설정) = gear (reached from the FarShell menu, `Mod+,` and the activity bar's bottom gear), Rail settings (세션 목록 설정) = `sliders-horizontal` (rail header), Status bar settings (상태 막대 설정) = `panel-top` (FarShell menu item).
 
 Settings are split across two scopes — `frontend/js/core/settings.js`'s
 `SCHEMA` gives each key a `scope: 'global' | 'device'` (default `global`).
@@ -997,7 +997,7 @@ drag-select always work even under vim/tmux mouse mode.
 
 - **Wide tables scroll inside a wrapper.** Wrap them in
   `.vt-set-covtable-host` (`overflow-x:auto`), as `agents.js`'s coverage table
-  and `security.js`'s device table (기기/id/등록/마지막 사용) do; otherwise the
+  and `security.js`'s device table (Device (기기)/id/Registered (등록)/Last used (마지막 사용)) do; otherwise the
   columns run off the right edge on a phone.
 - **ON/OFF toggles do not stretch.** The compact media query's
   `.vt-set-row { flex-direction:column; align-items:stretch }` (label above
@@ -1008,13 +1008,13 @@ drag-select always work even under vim/tmux mouse mode.
   `::-webkit-slider-thumb` and `::-moz-range-thumb`). The desktop affordance
   is `:hover { transform:scale(1.15) }`, which never fires on touch, so the
   knob would stay a tiny 12px.
-- **MCP · 스킬 · 플러그인 window (mock P09-b, `panels/agent-config.js`).** The window keeps its size
+- **MCP · Skills · Plugins (MCP · 스킬 · 플러그인) window (mock P09-b, `panels/agent-config.js`).** The window keeps its size
   (1240×860) and the legacy view's enlarged text; only the unified manager's insides follow P09-b: a top bar
-  (관리 대상 as a segmented control, 호스트/세션 selects with an inline 12px label, 새로고침 right), a 200px
+  (Management context (관리 대상) as a segmented control, Host (호스트)/Sessions (세션) selects with an inline 12px label, Refresh (새로고침) right), a 200px
   left nav on `bg-1` (icon 16 · 13px label · mono 11 count, current = `bg-3` + 600), a sticky filter bar
   (28px controls on `bg-2`), the bulk bar, rows with a 56px head (checkbox · caret · name mono 13/500 + kind
-  tag 16 + tool/host/scope in 12 muted, source path mono 11 ellipsized · state, `st-working` when on · 켜기/끄기
-  24) and a footer bar (help left, restart and 「기존 MCP 보관함·상세 관리」 right). Two columns only in the
+  tag 16 + tool/host/scope in 12 muted, source path mono 11 ellipsized · state, `st-working` when on · Turn on (켜기)/Turn off (끄기)
+  24) and a footer bar (help left, restart and Existing MCP library and advanced settings (기존 MCP 보관함·상세 관리) right). Two columns only in the
   wide modal; phones and the dock keep one column with the nav as a scrolling strip. The rules live
   unlayered in `components.css` next to the base `.vt-ac-*` rules — in the legacy screens layer they would
   lose to them regardless of specificity. Opening the legacy view drops `.vt-agent-config` so its 20px
@@ -1023,7 +1023,7 @@ drag-select always work even under vim/tmux mouse mode.
   (`.vt-mcp-meta`/`.vt-mcp-verify`, `--ui`). Hangul in a monospace face has
   uneven glyph spacing and reads worse; a lone identifier inside a sentence
   doesn't need its own font to be legible.
-- **MCP server row buttons (켬/끔, 검증) are 32px tall** on compact, not the
+- **MCP server row buttons (On (켬)/Off (끔), Verify (검증)) are 32px tall** on compact, not the
   desktop `.vt-chip.sm` 20px. 44px would overlap the adjacent tag chips (only a
   12px gap — the same crowding tradeoff as the terminal-selection handles in
   § 7), so 32px applies only to the two primary-action chips, not the tag
@@ -1037,7 +1037,7 @@ One palette covers quick open, commands and in-pane search. 8 prefixes:
 |---|---|---|
 | (none) | `default` | Recent commands (2) → recent files (2) → every command, grouped and scrollable — **no sessions** (see below) |
 | `/` | `file` | File fuzzy search (`GET /api/fs/search?q=`, debounced) |
-| `?` | `grep` | File **content** search (`GET /api/fs/grep`) — the palette widens to 1100×720: options row (⌥C/⌥W/⌥R toggles, include/exclude globs, scope), progress row with 「취소」, results grouped by file with the match in `--color-term-hl`, a 460px preview of the selected line. The same screen is the sidebar 「파일 › 내용 검색」 (`shell/GrepView.tsx`, `styles/screens/97-grep.css`) |
+| `?` | `grep` | File **content** search (`GET /api/fs/grep`) — the palette widens to 1100×720: options row (⌥C/⌥W/⌥R toggles, include/exclude globs, scope), progress row with Cancel (취소), results grouped by file with the match in `--color-term-hl`, a 460px preview of the selected line. The same screen is the sidebar Files › Search contents (파일 › 내용 검색) (`shell/GrepView.tsx`, `styles/screens/97-grep.css`) |
 | `@` | `session` | Sessions — the *only* place sessions are listed in the palette |
 | `:` | `keymap` | Commands — shows **the current key binding** next to each (read from the `core/keymap.js` registry, so a rebind shows up here too) |
 | `#` | `queue` | Prompt queue items |
@@ -1054,7 +1054,7 @@ is on `⌥⇧F` (rebindable); `⌘⇧F` opens the sidebar's content search.
 ### Default screen
 
 The no-prefix screen lists no sessions (session switching lives in the
-세션 tab, and `@` is the only palette path) and the command list covers
+Sessions (세션) tab, and `@` is the only palette path) and the command list covers
 everything: `settings.show`/`clients.show` (no activity pairs with these, so they are in
 `DEFAULT_COMMANDS` **without** `isPanel: true`, which keeps
 `rail-palette-parity.test.js`'s check from firing on them; every tool activity's action — `scm.show` …
@@ -1101,14 +1101,14 @@ every command" list.
 
 ## 7. Mobile (compact, < 720px)
 
-Redesign phase 8 (2026-11) restyled the whole compact layout to the 「정돈」 mock
+Redesign phase 8 (2026-11) restyled the whole compact layout to the "tidy" (정돈) mock
 (`specimen/final/mobile.html`, M01–M14) with the phase-3 tokens. Its rules live in one file,
 `styles/screens/98-mobile.css` (after the skeleton in `60-mobile-hud.css` and the bars in
 `95-bars.css`, before the overlays in `99-overlays.css`). Sizes: app bar 52 · bottom nav 52 ·
 session card 64 (two lines) · answer button 44 · keybar 90 (keys 44×36, gap 6, padding 6) ·
 floating mic 56 · sheet item 44 · focus pill 28 (touch 44) · top edge 24. Surfaces: bars
 `--color-bg-1`, cards and sheets `--color-bg-raised`, inputs `--color-bg-2`; amber
-(`--color-st-waiting`) is only for 개입 필요 (card border and strip, the answer-key numbers, the
+(`--color-st-waiting`) is only for Needs attention (개입 필요) (card border and strip, the answer-key numbers, the
 Session-tab badge).
 
 ```
@@ -1151,30 +1151,30 @@ do not consume the same vertical space — and `#terminal-container`'s bottom
 padding accounts for the 52px bottom nav in addition to the keybar, otherwise the
 prompt line and tmux status line hide behind the keybar whenever the nav is showing.
 
-**Fleet home** (`shell/Fleet.tsx`, labelled "세션" on the bottom nav) is
+**Fleet home** (`shell/Fleet.tsx`, labelled "Sessions (세션)" on the bottom nav) is
 the first screen (`ui.mobile.home` defaults to `fleet`) — most of what you do
 on a phone in compact is "what's waiting on me right now," not typing. Its
 data source is the same `/api/tmux/sessions` + `allSessions()` join as the desktop rail's local path
 (`Rail.tsx`), with the **same rows and zones**:
 `collectSessionRows` (`rail-fetch.ts`) builds them, `buildRailLists` (`rail-data.ts`) splits
-them into 개입 필요 and 세션 (name order), and the row parts (state icon + unseen ring,
+them into Needs attention (개입 필요) and Sessions (세션) (name order), and the row parts (state icon + unseen ring,
 keyword line, origin icon) are `RailRow.tsx`'s own components. Only the waiting rows in the
-개입 필요 zone carry the inline approval buttons (the same session also appears below
+Needs attention zone carry the inline approval buttons (the same session also appears below
 without them). Unseen is shown by the ring on the state icon, not a separate badge.
 
 **Session cards** (`FleetRow` in `Fleet.tsx`) are two lines, 64px including a 1px border:
 line 1 state icon 16 (unseen ring) · agent mark · name 15/600 · delegation toggle · elapsed
 (mono 12, right); line 2, indented 24, keyword 12/600 (with tool/badge) · location (WT ·
 directory/branch, mono) · changes · glyphs (share, other screens, origin) on the right. A waiting
-row in the 개입 필요 zone that is open becomes a card: raised surface, amber border at 42% and a
+row in the Needs attention (개입 필요) zone that is open becomes a card: raised surface, amber border at 42% and a
 3px amber strip on the left, the question on one line in terminal colors, and 44px answer
 buttons with the key drawn apart in amber (`AnswerButtons` `fleet` variant: 「1 예」; the
-desktop rail keeps 「1 · 예」). The same session lower down in 실행 중 is a plain row. A top
-row carries 대화 보관함 and 새 세션 as 44px icon buttons; zone heads are 36px.
+desktop rail keeps 「1 · 예」). The same session lower down in Running (실행 중) is a plain row. A top
+row carries Conversation archive (대화 보관함) and New session (새 세션) as 44px icon buttons; zone heads are 36px.
 
 **Long-press a row for a bottom-sheet menu** — the same items as the desktop ⋯ menu
-(`rowMenuItems`: open rows get 닫기 · 이름 변경 · 맥에서 열기 · 연결된 화면, closed rows get
-열기; tmux sessions add 종료, red), the same window bridges as the desktop rail
+(`rowMenuItems`: open rows get Close (닫기) · Rename (이름 변경) · Open on Mac (맥에서 열기) · Connected screens (연결된 화면), closed rows get
+Open (열기); tmux sessions add Kill (종료), red), the same window bridges as the desktop rail
 (`runRowMenu`), just a sheet instead of a coordinate popup — a touch menu
 that opens where you pressed can walk off-screen. Detection is a plain
 pointer-event timer (500ms / 8px cancel, touch-only — mouse is left to the
@@ -1188,10 +1188,10 @@ console. And the shared `.vt-session-sheet` (also used by the
 52px bottom nav, otherwise a sheet's last row/button sits behind the nav and
 is untappable.
 
-A permanent **"+ 새 세션"** button sits at the bottom of the list (hidden
+A permanent **"+ New session (새 세션)"** button sits at the bottom of the list (hidden
 only in the true empty state, where two dedicated buttons already do the
 same job) and opens the same `session.add-menu` popover as the desktop rail's
-own "+ 새 세션" — `Fleet.tsx` takes `getAction` as a dep (from
+own "+ New session" — `Fleet.tsx` takes `getAction` as a dep (from
 `core/dom.js`, passed in by `mobile-nav.js`) for this, the same way
 `Rail.tsx`/`Hud.tsx`/`Dock.tsx` already do.
 
@@ -1213,8 +1213,8 @@ byte-for-byte unchanged.
 
 `keybar.js`'s `setTerminalSelectionMode` owns entry/exit (blur the
 hidden textarea, hide the software keyboard, toggle the
-`vt-term-select-mode` class, show/hide the 복사·모두 선택·완료 bar); a long-press on the terminal
-triggers it, and handle-driven `select()` calls (not a native range) run inside it. "모두 선택" selects the visible
+`vt-term-select-mode` class, show/hide the Copy (복사)·Select all (모두 선택)·Done (완료) bar); a long-press on the terminal
+triggers it, and handle-driven `select()` calls (not a native range) run inside it. "Select all" selects the visible
 viewport (`rows×cols`), not `selectAll()`'s full scrollback — buffer text you
 can't see isn't what "select all" means to someone looking at a phone screen.
 
@@ -1258,7 +1258,7 @@ Modifiers sit outside the strip so a chord is always in the same place and a thu
 drifts while holding one does not cancel it. Modifier state reads like a
 Caps Lock light: a 5px lamp top-right — faint ring (off), accent outline +
 ring (next key), filled key + solid lamp (locked). On compact the same state is also spelled out to the right of
-Shift (`#keybar-mod-hint`, mock M02): 「Ctrl 다음 키만」, 「Ctrl 잠김」, both joined with 「 · 」 when mixed, nothing
+Shift (`#keybar-mod-hint`, mock M02): "Ctrl next key only" (Ctrl 다음 키만), "Ctrl locked" (Ctrl 잠김), both joined with 「 · 」 when mixed, nothing
 while a modifier is only held. The slot is always there (`flex:1`, one line, ellipsis, `title` carries the full text)
 and reaches 50px into the empty cell left of ↑, so the text appearing or going never moves a key. Keycaps use `--mono`. The
 strip fades whichever edge has more keys (`.more-left`/`.more-right`) and
@@ -1291,11 +1291,11 @@ look pressed — on `(hover:none)` only `aria-pressed` paints it.
 **File editing on compact** (`layout/mobile-edit.js`, mock files M-F5). While a viewer pane is in edit mode
 (`panels/viewer/edit.js` puts `vt-vw-editing` on the pane and fires `vt:viewer-edit` on start and stop),
 `html.vt-mobile-editing` hides the bottom nav and shows `#vt-edit-keys` at the bottom: Tab ← → ↑ ↓ Esc and an accent
-「저장」, keys 40×32 in the keybar key style. The row follows the soft keyboard with `visualViewport` (same formula as
+Save (저장), keys 40×32 in the keybar key style. The row follows the soft keyboard with `visualViewport` (same formula as
 `keybar-ui.js` `positionBar`), and the compact file sheet's bottom moves up by the row height plus the keyboard overlap
-(`--vt-edit-keys-h`, `--vt-edit-overlap`), so the cursor line and 「저장」 are never under the keyboard. Keys send a
+(`--vt-edit-keys-h`, `--vt-edit-overlap`), so the cursor line and Save are never under the keyboard. Keys send a
 `keydown` to the editor's `.cm-content` (CodeMirror's own keymap: Tab indents, arrows move, Esc collapses the
-selection); 「저장」 clicks the bar's `.vt-vw-save` (one save path, disabled together). `pointerdown` is prevented so the
+selection); Save clicks the bar's `.vt-vw-save` (one save path, disabled together). `pointerdown` is prevented so the
 editor keeps focus. A dialog on top (save elevation, discard) hides the row. Stopping the edit, the pane going away
 (watched on its ancestors), or crossing 720px restores the nav.
 
@@ -1305,8 +1305,8 @@ it below only when the label would get narrower than 160px; switches draw as a 4
 `role=switch`/`aria-checked`); number rows hide the slider and keep the input with its two 44px steps. Wide controls
 (presets, key combos, tables) stay under the label. CSS only (`98-mobile.css`).
 
-**Login OTP step** (mock M10). Six 52px boxes, one digit each (`#login-otp-boxes`, `role=group` labelled 「인증 코드」,
-each box 「인증 코드 n번째 자리」, `inputmode=numeric`; the first box carries `autocomplete=one-time-code`). Typing moves to
+**Login OTP step** (mock M10). Six 52px boxes, one digit each (`#login-otp-boxes`, `role=group` labelled Verification code (인증 코드),
+each box "Verification code digit n" (인증 코드 n번째 자리), `inputmode=numeric`; the first box carries `autocomplete=one-time-code`). Typing moves to
 the next box, Backspace in an empty box clears the previous one, ←/→ move, and a paste or autofill of several digits fills
 from that box (six digits always from the first). The submitted value is still the single hidden `#login-otp`
 (`gate.js` joins the boxes), so the error flows (`otp_invalid` clears the boxes and focuses the first, `otp_locked`,
@@ -1354,13 +1354,13 @@ button (user decision 5 — no two-finger double tap; it clashes with pinch zoom
 owns them, this file only paints the button, the pill and the pull-down edge) and hides the app bar,
 bottom nav and session slot. The keybar stays at the bottom and is shown even when closed
 (its toggle is gone with the app bar); the mic is its first key. The terminal gets 40px of top
-padding for the **pill**: top right, 28px high with 44px touch targets, 「개입 N name」 in amber
+padding for the **pill**: top right, 28px high with 44px touch targets, 「Needs you N name」 (개입 N name) in amber
 when a session waits (tap → the longest-waiting session, `jumpToWaiting`) plus an exit button. Exit
 also by pulling down from the **top 24px edge** (`#vt-focus-edge`, handle 36×4): a hint follows
-the finger and reads 「놓으면 집중 모드를 끝냅니다」 past 64px; releasing past 64px exits,
+the finger and reads Release to exit focus mode (놓으면 집중 모드를 끝냅니다) past 64px; releasing past 64px exits,
 less snaps back. Leaving the terminal tab or crossing 720px (either way) also exits. Not persisted.
 
-## 8. Usage (activity bar 「사용량」)
+## 8. Usage (사용량, activity bar)
 
 Two interfaces in `server/usage/base.py`:
 
@@ -1379,7 +1379,7 @@ class CounterProvider:  # counter-based — cumulative, no limit
   script actually makes that call is up to the user; FarShell only stores
   and displays. `usage/ollama.py` (optional) surfaces the running local
   model as a counter label whenever `localhost:11434/api/ps` responds.
-- If neither provider exists, the 사용량 activity disappears entirely — `VT_USAGE_PROVIDER` (`auto`/`clauth`/`none`) controls the choice. There is no always-on usage badge or right usage rail any more (removed in redesign phase 9 — both drew into hidden DOM).
+- If neither provider exists, the Usage (사용량) activity disappears entirely — `VT_USAGE_PROVIDER` (`auto`/`clauth`/`none`) controls the choice. There is no always-on usage badge or right usage rail any more (removed in redesign phase 9 — both drew into hidden DOM).
 
 ## 9. xterm.js terminal theme
 
@@ -1465,13 +1465,13 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
   already seen, a failure has to be read.
 - **Overlays** (redesign phase 6, mock `overlays.html`; rules in `styles/screens/99-overlays.css`): every
   floating window is one shell — `--color-bg-raised`, 1px `--color-line-strong`, radius 8, `--shadow-e2`,
-  behind it `--color-scrim`; head 44 (the 「정돈」 dialogs — approval, voice — 48), body padding 16 (20),
+  behind it `--color-scrim`; head 44 (the "tidy" (정돈) dialogs — approval, voice — 48), body padding 16 (20),
   footer row with a top hairline and 12/16 padding. **At most one filled button per window**, and none on
-  a window that grants or destroys: the approval window (O11/O11-B) puts 「거부」 left with default focus
-  and 「한 번만 · 이 세션 동안 · 나중에」 right, all unfilled, and keeps its 400ms input guard; a danger
-  confirm (O16-G) focuses 「취소」 and outlines the danger action. The voice panel (O16-F, 440) opens beside
-  the activity-bar mic anchored to its bottom edge so it grows upward; 「입력」 is its only filled button and
-  「녹음 종료」 is a danger outline. Session previews (palette `@`, empty-pane picker cards) draw the session's
+  a window that grants or destroys: the approval window (O11/O11-B) puts Deny (거부) left with default focus
+  and "Once · For this session · Later" (한 번만 · 이 세션 동안 · 나중에) right, all unfilled, and keeps its 400ms input guard; a danger
+  confirm (O16-G) focuses Cancel (취소) and outlines the danger action. The voice panel (O16-F, 440) opens beside
+  the activity-bar mic anchored to its bottom edge so it grows upward; Input (입력) is its only filled button and
+  Stop recording (녹음 종료) is a danger outline. Session previews (palette `@`, empty-pane picker cards) draw the session's
   screen in `--color-term-*` through `lib/ansi-spans.js` — text as `textContent`, colour as one of 14
   `ta-*` classes, never inline style. No blur anywhere here (the disconnect overlay used to blur).
 - **Tags** (`.vt-tag`): a filled faint tint, no border, `--radius-sm`. A
@@ -1525,10 +1525,10 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
   `--color-line-strong` on focus. No glow.
 - **Dividers**: 1px line, `line-strong` on hover, accent while dragging.
 - **Agent-share surfaces** (`.vt-srow-share`, `.vt-share-*` in `components.css`): a security state is never colour alone — the
-  shared mark pairs shape (eye = read, pen = write), a word (「쓰기」) and colour (`--color-st-waiting` for write only; read is
+  shared mark pairs shape (eye = read, pen = write), a word (Write (쓰기)) and colour (`--color-st-waiting` for write only; read is
   neutral). The warning copy is plain type hierarchy (first line semibold), no box, no icon. The approval modal is a decision
-  prompt: its first-focus button is the **safe** one (거부), no button is filled/accent (neither answer should look like the
-  obvious one), buttons ignore input for 400 ms after drawing, and Esc is 「나중에」, never an answer. 44px under a coarse pointer.
+  prompt: its first-focus button is the **safe** one (Deny), no button is filled/accent (neither answer should look like the
+  obvious one), buttons ignore input for 400 ms after drawing, and Esc is Later (나중에), never an answer. 44px under a coarse pointer.
 
 ## 11. Accessibility
 
@@ -1598,7 +1598,7 @@ design.
 | `frontend/js/layout/panes.js` · `compact.js` · `dnd.js` | Pane-tree rect computation · compact mode · drop zones |
 | `frontend/js/core/settings.js` | Server-backed settings store — global/device scope |
 | `frontend/js/core/keymap.js` | Keymap registry |
-| `frontend/js/panels/viewer/scm.js` | 변경 (source control) tool renderer |
+| `frontend/js/panels/viewer/scm.js` | Changes (변경, source control) tool renderer |
 | `frontend/js/ui/icons.js` | Inline SVG icon registry (the only icon source) — includes the 5 agent marks |
 | `frontend/js/ui/tooltip.js` · `tooltip-lazy.js` | The one tooltip layer — `data-tip` / `data-tip-sub` / `data-tip-side`, replaces native `title` (body in the lazy `tooltip` chunk) |
 | `frontend/js/term/xterm-setup.js` | xterm instance creation, applies `getVtXtermTheme()` |

@@ -651,7 +651,7 @@ mirrored) is **never overwritten**. Reads stay fail closed (agents, peers and th
 503 `store_unreadable` and nothing else in the same transaction is saved. Writes to other, healthy files are not blocked.
 The broken file is left exactly as it was (never deleted, never repaired); a copy of its bytes is kept next to it as
 `<name>.corrupt-<id>` (0600, one copy per distinct content). Fix or restore the file by hand (`fsh migrate-auth --restore <ts>`
-restores a backup), and the next change goes through. `fsh migrate-auth --status` prints a «저장소 읽기 불가» line per unreadable
+restores a backup), and the next change goes through. `fsh migrate-auth --status` prints a "store unreadable" (저장소 읽기 불가) line per unreadable
 file (reason, path, number of copies) and `fsh doctor` reports the same as a failed check.
 
 ## Deny log and the chain
@@ -728,7 +728,7 @@ as through the old `/api/agent/share/*` routes, which stay as shims. API detail:
 |---|---|
 | Who may call | Decide/revoke/panic: browser login session only (panic: elevated). Reads: login session, or the `fsh` CLI on the unix socket (a `cli` caller outside tmux) — the CLI never approves or revokes (`fsh authz revoke`/`panic` only point to the web/phone screen). An agent sees only its own requests and grants |
 | What a person chooses | `once` (a grant with `conds.max_uses = 1`, counted where an enforcement point consumes it), `session` (while the requester's and the resource's sessions live), or deny (5-minute cooldown). The approver can only narrow scopes and time, never widen |
-| Presets | The UI shows four bundles — 보기 (view), 협업 (collab), 운전 (drive), 제어 (control; elevated) — and the smallest bundle that covers a request or grant; scopes and conditions are on the detail view and in the audit |
+| Presets | The UI shows four bundles — View (보기), Collaborate (협업), Drive (운전), Control (제어; elevated bundle) — and the smallest bundle that covers a request or grant; scopes and conditions are on the detail view and in the audit |
 | `generic` grants | Written to `grants.json` with origin `authz:grant:<id>` (never projected to the old files), honoured by the engine wherever an enforcement point asks. With every flag off they change no response |
 | Requests by agents | `authz.request` is an agent default; 6 a minute per caller, 20 pending per caller, 200 in all, 24 h expiry, 5-minute cooldown after a refusal. `authz.request` and `authz.admin` cannot be requested; `pair.manage` can be requested only on a server with `pair` enforced. The agent's free-text `reason` is shown to the approver and never audited (length and sha8 only). A delegated child's request carries the parent delegation id |
 | Events | `authz_request`, `authz_resolved`, `authz_revoked` on `/ws-workspace` with ids and kinds only; the old `agent_share_request*` events are still sent for one release |
