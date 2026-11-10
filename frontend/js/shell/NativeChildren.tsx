@@ -3,7 +3,7 @@ import { Portal } from 'solid-js/web';
 import { t } from '../core/i18n.js';
 import { icon, stateIcon } from '../ui/icons.js';
 import { Menu } from './RailRow.js';
-import { normalizeSubagents, nativeStateLabel } from './native-subagents.js';
+import { normalizeSubagents, nativeStateLabel, sameLabelOrdinals } from './native-subagents.js';
 import { formatRelativeTime, type SessionRow } from './rail-data.js';
 
 export function NativeChip(props: { row: SessionRow }) {
@@ -58,16 +58,20 @@ export function NativeChildren(props: { row: SessionRow }) {
   ];
   // 하위 행(시안 D02 「내부 서브에이전트 하위 행」): 들여쓰기 24 + 가지선, 1줄 상태 아이콘 · 이름 · 경과,
   // 2줄 「내부 · 작업 중」. 도구 이름은 그리지 않는다 — 호출마다 생겼다 사라져 깜빡인다.
+  // 같은 이름이 둘 이상이면 「general-purpose #2」처럼 순번(시작 시각 순, 끝난 행 포함)을 붙이고,
+  // 2줄 끝에 id 앞 4자(바뀌지 않아 깜빡이지 않는다)를 흐리게 덧붙인다.
+  const ordinals = createMemo(() => sameLabelOrdinals(summary().items));
+  const shownName = (child: any) => ordinals().has(child.id) ? `${child.label} #${ordinals().get(child.id)}` : child.label;
   const render = (child: any) => <div class="vt-native-row" data-state={child.state}>
-    <button type="button" class="vt-native-open" aria-label={`${child.label}, ${nativeStateLabel(child.state)}${child.stale ? `, ${t('상태 확인 필요')}` : ''}`}
+    <button type="button" class="vt-native-open" aria-label={`${shownName(child)}, ${nativeStateLabel(child.state)}${child.stale ? `, ${t('상태 확인 필요')}` : ''}`}
       data-tip={t('기록 보기')} data-tip-side="right" onClick={() => void open(child)}>
       <span class="vt-native-state" data-stale={child.stale ? '' : undefined} innerHTML={stateIcon(child.state, 16)} />
       <span class="vt-native-main">
         <span class="vt-native-head">
-          <span class="vt-native-name">{child.label}</span>
+          <span class="vt-native-name">{shownName(child)}</span>
           <span class="vt-native-time">{formatRelativeTime(child.started_at)}</span>
         </span>
-        <span class="vt-native-kw" data-state={child.state}>{t('내부 · {state}', { state: nativeStateLabel(child.state) })}</span>
+        <span class="vt-native-kw" data-state={child.state}>{t('내부 · {state}', { state: nativeStateLabel(child.state) })}<Show when={ordinals().has(child.id)}><span class="vt-native-id"> · {child.id.slice(0, 4)}</span></Show></span>
       </span>
     </button>
     <button type="button" class="vt-icon-btn xs vt-native-menu-btn" aria-label={t('서브에이전트 메뉴')} aria-haspopup="menu" onClick={(e) => openMenu(e, child)} innerHTML={icon('more-horizontal', 14, 2)} />
@@ -79,7 +83,9 @@ export function NativeChildren(props: { row: SessionRow }) {
       </Show>
       <Show when={!manyWorking() || expanded()}><For each={current()}>{render}</For></Show>
       <Show when={ended().length}>
-        <button type="button" class="vt-native-fold" aria-expanded={endedOpen()} onClick={() => { setEndedOpen(!endedOpen()); save(); }}>{t('끝난 서브에이전트 {n}', { n: ended().length })}</button>
+        <button type="button" class="vt-native-fold vt-native-fold-ended" aria-expanded={endedOpen()} onClick={() => { setEndedOpen(!endedOpen()); save(); }}>
+          <span class="vt-native-fold-icon" aria-hidden="true" innerHTML={icon('state-done', 14, 2)} />{t('끝난 서브에이전트 {n}', { n: ended().length })}
+        </button>
         <Show when={endedOpen()}><For each={ended()}>{render}</For></Show>
       </Show>
       <Show when={summary().limited}><p class="vt-native-meta">{t('표시 한도에 도달함')}</p></Show>
