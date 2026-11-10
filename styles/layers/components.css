@@ -1982,6 +1982,11 @@
 .vt-number-step:hover:not(:disabled) { background:var(--color-state-hover); color:var(--color-txt); }
 .vt-number-step:active:not(:disabled) { background:var(--color-state-press); }
 .vt-number-step:disabled { opacity:.35; cursor:default; }
+/* 설정 화면의 숫자 입력은 컨트롤 28 — 테두리 1+1 을 빼고 안쪽 26(이 블록이 레이어 밖이라 legacy 레이어의 규칙보다 앞서므로 여기 둔다) */
+@media (min-width:720px) and (pointer:fine) {
+  .vt-settings .vt-number-spinner .vt-range-number { height:26px; }
+  .vt-settings .vt-number-step { height:13px; }
+}
 @media (pointer:coarse), (max-width:719px) {
   .vt-number-spinner .vt-range-number { height:44px; }
   .vt-number-steps { flex-direction:row; }
