@@ -17,7 +17,7 @@ import delegation
 import session_profile
 import tmux_runner
 from share_identity import Caller
-from test_session_profile import (DANGEROUS, FAKE_TOKEN, _dump, _login, _make, _spawn, _token,  # noqa: F401  (fixtures)
+from test_session_profile import (API_AUTH, API_KEY, API_URL, _api, DANGEROUS, FAKE_TOKEN, _dump, _login, _make, _spawn, _token,  # noqa: F401  (fixtures)
                                   sandbox, tmux)
 
 
@@ -177,6 +177,37 @@ def test_parent_with_a_profile_for_another_tool_only_injects_nothing(world):
 
 
 # --- refusal -----------------------------------------------------------------------------
+
+def test_an_api_endpoint_parent_hands_the_same_environment_to_the_child(world, monkeypatch, caplog):
+    pid = _make("gateway", login=False)
+    _api(pid, key=API_KEY, env={"ANTHROPIC_BASE_URL": API_URL, "ANTHROPIC_AUTH_TOKEN": API_AUTH})
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "ambient-api-key")
+    parent = _parent("main", session_profile.select(pid))
+    _fresh_dump(world)
+    caplog.set_level("DEBUG")
+    argv_mark = len(world.tmux.argv)
+    r = delegation.spawn(parent, task="x", title="kid")
+    assert r["account"] == {"inherited": True, "profiles": [{"id": pid, "name": "gateway", "tool": "claude"}]}
+    env = _dump(world.tmux)
+    assert env["ANTHROPIC_BASE_URL"] == API_URL and env["ANTHROPIC_AUTH_TOKEN"] == API_AUTH
+    assert env["CLAUDE_CONFIG_DIR"] == str(profiles.root(pid)) and "ANTHROPIC_API_KEY" not in env
+    ps = subprocess.run(["ps", "-axo", "command"], capture_output=True, text=True).stdout
+    for secret in (API_KEY, API_AUTH):
+        assert not any(secret in part for call in world.tmux.argv[argv_mark:] for part in call)
+        assert secret not in caplog.text and secret not in _tree_text() and secret not in json.dumps(r)
+        assert secret not in json.dumps(delegation.get(r["delegation"])) and secret not in ps
+
+
+def test_an_api_parent_with_a_broken_setup_refuses_the_child(world):
+    pid = _make("gateway", login=False)
+    _api(pid)
+    parent = _parent("main", session_profile.select(pid))
+    _api(pid, env={"ANTHROPIC_BASE_URL": "ftp://x.example.invalid"})
+    with pytest.raises(delegation.DelegationError) as e:
+        delegation.spawn(parent, task="x", title="kid")
+    assert (e.value.code, e.value.account) == ("parent_profile_unavailable", {"code": "unsupported_auth"})
+    assert not tmux_runner.has_session("kid") and not world.launched
+
 
 def _break_login(pid):
     (profiles.root(pid) / ".credentials.json").unlink()

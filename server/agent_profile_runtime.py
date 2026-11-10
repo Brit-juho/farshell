@@ -29,6 +29,23 @@ RECONCILE_SECONDS = 5
 _BASE_ENV = {"PATH", "HOME", "TERM", "COLORTERM", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "USER", "LOGNAME", "SHELL", "DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "SSH_AUTH_SOCK"}
 
 
+def provider_environment(profile_id):
+    """The variables an API-endpoint profile (`.farshell-provider.json`) adds, or None when the profile has
+    none. The ONE place this is computed: the managed launch (`environment` below) and the new-session injection
+    (`session_profile`) both call it, so the rules (the same validation as the import, protected names,
+    endpoint shape) cannot drift apart. Raises `profiles.Refused` for a malformed file. The values may be
+    secret (keys, auth headers) - callers must never log or echo them."""
+    from agent_profile_secret import read
+    private = read(profiles.root(profile_id))
+    if private is None:
+        return None
+    # Reuse import validation for manual edits as well. Do not relax the
+    # ambient/overlay credential ban when a private profile exists.
+    from agent_profile_migration import _private_configuration
+    raw, _ = _private_configuration(private, profiles.root(profile_id))
+    return json.loads(raw)['env']
+
+
 def environment(profile_id, project=None, *, record=False):
     profile = profiles.get(profile_id)
     profiles.require_active(profile)
@@ -48,18 +65,13 @@ def environment(profile_id, project=None, *, record=False):
     forbidden = {"OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_ORG_ID", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_CUSTOM_HEADERS", "CLAUDE_CODE_OAUTH_TOKEN"}
     if forbidden.intersection(env):
         raise profiles.Refused(tr("프로필 환경변수가 네이티브 로그인 계정을 우회합니다"))
-    from agent_profile_secret import read
-    private = read(profiles.root(profile_id))
-    if private is not None:
-        # Reuse import validation for manual edits as well. Do not relax the
-        # ambient/overlay credential ban when a private profile exists.
-        from agent_profile_migration import _private_configuration
-        raw, _ = _private_configuration(private, profiles.root(profile_id))
-        env.update(json.loads(raw)['env'])
+    provider = provider_environment(profile_id)
     from agent_profile_token import environment_value
     token = environment_value(profile_id)
+    if provider is not None:
+        env.update(provider)
     if token:
-        if private is not None:
+        if provider is not None:
             raise profiles.Refused(tr("API 인증과 장기 토큰이 함께 설정되어 있습니다. 하나만 남기세요"))
         # Only the profile's own stored mint reaches the CLI, never an ambient value.
         env["CLAUDE_CODE_OAUTH_TOKEN"] = token
