@@ -218,7 +218,8 @@ body {
   outline: var(--focus-ring-w) solid var(--color-focus-ring);
   outline-offset: var(--focus-ring-offset);
 }
-input:focus-visible, textarea:focus-visible, select:focus-visible, [contenteditable]:focus-visible,
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus-visible, textarea:focus-visible, select:focus-visible,
+[contenteditable]:focus-visible,
 .vt-native-open:focus-visible, .vt-ac-navitem:focus-visible, .vt-ac-itemhead:focus-visible,
 .vt-number-step:focus-visible, .vt-mcp-worktab:focus-visible, .vt-vm-pick:focus-visible,
 .vt-wgrail-new:focus-visible, .vt-rail-sort-opt:focus-visible, #vt-wgrail .vt-srow:focus-visible,

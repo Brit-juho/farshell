@@ -10,6 +10,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+- **One interaction-state token set.** Hover, press, selected, selected-hover and waiting-hover are now `--color-state-*` tokens (an ink overlay at 6 / 11 / 13 / 18 / 14 %, per-skin ink for notepad and warp) instead of the old `--menu-hover` (alpha .04~.10 per skin) plus `--color-bg-3` hover. There is one focus ring (`--focus-ring-*`, 2px accent, offset +2 or an inset list for clipped containers; it was −2/+1/+2/0), and every hover rule now has a press (`:active`) state. Hover no longer disappears on selected or "needs you" session rows, selected segments or pressed toggles. Transitions are `--dur-fast` (120ms) colour/opacity only — the activity bar included — and are off under `prefers-reduced-motion`. `check_contrast.py` and `tokens-contrast.test.js` now check all of it on the 9 skins.
+- **One menu spec.** The FarShell menu, the row/`+`/host menus, the file-tree row menu, dropdown lists and the port sheet share one look: raised surface, 8px radius, 28px items (44px on a phone), 13px text, 14px icons, shortcut column, separators and section labels. The row menu, `+` menu and catalog menus gained icons; a dangerous item gets a separator above it.
+- **Tooltips** keep inside the sidebar or dock they belong to (flipping or clamping at the panel edge), stack the sub-line under the title at the same x, and use the raised surface with a visible border and shadow.
+- Removed the old `--menu-hover`, `--crust`, `--wrad` and `--trad` aliases (all consumers migrated to `--color-state-hover`, `--color-scrim`/`--color-bg-2` and `--radius-*`).
+
+### Fixed
+- The sidebar header's `+` menu no longer covers the sort control below it; it opens beside the sidebar.
+- Status-bar chips use tabular figures again (a `font` shorthand had reset them, so a CPU 25 % → 100 % change shifted the chips next to it); the phone settings header text is 16px from the right edge (was 4px); the agent table's number column is right-aligned; settings labels and controls share a vertical centre (offsets of +2, +5 and +21px are gone).
+
 ---
 
 ## [2.10.1] — 2026-11-10

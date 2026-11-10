@@ -89,7 +89,7 @@ test('포커스 링 오프셋 숫자는 tokens.css의 한 쌍(+2 / −2 inset)�
 
 test('clipped 컨테이너의 inset 링 목록이 실제 CSS 클래스를 가리킨다', () => {
   const reset = read(path.join(STYLES, 'screens', '00-tokens-reset.css'));
-  const m = reset.match(/input:focus-visible,[\s\S]*?\{\s*--focus-ring-offset:\s*var\(--focus-ring-inset\);/);
+  const m = reset.match(/input:not\([\s\S]*?\{\s*--focus-ring-offset:\s*var\(--focus-ring-inset\);/);
   assert.ok(m, 'inset 목록 블록이 없다');
   const all = cssFiles().map(read).join('\n');
   const dead = [];

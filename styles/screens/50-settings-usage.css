@@ -92,6 +92,14 @@
   padding:12px 0; min-height:0; border-bottom:1px solid var(--line);
 }
 .vt-set-row:last-child { border-bottom:0; }
+/* 라벨과 컨트롤의 세로 중심(2026-11 점검 7-2: 대부분 +2.0px, 「글자 크기」 +5.0, 「스크롤백 줄 수」 +21.0).
+   라벨 첫 줄의 높이를 표준 컨트롤 높이 28에 맞추면, 위쪽 정렬(flex-start) 그대로 28px 컨트롤과 라벨 첫 줄의 중심이 같아진다.
+   24px 컨트롤(선택·ON/OFF)은 2px 내려 중심을 맞춘다. 컨트롤 상자를 행 가운데로 놓지 않는 이유: 설명 줄이 붙은 행에서
+   컨트롤이 라벨 줄이 아니라 설명 줄 높이만큼 아래로 떠 버린다. 폰은 자기 규칙(98-mobile.css)이 가운데 정렬을 맡는다. */
+@media (min-width:720px) {
+  .vt-set-row:has(> .vt-toggle, > .vt-select-wrap, > .vt-dd, > .vt-number-spinner, > .vt-btn, > .vt-range) > .vt-set-meta > .vt-set-label:first-child { line-height:28px; }
+  .vt-set-row > .vt-toggle, .vt-set-row > .vt-select-wrap, .vt-set-row > .vt-dd, .vt-set-row > .vt-btn.sm { margin-top:2px; }
+}
 .vt-set-row.conflict .vt-set-combo { color:var(--color-st-error); border-color:var(--color-st-error); }
 .vt-set-meta { min-width:0; }
 .vt-set-label { font:500 var(--fs-sm) / 20px var(--ui); color:var(--txt); }

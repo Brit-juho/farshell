@@ -51,7 +51,7 @@
   }
   .vt-viewer-backdrop.vt-mobile-route .vt-viewer-head .vt-vw-title { font:600 var(--fs-base) / 20px var(--font-ui); }
   /* 머리의 마지막 글자(설정 「변경 사항 자동 저장」)가 오른쪽 끝에서 4px에 붙었다(점검 7-2, 386/390) — 본문 gutter 16과 맞춘다. */
-  .vt-viewer-backdrop.vt-mobile-route .vt-viewer-head > .vt-set-save:last-child { margin-right:12px; }
+  .vt-viewer-backdrop.vt-mobile-route .vt-viewer-head > .vt-set-save { margin-right:12px; }
 
   /* ── 세션 탭(Fleet) ─────────────────────────────────────────────────── */
   #vt-fleet-slot { background:var(--color-bg-0); padding:0 0 calc(var(--spacing) * 4); }

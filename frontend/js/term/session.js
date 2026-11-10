@@ -91,7 +91,9 @@ export function showAddMenu(el, e) {
   // (2026-11 화면 점검). 머리 막대의 버튼이면 사이드바 바깥(오른쪽)으로 연다.
   const inHead = !!(el && el.closest && el.closest('.vt-wgrail-head'));
   menu.style.right = 'auto';
-  menu.style.left = `${Math.round(inHead ? r.right + 6 : r.left)}px`;
+  // 머리 막대 오른쪽에는 접기 버튼이 더 있으므로 버튼이 아니라 **사이드바 패널의 오른쪽 가장자리**를 기준으로 연다.
+  const panelRight = inHead ? (el.closest('.vt-sidepanel') || el).getBoundingClientRect().right : 0;
+  menu.style.left = `${Math.round(inHead ? panelRight + 6 : r.left)}px`;
   menu.style.top = `${Math.round(inHead ? r.top : r.bottom + 6)}px`;
 
   // 항목은 메뉴 한 규격(.vt-menu-item.two — components.css): 아이콘 14 + 이름 + 보조 설명.

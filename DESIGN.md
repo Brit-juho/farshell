@@ -158,9 +158,9 @@ JS-generated overlays (palette, dock) also inherit tokens through `.vt-*` classe
 | `windows` | Windows Terminal — caption buttons, Cascadia, Fluent blue, Campbell terminal palette, square 2px controls (§2 Radius) | |
 | `vscode` | VS Code integrated terminal — dark gray, Fluent blue accent, blue status bar (`--color-statusbar-bg`), square 2px controls (§2 Radius) | |
 | `notepad` | Notepad/paper feel — the only **light theme**, warm off-white background | |
-| `warp` | Warp terminal — near-black with a violet cast, single-token accent (`--color-acc`) drawn from a coral→lavender→sky gradient family that surface CSS (e.g. the settings page title) can paint as a gradient text-fill; rounder corners (`--wrad` 16px) than any other skin | |
+| `warp` | Warp terminal — near-black with a violet cast, single-token accent (`--color-acc`) drawn from a coral→lavender→sky gradient family that surface CSS (e.g. the settings page title) can paint as a gradient text-fill; rounder window corners than any other skin (the per-skin `--wrad` value of 16px was removed with the alias in 2026-11; the radius scale is shared) | |
 | `linear` | Linear — near-black, one flat indigo accent, almost-invisible hairline borders (`--color-line` alpha .05, half of every other dark skin) | |
-| `vercel` | Vercel/Geist — pure black/white + one blue signal color, hard edges (`--wrad`/`--trad` 2px, sharpest of all 9) | |
+| `vercel` | Vercel/Geist — pure black/white + one blue signal color, hard edges (sharpest of all 9; its old 2px `--wrad`/`--trad` aliases were removed in 2026-11) | |
 
 `warp`, `linear` and `vercel` are modelled on real products in FarShell's own
 category (a terminal app and two dev-tool dashboards) and intentionally depart
@@ -304,6 +304,53 @@ This table is recomputed on every CI run by
 document every time a token value changes, but if the table drifts far
 enough, refresh it.
 
+### Interaction state rules (상호작용 상태 규칙)
+
+One token set drives every pointer and keyboard state (`styles/theme/tokens.css`, per-skin values in `skins.css`).
+Before (2026-11 audit §6): four focus-ring offsets (−2/+1/+2/0), two hover systems (`--menu-hover`, per-skin alpha .04~.10,
+and `--color-bg-3`), 16 `:active` rules against ~137 hover rules, and no transition on the activity bar.
+
+| Token | Value | Use |
+|---|---|---|
+| `--state-ink` | `#fff` · notepad `#000` · warp `#c4a6ff` | the overlay color of hover/press |
+| `--color-state-hover` | ink 6% (`--state-hover-pct`) | hover on any surface |
+| `--color-state-press` | ink 11% | `:active` — one step above hover |
+| `--color-state-selected` | accent 13% (= `--color-acc-soft`) | selected row/segment/toggle |
+| `--color-state-selected-hover` / `-press` | accent 18% / 23% | hover/press **on a selected row** |
+| `--color-state-waiting-hover` / `-press` | `--color-st-waiting` 14% / 18% (catppuccin 13/17, notepad 17/21) | hover/press on a "needs you" row (rest tint 10%) |
+| `--focus-ring-w` / `--focus-ring-offset` / `--focus-ring-inset` | 2px / 2px / −2px | the ring |
+| `--color-focus-ring` | `--color-acc` (macos `#3b9dff`, vscode `#3395d6` — lightened so 3:1 holds on hover/tint) | the ring color |
+| `--dur-fast` / `--ease-fast` | 120ms / ease-out (0ms under `prefers-reduced-motion`) | the only transition for states |
+
+Rules:
+
+- **Steps are visible and ordered.** rest < hover < press, and selected < selected-hover < selected-press. Hover must not vanish
+  on a selected or waiting row — `styles/screens/99-states.css` is the one file that maps those rows (it loads last so it beats the
+  row tints). `check_contrast.py` and `tokens-contrast.test.js` check, on all 9 skins and bg-0/1/2/raised: text contrast on every
+  state surface (hover/selected-hover/waiting-hover txt 6.0 · sub 4.0 · muted 2.9; press 5.0 · 3.5 · 2.5), hover vs rest (≥ 1.08),
+  ΔE between hover/press (≥ 4), hover/selected (≥ 5), selected/selected-hover (≥ 3), and the ring on every state surface (≥ 3:1).
+- **One focus ring**: `:focus-visible { outline: var(--focus-ring-w) solid var(--color-focus-ring); outline-offset: var(--focus-ring-offset) }`
+  in `00-tokens-reset.css`. Consumers never write `outline`. Where a container's `overflow` would clip a +2 ring (bars, list rows,
+  text inputs, selects), the element goes on the **inset list** right under that rule, which swaps the offset to `--focus-ring-inset`.
+  `state-tokens.test.js` fails on any other `outline` and on `--menu-hover`/`--color-bg-3` hover backgrounds.
+- **Every hover has a press**: `:active` uses `--color-state-press` (rows, buttons, menu items, tabs, activity-bar icons); solid
+  buttons and the selected segment use `filter: brightness(1.08 / .94)` because their face is the accent.
+- **Cursor and disabled** come from `styles/layers/states.css` (zero-specificity base in `@layer components`): `pointer` on everything
+  clickable, `not-allowed` + opacity .45 on disabled/`aria-disabled`.
+- **Transitions** are `background-color`, `color`, `border-color`, `opacity` at `--dur-fast`/`--ease-fast` and nothing else — never
+  width, padding, margin or position (a layout transition re-fits the terminal). Data bars (gauges) may animate `width`.
+  `prefers-reduced-motion` sets `--dur-fast` to 0.
+- **Tooltip** (`.vt-tip`): `bg-raised`, 1px `--color-line-strong`, `--shadow-e2`, 12px; title and `data-tip-sub` stack at the same x;
+  max width `min(280px, 100vw − 16px)`. It stays inside the trigger's panel (sidebar/dock): the side flips, then goes above/below
+  with x clamped to the panel (`ui/tooltip-place.js`, unit-tested); the activity bar is exempt (its names open over the sidebar by
+  design), and `data-tip-free` opts out. 400ms to open, instant within 300ms of the last close, Esc dismisses.
+- **Menu** (one spec for every menu — FarShell menu, row/`+`/host menus, file-tree row menu, dropdown lists, port sheet; see
+  `components.css` "메뉴 한 규격"): surface `bg-raised` + 1px line-strong + radius 8 + e2 + padding 4; item 28 (phone/coarse 44),
+  13px, padding 0 8, gap 8, radius 4; icon 14 in `muted` (`on` accent, `danger` error); right column = shortcut (mono 12 muted,
+  `.vt-mb-keys`/`.vt-ft-mi-k`) or detail (ui 12 muted); separator 1px × −4px margins; section label 11/600 muted. Danger items get a
+  separator above them automatically. A menu opened from a header button opens beside the sidebar, not below the header (it used to
+  cover the sort control).
+
 ### Structural tokens
 
 - **Spacing:** a single `--spacing: 4px` scale. Every margin is
@@ -315,12 +362,12 @@ enough, refresh it.
   (38/46) stay outside the scale — they size three empty-state glyphs, not text.
 - **Radius:** `--radius-xs`(**4px** — small 24px buttons, chips, menu items) / `--radius-sm`(**6px**,
   was 5 — every control: 28px buttons, inputs, selects) / `--radius-lg`(**8px**, was 10 — menus,
-  dialogs, cards, sheets) / `--radius-full`. There is no `--radius-md`. Skins shape their window and tab corners with `--wrad`/`--trad`; only
-  `windows` and `vscode` override the scale: `--radius-xs`/`--radius-sm` (and `--trad`) are **2px** there, the square controls of
-  Windows Terminal and VS Code, while `--radius-lg` frames (menus, dialogs, cards, sheets) and `--wrad` stay as in every other skin.
+  dialogs, cards, sheets) / `--radius-full`. There is no `--radius-md`. The old per-skin `--wrad`/`--trad` aliases are gone (2026-11); only
+  `windows` and `vscode` override the scale: `--radius-xs`/`--radius-sm` are **2px** there, the square controls of
+  Windows Terminal and VS Code, while `--radius-lg` frames (menus, dialogs, cards, sheets) stay as in every other skin.
 - **Shadow:** `--shadow-e1` (the current row) + `--shadow-e2`/`e3` (overlays).
   e1 must be defined in every skin — see §0 for why.
-- **Motion:** `--dur-fast`(120ms) / `--dur-base`(200ms), `--ease-out-quint`.
+- **Motion:** `--dur-fast`(120ms) / `--dur-base`(200ms), `--ease-out-quint`; interaction states use `--dur-fast` + `--ease-fast` only (§ "Interaction state rules").
 - **Breakpoints:** `--breakpoint-regular`(720px) / `--breakpoint-wide`(1280px) /
   `--breakpoint-xwide`(1600px). The JS-side constants live in exactly **one**
   place, `frontend/js/layout/breakpoints.js` (`COMPACT_MAX`/`REGULAR_MAX`/`WIDE_MAX`).
@@ -353,9 +400,9 @@ scanning prose lets a wrong value slip through unnoticed.
 
 ### Legacy aliases
 
-`--win`/`--bar`/`--acc`/`--txt`/`--sub`/`--line`/`--ok`/`--err`/`--crust`/
-`--trad` etc. in `styles/screens/00-tokens-reset.css` are aliases pointing at the `--color-*` tokens
-above. Bulk-replacing the hundreds of consumers with `var(--color-*)` is a
+`--win`/`--bar`/`--acc`/`--txt`/`--sub`/`--line`/`--ok`/`--err` etc. in `styles/screens/00-tokens-reset.css` are aliases pointing at the `--color-*` tokens
+above (`--menu-hover`, `--crust`, `--wrad` and `--trad` were migrated to `--color-state-hover`, `--color-scrim`/`--color-bg-2` and
+`--radius-*` in 2026-11 and deleted; none of them was an externally documented variable). Bulk-replacing the hundreds of consumers with `var(--color-*)` is a
 separate, much larger job of moving where the value comes from — it hasn't
 been done. **New code reaches for `--color-*` directly.**
 
@@ -1369,9 +1416,9 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
 - **Tooltips** (`.vt-tip`, `js/ui/tooltip.js`, loaded on first hover/focus or idle by
   `ui/tooltip-lazy.js`; touch never loads it): one `position: fixed` element on
   `body`, driven by `data-tip` (name) and optional `data-tip-sub` (the value —
-  a count, a shortcut, a reason; `--font-mono`, `tabular-nums`, `--color-sub`).
+  a count, a shortcut, a reason; `--font-mono`, `tabular-nums`, `--color-sub`; stacked under the name at the same x).
   `data-tip-side` picks `top|bottom|left|right` and flips when the side doesn't
-  fit. **Never the native `title` attribute**: its ~1s delay can't be tuned, it
+  fit the viewport **or the trigger's panel** (§ "Interaction state rules"). **Never the native `title` attribute**: its ~1s delay can't be tuned, it
   can't be themed across the 9 skins, and it does nothing under touch. 400ms to
   open, instant within 300ms of the last one closing, 120ms
   opacity+scale growing from the trigger. No arrow — an arrow has to track both
@@ -1498,7 +1545,7 @@ See [session UI design](docs/ref/session-ui.md).
   fine pointer it stays 18px / 24px-header.
 - **Keyboard:** `Mod+K` palette, `Mod+,` settings, `Ctrl/Cmd+F` (palette `~`
   mode), `Alt+Shift+F` (in-pane search), `Cmd+Shift+F` / `Ctrl+Shift+G` (file content search), Esc to close,
-  `:focus-visible` outline (`--color-acc`).
+  `:focus-visible` outline (`--color-focus-ring`, one rule — § "Interaction state rules").
 - **Screen readers:** icon buttons carry `aria-label`; mic status is
   `role="status" aria-live="polite"`. A visible tooltip puts
   `aria-describedby="vt-tip"` on its trigger and removes it on close.

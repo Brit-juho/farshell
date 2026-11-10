@@ -74,7 +74,7 @@ test('「+」 메뉴: 아이콘이 있고 인라인 스타일이 없으며 머�
   assert.doesNotMatch(fn, /style="/, '인라인 style 문자열이 남았다');
   assert.doesNotMatch(fn, /opacity:\.55/);
   assert.match(fn, /closest\('\.vt-wgrail-head'\)/);
-  assert.match(fn, /r\.right \+ 6/);
+  assert.match(fn, /panelRight \+ 6/);
 });
 
 test('행 메뉴 항목에 아이콘이 있다 — 모든 RowMenuId가 ROW_MENU_ICON에 있다', () => {
