@@ -2284,9 +2284,9 @@ cmd_hooks() {
       while IFS=$'\t' read -r event state cur; do
         [ -z "$event" ] && continue
         case "$state" in
-          ok)     printf "  ✓ %-14s %s\n" "$event" "$cur" ;;
-          add)    printf "  ✗ %-14s %s\n" "$event" "$(_t '미등록')" ;;
-          update) printf "  ⚠ %-14s %s\n" "$event" "$(_t '다른 경로/스크립트: {cur}' cur="$cur")" ;;
+          ok)     printf "  ✓ %-19s %s\n" "$event" "$cur" ;;
+          add)    printf "  ✗ %-19s %s\n" "$event" "$(_t '미등록')" ;;
+          update) printf "  ⚠ %-19s %s\n" "$event" "$(_t '다른 경로/스크립트: {cur}' cur="$cur")" ;;
         esac
       done <<< "$out"
       local claude_rc="$rc" codex_out codex_rc

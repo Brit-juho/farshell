@@ -75,7 +75,7 @@ def accept(ent: dict, event: str, payload: dict, cli: str, ts=None) -> bool:
             return False
         if row and isinstance(row.get("_ts"), int) and ts <= row["_ts"]:
             return False
-    if row is None and event not in ("subagent_start", "pre", "post", "permission", "permission_request"):
+    if row is None and event not in ("subagent_start", "pre", "post", "post_failure", "permission", "permission_request"):
         return False
     now = time.time()
     rows = ent.setdefault("_subagents", {})
@@ -96,7 +96,7 @@ def accept(ent: dict, event: str, payload: dict, cli: str, ts=None) -> bool:
         rows[aid] = row
     if isinstance(ts, int):
         row["_ts"] = ts
-    if event in ("subagent_start", "pre", "post", "permission", "permission_request") and row["state"] != "working":
+    if event in ("subagent_start", "pre", "post", "post_failure", "permission", "permission_request") and row["state"] != "working":
         row.pop("_last_message", None)
         row["last_message"] = ""
     row["_updated"] = now
@@ -112,12 +112,12 @@ def accept(ent: dict, event: str, payload: dict, cli: str, ts=None) -> bool:
     if message:
         row["_last_message"] = message
         row["last_message"] = message[:500]
-    if event in ("subagent_start", "pre", "post", "permission", "permission_request"):
+    if event in ("subagent_start", "pre", "post", "post_failure", "permission", "permission_request"):
         row.update(state="working", ended_at=None, idle_since=None, stale=False)
         if event in ("pre", "permission", "permission_request"):
             row["tool"] = text(payload.get("tool_name")) or None
             row["tool_count"] += 1
-        elif event == "post":
+        elif event in ("post", "post_failure"):
             row["tool"] = None
     elif event == "stop_failure":
         _finish(row, "failed", now)
