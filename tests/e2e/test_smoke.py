@@ -3829,7 +3829,7 @@ def test_폰_설정_상세는_행_56에_컨트롤을_오른쪽에_두고_모든_
         assert over == 0, f"{name}: 가로로 넘친 요소 {over}개"
         _fud_shot(pg, f"settings-{i:02d}")
         if name == "터미널":
-            row = pg.evaluate("""() => { const t = document.querySelector('.vt-set-row > .vt-toggle'); const r = t.closest('.vt-set-row');
+            row = pg.evaluate("""() => { const t = document.querySelector('.vt-set-row > .vt-switch'); const r = t.closest('.vt-set-row');
                 const a = t.getBoundingClientRect(), m = r.querySelector('.vt-set-meta').getBoundingClientRect(), rr = r.getBoundingClientRect();
                 return { dir: getComputedStyle(r).flexDirection, h: rr.height, right: a.left > m.left + 100,
                          track: getComputedStyle(t, '::before').width }; }""")
