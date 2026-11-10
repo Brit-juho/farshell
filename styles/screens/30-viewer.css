@@ -97,15 +97,18 @@
 }
 .vt-vw-bar-warn{ color:var(--warn); }
 .vt-vw-bar-btn{
-  font:500 var(--fs-xs) var(--ui); color:var(--txt); background:var(--crust);
-  border:1px solid var(--line); border-radius:var(--radius-sm);
+  font:500 var(--fs-xs) var(--ui); color:var(--color-txt); background:transparent;
+  border:1px solid var(--color-line-strong); border-radius:var(--radius-sm);
   padding:calc(var(--spacing) * 0.5) calc(var(--spacing) * 2); cursor:pointer;
 }
 .vt-vw-bar-btn:hover{ background:var(--menu-hover); }
+/* 막은 이미지 자리표시 안의 복사 단추는 조용한 단추(.vt-btn.quiet)와 같다. */
+.vt-md-copy{ border-color:transparent; color:var(--color-sub); }
+.vt-md-copy:hover{ color:var(--color-txt); }
 .vt-vw-bar-btn:disabled{ opacity:.5; cursor:default; }
 .vt-vw-enc{ display:inline-flex; align-items:center; gap:calc(var(--spacing) * 1.5); }
 .vt-vw-enc select{
-  font:inherit; color:var(--txt); background:var(--crust);
+  font:inherit; color:var(--color-txt); background:transparent;
   border:1px solid var(--line); border-radius:var(--radius-sm); padding:calc(var(--spacing) * 0.5) calc(var(--spacing) * 1);
 }
 @media (pointer: coarse){
