@@ -32,7 +32,7 @@ Everything about using FarShell in the browser. (For the CLI see `fsh help conce
   saved app files and reloads — your settings and login stay. "Sign out" ends this browser's login only; the device registration stays), the **Mac** this screen shows (if you have
   paired Macs, click it to switch the whole screen to another one), and the active pane's **repository › branch ›
   session** (hidden below 1280px). Click the **Search or run a command** field in the middle, or press `Cmd+K`, to open
-  the palette. The focus mode button (four-corners icon), the keyboard toggle (touch devices) and window buttons sit on the right.
+  the palette. The focus mode button (four-corners icon), the key bar button (touch devices) and window buttons sit on the right.
 - **Status bar** (bottom): the **agents chip** (`Needs you N · Working N · Done N`; when something
   needs you, click it to jump to the session that has waited longest) is pinned at the left end, and short messages
   (copied, saved…) appear briefly just to its right. Then E2E, safe mode and connected screens, and on the right CPU,
@@ -49,10 +49,10 @@ Everything about using FarShell in the browser. (For the CLI see `fsh help conce
   the approval dialog and the palette still appear. In Settings → Appearance, "Focus mode" sets showing bars at the edges, the
   needs-you pill and the edge reveal delay (instant / 250ms / 500ms). Tablets without a mouse use an exit button at the bottom
   left instead of the edges. Reloading the page or crossing 720px in window width turns it off.
-- **Phone mic**: the round mic floating at the bottom right of the Terminal tab (above the bottom tabs, or above the keybar when it is open)
+- **Phone mic**: the round mic floating at the bottom right of the Terminal tab (above the bottom tabs, or above the key bar when it is open)
   starts recording; tap again to stop. A dot on it means voice needs setting up (long-press for the voice panel).
 - **Phone focus mode**: the first button in the Terminal tab's top bar (the four-corners icon) hides the top bar and bottom tabs and leaves
-  the terminal and keybar. The mic moves to the first keybar key. A small pill at the top right shows a session waiting for approval as
+  the terminal and key bar. The mic moves to the first key bar key. A small pill at the top right shows a session waiting for approval as
   "Needs you N name"; tap it to open that session. To leave, tap the pill's exit button or pull down from the very top edge and let go
   (a short pull snaps back).
 
@@ -222,13 +222,13 @@ More troubleshooting: `fsh help troubleshoot`
 
 ## Permissions when resuming a conversation
 
-Resume on a session and Continue in Conversation archive also restore the last recorded permissions.
+Resume and Conversation archive's Continue conversation also restore the last recorded permissions.
 Claude bypass and Codex YOLO stay on or off as recorded. OFF is applied explicitly, so a later change
 to global settings cannot turn it on. Codex also restores its approval policy, sandbox and approval reviewer.
 A notice shows the restored mode after launch.
 
 If records are missing, corrupt, conflicting or unsupported, FarShell refuses to start and explains why.
-Old Claude records without a verified profile are insufficient; resume directly in the CLI to record a new owner hook.
+If only older Claude records saved without a profile distinction exist, resume directly in the CLI to record a new hook.
 Legacy hooks without the PID needed for process verification still report state, but cannot supply a resume policy.
 Codex permission restoration requires version 0.164.0 or newer. Unsupported Codex settings include custom permission profiles and network access in read-only mode.
 Changes the CLI never recorded cannot be restored. FarShell execution grants are not inherited.
