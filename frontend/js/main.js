@@ -5,8 +5,7 @@
 // 옮겼다(F5에서 마지막 9개 classic script 전환 완료). 아직 window.* 브리지가
 // 남아 있는 값들은 (1) voice.js — capability 확인 후 별도로 독립 빌드·로드되는
 // 완전히 분리된 번들이라 진짜 import가 불가능한 경우(voice/recording.js 상단
-// 주석 참고), (2) index.html의 인라인 onchange="uploadFile(this)" 같은 HTML
-// 속성 핸들러, (3) clearWorkspace처럼 콘솔 디버깅용으로 의도적으로 남긴 것뿐이다.
+// 주석 참고), (2) (제거됨: 인라인 핸들러는 CSP가 막는다), (3) clearWorkspace처럼 콘솔 디버깅용으로 의도적으로 남긴 것뿐이다.
 import '../../styles/main.css';
 
 // 정적 HTML 문구 번역 — 다른 모듈이 DOM 문구를 읽거나 바꾸기 전에 한 번.

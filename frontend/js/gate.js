@@ -28,6 +28,8 @@
   var otpBoxes=Array.prototype.slice.call(document.querySelectorAll('#login-otp-boxes .login-otp-box'));
   var rememberWrap=document.getElementById('login-remember');
   var passState=document.getElementById('login-pass-state');
+  // 포커스 전까지 readonly(Chrome 자동완성 억제, index.html 주석). 인라인 핸들러는 CSP(script-src 'self')가 막는다.
+  if(pass) pass.addEventListener('focus',function(){ pass.removeAttribute('readonly'); });
   var btn=document.getElementById('login-submit');
   var btnLabel=document.getElementById('login-submit-label');
   var err=document.getElementById('login-err');

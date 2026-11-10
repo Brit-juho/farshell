@@ -181,8 +181,8 @@ export async function createTmuxSession() {
   return data.id;
 }
 
-// showOnboarding()(boot.js)이 만드는 온보딩 화면의 버튼은 innerHTML 문자열
-// onclick="...createTmuxSession()"이라 모듈 경계와 무관하게 window를 거쳐야 한다.
+// 온보딩 화면(boot.js showOnboarding)의 버튼은 data-action 위임으로 받는다 — 인라인 onclick은
+// CSP(script-src 'self')가 막는다. 아래 window 브리지는 다른 지연 청크가 쓴다.
 window.createTmuxSession = createTmuxSession;
 // N8/N44(30-worktree.md §4) — Rail.tsx(지연 청크)가 이 모듈을 정적 import
 // 못 하므로(Rail.tsx 상단 주석과 같은 이유) 워크트리 행 클릭 시 tmux 세션을
@@ -411,6 +411,6 @@ window.addSession = addSession;
 window.removeSession = removeSession;
 window.renameSession = renameSession;
 window.showAddMenu = showAddMenu;
-// showOnboarding()의 onclick="...createSession()" 인라인 문자열이 모듈 경계와
-// 무관하게 window를 거쳐야 하므로 함께 브리지.
 window.createSession = createSession;
+registerAction('onboarding.tmux', () => { document.getElementById('onboarding')?.remove(); createTmuxSession(); });
+registerAction('onboarding.plain', () => { document.getElementById('onboarding')?.remove(); createSession(); });
