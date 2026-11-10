@@ -21,7 +21,7 @@ import { t } from '../core/i18n.js';
 import { NativeChip } from './NativeChildren.js';
 import {
   stateKeyword, formatRelativeTime, statusSentence, diffLabel, lineageLabel,
-  ORIGIN_ICON, ORIGIN_LABEL, ORIGIN_SHORT, SHARE_MODE_LABEL, shareSentence, type SessionRow, type Origin, type ShareInfo, type RowSummaryDetails,
+  ORIGIN_ICON, originLabel, originShort, SHARE_MODE_LABEL, shareSentence, type SessionRow, type Origin, type ShareInfo, type RowSummaryDetails,
 } from './rail-data.js';
 
 /** 경과 시간을 행 DOM을 다시 만들지 않고 갱신하는 시계(30초). */
@@ -35,8 +35,9 @@ function createNow() {
 /** 만든 곳 아이콘(local은 없다). 레일 행과 Fleet 행이 같이 쓴다.
  * `withText`면 아이콘 뒤에 짧은 글(「다른 맥에서 만듦」·「직접 만듦」)을 붙인다 — 레일 행 3줄(시안 D02). 글이 있으면
  * 아이콘은 장식이고 글이 읽힌다(같은 말을 두 번 읽지 않게). 툴팁은 늘 긴 문장이다. */
-export function OriginMark(props: { origin: Origin; withText?: boolean }) {
-  const short = () => ORIGIN_SHORT[props.origin as Exclude<Origin, 'local'>];
+export function OriginMark(props: { origin: Origin; host?: string | null; withText?: boolean }) {
+  const short = () => originShort(props.origin, props.host);
+  const label = () => originLabel(props.origin, props.host);
   const ico = () => icon(ORIGIN_ICON[props.origin as Exclude<Origin, 'local'>], 12, 2);
   return (
     <Show when={props.origin !== 'local'}>
@@ -46,10 +47,10 @@ export function OriginMark(props: { origin: Origin; withText?: boolean }) {
           <span
             class="vt-srow-origin"
             data-origin={props.origin}
-            data-tip={ORIGIN_LABEL[props.origin]}
+            data-tip={label()}
             data-tip-side="right"
             role="img"
-            aria-label={ORIGIN_LABEL[props.origin]}
+            aria-label={label()}
             innerHTML={ico()}
           />
         }
@@ -57,7 +58,7 @@ export function OriginMark(props: { origin: Origin; withText?: boolean }) {
         <span
           class="vt-srow-origin with-text"
           data-origin={props.origin}
-          data-tip={ORIGIN_LABEL[props.origin]}
+          data-tip={label()}
           data-tip-side="right"
         >
           <span class="vt-srow-origin-ico" aria-hidden="true" innerHTML={ico()} />
@@ -403,7 +404,7 @@ export function Row(props: {
             </Show>
             <NativeChip row={props.row} />
             <ShareMark share={props.row.share} />
-            <OriginMark origin={props.row.origin} withText />
+            <OriginMark origin={props.row.origin} host={props.row.originHost} withText />
           </div>
           {/* 4줄(있을 때만): 다른 화면 N · 웹이 아닌 터미널 연결 수. */}
           <Show when={props.row.otherScreens > 0 || props.row.otherClients > 0}>

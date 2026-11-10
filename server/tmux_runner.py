@@ -135,6 +135,22 @@ class PaneInfo:
 ORIGIN_OPTION = "@fsh_origin"
 RECORDABLE_ORIGINS = frozenset({"local", "peer"})
 ORIGIN_EXTERNAL = "external"
+# peer가 만든 세션이면 **만든 맥의 표시 이름**(이 호스트의 허용 목록에 적힌 라벨)을 함께 적는다.
+# 옵션이 없으면(옛 세션·옛 서버) 화면은 「다른 맥에서 만듦」 그대로다 — 필드 없음 = 무시.
+ORIGIN_HOST_OPTION = "@fsh_origin_host"
+ORIGIN_HOST_MAX_LEN = 60
+
+
+def sanitize_origin_host(raw: str | None) -> str:
+    """표시 이름 위생 — 제어문자·탭·개행 제거(list-sessions 탭 분리를 깨지 않게), 앞뒤 공백 제거, 60자 제한."""
+    if not isinstance(raw, str):
+        return ""
+    return "".join(c for c in raw if c.isprintable() and c not in "\t\r\n").strip()[:ORIGIN_HOST_MAX_LEN]
+
+
+def origin_host_of(origin: str, raw: str | None) -> str:
+    """응답에 싣는 만든 맥 이름. peer가 아니면 빈 값(기록이 있어도 무시)."""
+    return sanitize_origin_host(raw) if origin == "peer" else ""
 
 
 def normalize_origin(raw: str | None) -> str:
@@ -236,12 +252,18 @@ def set_option(session: str, key: str, value: str) -> bool:
     return rc == 0
 
 
-def set_origin(session: str, origin: str) -> bool:
+def set_origin(session: str, origin: str, host: str = "") -> bool:
     """세션을 만든 곳을 `@fsh_origin`에 적는다. 화이트리스트(local/peer) 밖의 값은
-    tmux를 부르지 않고 False — 호출부가 외부 입력을 그대로 넘겨도 임의 값이 들어가지 않는다."""
+    tmux를 부르지 않고 False — 호출부가 외부 입력을 그대로 넘겨도 임의 값이 들어가지 않는다.
+    `origin == "peer"`이고 `host`(만든 맥의 표시 이름)가 있으면 `@fsh_origin_host`에도 적는다.
+    이름 기록이 실패해도 origin 기록 결과가 반환값이다(이름은 부가 정보)."""
     if origin not in RECORDABLE_ORIGINS:
         return False
-    return set_option(session, ORIGIN_OPTION, origin)
+    ok = set_option(session, ORIGIN_OPTION, origin)
+    name = sanitize_origin_host(host) if origin == "peer" else ""
+    if ok and name:
+        set_option(session, ORIGIN_HOST_OPTION, name)
+    return ok
 
 
 def is_installed() -> bool:

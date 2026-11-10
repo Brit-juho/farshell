@@ -1618,6 +1618,12 @@ window.__VT_I18N = {
   "다른 경로/스크립트: {cur}": "different path/script: {cur}",
   "다른 도구에 복사": "Copy to another tool",
   "다른 맥에서 만듦": "Created on another Mac",
+  "{host}에서 만듦": "Created on {host}",
+  "비밀번호 로그인이 설정돼 있지 않아 끝낼 세션이 없습니다": "Password login is not set up, so there is no session to end",
+  "저장된 앱 파일(캐시)을 지우고 새로고침할까요? 설정과 로그인은 그대로입니다.": "Clear the cached app files and reload? Your settings and login stay.",
+  "캐시 지우기": "Clear cache",
+  "캐시를 모두 지우지 못했습니다": "Could not clear the whole cache",
+
   "다른 맥에서 부를 수 없는 기능입니다: {target}": "This feature isn't available from another Mac: {target}",
   "다른 맥에서 쓸 수 없는 기능입니다: {target}": "This feature isn't available from another Mac: {target}",
   "다른 사용자가 읽을 수 있음.": "other users can read it.",

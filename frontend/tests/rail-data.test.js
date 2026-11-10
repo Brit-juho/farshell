@@ -288,7 +288,7 @@ test('collectSessionRows — 브랜치는 main도 담고, origin·열림·묶음
   const rows = collectSessionRows({
     tmux: [
       { name: 'api', cwd: '/r', wt_id: 'wt-main', attached: 3, origin: 'external' },
-      { name: 'web', cwd: '/r', wt_id: 'wt-b', attached: 1, origin: 'peer' },
+      { name: 'web', cwd: '/r', wt_id: 'wt-b', attached: 1, origin: 'peer', originHost: 'm5-studio' },
       { name: 'cli', cwd: null, wt_id: null, attached: 0 },
     ],
     repos: [{ worktrees: [
@@ -308,6 +308,8 @@ test('collectSessionRows — 브랜치는 main도 담고, origin·열림·묶음
   assert.strictEqual(by.api.origin, 'external');
   assert.strictEqual(by.web.origin, 'peer');
   assert.strictEqual(by.cli.origin, 'local', 'origin 필드가 없으면 local');
+  assert.strictEqual(by.web.originHost, 'm5-studio');
+  assert.strictEqual(by.api.originHost, '', 'originHost 필드가 없으면(구버전 서버) 빈 값');
   assert.strictEqual(by.api.open, true);
   assert.strictEqual(by.cli.open, false);
   assert.strictEqual(by.api.viewLabel, 'api+web');
@@ -470,4 +472,19 @@ test('rowMenuItems — 카탈로그에 이어진 행만 작업 기록을 갖고,
   const linked = ids({ open: false, tmuxName: 'x' }, { record: true });
   assert.ok(linked.includes('record') && linked.includes('rename'));
   assert.strictEqual(ids({ open: true, tmuxName: 'x' }, { record: true }).filter((i) => i === 'rename').length, 1);
+});
+
+test('originShort·originLabel — 만든 맥 이름이 있으면 「{host}에서 만듦」, 없으면 지금 문구 그대로', async () => {
+  const { originShort, originLabel, rowSummary } = await mod();
+  assert.strictEqual(originShort('peer', 'm5-studio'), 'm5-studio에서 만듦');
+  assert.strictEqual(originShort('peer', ''), '다른 맥에서 만듦');
+  assert.strictEqual(originShort('peer', undefined), '다른 맥에서 만듦');
+  assert.strictEqual(originShort('peer', '  '), '다른 맥에서 만듦');
+  assert.strictEqual(originShort('external', 'x'), '직접 만듦', '이름은 peer 에서만 쓴다');
+  assert.strictEqual(originLabel('peer', 'm5-studio'), 'm5-studio에서 만듦');
+  assert.strictEqual(originLabel('peer', null), '다른 맥에서 만듦');
+  assert.strictEqual(originLabel('external', 'x'), '직접 만듦 (CLI·tmux)');
+  const r = { status: 'working', kind: null, otherClients: 0, branch: null };
+  assert.strictEqual(rowSummary({ ...r, origin: 'peer', originHost: 'm5-studio' }), '작업 중 · m5-studio에서 만듦');
+  assert.strictEqual(rowSummary({ ...r, origin: 'peer' }), '작업 중 · 다른 맥에서 만듦');
 });

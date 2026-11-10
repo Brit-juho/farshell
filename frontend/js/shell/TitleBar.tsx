@@ -84,7 +84,7 @@ export function accessUrl(caps: unknown): string {
 }
 
 /**
- * 제목 막대 왼쪽 첫 칸의 FarShell 메뉴. 새 세션 · 빠른 열기 · 집중 모드 · 접속 주소 복사 · 설정 · 상태 막대 설정.
+ * 제목 막대 왼쪽 첫 칸의 FarShell 메뉴. 새 세션 · 빠른 열기 · 집중 모드 · 접속 주소 복사 · 설정 · 상태 막대 설정 · 캐시 지우기 · 로그아웃.
  * 드롭다운은 Portal로 body에 그린다 — 막대가 overflow를 자르고 OS 흉내 스킨은 backdrop-filter를 쓰는데, 그게
  * fixed의 기준 상자를 바꿔서 안에 두면 잘린다. 닫기: 바깥 클릭 · Esc · 항목 실행 · 창 크기 변경/포커스 잃음.
  * 키보드: ↑↓ Home End.
@@ -124,6 +124,10 @@ function MenuButton(props: { deps: TitleBarDeps; getCaps: () => unknown }) {
     },
     { id: 'settings', iconName: 'settings', label: t('설정'), keys: `${mod},`, sepBefore: true, run: () => act('settings.show') },
     { id: 'statusbar-settings', iconName: 'panel-top', label: t('상태 막대 설정'), run: () => act('settings.section', 'hud') },
+    // 캐시 지우기는 서비스 워커·Cache Storage만 지운다(설정은 그대로). 로그아웃은 웹 로그인 세션만 끝낸다(기기 등록은 유지).
+    // 둘 다 core/app-session-lazy.js가 등록한 액션이고, 본체는 같은 shell 청크의 app-session.ts다(명령 팔레트도 같은 액션).
+    { id: 'clear-cache', iconName: 'refresh-cw', label: t('캐시 지우기'), sepBefore: true, run: () => act('app.clear-cache') },
+    { id: 'logout', iconName: 'log-out', label: t('로그아웃'), run: () => act('session.logout') },
   ];
 
   const close = (restoreFocus = false) => {

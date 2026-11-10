@@ -416,6 +416,7 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
       isMainWorktree: modern ? ctx.worktree?.kind === 'main' : info?.isMain ?? false,
       worktreeId: modern ? rootToWt.get(ctx.root)?.id ?? null : tm.wt_id || null,
       origin: normalizeOrigin(tm.origin),
+      originHost: typeof tm.originHost === 'string' ? tm.originHost : '',
       share: normalizeShare(tm.share),
       lineage: normalizeLineage(tm.lineage),
       viewLabel: view?.label || null, viewId: view?.id || null,
