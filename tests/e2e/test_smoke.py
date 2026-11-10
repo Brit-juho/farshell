@@ -1513,7 +1513,7 @@ def test_SVG는_그림으로만_그려지고_주소를_직접_열어도_스크�
         page.wait_for_selector("#vt-file .vt-vw-svg img", timeout=15000)
         page.wait_for_function("() => document.querySelector('#vt-file .vt-vw-svg img').naturalWidth > 0", timeout=10000)
         assert page.evaluate("() => window.__vtXss || 0") == 0
-        assert "sandbox" in page.locator("#vt-file .vt-vw-bar").inner_text()
+        assert "격리된 그림" in page.locator("#vt-file .vt-vw-bar").inner_text()
     finally:
         _close_overlay(page)
     raw = page.context.new_page()
