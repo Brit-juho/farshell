@@ -5112,9 +5112,7 @@ window.__VT_I18N = {
   "설정 폴더가 없어 점검하지 않습니다(이 CLI를 쓰지 않는 것으로 봅니다).": "No settings folder, so it is not checked (this CLI is assumed unused).",
   "에이전트 훅이 빠졌거나 어긋났습니다 — 누르면 설정 → 정보에서 이유와 고치는 방법을 봅니다": "Agent hooks are missing or out of place — click to see the reason and the fix in Settings → About",
   "에이전트 훅이 빠졌거나 어긋났습니다 — 터미널에서 fsh hooks status": "Agent hooks are missing or out of place — run fsh hooks status in a terminal",
-  "에이전트 훅이 빠졌거나 어긋났을 때만 나타나는 경고입니다. 누르면 설정 → 정보에서 이유를 봅니다. 에이전트 칩 바로 오른쪽에 고정돼 끌 수 없습니다.": "A warning that only appears when agent hooks are missing or out of place. Click it to see why in Settings → About. Pinned right after the agent chip, so it cannot be moved.",
   "자동 점검이 꺼져 있습니다 (VT_HOOK_HEALTH=0). 이 화면을 열 때만 확인합니다.": "Automatic checking is off (VT_HOOK_HEALTH=0). Hooks are checked only when this screen opens.",
   "훅 자동 점검": "Hook auto-check",
-  "훅 점검": "Hook check",
   "훅 점검 필요": "Hook check needed"
 };

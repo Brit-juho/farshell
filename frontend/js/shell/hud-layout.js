@@ -26,8 +26,14 @@ export const HUD_KINDS = [
 ];
 
 /** 늘 상태 막대 맨 왼쪽에 고정된 종류(배치에 적지 않는다). @type {readonly HudKind[]} */
-// `hooks`(훅 점검 필요)는 이상이 있을 때만 생기는 경고 칩이라 끌 수 없게 고정한다 — 설정을 잘못 만져 경고가 사라지면 되찾을 길이 없다.
-export const PINNED_HUD_KINDS = ['agents', 'hooks'];
+export const PINNED_HUD_KINDS = ['agents'];
+
+/**
+ * 이상이 있을 때만 생기는 경고 칩 — 배치(설정 화면)와 상관없이 고정 칩 바로 다음에 나온다. 설정을 잘못 만져 경고가 사라지면
+ * 되찾을 길이 없어서 끌 수 없게 배치 밖에 둔다(고정 칩과 달리 설정 목록에는 나오지 않는다). `hooks` = 훅 점검 필요.
+ * @type {readonly HudKind[]}
+ */
+export const ALERT_HUD_KINDS = ['hooks'];
 
 /**
  * 기본 배치. 「서버 :7777」은 뺐다(사용자 요청, 2026-10-23) — 지금 이 화면을 보고 있다는

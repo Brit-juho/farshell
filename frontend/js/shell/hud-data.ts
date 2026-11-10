@@ -13,13 +13,13 @@ export type HudTone = 'ok' | 'warn' | 'err' | 'plain';
 // 배치(어떤 칩을 어느 쪽에 어떤 순서로)의 규칙은 hud-layout.js에 있다 — 설정 화면(일반 JS)도 같은 함수를
 // 써야 하는데 테스트 하네스가 .ts를 직접 못 읽어서다. 여기서는 타입과 함께 다시 내보내기만 한다.
 import {
-  HUD_KINDS, PINNED_HUD_KINDS, DEFAULT_HUD_LAYOUT, parseHudLayout, serializeHudLayout, sameHudLayout, hudZoneOf,
+  HUD_KINDS, PINNED_HUD_KINDS, ALERT_HUD_KINDS, DEFAULT_HUD_LAYOUT, parseHudLayout, serializeHudLayout, sameHudLayout, hudZoneOf,
   moveHudKind, stepHudKind,
 } from './hud-layout.js';
 import type { HudKind, HudLayout } from './hud-layout.js';
 
 export {
-  HUD_KINDS, PINNED_HUD_KINDS, DEFAULT_HUD_LAYOUT, parseHudLayout, serializeHudLayout, sameHudLayout, hudZoneOf,
+  HUD_KINDS, PINNED_HUD_KINDS, ALERT_HUD_KINDS, DEFAULT_HUD_LAYOUT, parseHudLayout, serializeHudLayout, sameHudLayout, hudZoneOf,
   moveHudKind, stepHudKind,
 };
 export type { HudKind, HudLayout };
@@ -380,7 +380,7 @@ export function buildHudChips(input: HudInput, layout: HudLayout = DEFAULT_HUD_L
   // 손으로 넘긴 경우) 두 번 그리지 않는다. 같은 종류의 칩이 여럿(사용량 프로필)이면 만든 순서를 유지한다.
   const pinned = new Set<string>(PINNED_HUD_KINDS);
   const placed: HudChip[] = [];
-  for (const kind of PINNED_HUD_KINDS) {
+  for (const kind of [...PINNED_HUD_KINDS, ...ALERT_HUD_KINDS]) {
     for (const c of chips) if (c.kind === kind) placed.push({ ...c, side: 'left' });
   }
   for (const side of ['left', 'right'] as const) {

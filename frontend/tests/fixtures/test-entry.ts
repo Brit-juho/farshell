@@ -5,7 +5,7 @@
 export { mountSmoke } from './smoke.js';
 export { SCHEMA as SETTINGS_SCHEMA } from '../../js/core/settings.js';
 export {
-  buildHudChips, formatResetsIn, formatRate, formatClock, HUD_KINDS, PINNED_HUD_KINDS, DEFAULT_HUD_LAYOUT, parseHudLayout, serializeHudLayout,
+  buildHudChips, formatResetsIn, formatRate, formatClock, HUD_KINDS, PINNED_HUD_KINDS, ALERT_HUD_KINDS, DEFAULT_HUD_LAYOUT, parseHudLayout, serializeHudLayout,
   sameHudLayout, hudZoneOf, moveHudKind, stepHudKind,
 } from '../../js/shell/hud-data.js';
 export {

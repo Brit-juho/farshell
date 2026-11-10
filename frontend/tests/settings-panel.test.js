@@ -340,6 +340,33 @@ test('정보 — Claude Code와 Codex 훅을 도구별로 모두 보여준다', 
   assert.match(block.querySelector('.vt-set-help').textContent, /fsh hooks install/);
 });
 
+test('정보 — 서버 점검 결과(health)의 이유와 마지막 확인 시각을 보여준다', async () => {
+  const hooks = {
+    ok: false,
+    events: { PreToolUse: 'ok', Stop: 'add' },
+    tools: {
+      claude: { ok: false, events: { PreToolUse: 'ok', Stop: 'add' } },
+      codex: { ok: false, events: { PreToolUse: 'update' } },
+    },
+    health: {
+      claude: { state: 'missing', missing: ['Stop'], mismatch: [], transient: false },
+      codex: { state: 'mismatch', missing: [], mismatch: ['PreToolUse'], transient: true },
+    },
+    checkedAt: 1760000000,
+    monitor: true,
+  };
+  const { document, P } = await build({ hooks });
+  P.showSettings();
+  sectionButton(document, '정보 및 진단').click();
+  await flush();
+  const block = document.querySelectorAll('.vt-set-about')[0];
+  const why = Array.from(block.querySelectorAll('.vt-set-hookwhy')).map((r) => r.textContent);
+  assert.match(why[0], /빠진 훅: Stop/);
+  assert.match(why[1], /다른 경로로 등록된 훅: PreToolUse.*runtime-\*/);
+  assert.match(block.querySelector('.vt-set-hookchecked').textContent, /서버가 .* 마지막으로 확인했습니다/);
+  assert.match(block.textContent, /fsh hooks install/);
+});
+
 // U1 회귀 — clauth가 schema 2로 올라가자 사용량이 통째로, 아무 말 없이 꺼졌다.
 // 게이팅상 탭도 칩도 사라지므로 「정보」가 유일하게 이유를 볼 수 있는 곳이다.
 function capsFetch(usage) {
