@@ -1,7 +1,7 @@
 import { vtFetch, STT_PRELOAD_TIMEOUT_MS } from '../../../core/api.js';
 import { get as setting, set as setSetting } from '../../../core/settings.js';
 import { confirmDialog } from '../../../core/dialog.js';
-import { row, statusLine, toast, group, fmtBytes } from '../controls.js';
+import { row, statusLine, statLine, toast, group, fmtBytes } from '../controls.js';
 import { t } from '../../../core/i18n.js';
 
 // ── 「음성 입력」 구역 — 모델 카드 · 준비 체크리스트 · 받아 둔 항목 관리 ──
@@ -31,7 +31,7 @@ function el(tag, cls, text) {
   if (text != null) e.textContent = text;
   return e;
 }
-function btn(label, cls = 'vt-btn sm quiet vt-set-reset') {
+function btn(label, cls = 'vt-btn sm') {
   const b = el('button', cls, label);
   b.type = 'button';
   return b;
@@ -66,14 +66,16 @@ export function renderVoiceInput() {
   unloadBtn.setAttribute('aria-label', t('음성 인식 모델을 메모리에서 내리기'));
   const btns = el('div', 'vt-set-btns');
   btns.append(preloadBtn, unloadBtn);
-  const sttRow = row(t('음성 인식 상태'), btns,
+  const sttRow = row(t('모델 상태'), btns,
     t('말을 글자로 바꾸는 기능입니다. 모델을 미리 올려 두면 첫 입력이 빨라지고, 내리면 메모리를 돌려받습니다.'));
-  const sttStatus = statusLine(t('확인 중…'));
+  // 상태는 한 줄(정상 = 조용한 회색 체크, 문제만 호박색). 아래 sttStatus 는 그 줄의 글자 칸이다.
+  const sttLine = statLine(t('확인 중…'));
+  const sttStatus = { set textContent(v) { sttLine.vtSetText(v); } };
   const sttError = statusLine('');
   sttError.classList.add('vt-vm-error');
   sttError.hidden = true;
-  sttRow.querySelector('.vt-set-label').append(sttStatus, sttError);
-  frag.appendChild(sttRow);
+  frag.append(sttRow, sttLine, sttError);
+  frag.appendChild(Object.assign(el('div', 'vt-set-subhead', t('음성 인식 모델'))));
 
   const labelOf = (id) => {
     const all = cat ? [...(cat.models || []), ...(cat.unsupported || [])] : [];
@@ -82,6 +84,7 @@ export function renderVoiceInput() {
   };
   function paintStatus(st) {
     if (!alive || !st) return;
+    sttLine.dataset.state = !st.available || st.last_error ? 'warn' : (st.loaded ? 'ok' : '');
     if (!st.available) sttStatus.textContent = t('이 서버에서는 음성 입력을 쓸 수 없습니다');
     else if (st.loaded) {
       const model = labelOf(st.loaded_model || st.model);
@@ -450,7 +453,7 @@ export function renderVoiceInput() {
   });
   repoIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') customGo.click(); });
 
-  // ── 받아 둔 항목 관리 ──────────────────────────────────────
+  // ── 내려받은 파일 ─────────────────────────────────────────
   const manageEl = el('div', 'vt-vm-manage');
   async function refreshManage() {
     if (!alive) return;
@@ -461,13 +464,11 @@ export function renderVoiceInput() {
       const models = (r && r.models) || [];
       const bins = (r && r.binaries) || [];
       manageEl.textContent = '';
-      if (!models.length && !bins.length) { manageEl.textContent = t('내려받은 파일이 없습니다.'); return; }
+      if (!models.length && !bins.length) { manageEl.appendChild(statLine(t('내려받은 파일이 없습니다.'))); return; }
       const add = (name, size, selected, payload, warnSel) => {
-        const it = el('div', 'vt-set-model-item');
-        const lab = el('span', 'vt-set-model-name', `${name} · ${fmtBytes(size || 0)}`);
-        it.appendChild(lab);
-        if (selected) it.appendChild(el('span', 'vt-tag vt-vm-tag-cur', t('선택 중')));
-        const del = btn(t('삭제'), 'vt-btn sm quiet vt-set-reset danger');
+        const ctl = el('div', 'vt-set-btns');
+        if (selected) ctl.appendChild(el('span', 'vt-tag vt-vm-tag-cur', t('선택 중')));
+        const del = btn(t('삭제'), 'vt-btn sm danger');
         del.setAttribute('aria-label', t('{name} 삭제', { name }));
         del.addEventListener('click', async () => {
           const warn = selected
@@ -484,18 +485,19 @@ export function renderVoiceInput() {
           } catch (e) { toast(e.message || t('삭제하지 못했습니다'), 'error'); }
           if (alive) { refreshStatus(); reload(); refreshManage(); }
         });
-        it.appendChild(del);
-        manageEl.appendChild(it);
+        ctl.appendChild(del);
+        const r = row(name, ctl, selected ? t('지우면 다시 받기 전까지 음성 입력을 쓸 수 없습니다.') : warnSel);
+        r.querySelector('.vt-set-label').append(el('span', 'vt-set-mono', fmtBytes(size || 0)));
+        manageEl.appendChild(r);
       };
       for (const m of models) add(m.label || m.model_id, m.size_bytes, m.selected, { model_id: m.model_id }, t('나중에 쓰려면 다시 받아야 합니다.'));
       for (const b of bins) add(b.label || b.id, b.size_bytes, false, { binary: b.id }, t('이 엔진을 쓰려면 다시 받아야 합니다.'));
-    } catch (e) { manageEl.textContent = t('상태를 확인할 수 없습니다.'); }
+    } catch (e) { manageEl.textContent = ''; manageEl.appendChild(statLine(t('상태를 확인할 수 없습니다.'), 'warn')); }
   }
 
-  const manageGroup = group(t('내려받은 파일 관리'), row(t('내려받은 파일'), manageEl,
-    t('모델과 엔진 파일을 삭제해 저장 공간을 돌려받습니다. 자동으로 받지 않으며, 삭제한 것은 다시 받아야 합니다.')));
+  const manageGroup = group(t('내려받은 파일'), manageEl);
   // 호출부가 구역 순서를 정할 수 있게 둘로 나눠 돌려준다.
-  const input = group(t('음성 입력'), frag);
+  const input = group(t('음성 입력(받아쓰기)'), frag);
   reload();
   refreshStatus();
   refreshManage();

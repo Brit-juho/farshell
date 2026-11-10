@@ -217,7 +217,7 @@ auto-feed and TTS just stop; a gstack setup once wrote a vanishing `runtime-*` p
 - **Alerts.** Only when the per-CLI state or the list of affected events **changes**: a content-free `hooks_health` event on
   `/ws-workspace` (CLI name, state and event names — no paths or settings values). The status bar shows a pinned
   Hook check needed (훅 점검 필요) chip (next to the agent chip, `frontend/js/shell/hud-data.ts` `hooksChip`) that disappears when the hooks are
-  healthy again; clicking it opens Settings → About, which says why and points at `fsh hooks install`. Web Push is **off by
+  healthy again; clicking it opens Settings → About (정보 및 진단), which says why and points at `fsh hooks install`. That screen shows a one-line summary with the last check time, a two-column table per CLI (fine rows are quiet grey checks, only problem rows are amber-tinted; on a phone only the problem rows are expanded and the fine ones fold behind a button), and — when something is wrong — the `fsh hooks install` command in a code box with a copy button. Web Push is **off by
   default** (`VT_HOOK_HEALTH_PUSH=1` sends one push on an ok → problem transition). The first result after start is a baseline
   and alerts nobody.
 - **`GET /api/hooks/status`** is served from the checker's cache while the settings files are unchanged; its old shape is kept

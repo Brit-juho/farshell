@@ -999,11 +999,17 @@ drag-select always work even under vim/tmux mouse mode.
   `.vt-set-covtable-host` (`overflow-x:auto`), as `agents.js`'s coverage table
   and `security.js`'s device table (Device (기기)/id/Registered (등록)/Last used (마지막 사용)) do; otherwise the
   columns run off the right edge on a phone.
-- **ON/OFF toggles do not stretch.** The compact media query's
-  `.vt-set-row { flex-direction:column; align-items:stretch }` (label above
-  control) stretches every row child to full width, which suits a `<select>`
-  or a button but turns a two-cell segmented switch into a giant bar with no
-  visual target. `.vt-toggle` sets `align-self:flex-start`.
+- **Switches and segments come from one builder.** `panels/settings/controls.js`
+  (`switchButton`, `segmentedControl`, `choiceControl`) is the only place that makes them; sections never draw their own.
+  On/off is a `.vt-switch` (`<button role="switch" aria-checked>`, track 28×16, 40×24 on touch with a 52×44 hit area);
+  a choice of three or fewer short options (each ≤10 characters, ≤24 in total) is a `.vt-segmented`
+  (`role="radiogroup"` of `role="radio"` buttons, roving tabindex, arrow keys select; 28 high, 44 on touch); anything longer
+  stays a `<select>`. Hover/pressed use `--color-state-hover/press`, the focus ring is the shared `:focus-visible` rule, and
+  `scripts/check_contrast.py` checks the on-track (`--color-acc-surface` ≥3:1 on every surface), the off knob and the
+  selected/unselected segment for all 9 skins. `frontend/tests/settings-controls-contract.test.js` fails when a section draws
+  an old ON | OFF pill (`.vt-toggle`), a native checkbox, or a short select. To go back, change the class the builders emit.
+  Switches do not stretch: the compact `.vt-set-row { flex-direction:column; align-items:stretch }` would turn one into a bar,
+  so rows containing one use the wrapping row layout instead.
 - **Range slider thumbs are 20px under the compact media query** (both
   `::-webkit-slider-thumb` and `::-moz-range-thumb`). The desktop affordance
   is `:hover { transform:scale(1.15) }`, which never fires on touch, so the

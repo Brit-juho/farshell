@@ -46,7 +46,8 @@ function renderTerminalSection() {
 
 function renderAgentSection() {
   const frag = document.createDocumentFragment();
-  frag.appendChild(group(t('감지 상태'), renderAgentsSection()));
+  const { body, aside } = renderAgentsSection();
+  frag.appendChild(group(t('감지 방법과 정확도'), body, aside));
   return frag;
 }
 
