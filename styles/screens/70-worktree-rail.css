@@ -212,9 +212,10 @@
 @keyframes vt-ring-spin { to { transform:rotate(360deg); } }
 @keyframes vt-ring-breathe { 50% { opacity:.55; } }
 @media (prefers-reduced-motion: reduce) { .vt-wgrail-ring .vt-ring { animation:none !important; } }
-/* 에이전트 마크 — 가운데, 상태색(시안 3-B). 셸·에이전트 모르는 행은 셸 프롬프트 선 마크. */
+/* 에이전트 마크 — 가운데, 상태색(시안 3-B). 셸·에이전트 모르는 행은 셸 프롬프트 선 마크.
+   margin:0 — components.css의 `.vt-wgrail-agent { margin-right:6px }`(펼침 행용)가 접힘에서도 걸려 마크가 링보다 3px 왼쪽으로 밀렸다. */
 #vt-wgrail.collapsed .vt-srow.vt-wgrail-row .vt-wgrail-agent-compact {
-  position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--st); pointer-events:none;
+  position:absolute; inset:0; margin:0; display:flex; align-items:center; justify-content:center; color:var(--st); pointer-events:none;
 }
 #vt-wgrail.collapsed .vt-srow.vt-wgrail-row .vt-wgrail-agent-compact svg { display:block; width:var(--mark); height:var(--mark); }
 /* 읽지 않음 점 — 마크 오른쪽 아래 모서리에 6px, 칸 바탕색(--rb)으로 2px 오려 낸다. */

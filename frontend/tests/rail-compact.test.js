@@ -109,3 +109,11 @@ test('접힘 CSS — 정렬(P안): 본문 위 여백이 펼침 첫 행 아이콘
   assert.match(r, /padding-top:calc\(28px \+ 6px \+ var\(--vt-line1\) \/ 2 - var\(--vt-cell\) \/ 2\)/, '보통: 28 + 6 + 10 − 20 = 24');
   assert.match(r, /\.vt-wgrail-group-sep \{ flex:none; width:24px; height:28px;/, '28 + 칸 간격 2·2 = 32');
 });
+
+test('접힘 CSS — 에이전트 마크 래퍼는 margin:0 이다(펼침 행용 margin-right 6px가 마크를 링 중심에서 3px 밀어낸다)', () => {
+  const r = css('70-worktree-rail.css');
+  const m = r.match(/#vt-wgrail\.collapsed \.vt-srow\.vt-wgrail-row \.vt-wgrail-agent-compact \{([^}]*)\}/);
+  assert.ok(m, '접힘 마크 규칙이 있다');
+  assert.match(m[1], /inset:0/);
+  assert.match(m[1], /margin:0/, 'components.css 의 .vt-wgrail-agent { margin-right } 를 접힘에서 지운다');
+});
