@@ -89,7 +89,12 @@ Running sessions are not changed and nothing switches automatically. A profile w
 signed in or whose token has expired is refused with a reason; the session is never created on the default
 `~/.claude` instead. The list shows the account name, auth state, usage and reset (when a value was already read,
 otherwise "unknown") and when it was updated, and can be sorted by "most headroom first". The small name tag on a
-rail row or session card is the account chosen **at creation** (the shell can change its own environment). It works
+rail row or session card is the account chosen **at creation** (the shell can change its own environment). Sessions an
+agent creates for a task (delegation) **inherit the parent session's account**: a parent created with account B gets a
+child on B (same rail tag), and a parent without an account behaves as before. Only the profile for the tool the child
+runs (Claude or Codex) is inherited. An agent cannot choose an account (a `profile` field is rejected), and when the
+parent's account cannot be used right now (folder missing, archived, not signed in, expired token) the delegation is
+refused instead of falling back to the default account. A child created on another Mac does not inherit. It works
 only when you are connected directly to this Mac; register only your own accounts. Profiles set up with an API
 endpoint are not supported by this route; use "run with this account".
 

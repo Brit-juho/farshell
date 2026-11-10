@@ -192,6 +192,55 @@ def present_overrides(names):
     return sorted(found)
 
 
+# --- inheriting a parent's account (hotswap H3: delegated child sessions) ---------------
+
+def _parent_ids(key):
+    """Profile ids the SERVER recorded for the session with this identity key (`#{session_id}:#{session_created}`).
+
+    The tmux option `@fsh_profile` is not used as the source: the agent running inside the session can
+    `tmux set-option` it, and delegation must never let an agent choose an account. Two records count — a
+    session created with an injected account (`injected_sessions`) and a managed `profile-<hex>` launch
+    (`sessions`). Returns (ids, mismatch)."""
+    ids, mismatch = [], False
+    with profiles.database() as db:
+        if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='injected_sessions'").fetchone():
+            ids += [r["profile_id"] for r in db.execute(
+                "SELECT profile_id FROM injected_sessions WHERE created=? ORDER BY profile_id", (key,))]
+        for row in db.execute("SELECT profile_id, state FROM sessions WHERE created=?", (key,)):
+            ids.append(row["profile_id"])
+            mismatch = mismatch or row["state"] == "mismatch"
+    return list(dict.fromkeys(ids)), mismatch
+
+
+def inherit(parent_key, parent_pane, agent):
+    """The account a delegated child must run under: the parent session's, never one the caller names.
+
+    Returns a Selection restricted to the child agent's tool (a Claude child needs only the parent's Claude
+    profile; an unrelated Codex profile that is unusable must not block it), or None when the parent has no
+    recorded account (nothing is injected — the behaviour before profiles existed). A parent profile that
+    cannot be used right now raises SlotRefused; it is NEVER replaced by the default account."""
+    if not _ready():
+        return None
+    ids, mismatch = _parent_ids(parent_key)
+    if not ids:
+        # A marker without a server record cannot be trusted (an agent can write the option itself).
+        tag = (tmux_runner.run_text(["display-message", "-p", "-t", parent_pane, "#{@fsh_profile}"]) or "").strip()
+        if tag:
+            raise SlotRefused("parent_profile_unverified",
+                              tr("부모 세션의 계정 기록을 확인하지 못했습니다. 새 세션에서 다시 시작하세요"))
+        return None
+    if mismatch:
+        raise SlotRefused("parent_profile_mismatch", tr("부모 세션이 기록된 계정으로 돌고 있지 않습니다"))
+    selection = Selection()
+    for pid in ids:
+        profile = _lookup(pid)
+        if profile["tool"] != agent:
+            continue
+        selection.kinds[pid] = check_slot(profile)
+        selection.profiles.append(profile)
+    return selection if selection.profiles else None
+
+
 # --- creating the tmux session ----------------------------------------------------------
 
 _version = None
