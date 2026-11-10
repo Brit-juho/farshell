@@ -137,6 +137,16 @@ def test_incomplete_snapshot_is_not_complete(fx):
     assert pins.verified_snapshot(REPO, root) is None
 
 
+
+def _fake_hub(monkeypatch, fn):
+    """`huggingface_hub`는 음성 설치 전용 의존성이라 CI(코어 잠금만 설치)에는 없다 — 가짜 모듈을 주입한다."""
+    import sys
+    import types
+    mod = types.ModuleType("huggingface_hub")
+    mod.snapshot_download = fn
+    monkeypatch.setitem(sys.modules, "huggingface_hub", mod)
+
+
 def test_download_uses_pinned_revision_and_verifies(fx, monkeypatch):
     pin, root = fx
     seen = {}
@@ -144,8 +154,7 @@ def test_download_uses_pinned_revision_and_verifies(fx, monkeypatch):
     def fake_dl(repo, **kw):
         seen.update(kw, repo=repo)
         _snap(root, kw["revision"], GOOD)
-    import huggingface_hub
-    monkeypatch.setattr(huggingface_hub, "snapshot_download", fake_dl)
+    _fake_hub(monkeypatch, fake_dl)
     snap = pins.download_pinned(REPO, root)
     assert seen["revision"] == pin.revision and seen["repo"] == REPO
     assert sorted(seen["allow_patterns"]) == sorted(GOOD)
@@ -157,8 +166,7 @@ def test_download_with_bad_content_raises_and_removes(fx, monkeypatch):
 
     def fake_dl(repo, **kw):
         _snap(root, kw["revision"], {"a.bin": b"E" * len(GOOD["a.bin"]), "c.json": GOOD["c.json"]})
-    import huggingface_hub
-    monkeypatch.setattr(huggingface_hub, "snapshot_download", fake_dl)
+    _fake_hub(monkeypatch, fake_dl)
     with pytest.raises(PinError):
         pins.download_pinned(REPO, root)
     assert pins.complete_snapshot(REPO, root) is None
@@ -167,9 +175,7 @@ def test_download_with_bad_content_raises_and_removes(fx, monkeypatch):
 def test_download_skips_network_when_cache_verified(fx, monkeypatch):
     pin, root = fx
     _snap(root, "o" * 40, GOOD)
-    import huggingface_hub
-    monkeypatch.setattr(huggingface_hub, "snapshot_download",
-                        lambda *a, **k: pytest.fail("네트워크를 쓰면 안 된다"))
+    _fake_hub(monkeypatch, lambda *a, **k: pytest.fail("네트워크를 쓰면 안 된다"))
     assert pins.download_pinned(REPO, root).name == "o" * 40
 
 
@@ -180,6 +186,5 @@ def test_download_removes_truncated_file_before_fetch(fx, monkeypatch):
     def fake_dl(repo, **kw):
         assert not os.path.lexists(snap / "a.bin")         # 잘린 파일은 먼저 치워져 HF가 다시 받는다
         _snap(root, kw["revision"], GOOD)
-    import huggingface_hub
-    monkeypatch.setattr(huggingface_hub, "snapshot_download", fake_dl)
+    _fake_hub(monkeypatch, fake_dl)
     assert pins.download_pinned(REPO, root).name == pin.revision
