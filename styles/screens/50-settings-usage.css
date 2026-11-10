@@ -173,6 +173,8 @@
   text-align:left; border-bottom:1px solid var(--line); white-space:nowrap;
 }
 .vt-set-covtable th { }
+/* 숫자 열(패턴 줄 수)은 오른쪽 정렬 + 같은 폭 숫자 — 자릿수가 달라도 일의 자리가 세로로 맞는다(점검 7-2). */
+.vt-set-covtable th:nth-child(3), .vt-set-covtable td:nth-child(3) { text-align:right; font-variant-numeric:tabular-nums; }
 .vt-set-covtable td { color:var(--txt); }
 .vt-set-covcli { font:500 var(--fs-sm) var(--mono); }
 .vt-set-covtrust { }
