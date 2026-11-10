@@ -140,6 +140,7 @@ export function mount(host) {
     top.appendChild(button(t('clauth 대체 준비 확인'), async () => { data = { kind: 'retirement', value: await api('retirement') }; }));
     host.appendChild(top);
     host.appendChild(el('p', 'vt-set-help', t('같은 계정에 여러 프로필을 만들 수 있습니다. 로그인·설정은 프로필마다 분리하며 공통·프로젝트 설정은 상속될 수 있습니다.')));
+    host.appendChild(el('p', 'vt-set-help', t('본인 계정만 등록하세요. 다른 사람의 계정이나 토큰을 넣지 마세요.')));
     if (status) { const notice = el('p', 'vt-ac-notice', status); notice.setAttribute('role', 'status'); host.appendChild(notice); }
     if (showArchived && !profiles.length) host.appendChild(el('p', 'vt-set-help', t('보관된 프로필이 없습니다')));
     if (!showArchived && !profiles.length) host.appendChild(el('p', 'vt-set-help', t('프로필을 만든 뒤 로그인하고 구성을 가져오세요. 기존 clauth는 그대로 유지됩니다.')));

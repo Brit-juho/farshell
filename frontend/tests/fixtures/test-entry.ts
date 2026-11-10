@@ -12,7 +12,7 @@ export {
   formatRelativeTime, statusSentence, stateKeyword, defaultRailCollapsed,
   buildRailLists, compactRailOrder, readRailPrefs, RAIL_PREF_DEFAULTS, ATTENTION_SHOW_KEY, ATTENTION_COLLAPSED_KEY, originShowKey,
   HIDEABLE_ORIGINS, normalizeOrigin, originShort, originLabel, normalizeKind, normalizeBadge, rowMenuItems, rowSummary, runRowMenu,
-  worktreeIconName, diffLabel, KIND_LABEL, BADGE_LABEL, normalizeShare, shareSentence, groupSessionRows,
+  worktreeIconName, diffLabel, KIND_LABEL, BADGE_LABEL, normalizeShare, shareSentence, normalizeProfile, profileLabel, groupSessionRows,
   normalizeLineage, lineageLabel, buildSessionTree, kidsProgress, moveInOrder, stepInOrder, parseNameList,
   ORDER_KEY, LINEAGE_KEY, encodeOrder, encodeLineagePrefs,
   splitRunning, pickRecentEnded, parseRailView, encodeRailView, toggleGroupCollapsed, ORIGIN_SHORT,

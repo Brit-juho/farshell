@@ -57,6 +57,10 @@ export interface PaletteDeps {
   displayCombo: (combo: string) => string;
   displayComboHtml?: (combo: string) => string;
   showToast: (msg: string, type?: string, opts?: any) => void;
+  /** 계정(핫스왑 H1) — 없으면 계정 줄을 그리지 않는다. */
+  loadAccounts?: () => Promise<{ ok: boolean; profiles: { id: string; name: string; tool: string; selectable: boolean }[] }>;
+  newSessionWithAccount?: (profile: string) => void;
+  openAccountMenu?: (opts: { mode: 'once' | 'default'; anchor?: HTMLElement | null }) => void;
 }
 
 interface Row {
@@ -165,6 +169,7 @@ function PaletteBody(props: PaletteBodyProps) {
   const [queueItems, setQueueItems] = createSignal<any[]>([]);
   const [scrollbackResults, setScrollbackResults] = createSignal<any[]>([]);
   const [scrollbackLoading, setScrollbackLoading] = createSignal(false);
+  const [accountRows, setAccountRows] = createSignal<{ id: string; name: string }[] | null>(null);
   const [selected, setSelected] = createSignal(0);
   // 설정 값이 바뀌면(이 줄에서든 다른 화면에서든) 줄의 값 표시를 다시 읽는다.
   const [settingsRev, setSettingsRev] = createSignal(0);
@@ -177,6 +182,11 @@ function PaletteBody(props: PaletteBodyProps) {
     if (typeof off === 'function') onCleanup(off);
     deps.loadViewer().then((v) => setRecentFiles(v._loadRecent())).catch(() => {});
     refreshTmux();
+  });
+  // 열릴 때마다 계정 목록을 새로 본다(등록·기본 변경이 다른 화면에서 일어날 수 있다). 계정이 없거나 읽지 못하면 줄이 없다.
+  createEffect(() => {
+    if (!props.visible() || !deps.loadAccounts) return;
+    deps.loadAccounts().then((a) => setAccountRows(a.ok ? a.profiles.filter((p) => p.selectable).map((p) => ({ id: p.id, name: p.name })) : null)).catch(() => setAccountRows(null));
   });
 
   let tmuxRevision = 0;
@@ -495,6 +505,18 @@ function PaletteBody(props: PaletteBodyProps) {
         const fileRows = (q ? fileMatches : fileMatches.slice(0, 2)).map(fileRow);
 
         const cmdRows = DEFAULT_COMMANDS.map(commandRow).filter(Boolean) as Row[];
+        // 계정(핫스왑 H1) — 등록된 계정이 있을 때만. 「<이름> 계정으로 새 세션」은 쓸 수 있는 계정만(깨진 계정은 선택기에서 사유와 함께 본다).
+        const accts = accountRows();
+        if (accts && accts.length && deps.newSessionWithAccount && deps.openAccountMenu) {
+          const open = deps.openAccountMenu;
+          const create = deps.newSessionWithAccount;
+          cmdRows.push({ key: 'cmd:account-default', kind: 'command', label: t('기본 계정 바꾸기'),
+            onOpen: () => { props.onRequestClose(); open({ mode: 'default' }); } });
+          for (const a of accts) {
+            cmdRows.push({ key: `cmd:account-new:${a.id}`, kind: 'command', label: t('{name} 계정으로 새 세션', { name: a.name }),
+              onOpen: () => { props.onRequestClose(); create(a.id); } });
+          }
+        }
         // 파일 업로드 — registerAction 대상이 아니라(quickopen.js 시절부터
         // #file-input을 직접 클릭하는 run 트리거였다) DEFAULT_COMMANDS(action
         // 기반, rail-palette-parity 대상)에는 안 넣는다.

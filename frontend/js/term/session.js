@@ -30,6 +30,8 @@ import { setPaneSession, revealSessionPane, openLayoutTab, clearSessionFromLayou
 import { saveLayoutNow } from '../layout/persist.js';
 import { t } from '../core/i18n.js';
 import { icon } from '../ui/icons.js';
+import { accountsSnapshot, loadAccounts, openAccountMenu, profileForCreate, refusalText, menuDefaultLine } from './accounts.js';
+import { isRelayed } from '../core/host-route.js';
 
 // opts.place — 새 세션을 어디에 놓나(addSession 주석). 기본은 새 단독 뷰.
 export async function createSession({ place = 'view' } = {}) {
@@ -39,12 +41,14 @@ export async function createSession({ place = 'view' } = {}) {
   // DOM이면 기기마다 다른 값이 되고, 패널 마크업이 바뀌면 조용히 undefined가 된다.
   const autoMac = setting('session.openOnMac');
   if (autoMac) {
+    const profile = await profileForCreate();
     const res = await apiFetch(`${API_BASE}/api/tmux/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ auto_open_on_mac: true, screen: screenId(),operation_id:operationId() }),
+      body: JSON.stringify({ auto_open_on_mac: true, screen: screenId(),operation_id:operationId(), ...(profile ? { profile } : {}) }),
     });
     const data = await res.json();
+    if (!res.ok && profile) { showToast(refusalText(data), 'error'); return; }
     addSession(data.id, data.name || data.id, { place });
     // ⚠ tmuxName을 안 채우면 openSessionOnMac()의 tmuxName 가드가 항상 실패해
     // "이 세션은 tmux 세션이 아니라 맥에서 열 수 없습니다"를 잘못 띄운다 —
@@ -98,14 +102,14 @@ export function showAddMenu(el, e) {
 
   // 항목은 메뉴 한 규격(.vt-menu-item.two — components.css): 아이콘 14 + 이름 + 보조 설명.
   const ICONS = new Map([[createPlainSession, 'terminal'], [createTmuxSession, 'square-terminal']]);
-  const mkItem = (label, hint, onClick) => {
+  const mkItem = (label, hint, onClick, iconName) => {
     const it = document.createElement('div');
     it.className = 'vt-menu-item two';
     it.setAttribute('role', 'button');
     it.tabIndex = 0;
     const ico = document.createElement('span');
     ico.className = 'vt-menu-item-ico';
-    ico.innerHTML = icon(ICONS.get(onClick) || 'terminal', 14, 2);
+    ico.innerHTML = icon(iconName || ICONS.get(onClick) || 'terminal', 14, 2);
     const body = document.createElement('span');
     body.className = 'vt-menu-item-body';
     const name = document.createElement('span');
@@ -130,20 +134,50 @@ export function showAddMenu(el, e) {
     return it;
   };
   menu.appendChild(mkItem(t('일반 터미널'), t('단발 셸 (tmux 아님)'), createPlainSession));
-  menu.appendChild(mkItem(t('tmux 세션'), t('화면을 닫아도 유지 · 맥/모바일 공유'), createTmuxSession));
+  menu.appendChild(mkItem(t('tmux 세션'), t('화면을 닫아도 유지 · 맥/모바일 공유'), () => createTmuxSession(), 'square-terminal'));
+  // 계정(핫스왑 H1) — 등록된 계정이 하나라도 있을 때만 보인다(없으면 이 메뉴는 예전 그대로). 다른 맥을 보는 중이면 숨긴다.
+  const addAccountRows = (acc) => {
+    if (menu.querySelector('.vt-menu-accounts') || isRelayed() || !acc.ok || !acc.profiles.length) return false;
+    const group = document.createElement('div');
+    group.className = 'vt-menu-accounts';
+    const sep = document.createElement('div');
+    sep.className = 'vt-menu-sep';
+    const label = document.createElement('div');
+    label.className = 'vt-menu-label';
+    label.textContent = `${t('계정')} · ${menuDefaultLine(acc)}`;
+    group.append(sep, label);
+    menu.appendChild(group);
+    const host = group;
+    const once = mkItem(t('이번만 다른 계정'), t('고른 계정으로 tmux 세션 하나를 만듭니다'),
+      () => openAccountMenu({ mode: 'once', anchor: el, onPick: (id) => createTmuxSession({ profile: id }) }), 'user');
+    const change = mkItem(t('기본 계정 바꾸기'), t('앞으로 만드는 새 세션에 적용 · 실행 중인 세션은 그대로'),
+      () => openAccountMenu({ mode: 'default', anchor: el }), 'user');
+    host.append(once, change);
+    return true;
+  };
+  addAccountRows(accountsSnapshot());
   document.body.appendChild(menu);
 
   // 레일 하단 버튼처럼 뷰포트 맨 아래에 붙은 경우, 아래로 펼치면 body의
   // overflow:hidden에 잘려 안 보인다 — 실제 높이를 측정해 필요하면 위로 뒤집는다.
-  const menuHeight = menu.offsetHeight;
-  if (!inHead && r.bottom + 6 + menuHeight > window.innerHeight) {
-    menu.style.top = `${Math.round(r.top - menuHeight - 6)}px`;
-  }
-  // 뷰포트 안으로 당긴다(오른쪽·아래로 넘치지 않게).
-  const rect = menu.getBoundingClientRect();
-  if (rect.right > window.innerWidth - 8) menu.style.left = `${Math.max(8, Math.round(window.innerWidth - 8 - rect.width))}px`;
-  if (rect.bottom > window.innerHeight - 8) menu.style.top = `${Math.max(8, Math.round(window.innerHeight - 8 - rect.height))}px`;
+  const fit = () => {
+    const menuHeight = menu.offsetHeight;
+    if (!inHead && r.bottom + 6 + menuHeight > window.innerHeight) {
+      menu.style.top = `${Math.round(r.top - menuHeight - 6)}px`;
+    }
+    // 뷰포트 안으로 당긴다(오른쪽·아래로 넘치지 않게).
+    const rect = menu.getBoundingClientRect();
+    if (rect.right > window.innerWidth - 8) menu.style.left = `${Math.max(8, Math.round(window.innerWidth - 8 - rect.width))}px`;
+    if (rect.bottom > window.innerHeight - 8) menu.style.top = `${Math.max(8, Math.round(window.innerHeight - 8 - rect.height))}px`;
+  };
+  fit();
   menu.querySelector('.vt-menu-item')?.focus();
+  // 목록을 아직 못 받았거나 낡았으면 백그라운드로 받아, 메뉴가 열려 있는 동안 계정 줄을 붙인다.
+  if (!isRelayed()) {
+    loadAccounts().then((fresh) => {
+      if (document.body.contains(menu) && addAccountRows(fresh)) { menu.style.top = `${Math.round(inHead ? r.top : r.bottom + 6)}px`; fit(); }
+    });
+  }
 
   setTimeout(() => {
     document.addEventListener('click', function _close(ev) {
@@ -198,16 +232,28 @@ export async function attachTmux(tmuxName, { place = 'view', catalogSessionId = 
 }
 
 // export — showAddMenu의 "tmux 세션" 메뉴 항목이 부른다. 만든 세션 id를 돌려준다(사용량 재인증 등).
-export async function createTmuxSession() {
+//
+// 계정(핫스왑 H1): `{ profile }`(프로필 id 또는 'none')를 주면 그 계정으로, 안 주면 기본 계정이 정해져 있을 때만
+// `'default'`를 싣는다(없으면 요청이 예전과 같다). 고른 계정을 못 쓰면 서버가 거절하고, 기본 환경으로 대체하지 않는다.
+export async function createTmuxSession(opts) {
   // "맥에서도 열기"가 켜져 있으면 서버가 메인 터미널(VT_TERMINAL) 창도 함께 연다.
   // E2: DOM이 아니라 설정 스토어가 이 값의 주인이다.
   const autoMac = setting('session.openOnMac');
+  const profile = await profileForCreate(opts && typeof opts === 'object' ? opts.profile : undefined);
   const res = await apiFetch(`${API_BASE}/api/tmux/create`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ auto_open_on_mac: !!autoMac, screen: screenId(), operation_id: operationId() }),
+    body: JSON.stringify({ auto_open_on_mac: !!autoMac, screen: screenId(), operation_id: operationId(), ...(profile ? { profile } : {}) }),
   });
-  if (!res.ok) { showToast(t('tmux 세션 생성 실패 ({status})', { status: res.status })); return; }
+  if (!res.ok) {
+    if (profile) {
+      let data = null;
+      try { data = await res.json(); } catch (_) { /* 본문 없음 */ }
+      if (data && data.error && data.reason) { showToast(refusalText(data), 'error'); return; }
+    }
+    showToast(t('tmux 세션 생성 실패 ({status})', { status: res.status }));
+    return;
+  }
   const data = await res.json();
   if (!data.id) { showToast(t('tmux 세션 생성 실패')); return; }
   addSession(data.id, data.name || data.id, { tmuxName: data.tmux_session });

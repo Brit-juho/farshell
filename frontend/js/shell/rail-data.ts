@@ -64,6 +64,8 @@ export interface SessionRow {
   originHost?: string;
   /** 에이전트 공유 표시. 공유 안 된 세션·구버전 서버는 없다/null. */
   share?: ShareInfo | null;
+  /** FarShell이 새 세션을 만들 때 넣은 계정(서버 `profile` — 생성 시 기록, 셸에서 바꾼 환경은 반영 안 됨). 안 넣었거나 구버전 서버면 없다/null. */
+  profile?: SessionProfile | null;
   /** 이 세션이 속한 묶음 뷰의 이름(묶음이 아니면 null). */
   viewLabel: string | null;
   viewId?: string | null;
@@ -268,6 +270,19 @@ export function normalizeShare(v: unknown): ShareInfo | null {
   if (!o || typeof o !== 'object' || typeof o.nick !== 'string' || !SHARE_NICK_RE.test(o.nick)) return null;
   return { nick: o.nick, mode: o.mode === 'readwrite' ? 'readwrite' : 'read' };
 }
+
+/** 생성 때 고른 계정. `name`이 null이면 레지스트리에서 이름을 못 읽은 것(이름을 지어내지 않는다). */
+export interface SessionProfile { id: string; name: string | null; tool: string | null; }
+
+/** 서버 값 → 계정 표시. 모양이 맞지 않으면 표시하지 않는다(추측 표시 금지). */
+export function normalizeProfile(v: unknown): SessionProfile | null {
+  const o = v as { id?: unknown; name?: unknown; tool?: unknown } | null;
+  if (!o || typeof o !== 'object' || typeof o.id !== 'string' || !o.id) return null;
+  return { id: o.id, name: typeof o.name === 'string' && o.name ? o.name : null, tool: typeof o.tool === 'string' ? o.tool : null };
+}
+
+/** 배지·툴팁 글. 이름을 모르면 「알 수 없는 계정」. */
+export function profileLabel(p: SessionProfile): string { return p.name ?? t('알 수 없는 계정'); }
 
 /** 「공유 · 닉네임 · 읽기 전용」 — 요약줄·접힌 레일 툴팁이 쓴다. */
 export function shareSentence(share: ShareInfo | null | undefined): string {

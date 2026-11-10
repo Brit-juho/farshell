@@ -735,6 +735,8 @@
   .vt-menu-item:active:not(:disabled), .vt-mb-item:active:not(:disabled), .vt-ft-mi:active, .vt-pt-menu-item:active { background: var(--color-state-press); }
   .vt-menu-item:focus-visible, .vt-mb-item:focus-visible, .vt-ft-mi:focus-visible { background: var(--color-state-hover); }
   .vt-menu-item:disabled { opacity: .45; cursor: not-allowed; background: transparent; }
+  /* 계정 선택기처럼 쓸 수 없는 이유를 보여 주는 줄 — 숨기지 않고 흐리게 둔다. */
+  .vt-menu-item[aria-disabled="true"] { opacity: .45; cursor: not-allowed; background: transparent; }
   /* "지금 이것" — 설정의 현재 섹션처럼 목록에서 선택된 항목. 액센트 글자가
    * 아니라 배경 한 단계로 말한다(액센트는 화면당 하나라는 규칙). */
   .vt-menu-item.active { background: var(--color-state-selected); color: var(--color-txt); }
@@ -1589,6 +1591,17 @@
   }
   .vt-srow-share > svg,
   .vt-srow-share > span:first-child { display: inline-flex; flex: none; }
+  /* 생성 때 고른 계정 이름(레일·Fleet 행). 공유 표시와 같은 무채색 한 줄 — 상태색을 쓰지 않는다. */
+  .vt-srow-profile {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 1);
+    min-width: 0;
+    max-width: 100%;
+    color: var(--color-sub);
+  }
+  .vt-srow-profile > span:first-child { display: inline-flex; flex: none; }
+  .vt-srow-profile-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .vt-srow-share-nick {
     min-width: 0;
     overflow: hidden;
