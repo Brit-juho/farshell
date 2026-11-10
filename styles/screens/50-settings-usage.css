@@ -994,11 +994,15 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
   .vt-settings .vt-set-covcli { font-size:var(--fs-sm); }
   .vt-set-covsub { display:block; margin-top:2px; font:400 var(--fs-xs) / 16px var(--font-ui); color:var(--color-muted); white-space:normal; }
   .vt-set-hkgrid { grid-template-columns:1fr; }
-  .vt-set-hookrow { height:auto; min-height:44px; }
+  /* 문제 행의 호박색 배경(데스크톱은 margin:0 -6px; padding:0 6px 로 글자를 열에 맞추고 배경만 6px 내민다)이 폰에서는
+     설정 본문 거터 16을 넘어 화면 좌우로 6px씩 번졌다(2026-11-10 실기기 03-about). 폰은 행 전체를 거터 안(0)에 두고 안쪽 패딩 8로
+     글자를 들인다 — 정상 행과 문제 행의 글자 열이 같아진다. */
+  .vt-set-hookrow { height:auto; min-height:44px; margin-inline:0; padding-inline:8px; }
+  .vt-set-hookrow[data-state="add"], .vt-set-hookrow[data-state="update"], .vt-set-hookrow[data-state="warn"] { margin-inline:0; padding-inline:8px; }
   .vt-set-hkgrid[data-all-ok="1"] { display:none; }
   .vt-set-hkgrid[data-collapsible="1"]:not([data-open="1"]) > .vt-set-hookrow[data-state="ok"] { display:none; }
   .vt-set-hkmore {
-    display:flex; align-items:center; width:100%; min-height:44px; padding:0; border:0; background:transparent; text-align:left;
+    display:flex; align-items:center; width:100%; min-height:44px; padding:0 8px; box-sizing:border-box; border:0; background:transparent; text-align:left;
     color:var(--color-sub); font:400 var(--fs-xs) / 16px var(--font-ui);
   }
   .vt-set-hkmore:hover { color:var(--color-txt); }
