@@ -26,7 +26,8 @@ import host_store
 from authz import host_gate
 from i18n import tr
 import peer_client
-from routes.pty import _ws_auth_token
+from resilience import wsutil
+from routes.pty import WS_HEARTBEAT_INTERVAL, WS_HEARTBEAT_TIMEOUT, _ws_auth_token
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,46 @@ def close_streams(host_id: str) -> int:
         except Exception:  # noqa: BLE001 — 이미 닫혔다
             pass
     return n
+
+
+def upstream_keepalive() -> dict:
+    """상류(B) WS 의 프로토콜 ping/pong 설정 — `websockets.connect` 에 그대로 넘긴다.
+
+    B 의 `/api/peer/ws` 는 앱 수준 ping 을 안 보내고 조용한 터미널은 바이트도 안 흘리므로, 상류가
+    «조용한 것»인지 «죽은 것»인지는 앱 메시지로 알 수 없다. 프로토콜 ping(상대 websocket 스택이 pong 으로
+    답한다 — 옛 B 도 마찬가지)으로 확인한다. 로컬 칸과 같은 기준: 15초마다 묻고 pong 이 15초 안에 안
+    오면 1011 로 닫는다(라이브러리 기본값 20/20 에 기대지 않고 명시). 상류가 닫히면 `_down` 이 끝나
+    브라우저가 평소 재연결 경로를 탄다."""
+    return {"ping_interval": WS_HEARTBEAT_INTERVAL, "ping_timeout": WS_HEARTBEAT_INTERVAL}
+
+
+async def browser_heartbeat(ws, last_seen, interval: float = WS_HEARTBEAT_INTERVAL,
+                            timeout: float = WS_HEARTBEAT_TIMEOUT) -> None:
+    """브라우저 ↔ 이 서버 구간의 생존 감시(로컬 `routes/pty.py` 의 `_heartbeat_loop` 와 같은 기준).
+
+    B 는 앱 ping 을 안 보내므로 이 프록시가 직접 `{"type":"ping"}` 을 보내야 브라우저의 45초 침묵
+    감시(core/ws-watchdog.js)가 조용한 원격 칸을 죽은 연결로 오인해 45초마다 끊지 않는다. 브라우저는 ping 에
+    pong 으로 답하므로, `timeout` 동안 브라우저에서 아무것도 안 왔으면 반쯤 열린 연결로 보고 1001 로
+    닫는다(`last_seen()` 은 마지막 수신 시각, loop.time 기준). 송신이 막혀도 같다(2초 한도).
+    끝나면(닫았거나 송신 실패) 돌아온다 — 호출한 쪽이 프록시 전체를 정리한다."""
+    loop = asyncio.get_running_loop()
+    while True:
+        await asyncio.sleep(interval)
+        if loop.time() - last_seen() > timeout:
+            logger.info("[peer proxy] 브라우저 무응답 %.0fs — 끊음", timeout)
+            try:
+                await asyncio.wait_for(ws.close(code=1001, reason="heartbeat timeout"), 1.0)
+            except Exception:  # noqa: BLE001
+                pass
+            return
+        try:
+            await asyncio.wait_for(ws.send_text('{"type":"ping"}'), wsutil.SEND_TIMEOUT)
+        except Exception:  # noqa: BLE001 — 끊겼거나 막혔다
+            try:
+                await asyncio.wait_for(ws.close(code=1011, reason="send timeout"), 1.0)
+            except Exception:  # noqa: BLE001
+                pass
+            return
 
 
 def _ws_url(base_url: str, path: str) -> str:
@@ -132,7 +173,7 @@ async def ws_remote(ws: WebSocket, host_id: str, tmux_name: str):
         # max_size=None: 터미널 출력은 한 프레임이 커질 수 있고, 여기서 자르면
         # 화면이 깨진 채로 끊긴다. 어차피 상대는 우리가 등록한 호스트다.
         upstream = await asyncio.wait_for(
-            websockets.connect(url, additional_headers=headers, max_size=None),
+            websockets.connect(url, additional_headers=headers, max_size=None, **upstream_keepalive()),
             timeout=CONNECT_TIMEOUT,
         )
     except Exception as e:  # noqa: BLE001 — 연결 실패는 상태이지 서버 오류가 아니다
@@ -148,24 +189,33 @@ async def ws_remote(ws: WebSocket, host_id: str, tmux_name: str):
             else:
                 await ws.send_text(message)
 
+    loop = asyncio.get_running_loop()
+    last_seen = loop.time()
+
     async def _up():
         """브라우저 → B. 내용은 보지 않는다 — 등급 판정은 **B가** 한다
-        (A가 판정하면 A를 믿는 셈이 되고, 그건 등급의 의미가 없다)."""
+        (A가 판정하면 A를 믿는 셈이 되고, 그건 등급의 의미가 없다).
+        생존 감시용 pong 만 여기서 걸러 B 로 넘기지 않는다(B 는 모르는 메시지다)."""
+        nonlocal last_seen
         while True:
             msg = await ws.receive()
+            last_seen = loop.time()
             if msg["type"] == "websocket.disconnect":
                 return
             if msg.get("bytes") is not None:
                 await upstream.send(msg["bytes"])
             elif msg.get("text") is not None:
+                if msg["text"] == '{"type":"pong"}':
+                    continue
                 await upstream.send(msg["text"])
 
     down = asyncio.create_task(_down())
     up = asyncio.create_task(_up())
+    hb = asyncio.create_task(browser_heartbeat(ws, lambda: last_seen))
     reg = (ws, asyncio.get_running_loop())
     _OPEN.setdefault(peer["id"], set()).add(reg)
     try:
-        done, pending = await asyncio.wait({down, up}, return_when=asyncio.FIRST_COMPLETED)
+        done, pending = await asyncio.wait({down, up, hb}, return_when=asyncio.FIRST_COMPLETED)
         for t in pending:
             t.cancel()
     except WebSocketDisconnect:
@@ -174,6 +224,7 @@ async def ws_remote(ws: WebSocket, host_id: str, tmux_name: str):
         _OPEN.get(peer["id"], set()).discard(reg)
         down.cancel()
         up.cancel()
+        hb.cancel()
         try:
             await upstream.close()
         except Exception:

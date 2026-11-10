@@ -36,7 +36,7 @@ from authz import scopes as authz_scopes
 from i18n import tr
 import peer_client
 import relay_policy
-from routes.peer_proxy import CONNECT_TIMEOUT, _ws_url
+from routes.peer_proxy import CONNECT_TIMEOUT, _ws_url, upstream_keepalive
 from routes.peer_relay import _PASS_REQUEST_HEADERS, RELAY_HEADER
 from routes.pty import _ws_auth_token
 
@@ -171,7 +171,7 @@ async def host_relay_ws(ws: WebSocket, host_id: str, rest: str):
     try:
         upstream = await asyncio.wait_for(
             websockets.connect(_ws_url(peer["url"], signed), additional_headers=headers,
-                               max_size=None),
+                               max_size=None, **upstream_keepalive()),
             timeout=CONNECT_TIMEOUT,
         )
     except Exception as e:  # noqa: BLE001 — 연결 실패는 상태이지 서버 오류가 아니다
