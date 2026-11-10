@@ -155,7 +155,6 @@ test('compact — 작업 중 서브에이전트 개수 배지(S1): N · 0이면 
   const b = two.root.querySelector('.vt-wgrail-subbadge');
   assert.strictEqual(b.textContent, '2');
   assert.strictEqual(b.getAttribute('aria-label'), '내부 에이전트 2 작업 중');
-  assert.match(two.root.querySelector('.vt-wgrail-row').dataset.tipSub, /내부 에이전트 2 작업 중/);
   assert.strictEqual(two.root.querySelector('button.vt-wgrail-subbadge'), null, '클릭 동작 없음(툴팁만)');
   const none = await mount({ status: 'working', agent: 'claude', subagents: items('idle', 'done') }, { compact: true });
   assert.strictEqual(none.root.querySelector('.vt-wgrail-subbadge'), null);
@@ -165,17 +164,21 @@ test('compact — 작업 중 서브에이전트 개수 배지(S1): N · 0이면 
   assert.strictEqual(wide.root.querySelector('.vt-wgrail-subbadge'), null);
 });
 
-test('compact 툴팁 — 이름, 둘째 줄은 브랜치 · 상태 · 다른 화면 · 공유', async () => {
+test('compact — 공용 data-tip 툴팁을 달지 않는다(호버 카드가 대신한다): 이름은 aria-label, 카드 열쇠는 data-card-key', async () => {
   const { root } = await mount({
     status: 'waiting', kind: 'approval', branch: 'dev', otherScreens: 2,
     share: { mode: 'readwrite', nick: 'mina' },
   }, { compact: true });
   const el = root.querySelector('.vt-wgrail-row');
-  assert.strictEqual(el.dataset.tip, 'api');
-  const sub = el.dataset.tipSub;
-  assert.match(sub, /^dev · 승인 요청/);
-  assert.match(sub, /다른 화면 2/);
-  assert.match(sub, /mina/);
+  for (const a of ['data-tip', 'data-tip-sub', 'data-tip-side']) assert.strictEqual(el.getAttribute(a), null, a + ' 없음(이중 툴팁 방지)');
+  assert.strictEqual(root.querySelector('[data-tip]'), null, '접힌 칸 안 어디에도 data-tip이 없다');
+  assert.strictEqual(el.getAttribute('aria-label'), 'api', '칸의 이름');
+  assert.strictEqual(el.getAttribute('data-card-key'), 'api', '카드 열쇠 = tmux 이름');
+  assert.strictEqual(el.getAttribute('role'), 'button');
+  assert.strictEqual(el.getAttribute('tabindex'), '0');
+  const wide = await mount({ status: 'idle' });
+  assert.strictEqual(wide.root.querySelector('.vt-wgrail-row').getAttribute('data-card-key'), null, '펼침에는 카드 열쇠가 없다');
+  assert.strictEqual(wide.root.querySelector('.vt-wgrail-row').getAttribute('aria-label'), null);
 });
 
 test('개입 필요 행 — 답 버튼(선택지 + 터미널로), 누르면 onAnswer(key)이고 행은 안 열린다', async () => {

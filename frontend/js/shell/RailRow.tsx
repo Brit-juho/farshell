@@ -23,7 +23,7 @@ import { agentMark } from './agent-mark.js';
 import { t } from '../core/i18n.js';
 import { NativeChip } from './NativeChildren.js';
 import {
-  stateKeyword, formatRelativeTime, statusSentence, diffLabel, lineageLabel,
+  stateKeyword, formatRelativeTime, diffLabel, lineageLabel,
   ORIGIN_ICON, originLabel, originShort, SHARE_MODE_LABEL, shareSentence, type SessionRow, type Origin, type ShareInfo, type RowSummaryDetails,
 } from './rail-data.js';
 
@@ -271,7 +271,7 @@ export function Row(props: {
   const diff = () => diffLabel(props.row);
   const answers = () => !props.compact && !!props.onAnswer && props.row.status === 'waiting' && props.row.open && !!props.row.sessionId;
 
-  // 접힘 칸 오른쪽 위 개수 배지(S1) — 작업 중인 내부 서브에이전트 수. 누를 곳이 아니라 툴팁만 둔다(칸을 누르면 세션이 열린다).
+  // 접힘 칸 오른쪽 위 개수 배지(S1) — 작업 중인 내부 서브에이전트 수. 누를 곳이 아니라 이름만 둔다(칸을 누르면 세션이 열린다).
   const sub = () => normalizeSubagents(props.row.subagents);
   const subWorking = () => sub().items.filter((r: any) => r.state === 'working').length;
   const subTip = () => sub().limited ? t('내부 에이전트 · 표시 한도 도달') : subWorking() > 0 ? t('내부 에이전트 {n} 작업 중', { n: subWorking() }) : '';
@@ -279,12 +279,9 @@ export function Row(props: {
   // 접힘 칸의 상태 이름(스크린리더) — 링은 모양뿐이라 이름이 없으면 읽히지 않는다. 펼침의 stateIcon과 같은 문장.
   const ringLabel = () => STATE_LABEL[normalizeState(props.row.status) as keyof typeof STATE_LABEL] + (unseen() ? ' · ' + t('아직 확인 안 함') : '');
 
-  // 48px 접힘에서는 이름·상태 문장이 숨는다. 그 정보는 툴팁(이름 / 브랜치 · 키워드 · 내부 에이전트 · 다른 화면 · 공유)이 맡는다.
-  const compactSub = () => {
-    if (!props.compact) return undefined;
-    const screens = props.row.otherScreens > 0 ? t('다른 화면 {n}', { n: props.row.otherScreens }) : '';
-    return [branch(), statusSentence(props.row, now()), subTip(), screens, shareSentence(props.row.share)].filter(Boolean).join(' · ') || undefined;
-  };
+  // 48px 접힘에서는 이름·상태 문장이 숨는다. 그 정보는 호버·포커스 때 뜨는 상세 카드(RailHoverCard.tsx)가 맡는다 —
+  // 공용 data-tip 툴팁은 접힌 칸에 달지 않는다(이중으로 뜨지 않게). 칸의 이름은 aria-label, 카드는 열린 동안 aria-describedby.
+  const cardKey = () => props.row.tmuxName || props.row.name;
 
   // div에 role=button만 붙이면 Enter·Space가 아무 일도 안 한다 — 직접 붙인다.
   // Space는 preventDefault가 필수(안 하면 활성화와 동시에 페이지가 스크롤된다).
@@ -316,9 +313,8 @@ export function Row(props: {
       // agent/paint.js의 전역 클릭 위임이 `[data-session-id]`로 "봤다"를 판정한다.
       // 열려 있지 않은 행은 sessionId가 없어 자연히 제외된다.
       data-session-id={props.row.sessionId || undefined}
-      data-tip={props.compact ? rowName() : undefined}
-      data-tip-sub={compactSub()}
-      data-tip-side="right"
+      aria-label={props.compact ? rowName() : undefined}
+      data-card-key={props.compact ? cardKey() : undefined}
     >
       {/* 펼침: 상태 아이콘은 행의 첫 열(16px)이다. 접힘(링형, 시안 3-B): 에이전트 마크 가운데 + 둘레 상태 링.
           링과 마크는 둘 다 상태색이고, 상태는 링 모양이 말한다. 읽지 않음(unseen)은 링을 상태가 쓰므로 마크 오른쪽 아래 점. */}

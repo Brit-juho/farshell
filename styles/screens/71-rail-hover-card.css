@@ -1,0 +1,63 @@
+/* 접힌 세션 띠(48px) 칸의 상세 호버 카드 — frontend/js/shell/RailHoverCard.tsx · rail-hover-card.ts.
+   시안 final/desktop.html 「접힘 48 툴팁」(.tip)을 정보 카드로 키운 것: 같은 면(bg-raised) · 1px line-strong · 가벼운 그림자, 글 12/13.
+   body로 Portal되는 position:fixed 한 장이라 띠의 overflow에 안 잘린다. 자리는 JS가 left/top으로 준다.
+
+   크기는 **고정**이다 — 폭 300 · 최대 높이 380 · 줄 높이 20 · 구역 사이 8. 메뉴 크기 설정(ui.side.scale, --vt-cell/--vt-act-w)을
+   쓰지 않는다(칸이 36/40/44여도 카드는 같다). 글자색은 txt·sub 두 가지뿐이라 check_contrast의 램프 검사(bg-raised 위 8.5/6.0)를 그대로 받는다.
+   상태색은 **모양 있는 기호**(링 아이콘)에만 쓰고 글자는 txt다 — 색에만 기대지 않는다.
+
+   열 정렬: 모든 줄이 같은 3열 격자 [14px 아이콘 | 값 | 오른쪽 값]이라 값 시작선이 줄마다 같다(측정은 보고서).
+   움직임: 등장은 opacity 120ms(--dur-fast)뿐, transform 없음. prefers-reduced-motion에서는 전환 없음. */
+.vt-hc {
+  position:fixed; left:0; top:0; z-index:999; box-sizing:border-box;
+  width:300px; max-height:min(380px, calc(100vh - 16px)); overflow:hidden;
+  padding:10px 12px; border:1px solid var(--color-line-strong); border-radius:8px;
+  background:var(--color-bg-raised); box-shadow:var(--shadow-e2); color:var(--color-txt);
+  font:var(--weight-normal) var(--fs-xs) / 20px var(--font-ui);
+  visibility:hidden; opacity:0; pointer-events:none;
+  transition:opacity var(--dur-fast) linear, visibility 0s linear var(--dur-fast);
+}
+.vt-hc.open { visibility:visible; opacity:1; pointer-events:auto; transition-delay:0s; }
+/* 띠와 카드 사이 8px 틈을 메우는 투명 다리 — 포인터가 칸에서 카드로 건너가는 동안 카드 위에 있게 한다(hoverable). */
+.vt-hc::before { content:""; position:absolute; left:-9px; top:0; bottom:0; width:9px; }
+@media (prefers-reduced-motion: reduce) { .vt-hc { transition:none; } }
+
+/* 줄 — [아이콘 14 | 값 | 오른쪽 값], 높이 20. 값 열이 모든 줄에서 같은 x. */
+.vt-hc-row { display:grid; grid-template-columns:14px minmax(0, 1fr) auto; column-gap:8px; align-items:center; min-height:20px; }
+.vt-hc-ico { display:flex; align-items:center; justify-content:center; width:14px; height:20px; color:var(--color-sub); }
+.vt-hc-ico svg { display:block; width:14px; height:14px; }
+.vt-hc-val { display:flex; align-items:center; gap:6px; min-width:0; }
+.vt-hc-text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-hc-text.mono, .vt-hc-head .vt-hc-extra, .vt-hc-extra:has(.vt-diff-add, .vt-diff-del) { font-family:var(--font-mono); }
+/* 오른쪽 값은 한글(보고 상태·확인 필요)이 섞여 UI 글꼴이다 — 숫자 폭만 tabular로 고정, 경과(머리)·diff만 mono. */
+.vt-hc-extra { justify-self:end; color:var(--color-sub); white-space:nowrap; font-variant-numeric:tabular-nums; }
+.vt-hc-tag { flex:none; padding:0 5px; border:1px solid var(--color-line-strong); border-radius:4px; color:var(--color-sub); font:var(--weight-medium) var(--fs-3xs) / 16px var(--font-ui); }
+.vt-hc-row.muted .vt-hc-text { color:var(--color-sub); }
+.vt-hc-row.dim .vt-hc-ico { opacity:.55; }
+
+/* 구역 — 사이 8px, 선도 면도 없이 여백만(「공간이 먼저」). */
+.vt-hc-sec { margin-top:8px; }
+
+/* 머리 — 마크(상태색) · 이름 13/600 · 경과 */
+.vt-hc-head { min-height:24px; }
+.vt-hc-name { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:var(--weight-semibold) var(--fs-sm) / 24px var(--font-ui); }
+.vt-hc-head .vt-hc-extra { font-size:var(--fs-xs); }
+.vt-hc-mark { height:24px; }
+
+/* 상태 칩 — 모양(링 기호)+글자. 칩 테두리는 중립색이고 상태색은 기호에만. */
+.vt-hc-status { min-height:22px; }
+.vt-hc-chip { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 8px 0 5px; border:1px solid var(--color-line-strong); border-radius:var(--radius-full); color:var(--color-txt); font-weight:var(--weight-semibold); white-space:nowrap; }
+.vt-hc-note { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--color-sub); }
+.vt-hc-glyph { display:inline-flex; align-items:center; justify-content:center; flex:none; }
+.vt-hc-chip .vt-hc-glyph svg { width:12px; height:12px; }
+.vt-hc-glyph svg { display:block; }
+.vt-hc-glyph[data-state="idle"], .vt-hc-mark[data-state="idle"] { color:var(--color-st-idle); }
+.vt-hc-glyph[data-state="working"], .vt-hc-mark[data-state="working"] { color:var(--color-st-working); }
+.vt-hc-glyph[data-state="waiting"], .vt-hc-mark[data-state="waiting"] { color:var(--color-st-waiting); }
+.vt-hc-glyph[data-state="done"], .vt-hc-mark[data-state="done"] { color:var(--color-st-done); }
+.vt-hc-glyph[data-state="failed"] { color:var(--color-st-error); }
+/* 읽지 않음 — 6px 점(글 「아직 확인 안 함」이 같이 있다) */
+.vt-hc-unseen { display:block; width:6px; height:6px; border-radius:50%; background:var(--color-acc); }
+
+/* 서브에이전트·하위 세션 줄(상태 기호가 아이콘 열에 온다) — 값은 12px 그대로, 오른쪽에 경과·보고 상태 */
+.vt-hc-row.item .vt-hc-ico svg { width:14px; height:14px; }

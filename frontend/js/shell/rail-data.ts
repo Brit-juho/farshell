@@ -257,6 +257,11 @@ const SHARE_NICK_RE = /^[A-Za-z0-9_-]{1,32}$/;
 /** 서버가 받는 세션 이름(`routes/agent_share.py`). 한글 이름 세션은 공유할 수 없다. */
 const SHARE_NAME_RE = /^[A-Za-z0-9_.-]{1,64}$/;
 
+/** 이 이름의 세션을 에이전트에게 공유할 수 있는가(서버 규칙과 같다). 접힌 띠 카드가 「공유 안 함」을 말해도 되는 세션인지 가르는 데 쓴다. */
+export function canShareName(name: string | null | undefined): boolean {
+  return typeof name === 'string' && SHARE_NAME_RE.test(name);
+}
+
 /** 서버 값 → 공유 표시. 닉네임 규칙을 못 지키면 공유 아님(서버도 같은 판단을 한다), 모르는 모드는 읽기 전용. */
 export function normalizeShare(v: unknown): ShareInfo | null {
   const o = v as { nick?: unknown; mode?: unknown } | null;
