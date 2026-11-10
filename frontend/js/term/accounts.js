@@ -4,7 +4,9 @@
 // (2) 생성 요청에 실을 값만 둔다. 선택기 메뉴·기본 계정 변경 요청은 accounts-ui.js(shell 청크, 지연 로드),
 // 줄 글은 accounts-text.js. 다른 맥(relay)을 보고 있으면 계정 기능 전체를 숨긴다 — 계정은 이 맥의 것이고 원격에서 고르지 못한다.
 import { apiFetch } from '../core/api.js';
-import { API_BASE } from '../core/env.js';
+// API_BASE는 부를 때마다 window에서 읽는다(core/api.js와 같은 규칙). core/env.js를 import하면 그 순간 window.API_BASE를
+// 다시 써서, 이 모듈을 불러오는 것만으로 다른 화면(설정 › 업데이트 시험)의 요청 주소가 바뀌었다.
+const apiBase = () => window.API_BASE || '';
 import { isRelayed } from '../core/host-route.js';
 import { t } from '../core/i18n.js';
 import { EMPTY_ACCOUNTS, normalizeAccounts, hasMarkedDefault } from './accounts-data.js';
@@ -25,7 +27,7 @@ export async function loadAccounts({ force = false } = {}) {
   if (_inflight) return _inflight;
   _inflight = (async () => {
     try {
-      const res = await apiFetch(`${API_BASE}/api/agent-profiles/read/picker`, {
+      const res = await apiFetch(`${apiBase()}/api/agent-profiles/read/picker`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
       });
       _cache = { at: Date.now(), value: res.ok ? normalizeAccounts(await res.json()) : EMPTY_ACCOUNTS };

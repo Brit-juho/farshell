@@ -2,7 +2,9 @@
 // `shell` 청크(vite.config.mjs)라 초기 페이로드에 안 실린다: term/session.js·palette-lazy.js는 import()로만 부른다.
 // 목록 캐시와 생성 요청에 싣는 값은 accounts.js(core)에 있다.
 import { apiFetch } from '../core/api.js';
-import { API_BASE } from '../core/env.js';
+// API_BASE는 부를 때마다 window에서 읽는다(core/api.js와 같은 규칙). core/env.js를 import하면 그 순간 window.API_BASE를
+// 다시 써서, 이 모듈을 불러오는 것만으로 다른 화면(설정 › 업데이트 시험)의 요청 주소가 바뀌었다.
+const apiBase = () => window.API_BASE || '';
 import { t } from '../core/i18n.js';
 import { icon } from '../ui/icons.js';
 import { showToast } from '../ui/toast.js';
@@ -15,7 +17,7 @@ export const ACCOUNTS_CHANGED = 'vt:accounts-changed';
 
 /** 기본 계정 변경(도구별). profileId null이면 해제. */
 export async function setDefaultAccount(tool, profileId, name) {
-  const res = await apiFetch(`${API_BASE}/api/agent-profiles/default`, {
+  const res = await apiFetch(`${apiBase()}/api/agent-profiles/default`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tool, profile_id: profileId }),
   });
