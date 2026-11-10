@@ -147,10 +147,26 @@ def listing():
             "accounts": accounts, "jobs": jobs, "sessions": sessions}
 
 
+def valid_name(name):
+    """A profile (or account) name: 1..80 characters once trimmed, with no control or format character — DEL,
+    bidi controls (U+202A-202E, U+2066-2069), zero-width characters (U+200B-200D, U+FEFF), line/paragraph
+    separators — which would let two accounts look alike in the picker and the badge."""
+    import unicodedata
+    return (isinstance(name, str) and 1 <= len(name.strip()) <= 80
+            and not any(unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp") for c in name))
+
+
+def _duplicate_name(db, tool, name, own_id=None):
+    """An active profile of the same tool already carries this name (trimmed, case-insensitive)."""
+    wanted = name.strip().casefold()
+    return any(row["name"].strip().casefold() == wanted for row in db.execute(
+        "SELECT id,name FROM profiles WHERE tool=? AND archived_at IS NULL AND id IS NOT ?", (tool, own_id)))
+
+
 def create(name, tool, account_id=None, account_label=None, purpose="work"):
-    if tool not in ("claude", "codex") or not isinstance(name, str) or not 1 <= len(name.strip()) <= 80 or any(ord(c) < 32 for c in name):
+    if tool not in ("claude", "codex") or not valid_name(name):
         raise Refused(tr("프로필 이름 또는 도구가 올바르지 않습니다"))
-    if account_label is not None and (not isinstance(account_label, str) or not 1 <= len(account_label.strip()) <= 80 or any(ord(c) < 32 for c in account_label)):
+    if account_label is not None and not valid_name(account_label):
         raise Refused(tr("계정 이름이 올바르지 않습니다"))
     if purpose not in ("work", "test"):
         raise Refused(tr("프로필 용도가 올바르지 않습니다"))
@@ -158,6 +174,7 @@ def create(name, tool, account_id=None, account_label=None, purpose="work"):
     with database() as db:
         if db.execute("SELECT count(*) FROM profiles").fetchone()[0] >= MAX_PROFILES:
             raise Refused(tr("프로필 수가 한도를 넘었습니다"))
+        duplicate = _duplicate_name(db, tool, name)   # allowed (`fsh claude <name>` then asks for the ID) but flagged
         if account_id:
             account = db.execute("SELECT * FROM accounts WHERE id=?", (identifier(account_id),)).fetchone()
             if not account or account["tool"] != tool:
@@ -184,7 +201,7 @@ def create(name, tool, account_id=None, account_label=None, purpose="work"):
             raise Refused(tr("프로필 저장 경로가 이미 있습니다"))
         os.rename(staging, destination)
         db.execute("INSERT INTO profiles (id,name,tool,account_id,revision,created_at,state,purpose) VALUES (?,?,?,?,?,?,?,?)", (pid, name.strip(), tool, account_id, 1, time.time(), "ready", purpose))
-    return get(pid)
+    return {**get(pid), "duplicate_name": duplicate}
 
 
 def require_active(profile):
@@ -286,9 +303,12 @@ def metadata_change(profile_id, revision, metadata_revision, operation, name=Non
         raise Refused(tr("지원하지 않는 관리 작업입니다"))
     if operation != 'restore':
         require_active(profile)
+    duplicate = False
     if operation == 'rename':
-        if not isinstance(name, str) or not 1 <= len(name.strip()) <= 80 or any(ord(c) < 32 or ord(c) == 127 for c in name):
+        if not valid_name(name):
             raise Refused(tr("프로필 이름 또는 도구가 올바르지 않습니다"))
+        with database() as db:
+            duplicate = _duplicate_name(db, profile["tool"], name, profile_id)
     else:
         require_no_pending_jobs(profile_id)
         from agent_profile_runtime import require_inactive, validate_native_files
@@ -303,4 +323,5 @@ def metadata_change(profile_id, revision, metadata_revision, operation, name=Non
         cursor = db.execute(f"UPDATE profiles SET {column}=?,metadata_revision=metadata_revision+1 WHERE id=? AND revision=? AND metadata_revision=?", (value, profile_id, revision, metadata_revision))
         if cursor.rowcount != 1:
             raise Refused(tr("프로필이 바뀌었습니다. 다시 검토하세요"))
-    return get(profile_id)
+    result = get(profile_id)
+    return {**result, "duplicate_name": duplicate} if operation == 'rename' else result

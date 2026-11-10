@@ -59,9 +59,13 @@ def preview(profile_id, revision, patch):
         before[name] = profiles.digest(fsguard.read_profile_bytes(root, name)) if path.exists() else None
     plan = {'profile_id': profile_id, 'revision': revision, 'before': before,
             'writes': {name: raw.decode() if raw is not None else None for name, raw in writes.items()}}
+    plain = private is not None and migration.plaintext_endpoint(data['env'].get('ANTHROPIC_BASE_URL', ''))
+    warning = tr("이 프로필의 API 인증·환경만 변경합니다. 비밀값은 다시 표시하지 않습니다")
+    if plain:
+        warning += " " + tr("엔드포인트가 http:// 입니다. 키가 암호화되지 않고 네트워크로 전송됩니다")
     return {**mcp_plans.issue('profile-provider', plan), 'profile_id': profile_id,
             'clear': patch.get('clear') is True, 'environment_keys': sorted(patch.get('env', {})),
-            'warning': tr("이 프로필의 API 인증·환경만 변경합니다. 비밀값은 다시 표시하지 않습니다")}
+            'plaintext_endpoint': plain, 'warning': warning}
 
 
 def apply(token):
