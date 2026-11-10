@@ -325,13 +325,15 @@ def post_checkout(root: Path, old: str, new: str) -> None:
     """바뀐 파일을 보고 필요한 의존성 설치·빌드만 한다."""
     changed = set(git(root, "diff", "--name-only", old, new).stdout.split())
     py = _python(root)
-    if "requirements-core.txt" in changed:
-        _run([py, "-m", "pip", "install", "--quiet", "-r", "requirements-core.txt"], root,
-             tr("파이썬 의존성 설치"))
-    if "requirements-voice.txt" in changed and \
-            subprocess.run([py, "-m", "pip", "show", "edge-tts"], capture_output=True).returncode == 0:
-        _run([py, "-m", "pip", "install", "--quiet", "-r", "requirements-voice.txt"], root,
-             tr("음성 의존성 설치"))
+    # 파이썬 의존성은 해시 잠금 파일(locks/)로만 설치한다(`--require-hashes`). requirements-*.txt 는 잠금의 입력일 뿐이다.
+    voice_installed = subprocess.run([py, "-m", "pip", "show", "edge-tts"], capture_output=True).returncode == 0
+    if "locks/core.txt" in changed or (voice_installed and "locks/voice.txt" in changed):
+        # 음성이 깔려 있으면 core 와 voice 를 한 번에 맞춘다 — 같은 패키지가 서로 다른 버전이 되지 않게.
+        files = ["locks/core.txt"] + (["locks/voice.txt"] if voice_installed else [])
+        cmd = [py, "-m", "pip", "install", "--quiet", "--require-hashes"]
+        for f in files:
+            cmd += ["-r", f]
+        _run(cmd, root, tr("파이썬 의존성 설치") + (" + " + tr("음성 의존성 설치") if voice_installed else ""))
     need_build = (not (root / "frontend" / "dist").exists()) or any(
         c == p or (p.endswith("/") and c.startswith(p)) for c in changed for p in _FRONTEND_PATHS)
     if need_build:

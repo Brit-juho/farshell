@@ -24,7 +24,7 @@
 
 ## 실행
 
-    pip install -r requirements-dev.txt && playwright install chromium
+    pip install --require-hashes -r locks/core.txt -r locks/dev.txt && playwright install chromium
     pytest tests/e2e -v
 
 playwright나 브라우저가 없으면 **전체 skip**한다. 옛 파일이 "안 도는데 있는 척"
@@ -56,7 +56,7 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("playwright.sync_api", reason="playwright 미설치 — pip install -r requirements-dev.txt")
+pytest.importorskip("playwright.sync_api", reason="playwright 미설치 — pip install --require-hashes -r locks/core.txt -r locks/dev.txt")
 
 from playwright.sync_api import Error as PlaywrightError  # noqa: E402
 from playwright.sync_api import expect  # noqa: E402

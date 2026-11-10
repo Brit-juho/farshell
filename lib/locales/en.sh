@@ -285,13 +285,16 @@ _t_en_lookup() {
     '낡은 환경변수를 설정 파일 값으로 바로잡음: {vars}') _T_OUT='Replaced stale environment variables with the config-file values: {vars}' ;;
     '낡은 환경변수를 파일 값으로 바로잡음: {keys} — 창을 새로 여세요') _T_OUT='stale environment variables replaced by file values: {keys} — open a new window' ;;
     '내가 그 호스트로 나가는 연결의 secret 을 양쪽이 함께 새로 바꿉니다(VT_AUTHZ_ENFORCE 에 peer 필요, 만료 없음). 도중에 실패하면 이전 secret 이 그대로 남고, 마지막 회전 시각은 감사 기록에 남습니다.') _T_OUT='Replaces the secret of my outgoing connection to that host on both sides at once (needs '\''peer'\'' in VT_AUTHZ_ENFORCE, no expiry). If it fails midway the previous secret stays, and the time of the last rotation is written to the audit log.' ;;
+    '내려받은 파일의 해시가 잠금 파일(locks/)과 다릅니다. 네트워크 중간 장치(프록시·미러)의 변조, 또는 PyPI 의 파일 교체일 수 있어 설치를 멈췄습니다.') _T_OUT='A downloaded file'\''s hash does not match the lock file (locks/). A proxy or mirror may have altered it, or the file on PyPI was replaced, so the install was stopped.' ;;
     '내부 프록시(:{port})가 아직 응답하지 않습니다 — 서버가 막 떴다면 잠시 후 다시 시도하세요') _T_OUT='The internal proxy (:{port}) isn'\''t responding yet. If the server just started, try again in a moment' ;;
+    '네트워크 연결, Python 버전(3.11 이상), 컴파일러(Linux 음성 모드의 evdev)를 확인하세요.') _T_OUT='Check your network, the Python version (3.11 or newer) and, for voice mode on Linux, a C compiler (needed to build evdev).' ;;
     '노션/브라우저 작업을 계속하면서 음성으로 코딩') _T_OUT='Keep working in Notion or the browser and code by voice' ;;
     '노출 포트') _T_OUT='Exposed ports' ;;
     '누가 언제 이 세션에 붙는지 push로 알림 받기: ~/.vt.env에 VT_NOTIFY_CLIENT_EVENTS=1 추가') _T_OUT='To get a push when someone attaches to this session, add VT_NOTIFY_CLIENT_EVENTS=1 to ~/.vt.env' ;;
     '다른 Mac 권한') _T_OUT='Other-Mac permissions' ;;
     '다른 pre-commit 훅이 있음 — '\''fsh lease guard install'\'' 은 그 훅을 이어서 실행합니다') _T_OUT='Another pre-commit hook exists — '\''fsh lease guard install'\'' chains it and runs it first' ;;
     '다른 경로/스크립트: {cur}') _T_OUT='different path/script: {cur}' ;;
+    '다른 네트워크에서 다시 시도하고, 같은 오류가 반복되면 이슈로 알려 주세요. 해시 검사를 끄고 설치하지는 마세요.') _T_OUT='Try again from another network and report an issue if it keeps happening. Do not turn off hash checking to get past it.' ;;
     '다른 사용자가 읽을 수 있음.') _T_OUT='other users can read it.' ;;
     '대신 직접 실행:') _T_OUT='Run it directly instead:' ;;
     '데스크톱 알림 미지원 — sudo apt-get install libnotify-bin') _T_OUT='desktop notifications unavailable — sudo apt-get install libnotify-bin' ;;
@@ -491,6 +494,7 @@ _t_en_lookup() {
     '심링크 아닌 파일 (install.sh 재실행 권장)') _T_OUT='a regular file, not a symlink (re-run install.sh)' ;;
     '쓰기 실패 (원본 유지)') _T_OUT='Write failed (original kept)' ;;
     '쓰는데도 안 보이면: clauth 데몬이 떠 있는지 확인하세요.') _T_OUT='If you do use it and still don'\''t see this, check that the clauth daemon is running.' ;;
+    '아래는 pip 출력의 마지막 부분입니다(전체: {log}).') _T_OUT='The end of the pip output follows (full log: {log}).' ;;
     '안내가 뜨면 곧바로 확인하려는 텍스트를 붙여넣으세요(60초 무응답 시 종료).') _T_OUT='When prompted, paste the text you want to check right away (exits after 60s of no input).' ;;
     '안전하지 않은 세션 이름: '\''{target}'\''') _T_OUT='Unsafe session name: '\''{target}'\''' ;;
     '알 수 없는 VT_TUNNEL_PROVIDER='\''{p}'\'' — cloudflare로 진행합니다') _T_OUT='Unknown VT_TUNNEL_PROVIDER='\''{p}'\''; continuing with cloudflare' ;;
@@ -584,11 +588,13 @@ _t_en_lookup() {
     '자동 재노출: 켜짐 — 만료되면 {ttl}씩 연장하고, 터널이 사라지면 서버가 다시 엽니다(주소는 바뀔 수 있음). 끄기: fsh tunnel auto {port} off') _T_OUT='Auto re-expose: on — extends by {ttl} at expiry, and the server re-opens the tunnel if it goes away (the address may change). Turn off: fsh tunnel auto {port} off' ;;
     '잘못된 키 이름: '\''{key}'\''') _T_OUT='Invalid key name: '\''{key}'\''' ;;
     '잘못된 핫키 형식: '\''{s}'\'' (예: ctrl+shift+m)') _T_OUT='Invalid hotkey format: '\''{s}'\'' (e.g. ctrl+shift+m)' ;;
+    '잠금 파일이 없습니다: {file}') _T_OUT='Lock file not found: {file}' ;;
     '장애 기록') _T_OUT='Incidents' ;;
     '재시작 실패') _T_OUT='Restart failed' ;;
     '재시작 완료') _T_OUT='Restarted' ;;
     '저장 위치:') _T_OUT='Stored in:' ;;
     '저장된 것은 해시뿐이라 다시 볼 수 없습니다. 바꾸려면: fsh password') _T_OUT='Only its hash is stored, so it cannot be shown again. To change it: fsh password' ;;
+    '저장소가 불완전합니다. 다시 내려받거나 git pull 로 최신 상태로 맞춘 뒤 재실행하세요.') _T_OUT='The checkout is incomplete. Download it again or run git pull, then re-run the installer.' ;;
     '적용하려면 서버 재시작: fsh restart') _T_OUT='To apply it, restart the server: fsh restart' ;;
     '적용하려면: fsh restart --network {mode}') _T_OUT='To apply it: fsh restart --network {mode}' ;;
     '전달할 내용 (stdin):') _T_OUT='Payload (stdin):' ;;
@@ -669,6 +675,7 @@ _t_en_lookup() {
     '템플릿 '\''{name}'\''을 찾을 수 없습니다') _T_OUT='Template '\''{name}'\'' not found' ;;
     '토큰 설정됨') _T_OUT='token set' ;;
     '토픽 목록: {names}') _T_OUT='Topics: {names}' ;;
+    '파이썬 패키지 설치에 실패했습니다.') _T_OUT='Installing the Python packages failed.' ;;
     '판정하지 못했습니다 — fsh tmux status') _T_OUT='Couldn'\''t check — fsh tmux status' ;;
     '패키지 설치 중...') _T_OUT='Installing packages...' ;;
     '포트 {port} 로 열린 터널이 없습니다') _T_OUT='No tunnel is open for port {port}' ;;
