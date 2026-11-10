@@ -330,14 +330,14 @@ def decide(docs: dict, request_id: str, decision: str, level: Optional[str], *, 
 
     share_mode: 대상 세션의 지금 공유 모드(`read`/`readwrite`/"" 미공유). None 이면 모른다 → 상한 검사를 건너뛴다(옛 동작)."""
     if decision not in ("allow", "deny"):
-        raise ShareError("bad_decision", "decision 은 allow 또는 deny 입니다", 400)
+        raise ShareError("bad_decision", tr("decision 은 allow 또는 deny 입니다"), 400)
     rid = request_id[3:] if request_id.startswith("ap-") else request_id
     req = next((r for r in agent_requests(docs) if raw_id(r) == rid and r.get("state") == "pending"), None)
     if req is None:
         again = replay(docs, SOURCE, rid, decision, level, actor, now)      # 이미 결정된 요청이면 처음 결과 또는 409
         if again is not None:
             return again
-        raise ShareError("not_found", "대기 중인 요청이 없습니다(이미 처리됐거나 만료됐거나 세션이 종료됨)", 404)
+        raise ShareError("not_found", tr("대기 중인 요청이 없습니다(이미 처리됐거나 만료됐거나 세션이 종료됨)"), 404)
     kind = kind_of(req)
     resource = f"session:local/{req['resource_session']}"
     if decision == "deny":
@@ -351,9 +351,9 @@ def decide(docs: dict, request_id: str, decision: str, level: Optional[str], *, 
         return out
     level = level or (LEVEL_READ if kind == KIND_READ else LEVEL_READWRITE)
     if level not in (LEVEL_READ, LEVEL_READWRITE) or (kind == KIND_READ and level != LEVEL_READ):
-        raise ShareError("bad_level", "요청보다 높은 권한은 줄 수 없습니다(읽기 요청에는 read 만)", 400)
+        raise ShareError("bad_level", tr("요청보다 높은 권한은 줄 수 없습니다(읽기 요청에는 read 만)"), 400)
     if level == LEVEL_READWRITE and share_mode is not None and share_mode != LEVEL_READWRITE:
-        raise ShareError("read_only_share", "이 공유는 읽기 전용입니다 — 공유 모드를 읽기·쓰기로 올린 뒤 허용하세요", 409)
+        raise ShareError("read_only_share", tr("이 공유는 읽기 전용입니다 — 공유 모드를 읽기·쓰기로 올린 뒤 허용하세요"), 409)
     granted_scopes = list(READ_SCOPES) + ([WRITE_SCOPE] if level == LEVEL_READWRITE else [])
     wconds = WRITE_SCONDS if level == LEVEL_READWRITE else None
     check_authority(actor, granted_scopes, resource, wconds, _snap(docs, now))
@@ -382,11 +382,11 @@ def decide(docs: dict, request_id: str, decision: str, level: Optional[str], *, 
 def revoke(docs: dict, grant_id: str, scope: str, now: float) -> tuple[dict, dict]:
     """권한 철회. scope `all`(전부) | `write`(쓰기만 거두고 읽기는 남긴다). (옛 모양 grant, 엔진 grant id)."""
     if scope not in ("all", "write"):
-        raise ShareError("bad_scope", "scope 는 all 또는 write 입니다", 400)
+        raise ShareError("bad_scope", tr("scope 는 all 또는 write 입니다"), 400)
     gid = grant_id[3:] if grant_id.startswith("ag-") else grant_id
     g = next((x for x in agent_grants(docs) if raw_id(x) == gid), None)
     if g is None:
-        raise ShareError("not_found", "그런 권한이 없습니다", 404)
+        raise ShareError("not_found", tr("그런 권한이 없습니다"), 404)
     if scope == "write":
         legacy = grant_to_legacy(g)
         legacy["write"], legacy["updated"] = False, now

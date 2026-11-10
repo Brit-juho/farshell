@@ -20,13 +20,13 @@ from typing import Optional
 import store_lock
 import vt_paths
 from authz import store as authz_store
+from i18n import tr
 
 logger = logging.getLogger(__name__)
 
 VERSION = 1
 
 def consent_text() -> str:
-    from i18n import tr
     return tr("브라우저 broker 를 처음 켭니다. 켜면 에이전트가 승인된 범위에서 FarShell 이 관리하는 격리된 브라우저 탭을 열고 조작할 수 있습니다. "
               "사용자의 Chrome 프로필과 로그인 세션에는 연결하지 않으며, 기본으로는 about:blank 와 FarShell 이 노출한 localhost 포트만 열립니다. "
               "스크립트 실행·쿠키/저장소 값·네트워크 내용은 별도 승인이 필요합니다. 언제든 어댑터를 끌 수 있습니다.")
@@ -90,7 +90,7 @@ def set_enabled(name: str, enabled: bool, *, consent: bool = False, now: Optiona
                 if not isinstance(cur, dict) or not isinstance(cur.get("adapters", {}), dict):
                     raise ValueError("shape")
             except ValueError as e:
-                raise OSError("browser.json 을 해석할 수 없어 바꾸지 않았습니다") from e
+                raise OSError(tr("browser.json 을 해석할 수 없어 바꾸지 않았습니다")) from e
             d.update({k: cur.get(k) for k in ("consent",) if k in cur})
             d["adapters"] = {str(k): v for k, v in cur.get("adapters", {}).items() if isinstance(v, dict)}
         if enabled:

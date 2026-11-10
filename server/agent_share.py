@@ -131,13 +131,13 @@ def find_by_nick(snap: dict[str, Sess], nick: str) -> Sess:
 
 def check_nick(nick) -> str:
     if not isinstance(nick, str) or not NICK_RE.fullmatch(nick):
-        raise ShareError("bad_nick", "닉네임은 영문·숫자·_·- 1~32자입니다", 400)
+        raise ShareError("bad_nick", tr("닉네임은 영문·숫자·_·- 1~32자입니다"), 400)
     return nick
 
 
 def check_mode(mode) -> str:
     if mode not in MODES:
-        raise ShareError("bad_mode", "공유 모드는 read 또는 readwrite 입니다", 400)
+        raise ShareError("bad_mode", tr("공유 모드는 read 또는 readwrite 입니다"), 400)
     return mode
 
 
@@ -254,12 +254,12 @@ def store_problem() -> Optional[str]:
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
     except OSError as e:
-        return f"읽기 실패: {e.strerror or e}"
+        return tr("읽기 실패: {reason}", reason=e.strerror or e)
     except ValueError as e:
-        return f"JSON 파싱 실패: {e}"
+        return tr("JSON 파싱 실패: {reason}", reason=e)
     if not isinstance(data, dict) or not isinstance(data.get("grants", []), list) \
             or not isinstance(data.get("requests", []), list):
-        return "모양이 올바르지 않음"
+        return tr("모양이 올바르지 않음")
     return None
 
 
@@ -355,22 +355,22 @@ def _legacy_request_access(snap: dict[str, Sess], agent, target: Sess, kind: str
 def _legacy_decide(request_id: str, decision: str, level: Optional[str], snap: Optional[dict[str, Sess]]) -> dict:
     """사람의 결정. allow(level=요청 종류와 같거나 낮게) 또는 deny. 결과 `{request, grant}`."""
     if decision not in ("allow", "deny"):
-        raise ShareError("bad_decision", "decision 은 allow 또는 deny 입니다", 400)
+        raise ShareError("bad_decision", tr("decision 은 allow 또는 deny 입니다"), 400)
     now = time.time()
     with _txn(snap) as data:
         req = next((r for r in data["requests"] if r.get("id") == request_id and r.get("state") == "pending"), None)
         if req is None:
-            raise ShareError("not_found", "대기 중인 요청이 없습니다(이미 처리됐거나 만료됐거나 세션이 종료됨)", 404)
+            raise ShareError("not_found", tr("대기 중인 요청이 없습니다(이미 처리됐거나 만료됐거나 세션이 종료됨)"), 404)
         if decision == "deny":
             req["state"], req["decided"] = "denied", now
             return {"request": dict(req), "grant": None}
         kind = req["kind"]
         level = level or (LEVEL_READ if kind == KIND_READ else LEVEL_READWRITE)
         if level not in (LEVEL_READ, LEVEL_READWRITE) or (kind == KIND_READ and level != LEVEL_READ):
-            raise ShareError("bad_level", "요청보다 높은 권한은 줄 수 없습니다(읽기 요청에는 read 만)", 400)
+            raise ShareError("bad_level", tr("요청보다 높은 권한은 줄 수 없습니다(읽기 요청에는 read 만)"), 400)
         tgt = (snap or {}).get(f"{req['target']['sid']}:{req['target']['created']}")
         if level == LEVEL_READWRITE and snap is not None and tgt and (tgt.share or {}).get("mode") != LEVEL_READWRITE:
-            raise ShareError("read_only_share", "이 공유는 읽기 전용입니다 — 공유 모드를 읽기·쓰기로 올린 뒤 허용하세요", 409)
+            raise ShareError("read_only_share", tr("이 공유는 읽기 전용입니다 — 공유 모드를 읽기·쓰기로 올린 뒤 허용하세요"), 409)
         grant = next((g for g in data["grants"]
                       if _same(g.get("agent") or {}, req["agent"]) and _same(g.get("target") or {}, req["target"])), None)
         if grant is None:
@@ -390,11 +390,11 @@ def _legacy_decide(request_id: str, decision: str, level: Optional[str], snap: O
 def _legacy_revoke(grant_id: str, scope: str, snap: Optional[dict[str, Sess]]) -> dict:
     """권한 철회. scope `all`(전부) | `write`(쓰기만 거두고 읽기는 남긴다)."""
     if scope not in ("all", "write"):
-        raise ShareError("bad_scope", "scope 는 all 또는 write 입니다", 400)
+        raise ShareError("bad_scope", tr("scope 는 all 또는 write 입니다"), 400)
     with _txn(snap) as data:
         g = next((x for x in data["grants"] if x.get("id") == grant_id), None)
         if g is None:
-            raise ShareError("not_found", "그런 권한이 없습니다", 404)
+            raise ShareError("not_found", tr("그런 권한이 없습니다"), 404)
         if scope == "write":
             g["write"] = False
             g["updated"] = time.time()
@@ -513,7 +513,7 @@ _share_lock = threading.Lock()
 def _by_name(snap: dict[str, Sess], name: str) -> Sess:
     hits = [s for s in snap.values() if s.name == name]
     if len(hits) != 1:
-        raise ShareError("not_found", f"'{name}' 세션이 없습니다", 404)
+        raise ShareError("not_found", tr("'{name}' 세션이 없습니다", name=name), 404)
     return hits[0]
 
 
@@ -523,18 +523,18 @@ def set_share(name: str, nick, mode, actor=None) -> dict:
     with _share_lock:
         snap = snapshot()
         if snap is None:
-            raise ShareError("tmux_unavailable", "tmux 상태를 읽지 못했습니다", 503)
+            raise ShareError("tmux_unavailable", tr("tmux 상태를 읽지 못했습니다"), 503)
         target = _by_name(snap, name)
         for s in snap.values():
             if s.key != target.key and s.share and s.share["nick"].lower() == nick.lower():
-                raise ShareError("nick_taken", f"'{nick}' 닉네임은 이미 다른 세션이 쓰고 있습니다", 409)
+                raise ShareError("nick_taken", tr("'{nick}' 닉네임은 이미 다른 세션이 쓰고 있습니다", nick=nick), 409)
         if enforced():
             # 정책 저장소(진실)를 먼저 — tmux 미러 쓰기가 실패해도 낮은 쪽으로 해소돼 안전하다.
             _svc().put_share(target, nick, mode, snap, actor)
         # 닉네임을 먼저 심으면 모드가 비어 있는 순간 read 로 읽힌다(낮은 쪽이라 안전).
         if not (tmux_runner.set_option(target.sid, tmux_runner.SHARE_NICK_OPTION, nick)
                 and tmux_runner.set_option(target.sid, tmux_runner.SHARE_MODE_OPTION, mode)):
-            raise ShareError("tmux_failed", "tmux 옵션을 쓰지 못했습니다", 500)
+            raise ShareError("tmux_failed", tr("tmux 옵션을 쓰지 못했습니다"), 500)
     return {"nick": nick, "mode": mode}
 
 
@@ -542,7 +542,7 @@ def unset_share(name: str, actor=None) -> dict:
     with _share_lock:
         snap = snapshot()
         if snap is None:
-            raise ShareError("tmux_unavailable", "tmux 상태를 읽지 못했습니다", 503)
+            raise ShareError("tmux_unavailable", tr("tmux 상태를 읽지 못했습니다"), 503)
         target = _by_name(snap, name)
         was = target.share
         if enforced():

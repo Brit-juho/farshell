@@ -446,7 +446,7 @@ def decide(request_id: str, decision: str, level: Optional[str], actor: Optional
     """사람의 결정. allow(grant 생성) 또는 deny(쿨다운 시작). 결과 `{request, grant, grantId}`.
     에이전트·cli·peer·무인증은 승인할 수 없다(`approvals.check_authority`)."""
     if decision not in ("allow", "deny"):
-        raise ShareError("bad_decision", "decision 은 allow 또는 deny 입니다", 400)
+        raise ShareError("bad_decision", tr("decision 은 allow 또는 deny 입니다"), 400)
     if level not in (None, "read", "msg"):
         raise ShareError("bad_level", tr("메시지 요청에는 level 이 필요 없습니다"), 400)
     now = time.time()
@@ -460,7 +460,7 @@ def decide(request_id: str, decision: str, level: Optional[str], actor: Optional
             again = approvals.replay(docs, SOURCE, rid, decision, None, actor, now)   # 이미 결정된 요청: 처음 결과 또는 409
             if again is not None:
                 return again
-            raise ShareError("not_found", "대기 중인 요청이 없습니다(이미 처리됐거나 만료됐거나 세션이 종료됨)", 404)
+            raise ShareError("not_found", tr("대기 중인 요청이 없습니다(이미 처리됐거나 만료됐거나 세션이 종료됨)"), 404)
         if actor is None:                        # 주체를 만들지 못했다 = 사람이 확인되지 않았다
             raise ShareError("human_session_required", tr("사람(브라우저 로그인 세션)만 승인할 수 있습니다"), 403)
         approvals.check_authority(actor, (SCOPE,) if decision == "allow" else (), req["resource"], None,
@@ -494,7 +494,7 @@ def revoke(grant_id: str, actor: Optional[P.Principal], names: Optional[dict] = 
     with store.txn() as docs:
         g = next((x for x in msg_grants(docs) if x["id"] == grant_id or _raw(x) == grant_id), None)
         if g is None:
-            raise ShareError("not_found", "그런 권한이 없습니다", 404)
+            raise ShareError("not_found", tr("그런 권한이 없습니다"), 404)
         _audit_strict({"principal": (actor or P.human("-")).id, "action": "msg.revoke", "resource": g["resource"],
                        "scopes": [SCOPE], "decision": "allow", "result": "ok", "grant_id": g["id"],
                        "reason": f"agent={g.get('subject_name', '')}"})
