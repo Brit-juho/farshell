@@ -106,3 +106,38 @@ def test_worktree_open_records_local(monkeypatch):
     monkeypatch.setattr(tmux_runner, "set_option", lambda s, k, v: sets.append((k, v)) or True)
     worktree.open_worktree("abc")
     assert ("@fsh_origin", "local") in sets
+
+
+# --- 만든 맥 이름(`@fsh_origin_host`) -------------------------------------------------
+
+def test_set_origin_records_host_only_for_peer(monkeypatch):
+    calls = []
+    monkeypatch.setattr(tmux_runner, "run", lambda args, timeout=None: calls.append(list(args)) or (0, b"", b""))
+    assert tmux_runner.set_origin("s", "peer", "m5-studio") is True
+    assert calls == [["set-option", "-t", "s", "@fsh_origin", "peer"],
+                     ["set-option", "-t", "s", "@fsh_origin_host", "m5-studio"]]
+    calls.clear()
+    tmux_runner.set_origin("s", "local", "m5-studio")      # local은 이름을 안 적는다
+    tmux_runner.set_origin("s", "peer", "  \t\n ")         # 위생 후 빈 이름은 안 적는다
+    assert [c[3] for c in calls] == ["@fsh_origin", "@fsh_origin"]
+
+
+def test_sanitize_origin_host():
+    assert tmux_runner.sanitize_origin_host("a\tb\nc\x00") == "abc"
+    assert tmux_runner.sanitize_origin_host("x" * 100) == "x" * 60
+    assert tmux_runner.sanitize_origin_host(None) == ""
+    assert tmux_runner.origin_host_of("external", "m5") == ""
+
+
+def test_collect_tmux_sessions_origin_host_backward_compatible(monkeypatch):
+    async def fake_run_text_async(args, timeout=None):
+        if args[0] == "list-sessions":
+            # 새 형식(10열), 옛 형식(열 부족), peer 아님 + 이름 기록
+            return ("a\t1\t0\t\tpeer\t\t\tid1\t1\tm5-studio\n"
+                    "b\t1\t0\t\tpeer\n"
+                    "c\t1\t0\t\tlocal\t\t\tid3\t3\tm5-studio\n")
+        return "a\tzsh\t/x\t%1\nb\tzsh\t/y\t%2\nc\tzsh\t/z\t%3\n"
+
+    monkeypatch.setattr(tmux_runner, "run_text_async", fake_run_text_async)
+    out = asyncio.run(tmux_route.collect_tmux_sessions())
+    assert {s["name"]: s["originHost"] for s in out} == {"a": "m5-studio", "b": "", "c": ""}

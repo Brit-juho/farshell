@@ -60,6 +60,8 @@ export interface SessionRow {
   isMainWorktree?: boolean;
   worktreeId?: string | null;
   origin: Origin;
+  /** peer가 만든 세션이면 만든 맥의 표시 이름(서버 `originHost`). 기록 없음·구버전 서버는 없다/빈 값. */
+  originHost?: string;
   /** 에이전트 공유 표시. 공유 안 된 세션·구버전 서버는 없다/null. */
   share?: ShareInfo | null;
   /** 이 세션이 속한 묶음 뷰의 이름(묶음이 아니면 null). */
@@ -215,11 +217,23 @@ export const ORIGIN_LABEL: Record<Origin, string> = {
   external: t('직접 만듦 (CLI·tmux)'),
 };
 /** 행 3줄에 아이콘과 함께 쓰는 짧은 글(시안 D02). 긴 문장(ORIGIN_LABEL)은 툴팁과 스크린 리더가 읽는다.
- * 서버가 peer 세션을 만든 맥의 이름을 기록하지 않아 「m5-studio에서 만듦」이 아니라 「다른 맥에서 만듦」이다. */
+ * 만든 맥의 이름이 기록된 세션은 `originShort`가 「{host}에서 만듦」으로 바꾼다. 이 상수는 이름 기록이 없을 때의 문구다. */
 export const ORIGIN_SHORT: Record<Exclude<Origin, 'local'>, string> = {
   peer: t('다른 맥에서 만듦'),
   external: t('직접 만듦'),
 };
+
+/** 만든 곳 문구. peer 세션에 만든 맥의 이름(`originHost`)이 기록돼 있으면 「{host}에서 만듦」, 없으면(옛 세션·옛 서버) 「다른 맥에서 만듦」 그대로. */
+export function originShort(origin: Origin, host?: string | null): string {
+  if (origin === 'local') return '';
+  const h = typeof host === 'string' ? host.trim() : '';
+  if (origin === 'peer' && h) return t('{host}에서 만듦', { host: h });
+  return ORIGIN_SHORT[origin];
+}
+export function originLabel(origin: Origin, host?: string | null): string {
+  const h = typeof host === 'string' ? host.trim() : '';
+  return origin === 'peer' && h ? t('{host}에서 만듦', { host: h }) : ORIGIN_LABEL[origin];
+}
 
 /** 서버 값이 없거나(구버전 서버) 모르는 값이면 local — 모든 행에 외부 아이콘이 붙는 것보다 안전하다. */
 export function normalizeOrigin(v: unknown): Origin {
@@ -520,14 +534,14 @@ export interface RowMenuItem {
  * 만든 곳 · 브랜치. 값이 없는 조각은 건너뛴다. 선택 불가 헤더 행(`.vt-menu-summary`)에 그린다.
  */
 export function rowSummary(
-  row: Pick<SessionRow, 'status' | 'kind' | 'otherClients' | 'origin' | 'branch'> & { share?: ShareInfo | null; cwd?: string },
+  row: Pick<SessionRow, 'status' | 'kind' | 'otherClients' | 'origin' | 'originHost' | 'branch'> & { share?: ShareInfo | null; cwd?: string },
 ): string {
   const s = normalizeState(row.status);
   const parts: string[] = [(STATE_LABEL as Record<string, string>)[s]];
   if (s === 'waiting') parts.push(KIND_LABEL[normalizeKind(row.kind)]);
   if (row.share) parts.push(shareSentence(row.share));
   if (row.otherClients > 0) parts.push(t('웹 외 {n}', { n: row.otherClients }));
-  parts.push(ORIGIN_LABEL[normalizeOrigin(row.origin)]);
+  parts.push(originLabel(normalizeOrigin(row.origin), row.originHost));
   if (row.cwd) parts.push(row.cwd);
   if (row.branch) parts.push(row.branch);
   return parts.join(' · ');

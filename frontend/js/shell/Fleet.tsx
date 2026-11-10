@@ -200,7 +200,7 @@ export function FleetRow(props: {
             <NativeChip row={props.row} />
             <ShareMark share={props.row.share} />
             <ScreensMark row={props.row} />
-            <OriginMark origin={props.row.origin} />
+            <OriginMark origin={props.row.origin} host={props.row.originHost} />
           </span>
         </div>
         {/* 질문 한 줄 — 터미널에 뜬 것을 터미널 색으로. 열려 있지 않은 세션은 키를 보낼 곳(열린 pane)이 없다 — 인라인 승인 버튼 대신 탭해서 연다. */}

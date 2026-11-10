@@ -998,4 +998,30 @@ def test_peer_create_records_origin_peer_and_ignores_body(env, fake_tmux):
                      {"name": "dev", "origin": "local", "@fsh_origin": "agent"})
     assert r.status_code == 200, r.text
     sets = [c for c in fake_tmux.calls if c[0] == "set-option"]
-    assert sets == [["set-option", "-t", "dev", "@fsh_origin", "peer"]]
+    # 만든 맥의 이름은 서명한 grant 라벨(`_pair`가 "노트북"으로 등록) — 본문 값이 아니다.
+    assert sets == [["set-option", "-t", "dev", "@fsh_origin", "peer"],
+                    ["set-option", "-t", "dev", "@fsh_origin_host", "노트북"]]
+
+
+def test_peer_create_ignores_body_origin_host(env, fake_tmux):
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
+    _signed_post(client, hs, secret, "/api/peer/sessions/create",
+                 {"name": "dev", "originHost": "evil", "origin_host": "evil"})
+    sets = [c for c in fake_tmux.calls if c[0] == "set-option"]
+    assert all("evil" not in c for c in sets)
+
+
+def test_sessions_carry_origin_host_for_peer_only(env, monkeypatch):
+    """peer가 만든 세션만 만든 맥 이름을 싣는다. 옵션이 없거나(옛 세션) peer가 아니면 빈 문자열."""
+    client, hs, _ = env
+    secret = _pair(client, hs)
+    import tmux_runner
+    lines = "\n".join(["a\t1\t0\tpeer\tm5-studio", "b\t1\t0\tpeer\t", "c\t1\t0\tlocal\tm5-studio", "d\t1\t0\tpeer"])
+    monkeypatch.setattr(tmux_runner, "run_text", lambda args, *a, **kw: lines)
+    monkeypatch.setattr(tmux_runner, "get_all_panes", lambda: [])
+    r = client.get("/api/peer/sessions",
+                   headers=_sign_headers(hs, "laptop", secret, "GET", "/api/peer/sessions"))
+    got = {s["name"]: s["originHost"] for s in r.json()["sessions"]}
+    assert got == {"a": "m5-studio", "b": "", "c": "", "d": ""}
