@@ -126,23 +126,12 @@
 .vt-ft-scrim.sheet { background:var(--color-scrim); }
 .vt-ft-menu {
   position:fixed; z-index:901; width:260px; max-width:calc(100vw - 16px);
-  display:flex; flex-direction:column; padding:calc(var(--spacing) * 1) 0;
-  background:var(--menu); border:1px solid var(--line); border-radius:var(--radius-lg);
-  box-shadow:var(--shadow-e2);
+  display:flex; flex-direction:column;
 }
 .vt-ft-menu-path {
   padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3); border-bottom:1px solid var(--line); margin-bottom:calc(var(--spacing) * 1);
   font:500 var(--fs-2xs) var(--mono); color:var(--sub); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left;
 }
-.vt-ft-mi {
-  display:flex; align-items:center; gap:calc(var(--spacing) * 2); height:28px; padding:0 calc(var(--spacing) * 3);
-  background:none; border:0; color:var(--txt); font:400 var(--fs-sm) var(--ui); text-align:left; cursor:pointer;
-}
-.vt-ft-mi:hover, .vt-ft-mi:focus { background:var(--color-state-hover); outline:none; }
-.vt-ft-mi:active { background:var(--color-state-press); }
-.vt-ft-mi-l { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.vt-ft-mi-k { flex:none; color:var(--sub); font:400 var(--fs-2xs) var(--mono); max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-
 .vt-ft-menu.sheet {
   left:0; right:0; bottom:0; top:auto; width:auto; max-width:none;
   border-radius:var(--radius-lg) var(--radius-lg) 0 0; border-bottom:0;
@@ -154,6 +143,7 @@
 .vt-ft-menu-title b { font:500 var(--fs-base) var(--mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .vt-ft-menu-title span { font:400 var(--fs-xs) var(--mono); color:var(--sub); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .vt-ft-menu.sheet .vt-ft-mi { height:44px; padding:0 calc(var(--spacing) * 5); font-size:var(--fs-base); }
+.vt-ft-menu.sheet .vt-ft-mi .vt-ft-ic svg { width:20px; height:20px; }
 .vt-ft-menu-cancel { margin:calc(var(--spacing) * 2) calc(var(--spacing) * 4) 0; height:44px; }
 
 /* ── 폰: 행 44 · 들여쓰기 16 · 아이콘 20 ───────────────────────────────────── */

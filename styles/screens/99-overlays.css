@@ -353,7 +353,7 @@
 .vt-unreachable-sub { margin:0; opacity:1; color:var(--color-sub); font-size:var(--fs-sm); }
 
 /* ── O16-E 툴팁 · 터미널 검색 바 ── */
-.vt-tip { padding:6px 8px; background:var(--color-bg-raised); border-color:var(--color-line-strong); box-shadow:var(--shadow-e2); font-size:var(--fs-xs); }
+/* 툴팁 면(바탕·테두리·그림자·글자)은 components.css `.vt-tip`이 한 곳에서 정한다. */
 #search-bar {
   width:380px; height:36px; box-sizing:border-box; padding:0 4px 0 10px; gap:6px;
   background:var(--color-bg-raised); border:1px solid var(--color-line-strong); border-radius:var(--radius-sm); box-shadow:var(--shadow-e2);

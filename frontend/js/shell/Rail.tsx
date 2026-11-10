@@ -29,7 +29,7 @@ import {
   createDiffWatcher, answerSessionPrompt,
 } from './rail-fetch.js';
 import { createRailPrefs } from './rail-prefs.js';
-import { Menu, Row, type MenuItem } from './RailRow.js';
+import { Menu, ROW_MENU_ICON, Row, type MenuItem } from './RailRow.js';
 import { NativeChildren } from './NativeChildren.js';
 import { CatalogTree, RecentEnded, ArchiveEntry, ArchiveList, type CatalogSnapshot } from './CatalogTree.js';
 import { renameSession as renameCatalogSession } from '../history/session-actions.js';
@@ -405,7 +405,7 @@ export function Rail(props: RailProps) {
     const row = m.row;
     const linked = catalogOf(row);
     return rowMenuItems(row, { split: splitAvailable(row), share: viewHostId === LOCAL_HOST, record: !!linked }).map((it) => ({
-      label: it.label, detail: it.detail, danger: it.danger,
+      label: it.label, detail: it.detail, danger: it.danger, icon: ROW_MENU_ICON[it.id],
       run: () => {
         if (it.id === 'record' && linked) { void openRecordOf(linked, row.tmuxName); return; }
         // 열려 있지 않은 행은 웹 세션이 없어 제자리 편집이 안 된다 — 카탈로그 제목만 바꾼다.
@@ -438,6 +438,7 @@ export function Rail(props: RailProps) {
       detail: h.detail,
       dim: !h.online,
       checked: h.active,
+      icon: h.id === LOCAL_HOST ? 'laptop' : 'server',
       run: () => selectHost(h.id),
     }));
 

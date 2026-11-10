@@ -659,29 +659,81 @@
    * 버튼과 나누는 기준: 버튼은 자기 글자만큼 넓고 **가운데 정렬**, 이건 줄을
    * 꽉 채우고 **왼쪽 정렬**이다. 목록 안에서 위아래로 훑는 것이라 글자 시작
    * 위치가 일정해야 한다. */
-  .vt-menu-item {
-    --menu-item-h: 36px;
+  /* ── 메뉴 한 규격 (2026-11, 화면 점검 8절 4번) ─────────────────────────────
+   * 이전에는 FarShell 메뉴(12px·28px·아이콘 14)와 행 메뉴·「+」 메뉴(13px·36px·아이콘
+   * 없음)가 한 화면에 같이 떠서 규격이 둘이었다. 시안 menu 규격 하나로 합친다:
+   *   면    bg-raised · 1px line-strong · 반경 8(radius-lg) · 그림자 e2 · 패딩 4
+   *   항목  높이 28(폰·터치 44) · 글자 13(fs-sm) · 좌우 패딩 8 · 칸 간격 8 · 반경 4(radius-xs)
+   *   아이콘 14 · 색 muted(켜짐 acc · 위험 err)
+   *   오른쪽 열  단축키(.vt-mb-keys · .vt-ft-mi-k · .vt-menu-item-k = mono 12 muted) ·
+   *            부가 글자(.vt-menu-item-detail = ui 12 muted) — 둘 다 margin-left:auto
+   *   구분선  1px line, 좌우 −4로 면 끝까지(.vt-menu-sep · .vt-mb-sep)
+   *   섹션 라벨 11/600 muted(.vt-menu-label · .vt-pt-menu-label)
+   * 이 규칙을 따르는 메뉴(코드로 열거): RailRow.tsx의 Menu(세션 행 ⋯ · 호스트 · 카탈로그 ·
+   * 서브에이전트 · 제목 막대 호스트), term/session.js의 「+」 메뉴, TitleBar.tsx의 FarShell 메뉴
+   * (.vt-mb-pop), FileTree.tsx의 행 메뉴(.vt-ft-menu), ui/select.js의 드롭다운(.vt-dd-list),
+   * 포트 관리 시트(.vt-pt-menu), Fleet.tsx의 폰 시트 항목. 시트 껍데기(폰 아래 시트)는 자기 CSS가
+   * 맡고 항목만 이 규격이다. 새 메뉴는 클래스를 새로 만들지 말고 이 목록에 올려라
+   * (frontend/tests/menu-spec.test.js가 소비 파일의 규격 선언을 본다). */
+  .vt-menu, .vt-mb-pop, .vt-ft-menu {
+    --menu-item-h: 28px;
+    box-sizing: border-box;
+    padding: calc(var(--spacing) * 1);
+    background: var(--color-bg-raised);
+    color: var(--color-txt);
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-e2);
+    font: var(--weight-normal) var(--fs-sm) / var(--leading-row) var(--font-ui);
+    min-width: 200px;
+  }
+  .vt-menu-item, .vt-mb-item, .vt-ft-mi, .vt-pt-menu-item {
     display: flex;
     align-items: center;
-    gap: calc(var(--spacing) * 2.5);
+    gap: calc(var(--spacing) * 2);
+    box-sizing: border-box;
     width: 100%;
     min-height: var(--menu-item-h);
-    padding: 0 calc(var(--spacing) * 2.5);
+    padding: 0 calc(var(--spacing) * 2);
     border: 0;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-xs);
     background: transparent;
     color: var(--color-txt);
     font: var(--weight-normal) var(--fs-sm) / var(--leading-row) var(--font-ui);
     text-align: left;
+    white-space: nowrap;
     cursor: pointer;
-    transition: background var(--dur-fast) var(--ease-out-quint),
-                color var(--dur-fast) var(--ease-out-quint);
   }
-  .vt-menu-item.sm { --menu-item-h: 28px; font-size: var(--fs-xs); }
-  .vt-menu-item > svg { width: 16px; height: 16px; flex: none; color: var(--color-sub); }
+  .vt-menu-item.sm { --menu-item-h: 28px; }
+  .vt-menu-item > svg, .vt-menu-item-ico svg, .vt-mb-item > svg, .vt-ft-mi > svg, .vt-ft-mi .vt-ft-ic svg { width: 14px; height: 14px; flex: none; color: var(--color-muted); }
+  .vt-menu-item-ico { display: inline-flex; flex: none; }
+  .vt-menu-item-label, .vt-mb-label, .vt-ft-mi-l { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vt-menu-item-detail { margin-left: auto; padding-left: calc(var(--spacing) * 4); color: var(--color-muted); font: var(--weight-normal) var(--fs-xs) / 1 var(--font-ui); }
+  .vt-menu-item-k, .vt-mb-keys, .vt-ft-mi-k {
+    margin-left: auto; padding-left: calc(var(--spacing) * 4); flex: none; max-width: 40%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--color-muted); font: var(--weight-normal) var(--fs-xs) / 1 var(--font-mono);
+  }
+  /* 두 줄 항목(「+」 메뉴) — 아이콘 옆에 이름과 보조 설명이 위아래로 선다. */
+  .vt-menu-item.two { padding-block: calc(var(--spacing) * 1.5); align-items: flex-start; }
+  .vt-menu-item.two > .vt-menu-item-ico { margin-top: 3px; }
+  .vt-menu-item-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .vt-menu-item-sub { color: var(--color-muted); font: var(--weight-normal) var(--fs-2xs) / var(--leading-row) var(--font-ui); white-space: normal; }
+  .vt-menu-sep, .vt-mb-sep { height: 1px; margin: calc(var(--spacing) * 1) calc(var(--spacing) * -1); border: 0; background: var(--color-line); }
+  .vt-menu-label, .vt-pt-menu-label {
+    padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2) calc(var(--spacing) * 1);
+    color: var(--color-muted); font: var(--weight-semibold) var(--fs-3xs) / 1.3 var(--font-ui);
+  }
+  /* 폰·터치는 항목 44 (WCAG 2.5.5). 설정 왼쪽 내비(.vt-set-navitem)는 자기 목록 규격을 따른다. */
+  @media (max-width: 719.98px), (pointer: coarse) {
+    .vt-menu, .vt-mb-pop, .vt-ft-menu { --menu-item-h: 44px; }
+    .vt-menu-item:not(.vt-set-navitem), .vt-mb-item, .vt-ft-mi, .vt-pt-menu-item { --menu-item-h: 44px; }
+    .vt-menu-item.sm:not(.vt-set-navitem) { --menu-item-h: 44px; }
+  }
 
-  .vt-menu-item:hover:not(:disabled) { background: var(--color-state-hover); }
-  .vt-menu-item:active:not(:disabled) { background: var(--color-state-press); }
+  .vt-menu-item:hover:not(:disabled), .vt-mb-item:hover:not(:disabled), .vt-ft-mi:hover, .vt-pt-menu-item:hover { background: var(--color-state-hover); }
+  .vt-menu-item:active:not(:disabled), .vt-mb-item:active:not(:disabled), .vt-ft-mi:active, .vt-pt-menu-item:active { background: var(--color-state-press); }
+  .vt-menu-item:focus-visible, .vt-mb-item:focus-visible, .vt-ft-mi:focus-visible { background: var(--color-state-hover); }
   .vt-menu-item:disabled { opacity: .45; cursor: not-allowed; background: transparent; }
   /* "지금 이것" — 설정의 현재 섹션처럼 목록에서 선택된 항목. 액센트 글자가
    * 아니라 배경 한 단계로 말한다(액센트는 화면당 하나라는 규칙). */
@@ -716,7 +768,7 @@
   .vt-menu-item.new { color: var(--ok); }
   /* 2026-09-23 — `.vt-btn.danger`와 같은 값의 목록-행 버전. 되돌릴 수 없는
    * 항목(세션 완전 종료 등) 하나만 위험색으로 눈에 띄게 한다. */
-  .vt-menu-item.danger { color: var(--color-st-error); }
+  .vt-menu-item.danger, .vt-menu-item.danger > svg, .vt-menu-item.danger .vt-menu-item-ico svg { color: var(--color-st-error); }
   .vt-menu-item.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--color-st-error) 14%, transparent); }
 
   /* ── 칩(필터) ──────────────────────────────────────────────────────────
@@ -1412,17 +1464,23 @@
     left: 0;
     top: 0;
     z-index: 1000;   /* 모달(600)·오버레이(700)·풀스크린(900) 위. 오프라인 배너(9999)만 위에 둔다. */
+    /* 제목과 부제는 위아래로 쌓고 같은 x에서 시작한다. 이전에는 한 줄(flex row, baseline)이라 부제가
+       제목 오른쪽에 붙고, 두 줄로 접히면 부제가 제목 아래 들여쓴 자리에 떨어졌다(2026-11 점검). */
     display: flex;
-    align-items: baseline;
-    gap: calc(var(--spacing) * 1.5);
-    max-width: 280px;
-    padding: calc(var(--spacing) * 1) calc(var(--spacing) * 2);
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    box-sizing: border-box;
+    max-width: min(280px, calc(100vw - 16px));
+    padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2);
+    /* 면 규격은 메뉴와 같다: bg-raised · 1px line-strong · 그림자 e2. 툴팁은 옆 패널 위에 뜨는 일이 있어
+       테두리가 안 보이면 반투명하게 겹쳐 읽혔다. 반경은 컨트롤과 같은 sm. */
     border: 1px solid var(--color-line-strong);
     border-radius: var(--radius-sm);
-    background: var(--menu);
-    box-shadow: var(--shadow-e1);
+    background: var(--color-bg-raised);
+    box-shadow: var(--shadow-e2);
     color: var(--color-txt);
-    font: var(--weight-medium) var(--fs-2xs) / 1.45 var(--font-ui);
+    font: var(--weight-medium) var(--fs-xs) / 1.45 var(--font-ui);
     /* nowrap이 아닌 이유: 경로처럼 긴 값을 그대로 싣는 자리가 있다(저장소
        표시 설정의 경로 줄). 280px에서 접히게 두고, 호출부가 명시한 \n만
        줄바꿈으로 존중한다. */
@@ -1435,8 +1493,8 @@
     opacity: 0;
     transform: scale(0.96);
     transition:
-      opacity var(--dur-fast) var(--ease-out-quint),
-      transform var(--dur-fast) var(--ease-out-quint),
+      opacity var(--dur-fast) var(--ease-fast),
+      transform var(--dur-fast) var(--ease-fast),
       visibility 0s linear var(--dur-fast);
   }
   .vt-tip.open {
@@ -1447,7 +1505,7 @@
   }
   .vt-tip-sub {
     color: var(--color-sub);
-    font-family: var(--font-mono);
+    font: var(--weight-normal) var(--fs-2xs) / 1.4 var(--font-mono);
     font-variant-numeric: tabular-nums;
   }
   /* 움직임만 걷어낸다(색·불투명도는 남긴다 — 그게 상태 전달이다). */
