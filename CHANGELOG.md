@@ -32,6 +32,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Fixed
 - The viewer's top-bar buttons, the encoding picker and the Markdown 「Copy address」 button no longer render with the old near-black background in the new design.
 - A quiet remote-host pane no longer drops and reconnects every 45 s.
+- The agent mark in the collapsed session bar sits exactly in the middle of its status ring; the expanded row's right margin leaked into the collapsed cell and pushed it 3 px left.
 - A native subagent that never appeared in the parent's Stop-hook `background_tasks` list is no longer marked done just because it is absent; completion now comes from `subagent_stop`/`stop_failure` or from a listed row disappearing. A one-time per-session warning (id prefixes and counts only) is logged when the list and the rows disagree.
 
 ### Security
