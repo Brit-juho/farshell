@@ -226,6 +226,7 @@
     --color-bg-1: #f1ede6;
     --color-bg-2: #eae6db;
     --color-bg-3: #ffffff;
+    --color-on-st-working: #000000;   /* st-working(#1e8e3e) 면 위 4.99 — bg-0은 3.96 */
     --color-line: rgb(0 0 0 / .10);
     --color-line-strong: rgb(0 0 0 / .20);
     --color-txt: #2b2a25;

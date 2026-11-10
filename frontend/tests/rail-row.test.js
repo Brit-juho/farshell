@@ -123,14 +123,46 @@ test('done 배지·작업 중 도구', async () => {
   assert.strictEqual(work.root.querySelector('.vt-srow-tool').textContent, '도구: Edit');
 });
 
-test('compact — 상태 아이콘이 행 직속에 있고 ⋯ 버튼은 없다, 우클릭은 된다', async () => {
+test('compact — 링 + 가운데 마크가 행 직속에 있고 ⋯ 버튼은 없다, 우클릭은 된다', async () => {
   const { root, window, calls } = await mount({ status: 'working', agent: 'claude' }, { compact: true });
-  assert.ok(root.querySelector('.vt-wgrail-row > .vt-srow-state .vt-state-icon[data-state="working"]'));
-  assert.ok(root.querySelector('.vt-wgrail-row > .vt-wgrail-agent-compact'), '에이전트 마크는 칸 모서리(행 직속)');
+  const ring = root.querySelector('.vt-wgrail-row > .vt-srow-state.vt-wgrail-ring[data-state="working"]');
+  assert.ok(ring, '상태 링은 행 직속');
+  assert.ok(ring.querySelector('svg.vt-ring'));
+  assert.strictEqual(ring.getAttribute('role'), 'img');
+  assert.strictEqual(ring.getAttribute('aria-label'), '작업 중', '상태 이름은 지금과 같다');
+  assert.ok(root.querySelector('.vt-wgrail-row > .vt-wgrail-agent-compact svg'), '에이전트 마크는 칸 가운데(행 직속)');
+  assert.strictEqual(root.querySelector('.vt-state-icon'), null, '접힘은 상태 아이콘 모양이 아니라 링이다');
   assert.strictEqual(root.querySelector('.vt-srow-main'), null, '이름·줄은 접힘에서 그리지 않는다');
   assert.strictEqual(root.querySelector('.vt-srow-menu'), null);
   root.querySelector('.vt-wgrail-row').dispatchEvent(new window.MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
   assert.deepStrictEqual(calls, ['contextmenu']);
+});
+
+test('compact — 에이전트를 모르거나 셸이어도 마크가 있다(셸 프롬프트), 읽지 않음은 링이 아니라 점', async () => {
+  const sh = await mount({ status: 'idle', agent: null }, { compact: true });
+  assert.ok(sh.root.querySelector('.vt-wgrail-agent-compact svg'));
+  assert.strictEqual(sh.root.querySelector('.vt-wgrail-unseen'), null);
+  const un = await mount({ status: 'done', agent: 'codex', unseen: true }, { compact: true });
+  assert.ok(un.root.querySelector('.vt-wgrail-unseen'), 'unseen 점');
+  assert.strictEqual(un.root.querySelector('.vt-wgrail-ring').getAttribute('aria-label'), '완료 · 아직 확인 안 함');
+  const idleUnseen = await mount({ status: 'idle', agent: 'claude', unseen: true }, { compact: true });
+  assert.strictEqual(idleUnseen.root.querySelector('.vt-wgrail-unseen'), null, 'idle은 unseen을 안 그린다(펼침과 같다)');
+});
+
+test('compact — 작업 중 서브에이전트 개수 배지(S1): N · 0이면 없음 · 한도 도달은 속 빈 「+」 · 펼침에는 없다', async () => {
+  const items = (...states) => ({ parent_id: 'p', items: states.map((state, i) => ({ id: 'a' + i, state, label: 'x' + i })) });
+  const two = await mount({ status: 'waiting', agent: 'claude', subagents: items('working', 'working', 'idle') }, { compact: true });
+  const b = two.root.querySelector('.vt-wgrail-subbadge');
+  assert.strictEqual(b.textContent, '2');
+  assert.strictEqual(b.getAttribute('aria-label'), '내부 에이전트 2 작업 중');
+  assert.match(two.root.querySelector('.vt-wgrail-row').dataset.tipSub, /내부 에이전트 2 작업 중/);
+  assert.strictEqual(two.root.querySelector('button.vt-wgrail-subbadge'), null, '클릭 동작 없음(툴팁만)');
+  const none = await mount({ status: 'working', agent: 'claude', subagents: items('idle', 'done') }, { compact: true });
+  assert.strictEqual(none.root.querySelector('.vt-wgrail-subbadge'), null);
+  const lim = await mount({ status: 'working', agent: 'claude', subagents: { ...items('working'), limited: true } }, { compact: true });
+  assert.ok(lim.root.querySelector('.vt-wgrail-subbadge.limited'));
+  const wide = await mount({ status: 'working', agent: 'claude', subagents: items('working') });
+  assert.strictEqual(wide.root.querySelector('.vt-wgrail-subbadge'), null);
 });
 
 test('compact 툴팁 — 이름, 둘째 줄은 브랜치 · 상태 · 다른 화면 · 공유', async () => {

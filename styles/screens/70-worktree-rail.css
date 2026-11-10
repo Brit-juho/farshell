@@ -23,7 +23,11 @@
    body padding은 작업대(`#vt-workbench.vt-sidepanel.left`, 90-workbench.css)가 맡고,
    레일은 사이드바 폭(--vt-side-w, 활동 전체가 공유)을 그대로 채운다. 접힘(48px 띠)도
    사이드바 폭이 48이 되는 것이라 여기서 폭을 따로 정하지 않는다. */
-#vt-wgrail { display:flex; flex-direction:column; flex:1; min-height:0; min-width:0; width:100%; }
+#vt-wgrail { display:flex; flex-direction:column; flex:1; min-height:0; min-width:0; width:100%;
+  /* 「메뉴 크기」(ui.side.scale) — 세션 행의 줄 높이(1줄 · 2~4줄)와 글자 한 단계. 보통이 지금 값(20 · 18). */
+  --vt-line1:20px; --vt-line:18px; }
+:root[data-vt-side-scale="small"] #vt-wgrail { --vt-line1:18px; --vt-line:16px; --fs-xs:11px; --fs-sm:12px; }
+:root[data-vt-side-scale="large"] #vt-wgrail { --vt-line1:22px; --vt-line:20px; --fs-3xs:12px; --fs-xs:13px; --fs-sm:14px; }
 
 /* 머리 36(리디자인 4단계, 시안 `.sb-h`): 「세션 N」 12/600 · 아이콘 버튼 24 넷(대화 기록 · 레일 설정 ·
    새 세션 · 접기). 대문자 라벨(patterns.css의 eyebrow)이 아니라 글자 그대로 쓴다. */
@@ -173,26 +177,74 @@
   padding:calc(var(--spacing) * 4) calc(var(--spacing) * 2.5); text-align:center;
   color:var(--sub); font:400 var(--fs-sm) var(--mono); display:flex; flex-direction:column; gap:calc(var(--spacing) * 2); align-items:center;
 }
-/* 접힘(48px 띠, 시안 D02 「접힘 48」): 칸 40×40(반경 6) 가운데 상태 아이콘 16, 오른쪽 아래 모서리에
-   에이전트 마크 12. 개입 필요가 위(옅은 호박 바탕), 경계선 24×1, 나머지가 아래. 이름 · 브랜치 · 상태 ·
-   다른 화면 · 공유는 행의 툴팁이 돌려준다(RailRow.tsx의 compactSub). */
-#vt-wgrail.collapsed .vt-wgrail-body { display:flex; flex-direction:column; align-items:center; gap:2px; padding-top:calc(var(--spacing) * 2); }
-#vt-wgrail.collapsed .vt-wgrail-row {
-  position:relative; flex:none; width:40px; height:40px; padding:0; gap:0;
-  align-items:center; justify-content:center; border-radius:var(--radius-sm); box-shadow:none;
+/* 접힘(48px 띠, 링형 · 시안 rail-specimen-v2 「3-B」) — 칸 40×40(반경 6, --vt-cell) 가운데 에이전트 마크 18, 둘레 2px 상태 링(34).
+   링과 마크는 둘 다 상태색이고 상태는 링 모양이 말한다: 유휴 점선 점 · 입력 대기 파선(숨쉬기) · 작업 중 회전 호 · 완료 실선.
+   읽지 않음(unseen)은 링을 상태가 쓰므로 마크 오른쪽 아래 6px 점(칸 배경색 2px 오려내기). 작업 중 내부 서브에이전트는 칸 오른쪽 위 12px 개수
+   배지(S1, 툴팁만). 하위 세션(lineage 자식)은 부모 바로 아래 0.8배 칸 + 왼쪽 2px 가지선(S3-b). 이름 · 브랜치 · 상태 · 내부 에이전트 ·
+   다른 화면 · 공유는 행의 툴팁이 돌려준다(RailRow.tsx의 compactSub).
+   세로 정렬(P안): 본문 위 여백 = 펼침 구역 머리 28 + 행 위 패딩 6 + 줄 높이/2 − 칸/2 → 첫 아이콘 중심이 펼침 첫 행과 같은 y.
+   구역 사이 = 펼침 머리 28 + 여백 4 = 32(아래 .vt-wgrail-group-sep 28 + 칸 간격 2·2). 가로 중심은 활동 막대와 같은 열.
+   ⚠ 애니메이션은 transform·opacity만. 폭·padding transition 없음(90-workbench.css 머리말). */
+#vt-wgrail.collapsed .vt-wgrail-body { display:flex; flex-direction:column; align-items:center; gap:2px; padding-top:calc(28px + 6px + var(--vt-line1) / 2 - var(--vt-cell) / 2); }
+#vt-wgrail.collapsed .vt-srow.vt-wgrail-row {
+  --cell:var(--vt-cell); --rb:var(--bar); --st0:var(--color-st-idle); --st:var(--st0);
+  --ring:calc(var(--cell) * .85); --mark:calc(var(--cell) * .45);
+  position:relative; flex:none; width:var(--cell); height:var(--cell); padding:0; gap:0; overflow:visible;
+  align-items:center; justify-content:center; border-radius:var(--radius-sm); box-shadow:none; background:transparent;
 }
-#vt-wgrail.collapsed .vt-wgrail-row.is-waiting { background:var(--color-st-waiting-tint); box-shadow:none; }
-#vt-wgrail.collapsed .vt-wgrail-row.active { background:var(--color-acc-soft); box-shadow:none; }
-#vt-wgrail.collapsed .vt-wgrail-row:hover { background:var(--color-bg-3); }
-#vt-wgrail.collapsed .vt-wgrail-row > .vt-srow-state { width:auto; height:auto; }
-.vt-wgrail-agent-compact { position:absolute; right:2px; bottom:2px; align-items:center; color:var(--color-muted); pointer-events:none; }
-.vt-wgrail-agent-compact svg { width:12px; height:12px; }
-.vt-wgrail-agent[data-state="working"] { color:var(--color-st-working); }
-.vt-wgrail-agent[data-state="waiting"] { color:var(--color-st-waiting); }
-.vt-wgrail-agent[data-state="done"] { color:var(--color-st-done); }
+#vt-wgrail.collapsed .vt-wgrail-kidcell { --cell:calc(var(--vt-cell) * .8); --branch:color-mix(in srgb, var(--color-acc) 60%, transparent); position:relative; flex:none; width:var(--cell); height:var(--cell); }
+#vt-wgrail.collapsed .vt-wgrail-kidcell > .vt-srow.vt-wgrail-row { --cell:inherit; }
+#vt-wgrail.collapsed .vt-srow.vt-wgrail-row[data-state="working"] { --st0:var(--color-st-working); }
+#vt-wgrail.collapsed .vt-srow.vt-wgrail-row[data-state="waiting"] { --st0:var(--color-st-waiting); }
+#vt-wgrail.collapsed .vt-srow.vt-wgrail-row[data-state="done"] { --st0:var(--color-st-done); }
+#vt-wgrail.collapsed .vt-srow.vt-wgrail-row.is-waiting { background:var(--color-st-waiting-tint); box-shadow:none; --rb:color-mix(in srgb, var(--color-st-waiting) var(--waiting-tint-pct), var(--bar)); }
+/* 선택 칸은 상태색을 본문색 쪽으로 20% 당긴다 — 선택 틴트 위에서 notepad·vscode의 링이 3:1 아래로 내려가는 것을 막는다(tokens-contrast.test.js). */
+#vt-wgrail.collapsed .vt-srow.vt-wgrail-row.active { background:var(--color-acc-soft); box-shadow:none; --rb:color-mix(in srgb, var(--color-acc) var(--acc-soft-pct), var(--bar)); --st:color-mix(in srgb, var(--st0) 80%, var(--color-txt)); }
+#vt-wgrail.collapsed .vt-srow.vt-wgrail-row:hover { background:var(--color-bg-3); --rb:var(--color-bg-3); }
+/* 상태 링 — 칸 안에 --ring(칸의 85%)으로 가운데. */
+#vt-wgrail.collapsed .vt-srow.vt-wgrail-row > .vt-srow-state.vt-wgrail-ring {
+  position:absolute; left:50%; top:50%; width:var(--ring); height:var(--ring); margin:calc(var(--ring) / -2) 0 0 calc(var(--ring) / -2);
+  display:block; color:var(--st); pointer-events:none;
+}
+.vt-wgrail-ring .vt-ring { display:block; width:100%; height:100%; transform-origin:center; }
+.vt-wgrail-ring[data-state="working"] .vt-ring { animation:vt-ring-spin 1.1s linear infinite; }
+.vt-wgrail-ring[data-state="waiting"] .vt-ring { animation:vt-ring-breathe 1.8s ease-in-out infinite; }
+@keyframes vt-ring-spin { to { transform:rotate(360deg); } }
+@keyframes vt-ring-breathe { 50% { opacity:.55; } }
+@media (prefers-reduced-motion: reduce) { .vt-wgrail-ring .vt-ring { animation:none !important; } }
+/* 에이전트 마크 — 가운데, 상태색(시안 3-B). 셸·에이전트 모르는 행은 셸 프롬프트 선 마크. */
+#vt-wgrail.collapsed .vt-srow.vt-wgrail-row .vt-wgrail-agent-compact {
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--st); pointer-events:none;
+}
+#vt-wgrail.collapsed .vt-srow.vt-wgrail-row .vt-wgrail-agent-compact svg { display:block; width:var(--mark); height:var(--mark); }
+/* 읽지 않음 점 — 마크 오른쪽 아래 모서리에 6px, 칸 바탕색(--rb)으로 2px 오려 낸다. */
+.vt-wgrail-unseen {
+  position:absolute; left:calc(50% + var(--mark) / 2 - 3px); top:calc(50% + var(--mark) / 2 - 3px);
+  width:6px; height:6px; border-radius:50%; background:var(--st); box-shadow:0 0 0 2px var(--rb); pointer-events:none;
+}
+/* 내부 서브에이전트 개수 배지(S1) — 작업 중 N. 한도 도달은 속 빈 「+」. 글자색은 working 면 위의 --color-on-st-working(대비 4.5). */
+.vt-wgrail-subbadge {
+  position:absolute; right:-3px; top:-3px; z-index:2; width:12px; height:12px; box-sizing:border-box; border-radius:50%;
+  background:var(--color-st-working); color:var(--color-on-st-working); box-shadow:0 0 0 1.5px var(--rb);
+  font:700 8.5px / 12px var(--font-ui); text-align:center; font-variant-numeric:tabular-nums; pointer-events:none;
+}
+.vt-wgrail-subbadge.limited { background:var(--rb); color:var(--color-st-working); box-shadow:inset 0 0 0 1.5px var(--color-st-working), 0 0 0 1.5px var(--rb); font-size:10px; line-height:11px; }
+/* 하위 세션 가지선(S3-b) — 칸 왼쪽 2px. 위로는 부모 칸 옆까지, 마지막 자식은 ㄴ 꺾임, 아니면 아래로 이어진다.
+   가지색은 펼침의 .vt-lin-kid와 같은 분류: 병합됨 완료색 · 실패 오류색 · 닫힌 하위 옅은 선. */
+#vt-wgrail.collapsed .vt-wgrail-kidcell.merged { --branch:var(--color-st-done); }
+#vt-wgrail.collapsed .vt-wgrail-kidcell.failed { --branch:var(--color-st-error); }
+#vt-wgrail.collapsed .vt-wgrail-kidcell.closed { --branch:var(--color-line-strong); }
+#vt-wgrail.collapsed .vt-wgrail-kidcell.closed > .vt-srow { opacity:.55; }
+#vt-wgrail.collapsed .vt-wgrail-kidcell::before {
+  content:""; position:absolute; left:-6.5px; top:-14px; width:6.5px; height:calc(14px + var(--cell) / 2 + 1px); box-sizing:border-box;
+  border-left:2px solid var(--branch); border-bottom:2px solid var(--branch); border-bottom-left-radius:4px; pointer-events:none;
+}
+#vt-wgrail.collapsed .vt-wgrail-kidcell:not(.last)::after {
+  content:""; position:absolute; left:-6.5px; top:calc(var(--cell) / 2); bottom:-2px; border-left:2px solid var(--branch); pointer-events:none;
+}
 
-/* 접힘에서 구역 라벨 대신 남는 경계선(Rail.tsx의 group-sep). */
-.vt-wgrail-group-sep { flex:none; width:24px; height:1px; margin:calc(var(--spacing) * 1.5) 0; background:var(--color-line-strong); }
+/* 접힘에서 구역 라벨 대신 남는 경계선(Rail.tsx의 group-sep). 28 + 칸 간격 2·2 = 32, 선은 가운데. */
+.vt-wgrail-group-sep { flex:none; width:24px; height:28px; background:linear-gradient(var(--color-line-strong), var(--color-line-strong)) center / 100% 1px no-repeat; }
 .vt-wgrail-body > .vt-wgrail-group-sep:first-child { display:none; }
 
 /* 바닥 36: 「+ 새 세션」 조용한 버튼(시안 `.sb-f`). 접힘에서는 40×32 「+」 하나. */
@@ -211,7 +263,7 @@
 .vt-wgrail-new:hover { background:var(--color-bg-3); color:var(--color-txt); }
 .vt-wgrail-new:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
 #vt-wgrail.collapsed .vt-wgrail-footer { justify-content:center; padding:0; }
-#vt-wgrail.collapsed .vt-wgrail-new { flex:none; width:40px; height:32px; justify-content:center; padding:0; }
+#vt-wgrail.collapsed .vt-wgrail-new { flex:none; width:var(--vt-cell); height:32px; justify-content:center; padding:0; }
 .vt-wgrail-new-mark { display:inline-flex; flex:none; }
 .vt-wgrail-new-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
@@ -509,16 +561,16 @@ label.vt-railset-row { cursor:pointer; }
 #vt-wgrail .vt-srow:focus-visible { outline:2px solid var(--color-acc); outline-offset:-2px; }
 #vt-wgrail .vt-srow.active { background:var(--color-acc-soft); box-shadow:inset 2px 0 0 var(--color-acc); }
 #vt-wgrail .vt-srow.is-waiting { background:var(--color-st-waiting-tint); box-shadow:inset 2px 0 0 var(--color-st-waiting); }
-#vt-wgrail .vt-srow > .vt-srow-state { flex:none; width:16px; height:20px; margin:0; justify-content:center; }
+#vt-wgrail .vt-srow > .vt-srow-state { flex:none; width:16px; height:var(--vt-line1); margin:0; justify-content:center; }
 #vt-wgrail .vt-srow-main { gap:2px; }
 
 /* 1줄 20 — 에이전트 14 · 이름 13/600 · 위임 토글 · 경과 mono 12 · ⋯ 24. */
-#vt-wgrail .vt-srow-top { height:20px; gap:calc(var(--spacing) * 1.5); }
+#vt-wgrail .vt-srow-top { height:var(--vt-line1); gap:calc(var(--spacing) * 1.5); }
 #vt-wgrail .vt-srow-agent { color:var(--color-muted); }
 #vt-wgrail .vt-srow-agent svg { width:14px; height:14px; }
 #vt-wgrail .vt-srow-name {
   flex:0 1 auto; color:var(--color-txt);
-  font:var(--weight-semibold) var(--fs-sm) / 20px var(--font-ui);
+  font:var(--weight-semibold) var(--fs-sm) / var(--vt-line1) var(--font-ui);
 }
 #vt-wgrail .vt-srow.active .vt-srow-name { color:var(--color-txt); }
 /* 유휴 행은 이름이 sub · 500, 칸에 없는 행은 muted · 500 — 흐림(opacity)이 아니라 글자 단계로. */
@@ -531,13 +583,13 @@ label.vt-railset-row { cursor:pointer; }
 #vt-wgrail .vt-srow:focus-within .vt-srow-menu,
 #vt-wgrail .vt-srow.active .vt-srow-menu { display:inline-flex; }
 @media (hover:none) { #vt-wgrail .vt-srow-menu { display:inline-flex; } }
-#vt-wgrail .vt-wgrail-name-edit { height:20px; font:var(--weight-semibold) var(--fs-sm) / 1 var(--font-ui); }
+#vt-wgrail .vt-wgrail-name-edit { height:var(--vt-line1); font:var(--weight-semibold) var(--fs-sm) / 1 var(--font-ui); }
 
 /* 부모 행의 「위임 보고 1/2」 토글(시안 `.dlg-t`). */
 #vt-wgrail .vt-srow-kids {
-  min-height:0; height:18px; gap:3px; padding:0 calc(var(--spacing) * 1);
+  min-height:0; height:var(--vt-line); gap:3px; padding:0 calc(var(--spacing) * 1);
   border:1px solid var(--color-line-strong); border-radius:var(--radius-xs);
-  color:var(--color-sub); font:var(--weight-medium) var(--fs-3xs) / 16px var(--font-ui);
+  color:var(--color-sub); font:var(--weight-medium) var(--fs-3xs) / calc(var(--vt-line) - 2px) var(--font-ui);
 }
 .vt-srow-kids-ico { display:inline-flex; flex:none; }
 
@@ -545,8 +597,8 @@ label.vt-railset-row { cursor:pointer; }
 #vt-wgrail .vt-srow-line2,
 #vt-wgrail .vt-srow-line3,
 #vt-wgrail .vt-srow-line4 {
-  height:18px; gap:calc(var(--spacing) * 1.5); overflow:hidden;
-  color:var(--color-muted); font:var(--weight-normal) var(--fs-xs) / 18px var(--font-ui);
+  height:var(--vt-line); gap:calc(var(--spacing) * 1.5); overflow:hidden;
+  color:var(--color-muted); font:var(--weight-normal) var(--fs-xs) / var(--vt-line) var(--font-ui);
 }
 #vt-wgrail .vt-srow-line2 { font-family:var(--font-mono); }
 #vt-wgrail .vt-srow-line2 .vt-srow-branch { flex:0 0 auto; max-width:60%; }   /* 브랜치 먼저 온전히, 모자라면 디렉터리가 줄임표 */
@@ -563,7 +615,7 @@ label.vt-railset-row { cursor:pointer; }
 #vt-wgrail .vt-srow-kw { font-weight:var(--weight-semibold); }
 #vt-wgrail .vt-srow-tool { color:var(--color-sub); }
 #vt-wgrail .vt-srow-badge {
-  display:inline-flex; align-items:center; height:18px; padding:0 6px; box-sizing:border-box;
+  display:inline-flex; align-items:center; height:var(--vt-line); padding:0 6px; box-sizing:border-box;
   border:1px solid var(--color-line-strong); border-radius:var(--radius-xs);
   color:var(--color-sub); font:var(--weight-medium) var(--fs-3xs) / 1 var(--font-ui);
 }
@@ -598,15 +650,15 @@ label.vt-railset-row { cursor:pointer; }
 /* 위임 하위 행 — 부모 아이콘 축(x=19)에서 내려오는 1px 가지선. 폰 Fleet의 색 레인(.vt-lin-fleet)은 그대로 둔다.
    부모 행은 아이콘 아래(6 + 20 + 2 = y 28)부터 선을 내리고, 하위 행은 위에서 아이콘 가운데(y 16)까지 와서 꺾인다. */
 #vt-wgrail .vt-lin.has-kids > .vt-srow::after {
-  left:19px; top:28px; bottom:0; width:0; border:0; border-left:1px solid var(--color-line-strong); border-radius:0;
+  left:19px; top:calc(var(--vt-line1) + 8px); bottom:0; width:0; border:0; border-left:1px solid var(--color-line-strong); border-radius:0;
 }
 #vt-wgrail .vt-lin-kid > .vt-srow { padding-left:36px; }
 #vt-wgrail .vt-lin-kid::before {
-  left:19px; top:0; width:10px; height:16px; z-index:1;
+  left:19px; top:0; width:10px; height:calc(6px + var(--vt-line1) / 2); z-index:1;
   border:0; border-left:1px solid var(--color-line-strong); border-bottom:1px solid var(--color-line-strong); border-bottom-left-radius:5px;
 }
 #vt-wgrail .vt-lin-kid:not(.last)::after {
-  left:19px; top:16px; width:0; z-index:1; background:none; border-left:1px solid var(--color-line-strong);
+  left:19px; top:calc(6px + var(--vt-line1) / 2); width:0; z-index:1; background:none; border-left:1px solid var(--color-line-strong);
 }
 #vt-wgrail .vt-lin-fold { min-height:28px; padding-left:30px; }
 #vt-wgrail .vt-lin-fold-btn { color:var(--color-muted); font:var(--weight-normal) var(--fs-xs) / 1 var(--font-ui); }
