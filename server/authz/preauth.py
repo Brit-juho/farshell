@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 import os
 import threading
@@ -41,6 +42,7 @@ class Limiter:
         self._failures: dict[str, list[float]] = {}
         self._locked_until: dict[str, float] = {}
         self._exchange: list[float] = []
+        self._seen: dict[str, dict[str, float]] = {}   # 출처 -> {틀린 값 해시: 처음 센 시각}
         self._mu = threading.Lock()
 
     def lock_remaining(self, source: str) -> int:
@@ -59,19 +61,46 @@ class Limiter:
     def note_failure(self, source: str) -> int:
         """실패 한 번. 이 실패로(또는 이미) 잠겼으면 남은 초, 아니면 0."""
         with self._mu:
+            return self._note_locked(source, self.clock())
+
+    def _note_locked(self, source: str, now: float) -> int:
+        until = self._locked_until.get(source)
+        if until is not None and until > now:
+            return max(1, math.ceil(until - now))
+        hits = [t for t in self._failures.get(source, []) if now - t < self.window]
+        hits.append(now)
+        self._failures[source] = hits
+        self._evict(now)
+        if len(hits) >= self.fails:
+            self._locked_until[source] = now + self.lock_sec
+            self._failures.pop(source, None)
+            return int(self.lock_sec)
+        return 0
+
+    def note_failure_once(self, source: str, value: str) -> tuple[bool, int]:
+        """`note_failure` 인데, 이 출처가 최근 `window` 초 안에 이미 센 같은 틀린 값이면 세지 않는다.
+        (남의 포트가 준 낡은 쿠키가 페이지 하나의 API 호출마다 쌓여 정상 로그인을 잠그는 것을 막는다.
+        다른 값은 매번 세므로 추측 속도 제한은 그대로다.) 돌려주는 값: (이번에 셌는지, 잠겼으면 남은 초 아니면 0).
+        이미 잠긴 출처는 세지 않고 남은 초만 돌려준다."""
+        digest = hashlib.sha256(value.encode("utf-8", "replace")).hexdigest()[:16]
+        with self._mu:
             now = self.clock()
             until = self._locked_until.get(source)
             if until is not None and until > now:
-                return max(1, math.ceil(until - now))
-            hits = [t for t in self._failures.get(source, []) if now - t < self.window]
-            hits.append(now)
-            self._failures[source] = hits
-            self._evict(now)
-            if len(hits) >= self.fails:
-                self._locked_until[source] = now + self.lock_sec
-                self._failures.pop(source, None)
-                return int(self.lock_sec)
-            return 0
+                return False, max(1, math.ceil(until - now))
+            seen = self._seen.get(source)
+            if seen is not None:
+                at = seen.get(digest)
+                if at is not None and now - at < self.window:
+                    return False, 0
+            left = self._note_locked(source, now)
+            seen = self._seen.setdefault(source, {})
+            for k in [k for k, t in seen.items() if now - t >= self.window]:
+                del seen[k]
+            seen[digest] = now
+            if len(self._seen) > MAX_KEYS:
+                self._seen = {k: v for k, v in self._seen.items() if v and now - max(v.values()) < self.window}
+            return True, left
 
     def _evict(self, now: float) -> None:
         if len(self._failures) > MAX_KEYS:
@@ -100,6 +129,7 @@ class Limiter:
             self._failures.clear()
             self._locked_until.clear()
             self._exchange.clear()
+            self._seen.clear()
 
 
 LIMITER = Limiter()
@@ -163,6 +193,14 @@ def fail(source: str, kind: str) -> int:
     """실패 한 번을 센다(`kind`: peer_sig · session · token · login · ticket · pair). 이 실패로 잠기면 남은 초를 돌려준다."""
     left = LIMITER.note_failure(source)
     _deny(source, kind, "auth.failure" if not left else "auth.lockout")
+    return left
+
+
+def fail_once(source: str, kind: str, value: str) -> int:
+    """`fail` 인데 같은 출처가 60초 안에 이미 낸 같은 틀린 값은 세지 않는다(거부 기록도 남기지 않는다)."""
+    counted, left = LIMITER.note_failure_once(source, value)
+    if counted:
+        _deny(source, kind, "auth.failure" if not left else "auth.lockout")
     return left
 
 

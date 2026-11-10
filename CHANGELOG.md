@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+- **429 lockout caused by a login page's own requests.** The pre-auth failure limit now counts the same wrong cookie/token once per 60 s per source (a different value is still counted every time), a 401 for a `vt_session` cookie whose signature does not verify deletes that cookie, and the frontend holds API calls and the workspace/fs-watch/notify sockets until login completes (`/api/auth*` and `/api/health/live` excepted). Before, opening the page with a cookie from another FarShell port on the same host sent ~18 unauthenticated calls and locked the correct password out for 5 minutes. Two FarShells on one host still share the cookie name (documented in `docs/ref/auth.md`).
+
 ---
 
 ## [2.10.1] — 2026-11-10

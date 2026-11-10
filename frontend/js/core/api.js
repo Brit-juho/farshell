@@ -9,6 +9,7 @@
 import { noteNetworkError, noteResponse, noteTimeout } from './reachability.js';
 import { relayPath, relayUrl } from './host-route.js';
 import { t } from './i18n.js';
+import { waitForAuthentication } from './auth-state.js';
 
 // ## 요청 시간 제한 (서버가 연결은 받는데 답을 안 하던 사고)
 //
@@ -88,6 +89,31 @@ function _deadline(opts) {
   };
 }
 
+// ## 로그인 전 대기 관문
+//
+// 로그인 화면이 떠 있는 동안(`window.__vtAuthed === false`) 인증이 필요한 API를 보내면 전부 401이고,
+// 서버는 그 틀린(또는 남의 서버가 준) 자격을 사전 인증 실패로 센다(authz/preauth.py). 그래서 보내기 전에
+// 로그인 완료(`vt:authed`)를 기다린다. 마감(`_deadline`)은 **기다림이 끝난 뒤** 시작한다.
+// 기다리지 않는 것: `/api/auth*`(상태 조회·승격·로그인 자체)와 `/api/health/live`.
+// 기다리는 중에 페이지를 떠나면(pagehide) 요청을 보내지 않고 AbortError를 던진다.
+function _gateExempt(url) {
+  let p;
+  try { p = new URL(String(url), 'http://x').pathname; } catch (_) { return false; }
+  return p === '/api/auth' || p.startsWith('/api/auth/') || p === '/api/health/live';
+}
+
+function _needsGate(url) {
+  return window.__vtAuthed === false && !_gateExempt(url);
+}
+
+async function _gate() {
+  if (await waitForAuthentication()) return;
+  const e = new Error('aborted: page is leaving before authentication');
+  e.name = 'AbortError';
+  e.status = 0;
+  throw e;
+}
+
 // 거부 사유를 도달 판정에 반영한다. 호출부가 스스로 끊은 것(signal)은 서버 탓이 아니다.
 function _noteFailure(dl, e) {
   if (isTimeoutError(e)) noteTimeout();
@@ -96,6 +122,7 @@ function _noteFailure(dl, e) {
 
 // vtFetch·vtFetchConditional 공용. `notModifiedOk`면 304를 실패로 보지 않고 본문을 읽지 않는다.
 async function _request(path, opts, notModifiedOk) {
+  if (_needsGate(path)) await _gate();       // 관문 판정은 호스트 중계로 바뀌기 전 경로로 한다
   // 호스트 전환 중이면 선택한 맥으로(core/host-route.js). 로컬이면 그대로.
   path = relayPath(path);
   const tokenQuery = window._tokenQuery || '';
@@ -171,6 +198,7 @@ export function vtUrl(path) {
 // vtFetch와 달리 파싱된 JSON이 아니라 Response를 그대로 반환한다 — 기존 fetch(...)
 // 호출부를 1:1로 치환하기 위한 설계.
 export function apiFetch(url, opts = {}) {
+  if (_needsGate(url)) return _gate().then(() => apiFetch(url, opts));
   url = relayUrl(url);
   const token = window.VT_TOKEN;
   if (token && typeof url === 'string' && url.startsWith(window.API_BASE)) {
@@ -196,6 +224,7 @@ export function apiFetch(url, opts = {}) {
  * Response를 그대로 돌려준다(apiFetch와 같은 계약, 본문 읽기 마감도 같다).
  */
 export function timedFetch(url, opts) {
+  if (_needsGate(url)) return _gate().then(() => timedFetch(url, opts));
   const dl = _deadline(opts);
   return dl.race(fetch(url, dl.fetchOpts)).then(
     (res) => { noteResponse(res.status); return res; },

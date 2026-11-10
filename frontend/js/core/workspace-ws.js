@@ -16,6 +16,7 @@
 import { WS_BASE, _tokenQuery } from './env.js';
 import { relayWsPath } from './host-route.js';
 import { watchSocketLiveness } from './ws-watchdog.js';
+import { waitForAuthentication } from './auth-state.js';
 
 const _subs = new Map();   // type -> Set<fn>
 let _ws = null;
@@ -53,7 +54,19 @@ function _scheduleReconnect() {
   _reconnectTimer = setTimeout(connect, delay);
 }
 
+// 로그인 화면이 떠 있는 동안은 붙지 않는다(인증 없는 접속이 사전 인증 실패로 세어진다). 재연결 타이머도 여기를 지난다.
+let _waitingAuth = false;
 function connect() {
+  if (window.__vtAuthed === false) {
+    if (_waitingAuth) return;
+    _waitingAuth = true;
+    waitForAuthentication().then((ok) => { _waitingAuth = false; if (ok) connect(); });
+    return;
+  }
+  _connectNow();
+}
+
+function _connectNow() {
   try {
     _ws = new WebSocket(`${WS_BASE}${relayWsPath(`/ws-workspace${_tokenQuery}`)}`);
   } catch (_) {
