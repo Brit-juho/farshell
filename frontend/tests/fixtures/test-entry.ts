@@ -11,12 +11,13 @@ export {
 export {
   formatRelativeTime, statusSentence, stateKeyword, defaultRailCollapsed,
   buildRailLists, compactRailRows, readRailPrefs, RAIL_PREF_DEFAULTS, ATTENTION_SHOW_KEY, ATTENTION_COLLAPSED_KEY, originShowKey,
-  HIDEABLE_ORIGINS, normalizeOrigin, normalizeKind, normalizeBadge, rowMenuItems, rowSummary, runRowMenu,
+  HIDEABLE_ORIGINS, normalizeOrigin, originShort, originLabel, normalizeKind, normalizeBadge, rowMenuItems, rowSummary, runRowMenu,
   worktreeIconName, diffLabel, KIND_LABEL, BADGE_LABEL, normalizeShare, shareSentence, groupSessionRows,
   normalizeLineage, lineageLabel, buildSessionTree, kidsProgress, moveInOrder, stepInOrder, parseNameList,
   ORDER_KEY, LINEAGE_KEY, encodeOrder, encodeLineagePrefs,
   splitRunning, pickRecentEnded, parseRailView, encodeRailView, toggleGroupCollapsed, ORIGIN_SHORT,
 } from '../../js/shell/rail-data.js';
+export { logout, clearAppCache, pageAssetUrls } from '../../js/shell/app-session.js';
 export { collectSessionRows } from '../../js/shell/rail-fetch.js';
 export { mountRow, mountMenu, mountNativeChildren, mountFleetRow, mountViewGroup } from './row-mount.js';
 export {

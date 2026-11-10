@@ -28,7 +28,8 @@ Everything about using FarShell in the browser. (For the CLI see `fsh help conce
 ### Title bar and status bar (desktop, 720px and wider)
 
 - **Title bar** (top): from the left, the **FarShell menu** (new session, quick open, focus mode, copy access URL, settings,
-  status bar settings; the number of pending approvals shows as a badge), the **Mac** this screen shows (if you have
+  status bar settings, clear cache, sign out; the number of pending approvals shows as a badge. "Clear cache" removes the
+  saved app files and reloads — your settings and login stay. "Sign out" ends this browser's login only; the device registration stays), the **Mac** this screen shows (if you have
   paired Macs, click it to switch the whole screen to another one), and the active pane's **repository › branch ›
   session** (hidden below 1280px). Click the **Search or run a command** field in the middle, or press `Cmd+K`, to open
   the palette. The focus mode button (four-corners icon), the keyboard toggle (touch devices) and window buttons sit on the right.

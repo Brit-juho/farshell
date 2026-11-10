@@ -109,6 +109,9 @@ export const DEFAULT_COMMANDS: CommandDescriptor[] = [
   { label: t('설정'), action: 'settings.show' },
   { label: t('변경'), action: 'scm.show', isPanel: true },
   { label: t('연결된 화면'), action: 'clients.show' },
+  // FarShell 메뉴(제목 막대)와 같은 액션 — core/app-session-lazy.js가 등록한다.
+  { label: t('캐시 지우기'), action: 'app.clear-cache' },
+  { label: t('로그아웃'), action: 'session.logout' },
 ];
 
 // `>` 접두사(설정 — 2.0에서 이어받은 부가 기능, 위 PREFIX_MODE 주석 참고).

@@ -42,6 +42,8 @@ export const SHELL_ICONS = {
   'list-tree': '<path d="M21 12h-8"/><path d="M21 6H8"/><path d="M21 18h-8"/><path d="M3 6v4c0 1.1.9 2 2 2h3"/><path d="M3 10v6c0 1.1.9 2 2 2h3"/>',
   // ── 오른쪽 고정 사이드바(리디자인 9단계) — 패널 머리의 「오른쪽에 고정」(panel-right) · 「고정 해제」(panel-left) ──
   'panel-right': '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/>',
+  // lucide log-out — FarShell 메뉴의 「로그아웃」.
+  'log-out': '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>',
   'panel-left': '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>',
 };
 

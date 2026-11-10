@@ -46,6 +46,7 @@ import { initTooltips } from './ui/tooltip-lazy.js';  // 2026-09-18 — 네이�
 import './theme.js';      // F5 — classic script에서 전환. term/xterm-setup.js가 이걸 import한다.
 import './lib/ansilex.js';
 import './lib/keyseq.js';
+import './core/app-session-lazy.js';  // 로그아웃·캐시 지우기 액션(본체는 shell 청크)
 import './panels/settings-lazy.js';  // S4 — 설정 화면(Mod+, / rail ⚙)
 import './panels/usage-badge.js';     // U2 — 사용량 게이지(rail 「사용량」 + 우측 레일)
 import './ui/favicon.js';

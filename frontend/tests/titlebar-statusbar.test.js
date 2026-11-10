@@ -110,10 +110,26 @@ test('FarShell 메뉴: 「상태 막대 설정」이 설정의 hud 섹션을 연
   await flush(window);
   const items = Array.from(document.querySelectorAll('.vt-mb-pop .vt-mb-item'));
   const labels = items.map((b) => b.querySelector('.vt-mb-label').textContent);
-  assert.deepStrictEqual(labels, ['새 세션', '빠른 열기', '집중 모드', '접속 주소 복사', '설정', '상태 막대 설정']);
+  assert.deepStrictEqual(labels, ['새 세션', '빠른 열기', '집중 모드', '접속 주소 복사', '설정', '상태 막대 설정', '캐시 지우기', '로그아웃']);
   items[5].click();
   assert.deepStrictEqual(calls, ['section:hud']);
   assert.strictEqual(document.querySelector('.vt-mb-pop'), null, '실행하면 닫힌다');
+});
+
+test('FarShell 메뉴: 「캐시 지우기」「로그아웃」이 같은 이름의 액션을 부른다', async () => {
+  const env = await fresh();
+  const { document, window } = env;
+  const tb = document.getElementById('vt-titlebar');
+  const { deps, calls } = titleDeps(env);
+  const base = deps.getAction;
+  deps.getAction = (n) => (n === 'app.clear-cache' ? () => calls.push('clear-cache') : n === 'session.logout' ? () => calls.push('logout') : base(n));
+  env.mountTitleBar(tb, deps);
+  for (const [i, want] of [[6, 'clear-cache'], [7, 'logout']]) {
+    tb.querySelector('.vt-mb-menu').click();
+    await flush(window);
+    document.querySelectorAll('.vt-mb-pop .vt-mb-item')[i].click();
+    assert.strictEqual(calls[calls.length - 1], want);
+  }
 });
 
 test('경로: 모르는 조각은 빼고, 비면 아무것도 그리지 않고, 구독 알림에 맞춰 바뀐다', async () => {
