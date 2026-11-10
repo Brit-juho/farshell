@@ -441,3 +441,23 @@ def test_auth_order_warns_when_doc_has_no_middleware_rows(tmp_path, monkeypatch)
     check_docs.check_auth_order(problems)
     assert len(problems) == 1
     assert "미들웨어 행" in problems[0]
+
+
+# ── 영어 문서에 남은 한국어 본문(경고만) ────────────────────────────────────
+
+
+@pytest.mark.parametrize("line,expected", [
+    ("Settings → Appearance (모양) opens it", False),          # 영어 이름 (한국어) 병기
+    ("the button 「저장」 and `저장됨` and \"저장\"", False),     # 라벨·코드·따옴표 안
+    ("Settings → 모양 opens it", True),                         # 라벨 밖 한국어
+    ("이 문장은 한국어 본문이다", True),
+    ("plain English only", False),
+])
+def test_korean_outside_labels(line, expected):
+    assert check_docs.korean_outside_labels(line) is expected
+
+
+def test_english_docs_korean_lines_within_limit(capsys):
+    """영어 문서(docs/ref·docs/help/en)에 라벨 밖 한국어 본문 줄이 한도를 넘지 않는다."""
+    found = check_docs.english_docs_korean_lines()
+    assert len(found) <= check_docs.KOREAN_BODY_LIMIT, found

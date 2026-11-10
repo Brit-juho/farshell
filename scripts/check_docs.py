@@ -770,6 +770,53 @@ def check_auth_order(problems: list[str]) -> None:
         )
 
 
+
+# ── 영어 문서에 남은 한국어 본문 ─────────────────────────────────────────
+# 공개 문서(docs/ref, docs/help/en)는 영어 본문이다. 한국어는 UI 이름 인용
+# (`English name (한국어 이름)`, 「…」, 백틱, 따옴표)으로만 남는다. 실패가 아니라
+# **리포트만** 한다 — 줄 수가 한도를 넘으면 참고 줄을 찍는다.
+# docs/ref/i18n.md 는 한국어 문구 규칙과 용어집(한국어 열)이 본문이라 뺀다.
+ENGLISH_DOC_GLOBS = ("docs/ref/*.md", "docs/help/en/*.md")
+ENGLISH_DOC_SKIP = frozenset({"docs/ref/i18n.md"})
+KOREAN_BODY_LIMIT = 5
+_HANGUL = re.compile(r"[\u3131-\u318e\uac00-\ud7a3]")
+
+
+def korean_outside_labels(line: str) -> bool:
+    """백틱·「」·따옴표·한국어가 든 괄호(영어 이름 병기) 밖에 한국어가 있으면 True."""
+    line = re.sub(r"`[^`]*`", "", line)
+    line = re.sub(r"「[^」]*」", "", line)
+    line = re.sub(r"\"[^\"]*\"", "", line)
+    line = re.sub(r"\([^()]*\)", "", line)
+    return bool(_HANGUL.search(line))
+
+
+def english_docs_korean_lines() -> list[str]:
+    found: list[str] = []
+    for pattern in ENGLISH_DOC_GLOBS:
+        for path in sorted(ROOT.glob(pattern)):
+            rel = path.relative_to(ROOT).as_posix()
+            if rel in ENGLISH_DOC_SKIP:
+                continue
+            in_fence = False
+            for n, line in enumerate(path.read_text().splitlines(), 1):
+                if line.lstrip().startswith("```"):
+                    in_fence = not in_fence
+                    continue
+                if not in_fence and korean_outside_labels(line):
+                    found.append(f"{rel}:{n}")
+    return found
+
+
+def report_english_docs_korean() -> None:
+    """경고만 한다(problems에 넣지 않는다) — 한도 초과 시 참고 줄을 찍는다."""
+    found = english_docs_korean_lines()
+    if len(found) > KOREAN_BODY_LIMIT:
+        print(f"  (참고) docs/ref·docs/help/en 에 라벨·코드 밖 한국어 본문 줄 {len(found)}개 "
+              f"(기준 {KOREAN_BODY_LIMIT}개 이하) — 영어로 옮기고 UI 이름은 `English (한국어)` 형식으로: "
+              + ", ".join(found[:8]) + (" …" if len(found) > 8 else ""))
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="문서 일관성 검사 (I3)")
     ap.add_argument("--strict", action="store_true", help="발견 시 종료코드 1")
@@ -787,6 +834,7 @@ def main() -> int:
     check_skill_copy_in_sync(problems)
     check_config_keys_documented(problems)
     check_auth_order(problems)
+    report_english_docs_korean()
 
     if not problems:
         print("✓ 문서 일관성 OK")
