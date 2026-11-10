@@ -137,7 +137,7 @@ export function showAddMenu(el, e) {
   menu.appendChild(mkItem(t('일반 터미널'), t('단발 셸 (tmux 아님)'), createPlainSession));
   menu.appendChild(mkItem(t('tmux 세션'), t('화면을 닫아도 유지 · 맥/모바일 공유'), () => createTmuxSession(), 'square-terminal'));
   // 계정(핫스왑 H1) — 등록된 계정이 하나라도 있을 때만 보인다(없으면 이 메뉴는 예전 그대로). 다른 맥을 보는 중이면 숨긴다.
-  // 기본 계정을 바꾸는 곳은 상태 막대의 계정 칩과 설정 › 계정이다 — 여기는 「이번만」 한 줄이고, 지금 기본 계정은 보조 글에 적는다.
+  // 기본 계정을 바꾸는 곳은 상태 막대의 계정 칩과 설정 › 에이전트 계정이다 — 여기는 「이번만」 한 줄이고, 지금 기본 계정은 보조 글에 적는다.
   const addAccountRows = (acc) => {
     if (menu.querySelector('.vt-menu-accounts') || isRelayed() || !acc.ok || !acc.profiles.length) return false;
     const group = document.createElement('div');

@@ -34,7 +34,7 @@ export function mcpContext() {
   return (tab && tab.worktreeId) || null;
 }
 
-// section — 열자마자 보일 화면(지금은 'profiles' = 실행 프로필만 받는다). 설정 › 계정의 「실행 프로필 관리」가 쓴다.
+// section — 열자마자 보일 화면(지금은 'profiles' = 실행 프로필만 받는다). 설정 › 에이전트 계정의 「실행 프로필 관리」가 쓴다.
 export function showMcp(section) {
   // 설정 위에 팝업이 겹치지 않도록 먼저 닫는다.
   closePanel('vt-settings');

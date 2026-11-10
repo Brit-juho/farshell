@@ -239,7 +239,7 @@ test('팔레트: 계정이 있으면 「<이름> 계정으로 새 세션」과 �
       { id: 'd'.repeat(32), name: 'blank', tool: 'claude', selectable: false }] }),
     newSessionWithAccount: (id) => created.push(id),
   };
-  // 기본 계정 바꾸기는 선택기를 열지 않고 설정 › 계정을 연다.
+  // 기본 계정 바꾸기는 선택기를 열지 않고 설정 › 에이전트 계정을 연다.
   deps.getAction = (name) => (name === 'settings.section' ? (section) => opened.push(section) : undefined);
   const api = mountPalette(root, deps);
   api.open();
@@ -256,7 +256,7 @@ test('팔레트: 계정이 있으면 「<이름> 계정으로 새 세션」과 �
   list = await rows();
   list.find((r) => r.textContent.includes('기본 계정 바꾸기')).click();
   await flush();
-  assert.deepEqual(opened, ['accounts'], '기본 계정 바꾸기는 설정 › 계정을 연다');
+  assert.deepEqual(opened, ['accounts'], '기본 계정 바꾸기는 설정 › 에이전트 계정을 연다');
 });
 
 test('팔레트: 계정이 없거나 deps가 없으면 계정 줄이 없다(예전 그대로)', async () => {

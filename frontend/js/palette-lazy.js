@@ -70,7 +70,7 @@ const deps = {
   showToast,
   host: relayHost(),
   openSidebarSearch: (q, opts) => openContentSearch({ q, opts }),
-  // 계정(핫스왑 H1) — 「<이름> 계정으로 새 세션」·「기본 계정 바꾸기」(설정 › 계정을 연다) 줄의 재료와 동작.
+  // 계정(핫스왑 H1) — 「<이름> 계정으로 새 세션」·「기본 계정 바꾸기」(설정 › 에이전트 계정을 연다) 줄의 재료와 동작.
   loadAccounts,
   newSessionWithAccount: (profile) => createTmuxSession({ profile }),
 };

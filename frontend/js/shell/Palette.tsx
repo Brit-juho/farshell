@@ -508,8 +508,8 @@ function PaletteBody(props: PaletteBodyProps) {
         const accts = accountRows();
         if (accts && accts.length && deps.newSessionWithAccount) {
           const create = deps.newSessionWithAccount;
-          // 기본 계정은 설정이다 — 세션을 만드는 메뉴가 아니라 설정 › 계정을 연다.
-          cmdRows.push({ key: 'cmd:account-default', kind: 'command', label: t('기본 계정 바꾸기'), hint: t('설정 › 계정'),
+          // 기본 계정은 설정이다 — 세션을 만드는 메뉴가 아니라 설정 › 에이전트 계정을 연다.
+          cmdRows.push({ key: 'cmd:account-default', kind: 'command', label: t('기본 계정 바꾸기'), hint: t('설정 › 에이전트 계정'),
             onOpen: () => { props.onRequestClose(); deps.getAction('settings.section')?.('accounts'); } });
           for (const a of accts) {
             cmdRows.push({ key: `cmd:account-new:${a.id}`, kind: 'command', label: t('{name} 계정으로 새 세션', { name: a.name }),

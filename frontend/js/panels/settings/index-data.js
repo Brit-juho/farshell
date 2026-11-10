@@ -81,7 +81,7 @@ export const SECTION_META = [
   { id: 'terminal', label: t('터미널'), description: t('표시, 입력, 접근성, 기록 방식을 설정합니다.') },
   { id: 'voice', label: t('음성 및 알림'), description: t('알림과 음성 입력 엔진을 관리합니다.') },
   { id: 'agents', label: t('에이전트'), description: t('에이전트 감지 상태를 확인합니다.') },
-  { id: 'accounts', label: t('계정'), description: t('Claude·Codex 계정의 사용률을 보고, 새 세션이 기본으로 쓸 계정을 정합니다.') },
+  { id: 'accounts', label: t('에이전트 계정'), description: t('Claude·Codex 계정의 사용률을 보고, 새 세션이 기본으로 쓸 계정을 정합니다.') },
   { id: 'keymap', label: t('키맵'), description: t('단축키와 터미널 전달 여부를 바꿉니다.') },
   { id: 'appearance', label: t('모양'), description: t('스킨, 화면 언어, 메뉴 크기, 파일 뷰어 표시 방식, 집중 모드를 고릅니다.') },
   { id: 'hud', label: t('상태 막대 · 활동 막대'), description: t('화면 맨 아래 상태 막대의 칩과, 왼쪽 활동 막대의 순서를 고릅니다.'), desktopOnly: true },

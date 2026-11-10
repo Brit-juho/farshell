@@ -69,7 +69,7 @@ test('열기 — 섹션 목록과 첫 섹션이 그려진다', async () => {
   assert.ok(document.getElementById('vt-settings'), '패널이 열려야 한다');
   assert.deepEqual(
     Array.from(document.querySelectorAll('.vt-set-navitem')).map((b) => b.textContent),
-    ['터미널', '음성 및 알림', '에이전트', '계정', '키맵', '모양', '상태 막대 · 활동 막대', '권한', '계정 및 보안', '업데이트', '정보 및 진단'],
+    ['터미널', '음성 및 알림', '에이전트', '에이전트 계정', '키맵', '모양', '상태 막대 · 활동 막대', '권한', '계정 및 보안', '업데이트', '정보 및 진단'],
   );
   assert.ok(rowByLabel(document, '글자 크기'), '첫 섹션(터미널)이 그려져야 한다');
 });
@@ -181,7 +181,7 @@ test('compact — 더보기 첫 화면에 도구와 설정 진입점이 나온�
   const { document, P } = await build({ compact: true });
   P.showSettings();
   const links = Array.from(document.querySelectorAll('.vt-set-mobile-link strong')).map((e) => e.textContent);
-  assert.deepEqual(links, ['파일', '포트', '사용량', '터미널', '음성 및 알림', '에이전트', '계정', '키맵', '모양', '권한', '계정 및 보안', '업데이트', '정보 및 진단']);
+  assert.deepEqual(links, ['파일', '포트', '사용량', '터미널', '음성 및 알림', '에이전트', '에이전트 계정', '키맵', '모양', '권한', '계정 및 보안', '업데이트', '정보 및 진단']);
   assert.strictEqual(document.querySelector('.vt-set-nav'), null, 'compact 첫 화면은 숨은 가로 탭을 만들지 않는다');
 });
 
@@ -828,7 +828,7 @@ test('계정 — 도구별로 묶어 기본 표시·인증·사용률·리셋·�
   const { fetchExtra } = accountsFetch();
   const { document, P } = await build({ fetchExtra });
   P.showSettings();
-  sectionButton(document, '계정').click();
+  sectionButton(document, '에이전트 계정').click();
   await flush(); await flush();
   const titles = Array.from(document.querySelectorAll('.vt-set-group-title')).map((h) => h.firstChild.textContent);
   assert.deepEqual(titles, ['Claude 기본 계정', 'Codex 기본 계정', '계정 추가']);
@@ -853,7 +853,7 @@ test('계정 — 「기본으로 지정」·「해제」는 도구별 기본 계
   const { fetchExtra, calls } = accountsFetch();
   const { document, P } = await build({ fetchExtra });
   P.showSettings();
-  sectionButton(document, '계정').click();
+  sectionButton(document, '에이전트 계정').click();
   await flush(); await flush();
   rowByLabel(document, 'work').querySelector('button').click();
   await flush(); await flush();
@@ -867,7 +867,7 @@ test('계정 — 등록된 계정이 없으면 안내만, 폰(compact)에서도 
   const { fetchExtra } = accountsFetch({ profiles: [], defaults: {} });
   const { document, P } = await build({ fetchExtra, compact: true });
   P.showSettings();
-  Array.from(document.querySelectorAll('.vt-set-mobile-link strong')).find((e) => e.textContent === '계정').closest('button').click();
+  Array.from(document.querySelectorAll('.vt-set-mobile-link strong')).find((e) => e.textContent === '에이전트 계정').closest('button').click();
   await flush(); await flush();
   assert.match(document.querySelector('.vt-set-content').textContent, /등록된 계정이 없습니다/);
   assert.strictEqual(document.querySelector('.vt-set-group-title').textContent, '계정 추가', '프로필 추가·로그인 링크는 계정이 없어도 있다');

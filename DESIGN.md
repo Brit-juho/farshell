@@ -763,7 +763,7 @@ with a default → one chip, name only; Claude and Codex both have defaults → 
 is signed out or gone is warn-toned with the reason. Data = `/api/agent-profiles/read/picker` (15 s cache, one call per HUD poll);
 the chip refreshes at once on the `vt:accounts-changed` window event that `setDefaultAccount` fires. Choosing the default account
 is a **setting**, not part of creating a session: the «+ New session» menu keeps only «Another account, this time only»
-(default account shown as its sub text) and the palette's «Change default account» row opens Settings › Account.
+(default account shown as its sub text) and the palette's «Change default account» row opens Settings › Agent accounts.
 
 Polled every 30s (CPU/network every 3s, connected screens every 5s), plus immediate refresh on `/ws-notify`
 events. A chip with no value is **hidden** (no usage provider → no chip). Reset wording appears in tooltips; GPU

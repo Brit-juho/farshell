@@ -308,7 +308,7 @@ function Hud(props: { deps: HudDeps; root: HTMLElement }) {
   props.root.addEventListener('click', onPushClick);
   onCleanup(() => props.root.removeEventListener('click', onPushClick));
 
-  // 기본 계정이 다른 화면(설정 › 계정·선택기)에서 바뀌면 30초를 기다리지 않고 칩을 다시 만든다.
+  // 기본 계정이 다른 화면(설정 › 에이전트 계정·선택기)에서 바뀌면 30초를 기다리지 않고 칩을 다시 만든다.
   const onAccounts = () => {
     if (!snapshot) return;
     const acc = accountsSnapshot();
