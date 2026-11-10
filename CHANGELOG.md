@@ -10,6 +10,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+---
+
+## [2.10.1] — 2026-11-10
+
 ### Added
 - **Menu size setting** (Settings › 모양 › 메뉴 크기: small / normal / large, desktop only, `ui.side.scale`). It scales the activity bar and collapsed strip (44 / 48 / 52), the collapsed session cells (36 / 40 / 44), the session row text and line heights by one step, and the default sidebar width (320 / 360 / 392). A sidebar width you set by dragging is never overridden; changing the size refits each terminal once.
 - **「Clear cache」 and 「Log out」 in the FarShell menu** (and the command palette: `app.clear-cache`, `session.logout`). Clear cache unregisters the service worker, empties Cache Storage, re-fetches the app files and reloads; your `ui.*` settings stay, and push notifications are re-subscribed if they were on. Log out ends only this browser's web login (`POST /api/auth/logout`); the registered device is kept.
