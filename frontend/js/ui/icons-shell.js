@@ -24,6 +24,10 @@ export const SHELL_ICONS = {
   square: '<rect width="14" height="14" x="5" y="5" rx="2"/>',
   // lucide corner-down-right — 부모 행의 「위임 보고 1/2」 토글.
   'corner-down-right': '<polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>',
+  // lucide corner-up-left — 접힌 띠 호버 카드의 「부모: 이름」.
+  'corner-up-left': '<polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/>',
+  // lucide bot — 접힌 띠 호버 카드의 「내부 에이전트 N개」(칩의 git-branch는 브랜치 줄과 헷갈려 따로 둔다).
+  bot: '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>',
   server: '<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>',
   // ── 파일 내용 검색(파일 개편 단계 6, 시안 F06) — 팔레트 `?` 모드와 사이드바 「내용 검색」 ──
   'case-sensitive': '<path d="m3 15 4-8 4 8"/><path d="M4 13h6"/><circle cx="18" cy="12" r="3"/><path d="M21 9v6"/>',
