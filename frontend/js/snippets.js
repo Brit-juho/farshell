@@ -94,7 +94,7 @@ export function showSnippets() {
           <div class="vt-sn-opt" id="vt-sn-proj-opt">
             <div class="vt-sn-opt-text"><b>${t('이 프로젝트에만')}</b>
               <span>${t('지금 세션의 git 저장소에서만 보입니다.')}</span></div>
-            <button type="button" class="vt-toggle" role="switch" aria-checked="false" id="vt-sn-proj" aria-label="${t('이 프로젝트에만')}"><span>ON</span><span>OFF</span></button>
+            <button type="button" class="vt-switch" role="switch" aria-checked="false" id="vt-sn-proj" aria-label="${t('이 프로젝트에만')}"></button>
           </div>
           <div class="vt-fld" role="radiogroup" aria-label="${t('전송 방식')}">
             <span class="vt-fld-l">${t('전송 방식')}</span>

@@ -153,3 +153,9 @@ test('CSS: 호버·눌림은 상태 토큰, 켜짐은 액센트 면 + 손잡이 
   assert.match(reset, /\.vt-switch:focus-visible/);
   assert.match(reset, /\.vt-segmented-opt:focus-visible/);
 });
+
+test('스니펫 편집기의 「이 프로젝트에만」도 옛 ON | OFF 알약(.vt-toggle)이 아니라 스위치(.vt-switch)다', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../js/snippets.js'), 'utf8');
+  assert.match(src, /class="vt-switch" role="switch" aria-checked="false" id="vt-sn-proj"/);
+  assert.doesNotMatch(src, /class="vt-toggle"/, '옛 알약 마크업이 남아 있으면 화면마다 켜기/끄기 모양이 어긋난다');
+});
