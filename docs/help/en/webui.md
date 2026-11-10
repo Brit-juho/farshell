@@ -29,7 +29,7 @@ Everything about using FarShell in the browser. (For the CLI see `fsh help conce
 
 - **Title bar** (top): from the left, the **FarShell menu** (new session, quick open, focus mode, copy access URL, settings,
   status bar settings, clear cache, sign out; the number of pending approvals shows as a badge. "Clear cache" removes the
-  saved app files and reloads — your settings and login stay. "Sign out" ends this browser's login only; the device registration stays), the **Mac** this screen shows (if you have
+  saved app files and reloads — your settings and login stay (a phone has no title bar, so the same thing is the "Clear cache" button in Settings → About → App files). "Sign out" ends this browser's login only; the device registration stays), the **Mac** this screen shows (if you have
   paired Macs, click it to switch the whole screen to another one), and the active pane's **repository › branch ›
   session** (hidden below 1280px). Click the **Search or run a command** field in the middle, or press `Cmd+K`, to open
   the palette. The focus mode button (four-corners icon), the key bar button (touch devices) and window buttons sit on the right.
