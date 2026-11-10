@@ -77,6 +77,7 @@ same options; a missing file is skipped silently.
 ```
 fsh tmux reload    # re-read the config into the running tmux (sessions stay)
 fsh tmux status    # what is applied now
+fsh tmux extkeys on|off|status   # trial switch for extended keys (Shift+Enter etc.)
 ```
 
 - An old `~/.config/vt/tmux.conf` copy left by earlier installs is moved aside by `fsh tmux reload`
@@ -85,3 +86,8 @@ fsh tmux status    # what is applied now
 - Reloading does not undo values you **removed** from the config; they stay in the running tmux
   until the tmux server restarts, which closes every session.
 - The "tmux config" line in `fsh doctor` shows the same state.
+- `fsh tmux extkeys on` writes a `# >>> fsh extkeys` … `# <<< fsh extkeys` block to
+  `~/.config/vt/tmux.local.conf` (`extended-keys on` plus `extkeys` in `terminal-features`) and reloads at once.
+  `off` removes only that block and turns it off in the running tmux too. Your own lines are never touched
+  and repeating the command gives the same result. The default stays off. Needs tmux 3.2 or newer.
+  Screens that are already attached may pick it up late — reopen the tab or pane if it does not take effect.

@@ -2038,6 +2038,8 @@ cmd_help() {
     fsh update trust [--key <pubkey>]   Pin the release-signing key stable updates verify against
     fsh sync [--dry-run]    Re-sync Claude Code/Codex hooks and the fsh skill link to the current code
     fsh tmux reload         Re-read the tmux config (repo base + ~/.config/vt/tmux.local.conf) into the running tmux; moves an old ~/.config/vt/tmux.conf copy aside
+    fsh tmux extkeys [on|off|status]
+                            Trial switch for tmux extended keys (Shift+Enter etc.): writes/removes a marked block in tmux.local.conf and reloads; default stays off
 
   Sessions and terminal
     fsh attach [name]       Attach a tmux session in a new terminal window
@@ -2112,6 +2114,8 @@ HELP_EN
     fsh update trust [--key <공개키>]   stable 업데이트가 검증할 릴리스 서명 키 고정
     fsh sync [--dry-run]    Claude Code·Codex 훅과 fsh 스킬 링크를 현재 코드에 맞춤
     fsh tmux reload         tmux 설정(레포 기준 + ~/.config/vt/tmux.local.conf)을 떠 있는 tmux 에 다시 읽힘; 옛 ~/.config/vt/tmux.conf 사본은 치움
+    fsh tmux extkeys [on|off|status]
+                            tmux 확장 키(Shift+Enter 등) 시험 스위치: tmux.local.conf 의 표식 구간을 쓰고/지우고 다시 읽힘; 기본은 꺼짐
 
   세션과 터미널
     fsh attach [name]       tmux 세션을 새 터미널 창에 붙임
@@ -2228,9 +2232,9 @@ cmd_tmux() {
     return 1
   fi
   case "${1:-status}" in
-    reload|status) (cd "$VT_DIR/server" && "$VT_PYTHON" -m tmux_conf "$@") ;;
+    reload|status|extkeys) (cd "$VT_DIR/server" && "$VT_PYTHON" -m tmux_conf "$@") ;;
     *)
-      echo "  $(_t '사용법: fsh tmux [status|reload [--dry-run]]')"
+      echo "  $(_t '사용법: fsh tmux [status|reload [--dry-run]|extkeys [on|off|status]]')"
       return 1
       ;;
   esac

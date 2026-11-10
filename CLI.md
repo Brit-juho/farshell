@@ -45,7 +45,7 @@ fsh hotkey [list|set|reset|disable]  # view/change hotkeys
 fsh hooks [status|install|uninstall|dedupe [--dry-run]]  # register Claude Code + Codex hooks (status badges/queue; Claude/Codex Stop drive session-specific TTS); dedupe removes FarShell hooks the Codex app copied into ~/.codex/hooks.json
 fsh update [--channel stable|dev|devmode] [--to vX.Y.Z] [--check] [--restart] [--rollback]  # update by channel (stable = signed release tag, dev = origin/dev, devmode = manual pull) then re-sync hooks + skill; `update trust [--key <pubkey file>]` pins the release-signing key; `--rollback` returns to the previous commit
 fsh sync [--dry-run]  # re-sync Claude Code/Codex hooks, the fsh skill link and the tmux config to the current code (use after a manual pull)
-fsh tmux [status|reload [--dry-run]]  # tmux config: the repo base + your ~/.config/vt/tmux.local.conf; reload re-reads it into the running tmux (sessions stay) and moves an old ~/.config/vt/tmux.conf copy aside
+fsh tmux [status|reload [--dry-run]|extkeys [on|off|status]]  # tmux config: the repo base + your ~/.config/vt/tmux.local.conf; reload re-reads it into the running tmux (sessions stay) and moves an old ~/.config/vt/tmux.conf copy aside; extkeys on|off|status is a trial switch for tmux extended keys (a marked block in tmux.local.conf, default stays off)
 fsh pane report [--state ...] [--agent ...]  # report this pane's state (for agents without managed hooks)
 fsh clauth [status|which]  # read-only usage view (hidden when clauth isn't installed)
 fsh usage [list|add --model <name> --tokens <N> --seconds <N>]  # cumulative usage log (local LLMs etc., no quota)

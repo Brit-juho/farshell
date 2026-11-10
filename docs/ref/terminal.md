@@ -24,8 +24,37 @@
 | Rail | **Rail rows are tmux sessions** in two zones — 개입 필요 (waiting; collapsible, switchable in rail settings) and 실행 중 (group headers with pane-order members, remaining singles in name order) — three lines each: state icon (+unseen ring) · agent · name / workspace kind (메인/WT) · workspace-relative directory · branch (main too) · diff / state keyword · elapsed · origin icon, plus 「다른 화면 N」 when they apply (`shell/RailRow.tsx`, `rail-data.ts`; details under "Session and view rules → Rail"). **A group is derived from the screen, not stored** — a view whose pane tree holds 2+ sessions is a grouped view; you make one by dragging a rail row onto the terminal area (`layout/dnd.js`) and name it from the group header’s 편집 button (`window.vtRenameTab`; `tabDisplayLabel()` computes member names when unset). Row verbs are 열기 / 닫기 / 종료 (`term/session-actions.js`); the ⋯ button and right-click open the same `Portal`-rendered menu (`rowMenuItems`). There is no 재우기/깨우기 and no 「묶음 / 묶지 않음 / 잠자는 중」 zone, and no `@fsh_grp` tag, `group_store.py` or `/api/groups*`: groups are never stored. |
 | Views (mechanics for the row above) | There is no visible tab strip: the rail switches, names and closes views. **Each view owns its own pane tree** — switch away and back and that layout is exactly as you left it. A view has no identity of its own beyond its pane-tree members (a group *is* its pane-tree members): `openLayoutTab` dedups on `findTabBySessionId(sessionId)`. `worktreeId` is "which worktree this view is currently looking at" (`setTabWorktree`), shown as a small **branch chip next to the pane header** (`layout/panes.js`, `layout/branch-chips.js`, `term/tab-worktree.js`'s `branchChipMap`) using the same current-cwd context as the session lists. Two worktrees of the same repo cannot be two separate views; open them as split panes instead. The layout snapshot is `v6` (`{tabs:[{id,worktreeId,hostId,label,tree}], activeTab, screen, closed}`), saved per browser tab; `v1`–`v5` are still read, and `repoId`/`groupId` on old snapshots are dropped on load. Closing a view (`closeView`) closes every session it held and remembers a grouped view's composition — tmux is never touched. The last view can be closed too: the store then keeps one unlabeled empty-pane view that reads as "no views" (onboarding). Selecting a view focuses its top-left pane. Each view carries a segmented state bar (one segment per session; see "View tab" below). Dragging a session out of another view leaves an empty pane there, and closes that view if it ends up wholly empty (`closeViewIfEmptied`). The same session is never placed in two views: the surface layer moves one DOM node around |
 | tmux detach detection | Shows `[process exited]` on PTY EOF |
-| kitty keyboard protocol | Sends combinations that legacy encodings have no room for — `Ctrl+Shift+<letter>`, `Shift+Enter`, `Ctrl+Enter`, `Ctrl+Tab` — as CSI u (`frontend/js/term/kitty-keys.js`). Encoding happens **only while an app has turned the mode on** (`CSI > flags u`); otherwise a shell that never enabled it would literally print `\x1b[97;6u`. The mode is a push/pop stack, so a vim that opens and closes inside a shell restores the previous value. Routing is decided once before encoding; app-only shortcuts never reach the PTY. Only implemented flag 1 is advertised. ⚠ **Layer 3 (tmux `extended-keys`) is deliberately absent** — that is a change to the user's tmux server options and needs its own approval. With tmux 3.3+ and that option off, tmux blocks CSI u before it reaches the inner app (`set -s extended-keys on`) |
+| kitty keyboard protocol | Sends combinations that legacy encodings have no room for — `Ctrl+Shift+<letter>`, `Shift+Enter`, `Ctrl+Enter`, `Ctrl+Tab` — as CSI u (`frontend/js/term/kitty-keys.js`). Encoding happens **only while an app has turned the mode on** (`CSI > flags u`); otherwise a shell that never enabled it would literally print `\x1b[97;6u`. The mode is a push/pop stack, so a vim that opens and closes inside a shell restores the previous value. Routing is decided once before encoding; app-only shortcuts never reach the PTY. Only implemented flag 1 is advertised. ⚠ **Layer 3 (tmux `extended-keys`) is off by default** — it changes the user's tmux server options, so it is a trial switch, not part of the base config: `fsh tmux extkeys on|off|status` (see «Extended-keys trial» below). With tmux 3.3+ and that option off, tmux blocks CSI u before it reaches the inner app (`set -s extended-keys on`) |
 | Skins | Settings → "모양" (Mod+, or the FarShell menu's 설정 item) is the **only** place to switch skins — the 9 skin chips in Settings → 「모양」 (farshell/macos/catppuccin/windows/vscode/notepad/warp/linear/vercel, `theme.js`'s `vtSkins()`) render there. The command palette (Mod+K → "테마") also lists all skins, reading `vtSkins()` directly rather than scanning the DOM — so it works even when the Settings panel isn't open. There is no skin that imports a Ghostty config or Warp theme YAML. |
+
+## Extended-keys trial
+
+The base config keeps tmux `extended-keys off`. Until the trial below has results, nothing in the repo turns it on.
+`fsh tmux extkeys on|off|status` (`server/tmux_conf.py`) is the switch:
+
+- `on` writes a marked block to `~/.config/vt/tmux.local.conf` and runs the same reload as `fsh tmux reload`:
+  `# >>> fsh extkeys` · `set -sq extended-keys on` · `set -sq 'terminal-features[90]' 'xterm*:extkeys'` · `# <<< fsh extkeys`.
+  The numbered `terminal-features[90]` assignment is used instead of `set -as` because an append stacks one more
+  identical entry on every reload, while the numbered form stays a single entry and `set -u` removes exactly it
+  (checked on tmux 3.7c with an isolated socket). `-q` keeps tmux older than 3.2 from erroring; `on` itself refuses below 3.2.
+- `off` removes only the marked block (other lines are kept), reloads, then sets `extended-keys off` and unsets
+  `terminal-features[90]` on the running server, because a reload does not undo values that left the config.
+- `status` prints the live `show -s extended-keys`, whether `extkeys` is in the live `terminal-features`, whether the block
+  is in the file, the tmux version, and a warning when file and server disagree or `VT_TMUX_CONF` bypasses the local file.
+- Both directions are idempotent. A block whose begin/end markers do not pair is never edited (the command stops with an error).
+- Clients attached before the change may take it up late; reopen the tab or pane.
+
+Checklist (run `fsh tmux extkeys on`, then each item; record results in the TODOS entry):
+
+1. Mac physical keyboard, Safari and Chrome: `Shift+Enter` inserts a newline in Claude Code's prompt; `Ctrl+Enter`, `Ctrl+Shift+<letter>` reach the app.
+2. Android on-screen keyboard bar: `Shift+Enter` inserts a newline.
+3. Plain shell (no app running): pressing those combinations does **not** print a literal `\x1b[...u` / `[13;2u`.
+4. vim: modifier combinations still work, and after quitting vim the shell prompt is unaffected.
+5. Codex and Claude Code: their own shortcuts (newline, interrupt, history) still work.
+6. iTerm2 attached to the same session at the same time (`tmux -L fsh attach`): both clients behave, neither shows stray escape text.
+7. Revert with `fsh tmux extkeys off`, then `fsh tmux extkeys status` shows `off`, no block, and `extkeys` absent.
+
+If any item fails, run `off` first and write down which item, browser/keyboard and what appeared; the base config stays unchanged.
 
 ## Session and view rules
 

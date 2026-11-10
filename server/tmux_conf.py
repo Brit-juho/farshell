@@ -14,7 +14,10 @@
 띄우거나 죽이지 않는다(세션이 끊긴다). 다시 읽어도 예전 설정에만 있던 값은 남는다 — 완전히 깨끗한
 상태는 tmux 서버를 재시작해야 한다.
 
-CLI: `python server/tmux_conf.py migrate|reload|status|doctor [--dry-run]`
+확장 키 시험: `extkeys on|off|status` 가 tmux.local.conf 의 표식 구간(`# >>> fsh extkeys` … `# <<< fsh extkeys`)
+만 쓰고 지운다. 사용자가 쓴 다른 줄은 건드리지 않는다. 기본(저장소 conf)은 extended-keys off 그대로다.
+
+CLI: `python server/tmux_conf.py migrate|reload|status|doctor|extkeys [on|off|status] [--dry-run]`
 (`fsh tmux reload`, `fsh doctor`, `fsh sync`, install.sh 가 부른다.)
 """
 
@@ -24,6 +27,8 @@ import argparse
 import datetime
 import hashlib
 import os
+import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -259,11 +264,235 @@ def doctor_lines(st: Status) -> tuple[str, list[str]]:
     return level, [head, *notes]
 
 
+# ── 확장 키(extended-keys) 시험 스니펫 ─────────────────────────────────────────
+# 웹이 kitty 프로토콜로 보내는 CSI u 를 tmux 가 안쪽 앱에 넘기게 하는 설정. 기본은 꺼 둔다(시험 전).
+# terminal-features 는 `set -as`(덧붙임)로 쓰면 reload 할 때마다 같은 줄이 쌓이므로 번호 지정
+# 대입을 쓴다 — 몇 번을 읽어도 한 줄이고 `set -u` 로 그 한 줄만 지울 수 있다(tmux 3.7c 로 확인).
+EXTKEYS_BEGIN = "# >>> fsh extkeys"
+EXTKEYS_END = "# <<< fsh extkeys"
+EXTKEYS_FEATURE_OPT = "terminal-features[90]"
+EXTKEYS_FEATURE_VAL = "xterm*:extkeys"
+EXTKEYS_MIN_TMUX = (3, 2)  # extended-keys·terminal-features 는 3.2 에서 생겼다
+EXTKEYS_BLOCK = (
+    f"{EXTKEYS_BEGIN}\n"
+    "# fsh tmux extkeys on|off 가 관리하는 구간 — 손으로 고치지 마세요(다른 줄은 이 밖에 두세요).\n"
+    "set -sq extended-keys on\n"
+    f"set -sq '{EXTKEYS_FEATURE_OPT}' '{EXTKEYS_FEATURE_VAL}'\n"
+    f"{EXTKEYS_END}\n"
+)
+
+
+class ExtkeysError(Exception):
+    pass
+
+
+def _find_block(lines: list[str]) -> Optional[tuple[int, int]]:
+    """표식 구간의 (시작, 끝) 줄 번호(끝 포함). 없으면 None. 짝이 안 맞으면 ExtkeysError."""
+    begins = [i for i, ln in enumerate(lines) if ln.strip() == EXTKEYS_BEGIN]
+    ends = [i for i, ln in enumerate(lines) if ln.strip() == EXTKEYS_END]
+    if not begins and not ends:
+        return None
+    if len(begins) != 1 or len(ends) != 1 or ends[0] < begins[0]:
+        raise ExtkeysError(tr("표식 구간({begin} … {end})의 짝이 맞지 않습니다 — 파일을 직접 고쳐 주세요",
+                              begin=EXTKEYS_BEGIN, end=EXTKEYS_END))
+    return begins[0], ends[0]
+
+
+def extkeys_in_file(home: Optional[Path] = None) -> bool:
+    p = local_path(home)
+    try:
+        text = p.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return False
+    except (OSError, UnicodeDecodeError) as e:
+        raise ExtkeysError(str(e))
+    return _find_block(text.splitlines()) is not None
+
+
+def _atomic_write(p: Path, text: str) -> None:
+    p.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        mode = p.stat().st_mode & 0o777
+    except FileNotFoundError:
+        mode = 0o600
+    tmp = p.with_name(p.name + f".tmp{os.getpid()}")
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp, p)
+    finally:
+        try:
+            os.unlink(tmp)
+        except FileNotFoundError:
+            pass
+
+
+def extkeys_edit(on: bool, home: Optional[Path] = None, dry_run: bool = False) -> str:
+    """tmux.local.conf 의 표식 구간을 켜거나 지운다. 멱등. 반환: changed | unchanged."""
+    p = local_path(home)
+    try:
+        text = p.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        text = ""
+    except (OSError, UnicodeDecodeError) as e:
+        raise ExtkeysError(str(e))
+    lines = text.splitlines(keepends=True)
+    span = _find_block([ln.rstrip("\r\n") for ln in lines])
+    if on:
+        if span is not None:
+            cur = "".join(lines[span[0]:span[1] + 1])
+            if cur == EXTKEYS_BLOCK:
+                return "unchanged"
+            new_lines = lines[:span[0]] + [EXTKEYS_BLOCK] + lines[span[1] + 1:]
+        else:
+            sep = "" if not text or text.endswith("\n") else "\n"
+            if text.strip():
+                sep += "\n"
+            new_lines = lines + ([sep] if sep else []) + [EXTKEYS_BLOCK]
+    else:
+        if span is None:
+            return "unchanged"
+        new_lines = lines[:span[0]] + lines[span[1] + 1:]
+        # 켤 때 구간 앞에 넣은 빈 줄이 남지 않게: 앞이 빈 줄이고 뒤가 끝이거나 빈 줄이면 앞 빈 줄을 뺀다
+        i = span[0]
+        if i > 0 and new_lines[i - 1].strip() == "" and (i >= len(new_lines) or new_lines[i].strip() == ""):
+            new_lines.pop(i - 1)
+    if not dry_run:
+        try:
+            _atomic_write(p, "".join(new_lines))
+        except OSError as e:
+            raise ExtkeysError(str(e))
+    return "changed"
+
+
+def tmux_version() -> Optional[tuple[int, int]]:
+    """`tmux -V` 의 (major, minor). 서버를 띄우지 않는다. 못 읽으면 None."""
+    try:
+        out = subprocess.run(["tmux", "-V"], capture_output=True, text=True, timeout=3).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    m = re.search(r"(\d+)\.(\d+)", out)
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+@dataclass
+class ExtkeysStatus:
+    server: Optional[str]      # 떠 있는 서버의 extended-keys 값(on|off|always), 서버가 꺼져 있으면 None
+    feature: bool              # 떠 있는 서버 terminal-features 에 extkeys 가 들어 있는가
+    in_file: bool              # tmux.local.conf 에 표식 구간이 있는가
+    version: Optional[tuple[int, int]]
+    local: Path
+    override: Optional[str]
+
+
+def extkeys_status(home: Optional[Path] = None) -> ExtkeysStatus:
+    server: Optional[str] = None
+    feature = False
+    if server_running():
+        server = (tmux_runner.run_text(["show-options", "-sv", "extended-keys"]) or "").strip() or None
+        feats = tmux_runner.run_text(["show-options", "-sv", "terminal-features"]) or ""
+        feature = "extkeys" in feats
+    return ExtkeysStatus(server, feature, extkeys_in_file(home), tmux_version(),
+                         local_path(home), override_conf())
+
+
+def extkeys_live_off() -> bool:
+    """reload 는 설정에서 지운 값을 되돌리지 못하므로, 떠 있는 서버에 끄는 값을 직접 넣는다."""
+    if not server_running():
+        return True
+    rc1, _, _ = tmux_runner.run(["set-option", "-sq", "extended-keys", "off"], timeout=5.0)
+    rc2, _, _ = tmux_runner.run(["set-option", "-squ", EXTKEYS_FEATURE_OPT], timeout=5.0)
+    return rc1 == 0 and rc2 == 0
+
+
+def describe_extkeys_status(st: ExtkeysStatus) -> list[str]:
+    ver = f"{st.version[0]}.{st.version[1]}" if st.version else "?"
+    lines = []
+    if st.server is None:
+        lines.append("  ⓘ " + tr("tmux 서버가 꺼져 있습니다 — 다음 시작 때 파일 구간대로 적용됩니다"))
+    else:
+        lines.append("  ✓ " + tr("떠 있는 tmux: extended-keys = {v}, terminal-features 의 extkeys = {f}",
+                                  v=st.server, f=tr("있음") if st.feature else tr("없음")))
+    lines.append("  ✓ " + (tr("{path}: 확장 키 구간 있음", path=st.local) if st.in_file
+                           else tr("{path}: 확장 키 구간 없음", path=st.local)))
+    lines.append("  ⓘ " + tr("tmux 버전 {v}", v=ver))
+    if st.version and st.version < EXTKEYS_MIN_TMUX:
+        lines.append("  ⚠ " + tr("tmux 3.2 이상이 필요합니다 — 이 버전에서는 켜도 적용되지 않습니다"))
+    if st.override:
+        lines.append("  ⚠ " + tr("VT_TMUX_CONF 사용 중이라 tmux.local.conf 를 읽지 않습니다 — 구간이 적용되지 않습니다"))
+    on_live = st.server in ("on", "always") and st.feature
+    if st.in_file != on_live and st.server is not None:
+        lines.append("  ⚠ " + tr("파일과 떠 있는 tmux 가 다릅니다 — 'fsh tmux extkeys {m}' 또는 'fsh tmux reload'",
+                                  m="on" if st.in_file else "off"))
+    return lines
+
+
+def run_extkeys(mode: str, dry_run: bool = False, home: Optional[Path] = None) -> int:
+    if mode == "status":
+        try:
+            for ln in describe_extkeys_status(extkeys_status(home)):
+                print(ln)
+        except ExtkeysError as e:
+            print("  ✗ " + str(e))
+            return 1
+        return 0
+    on = mode == "on"
+    ver = tmux_version()
+    if on and ver and ver < EXTKEYS_MIN_TMUX:
+        print("  ✗ " + tr("tmux 3.2 이상이 필요합니다 (지금 {v})", v=f"{ver[0]}.{ver[1]}"))
+        return 1
+    try:
+        res = extkeys_edit(on, home, dry_run)
+    except ExtkeysError as e:
+        print("  ✗ " + tr("tmux.local.conf 를 고치지 못했습니다: {err}", err=str(e)))
+        return 1
+    p = local_path(home)
+    if dry_run:
+        if res != "changed":
+            print("  ⓘ " + tr("{path}: 이미 그 상태입니다", path=p))
+        elif on:
+            print("  ⓘ " + tr("{path} 에 확장 키 구간을 쓸 예정입니다", path=p))
+        else:
+            print("  ⓘ " + tr("{path} 의 확장 키 구간을 지울 예정입니다", path=p))
+        return 0
+    if res != "changed":
+        print("  ✓ " + tr("{path}: 이미 그 상태입니다", path=p))
+    elif on:
+        print("  ✓ " + tr("{path} 에 확장 키 구간을 썼습니다", path=p))
+    else:
+        print("  ✓ " + tr("{path} 의 확장 키 구간을 지웠습니다", path=p))
+    if override_conf():
+        print("  ⚠ " + tr("VT_TMUX_CONF 사용 중이라 tmux.local.conf 를 읽지 않습니다 — 구간이 적용되지 않습니다"))
+        return 0
+    r = reload()
+    for ln in describe_reload(r):
+        print(ln)
+    rc = 1 if r.action in ("error", "no-conf") else 0
+    if not on and r.action != "no-conf":
+        if extkeys_live_off():
+            if r.action == "ok":
+                print("  ✓ " + tr("떠 있는 tmux 에도 extended-keys off 를 적용했습니다"))
+        else:
+            print("  ✗ " + tr("떠 있는 tmux 에 끄는 값을 넣지 못했습니다"))
+            rc = 1
+    if r.action == "ok":
+        print("  ⓘ " + tr("이미 붙어 있는 화면은 적용이 늦을 수 있습니다 — 안 되면 탭이나 pane 을 다시 여세요"))
+    return rc
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser(prog="fsh tmux", description=tr("FarShell tmux 설정 정리·다시 읽기"))
-    ap.add_argument("action", nargs="?", default="status", choices=("migrate", "reload", "status", "doctor"))
+    ap.add_argument("action", nargs="?", default="status",
+                    choices=("migrate", "reload", "status", "doctor", "extkeys"))
+    ap.add_argument("mode", nargs="?", choices=("on", "off", "status"), default=None)
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args(argv)
+
+    if args.action == "extkeys":
+        return run_extkeys(args.mode or "status", dry_run=args.dry_run)
+    if args.mode is not None:
+        ap.error(tr("on|off|status 는 extkeys 에만 씁니다"))
 
     if args.action == "doctor":
         level, lines = doctor_lines(status())

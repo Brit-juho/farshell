@@ -248,3 +248,149 @@ def test_cli_reload_migrates_and_skips_absent_server(isolated, capsys):
     assert tmux_conf.main(["reload"]) == 0
     assert not src.exists()
     assert len(list(src.parent.glob("tmux.conf.bak-*"))) == 1
+
+
+# ── 확장 키(extkeys) 시험 스위치 ───────────────────────────────────────────────
+def _local(home: Path) -> Path:
+    return tmux_conf.local_path(home)
+
+
+def test_extkeys_on_creates_block_in_absent_file(isolated):
+    assert tmux_conf.extkeys_edit(True, isolated) == "changed"
+    text = _local(isolated).read_text()
+    assert text == tmux_conf.EXTKEYS_BLOCK
+    assert "set -sq extended-keys on" in text and "terminal-features[90]" in text
+    assert oct(_local(isolated).stat().st_mode & 0o777) == "0o600"
+
+
+def test_extkeys_on_is_idempotent_and_keeps_user_lines(isolated):
+    p = _local(isolated)
+    p.parent.mkdir(parents=True)
+    p.write_text("set -g mouse off\n# 내 메모\n")
+    assert tmux_conf.extkeys_edit(True, isolated) == "changed"
+    once = p.read_text()
+    assert once.startswith("set -g mouse off\n# 내 메모\n") and once.count(tmux_conf.EXTKEYS_BEGIN) == 1
+    assert tmux_conf.extkeys_edit(True, isolated) == "unchanged"
+    assert p.read_text() == once
+
+
+def test_extkeys_on_appends_after_file_without_trailing_newline(isolated):
+    p = _local(isolated)
+    p.parent.mkdir(parents=True)
+    p.write_text("set -g mouse off")
+    tmux_conf.extkeys_edit(True, isolated)
+    assert p.read_text().startswith("set -g mouse off\n")
+    assert tmux_conf.extkeys_in_file(isolated)
+
+
+def test_extkeys_off_removes_only_block_and_restores_original(isolated):
+    p = _local(isolated)
+    p.parent.mkdir(parents=True)
+    original = "set -g mouse off\n\nset -g history-limit 9000\n"
+    p.write_text(original)
+    tmux_conf.extkeys_edit(True, isolated)
+    assert tmux_conf.extkeys_edit(False, isolated) == "changed"
+    assert p.read_text() == original
+    assert tmux_conf.extkeys_edit(False, isolated) == "unchanged"
+
+
+def test_extkeys_off_keeps_user_lines_around_block(isolated):
+    p = _local(isolated)
+    p.parent.mkdir(parents=True)
+    p.write_text(f"set -g a 1\n{tmux_conf.EXTKEYS_BLOCK}set -g b 2\n")
+    tmux_conf.extkeys_edit(False, isolated)
+    assert p.read_text() == "set -g a 1\nset -g b 2\n"
+
+
+def test_extkeys_off_without_file_creates_nothing(isolated):
+    assert tmux_conf.extkeys_edit(False, isolated) == "unchanged"
+    assert not _local(isolated).exists()
+
+
+def test_extkeys_on_rewrites_edited_block(isolated):
+    p = _local(isolated)
+    p.parent.mkdir(parents=True)
+    p.write_text(f"x\n{tmux_conf.EXTKEYS_BEGIN}\nset -sq extended-keys off\n{tmux_conf.EXTKEYS_END}\ny\n")
+    assert tmux_conf.extkeys_edit(True, isolated) == "changed"
+    assert p.read_text() == f"x\n{tmux_conf.EXTKEYS_BLOCK}y\n"
+
+
+@pytest.mark.parametrize("body", [
+    f"{tmux_conf.EXTKEYS_BEGIN}\nset -g a 1\n",
+    f"{tmux_conf.EXTKEYS_END}\n{tmux_conf.EXTKEYS_BEGIN}\n",
+    f"{tmux_conf.EXTKEYS_BLOCK}{tmux_conf.EXTKEYS_BLOCK}",
+])
+def test_extkeys_unbalanced_markers_are_never_edited(isolated, body):
+    p = _local(isolated)
+    p.parent.mkdir(parents=True)
+    p.write_text(body)
+    for on in (True, False):
+        with pytest.raises(tmux_conf.ExtkeysError):
+            tmux_conf.extkeys_edit(on, isolated)
+    assert p.read_text() == body
+
+
+def test_extkeys_dry_run_writes_nothing(isolated):
+    assert tmux_conf.extkeys_edit(True, isolated, dry_run=True) == "changed"
+    assert not _local(isolated).exists()
+
+
+def test_extkeys_cli_rejects_mode_on_other_actions(isolated):
+    with pytest.raises(SystemExit):
+        tmux_conf.main(["reload", "on"])
+    with pytest.raises(SystemExit):
+        tmux_conf.main(["extkeys", "maybe"])
+
+
+def test_extkeys_cli_on_off_status_with_absent_server(isolated, capsys, monkeypatch):
+    monkeypatch.setattr(tmux_conf, "tmux_version", lambda: (3, 7))
+    assert tmux_conf.main(["extkeys", "on"]) == 0
+    assert tmux_conf.extkeys_in_file(isolated)
+    assert tmux_conf.main(["extkeys", "status"]) == 0
+    out = capsys.readouterr().out
+    assert "확장 키 구간 있음" in out and "tmux 서버가 꺼져 있습니다" in out
+    assert tmux_conf.main(["extkeys", "off"]) == 0
+    assert not tmux_conf.extkeys_in_file(isolated)
+    assert _local(isolated).read_text() == ""
+
+
+def test_extkeys_on_refused_below_min_version(isolated, capsys, monkeypatch):
+    monkeypatch.setattr(tmux_conf, "tmux_version", lambda: (3, 1))
+    assert tmux_conf.main(["extkeys", "on"]) == 1
+    assert not _local(isolated).exists()
+
+
+def test_extkeys_status_warns_when_override_conf(isolated, capsys, monkeypatch, tmp_path):
+    monkeypatch.setenv("VT_TMUX_CONF", str(tmp_path / "x.conf"))
+    monkeypatch.setattr(tmux_conf, "tmux_version", lambda: (3, 7))
+    tmux_conf.extkeys_edit(True, isolated)
+    assert tmux_conf.main(["extkeys", "status"]) == 0
+    assert "VT_TMUX_CONF" in capsys.readouterr().out
+
+
+def test_extkeys_real_tmux_on_off_roundtrip(isolated, capsys):
+    """격리 소켓(fixture 가 임의 이름을 줌)에서 켜기→끄기. 끝나면 서버를 죽이고 소켓 파일을 지운다."""
+    if not shutil.which("tmux") or (tmux_conf.tmux_version() or (0, 0)) < tmux_conf.EXTKEYS_MIN_TMUX:
+        pytest.skip("tmux 3.2+ 없음")
+    sock = tmux_runner.VT_TMUX_SOCKET
+    try:
+        rc, _, err = tmux_runner.run(["new-session", "-d", "-s", "t"], timeout=5.0)
+        assert rc == 0, err
+        assert tmux_runner.run_text(["show-options", "-sv", "extended-keys"]).strip() == "off"
+        assert tmux_conf.main(["extkeys", "on"]) == 0
+        assert tmux_runner.run_text(["show-options", "-sv", "extended-keys"]).strip() == "on"
+        for _ in range(2):  # reload 를 거듭해도 한 줄
+            assert tmux_conf.main(["extkeys", "on"]) == 0
+            tmux_conf.reload()
+        feats = tmux_runner.run_text(["show-options", "-sv", "terminal-features"])
+        assert feats.count("xterm*:extkeys") == 1
+        st = tmux_conf.extkeys_status(isolated)
+        assert st.server == "on" and st.feature and st.in_file
+        assert tmux_conf.main(["extkeys", "off"]) == 0
+        assert tmux_runner.run_text(["show-options", "-sv", "extended-keys"]).strip() == "off"
+        assert "extkeys" not in tmux_runner.run_text(["show-options", "-sv", "terminal-features"])
+        assert not tmux_conf.extkeys_in_file(isolated)
+    finally:
+        tmux_runner.run(["kill-server"], timeout=5.0)
+        for d in Path("/tmp").glob("tmux-*"):
+            (d / sock).unlink(missing_ok=True)

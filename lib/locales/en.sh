@@ -401,7 +401,7 @@ _t_en_lookup() {
     '사용법: fsh run "명령어"') _T_OUT='Usage: fsh run "command"' ;;
     '사용법: fsh shell-init [zsh|bash|fish|pwsh]') _T_OUT='Usage: fsh shell-init [zsh|bash|fish|pwsh]' ;;
     '사용법: fsh terminal [show|set <{choices}>|unset]') _T_OUT='Usage: fsh terminal [show|set <{choices}>|unset]' ;;
-    '사용법: fsh tmux [status|reload [--dry-run]]') _T_OUT='Usage: fsh tmux [status|reload [--dry-run]]' ;;
+    '사용법: fsh tmux [status|reload [--dry-run]|extkeys [on|off|status]]') _T_OUT='Usage: fsh tmux [status|reload [--dry-run]|extkeys [on|off|status]]' ;;
     '사용법: fsh tunnel [status|list|hook|restart|watchdog|expose <port> [라벨] [--mode public|session|pin] [--ttl 1h|24h|7d|30d] [--auto-renew|--no-auto-renew]|unexpose <port>|pin <port>|mode <port> <mode>|auto <port> <on|off>|setup|teardown|switch <anon|named>]') _T_OUT='Usage: fsh tunnel [status|list|hook|restart|watchdog|expose <port> [label] [--mode public|session|pin] [--ttl 1h|24h|7d|30d] [--auto-renew|--no-auto-renew]|unexpose <port>|pin <port>|mode <port> <mode>|auto <port> <on|off>|setup|teardown|switch <anon|named>]' ;;
     '사용법: fsh tunnel auto <port> <on|off>') _T_OUT='Usage: fsh tunnel auto <port> <on|off>' ;;
     '사용법: fsh tunnel mode <port> <public|session|pin>') _T_OUT='Usage: fsh tunnel mode <port> <public|session|pin>' ;;
