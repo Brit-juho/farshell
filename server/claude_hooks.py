@@ -231,6 +231,28 @@ def apply_install(settings: dict, repo_root: Path | None = None) -> tuple[dict, 
     return settings, changes
 
 
+def refresh_installed(settings: dict, repo_root: Path | None = None) -> tuple[dict, list[str]]:
+    """이미 들어 있는 우리 훅의 명령(스크립트 경로)만 현재 체크아웃 것으로 고친다.
+
+    apply_install과 달리 없는 이벤트·항목을 절대 추가하지 않고 아무것도 지우지 않는다
+    (사람이 일부러 뺀 훅을 되살리지 않기 위해). 한 그룹에 남의 훅이 섞여 있어도 우리 항목만 바뀐다.
+    """
+    settings = json.loads(json.dumps(settings))
+    changes: list[str] = []
+    hooks = settings.get("hooks")
+    for event, groups in (hooks.items() if isinstance(hooks, dict) else ()):
+        if event not in EVENTS or not isinstance(groups, list):
+            continue
+        want = hook_command(event, repo_root)
+        for g in groups:
+            for h in (g.get("hooks") or []) if isinstance(g, dict) else []:
+                if isinstance(h, dict) and isinstance(h.get("command"), str) and _is_ours(h["command"]):
+                    if h["command"] != want:
+                        changes.append(f"{event}: {h['command']} → {want}")
+                        h["command"] = want
+    return settings, changes
+
+
 def apply_uninstall(settings: dict) -> tuple[dict, list[str]]:
     """우리가 넣은 항목만 제거한다. 남의 훅과 빈 이벤트 키는 그대로 둔다."""
     settings = json.loads(json.dumps(settings))

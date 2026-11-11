@@ -87,8 +87,9 @@ Verify affected behavior with actual responses, operations and logs.
     `~/.claude`/`~/.codex` (those are only read). Two person-initiated paths write there: the explicit
     `fsh profile sync-settings` / the managed launch (`fsh claude <profile>`), and creating a new session with an account
     a person chose (`session_profile.sync_settings`), which places **only the usage statusLine wrapper** in that
-    profile's `settings.json` (`agent_profile_settings.sync(..., statusline_only=True)`: no other key, no hooks, no MCP
-    definitions, `.claude.json` untouched). A failure is logged without values or paths and never blocks the session.
+    profile's `settings.json` and, for FarShell's own hooks already in that profile, refreshes their script path to the
+    current checkout (`agent_profile_settings.sync(..., statusline_only=True)` -> `claude_hooks.refresh_installed`: it
+    never adds a hook, never touches other people's hooks, MCP definitions or `.claude.json`). A failure is logged without values or paths and never blocks the session.
     Do not widen the automatic call: a global hook or MCP definition (with its keys) must never spread to every
     profile without a person running the sync. Details: `docs/ref/agents.md` «Account choice for new sessions».
 17. **Automatic update runs network code — keep it bounded.** `update.auto` is off by default and only ever applies

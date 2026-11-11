@@ -242,3 +242,48 @@ def test_an_existing_folder_open_to_others_is_closed_but_a_linked_one_is_never_u
     link.symlink_to(real)
     result = run(["--profile", PID, "--dir", str(link), "--", "echo through"], LIMITS)
     assert result.stdout.decode() == "through\n" and not list(real.iterdir())   # the command still runs; nothing is written through a link
+
+
+# --- the automatic (statusline_only) path never resurrects hooks ---------------------------
+
+def _hook_cmds(data):
+    return {e: [h["command"] for g in gs for h in g.get("hooks", [])] for e, gs in data.get("hooks", {}).items()}
+
+
+def test_statusline_only_sync_does_not_readd_removed_hooks_but_follows_the_statusline(sandbox):
+    import claude_hooks
+    gpath = _global(sandbox, statusLine={"type": "command", "command": "echo one"})
+    pid = profiles.create("nohooks", "claude")["id"]
+    sync.sync(pid)
+    spath = profiles.root(pid) / "settings.json"
+    data = _mine(pid)
+    data["hooks"] = {"Notification": [{"hooks": [{"type": "command", "command": "/mine/notify.sh"}]}]}   # FarShell hooks removed on purpose
+    spath.write_text(json.dumps(data))
+    gpath.write_text(json.dumps({"statusLine": {"type": "command", "command": "echo two"}}))
+    sync.sync(pid, statusline_only=True)
+    after = _mine(pid)
+    assert sync._wrapped(after["statusLine"]) == (True, "echo two")
+    assert _hook_cmds(after) == {"Notification": ["/mine/notify.sh"]}
+    gpath.write_text(json.dumps({"statusLine": {"type": "command", "command": "echo three"}}))
+    sync.sync(pid)   # the explicit path still installs the full set
+    assert set(_hook_cmds(_mine(pid))) >= set(claude_hooks.EVENTS)
+
+
+def test_statusline_only_sync_refreshes_only_an_old_farshell_path_and_leaves_mcp_alone(sandbox):
+    import claude_hooks
+    gpath = _global(sandbox, statusLine={"type": "command", "command": "echo one"})
+    pid = profiles.create("moved", "claude")["id"]
+    sync.sync(pid)
+    spath = profiles.root(pid) / "settings.json"
+    data = _mine(pid)
+    data["hooks"] = {"Stop": [{"hooks": [{"type": "command", "command": "/old/server/agent_hook.sh stop claude"},
+                                         {"type": "command", "command": "/mine/own.sh"}]}]}
+    spath.write_text(json.dumps(data))
+    cpath = profiles.root(pid) / ".claude.json"
+    cpath.write_text(json.dumps({"mcpServers": {"mine": {"command": "x"}}}))
+    cbefore = _sha(cpath)
+    gpath.write_text(json.dumps({"statusLine": {"type": "command", "command": "echo two"}, "hooks": {
+        "Stop": [{"hooks": [{"type": "command", "command": "/global/hook.sh"}]}]}}))
+    sync.sync(pid, statusline_only=True)
+    assert _hook_cmds(_mine(pid)) == {"Stop": [claude_hooks.hook_command("Stop"), "/mine/own.sh"]}
+    assert _sha(cpath) == cbefore

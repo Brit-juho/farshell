@@ -98,8 +98,10 @@ copied or swapped, and nothing switches automatically.
 - **The statusLine is refreshed when a session is created.** For a chosen Claude profile the server places the
   usage wrapper in the profile's `settings.json` (`session_profile.sync_settings` ->
   `agent_profile_settings.sync(..., statusline_only=True)`) so a moved checkout or a changed global statusLine is
-  followed. It touches that one key only: other settings, hooks and MCP definitions (with their keys) follow the
-  global files **only** through the explicit `fsh profile sync-settings` or the managed launch. The global
+  followed. It places that one key and, for FarShell's own hooks already in that profile, rewrites their script
+  path to the current checkout (`claude_hooks.refresh_installed`); it never adds a hook, so a hook a person removed
+  stays removed. Other settings, hooks and MCP definitions (with their keys) follow the global files **only**
+  through the explicit `fsh profile sync-settings` or the managed launch. The global
   `~/.claude` is only read. A failure is logged as a warning (exception type only) and the session is still created.
 - **Names.** A session created with `profile` must be named `[A-Za-z0-9_-]{1,80}` (`400 invalid_name`): tmux expands
   formats in a `-s` value, so `#{session_id}` would create a session under another name that the failed-create cleanup
@@ -485,7 +487,8 @@ The wrapper reads stdin once, replaces the profile's file only with a document t
 (a new session never erases the last value), pipes the same input to the original command (one shell string,
 `sh -c`) and returns its output and exit status. A write failure is ignored. It makes no network or server
 call. It stores the whole input document (POSIX sh cannot parse JSON; the input also carries cwd and transcript
-path), which is why the directory is 0700 and the server reads only `rate_limits` from it.
+path), which is why the directory is 0700 and the server reads only `rate_limits` from it. The global statusLine
+command therefore runs in every profile session (the wrapper pipes to it).
 
 **Codex app-server conditions.** Started only when the profile's `auth.json` exists, no Codex process uses that
 `CODEX_HOME` (same ps check as `require_inactive`; an unreadable ps counts as in use), at least 5 minutes since
