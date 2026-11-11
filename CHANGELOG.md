@@ -10,6 +10,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+---
+
+## [2.11.0] — 2026-11-11
+
 ### Added
 - **`FarShell.app` now has an icon** (`macos/AppIcon.icns`, the `>_` mark on a rounded square, drawn from `frontend/icon-512.png`'s colors and proportions by `scripts/gen_app_icon.py`). It shows in permission prompts, System Settings > Privacy, Activity Monitor and Finder. The icon is part of the app's source hash, so the app is rebuilt once on the next start and macOS asks for permissions once more; a missing icon file just builds the app without one.
 - **「Clear cache」 button in Settings › About (정보 및 진단)** under a new 「App files」 (앱 파일) group, so a phone — which has no FarShell menu — can clear stale app files too. It runs the same `app.clear-cache` action as the menu and the palette (confirm, unregister service workers, delete Cache Storage, re-request the app assets, reload; settings and login stay), is a 44px target on a phone, and is found by Settings search (cache / update / clear / 캐시 / 앱 파일 / 새로고침). It lives in the lazy settings chunk, so the initial payload does not grow.
