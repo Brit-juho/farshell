@@ -63,6 +63,8 @@ Read the relevant area document before making changes.
 | Voice, clipboard, push | Voice daemon, hands-free and voice-only modes, clipboard daemon, Web Push | [`docs/ref/voice.md`](./docs/ref/voice.md) |
 | Measurements: session/view rules, `waiting` release, phone | Per-CLI `waiting` kind results, release-path table, terminal-reply root cause, real-device (touch) findings, bundle-size trend, reproduction | [`docs/ref/session-view-measurements.md`](./docs/ref/session-view-measurements.md) |
 | Reliability: hangs, health, watchdog | Named thread pools with deadlines, `TimedLock`, `proc.run`, remote-mount detection, scan quarantine, `/api/health/*`, the server watchdog and incident bundles, frontend request deadlines and the WS silence watchdog | [`docs/ref/reliability.md`](./docs/ref/reliability.md) |
+| Keyboard input | The processing order of a keystroke, delivery target and settings, scopes and virtual input, paste, Android measurements | [`docs/ref/keyboard-input.md`](./docs/ref/keyboard-input.md) |
+| Session list and work context | How the rail groups sessions and edits titles, and keeping work context consistent across CLIs | [`docs/ref/session-ui.md`](./docs/ref/session-ui.md) |
 | Display language | `VT_LANG`, how the server picks ko/en, `t('한국어 원문')` keys, the English dictionary, glossary | [`docs/ref/i18n.md`](./docs/ref/i18n.md) |
 | Running, testing, install | Running the server, mobile testing over adb, the E2E procedure, manual install | [`docs/ref/dev.md`](./docs/ref/dev.md) |
 
@@ -91,9 +93,11 @@ Run these checks before committing:
 npm test
 .venv/bin/python -m pytest
 python3 scripts/check_docs.py --strict
-python3 scripts/check_css_vars.py --strict
+python3 scripts/check_css_vars.py --strict   # needs `npm run build` first (reads frontend/dist)
+python3 scripts/check_css_order.py
 python3 scripts/check_i18n.py --strict
 python3 scripts/check_python_lock.py
+.venv/bin/python -m pytest tests/e2e         # browser tests; see "Working rules" for where to run it
 ```
 
 `npm test` includes TypeScript checking; Vite builds do not. Put server tests in
@@ -103,8 +107,10 @@ Verify affected behavior with actual responses, operations and logs.
 
 ## Project contracts
 
-1. Preserve the fixed `app.js`, `app.css` and `voice.js` outputs and the two Vite build
-   passes. `frontend/sw.js` precaches those filenames.
+1. Preserve the fixed, unhashed build outputs — `app.js`, `core.js`, `app.css`, `voice.js` and the lazy
+   chunks (`chunkFileNames: '[name].js'`) — and the two Vite build passes (`npm run build` = main + `VOICE_BUILD=1`).
+   `index.html` and the service worker request them by name. The **initial payload (`app.js` + `core.js`) must stay
+   within 300 KiB** (`frontend/tests/build-output.test.js`): put new code in a lazy chunk, not in `core.js`.
 2. Keep path access checks in `server/fsguard.py`. Use resolved paths and
    `is_relative_to`, never string-prefix containment checks.
 3. Preserve `OriginGuardMiddleware` protection for cross-site HTTP and WebSocket
@@ -213,8 +219,16 @@ Verify affected behavior with actual responses, operations and logs.
 
 - Preserve unrelated changes. Do not use `git stash`; stage only the intended changes.
 - Confirm design direction and policy changes with the user.
-- Isolated test servers must set `VT_CONFIG`, `VT_WORKSPACE_PATH` and `VT_TMUX_SOCKET`,
-  and unset `VT_TOKEN`, to avoid accessing the user's runtime state.
+- Isolated test servers must set `VT_CONFIG`, `VT_WORKSPACE_PATH`, `VT_STATE_DIR` and `VT_TMUX_SOCKET` (all under a
+  temporary directory, with `HOME` there too), set `VT_UPDATE_CHECK=0`, and unset `VT_TOKEN`, to avoid accessing the
+  user's runtime state. Without `VT_STATE_DIR` and `VT_UPDATE_CHECK=0` the background update check does a
+  `git fetch` and writes its status into the real state directory.
+- Run browser (e2e) tests from a checkout whose path has no `.claude` component: `fsguard` denies `.claude`
+  directories, so the file-viewer tests fail under `.claude/worktrees/…`. Copy the tree elsewhere (with its own
+  `git init`) if you work in such a worktree.
+- Build: `npm run build` writes the git-ignored `frontend/dist`; Python dependencies install only from `locks/`
+  (contract 12). Plans, reports and superseded documents live in the untracked `docs/local/` (archived under
+  `docs/local/archive/`) and are never the current standard — `docs/ref/` is.
 - Apply changes to a running instance with `fsh restart`. Do not use
   `fsh stop && fsh start`: stopping the tunnel changes its public URL.
 - Use Korean commit messages with `type: summary` and a body explaining why.
