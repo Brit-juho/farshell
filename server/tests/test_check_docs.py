@@ -473,3 +473,19 @@ def test_every_ref_doc_must_be_in_the_agents_md_index(tmp_path, monkeypatch):
     problems = []
     check_docs.check_agents_md_is_an_index(problems)
     assert len(problems) == 1 and "orphan.md" in problems[0]
+
+
+def test_claude_md_files_are_forbidden(tmp_path, monkeypatch, capsys):
+    """CLAUDE.md 가 있으면 Claude Code 가 AGENTS.md 를 안 읽는다 — 공유 파일이 생기면 실패, CLAUDE.local.md 는 알림만."""
+    monkeypatch.setattr(check_docs, "ROOT", tmp_path)
+    problems = []
+    check_docs.check_no_claude_md(problems)
+    assert problems == []
+    (tmp_path / "CLAUDE.local.md").write_text("x\n")
+    check_docs.check_no_claude_md(problems)
+    assert problems == [] and "CLAUDE.local.md" in capsys.readouterr().out
+    (tmp_path / "CLAUDE.md").write_text("x\n")
+    (tmp_path / ".claude").mkdir()
+    (tmp_path / ".claude" / "CLAUDE.md").write_text("x\n")
+    check_docs.check_no_claude_md(problems)
+    assert len(problems) == 2 and all("AGENTS.md" in p for p in problems)

@@ -219,6 +219,10 @@ Verify affected behavior with actual responses, operations and logs.
 
 - Preserve unrelated changes. Do not use `git stash`; stage only the intended changes.
 - Confirm design direction and policy changes with the user.
+- Instruction files: this `AGENTS.md` is the only shared one. A developer's own working rules go in the untracked
+  `.claude/AGENTS.md` (git-ignored; Claude Code reads it together with this file). Never create `CLAUDE.md`,
+  `.claude/CLAUDE.md` or `CLAUDE.local.md`: while any of them exists Claude Code stops reading `AGENTS.md`.
+  Check what a session loaded with `/context all`.
 - Isolated test servers must set `VT_CONFIG`, `VT_WORKSPACE_PATH`, `VT_STATE_DIR` and `VT_TMUX_SOCKET` (all under a
   temporary directory, with `HOME` there too), set `VT_UPDATE_CHECK=0`, and unset `VT_TOKEN`, to avoid accessing the
   user's runtime state. Without `VT_STATE_DIR` and `VT_UPDATE_CHECK=0` the background update check does a
