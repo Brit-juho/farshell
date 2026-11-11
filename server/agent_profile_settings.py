@@ -293,7 +293,9 @@ def sync(profile_id, *, dry_run=False, take_global=(), include_mcp=None, statusl
         if not dry_run:
             if updated != mine:
                 import claude_hooks
-                updated, _ = claude_hooks.apply_install(updated)
+                # Session-creation path: refresh the paths of hooks already there, never (re)add one.
+                refresh = claude_hooks.refresh_installed if statusline_only else claude_hooks.apply_install
+                updated, _ = refresh(updated)
                 from agent_profile_migration import _write_bytes
                 _write_bytes(spath, json.dumps(updated, ensure_ascii=False, indent=2).encode(), 0o600)
 

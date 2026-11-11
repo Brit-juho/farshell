@@ -192,3 +192,26 @@ def test_twelve_installed_shows_one_missing_then_install_adds_it(cfg, capsys):
     assert cfg.with_suffix(".json.vtbak").read_text() == before, "백업은 설치 직전 원본"
     again = cfg.read_text()
     assert ch._cmd_install() == 0 and cfg.read_text() == again, "멱등"
+
+
+# --- refresh_installed: 경로만 갱신, 추가·삭제 없음 ---------------------------------------
+
+def test_refresh_installed_never_adds_and_rewrites_only_our_path():
+    src = {"hooks": {
+        "Stop": [{"hooks": [{"type": "command", "command": "/old/server/agent_hook.sh stop claude"},
+                            {"type": "command", "command": "/mine/own.sh"}]}],
+        "Notification": [{"hooks": [{"type": "command", "command": "/mine/notify.sh"}]}],
+    }, "theme": "dark"}
+    before = json.dumps(src)
+    out, changes = ch.refresh_installed(src)
+    assert json.dumps(src) == before, "입력을 변형하면 안 된다"
+    assert set(out["hooks"]) == {"Stop", "Notification"}, "없던 이벤트를 추가하면 안 된다"
+    assert _cmds(out, "Stop") == [ch.hook_command("Stop"), "/mine/own.sh"]
+    assert _cmds(out, "Notification") == ["/mine/notify.sh"]
+    assert out["theme"] == "dark" and len(changes) == 1
+
+
+def test_refresh_installed_on_empty_or_current_settings_is_noop():
+    assert ch.refresh_installed({}) == ({}, [])
+    full, _ = ch.apply_install({})
+    assert ch.refresh_installed(full) == (full, [])
