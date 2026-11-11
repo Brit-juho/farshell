@@ -54,6 +54,39 @@ test('parseQuery — 접두사 뒤 공백은 트리밍되고, query에는 접두
   assert.strictEqual(p.raw, '/  needle.py');
 });
 
+test('fuzzyMatch — 한글 부분 일치, NFD/NFC 어느 쪽이든 맞는다', async () => {
+  const { fuzzyMatch } = await mod();
+  assert.strictEqual(fuzzyMatch('로그아웃', '로그'), true);
+  assert.strictEqual(fuzzyMatch('설정', '설정'.normalize('NFD')), true);
+  assert.strictEqual(fuzzyMatch('설정'.normalize('NFD'), '설정'), true);
+  assert.strictEqual(fuzzyMatch('로그아웃', '캐시'), false);
+  assert.strictEqual(fuzzyMatch('Log Out', 'LOG O'), true);
+  assert.strictEqual(fuzzyMatch('a:b', ':'), true);
+});
+
+test('`:` 결과가 0건이면 단축키 없는 명령은 접두어 없이 찾으라고 안내한다', async () => {
+  const { mountPalette, document, root } = await mountFresh();
+  const deps = fakeDeps(document, {
+    listKeymapActions: () => [
+      { id: 'settings', label: '설정', combo: 'Mod+,', passthrough: false, unavailable: false },
+    ],
+  });
+  const api = mountPalette(root, deps);
+  api.open();
+  await flush();
+  const input = document.getElementById('vt-qo-input');
+  const type = (v) => { input.value = v; input.dispatchEvent(new document.defaultView.Event('input', { bubbles: true })); };
+  type(':로그아웃');
+  const empty = await waitFor(() => document.querySelector('.vt-vw-empty'));
+  assert.ok(empty.textContent.includes('단축키 없는 명령은 `:` 없이 검색해 보세요'), empty.textContent);
+  type('xyz-없음');
+  const empty2 = await waitFor(() => {
+    const e = document.querySelector('.vt-vw-empty');
+    return e && !e.textContent.includes('단축키') ? e : null;
+  });
+  assert.ok(empty2.textContent.includes('일치하는 항목이 없습니다.'));
+});
+
 test('fuzzyMatch — 빈 질의는 항상 매치, 대소문자 무시 부분 문자열', async () => {
   const { fuzzyMatch } = await mod();
   assert.strictEqual(fuzzyMatch('anything', ''), true);
