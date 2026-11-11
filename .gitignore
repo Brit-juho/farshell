@@ -54,7 +54,7 @@ docs/*
 !docs/help/
 # README 가 링크하는 사용자 안내
 !docs/guide/
-# CLAUDE.md 색인이 가리키는 영역별 현재 동작 참조
+# AGENTS.md 색인이 가리키는 영역별 현재 동작 참조
 !docs/ref/
 
 # 릴리스 산출물 — .github/workflows/release.yml 이 저장소 루트에 만든다.
@@ -114,7 +114,7 @@ frontend/static/
 .aider*
 !.aider.conf.yml
 
-# 에이전트 지침의 로컬 덮어쓰기본(개인 선호) — 공유본은 AGENTS.md / CLAUDE.md 하나뿐이다.
+# 에이전트 지침의 로컬 덮어쓰기본(개인 선호) — 공유본은 AGENTS.md 하나뿐이다.
 AGENTS.local.md
 CLAUDE.local.md
 *.local.md

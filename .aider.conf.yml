@@ -2,4 +2,3 @@
 # every CLI reads the same rules — see AGENTS.md for why they are not duplicated.
 read:
   - AGENTS.md
-  - CLAUDE.md
