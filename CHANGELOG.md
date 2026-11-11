@@ -12,6 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 
 ### Changed
+- `AGENTS.md` is brought up to date: the build-output contract names `core.js` and the lazy chunks and states the 300 KiB initial-payload cap, the area index lists `keyboard-input.md` and `session-ui.md` (a new check fails when a `docs/ref` document is missing from it), the validation list matches CI, and isolated test servers must also set `VT_STATE_DIR` and `VT_UPDATE_CHECK=0` so the background update check cannot touch the real state directory. `docs/ref/dev.md` documents that e2e tests must not run under a `.claude` path.
 - The repository has one agent instruction file, `AGENTS.md` (project overview, document map, area index, validation, contracts, branches). `CLAUDE.md` is gone: Claude Code reads `AGENTS.md` itself, so keeping a second file only invited drift. `scripts/check_docs.py` now checks `AGENTS.md` for the endpoint-table and index-size rules it used to apply to `CLAUDE.md`.
 ---
 

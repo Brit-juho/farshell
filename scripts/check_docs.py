@@ -531,8 +531,8 @@ def check_design_md(problems: list[str]) -> None:
 # 496줄·56k자였던 지침 문서를 색인으로 줄이고 상세를 docs/ref/*.md로 갈랐다. 2026-11-11에 CLAUDE.md(색인)와
 # AGENTS.md(계약)를 AGENTS.md 하나로 합쳤다(모든 도구가 같은 파일을 읽는다). 그 파일은 **세션마다 자동으로 컨텍스트에 들어간다** — 다시 불어나면 만지지도
 # 않는 영역의 설명까지 매번 토큰을 먹는다. 그래서 예산을 검사로 고정한다.
-# 합치기 전 예산은 색인 9000자(+ 계약 문서는 무제한)였다. 합친 파일의 현재 크기는 약 15.1k자.
-AGENTS_MD_MAX_CHARS = 17000
+# 합치기 전 예산은 색인 9000자(+ 계약 문서는 무제한)였다. 합친 파일의 현재 크기는 약 16.8k자(2026-11-11).
+AGENTS_MD_MAX_CHARS = 18000
 
 
 def check_agents_md_is_an_index(problems: list[str]) -> None:
@@ -549,6 +549,13 @@ def check_agents_md_is_an_index(problems: list[str]) -> None:
     for rel in re.findall(r"\]\(\./((?:docs/ref/)?[A-Za-z0-9_.-]+\.md)\)", text):
         if not (ROOT / rel).exists():
             problems.append(f"AGENTS.md가 없는 문서를 가리킨다: {rel}")
+    # 반대 방향: docs/ref/ 의 문서는 전부 색인에 있어야 한다(2026-11-11: keyboard-input.md·session-ui.md 가
+    # 색인에서 빠진 채로 있었다 — 색인에 없는 문서는 에이전트가 읽을 일이 없다).
+    ref = ROOT / "docs" / "ref"
+    if ref.is_dir():
+        for f in sorted(ref.glob("*.md")):
+            if f"docs/ref/{f.name}" not in text:
+                problems.append(f"AGENTS.md 영역 색인에 없는 문서: docs/ref/{f.name}")
 
 
 # ── 7. 개인 값이 리포에 들어오지 않았는가 ─────────────────────────────────

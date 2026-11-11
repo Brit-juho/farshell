@@ -461,3 +461,15 @@ def test_english_docs_korean_lines_within_limit(capsys):
     """영어 문서(docs/ref·docs/help/en)에 라벨 밖 한국어 본문 줄이 한도를 넘지 않는다."""
     found = check_docs.english_docs_korean_lines()
     assert len(found) <= check_docs.KOREAN_BODY_LIMIT, found
+
+
+def test_every_ref_doc_must_be_in_the_agents_md_index(tmp_path, monkeypatch):
+    """docs/ref 의 문서가 AGENTS.md 색인에서 빠지면 경고 — 색인에 없는 문서는 읽힐 일이 없다."""
+    monkeypatch.setattr(check_docs, "ROOT", tmp_path)
+    (tmp_path / "docs" / "ref").mkdir(parents=True)
+    (tmp_path / "docs" / "ref" / "listed.md").write_text("# a\n")
+    (tmp_path / "docs" / "ref" / "orphan.md").write_text("# b\n")
+    (tmp_path / "AGENTS.md").write_text("| a | [`docs/ref/listed.md`](./docs/ref/listed.md) |\n")
+    problems = []
+    check_docs.check_agents_md_is_an_index(problems)
+    assert len(problems) == 1 and "orphan.md" in problems[0]

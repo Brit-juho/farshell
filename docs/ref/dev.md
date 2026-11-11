@@ -177,6 +177,11 @@ Browser smoke tests use Playwright from `requirements-dev.txt`:
 .venv/bin/python -m pytest tests/e2e -v
 ```
 
+Run them from a checkout whose path has no `.claude` component. `fsguard` denies `.claude` directories, so the
+file-viewer, image and source-control dock tests time out waiting for content when the repository sits under
+`.claude/worktrees/…` (the viewer answers 403 `denied`). Copy the tree to a plain path with its own `git init`
+(the source-control tests read the working tree's `git status`) and link `node_modules` and `.venv` into it.
+
 For manual verification, create a disposable session, exercise terminal input,
 rename and file upload, then check scrollback after refresh and reconnection.
 Delete the disposable session **after** completing those operations. Test voice
