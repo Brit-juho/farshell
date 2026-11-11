@@ -55,10 +55,10 @@ export const MODE_PREFIX: Record<Exclude<PaletteMode, 'default'>, string> = {
 };
 
 export const PLACEHOLDER =
-  t('세션 · 최근 파일 · 명령 검색… ( / 파일 · ? 내용 · @ 세션 · : 명령 · # 큐 · ! 포트 · ~ 스크롤백 )');
+  t('세션 · 최근 파일 · 명령 검색… ( / 파일 · ? 내용 · @ 세션 · : 단축키 · # 큐 · ! 포트 · ~ 스크롤백 )');
 
 /** 팔레트 아래 고정 줄의 접두어 안내. */
-export const MODE_HINT = t('/ 파일 · ? 내용 · @ 세션 · : 명령 · # 큐 · ! 포트 · ~ 스크롤백');
+export const MODE_HINT = t('/ 파일 · ? 내용 · @ 세션 · : 단축키 · # 큐 · ! 포트 · ~ 스크롤백');
 
 export function parseQuery(rawInput: string): ParsedQuery {
   const raw = (rawInput || '').trim();
@@ -76,7 +76,8 @@ export function parseQuery(rawInput: string): ParsedQuery {
 // subsequence 스코어링을 쓴다).
 export function fuzzyMatch(hay: string, needle: string): boolean {
   if (!needle) return true;
-  return hay.toLowerCase().includes(needle.toLowerCase());
+  // 한글은 자모로 분해된(NFD) 입력이 올 수 있다 — 양쪽을 NFC로 맞춰 비교한다.
+  return hay.normalize('NFC').toLowerCase().includes(needle.normalize('NFC').toLowerCase());
 }
 
 export interface CommandDescriptor {

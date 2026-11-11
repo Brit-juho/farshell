@@ -1065,7 +1065,7 @@ One palette covers quick open, commands and in-pane search. 8 prefixes:
 | `/` | `file` | File fuzzy search (`GET /api/fs/search?q=`, debounced) |
 | `?` | `grep` | File **content** search (`GET /api/fs/grep`) — the palette widens to 1100×720: options row (⌥C/⌥W/⌥R toggles, include/exclude globs, scope), progress row with Cancel (취소), results grouped by file with the match in `--color-term-hl`, a 460px preview of the selected line. The same screen is the sidebar Files › Search contents (파일 › 내용 검색) (`shell/GrepView.tsx`, `styles/screens/97-grep.css`) |
 | `@` | `session` | Sessions — the *only* place sessions are listed in the palette |
-| `:` | `keymap` | Commands — shows **the current key binding** next to each (read from the `core/keymap.js` registry, so a rebind shows up here too) |
+| `:` | `keymap` | Actions **that have a key binding** (the `core/keymap.js` registry, 14) — shows the current binding next to each, so a rebind shows up here too. Commands without a binding (Sign out, Clear cache, Update settings…) are not listed; find them without a prefix. The empty-result line says so |
 | `#` | `queue` | Prompt queue items |
 | `!` | `port` | Open ports |
 | `~` | `scrollback` | Server-side scrollback search (`GET /api/search/scrollback?q=` — greps the full session ring buffer) |
@@ -1164,7 +1164,7 @@ view like any other.
 
 Bottom nav has **5 tabs** (`frontend/index.html`'s `#vt-mnav-bottom`):
 **Session · Terminal · Changes · Files · Settings**. Queue has no slot in
-the bar but is reachable from the command palette's `:` mode. Files (attachments)
+the bar but is reachable from the command palette's `#` mode. Files (attachments)
 has a slot and shows a badge
 of in-flight upload jobs (`window.vtUploadJobs()`, event-driven off
 `vt:upload-progress` rather than polled). Settings opens straight into

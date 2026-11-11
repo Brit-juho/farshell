@@ -692,7 +692,10 @@ function PaletteBody(props: PaletteBodyProps) {
                 ? t('불러오는 중…')
                 : searchError()
                   ? searchError()
-                  : t('일치하는 항목이 없습니다.')}
+                  : parsed().mode === 'keymap'
+                    // `:`는 단축키가 있는 동작만 찾는다 — 로그아웃·캐시 지우기 같은 명령은 `:` 없이 찾아야 한다.
+                    ? t('단축키가 있는 동작만 찾습니다. 단축키 없는 명령은 `:` 없이 검색해 보세요.')
+                    : t('일치하는 항목이 없습니다.')}
           </div>
         </Show>
         <For each={rows()}>
