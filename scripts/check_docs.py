@@ -535,6 +535,25 @@ def check_design_md(problems: list[str]) -> None:
 AGENTS_MD_MAX_CHARS = 18000
 
 
+def check_no_claude_md(problems: list[str]) -> None:
+    """루트 `CLAUDE.md`·`.claude/CLAUDE.md` 는 두지 않는다(2026-11-11).
+
+    Claude Code 는 CLAUDE 계열 파일(`CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md`)이 하나라도 있으면
+    `AGENTS.md` 를 읽지 않는다 — 하나가 생기면 모든 사용자의 세션에서 이 저장소의 계약이 조용히 빠진다.
+    공유 지침은 루트 AGENTS.md, 개발자 로컬 지침은 git 제외인 `.claude/AGENTS.md` 에 둔다.
+    `CLAUDE.local.md` 는 개인 파일이라 실패시키지 않고 알리기만 한다(있으면 그 개발자의 세션만 영향).
+    """
+    for rel in ("CLAUDE.md", ".claude/CLAUDE.md"):
+        if (ROOT / rel).exists():
+            problems.append(
+                f"{rel}가 있다 — Claude Code 가 AGENTS.md 를 읽지 않게 된다. 내용은 AGENTS.md(공유) 또는 "
+                ".claude/AGENTS.md(개발자 로컬, git 제외)로 옮기고 지운다"
+            )
+    if (ROOT / "CLAUDE.local.md").exists():
+        print("  (참고) CLAUDE.local.md 가 있다 — 이 체크아웃의 Claude Code 는 AGENTS.md 를 읽지 않는다. "
+              "내용을 .claude/AGENTS.md 로 옮기고 지운다")
+
+
 def check_agents_md_is_an_index(problems: list[str]) -> None:
     doc = ROOT / "AGENTS.md"
     if not doc.exists():
@@ -838,6 +857,7 @@ def main() -> int:
     check_version(problems)
     check_design_md(problems)
     check_agents_md_is_an_index(problems)
+    check_no_claude_md(problems)
     check_no_personal_values(problems)
     check_skill_copy_in_sync(problems)
     check_config_keys_documented(problems)

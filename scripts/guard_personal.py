@@ -46,6 +46,8 @@ FORBIDDEN_PATHS: tuple[tuple[str, str], ...] = (
      "에이전트·에디터 도구가 만든 개인 설정 디렉터리"),
     (r"(^|/)\.aider(?!\.conf\.yml$)[^/]*$", "aider 대화·입력·태그 캐시(개인 것)"),
     (r"(^|/)(AGENTS|CLAUDE)\.local\.md$|\.local\.md$", "에이전트 지침의 개인 덮어쓰기본"),
+    (r"(^|/)\.claude/(AGENTS|CLAUDE)\.md$", "개발자 로컬 지침(.claude/AGENTS.md — 개인 작업 규칙은 올리지 않는다)"),
+    (r"^CLAUDE\.md$", "CLAUDE.md — 있으면 Claude Code 가 AGENTS.md 를 읽지 않는다(지침은 루트 AGENTS.md 하나)"),
     (r"(^|/)settings\.local\.json$", "도구의 로컬 설정"),
     (r"(^|/)\.claude/(projects|hooks)(/|$)|(^|/)\.claude/settings\.json$", "Claude Code 개인 설정/상태"),
     (r"(^|/)auth\.json$", "인증 정보"),

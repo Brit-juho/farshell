@@ -114,7 +114,10 @@ frontend/static/
 .aider*
 !.aider.conf.yml
 
-# 에이전트 지침의 로컬 덮어쓰기본(개인 선호) — 공유본은 AGENTS.md 하나뿐이다.
+# 에이전트 지침: 서비스용(공유)은 루트 AGENTS.md 하나뿐이다. 개발자 로컬용(개인 작업 규칙)은 .claude/AGENTS.md —
+# Claude Code 는 CLAUDE 계열 파일이 없으면 루트 AGENTS.md 와 .claude/AGENTS.md 를 둘 다 읽는다. 이 파일은 절대 올리지 않는다.
+# (CLAUDE.md·CLAUDE.local.md 를 만들면 Claude Code 가 AGENTS.md 를 읽지 않으니 만들지 않는다.)
+.claude/AGENTS.md
 AGENTS.local.md
 CLAUDE.local.md
 *.local.md
