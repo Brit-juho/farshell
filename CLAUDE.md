@@ -3,6 +3,10 @@
 Project overview for all AI coding agents. Shared development rules and contracts
 live in [`AGENTS.md`](./AGENTS.md).
 
+Claude Code skips `AGENTS.md` when a `CLAUDE.md` exists, so it is imported here:
+
+@AGENTS.md
+
 FarShell puts your Mac terminal on your phone: a tmux-backed web terminal reachable from
 anywhere, with voice input, file transfer, a code viewer and agent-state awareness.
 macOS / Linux (X11) / WSL2. Native Windows is not supported.
