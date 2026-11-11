@@ -22,7 +22,7 @@ def test_repo_is_currently_consistent():
     problems = []
     check_docs.check_api_docs(problems)
     check_docs.check_api_contract(problems)
-    check_docs.check_claude_md(problems)
+    check_docs.check_agents_md(problems)
     check_docs.check_help_topics(problems)
     check_docs.check_version(problems)
     check_docs.check_design_md(problems)
@@ -312,29 +312,29 @@ def test_detects_route_removed_from_code(monkeypatch):
     assert any("/api/ghost" in p for p in problems)
 
 
-def test_category_table_in_claude_md_is_allowed(tmp_path, monkeypatch):
-    """CLAUDE.md의 카테고리 목록은 허용 — 금지 대상은 메서드까지 적은 상세 표다."""
+def test_category_table_in_agents_md_is_allowed(tmp_path, monkeypatch):
+    """AGENTS.md의 카테고리 목록은 허용 — 금지 대상은 메서드까지 적은 상세 표다."""
     monkeypatch.setattr(check_docs, "ROOT", tmp_path)
-    (tmp_path / "CLAUDE.md").write_text(
+    (tmp_path / "AGENTS.md").write_text(
         "| Category | Paths |\n|---|---|\n"
         "| Sessions | `/api/sessions`, `/ws/{id}`, `/api/watch/{id}` |\n"
         "| tmux | `/api/tmux/sessions`, `/api/tmux/attach`, `/api/tmux/create` |\n"
         "| Voice | `/voice/input`, `/api/x`, `/api/y` |\n"
     )
     problems = []
-    check_docs.check_claude_md(problems)
+    check_docs.check_agents_md(problems)
     assert problems == []
 
 
-def test_detailed_table_in_claude_md_is_flagged(tmp_path, monkeypatch):
+def test_detailed_table_in_agents_md_is_flagged(tmp_path, monkeypatch):
     """2026-08-20 드리프트 사고의 재발 방지 — 상세 표가 부활하면 경고."""
     monkeypatch.setattr(check_docs, "ROOT", tmp_path)
-    (tmp_path / "CLAUDE.md").write_text(
+    (tmp_path / "AGENTS.md").write_text(
         "| Method | Path | Desc |\n|---|---|---|\n"
         "| GET | `/api/a` | x |\n| POST | `/api/b` | y |\n| GET | `/api/c` | z |\n"
     )
     problems = []
-    check_docs.check_claude_md(problems)
+    check_docs.check_agents_md(problems)
     assert len(problems) == 1 and "단일 진실" in problems[0]
 
 

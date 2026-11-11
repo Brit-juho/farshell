@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+
+### Changed
+- The repository has one agent instruction file, `AGENTS.md` (project overview, document map, area index, validation, contracts, branches). `CLAUDE.md` is gone: Claude Code reads `AGENTS.md` itself, so keeping a second file only invited drift. `scripts/check_docs.py` now checks `AGENTS.md` for the endpoint-table and index-size rules it used to apply to `CLAUDE.md`.
 ---
 
 ## [2.11.0] — 2026-11-11

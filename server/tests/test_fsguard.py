@@ -110,7 +110,7 @@ def test_no_roots_configured_denies_everything(monkeypatch, tmp_path):
 def test_default_boundary_is_github_not_home(monkeypatch, tmp_path):
     """기본 경계(get_roots)는 이제 ~/GitHub 이다 — $HOME 전체를 기본으로 열면
     .ssh/.aws/셸 히스토리 등 거부 목록이 모르는 임의 시크릿까지 사정권에 든다.
-    CLAUDE.md에 문서화된 기본값(~/GitHub)과도 일치해야 한다.
+    AGENTS.md에 문서화된 기본값(~/GitHub)과도 일치해야 한다.
 
     N8(30-worktree.md §2): 실제 홈에 `~/.worktrees`가 있으면 get_roots()가 그걸
     자동으로 덧붙이므로, 이 테스트는 그 부작용과 무관하게 결정적이어야 해서

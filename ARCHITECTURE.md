@@ -325,7 +325,7 @@ frontend/js/agent/preview.js opens /ws-preview/{tmux_name} per visible card
 frontend/js/agent/status.js opens /ws-agent once
   (server/agent_status.py — Claude Code Pre/Post/Stop hooks feed this via
    /api/agent/event, matched to a tmux pane by cwd since hooks don't report
-   the pane directly — see CLAUDE.md's caveat on this)
+   the pane directly — see docs/ref/agents.md)
 ```
 
 ---

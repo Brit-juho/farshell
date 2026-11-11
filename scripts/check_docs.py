@@ -5,9 +5,9 @@
 검사한다: 서버 라우트·`fsh help` 토픽·`VERSION`이 실제로 존재하는 것이고,
 문서가 그것과 어긋나면 문서 쪽을 고친다.
 
-왜 필요한가: 2026-08-20에 실제로 겪은 드리프트가 근거다 — `CLAUDE.md`가
-엔드포인트 표를 따로 들고 있다가 `API.md`와 어긋났고, 그 뒤로 CLAUDE.md는
-카테고리 목록만 남기고 API.md를 단일 진실로 삼았다. 사람이 기억으로 지키는
+왜 필요한가: 2026-08-20에 실제로 겪은 드리프트가 근거다 — 프로젝트 지침 문서(당시 `CLAUDE.md`,
+2026-11-11부터 `AGENTS.md` 하나로 합침)가 엔드포인트 표를 따로 들고 있다가 `API.md`와 어긋났고,
+그 뒤로 지침 문서는 카테고리 목록만 남기고 API.md를 단일 진실로 삼았다. 사람이 기억으로 지키는
 규칙은 언젠가 깨지므로 검사로 고정한다.
 
 **경고로 시작한다**(계획서 I3): 기본은 종료코드 0으로 리포트만 하고,
@@ -287,19 +287,19 @@ def check_api_contract(problems: list[str]) -> None:
               "— 새 라우트에는 붙일 것")
 
 
-def check_claude_md(problems: list[str]) -> None:
-    """CLAUDE.md는 **카테고리 목록만** 유지한다(2026-08-20 드리프트 사고 이후).
+def check_agents_md(problems: list[str]) -> None:
+    """AGENTS.md는 **카테고리 목록만** 유지한다(2026-08-20 드리프트 사고 이후).
 
     엔드포인트 표를 다시 들이면 API.md와 두 벌이 되므로, 그 표가 생겼는지를
     검사한다 — 개별 경로가 아니라 '표가 다시 생겼는가'가 검사 대상이다.
     """
-    for name in ("CLAUDE.md",):
+    for name in ("AGENTS.md",):
         doc = ROOT / name
         if not doc.exists():
             continue
         text = doc.read_text()
         # 카테고리 목록(`| 카테고리 | 대표 경로 |`)은 **허용**이다 — 실제로 지금
-        # CLAUDE.md가 그 형태다. 금지 대상은 메서드까지 적은 상세 표
+        # AGENTS.md가 그 형태다. 금지 대상은 메서드까지 적은 상세 표
         # (`| GET | /api/x | 설명 |`)다. 둘을 구분하지 않으면 지금 문서가 매번
         # 경보를 내고, 그러면 아무도 이 검사를 안 보게 된다.
         detailed = [
@@ -310,7 +310,7 @@ def check_claude_md(problems: list[str]) -> None:
         if len(detailed) >= 3:
             problems.append(
                 f"{name}: 엔드포인트 상세 표가 다시 생긴 것으로 보인다 "
-                f"({len(detailed)}행) — API.md가 단일 진실이다(CLAUDE.md는 카테고리 목록만)"
+                f"({len(detailed)}행) — API.md가 단일 진실이다(AGENTS.md는 카테고리 목록만)"
             )
 
 
@@ -526,28 +526,29 @@ def check_design_md(problems: list[str]) -> None:
             problems.append(f"{name}: 「코드 파생 값」 표의 `{key}` 행은 대응하는 코드 검사가 없다")
 
 
-# ── 6. CLAUDE.md는 색인이다 (2026-09-18) ──────────────────────────────────
+# ── 6. AGENTS.md는 색인이다 (2026-09-18, 2026-11-11 CLAUDE.md와 합침) ──────────────────────────────────
 
-# 496줄·56k자였던 CLAUDE.md를 색인으로 줄이고 상세를 docs/ref/*.md로 갈랐다.
-# 그 파일은 **세션마다 자동으로 컨텍스트에 들어간다** — 다시 불어나면 만지지도
+# 496줄·56k자였던 지침 문서를 색인으로 줄이고 상세를 docs/ref/*.md로 갈랐다. 2026-11-11에 CLAUDE.md(색인)와
+# AGENTS.md(계약)를 AGENTS.md 하나로 합쳤다(모든 도구가 같은 파일을 읽는다). 그 파일은 **세션마다 자동으로 컨텍스트에 들어간다** — 다시 불어나면 만지지도
 # 않는 영역의 설명까지 매번 토큰을 먹는다. 그래서 예산을 검사로 고정한다.
-CLAUDE_MD_MAX_CHARS = 9000
+# 합치기 전 예산은 색인 9000자(+ 계약 문서는 무제한)였다. 합친 파일의 현재 크기는 약 15.1k자.
+AGENTS_MD_MAX_CHARS = 17000
 
 
-def check_claude_md_is_an_index(problems: list[str]) -> None:
-    doc = ROOT / "CLAUDE.md"
+def check_agents_md_is_an_index(problems: list[str]) -> None:
+    doc = ROOT / "AGENTS.md"
     if not doc.exists():
         return
     text = doc.read_text()
-    if len(text) > CLAUDE_MD_MAX_CHARS:
+    if len(text) > AGENTS_MD_MAX_CHARS:
         problems.append(
-            f"CLAUDE.md가 {len(text)}자다(예산 {CLAUDE_MD_MAX_CHARS}자) — "
+            f"AGENTS.md가 {len(text)}자다(예산 {AGENTS_MD_MAX_CHARS}자) — "
             "상세는 docs/ref/*.md로 옮기고 색인만 남긴다. 이 파일은 매 세션 자동 로드된다"
         )
     # 색인이 가리키는 문서가 실제로 있어야 한다. 링크가 깨진 색인은 없느니만 못하다.
     for rel in re.findall(r"\]\(\./((?:docs/ref/)?[A-Za-z0-9_.-]+\.md)\)", text):
         if not (ROOT / rel).exists():
-            problems.append(f"CLAUDE.md가 없는 문서를 가리킨다: {rel}")
+            problems.append(f"AGENTS.md가 없는 문서를 가리킨다: {rel}")
 
 
 # ── 7. 개인 값이 리포에 들어오지 않았는가 ─────────────────────────────────
@@ -713,7 +714,7 @@ def check_config_keys_documented(problems: list[str]) -> None:
 # Starlette는 **마지막 등록을 가장 바깥**에 둔다(add_middleware가
 # user_middleware.insert(0, …)) — 그래서 실행 순서는 등록의 역순이다. 그
 # 뒤집기를 사람이 매번 암산하면 언젠가 틀린다. `docs/ref/auth.md`의 순서
-# 표가 `main.py`의 실제 등록과 어긋나면 없느니만 못하다 — CLAUDE.md가 자체
+# 표가 `main.py`의 실제 등록과 어긋나면 없느니만 못하다 — 지침 문서가 자체
 # 엔드포인트 표를 들었다가 API.md와 갈라진 것(계약 9)과 같은 병이다.
 #
 # 표의 미들웨어 행에만 `<!-- mw -->` 마커를 단다 — 표에는 미들웨어가 아닌
@@ -825,11 +826,11 @@ def main() -> int:
     problems: list[str] = []
     check_api_docs(problems)
     check_api_contract(problems)
-    check_claude_md(problems)
+    check_agents_md(problems)
     check_help_topics(problems)
     check_version(problems)
     check_design_md(problems)
-    check_claude_md_is_an_index(problems)
+    check_agents_md_is_an_index(problems)
     check_no_personal_values(problems)
     check_skill_copy_in_sync(problems)
     check_config_keys_documented(problems)
