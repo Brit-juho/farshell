@@ -127,6 +127,13 @@ def _isolated_env(port: int, token: str, tmp: Path) -> dict:
     위해서다. 짧게 뜨는 서버라도 인증 토큰이 프로세스 목록에 보이는 창은 안 만든다.
     """
     env = dict(os.environ)
+    # 일반 세션의 셸이 사용자의 실제 ~/.zshrc·.zprofile을 읽지 않게 한다. HOME은 그대로 두되 ZDOTDIR만 빈 폴더로 돌린다.
+    # (실 rc를 읽으면 프롬프트가 8~16초 뒤에 떠서, 직전에 입력한 명령이 셸 준비 전에 들어가 시험이 흔들렸다.)
+    # 빈 .zshrc는 zsh 첫 실행 안내(zsh-newuser-install)가 뜨지 않게 하려는 것이다.
+    zdot = tmp / "zdotdir"
+    zdot.mkdir(exist_ok=True)
+    (zdot / ".zshrc").touch()
+    env["ZDOTDIR"] = str(zdot)
     # 상속을 확실히 끊는다 — ~/.vt.env가 아니라 여기서 준 값만 쓰게 한다.
     for k in list(env):
         if k.startswith("VT_"):
@@ -4182,8 +4189,28 @@ def test_일반_터미널의_OSC52는_기본_차단되고_설정을_켜면_클�
     page.context.grant_permissions(["clipboard-read", "clipboard-write"])
     page.evaluate("() => window.createSession && window.createSession()")
     page.wait_for_selector(".vt-pane .vt-pane-body .xterm", timeout=15000)
-    page.wait_for_timeout(800)
     sid = page.evaluate("() => Object.keys(window.allSessions())[0]")
+    # 셸이 입력을 받을 준비가 됐는지 — 고정 대기 대신 표식을 echo해 출력에 나타날 때까지 기다린다.
+    # 입력 줄에는 `$((1+1))`가 글자 그대로 에코되고, 셸이 계산한 `FSHREADY2`는 출력에만 나온다.
+    read_buf = """(id) => {
+      const s = window.getSession(id);
+      const b = s && s.term && s.term.buffer && s.term.buffer.active;
+      if (!b) return '';
+      let out = '';
+      for (let i = 0; i < b.length; i++) {
+        const line = b.getLine(i);
+        if (line) out += (line.isWrapped ? '' : '\\n') + line.translateToString(true);
+      }
+      return out;
+    }"""
+    deadline = time.time() + 20
+    while True:
+        page.evaluate("([id, cmd]) => window.getSession(id).term.input(cmd + '\\r', true)", [sid, "echo FSHREADY$((1+1))"])
+        try:
+            page.wait_for_function("([f, id]) => (0, eval)('(' + f + ')')(id).includes('FSHREADY2')", arg=[read_buf, sid], timeout=2000)
+            break
+        except Exception:
+            assert time.time() < deadline, "셸이 20초 안에 준비되지 않았다"
 
     def emit(text: str) -> None:
         b64 = base64.b64encode(text.encode()).decode()
