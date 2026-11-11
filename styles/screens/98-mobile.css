@@ -159,6 +159,10 @@
      읽을 글이 아니다 — 선택·콜아웃을 끈다(세션 행 .vt-fleet-row와 같은 처방, 60-mobile-hud.css). 이름 변경 입력은 편집 중 선택이 필요하다. */
   .vt-session-sheet { -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
   .vt-session-sheet .vt-input { -webkit-user-select:text; user-select:text; }
+  /* 롱프레스 단어 선택은 터치 좌표의 hit-test 대상(백드롭)이 글이 아니면 문서에서 가장 가까운 '선택 가능한' 글을 고른다.
+     시트(none) 안은 건너뛰므로 하단 탭 라벨(「설정」)에 선택·핸들이 남았다(2026-11-11 실기기 2/2; 백드롭에 none을 주면 0/3).
+     body 전체를 막으면 터미널 복사가 깨지므로 시트를 받치는 백드롭만 끈다. */
+  .vt-fleet-menu-backdrop { -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
   .vt-session-sheet .vt-session-head { margin:0; padding:8px 20px; }
   .vt-session-sheet .vt-session-head h2 { font:600 var(--fs-md) / 24px var(--font-ui); }
   .vt-fleet-menu-sheet .vt-session-list { gap:0; padding:4px 0; border-top:1px solid var(--color-line); }

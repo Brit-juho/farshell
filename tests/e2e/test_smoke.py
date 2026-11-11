@@ -4561,6 +4561,12 @@ def test_폰_꾹_눌러_메뉴_시트는_하단_탭을_덮어_취소와_모든_�
     got = pg.evaluate("""() => ({ sel: String(getSelection()), us: getComputedStyle(document.querySelector('.vt-fleet-menu-sheet .vt-session-head h2')).userSelect,
       row: getComputedStyle(document.querySelector('#vt-fleet .vt-fleet-row')).userSelect })""")
     assert got == {"sel": "", "us": "none", "row": "none"}, got
+    # 롱프레스 단어 선택은 hit-test 대상(백드롭)이 글이 아니면 문서에서 가장 가까운 선택 가능한 글(하단 탭 라벨)을 고른다(실기기 2/2).
+    # 에뮬레이션은 OS 선택을 못 만드니 계산값으로 본다 — 백드롭만 none 이고 body·터미널 컨테이너는 막지 않는다
+    # (xterm 본문의 선택은 xterm 자체 모델이라 .xterm 의 CSS 와 무관하다).
+    us = pg.evaluate("""() => ({ back: getComputedStyle(document.querySelector('.vt-fleet-menu-backdrop')).userSelect,
+      body: getComputedStyle(document.body).userSelect, term: getComputedStyle(document.querySelector('#terminal-container')).userSelect })""")
+    assert us["back"] == "none" and us["body"] != "none" and us["term"] != "none", us
     pg.locator(".vt-session-footer-item").tap()
     pg.wait_for_selector(".vt-fleet-menu-sheet", state="detached", timeout=3000)
 

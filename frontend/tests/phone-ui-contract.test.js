@@ -71,3 +71,17 @@ test('정보 및 진단 훅 행: 폰에서는 배경이 거터(16) 밖으로 내
   // 데스크톱의 -6px 내민 배경은 그대로(두 열 표) — 폰 블록에서만 되돌린다.
   assert.match(t, /\.vt-set-hookrow\[data-state="add"\][^{]*\{\s*margin:0 -6px/);
 });
+
+test('꾹 눌러 시트의 백드롭은 user-select:none 이다(롱프레스 단어 선택이 하단 탭 라벨로 새지 않게), 터미널·입력은 막지 않는다', () => {
+  const m = css('98-mobile.css');
+  const back = bodies(m, '.vt-fleet-menu-backdrop').join(' ');
+  assert.match(back, /user-select:\s*none/);
+  assert.match(back, /-webkit-touch-callout:\s*none/);
+  // 전역(body·html·.vt-mnav)으로 막지 않는다 — 터미널 본문 복사·입력 선택은 그대로.
+  for (const f of ['98-mobile.css', '60-mobile-hud.css']) {
+    const t = css(f);
+    assert.ok(!/(?:^|[}\s,])(?:body|html|#terminal-container|\.xterm)[^{]*\{[^}]*user-select:\s*none/.test(t), `${f}: 전역 user-select:none 금지`);
+  }
+  // Fleet.tsx 의 시트 백드롭이 이 클래스를 쓴다.
+  assert.match(src('frontend/js/shell/Fleet.tsx'), /class="vt-session-backdrop vt-fleet-menu-backdrop"/);
+});
