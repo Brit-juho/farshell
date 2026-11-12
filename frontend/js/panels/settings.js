@@ -25,6 +25,7 @@ import { renderPermissionsSection } from './settings/sections/permissions.js';
 import { renderAboutSection } from './settings/sections/about.js';
 import { renderUpdateSection } from './settings/sections/update.js';
 import { renderHudSection } from './settings/sections/hud.js';
+import { renderHistorySection } from './settings/sections/history.js';
 import { getAction } from '../core/dom.js';
 import { subscribePersistence } from '../core/settings.js';
 import { t } from '../core/i18n.js';
@@ -62,6 +63,7 @@ const SECTION_RENDERERS = {
   keymap: () => renderKeymapSection(rerender),
   appearance: renderAppearanceSection,
   hud: renderHudSection,
+  history: renderHistorySection,
   permissions: renderPermissionsSection,
   security: renderSecuritySection,
   update: renderUpdateSection,

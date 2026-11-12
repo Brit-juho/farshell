@@ -412,7 +412,8 @@ def snapshot(*, limit=50, after=None, archived=False, order="id", cursor=None, q
             where.append("w.project_id=?"); args.append(project)
         if q and q.strip():
             like = _like(q.strip())
-            fields = ["s.title", "r.name", "lc.title", "r.branch_at_end", "w.branch"] + (["cl.last_user_text"] if local else [])
+            # w.path: 작업 트리 폴더(저장소 루트·워크트리 경로) — 「어느 폴더에서 한 세션」으로도 찾는다.
+            fields = ["s.title", "r.name", "lc.title", "r.branch_at_end", "w.branch", "w.path"] + (["cl.last_user_text"] if local else [])
             where.append("(" + " OR ".join(f"{f} LIKE ? ESCAPE '\\'" for f in fields) + ")"); args += [like] * len(fields)
         if order == "id":
             where.append("(? IS NULL OR s.id>?)"); args += [after, after]
@@ -457,6 +458,11 @@ def snapshot(*, limit=50, after=None, archived=False, order="id", cursor=None, q
             out["projects"] = [{**dict(r), "hidden": repo_store.is_hidden({"path": r['path']}, hidden)} for r in db.execute("SELECT * FROM projects ORDER BY name,id")]
             out["workspaces"] = [dict(r) for r in db.execute("SELECT * FROM workspaces ORDER BY path,id")]
             out["relations"] = [dict(r) for r in db.execute("SELECT * FROM relations WHERE kind='delegation' LIMIT 5000")]
+            # 저장소별 세션 수(이 목록과 같은 보관 여부) — 보관함의 저장소 칩. `_none`은 저장소 밖.
+            out["project_counts"] = {(r[0] or "_none"): r[1] for r in db.execute(
+                "SELECT CASE WHEN p.kind='git' THEN p.id END AS pid, COUNT(*) FROM sessions s LEFT JOIN workspaces w ON w.id=s.workspace_id"
+                " LEFT JOIN projects p ON p.id=w.project_id WHERE s.deleted IS NULL AND (s.archived IS NOT NULL)=? GROUP BY pid",
+                (int(archived),))}
         return out
 
 

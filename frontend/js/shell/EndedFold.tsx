@@ -116,10 +116,17 @@ export function EndedItem(p: { session: any; last: boolean; onChanged: () => voi
             <span class="vt-rg-sp" />
             <span class="vt-rg-tm">{agoLabel(endedActivity(s()))}</span>
             <Show when={resumable()} fallback={
+              <Show when={archived()} fallback={
               <Show when={status().recheck}>
                 <button type="button" class="vt-rg-rs q" disabled={busy()} title={status().hint}
                   onClick={(e) => { e.stopPropagation(); void run(async () => { const r = await recheckCatalog(); if (!r.complete) throw new Error(t('아직 터미널 상태를 읽지 못했습니다. 잠시 뒤 다시 시도하세요')); }); }}>
                   {busy() ? t('확인하는 중…') : t('다시 확인')}
+                </button>
+              </Show>
+              }>
+                <button type="button" class="vt-rg-rs q" disabled={busy()} aria-label={t('{name} 보관 해제', { name: s().title })}
+                  onClick={(e) => { e.stopPropagation(); void run(() => setSessionArchived(s(), false)); }}>
+                  <span innerHTML={icon('archive', 11, 2)} />{t('해제')}
                 </button>
               </Show>
             }>

@@ -96,7 +96,8 @@ _ROWS: tuple = (
     ("GET", "/api/session-history/replicas/{origin}/{conversation_id}", human()),
     ("POST", "/api/session-catalog/sessions/{session_id}", human()),
     ("DELETE", "/api/session-catalog/sessions/{session_id}", human()),
-    ("POST", "/api/session-catalog/settings", human()),
+    # 자동 보관·자동 이름·이어서 시작 끝 — 수집 한도와 같은 급(사람 + 승격, 설계 S2 「자동 보관 설정 권한」).
+    ("POST", "/api/session-catalog/settings", human(elevated=True)),
     ("POST", "/api/session-catalog/sessions/{session_id}/stop", human()),
     ("POST", "/api/session-catalog/sessions/{session_id}/dismiss", human()),
     ("POST", "/api/session-catalog/sessions/{session_id}/resume", human()),
@@ -138,6 +139,7 @@ _ROWS: tuple = (
 # --- routes/tmux.py
     ("GET", "/api/tmux/sessions", sock_()),
     ("POST", "/api/tmux/create", auth()),
+    ("GET", "/api/tmux/name-preview", auth()),
     ("POST", "/api/tmux/open-on-mac", auth()),
     ("POST", "/api/tmux/attach", auth()),
     ("DELETE", "/api/tmux/kill/{tmux_name}", sock_()),

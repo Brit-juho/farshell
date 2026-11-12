@@ -57,6 +57,8 @@ export interface RepoBranchProps {
   /** 「종료 N」 칸들. 마지막 칸 여부를 받아 그린다. */
   ended?: (last: boolean) => JSX.Element;
   hasEnded: boolean;
+  /** 저장소 머리의 「+」 — 그 저장소(메인 작업 트리)에서 새 세션. 없으면 버튼이 없다(원격 맥 등). */
+  onNew?: (root: string) => void;
   /** 세션 칸 바로 밑(내부 서브에이전트 목록). */
   afterNode?: (row: SessionRow) => JSX.Element;
 }
@@ -70,6 +72,8 @@ export function RepoBranch(p: RepoBranchProps) {
   const moreAfterLane = (li: number) => li < lanes().length - 1 || p.hasEnded;
   return (
     <section class="vt-rg" classList={{ outside: !g().repository, collapsed: p.collapsed }} aria-label={title()}>
+      {/* 머리 = 접기 버튼 + (저장소면) 「+」 새 세션 버튼. 둘은 형제다 — 버튼 안에 버튼을 두지 않는다. */}
+      <div class="vt-rg-headrow">
       <button type="button" class="vt-rg-row vt-rg-head" aria-expanded={!p.collapsed} onClick={p.onToggle}
         data-tip={g().root || undefined} data-tip-side="right">
         <span class="vt-rg-gut">
@@ -88,6 +92,12 @@ export function RepoBranch(p: RepoBranchProps) {
           <span class="vt-rg-caret" innerHTML={icon('chevron-down', 12, 2)} />
         </span>
       </button>
+      <Show when={p.onNew && g().repository && g().root}>
+        <button type="button" class="vt-icon-btn sm vt-rg-new" aria-label={t('{name}에서 새 세션', { name: title() })}
+          data-tip={t('{name}에서 새 세션', { name: title() })} data-tip-side="left"
+          onClick={() => p.onNew!(g().root!)} innerHTML={icon('plus', 14, 2)} />
+      </Show>
+      </div>
       <Show when={!p.collapsed}>
         {/* 갈래·세션은 열쇠(문자열)로 돈다 — 폴링마다 새 객체가 와도 칸 DOM(편집 중 입력창·열린 메뉴·포커스)이 그대로다. */}
         <For each={lanes().map(laneKey)}>{(key, li) => (

@@ -20,6 +20,8 @@ export const SHELL_ICONS = {
   history: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
   // lucide play — 종료된 행의 「이어서 시작」.
   play: '<polygon points="6 3 20 12 6 21 6 3"/>',
+  // lucide git-fork — 새 세션 메뉴의 워크트리 줄(세션 로직 점검 단계 6).
+  'git-fork': '<circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"/><path d="M12 12v3"/>',
   // lucide house — 레일 「저장소 밖」 묶음 머리(세션 로직 점검 단계 5).
   home: '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   // lucide square — 작업 기록 「실행 종료」(정지).

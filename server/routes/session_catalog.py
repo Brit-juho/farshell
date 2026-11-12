@@ -116,7 +116,7 @@ async def delete_session(session_id: str, request: Request):
     return await _call(db.delete_session, session_id, body.get('revision'))
 
 
-@router.post('/api/session-catalog/settings')
+@elevated_router.post('/api/session-catalog/settings')
 async def catalog_settings(request: Request):
     try:
         body = await _body(request, {'auto_archive_days', 'auto_name', 'resume_ends_session'})
