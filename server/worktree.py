@@ -28,6 +28,7 @@ import agents
 import fsguard
 import git_safe
 import mcp_env
+import session_names
 import tmux_runner
 from resilience import mounts as res_mounts, proc as res_proc, scan as res_scan
 from resilience.locks import TimedLock
@@ -563,23 +564,34 @@ def precheck(repo: str, base: str) -> dict:
 # --- 에이전트 기동 --------------------------------------------------------------
 
 
-def _session_name_for(repo_name: str, branch: str) -> str:
-    slug = re.sub(r"[^A-Za-z0-9_-]+", "-", f"{repo_name}-{branch}").strip("-")
-    return (f"wt-{slug}"[:64]) or "wt-session"
+def _new_session_in(path: str) -> tuple[int, str, bytes]:
+    """워크트리 폴더에서 새 tmux 세션을 연다. 이름은 session_names 규칙(그 워크트리 폴더 이름, 겹치면 -2·-3)이고,
+    예전처럼 `wt-<저장소>-<브랜치>`가 이미 있으면 그 세션을 「재사용」하지 않는다 — 이름이 같다고 이 워크트리의
+    세션이라는 보장이 없었다(접두사 매칭까지 겹쳐 엉뚱한 세션에 에이전트 명령을 보냈다). 재사용은 이 워크트리
+    소속(`@fsh_wt`·cwd)으로 찾은 세션만이다."""
+    def spawn(name):
+        code, _, stderr = tmux_runner.run(["new-session", "-d", "-s", name, "-c", path], timeout=GIT_TIMEOUT)
+        return code, stderr
+    rc, name, err = session_names.spawn_unique(session_names.base_for(path), spawn)
+    if rc == 0:
+        tmux_runner.set_origin(name, "local")
+    return rc, name, err
 
 
 def _open_agent(path: Path, repo_name: str, branch: str, agent_name: str) -> dict:
     spec = agents.get(agent_name)
     if not spec:
         return {"ok": False, "error": tr("지원하지 않는 agent")}
-    tmux_name = _session_name_for(repo_name, branch)
-    if not tmux_runner.has_session(tmux_name):
-        rc, _, err = tmux_runner.run(
-            ["new-session", "-d", "-s", tmux_name, "-c", str(path)], timeout=GIT_TIMEOUT,
-        )
+    try:
+        existing = next((w for w in list_worktrees() if w.get("path") == str(path)), None)
+    except Exception:  # noqa: BLE001 — 목록을 못 읽으면 새 세션을 연다
+        existing = None
+    if existing and existing.get("sessions"):
+        tmux_name = existing["sessions"][0]
+    else:
+        rc, tmux_name, err = _new_session_in(str(path))
         if rc != 0:
             return {"ok": False, "error": err.decode("utf-8", errors="replace")}
-        tmux_runner.set_origin(tmux_name, "local")
 
     # 97번 3단계 §2-4 — MCP 설정에는 참조(`${VAR}`)만 심으므로 값은 여기서
     # 채운다. **값이 아니라 파일 경로만** 명령줄에 실린다(mcp_env 머리말:
@@ -588,13 +600,13 @@ def _open_agent(path: Path, repo_name: str, branch: str, agent_name: str) -> dic
     prefix = ""
     wt_id_for_tag: str | None = None
     try:
-        wt = next((w for w in list_worktrees() if w.get("path") == str(path)), None)
+        wt = existing
         wt_id_for_tag = wt.get("id") if wt else None
         env_file = mcp_env.prepare(tmux_name, wt_id_for_tag)
         prefix = mcp_env.source_prefix(env_file)
         if env_file:
             tmux_runner.run(
-                ["set-environment", "-t", tmux_name, mcp_env.ENV_POINTER, str(env_file)],
+                ["set-environment", "-t", tmux_runner.exact_target(tmux_name), mcp_env.ENV_POINTER, str(env_file)],
                 timeout=GIT_TIMEOUT,
             )
     except Exception:
@@ -606,7 +618,7 @@ def _open_agent(path: Path, repo_name: str, branch: str, agent_name: str) -> dic
     if wt_id_for_tag:
         tmux_runner.set_option(tmux_name, "@fsh_wt", wt_id_for_tag)
 
-    tmux_runner.run(["send-keys", "-t", tmux_name, prefix + spec.command, "Enter"],
+    tmux_runner.run(["send-keys", "-t", tmux_runner.exact_target(tmux_name), prefix + spec.command, "Enter"],
                     timeout=GIT_TIMEOUT)
     return {"ok": True, "tmux_session": tmux_name}
 
@@ -742,16 +754,11 @@ def open_worktree(wt_id: str) -> dict:
         raise WorktreeError(404, {"error": tr("워크트리를 찾을 수 없습니다")})
     if wt["sessions"]:
         return {"ok": True, "tmux_session": wt["sessions"][0], "created": False}
-    tmux_name = _session_name_for(wt["repoName"], wt["branch"])
-    if not tmux_runner.has_session(tmux_name):
-        rc, _, err = tmux_runner.run(
-            ["new-session", "-d", "-s", tmux_name, "-c", wt["path"]], timeout=GIT_TIMEOUT,
-        )
-        if rc != 0:
-            raise WorktreeError(500, {"error": tr("tmux 세션 생성 실패"), "detail": err.decode("utf-8", errors="replace")})
-        tmux_runner.set_origin(tmux_name, "local")
-        # 2.1 D2 — 방금 만든 세션이 이 워크트리 소속임을 tmux에 적어 둔다.
-        tmux_runner.set_option(tmux_name, "@fsh_wt", wt_id)
+    rc, tmux_name, err = _new_session_in(wt["path"])
+    if rc != 0:
+        raise WorktreeError(500, {"error": tr("tmux 세션 생성 실패"), "detail": err.decode("utf-8", errors="replace")})
+    # 2.1 D2 — 방금 만든 세션이 이 워크트리 소속임을 tmux에 적어 둔다.
+    tmux_runner.set_option(tmux_name, "@fsh_wt", wt_id)
     invalidate_cache()
     return {"ok": True, "tmux_session": tmux_name, "created": True}
 

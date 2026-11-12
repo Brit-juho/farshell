@@ -23,6 +23,10 @@ Session identity (the tmux name), the user-set view title, the current work loca
 
 An agent's kind/state keeps the verified-pane or unique-cwd attribution rule. Differences in event capability between Claude, Codex and agy are not propagated into the work-location/Git display. When there is no basis for telling several Codex sessions in the same cwd apart, none is attributed arbitrarily.
 
+## Session names
+
+`server/session_names.py` is the one place that names a new tmux session; every create path uses it — `POST /api/tmux/create` (with or without `unique_name`), opening a worktree or an agent in one, catalog resume, a peer's create, and a delegated child (`<parent>-sub`, `-2`, `-3`). The base is the start folder's repository name (a linked worktree's own folder name inside one), else the folder name, `home` for the home folder; never the server's folder. A taken name gets `-2`, `-3` … (`base-<4 hex>` after 99), checked with tmux exact matching (`=name`); paths that create directly retry with the next number when tmux answers "duplicate session", so a name taken by `bin/fsh` or a hand-started tmux in between is not fatal. The server does not rename a session after creating it. Not covered: `bin/fsh`'s `dev` (a user contract) and managed-profile sessions `profile-<hex>` (the name is their key). Tests: `server/tests/test_session_names.py`.
+
 ## Groups and titles
 
 A group is derived from the current view's pane tree. A closed group uses what the v5 layout remembers. No new group store and no tmux group tag is created.

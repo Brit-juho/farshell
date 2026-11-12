@@ -130,7 +130,10 @@ def resume(cid, opid, *, sid=None):
             execution_policy.require_cli(binary)
         argv = resume_argv(source['provider'], binary, root, native, mode, policy=policy)
         placement = inventory.inspect_workspace(str(cwd))
-        now, name = time.time(), 'fsh-' + opid
+        # 새 tmux 이름은 다른 생성 경로와 같은 규칙(대화를 시작한 폴더의 저장소 이름, 겹치면 -2·-3)이다.
+        # 예전 `fsh-<32자리>`는 사람이 읽을 수 없었다. 이름은 열쇠가 아니다 — 이 실행은 런타임 신원으로 묶인다.
+        import session_names
+        now, name = time.time(), session_names.allocate(session_names.base_for(str(cwd)))
         with database(write=True) as db:
             current_source = db.execute('SELECT * FROM sources WHERE id=?', (source['id'],)).fetchone()
             if (not current_source or not current_source['enabled']

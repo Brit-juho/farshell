@@ -176,4 +176,4 @@ def test_open_agent_sources_the_file_and_never_puts_the_value_on_the_line(
 
     sent = [c for c in calls if c[0] == "send-keys"]
     assert sent and "set -a" in sent[0][3], "환경 파일을 읽는 조각이 안 붙었다"
-    assert str(m.env_file_for("wt-repo-main")) in sent[0][3]
+    assert str(m.env_file_for(out["tmux_session"])) in sent[0][3]

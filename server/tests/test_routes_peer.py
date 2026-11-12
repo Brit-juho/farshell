@@ -825,11 +825,12 @@ def test_create_without_name_uses_the_local_default_rule(env, fake_tmux, monkeyp
     client, hs, _ = env
     secret = _pair(client, hs)
     hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
-    import routes.tmux as tmux_mod
-    monkeypatch.setattr(tmux_mod, "_generate_default_session_name", lambda: "server-3")
+    import session_names
+    monkeypatch.setattr(session_names, "base_for", lambda cwd: "home")
+    monkeypatch.setattr(session_names, "allocate", lambda base: f"{base}-3")
     r = _signed_post(client, hs, secret, "/api/peer/sessions/create", {})
-    assert r.json()["name"] == "server-3"
-    assert "server-3" in fake_tmux.names
+    assert r.json()["name"] == "home-3"
+    assert "home-3" in fake_tmux.names
 
 
 @pytest.mark.parametrize("bad", ["a:b", "a.b", "a b", "x" * 33, "-t", "$(id)"])

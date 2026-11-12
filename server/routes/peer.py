@@ -467,11 +467,13 @@ async def peer_sessions_create(request: Request, grant: dict):
         body = {}
     import platform_utils
     import tmux_runner
-    from routes.tmux import _generate_default_session_name
+    import session_names
 
     raw = body.get("name")
     if raw is None or str(raw).strip() == "":
-        name = await asyncio.to_thread(_generate_default_session_name)
+        # 이름 짓기 규칙은 session_names 한 곳이다 — 이 세션은 홈에서 열리니 기준은 `home`(서버 cwd가 아니다).
+        name = await asyncio.to_thread(session_names.allocate,
+                                       await asyncio.to_thread(session_names.base_for, platform_utils.default_start_dir()))
     else:
         name = _tmux_name_or_none(raw)
         if name is None:

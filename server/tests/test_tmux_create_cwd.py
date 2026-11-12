@@ -84,7 +84,7 @@ def test_create_rejects_nonexistent_cwd(monkeypatch, tmp_path):
     assert not calls
 
 
-# ── 세션 이름: 이름, 이름-1, 이름-2 (2026-10-23) ─────────────────────────────
+# ── 세션 이름: 이름, 이름-2, 이름-3 (2026-11-12, session_names) ─────────────────────────────
 
 def _fake_tmux(monkeypatch, existing):
     """has-session은 `existing`에 있는 이름만 0, new-session은 이름을 기록하고 existing에 더한다."""
@@ -103,11 +103,11 @@ def _fake_tmux(monkeypatch, existing):
     return created
 
 
-def test_unique_name_numbers_from_one(monkeypatch):
+def test_unique_name_numbers_from_two(monkeypatch):
     created = _fake_tmux(monkeypatch, set())
     for _ in range(3):
         asyncio.run(tmux_route.create_tmux_session(_FakeRequest({"name": "deploy", "unique_name": True})))
-    assert created == ["deploy", "deploy-1", "deploy-2"]
+    assert created == ["deploy", "deploy-2", "deploy-3"]
 
 
 def test_unique_name_without_usable_characters_falls_back_to_cwd_folder(tmp_path, monkeypatch):
@@ -126,13 +126,13 @@ def test_unique_name_sanitizes_tmux_unsafe_characters(monkeypatch):
     assert created == ["my-build-v1-2"]
 
 
-def test_default_name_comes_from_requested_cwd_and_numbers_from_one(tmp_path, monkeypatch):
+def test_default_name_comes_from_requested_cwd_and_numbers_from_two(tmp_path, monkeypatch):
     proj = tmp_path / "Proj"
     proj.mkdir()
     created = _fake_tmux(monkeypatch, set())
     for _ in range(2):
         asyncio.run(tmux_route.create_tmux_session(_FakeRequest({"cwd": str(proj)})))
-    assert created == ["proj", "proj-1"]
+    assert created == ["Proj", "Proj-2"]
 
 
 def test_concurrent_creates_get_distinct_names(monkeypatch):
@@ -144,7 +144,7 @@ def test_concurrent_creates_get_distinct_names(monkeypatch):
             for _ in range(4)
         ])
     asyncio.run(go())
-    assert sorted(created) == ["same", "same-1", "same-2", "same-3"]
+    assert sorted(created) == ["same", "same-2", "same-3", "same-4"]
 
 
 def test_explicit_name_without_unique_flag_is_used_as_is(monkeypatch):
