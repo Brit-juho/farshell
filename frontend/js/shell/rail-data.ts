@@ -75,6 +75,18 @@ export interface SessionRow {
   otherClients: number;
   /** 에이전트 위임으로 만든 하위 세션이면 그 계보(서버 위임 장부 기준). 아니면 없다/null. */
   lineage?: Lineage | null;
+  /** 카탈로그가 정한 자리(처음 시작한 저장소·작업 트리, cd해도 그대로). 아직 기록 전·옛 서버는 null. */
+  home?: SessionHome | null;
+  /** 보이는 이름(별칭)이 사람이 붙인 것인가. */
+  nameSource?: 'auto' | 'human' | null;
+  /** 서버가 만든 도구 요약(파일 경로·프로그램 이름). working에서 도구 옆에 붙는다. */
+  summary?: string | null;
+  /** 마지막으로 사람이 친 지시(이 맥 화면에만). */
+  lastPrompt?: string | null;
+}
+
+export interface SessionHome {
+  project_id: string; workspace_id?: string; root: string; name: string; repository: boolean; kind?: string; path?: string;
 }
 
 // ── 계보(에이전트 위임) ───────────────────────────────────────────────────────
@@ -91,6 +103,10 @@ export interface Lineage {
   createdAt: number;
   task: string;
   summary: string;
+  /** 보고가 온 시각(초). 아직이면 null. */
+  reportedAt?: number | null;
+  /** 보고가 왔는데 부모가 그 뒤로 새 턴을 시작하지 않았다(서버 판정). */
+  reportUnread?: boolean;
 }
 
 const LINEAGE_STATES: LineageState[] = ['running', 'reported', 'closed', 'orphaned'];
@@ -107,7 +123,16 @@ export function normalizeLineage(v: unknown): Lineage | null {
     createdAt: Number(o.createdAt) || 0,
     task: typeof o.task === 'string' ? o.task : '',
     summary: typeof o.summary === 'string' ? o.summary : '',
+    reportedAt: Number(o.reportedAt) || null,
+    reportUnread: o.reportUnread === true,
   };
+}
+
+/** 가지 그래프의 하위 세션 한 줄 오른쪽: 「보고 도착」(부모가 아직 안 읽음) · 「보고 · 성공/실패」 · 「진행 중」 …. */
+export function kidLabel(l: Pick<Lineage, 'state' | 'outcome' | 'reportUnread'>): { text: string; tone: 'done' | 'error' | 'muted' } {
+  if (l.state === 'reported' && l.reportUnread) return { text: t('보고 도착'), tone: l.outcome === 'failed' ? 'error' : 'done' };
+  if (l.state === 'reported' && l.outcome === 'failed') return { text: lineageLabel(l), tone: 'error' };
+  return { text: lineageLabel(l), tone: 'muted' };
 }
 
 /** 하위 세션 한 줄 표시: 「진행 중」「보고 · 성공」「보고 · 실패」「닫힘」「부모 없음」. */
@@ -177,16 +202,6 @@ export function buildSessionTree<T extends Pick<SessionRow, 'name' | 'tmuxName'>
 export function kidsProgress<T extends { lineage?: Lineage | null }>(kids: T[]): { reported: number; open: number } | null {
   if (kids.length === 0) return null;
   return { reported: kids.filter((k) => k.lineage?.state === 'reported').length, open: kids.length };
-}
-
-/** 수동 정렬에서 한 항목을 옮긴 새 순서. `current`는 지금 화면의 최상위 순서(이름). */
-export function moveInOrder(current: string[], name: string, target: string, place: 'before' | 'after'): string[] {
-  if (name === target) return current.slice();
-  const rest = current.filter((n) => n !== name);
-  const i = rest.indexOf(target);
-  if (i < 0) return current.slice();
-  rest.splice(place === 'before' ? i : i + 1, 0, name);
-  return rest;
 }
 
 /** 위/아래로 한 칸. 끝이면 그대로. */
@@ -325,6 +340,22 @@ export function stateKeyword(
   if (s === 'working') return { text: STATE_LABEL.working, tool: row.tool || null, badge };
   if (s === 'done') return { text: STATE_LABEL.done, tool: null, badge };
   return { text: STATE_LABEL.idle, tool: null, badge: null };
+}
+
+/** 가지 그래프 세션 칸의 둘째 줄(할 말이 있을 때만). 「유휴」는 쓰지 않는다 — 아무 일도 없으면 마지막으로 사람이 친
+ * 지시를 보이고, 그것도 없으면 둘째 줄이 없다. */
+export interface NodeLine { tone: 'waiting' | 'working' | 'done' | 'muted'; text: string; detail: string | null }
+export function nodeLine(row: Pick<SessionRow, 'status' | 'kind' | 'badge' | 'tool' | 'summary' | 'lastPrompt' | 'unseen'>): NodeLine | null {
+  const s = normalizeState(row.status);
+  const detail = row.summary || null;
+  if (s === 'waiting') return { tone: 'waiting', text: KIND_LABEL[normalizeKind(row.kind)], detail: detail || row.tool || null };
+  if (s === 'working') return { tone: 'working', text: row.tool || STATE_LABEL.working, detail };
+  if (s === 'done') {
+    const b = normalizeBadge(row.badge);
+    const text = row.unseen ? t('끝남 · 확인 안 함') : t('끝남');
+    return { tone: row.unseen ? 'done' : 'muted', text: b ? `${text} · ${BADGE_LABEL[b]}` : text, detail: null };
+  }
+  return row.lastPrompt ? { tone: 'muted', text: `「${row.lastPrompt}」`, detail: null } : null;
 }
 
 export function formatRelativeTime(sinceEpochSec: number | null, nowMs = Date.now()): string {
@@ -493,54 +524,10 @@ export function buildRailLists<T extends Pick<SessionRow, 'name' | 'status' | 'o
   return { attention, sessions };
 }
 
-export interface CompactEntry<T> {
-  row: T;
-  /** 하위 세션(lineage 자식)이면 부모 밑 가지선을 그리는 데 쓰는 값. 최상위·개입 필요 행은 null. */
-  kid: { last: boolean; merged: boolean; failed: boolean; closed: boolean } | null;
-}
-
-/**
- * 접힌 레일(48px 띠)의 칸 순서 — **펼친 레일과 같은 트리 순서**다. 순서의 출처를 새로 만들지 않고
- * 펼침이 쓰는 값(개입 필요 목록 · 분할 묶음 · `buildSessionTree`의 정렬·수동 순서·부모 밑 자식)을 그대로 받아 평평하게 편다.
- *
- *   개입 필요(waiting, 이름순) → 분할 묶음 구성원 → 트리(설정된 정렬 · 수동 순서, 하위 세션은 부모 바로 아래)
- *
- * 구역 머리글이 없어 waiting 세션은 한 번만 나온다(「개입 필요」에 올라간 행은 `groups`·`tree`에 이미 없다).
- * 하위 세션이 waiting이면 개입 필요로 올라가 평평하게 나오므로 부모 밑에 없다 — 펼침과 같다.
- * 부모가 하위를 접어 둔 것(`kidsCollapsed`)과 닫힌 하위(`closedOpen`을 펼쳐야 보임)도 펼침과 같은 규칙을 따른다.
- * `split`은 개입 필요와 나머지 사이에 경계선을 그릴 위치(위쪽 개수, 0이면 없음).
- * 펼친 레일은 이 함수를 안 쓴다 — 거기서는 구역 머리글 아래에 그대로 그린다.
- */
-export function compactRailOrder<T extends { lineage?: Lineage | null }>(
-  attention: T[],
-  groups: SessionGroup<T>[],
-  tree: TreeEntry<T>[],
-  opts: { kidsCollapsed?: (r: T) => boolean; closedOpen?: (r: T) => boolean } = {},
-): { entries: CompactEntry<T>[]; split: number } {
-  const entries: CompactEntry<T>[] = attention.map((row) => ({ row, kid: null }));
-  const top = entries.length;
-  for (const g of groups) if (g.id) for (const row of g.rows) entries.push({ row, kid: null });
-  for (const e of tree) {
-    entries.push({ row: e.row, kid: null });
-    if (opts.kidsCollapsed?.(e.row)) continue;
-    const shown = [...e.kids, ...(opts.closedOpen?.(e.row) ? e.closedKids : [])];
-    shown.forEach((row, i) => entries.push({
-      row,
-      kid: {
-        last: i === shown.length - 1,
-        merged: row.lineage?.state === 'reported',
-        failed: row.lineage?.outcome === 'failed',
-        closed: row.lineage?.state === 'closed',
-      },
-    }));
-  }
-  return { entries, split: entries.length > top ? top : 0 };
-}
-
 /**
  * 「실행 중」 구역 = 「세션」 전체에서 「개입 필요」에 이미 올라간 행을 뺀 것.
  * 개입 필요 구역이 꺼져 있으면(`attention`이 비어 있다) 빼는 것이 없다.
- * 접힌 레일(compactRailOrder)은 이 함수의 결과(펼침의 「실행 중」)를 그대로 받아 쓴다.
+ * 저장소 가지 그래프(repo-tree.ts)와 접힌 띠는 이 결과(개입 필요에 없는 행)를 받는다.
  */
 export function splitRunning<T>(lists: RailLists<T>): T[] {
   if (lists.attention.length === 0) return lists.sessions;

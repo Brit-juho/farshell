@@ -73,6 +73,11 @@ async def session_detail(session_id: str):
     return await _call(db.session_detail, session_id)
 
 
+@router.get('/api/session-catalog/sessions/{session_id}/resume-preview')
+async def resume_preview(session_id: str):
+    return await _call(lifecycle.resume_preview, session_id)
+
+
 @router.get('/api/session-history/replicas/{origin}/{conversation_id}')
 async def replica_detail(origin: str, conversation_id: str, after: int = 0, limit: int = 100):
     return await _call(query.replica_detail, origin, conversation_id, after=after, limit=limit)

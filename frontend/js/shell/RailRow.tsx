@@ -14,26 +14,18 @@
 // (Rail.tsx 머리말과 같은 이유, ADR-26/N35).
 import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 
-import { agentLabel, icon, stateIcon } from '../ui/icons.js';
+import { icon } from '../ui/icons.js';
 import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
 import { ringSvg, subBadge } from './compact-mark.js';
 import { normalizeSubagents } from './native-subagents.js';
 import { shellIcon } from '../ui/icons-shell.js';
 import { agentMark } from './agent-mark.js';
 import { t } from '../core/i18n.js';
-import { NativeChip } from './NativeChildren.js';
 import {
-  stateKeyword, formatRelativeTime, diffLabel, lineageLabel,
+  stateKeyword, formatRelativeTime, lineageLabel,
   ORIGIN_ICON, originLabel, originShort, SHARE_MODE_LABEL, shareSentence, profileLabel, type SessionRow, type SessionProfile, type Origin, type ShareInfo, type RowSummaryDetails,
 } from './rail-data.js';
 
-/** 경과 시간을 행 DOM을 다시 만들지 않고 갱신하는 시계(30초). */
-function createNow() {
-  const [now, setNow] = createSignal(Date.now());
-  const timer = setInterval(() => setNow(Date.now()), 30000);
-  onCleanup(() => clearInterval(timer));
-  return now;
-}
 
 /** 만든 곳 아이콘(local은 없다). 레일 행과 Fleet 행이 같이 쓴다.
  * `withText`면 아이콘 뒤에 짧은 글(「다른 맥에서 만듦」·「직접 만듦」)을 붙인다 — 레일 행 3줄(시안 D02). 글이 있으면
@@ -264,64 +256,45 @@ export function AnswerButtons(props: {
   );
 }
 
+/**
+ * 접힌 48px 띠의 칸 하나 — 에이전트 마크 가운데 + 둘레 상태 링(시안 3-B). 펼친 레일은 가지 그래프 칸
+ * (SessionNode.tsx)을 쓴다. 이름·상태 문장은 숨기고 호버·포커스 때 뜨는 상세 카드(RailHoverCard.tsx)가 맡는다 —
+ * 공용 data-tip 툴팁은 달지 않는다(이중으로 뜨지 않게). 칸의 이름은 aria-label, 카드는 열린 동안 aria-describedby.
+ */
 export function Row(props: {
-  row: SessionRow; active: boolean; compact?: boolean;
-  /** 위임 하위 세션 행 — 둘째 줄(작업 공간·브랜치)을 빼고 위임 상태를 붙인다. 부모 밑 레인 안에 그려진다. */
+  row: SessionRow; active: boolean;
+  /** 늘 접힌 띠의 칸이다(옛 호출 호환용 표시). */
+  compact?: boolean;
+  /** 위임 하위 세션 칸(부모 밑 가지선은 Rail.tsx의 .vt-wgrail-kidcell이 긋는다). */
   kid?: boolean;
-  /** 부모 행이면 하위 진행 칩과 접기 토글. */
-  progress?: { reported: number; open: number } | null; kidsCount?: number; kidsCollapsed?: boolean; onToggleKids?: () => void;
-  /** 열린 행만 끌 수 있다(Rail.tsx의 onRowDragStart가 조건을 본다) — 터미널 칸에 놓으면 분할(묶음)이 생긴다. */
+  /** 열린 칸만 끌 수 있다 — 터미널 칸에 놓으면 분할(묶음)이 생긴다. */
   draggable?: boolean; onDragStart?: (e: DragEvent) => void;
-  /** 이름 제자리 편집 — window.prompt 안 씀. */
-  editing?: boolean; editingValue?: string;
-  onEditInput?: (v: string) => void; onEditCommit?: () => void; onEditCancel?: () => void;
   onOpen: (e: MouseEvent) => void;
-  /** ⋯ 버튼(좌클릭)과 우클릭이 같은 함수를 부른다 — 같은 메뉴가 같은 항목으로 열린다. */
+  /** 우클릭 메뉴(⋯ 버튼은 접힌 칸에 없다). */
   onContext: (e: MouseEvent) => void;
-  /** 개입 필요 행의 인라인 답(1 · 예 …). 있으면 waiting이고 열린 행에 답 버튼 줄이 붙는다. */
-  onAnswer?: (key: string) => Promise<void>;
 }) {
-  const now = createNow();
-  const rowName = () => props.row.name;
-  const branch = () => props.row.branch || '';
   const unseen = () => props.row.unseen && props.row.status !== 'idle';
-  const rel = () => formatRelativeTime(props.row.since, now());
-  const changed = () => {
-    const c = props.row.changed;
-    return c && (c.add > 0 || c.del > 0) ? c : null;
-  };
-  const diff = () => diffLabel(props.row);
-  const answers = () => !props.compact && !!props.onAnswer && props.row.status === 'waiting' && props.row.open && !!props.row.sessionId;
-
-  // 접힘 칸 오른쪽 위 개수 배지(S1) — 작업 중인 내부 서브에이전트 수. 누를 곳이 아니라 이름만 둔다(칸을 누르면 세션이 열린다).
+  // 칸 오른쪽 위 개수 배지(S1) — 작업 중인 내부 서브에이전트 수.
   const sub = () => normalizeSubagents(props.row.subagents);
   const subWorking = () => sub().items.filter((r: any) => r.state === 'working').length;
   const subTip = () => sub().limited ? t('내부 에이전트 · 표시 한도 도달') : subWorking() > 0 ? t('내부 에이전트 {n} 작업 중', { n: subWorking() }) : '';
-  const badge = () => props.compact ? subBadge(subWorking(), sub().limited) : null;
-  // 접힘 칸의 상태 이름(스크린리더) — 링은 모양뿐이라 이름이 없으면 읽히지 않는다. 펼침의 stateIcon과 같은 문장.
+  const badge = () => subBadge(subWorking(), sub().limited);
+  // 상태 이름(스크린리더) — 링은 모양뿐이라 이름이 없으면 읽히지 않는다.
   const ringLabel = () => STATE_LABEL[normalizeState(props.row.status) as keyof typeof STATE_LABEL] + (unseen() ? ' · ' + t('아직 확인 안 함') : '');
-
-  // 48px 접힘에서는 이름·상태 문장이 숨는다. 그 정보는 호버·포커스 때 뜨는 상세 카드(RailHoverCard.tsx)가 맡는다 —
-  // 공용 data-tip 툴팁은 접힌 칸에 달지 않는다(이중으로 뜨지 않게). 칸의 이름은 aria-label, 카드는 열린 동안 aria-describedby.
   const cardKey = () => props.row.tmuxName || props.row.name;
-
-  // div에 role=button만 붙이면 Enter·Space가 아무 일도 안 한다 — 직접 붙인다.
-  // Space는 preventDefault가 필수(안 하면 활성화와 동시에 페이지가 스크롤된다).
+  // div에 role=button만 붙이면 Enter·Space가 아무 일도 안 한다 — 직접 붙인다(Space는 스크롤을 막는다).
   const onKeyDown = (e: KeyboardEvent) => {
-    if (e.target !== e.currentTarget) return;   // 이름 입력창의 키 입력을 가로채지 않는다
+    if (e.target !== e.currentTarget) return;
     if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
     if (e.key !== 'Enter') e.preventDefault();
     props.onOpen(e as unknown as MouseEvent);
   };
-
   return (
     <div
       class="vt-srow vt-wgrail-row"
       classList={{
         active: props.active, closed: !props.row.open, kid: !!props.kid,
-        'is-waiting': props.row.status === 'waiting',
-        // 열려 있지 않거나 유휴인 행은 이름이 한 단 물러난다(흐림이 아니다 — 대부분의 행이 이 상태다).
-        'is-quiet': props.row.status === 'idle',
+        'is-waiting': props.row.status === 'waiting', 'is-quiet': props.row.status === 'idle',
       }}
       data-state={props.row.status}
       onClick={props.onOpen}
@@ -332,124 +305,17 @@ export function Row(props: {
       role="button"
       tabindex="0"
       aria-current={props.active ? 'true' : undefined}
-      // agent/paint.js의 전역 클릭 위임이 `[data-session-id]`로 "봤다"를 판정한다.
-      // 열려 있지 않은 행은 sessionId가 없어 자연히 제외된다.
+      // agent/paint.js의 전역 클릭 위임이 `[data-session-id]`로 「봤다」를 판정한다.
       data-session-id={props.row.sessionId || undefined}
-      aria-label={props.compact ? rowName() : undefined}
-      data-card-key={props.compact ? cardKey() : undefined}
+      aria-label={props.row.name}
+      data-card-key={cardKey()}
     >
-      {/* 펼침: 상태 아이콘은 행의 첫 열(16px)이다. 접힘(링형, 시안 3-B): 에이전트 마크 가운데 + 둘레 상태 링.
-          링과 마크는 둘 다 상태색이고, 상태는 링 모양이 말한다. 읽지 않음(unseen)은 링을 상태가 쓰므로 마크 오른쪽 아래 점. */}
-      <Show
-        when={props.compact}
-        fallback={<span class="vt-srow-state" innerHTML={stateIcon(props.row.status, 16, unseen())} />}
-      >
-        <span class="vt-srow-state vt-wgrail-ring" data-state={normalizeState(props.row.status)} role="img" aria-label={ringLabel()} innerHTML={ringSvg(props.row.status)} />
-        {/* 에이전트를 아직 모르거나 셸이면 셸 프롬프트 마크 — 칸이 비면 링만 덩그러니 남는다. */}
-        <span class="vt-srow-agent vt-wgrail-agent vt-wgrail-agent-compact" data-state={props.row.status} innerHTML={agentMark(props.row.agent || 'shell')} />
-        <Show when={unseen()}><span class="vt-wgrail-unseen" aria-hidden="true" /></Show>
-        <Show when={badge()}>
-          {(b) => <span class="vt-wgrail-subbadge" classList={{ limited: b().limited }} role="img" aria-label={subTip()}>{b().text}</span>}
-        </Show>
-      </Show>
-      <Show when={!props.compact}>
-        <div class="vt-srow-main vt-wgrail-row-main">
-          {/* 1줄: 에이전트 14 · 이름 13/600 · 위임 토글 · 경과(mono 12) · ⋯ */}
-          <div class="vt-srow-top vt-wgrail-row-top">
-            {/* 에이전트를 아직 모르면(agent == null) 아무것도 안 그린다 — "셸이다"와 "모른다"는 다르다. */}
-            <Show when={props.row.agent}>
-              {(a) => (
-                <span
-                  class="vt-srow-agent vt-wgrail-agent"
-                  data-tip={agentLabel(a())}
-                  data-tip-side="right"
-                  data-state={props.row.status}
-                  innerHTML={agentMark(a())}
-                />
-              )}
-            </Show>
-            <Show
-              when={props.editing}
-              fallback={<span class="vt-srow-name vt-wgrail-name">{rowName()}</span>}
-            >
-              <input
-                type="text"
-                class="vt-input vt-wgrail-name-edit"
-                value={props.editingValue ?? ''}
-                ref={(el) => { queueMicrotask(() => { el.focus(); el.select(); }); }}
-                onInput={(e) => props.onEditInput?.(e.currentTarget.value)}
-                onClick={(e) => e.stopPropagation()}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') { e.preventDefault(); props.onEditCommit?.(); }
-                  else if (e.key === 'Escape') { e.preventDefault(); props.onEditCancel?.(); }
-                }}
-                onBlur={() => props.onEditCommit?.()}
-              />
-            </Show>
-            <KidsToggle progress={props.progress ?? null} count={props.kidsCount || 0} collapsed={!!props.kidsCollapsed}
-              name={rowName()} onToggle={props.onToggleKids} />
-            <span class="vt-srow-elapsed">{rel()}</span>
-            {/* ⋯ 버튼은 우클릭과 같은 메뉴를 연다(행의 좌클릭은 열기/전환이 쓰고 있다). */}
-            <button
-              type="button"
-              class="vt-icon-btn sm vt-srow-menu"
-              aria-label={t('{name} 메뉴', { name: rowName() })}
-              data-tip={t('메뉴')}
-              data-tip-side="left"
-              onClick={(e) => { e.stopPropagation(); props.onContext(e); }}
-              innerHTML={icon('more-horizontal', 16, 2)}
-            />
-          </div>
-          {/* 2줄(mono 12): WT · 디렉터리 · 브랜치 · 변경량. 정보가 아직 없으면 「정보 갱신 대기」. */}
-          <Show when={!props.kid && (props.row.directory || branch() || diff() || props.row.contextStatus === 'unavailable')}>
-            <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line2">
-              <Show when={props.row.workspaceKind}><span class="vt-srow-workspace-kind" data-kind={props.row.workspaceKind === 'WT' ? 'wt' : undefined} role="img" aria-label={props.row.workspaceKind === 'WT' ? t('별도 워크트리') : props.row.workspaceKind}>{props.row.workspaceKind}</span></Show>
-              <Show when={props.row.directory}><span class="vt-srow-directory" data-tip={props.row.locationTip || props.row.cwd} data-tip-side="right">{props.row.directory}</span></Show>
-              <Show when={branch()}>
-                <span class="vt-srow-branch with-ico" data-tip={t('브랜치 · {branch}', { branch: branch() })} data-tip-side="right">
-                  <span class="vt-srow-branch-ico" innerHTML={icon('git-branch', 12, 2)} />
-                  <span class="vt-srow-branch-name">{branch()}</span>
-                </span>
-              </Show>
-              <Show when={diff()}>
-                <span class="vt-srow-meta vt-wgrail-diff">
-                  <Show when={changed()} fallback={diff()}>
-                    {(c) => <>
-                      <Show when={c().add > 0}><span class="vt-diff-add">+{c().add}</span></Show>
-                      {c().add > 0 && c().del > 0 ? ' ' : ''}
-                      <Show when={c().del > 0}><span class="vt-diff-del">−{c().del}</span></Show>
-                    </>}
-                  </Show>
-                </span>
-              </Show>
-              <Show when={props.row.contextStatus === 'unavailable'}><span class="vt-srow-pending">{t('정보 갱신 대기')}</span></Show>
-            </div>
-          </Show>
-          {/* 3줄: 상태 키워드 12/600 · 도구 · 배지 · 내부 서브에이전트 · 공유 · 출처. */}
-          <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line3">
-            {/* 하위 행: 진행 중이면 에이전트 상태(작업 중·입력 대기)가 정보고, 끝났으면 위임 결과가 정보다 — 둘을 같이 쓰면
-                「보고 · 성공 완료」처럼 같은 말이 겹친다(2026-10-13 실화면). */}
-            <Show when={props.kid && props.row.lineage?.state !== 'running'} fallback={<KeywordLine row={props.row} now={now} noSince />}>
-              <LineageMark row={props.row} />
-            </Show>
-            <Show when={props.kid}>
-              <span class="vt-srow-kidnote" data-tip={t('FarShell 위임 세션')} data-tip-side="right">{t('별도 터미널')}</span>
-            </Show>
-            <NativeChip row={props.row} />
-            <ShareMark share={props.row.share} />
-            <ProfileMark profile={props.row.profile} />
-            <OriginMark origin={props.row.origin} host={props.row.originHost} withText />
-          </div>
-          {/* 4줄(있을 때만): 다른 화면 N · 웹이 아닌 터미널 연결 수. */}
-          <Show when={props.row.otherScreens > 0 || props.row.otherClients > 0}>
-            <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line4">
-              <ScreensMark row={props.row} />
-            </div>
-          </Show>
-          <Show when={answers()}>
-            <AnswerButtons row={props.row} variant="rail" onAnswer={props.onAnswer!} onTerminal={() => props.onOpen(new MouseEvent('click'))} />
-          </Show>
-        </div>
+      <span class="vt-srow-state vt-wgrail-ring" data-state={normalizeState(props.row.status)} role="img" aria-label={ringLabel()} innerHTML={ringSvg(props.row.status)} />
+      {/* 에이전트를 아직 모르거나 셸이면 셸 프롬프트 마크 — 칸이 비면 링만 덩그러니 남는다. */}
+      <span class="vt-srow-agent vt-wgrail-agent vt-wgrail-agent-compact" data-state={props.row.status} innerHTML={agentMark(props.row.agent || 'shell')} />
+      <Show when={unseen()}><span class="vt-wgrail-unseen" aria-hidden="true" /></Show>
+      <Show when={badge()}>
+        {(b) => <span class="vt-wgrail-subbadge" classList={{ limited: b().limited }} role="img" aria-label={subTip()}>{b().text}</span>}
       </Show>
     </div>
   );

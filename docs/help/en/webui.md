@@ -74,8 +74,11 @@ Everything about using FarShell in the browser. (For the CLI see `fsh help conce
 
 ### Sidebar Sessions view (session list)
 
-Sessions are listed by name, and sessions waiting for input also appear in the "Needs attention" section at the top.
-Each row has three lines: status, agent, name / branch, change count / status keyword (Approval request, Choice requested, Plan review, Question), elapsed time, origin.
+Sessions are grouped by repository. A repository head shows its name and main branch, and a session stays under the repository it started in (even after `cd`).
+A session working in another worktree of the same repository sits under a "Worktree <branch>" branch; sessions outside any repository are listed under "Outside a repository" at the bottom.
+Sessions waiting for input move up to the "Needs attention" section. Repositories with a waiting session come first, then by most recent activity.
+Each cell has two lines: state ring and agent · name · elapsed · ⋯ / (only when there is something to say) waiting kind · tool at work · "Finished · not seen" · your last instruction, and the change count.
+Open "Ended N" at the bottom of a repository to see the sessions that ended there; the "Resume" button is always visible. Clicking an ended session shows its linked conversations and where and under which name a resume will open.
 
 | Action | Result |
 |------|------|

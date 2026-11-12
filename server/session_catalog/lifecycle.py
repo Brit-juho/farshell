@@ -275,6 +275,31 @@ def resume(cid, opid, *, sid=None):
         return {'operation_id': opid, 'state': 'started_unverified', **result}
 
 
+def resume_preview(sid):
+    """「이어서 시작」을 누르기 전에 보여 줄 것: 이어 갈 대화와, 어느 저장소에서 어떤 tmux 이름으로 열릴지.
+    아무것도 만들지 않는다. 이름은 지금 tmux에 없는 첫 이름이라 실제로 누를 때 그 사이 다른 세션이 가져가면
+    다음 번호가 될 수 있다."""
+    identifier(sid)
+    with database() as db:
+        row = db.execute('SELECT archived FROM sessions WHERE id=? AND deleted IS NULL', (sid,)).fetchone()
+        if not row:
+            raise Refused('session_not_found', 404)
+        cid = resume_target(db, sid) if row['archived'] is None else None
+        conversation = db.execute('SELECT id,title,provider,cwd FROM conversations WHERE id=? AND deleted IS NULL',
+                                  (cid,)).fetchone() if cid else None
+    if not conversation:
+        return {'resumable': False, 'conversation_id': None}
+    import session_names
+    try:
+        cwd = str(fsguard.resolve_under_roots(conversation['cwd'], git_meta=True))
+    except (fsguard.FsDenied, TypeError):
+        cwd = None
+    base = session_names.base_for(cwd) if cwd else None
+    return {'resumable': True, 'conversation_id': conversation['id'], 'conversation_title': conversation['title'] or '',
+            'provider': conversation['provider'], 'folder': Path(cwd).name if cwd else None,
+            'name': session_names.allocate(base) if base else None}
+
+
 def resume_session(sid, opid):
     """Restart a stopped session by resuming its latest verified conversation under the same session id."""
     identifier(sid)

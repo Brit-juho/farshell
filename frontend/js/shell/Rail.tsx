@@ -13,11 +13,15 @@ import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'so
 import { Portal } from 'solid-js/web';
 import { t } from '../core/i18n.js';
 import {
-  buildRailLists, splitRunning, groupSessionRows, compactRailOrder, rowMenuItems, rowSummaryDetails, runRowMenu,
-  ATTENTION_COLLAPSED_KEY, ATTENTION_SHOW_KEY, ORDER_KEY, LINEAGE_KEY, VIEW_KEY, encodeOrder, encodeLineagePrefs, encodeRailView, toggleGroupCollapsed,
-  buildSessionTree, kidsProgress, moveInOrder, canShareName,
-  type SessionRow, type RailSort, type TreeEntry,
+  buildRailLists, splitRunning, rowMenuItems, rowSummaryDetails, runRowMenu,
+  ATTENTION_COLLAPSED_KEY, ATTENTION_SHOW_KEY, LINEAGE_KEY, VIEW_KEY, encodeLineagePrefs, encodeRailView, toggleGroupCollapsed,
+  kidsProgress, canShareName,
+  type SessionRow,
 } from './rail-data.js';
+import { buildRepoTree, flattenRows, OUTSIDE_KEY, type RepoGroup } from './repo-tree.js';
+import { RepoBranch } from './RepoBranch.js';
+import { SessionNode } from './SessionNode.js';
+import { EndedFold } from './EndedFold.js';
 import {
   buildHostMenu, hostDetail, LOCAL_HOST,
   type HostEntry,
@@ -26,13 +30,13 @@ import {
   actionSessionId, collectSessionRows, pollFetch, isNoResponse,
   useAgentVersion, useSessionsVersion, useLayoutVersion, syncAgentsFromServer,
   type RailDeps,
-  createDiffWatcher, answerSessionPrompt,
+  createDiffWatcher,
 } from './rail-fetch.js';
 import { createRailPrefs } from './rail-prefs.js';
 import { Menu, ROW_MENU_ICON, Row, type MenuItem } from './RailRow.js';
 import { RailHoverCard, type HoverCardSource } from './RailHoverCard.js';
 import { NativeChildren } from './NativeChildren.js';
-import { CatalogTree, RecentEnded, ArchiveEntry, ArchiveList, type CatalogSnapshot } from './CatalogTree.js';
+import { ArchiveEntry, ArchiveList, type CatalogSnapshot } from './CatalogTree.js';
 import { renameSession as renameCatalogSession } from '../history/session-actions.js';
 import { historyApi } from '../history/api.js';
 import { icon } from '../ui/icons.js';
@@ -41,7 +45,6 @@ import { shellIcon } from '../ui/icons-shell.js';
 export type { RailDeps } from './rail-fetch.js';
 import { RepoVisibility } from './RepoVisibility.js';
 import { RailSettingsLead } from './RailSettings.js';
-import { ViewGroup } from './ViewGroup.js';
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
 // 상태 없는 순수 모듈이라 지연 청크에 복제돼도 된다(위 ⚠의 예외).
 import { createPoll, isStale } from '../core/poll.js';
@@ -130,15 +133,29 @@ export function Rail(props: RailProps) {
   onCleanup(() => clearInterval(staleTimer));
 
   let catalogRequest = 0;
+  // 「종료 세션 더 불러오기」로 첫 쪽 뒤를 받았는가. 보관함↔목록을 바꾸면 다시 첫 쪽부터다.
+  let extraPages = false;
   const refreshCatalog = async (more = false) => {
     if (viewHostId !== LOCAL_HOST) return;
     const request = ++catalogRequest;
     try {
-      const params = new URLSearchParams({ archived: String(archiveOpen()), limit: '200' });
-      if (more && catalog()?.next) params.set('after', catalog()!.next!);
+      // 최근 활동순(저장소 묶음의 「종료 N」과 세션 정렬이 같은 기준). 보관함은 따로 연다.
+      const params = new URLSearchParams({ archived: String(archiveOpen()), limit: '200', order: 'activity' });
+      if (more && catalog()?.next) params.set('cursor', catalog()!.next!);
       const data = await historyApi('/api/session-catalog?' + params);
       if (request !== catalogRequest) return;
-      setCatalog(more && catalog() ? { ...data, sessions: [...catalog()!.sessions, ...data.sessions] } : data);
+      const prev = catalog();
+      if (more && prev) {
+        setCatalog({ ...data, sessions: [...prev.sessions, ...data.sessions.filter((x: any) => !prev.sessions.some((y) => y.id === x.id))] });
+      } else if (prev && extraPages) {
+        // 「더 불러오기」로 받아 둔 뒤쪽은 다음 폴링(첫 쪽만 다시 읽음)에 버리지 않는다. 사라진 기록은 다시 열 때 정리된다.
+        const fresh = new Set(data.sessions.map((x: any) => x.id));
+        const tail = prev.sessions.filter((x) => !fresh.has(x.id) && (x.last_activity ?? 0) <= Math.min(...data.sessions.map((y: any) => y.last_activity ?? 0)));
+        setCatalog({ ...data, sessions: [...data.sessions, ...tail], next: prev.next });
+      } else {
+        setCatalog(data);
+      }
+      if (more) extraPages = true;
     } catch (e) {
       // 옛 호스트(카탈로그 없음)는 지금의 라이브 레일을 그대로 쓴다. 답 자체가 없던
       // 실패(마감·네트워크)만 폴러에 알려 간격을 늘린다.
@@ -276,31 +293,54 @@ export function Rail(props: RailProps) {
   const lists = createMemo(() => buildRailLists(rows(), prefs()));
   // 「실행 중」 구역 = 세션 전체에서 개입 필요에 올라간 행을 뺀 것(같은 세션이 두 번 나오지 않는다).
   const running = createMemo(() => splitRunning(lists()));
-  const viewGroups = createMemo(() => { layoutVersion(); return groupSessionRows(running(),
-    (window as any).getSessionViewGroups?.() || (window as any).getTabGroups?.() || []); });
-  // ── 계보 트리 · 정렬 ─────────────────────────────────────────────────────
-  // 분할 화면 묶음(viewGroups의 id 있는 것)은 지금처럼 따로 그리고, 나머지 단독 행을 부모 → 자식
-  // 트리로 묶는다(rail-data.ts buildSessionTree). 자식은 정렬과 상관없이 부모 밑에 붙는다.
-  const groupedViews = createMemo(() => viewGroups().filter((g) => g.id));
-  const tree = createMemo<TreeEntry<SessionRow>[]>(() =>
-    buildSessionTree(viewGroups().filter((g) => !g.id).map((g) => g.rows[0]), prefs().sort, prefs().order));
+  // ── 저장소 가지 그래프(설계 P1·P2) ────────────────────────────────────────
+  // 저장소 → (메인 · 워크트리 가지) → 세션 → 위임 하위 · 「종료 N」. 정렬은 입력 대기가 있는 저장소 > 최근 활동,
+  // 저장소 안은 최근 활동(카탈로그 last_activity)순이다. 수동 정렬·이름순 정렬·「저장소별로 묶기」 토글은 없다.
   const rowKey = (r: SessionRow) => r.tmuxName || r.name;
-  const topOrder = () => tree().map((e) => rowKey(e.row));
-  const saveOrder = (names: string[]) => setPref(ORDER_KEY, encodeOrder('manual', names));
-  const setSort = (s: RailSort) => {
-    if (s === prefs().sort) return;
-    // 수동으로 바꿀 때는 지금 보이는 순서를 출발점으로 삼는다(바꾸자마자 섞이지 않게). 이름순으로 돌아가도
-    // 수동 순서는 지우지 않는다 — 다시 수동을 고르면 그대로 돌아온다.
-    setPref(ORDER_KEY, encodeOrder(s, s === 'manual' ? topOrder() : prefs().order));
-  };
+  const mainBranches = createMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const repo of repos()) {
+      const main = (repo.worktrees || []).find((w: any) => w.isMain);
+      if (main && typeof main.path === 'string') m.set(main.path, main.branch || null);
+    }
+    return m;
+  });
+  const activityByKey = createMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of catalog()?.sessions || []) if (c.physical_key && c.ended == null) m.set(c.physical_key, Number(c.last_activity) || 0);
+    return m;
+  });
+  const isLiveCatalog = (c: any) => c.ended == null && !!c.runtime_id
+    && rows().some((r) => r.tmuxName === c.tmux_name && r.physicalKey === c.physical_key);
+  // 이름을 고치는 동안은 그래프도 얼린다 — 카탈로그 폴링(5초)마다 새 묶음 객체가 오면 <For>가 칸을 다시 만들어 편집 중이던
+  // 입력창이 뜯겨 나간다(행 메모를 얼리는 것과 같은 이유, 위 rows 주석).
+  const tree = createMemo<RepoGroup<SessionRow, any>[]>((prev) => editingSessionKey() && prev ? prev : buildRepoTree({
+    rows: running(),
+    ended: viewHostId === LOCAL_HOST ? catalog()?.sessions || [] : [],
+    workspaces: catalog()?.workspaces || [],
+    projects: catalog()?.projects || [],
+    mainBranches: mainBranches(),
+    activityOf: (r) => (r.physicalKey && activityByKey().get(r.physicalKey)) || Number(r.since || 0),
+    isLive: isLiveCatalog,
+  }));
   const flip = (list: string[], name: string) => (list.includes(name) ? list.filter((n) => n !== name) : [...list, name]);
   const toggleKids = (name: string) => setPref(LINEAGE_KEY, encodeLineagePrefs(flip(prefs().kidsCollapsed, name), prefs().closedOpen));
-  const toggleClosed = (name: string) => setPref(LINEAGE_KEY, encodeLineagePrefs(prefs().kidsCollapsed, flip(prefs().closedOpen, name)));
   const kidsCollapsed = (r: SessionRow) => prefs().kidsCollapsed.includes(rowKey(r));
-  const closedOpen = (r: SessionRow) => prefs().closedOpen.includes(rowKey(r));
-  // 접힌 띠(48px)의 칸 순서 — 펼침이 쓰는 목록(개입 필요 · 묶음 · 트리)을 그대로 펴서 같은 순서가 나온다.
-  const compact = createMemo(() => compactRailOrder(lists().attention, viewGroups(), tree(),
-    { kidsCollapsed, closedOpen }));
+  // 접힘·「종료 N」 펼침은 저장소 경로를 열쇠로 기기별(rail.view)에 둔다 — 세션이 바뀌어도 같은 저장소면 그대로.
+  const repoKey = (g: RepoGroup<SessionRow, any>) => (g.key === OUTSIDE_KEY ? OUTSIDE_KEY : g.root || g.key);
+  const repoCollapsed = (g: RepoGroup<SessionRow, any>) => prefs().view.groupsCollapsed.includes('repo:' + repoKey(g));
+  const endedOpen = (g: RepoGroup<SessionRow, any>) => prefs().view.groupsCollapsed.includes('ended:' + repoKey(g));
+  const toggleView = (id: string) => setPref(VIEW_KEY, encodeRailView({ ...prefs().view, groupsCollapsed: toggleGroupCollapsed(prefs().view.groupsCollapsed, id) }));
+  // 접힌 띠(48px)의 칸 순서 — 개입 필요가 위, 나머지는 펼친 가지와 같은 순서.
+  const compact = createMemo(() => {
+    const top = lists().attention.map((row) => ({ row, kid: null as null | { last: boolean; merged: boolean; failed: boolean; closed: boolean } }));
+    const rest = flattenRows(tree()).filter((e) => !(e.kid && kidsCollapsed(rowParent(e.row)))).map((e) => ({
+      row: e.row,
+      kid: e.kid ? { last: false, merged: e.row.lineage?.state === 'reported', failed: e.row.lineage?.outcome === 'failed', closed: e.row.lineage?.state === 'closed' } : null,
+    }));
+    return { entries: [...top, ...rest], split: top.length > 0 && rest.length > 0 ? top.length : 0 };
+  });
+  const rowParent = (kid: SessionRow): SessionRow => rows().find((r) => r.tmuxName === kid.lineage?.parent) || kid;
 
   // 접힌 띠 호버 카드가 칸의 열쇠(rowKey)로 세션 데이터를 찾는 함수 — 이미 들고 있는 행·호스트 값만 쓴다(요청 없음).
   // 하위 세션은 부모의 tmux 이름을 가리키는 열린 위임(진행 중·보고됨)이다. 원격 호스트를 보고 있으면 그 호스트의 응답 상태도 싣는다.
@@ -320,27 +360,6 @@ export function Rail(props: RailProps) {
     };
   };
   let railEl: HTMLElement | undefined;
-
-  // 수동 정렬 드래그. 최상위 항목(부모는 자식과 한 덩어리)만 옮긴다. 터미널 칸 분할 드래그(text/vt-tab-id)와
-  // 같은 드래그에 두 형식을 함께 싣는다 — 레일 안에 놓으면 순서, 칸에 놓으면 분할이다.
-  const ORDER_MIME = 'text/vt-rail-order';
-  const [dropAt, setDropAt] = createSignal<{ name: string; place: 'before' | 'after' } | null>(null);
-  const isTop = (r: SessionRow) => tree().some((e) => e.row === r);
-  const onEntryDragOver = (e: DragEvent, entry: TreeEntry<SessionRow>) => {
-    if (prefs().sort !== 'manual' || !e.dataTransfer?.types.includes(ORDER_MIME)) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setDropAt({ name: rowKey(entry.row), place: e.clientY < r.top + Math.min(r.height, 60) / 2 ? 'before' : 'after' });
-  };
-  const onEntryDrop = (e: DragEvent) => {
-    const name = e.dataTransfer?.getData(ORDER_MIME);
-    const at = dropAt();
-    setDropAt(null);
-    if (!name || !at) return;
-    e.preventDefault();
-    saveOrder(moveInOrder(topOrder(), name, at.name, at.place));
-  };
   const totalRows = createMemo(() => lists().sessions.length);
 
   const activeId = createMemo(() => { sessionsVersion(); return (window as any).activeSessionId?.() ?? null; });
@@ -363,7 +382,7 @@ export function Rail(props: RailProps) {
     e.preventDefault();
     if (!row.sessionId && !row.tmuxName) return; // 웹 세션도 tmux 이름도 없으면 메뉴가 성립하지 않는다.
     // ⋯ 버튼에서 열었으면 버튼 아래에, 우클릭이면 포인터 옆에 띄운다.
-    const btn = (e.target as HTMLElement | null)?.closest?.('.vt-srow-menu');
+    const btn = (e.target as HTMLElement | null)?.closest?.('.vt-srow-menu, .vt-rg-more');
     const r = btn?.getBoundingClientRect();
     setCtxMenu({ x: r ? r.left : e.clientX, y: r ? r.bottom + 2 : e.clientY, row });
   };
@@ -373,11 +392,8 @@ export function Rail(props: RailProps) {
   // 문자열이어야 한다(이 파일은 레이아웃 모듈을 정적 import 못 한다). 열려 있지 않은
   // 세션은 웹 세션 id가 없어 끌 수 없다.
   const onRowDragStart = (e: DragEvent, row: SessionRow) => {
-    const reorder = prefs().sort === 'manual' && isTop(row);
-    const split = row.open && !!row.sessionId;
-    if (!reorder && !split) { e.preventDefault(); return; }
-    if (split) e.dataTransfer?.setData('text/vt-tab-id', row.sessionId);
-    if (reorder) e.dataTransfer?.setData(ORDER_MIME, rowKey(row));
+    if (!row.open || !row.sessionId) { e.preventDefault(); return; }
+    e.dataTransfer?.setData('text/vt-tab-id', row.sessionId);
     if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
   };
 
@@ -410,11 +426,6 @@ export function Rail(props: RailProps) {
     const { openSessionRecord } = await import('../history/session-record.js');
     openSessionRecord(session.id, () => { catalogPoll.kick(); }, { tmuxName: tmuxName || session.tmux_name || '' });
   };
-  const recentCollapsedToggle = () => setPref(VIEW_KEY, encodeRailView({ ...prefs().view, recentCollapsed: !prefs().view.recentCollapsed }));
-  // 「실행 중」 구역과 묶음 접힘 — 같은 rail.view 한 덩어리(기기별). 접힌 묶음도 머리(제목 · 개수)는 남는다.
-  const toggleRunningCollapsed = () => setPref(VIEW_KEY, encodeRailView({ ...prefs().view, runningCollapsed: !prefs().view.runningCollapsed }));
-  const groupCollapsed = (id: string) => !!id && prefs().view.groupsCollapsed.includes(id);
-  const toggleGroup = (id: string) => setPref(VIEW_KEY, encodeRailView({ ...prefs().view, groupsCollapsed: toggleGroupCollapsed(prefs().view.groupsCollapsed, id) }));
 
   // 폭 720px 이상 + 터치일 때만 「오른쪽에 나란히/아래에 열기」가 들어간다(term/session-actions.js).
   const splitAvailable = (row: SessionRow): boolean => !!(window as any).vtTouchSplitAvailable?.(row.sessionId || null);
@@ -424,7 +435,11 @@ export function Rail(props: RailProps) {
     if (!m) return [];
     const row = m.row;
     const linked = catalogOf(row);
-    return rowMenuItems(row, { split: splitAvailable(row), share: viewHostId === LOCAL_HOST, record: !!linked }).map((it) => ({
+    // D5 — 분할 화면 묶음에 든 세션은 행에 작은 표식만 두고, 묶음을 통째로 여는 길은 메뉴에 둔다(행을 눌러도
+    // 닫힌 묶음은 통째로 다시 열린다 — term/session-actions.js openSessionFromRail).
+    const group: MenuItem[] = row.viewLabel ? [{ label: t('묶음 전체 열기'), detail: row.viewLabel, icon: 'columns-2',
+      run: () => { void openRow({} as MouseEvent, row); } }] : [];
+    return [...group, ...rowMenuItems(row, { split: splitAvailable(row), share: viewHostId === LOCAL_HOST, record: !!linked }).map((it) => ({
       label: it.label, detail: it.detail, danger: it.danger, icon: ROW_MENU_ICON[it.id],
       run: () => {
         if (it.id === 'record' && linked) { void openRecordOf(linked, row.tmuxName); return; }
@@ -432,7 +447,7 @@ export function Rail(props: RailProps) {
         if (it.id === 'rename' && linked && !row.sessionId) { void renameCatalogSession(linked).then(() => catalogPoll.kick()); return; }
         runRowMenu(it.id, row, window, () => startRenameSession(row.sessionId, row.name));
       },
-    }));
+    }))];
   };
 
   // "⋯ 더보기" — §5가 기존 48px 아이콘 레일을 완전히 대체하기로 하면서 갈 곳을
@@ -468,32 +483,36 @@ export function Rail(props: RailProps) {
   const newSession = (e: MouseEvent) =>
     (props.deps.getAction('session.add-menu') as ((el?: HTMLElement, e?: MouseEvent) => void) | undefined)?.(e.currentTarget as HTMLElement, e);
 
-  // 같은 행이 두 구역(개입 필요·세션)에 나올 수 있다 — 같은 세션이라 편집·활성 상태도 같이 따라간다.
-  const renderRow = (row: SessionRow, lin?: { kid?: boolean; entry?: TreeEntry<SessionRow> }) => (
-    <>
+  // 접힌 48px 띠의 칸(링 + 에이전트 마크). 펼친 레일은 가지 그래프(SessionNode)를 쓴다.
+  const renderCompact = (row: SessionRow, kid = false) => (
     <Row
-      row={row}
-      compact={collapsed()}
-      kid={!!lin?.kid}
-      progress={lin?.entry ? kidsProgress(lin.entry.kids) : null}
-      kidsCount={lin?.entry ? lin.entry.kids.length + lin.entry.closedKids.length : 0}
-      kidsCollapsed={lin?.entry ? kidsCollapsed(row) : false}
-      onToggleKids={lin?.entry ? () => toggleKids(rowKey(row)) : undefined}
+      row={row} compact kid={kid}
       active={!!row.sessionId && row.sessionId === activeId()}
-      draggable={(row.open && !!row.sessionId) || (prefs().sort === 'manual' && !lin?.kid && !!lin?.entry)}
+      draggable={row.open && !!row.sessionId}
       onDragStart={(e) => onRowDragStart(e, row)}
-      editing={!!row.sessionId && editingSessionKey() === row.sessionId}
-      editingValue={editingSessionValue()}
-      onEditInput={setEditingSessionValue}
-      onEditCommit={() => commitRenameSession(row.sessionId)}
-      onEditCancel={() => setEditingSessionKey(null)}
       onOpen={(e) => openRow(e, row)}
       onContext={(e) => contextRow(e, row)}
-      onAnswer={(key) => answerSessionPrompt(props.deps, row, key)}
     />
-    <Show when={!collapsed()}><NativeChildren row={row} /></Show>
-    </>
   );
+  // 펼친 레일의 세션 칸에 넘기는 것(가지선 모양은 RepoBranch가 정한다). 같은 세션이 두 구역(개입 필요·저장소)에
+  // 나오지 않으므로 편집·활성 상태는 한 칸만 따라간다.
+  const nodeProps = (row: SessionRow, kids: SessionRow[] = []) => ({
+    kidsCount: kids.length,
+    kidsCollapsed: kidsCollapsed(row),
+    onToggleKids: kids.length ? () => toggleKids(rowKey(row)) : undefined,
+    progress: kids.length ? kidsProgress(kids) : null,
+    groupLabel: row.viewLabel,
+    editing: !!row.sessionId && editingSessionKey() === row.sessionId,
+    editingValue: editingSessionValue(),
+    onEditInput: setEditingSessionValue,
+    onEditCommit: () => commitRenameSession(row.sessionId),
+    onEditCancel: () => setEditingSessionKey(null),
+    draggable: row.open && !!row.sessionId,
+    onDragStart: (e: DragEvent) => onRowDragStart(e, row),
+    onOpen: (e: MouseEvent) => openRow(e, row),
+    onContext: (e: MouseEvent) => contextRow(e, row),
+  });
+  const isActiveRow = (row: SessionRow) => !!row.sessionId && row.sessionId === activeId();
 
   return (
     <aside id="vt-wgrail" ref={railEl} classList={{ collapsed: collapsed() }} aria-label={t('세션')}>
@@ -585,7 +604,7 @@ export function Rail(props: RailProps) {
         </Show>
         <Show when={!viewHostOffline()}>
           {/* 접힌 레일(48px)은 구역 머리글이 없어 한 목록이다 — 개입 필요가 위, 나머지가 아래,
-              같은 순서 소스를 펴서 각 세션은 한 번만(compactRailOrder). 펼친 레일은 waiting이 두 구역에 모두 나온다. */}
+              펼친 가지 그래프와 같은 순서(repo-tree.ts flattenRows)이고 각 세션은 한 번만 나온다. */}
           <Show when={collapsed()}>
             <For each={compact().entries}>
               {(entry, i) => (
@@ -593,10 +612,10 @@ export function Rail(props: RailProps) {
                   <Show when={compact().split > 0 && i() === compact().split}>
                     <div class="vt-wgrail-group-sep" role="separator" />
                   </Show>
-                  <Show when={entry.kid} fallback={renderRow(entry.row)}>
+                  <Show when={entry.kid} fallback={renderCompact(entry.row)}>
                     {/* 하위 세션: 부모 바로 아래 축소한 칸 + 왼쪽 가지선(펼침의 .vt-lin-kid와 같은 last·merged·failed). */}
                     <div class="vt-wgrail-kidcell" classList={{ last: entry.kid!.last, merged: entry.kid!.merged, failed: entry.kid!.failed, closed: entry.kid!.closed }}>
-                      {renderRow(entry.row, { kid: true })}
+                      {renderCompact(entry.row, true)}
                     </div>
                   </Show>
                 </>
@@ -630,117 +649,49 @@ export function Rail(props: RailProps) {
               />
             </div>
             <Show when={!prefs().attentionCollapsed || collapsed()}>
-              <For each={lists().attention}>{(row) => renderRow(row)}</For>
+              <div class="vt-rg-flat">
+                <For each={lists().attention}>{(row) => (
+                  <SessionNode row={row} active={isActiveRow(row)} geometry={{ lane: 1, lines: '' }} {...nodeProps(row)} />
+                )}</For>
+              </div>
             </Show>
           </Show>
           {/* 보관함 — 탭이 아니라 같은 자리의 목록 전환이다. 위의 「최근 종료」 아래 한 줄이 여기로 온다. */}
           <Show when={!collapsed() && archiveOpen() && catalog()}>
-            {data => <ArchiveList data={data()} onBack={() => { setArchiveOpen(false); catalogPoll.kick(); }}
+            {data => <ArchiveList data={data()} onBack={() => { setArchiveOpen(false); extraPages = false; catalogPoll.kick(); }}
               onChanged={() => { catalogPoll.kick(); }} onMore={() => { void refreshCatalog(true).catch(() => {}); }} />}
           </Show>
-          {/* 「저장소별로 묶기」(레일 설정) — 저장소 → 작업 공간 보기. 정렬·위임 트리는 이 보기에서 쓰지 않는다. */}
-          <Show when={!collapsed() && !archiveOpen() && prefs().view.byRepo && catalog()}>
-            {data => <CatalogTree data={data()} live={lists().sessions} renderLive={renderRow} onChanged={() => { catalogPoll.kick(); }} onMore={() => { void refreshCatalog(true).catch(() => {}); }} />}
-          </Show>
-          <Show when={!collapsed() && !archiveOpen() && !(prefs().view.byRepo && catalog()) && running().length > 0}>
-            <Show when={!collapsed()}>
-              <div class="vt-wgrail-group-head">
-                {/* 제목 줄(캐럿 · 실행 중 · 개수)이 접기 토글이다 — 「개입 필요」와 같은 모양. 접힘은 기기별(rail.view). */}
-                <button
-                  type="button"
-                  class="vt-wgrail-group-toggle"
-                  classList={{ collapsed: prefs().view.runningCollapsed }}
-                  aria-expanded={!prefs().view.runningCollapsed}
-                  onClick={toggleRunningCollapsed}
-                >
-                  <span class="vt-wgrail-group-caret" innerHTML={icon('chevron-down', 12, 2)} />
-                  <span class="vt-wgrail-group-label">{t('실행 중')}</span>
-                  <span class="vt-wgrail-group-count">{running().length}</span>
-                </button>
-                <div class="vt-rail-sort" role="radiogroup" aria-label={t('세션 정렬')}>
-                  <For each={[['name', t('이름순')], ['manual', t('수동')]] as [RailSort, string][]}>{([id, label]) => (
-                    <button
-                      type="button"
-                      role="radio"
-                      class="vt-rail-sort-opt"
-                      aria-checked={prefs().sort === id}
-                      data-tip={id === 'manual' ? t('끌어서 순서를 바꿉니다.') : undefined}
-                      data-tip-side="bottom"
-                      onClick={() => setSort(id)}
-                    >{label}</button>
-                  )}</For>
-                </div>
-              </div>
-            </Show>
-            <Show when={!prefs().view.runningCollapsed}>
-            <For each={groupedViews()}>{(group) => (
-              <ViewGroup group={group} onOpen={() => { void openRow({} as MouseEvent, group.rows[0]); }}
-                collapsed={groupCollapsed(group.id)} onToggle={() => toggleGroup(group.id)}>
-                <For each={group.rows}>{(row) => renderRow(row)}</For>
-              </ViewGroup>
-            )}</For>
-            <For each={tree()}>{(entry) => (
-              <div
-                class="vt-lin"
-                classList={{
-                  'has-kids': entry.kids.length + entry.closedKids.length > 0 && !kidsCollapsed(entry.row),
-                  'drop-before': dropAt()?.name === rowKey(entry.row) && dropAt()?.place === 'before',
-                  'drop-after': dropAt()?.name === rowKey(entry.row) && dropAt()?.place === 'after',
-                }}
-                data-lane={entry.row.status}
-                onDragOver={(e) => onEntryDragOver(e, entry)}
-                onDragLeave={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) setDropAt(null); }}
-                onDrop={onEntryDrop}
-                onDragEnd={() => setDropAt(null)}
-              >
-                {renderRow(entry.row, { entry })}
-                <Show when={(entry.kids.length + entry.closedKids.length) > 0 && !kidsCollapsed(entry.row)}>
-                  <div class="vt-lin-kids" role="group" aria-label={t('{name}의 하위 세션', { name: entry.row.name })}>
-                    <For each={entry.kids}>{(kid, i) => (
-                      <div
-                        class="vt-lin-kid"
-                        classList={{
-                          last: i() === entry.kids.length - 1 && entry.closedKids.length === 0,
-                          merged: kid.lineage?.state === 'reported',
-                          failed: kid.lineage?.outcome === 'failed',
-                        }}
-                      >{renderRow(kid, { kid: true })}</div>
-                    )}</For>
-                    <Show when={entry.closedKids.length > 0}>
-                      <div class="vt-lin-kid vt-lin-fold" classList={{ last: !closedOpen(entry.row) }}>
-                        <button
-                          type="button"
-                          class="vt-lin-fold-btn"
-                          aria-expanded={closedOpen(entry.row)}
-                          onClick={() => toggleClosed(rowKey(entry.row))}
-                        >
-                          <span class="vt-lin-fold-caret" innerHTML={icon('chevron-down', 12, 2)} />
-                          {t('닫힌 하위 {n}', { n: entry.closedKids.length })}
-                        </button>
-                      </div>
-                      <Show when={closedOpen(entry.row)}>
-                        <For each={entry.closedKids}>{(kid, i) => (
-                          <div class="vt-lin-kid closed" classList={{ last: i() === entry.closedKids.length - 1 }}>
-                            {renderRow(kid, { kid: true })}
-                          </div>
-                        )}</For>
-                      </Show>
-                    </Show>
-                  </div>
-                </Show>
-              </div>
-            )}</For>
-            </Show>
-          </Show>
-          {/* 최근 종료 → 보관함 한 줄. 카탈로그가 없는 옛 호스트는 위의 실행 중 목록만 남는다. */}
-          <Show when={!collapsed() && !archiveOpen() && catalog()}>
-            {data => <>
-              <Show when={!prefs().view.byRepo}>
-                <RecentEnded data={data()} live={lists().sessions} count={prefs().view.recent} collapsed={prefs().view.recentCollapsed}
-                  onToggle={recentCollapsedToggle} onChanged={() => { catalogPoll.kick(); }} />
+          {/* 저장소 가지 그래프 — 저장소 → (메인 · 워크트리 가지) → 세션 → 위임 하위, 맨 아래 「종료 N」. */}
+          <Show when={!collapsed() && !archiveOpen()}>
+            {/* 저장소는 열쇠(문자열)로 돈다 — 폴링마다 묶음 객체가 새로 와도 칸 DOM(펼친 종료 칸·열린 메뉴·포커스)이 남는다. */}
+            <For each={tree().map((g) => g.key)}>{(key) => (
+              <Show when={tree().find((g) => g.key === key)}>
+                {(group) => (
+                  <RepoBranch
+                    group={group()}
+                    collapsed={repoCollapsed(group())}
+                    onToggle={() => toggleView('repo:' + repoKey(group()))}
+                    isActive={isActiveRow}
+                    nodeProps={nodeProps}
+                    kidsCollapsed={kidsCollapsed}
+                    afterNode={(row) => <NativeChildren row={row} />}
+                    hasEnded={group().ended.length > 0}
+                    ended={() => <EndedFold sessions={group().ended} open={endedOpen(group())}
+                      onToggle={() => toggleView('ended:' + repoKey(group()))} onChanged={() => { catalogPoll.kick(); }} />}
+                  />
+                )}
               </Show>
-              <ArchiveEntry count={data().archived_count ?? 0} onOpen={() => { setArchiveOpen(true); catalogPoll.kick(); }} />
-            </>}
+            )}</For>
+            {/* 카탈로그 한 쪽(200개) 밖의 오래된 종료 세션 — 더 불러오면 각 저장소의 「종료 N」에 붙는다. */}
+            <Show when={viewHostId === LOCAL_HOST && catalog()?.next}>
+              <button type="button" class="vt-catalog-more-link" onClick={() => { void refreshCatalog(true).catch(() => {}); }}>
+                {t('종료 세션 더 불러오기')}
+              </button>
+            </Show>
+          </Show>
+          {/* 보관함 한 줄. 카탈로그가 없는 옛 호스트는 위의 실행 중 목록만 남는다. */}
+          <Show when={!collapsed() && !archiveOpen() && catalog()}>
+            {data => <ArchiveEntry count={data().archived_count ?? 0} onOpen={() => { setArchiveOpen(true); extraPages = false; catalogPoll.kick(); }} />}
           </Show>
           <Show when={rows().length > lists().sessions.length && !collapsed()}>
             <div class="vt-wgrail-note">{t('세션 목록 설정에서 {n}개를 숨겼습니다.', { n: rows().length - lists().sessions.length })}</div>

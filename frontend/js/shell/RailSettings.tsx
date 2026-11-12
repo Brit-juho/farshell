@@ -10,10 +10,8 @@ import { createRailPrefs } from './rail-prefs.js';
 import { t } from '../core/i18n.js';
 import {
   ATTENTION_SHOW_KEY, HIDEABLE_ORIGINS, ORIGIN_LABEL, originShowKey, type Origin,
-  VIEW_KEY, RECENT_MAX, encodeRailView, type RailView,
 } from './rail-data.js';
 import { historyApi } from '../history/api.js';
-import { numberSpinner } from '../ui/number-spinner.js';
 
 function Toggle(props: { label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -33,11 +31,6 @@ const AUTO_ARCHIVE_CHOICES = [0, 7, 14, 30, 90];
 
 export function RailSettingsLead() {
   const { prefs, set } = createRailPrefs();
-  const setView = (patch: Partial<RailView>) =>
-    set(VIEW_KEY, encodeRailView({ ...prefs().view, ...patch }));
-  // 기본 type=number 대신 공용 스피너(ui/number-spinner.js). 범위를 벗어난 입력은 스피너가 되돌린다.
-  const recentSpinner = numberSpinner({ value: prefs().view.recent, min: 1, max: RECENT_MAX, step: 1, onCommit: (n: number) => { setView({ recent: n }); } });
-  recentSpinner.element.vtSetLabel(t('최근 종료 표시 개수'));
   // 자동 보관 일수는 서버가 정한다(서버가 주기적으로 보관하므로 기기 설정이 아니다). 0 = 끔.
   const [autoDays, setAutoDays] = createSignal<number | null>(null);
   const [autoError, setAutoError] = createSignal('');
@@ -57,23 +50,14 @@ export function RailSettingsLead() {
         checked={prefs().attentionShow}
         onChange={(v) => set(ATTENTION_SHOW_KEY, v)}
       />
+      {/* 세션은 늘 저장소별로 묶인다(「저장소별로 묶기」 토글·「최근 종료 표시 개수」는 없앴다 — 종료 세션은 저장소마다 「종료 N」). */}
       <div class="vt-wtd-section-title">{t('종료한 세션')}</div>
-      <Toggle
-        label={t('저장소별로 묶기')}
-        hint={t('실행 중과 종료한 세션을 저장소 아래에 함께 보여줍니다. 이 보기에서는 이름순·수동 정렬과 위임 트리를 쓰지 않습니다.')}
-        checked={prefs().view.byRepo}
-        onChange={(v) => setView({ byRepo: v })}
-      />
-      <div class="vt-railset-row">
-        <span class="vt-railset-label">{t('최근 종료 표시 개수')}</span>
-        {recentSpinner.element}
-      </div>
       <Show when={autoDays() !== null}>
         <label class="vt-railset-row">
           <span class="vt-railset-label">{t('자동 보관')}</span>
           <select value={autoDays()!} onChange={(e) => { void saveAutoDays(Number(e.currentTarget.value)); }}>
             <For each={AUTO_ARCHIVE_CHOICES.includes(autoDays()!) ? AUTO_ARCHIVE_CHOICES : [...AUTO_ARCHIVE_CHOICES, autoDays()!].sort((a, b) => a - b)}>
-              {(d) => <option value={d} selected={d === autoDays()}>{d === 0 ? t('끄기') : t('종료 후 {n}일', { n: d })}</option>}
+              {(d) => <option value={d} selected={d === autoDays()}>{d === 0 ? t('끄기') : t('마지막 활동 후 {n}일', { n: d })}</option>}
             </For>
           </select>
         </label>

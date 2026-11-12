@@ -70,11 +70,8 @@ test('kidsProgress · lineageLabel', async () => {
   assert.strictEqual(lineageLabel({ state: 'closed', outcome: null }), '닫힘');
 });
 
-test('moveInOrder · stepInOrder', async () => {
-  const { moveInOrder, stepInOrder } = await mod();
-  assert.deepStrictEqual(Array.from(moveInOrder(['a', 'b', 'c'], 'c', 'a', 'before')), ['c', 'a', 'b']);
-  assert.deepStrictEqual(Array.from(moveInOrder(['a', 'b', 'c'], 'a', 'c', 'after')), ['b', 'c', 'a']);
-  assert.deepStrictEqual(Array.from(moveInOrder(['a', 'b'], 'a', 'zz', 'after')), ['a', 'b']);
+test('stepInOrder', async () => {
+  const { stepInOrder } = await mod();
   assert.deepStrictEqual(Array.from(stepInOrder(['a', 'b', 'c'], 'b', -1)), ['b', 'a', 'c']);
   assert.deepStrictEqual(Array.from(stepInOrder(['a', 'b'], 'a', -1)), ['a', 'b']);
 });
