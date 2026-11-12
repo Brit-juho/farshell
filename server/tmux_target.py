@@ -113,7 +113,7 @@ def get_locked_session_pane(session_name: str) -> str | None:
     """lock된 세션의 active pane id."""
     try:
         result = subprocess.run(
-            TMUX_BASE + ["display-message", "-p", "-t", tmux_runner.exact_target(session_name), "#{pane_id}"],
+            TMUX_BASE + ["display-message", "-p", "-t", tmux_runner.pane_target(session_name), "#{pane_id}"],
             capture_output=True, text=True, timeout=2,
         )
         pane_id = result.stdout.strip()

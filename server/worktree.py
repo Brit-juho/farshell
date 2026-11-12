@@ -618,7 +618,7 @@ def _open_agent(path: Path, repo_name: str, branch: str, agent_name: str) -> dic
     if wt_id_for_tag:
         tmux_runner.set_option(tmux_name, "@fsh_wt", wt_id_for_tag)
 
-    tmux_runner.run(["send-keys", "-t", tmux_runner.exact_target(tmux_name), prefix + spec.command, "Enter"],
+    tmux_runner.run(["send-keys", "-t", tmux_runner.pane_target(tmux_name), prefix + spec.command, "Enter"],
                     timeout=GIT_TIMEOUT)
     return {"ok": True, "tmux_session": tmux_name}
 
