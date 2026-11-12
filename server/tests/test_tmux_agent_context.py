@@ -168,3 +168,35 @@ def test_catalog_homes_reads_running_runtimes(tmp_path, monkeypatch):
     assert set(got) == {"$1:1"}
     assert got["$1:1"]["home"]["name"] == "farshell" and got["$1:1"]["home"]["repository"] is True
     assert got["$1:1"]["title"] == "farshell" and got["$1:1"]["name_source"] == "auto"
+
+
+def _ledger(monkeypatch, items):
+    import delegation
+    from session_catalog import identity
+    monkeypatch.setattr(delegation, "list_all", lambda: items)
+    monkeypatch.setattr(identity, "visible_ledger", lambda xs: xs)
+
+
+def _item(did, state, **kw):
+    return {"id": did, "state": state, "child": {"key": f"$c{did}:1"}, "parent": {"key": "$p:1"}, "created_at": 1.0, **kw}
+
+
+def test_lineage_hides_delegations_closed_over_a_day_ago(monkeypatch):
+    import time as _t
+    now = _t.time()
+    _ledger(monkeypatch, [_item("a", "closed", closed_at=now - 25 * 3600), _item("b", "closed", closed_at=now - 3600)])
+    lin = tmux_route._lineage_by_name({"$ca:1": "old", "$cb:1": "recent", "$p:1": "main"})
+    assert set(lin) == {"recent"} and lin["recent"]["closedAt"] == now - 3600
+
+
+def test_report_is_unread_until_the_parent_starts_a_new_turn(monkeypatch):
+    import time as _t
+    agent_status._state.clear()
+    reported = _t.time() - 10
+    _ledger(monkeypatch, [_item("a", "reported", reported_at=reported)])
+    keys = {"$ca:1": "kid", "$p:1": "main"}
+    lin = tmux_route._lineage_by_name(keys)
+    assert lin["kid"]["reportedAt"] == reported and lin["kid"]["reportUnread"] is True
+    agent_status.on_event("prompt", {"session_id": "p1", "cwd": "/tmp", "prompt": "[위임 결과 · kid · 성공] (위임 a)"}, session="main")
+    assert tmux_route._lineage_by_name(keys)["kid"]["reportUnread"] is False
+    agent_status._state.clear()

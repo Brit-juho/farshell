@@ -66,6 +66,26 @@ def test_rest_status_hides_the_local_field_from_relayed_requests(local_only, mon
     assert asyncio.run(agents_route.agent_status_get(local))["all"]["k"]["secret_note"] == "이 맥에서만"
 
 
-def test_remote_view_is_identity_when_nothing_is_local_only():
+def test_remote_view_keeps_every_other_field():
     entry = _entry()
-    assert agent_status.remote_view(entry) is entry
+    assert agent_status.remote_view(entry) == {k: v for k, v in entry.items() if k not in agent_status.LOCAL_ONLY_FIELDS}
+
+
+# --- 세션 로직 점검 단계 4: 마지막 지시(last_prompt) -------------------------------------------------
+
+def test_last_prompt_keeps_the_last_human_instruction_and_stays_on_this_mac():
+    import agent_status
+    agent_status._state.clear()
+    try:
+        agent_status.on_event("prompt", {"session_id": "lp1", "cwd": "/tmp", "prompt": "결제 버그 고쳐줘\n자세히는…"}, session="w")
+        ent = next(v for v in agent_status._state.values() if v.get("session_id") == "lp1")
+        assert ent["last_prompt"] == "결제 버그 고쳐줘"
+        for machine in ("[위임 결과 · w-2 · 성공] (위임 1)", "[FarShell 에이전트 요청 #3 · 보낸 쪽 x]", "<system-reminder>x",
+                        "하위 작업 하나\n\n---\n[FarShell 위임 d1] 이 작업은 다른 에이전트 세션이 맡긴 것입니다."):
+            agent_status.on_event("prompt", {"session_id": "lp1", "cwd": "/tmp", "prompt": machine}, session="w")
+            assert ent["last_prompt"] == "결제 버그 고쳐줘", machine
+        pub = agent_status.public_entry(ent)
+        assert pub["last_prompt"] == "결제 버그 고쳐줘"
+        assert "last_prompt" not in agent_status.remote_view(pub) and "last_prompt_at" not in agent_status.remote_view(pub)
+    finally:
+        agent_status._state.clear()

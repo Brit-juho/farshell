@@ -489,6 +489,10 @@ def _set_status(ent: dict, status: str, now: Optional[float] = None) -> None:
         ent.pop("_title_seen", None)
     if status != DONE:
         ent.pop("_reopen", None)
+    elif prev != DONE:
+        # 완료 턴 번호. 「확인 안 함」은 기기마다가 아니라 모든 기기 공통이고(D4), 확인은 이 번호 단위다 —
+        # 한 기기가 앞 완료를 확인하는 사이 새 완료가 오면 새 완료는 확인되지 않은 채 남는다.
+        ent["turn"] = int(ent.get("turn") or 0) + 1
     if status != WAITING:
         # 해소된 프롬프트가 "아직 활성"으로 남지 않게 한다(소비 뒤 활성 표식을 지운다).
         ent["prompt_id"] = None
@@ -770,6 +774,17 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
             _emit(ent, "subagents")
 
     if event in ("prompt", "user_prompt_submit"):
+        if not sub:
+            # 이 세션이 마지막으로 새 턴을 받은 시각(사람·위임 결과 가리지 않음) — 「위임 보고를 아직 안 읽음」 판정.
+            ent["prompt_at"] = time.time()
+        # 마지막으로 사람이 친 지시(200자 한 줄). 위임·위임 결과·에이전트 메시지는 사람 지시가 아니라 건너뛴다 —
+        # 그때는 앞의 사람 지시가 그대로 남는다. 이 맥의 화면에만 나간다(LOCAL_ONLY_FIELDS).
+        if not sub:
+            from human_prompt import human_prompt
+            said = human_prompt(payload.get("prompt"))
+            if said:
+                ent["last_prompt"] = said
+                ent["last_prompt_at"] = time.time()
         # 새 턴이다 — 이전 턴의 도구 이름·요약이 「작업 중 · Bash」로 남지 않게 함께 지운다.
         ent["tool"] = None
         ent.pop("last_tool", None)
@@ -1048,7 +1063,28 @@ def ack(sid: str, host: str = LOCAL_HOST) -> Optional[dict]:
     return ent
 
 
-def ack_session(tmux_name: str, host: str = LOCAL_HOST) -> int:
+def _turn_ok(ent: dict, turn: Optional[int]) -> bool:
+    """확인 요청이 가리킨 완료 턴이 아직 그 엔트리의 마지막 완료인가(없으면 옛 화면 — 지금 완료로 본다)."""
+    return turn is None or int(ent.get("turn") or 0) <= turn
+
+
+def mark_seen(tmux_name: str, turn: int, host: str = LOCAL_HOST) -> int:
+    """그 세션의 완료 턴 `turn`까지 봤다(모든 기기 공통, D4) → 바뀐 엔트리 수. done 상태는 그대로 둔다 —
+    「봤다」와 「완료를 치웠다(ack)」는 다른 사건이다. 더 새 완료는 건드리지 않는다."""
+    sweep()
+    n = 0
+    for ent in _entries_for(tmux_name, host):
+        if ent.get("status") != DONE or not _turn_ok(ent, turn):
+            continue
+        current = int(ent.get("turn") or 0)
+        if int(ent.get("seen_turn") or 0) < current:
+            ent["seen_turn"] = current
+            _emit(ent, "seen")
+            n += 1
+    return n
+
+
+def ack_session(tmux_name: str, host: str = LOCAL_HOST, turn: Optional[int] = None) -> int:
     """tmux 세션 이름으로 그 세션의 완료(done)를 확인 처리한다 → 바뀐 엔트리 수.
 
     화면은 세션 이름만 안다(훅의 session_id는 모른다). 소유자가 있으면 소유자 하나만,
@@ -1059,11 +1095,18 @@ def ack_session(tmux_name: str, host: str = LOCAL_HOST) -> int:
     sweep()
     n = 0
     for ent in _entries_for(tmux_name, host):
-        if ent.get("status") == DONE:
+        if ent.get("status") == DONE and _turn_ok(ent, turn):
+            ent["seen_turn"] = int(ent.get("turn") or 0)
             _set_status(ent, IDLE)
             _emit(ent, "ack")
             n += 1
     return n
+
+
+def last_turn_started(tmux_name: str, host: str = LOCAL_HOST) -> Optional[float]:
+    """그 세션이 마지막으로 새 턴(프롬프트)을 받은 시각. 모르면 None."""
+    times = [e.get("prompt_at") for e in _entries_for(tmux_name, host) if isinstance(e.get("prompt_at"), (int, float))]
+    return max(times) if times else None
 
 
 def _entries_for(tmux_name: str, host: str = LOCAL_HOST) -> list[dict]:
@@ -1233,8 +1276,8 @@ def tool_summary(tool, tool_input, cwd=None):
 
 # 이 맥의 브라우저에만 보내는 공개 필드(다른 맥으로 중계되는 /ws-agent·/api/agent/status 응답에서는 뺀다).
 # 원격 노출 정책: 화면에 나오지 않는 원문은 어디로도 내보내지 않고(`_input`), 사용자 입력 원문(마지막 지시 등)은
-# 이 맥의 사람 화면에만 둔다. 지금은 비어 있다 — 그런 필드가 생기면 여기에 더한다(docs/ref/agents.md).
-LOCAL_ONLY_FIELDS: frozenset = frozenset()
+# 이 맥의 사람 화면에만 둔다(docs/ref/agents.md).
+LOCAL_ONLY_FIELDS: frozenset = frozenset({"last_prompt", "last_prompt_at"})
 
 
 def remote_view(pub: dict) -> dict:

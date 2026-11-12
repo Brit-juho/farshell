@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 import re
+import time
 
 from fastapi import APIRouter, Request, WebSocket
 from fastapi.responses import JSONResponse
@@ -345,22 +346,40 @@ def _lineage_by_name(keys: dict[str, str]) -> dict[str, dict]:
         items = visible_ledger(delegation.list_all())
     except Exception:  # noqa: BLE001
         return {}
+    import agent_status
+    now = time.time()
     out: dict[str, dict] = {}
     for x in sorted(items, key=lambda x: x.get("created_at", 0)):
         child = keys.get(x["child"]["key"])
         if not child or x.get("state") == "starting":
             continue
+        # 닫힌 위임은 하루 뒤 가지에서 뺀다 — 자식 세션이 남아 있으면 보통 세션으로 보인다.
+        if x.get("state") == "closed" and now - (x.get("closed_at") or now) > CLOSED_LINEAGE_SECONDS:
+            continue
+        parent = keys.get(x["parent"]["key"])     # 부모 세션이 사라졌으면 None
+        reported_at = x.get("reported_at")
+        # 보고가 왔는데 부모가 그 뒤로 새 턴을 시작하지 않았다(보고를 아직 읽지 않았다).
+        unread = False
+        if x.get("state") == "reported" and isinstance(reported_at, (int, float)) and parent:
+            started = agent_status.last_turn_started(parent)
+            unread = started is None or started < reported_at
         summary = x.get("summary") or ""
         out[child] = {
             "delegation": x["id"],
-            "parent": keys.get(x["parent"]["key"]),     # 부모 세션이 사라졌으면 None
+            "parent": parent,
             "state": x.get("state"),
             "outcome": x.get("outcome"),
             "createdAt": x.get("created_at"),
+            "reportedAt": reported_at,
+            "closedAt": x.get("closed_at"),
+            "reportUnread": unread,
             "task": x.get("task_preview", "")[:200],
             "summary": summary[:600] + ("…" if len(summary) > 600 else ""),
         }
     return out
+
+
+CLOSED_LINEAGE_SECONDS = 24 * 3600
 
 
 

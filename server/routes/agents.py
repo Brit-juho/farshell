@@ -751,6 +751,18 @@ async def agent_status_get(request: Request):
 
 class AckRequest(BaseModel):
     tmux_session: str = Field(min_length=1, max_length=128)
+    # 확인한 완료 턴(`turn`). 그 뒤에 새 완료가 왔으면 그건 치우지 않는다. 없으면(옛 화면) 지금 완료를 치운다.
+    turn: int | None = Field(default=None, ge=0)
+
+
+class SeenRequest(BaseModel):
+    tmux_session: str = Field(min_length=1, max_length=128)
+    turn: int = Field(ge=0)
+
+
+class SeenResponse(BaseModel):
+    ok: bool
+    seen: int
 
 
 class AckResponse(BaseModel):
@@ -765,7 +777,13 @@ async def agent_ack(body: AckRequest):
     화면만 idle로 바꾸면 서버의 done이 30분 TTL까지 남아, 다음 스냅샷(15초 하트비트)이
     "idle→done 전이"로 읽혀 완료와 「확인하지 않음」이 되살아났다. 서버가 내리면 모든 기기가
     같은 idle을 받는다(`ack` 이벤트가 /ws-agent로 나간다)."""
-    return {"ok": True, "acked": agent_status.ack_session(body.tmux_session)}
+    return {"ok": True, "acked": agent_status.ack_session(body.tmux_session, turn=body.turn)}
+
+
+@human_router.post("/api/agent/seen", response_model=SeenResponse)
+async def agent_seen(body: SeenRequest):
+    """사람이 그 세션의 완료(턴 `turn`)를 봤다 — 「확인 안 함」 표시를 모든 기기에서 내린다(D4). done은 그대로다."""
+    return {"ok": True, "seen": agent_status.mark_seen(body.tmux_session, body.turn)}
 
 
 @router.websocket("/ws-agent")
