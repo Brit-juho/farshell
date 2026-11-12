@@ -68,22 +68,24 @@ export function mountSessionNode(root: HTMLElement, props: Parameters<typeof Ses
   return render(() => <SessionNode {...props} />, root);
 }
 
-/** 저장소 묶음 하나를 그린다. calls에 열기·메뉴·접기가 쌓인다. */
-export function mountRepoBranch(root: HTMLElement, group: any, opts: { collapsed?: boolean; ended?: any[]; calls?: string[] } = {}) {
+/** 저장소 묶음 하나를 그린다. calls에 열기·메뉴·접기가 쌓인다. 돌려준 setGroup으로 새 묶음 객체를 넣어 볼 수 있다. */
+export function mountRepoBranch(root: HTMLElement, group: any, opts: { collapsed?: boolean; ended?: any[]; endedOpen?: boolean; calls?: string[]; editing?: string } = {}) {
   const calls = opts.calls || [];
-  return render(() => (
+  const [g, setGroup] = createSignal<any>(group);
+  render(() => (
     <div id="vt-wgrail">
       <RepoBranch
-        group={group}
+        group={g()}
         collapsed={!!opts.collapsed}
         onToggle={() => calls.push('toggle')}
         isActive={() => false}
-        nodeProps={(row) => ({ onOpen: () => calls.push('open:' + row.name), onContext: () => calls.push('menu:' + row.name) })}
-        kidProps={(row) => ({ onOpen: () => calls.push('open:' + row.name), onContext: () => calls.push('menu:' + row.name) })}
+        nodeProps={(row) => ({ onOpen: () => calls.push('open:' + row.name), onContext: () => calls.push('menu:' + row.name),
+          editing: opts.editing === row.name, editingValue: row.name, onEditCommit: () => calls.push('commit:' + row.name) })}
         kidsCollapsed={() => false}
         hasEnded={(opts.ended || []).length > 0}
-        ended={() => <EndedFold sessions={opts.ended || []} open={false} onToggle={() => calls.push('ended')} onChanged={() => {}} />}
+        ended={() => <EndedFold sessions={opts.ended || []} open={!!opts.endedOpen} onToggle={() => calls.push('ended')} onChanged={() => {}} />}
       />
     </div>
   ), root);
+  return { setGroup };
 }

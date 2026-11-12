@@ -43,14 +43,16 @@ export function endLines(last: boolean): string {
   return v(X1, 0, last ? 9 : '100%');
 }
 
+const laneKey = (l: Lane<SessionRow>) => l.worktree?.key ?? '';
+const rowKey = (r: SessionRow) => r.tmuxName || r.sessionId || r.name;
+
 export interface RepoBranchProps {
   group: RepoGroup<SessionRow, any>;
   collapsed: boolean;
   onToggle: () => void;
   isActive: (row: SessionRow) => boolean;
   /** 세션 칸에 넘길 나머지(편집·메뉴·열기·위임 접기 …) — Rail.tsx가 정한다. */
-  nodeProps: (row: SessionRow, kids: SessionRow[]) => Omit<Parameters<typeof SessionNode>[0], 'row' | 'active' | 'geometry'>;
-  kidProps: (row: SessionRow) => Pick<Parameters<typeof KidNode>[0], 'onOpen' | 'onContext'>;
+  nodeProps: (row: SessionRow, kids?: SessionRow[]) => Omit<Parameters<typeof SessionNode>[0], 'row' | 'active' | 'geometry'>;
   kidsCollapsed: (row: SessionRow) => boolean;
   /** 「종료 N」 칸들. 마지막 칸 여부를 받아 그린다. */
   ended?: (last: boolean) => JSX.Element;
@@ -87,7 +89,12 @@ export function RepoBranch(p: RepoBranchProps) {
         </span>
       </button>
       <Show when={!p.collapsed}>
-        <For each={lanes()}>{(lane, li) => <LaneView lane={lane} more={moreAfterLane(li())} {...p} />}</For>
+        {/* 갈래·세션은 열쇠(문자열)로 돈다 — 폴링마다 새 객체가 와도 칸 DOM(편집 중 입력창·열린 메뉴·포커스)이 그대로다. */}
+        <For each={lanes().map(laneKey)}>{(key, li) => (
+          <Show when={lanes().find((l) => laneKey(l) === key)}>
+            {(lane) => <LaneView lane={lane()} more={moreAfterLane(li())} {...p} />}
+          </Show>
+        )}</For>
         <Show when={p.hasEnded}>{p.ended?.(true)}</Show>
       </Show>
     </section>
@@ -111,33 +118,40 @@ function LaneView(props: RepoBranchProps & { lane: Lane<SessionRow>; more: boole
           </div>
         )}
       </Show>
-      <For each={sessions()}>{(s, si) => {
+      <For each={sessions().map((x) => rowKey(x.row))}>{(key, si) => {
+        const entry = () => sessions().find((x) => rowKey(x.row) === key);
         const lastInLane = () => si() === sessions().length - 1;
-        const kidsShown = () => (props.kidsCollapsed(s.row) ? [] : s.kids);
+        const kidsShown = () => { const e = entry(); return !e || props.kidsCollapsed(e.row) ? [] : e.kids; };
         // 메인 가지(lane 1)는 줄기 자체가 가지라 「아래에 더 있음」에 같은 가지의 다음 세션도 든다.
         const more = () => (lane2() ? props.more : !lastInLane() || props.more);
         return (
-          <>
-            <SessionNode
-              row={s.row}
-              active={props.isActive(s.row)}
-              geometry={{ lane: laneNo(), lines: sessionLines(laneNo(), { more: more(), moreInLane: !lastInLane(), kids: kidsShown().length > 0 }) }}
-              {...props.nodeProps(s.row, s.kids)}
-            />
-            {props.afterNode?.(s.row)}
-            <For each={kidsShown()}>{(kid, ki) => (
-              <KidNode
-                row={kid}
-                active={props.isActive(kid)}
-                lane={laneNo()}
-                lines={kidLines(laneNo(), {
-                  more: props.more,
-                  continueParent: ki() < kidsShown().length - 1 || (lane2() ? !lastInLane() : more()),
-                })}
-                {...props.kidProps(kid)}
+          <Show when={entry()}>
+            {(s) => <>
+              <SessionNode
+                row={s().row}
+                active={props.isActive(s().row)}
+                geometry={{ lane: laneNo(), lines: sessionLines(laneNo(), { more: more(), moreInLane: !lastInLane(), kids: kidsShown().length > 0 }) }}
+                {...props.nodeProps(s().row, s().kids)}
               />
-            )}</For>
-          </>
+              {props.afterNode?.(s().row)}
+              <For each={kidsShown().map(rowKey)}>{(kk, ki) => (
+                <Show when={kidsShown().find((k) => rowKey(k) === kk)}>
+                  {(kid) => (
+                    <KidNode
+                      row={kid()}
+                      active={props.isActive(kid())}
+                      lane={laneNo()}
+                      lines={kidLines(laneNo(), {
+                        more: props.more,
+                        continueParent: ki() < kidsShown().length - 1 || (lane2() ? !lastInLane() : more()),
+                      })}
+                      {...props.nodeProps(kid())}
+                    />
+                  )}
+                </Show>
+              )}</For>
+            </>}
+          </Show>
         );
       }}</For>
     </>

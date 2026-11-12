@@ -133,6 +133,8 @@ export function Rail(props: RailProps) {
   onCleanup(() => clearInterval(staleTimer));
 
   let catalogRequest = 0;
+  // 「종료 세션 더 불러오기」로 첫 쪽 뒤를 받았는가. 보관함↔목록을 바꾸면 다시 첫 쪽부터다.
+  let extraPages = false;
   const refreshCatalog = async (more = false) => {
     if (viewHostId !== LOCAL_HOST) return;
     const request = ++catalogRequest;
@@ -142,7 +144,18 @@ export function Rail(props: RailProps) {
       if (more && catalog()?.next) params.set('cursor', catalog()!.next!);
       const data = await historyApi('/api/session-catalog?' + params);
       if (request !== catalogRequest) return;
-      setCatalog(more && catalog() ? { ...data, sessions: [...catalog()!.sessions, ...data.sessions] } : data);
+      const prev = catalog();
+      if (more && prev) {
+        setCatalog({ ...data, sessions: [...prev.sessions, ...data.sessions.filter((x: any) => !prev.sessions.some((y) => y.id === x.id))] });
+      } else if (prev && extraPages) {
+        // 「더 불러오기」로 받아 둔 뒤쪽은 다음 폴링(첫 쪽만 다시 읽음)에 버리지 않는다. 사라진 기록은 다시 열 때 정리된다.
+        const fresh = new Set(data.sessions.map((x: any) => x.id));
+        const tail = prev.sessions.filter((x) => !fresh.has(x.id) && (x.last_activity ?? 0) <= Math.min(...data.sessions.map((y: any) => y.last_activity ?? 0)));
+        setCatalog({ ...data, sessions: [...data.sessions, ...tail], next: prev.next });
+      } else {
+        setCatalog(data);
+      }
+      if (more) extraPages = true;
     } catch (e) {
       // 옛 호스트(카탈로그 없음)는 지금의 라이브 레일을 그대로 쓴다. 답 자체가 없던
       // 실패(마감·네트워크)만 폴러에 알려 간격을 늘린다.
@@ -299,7 +312,9 @@ export function Rail(props: RailProps) {
   });
   const isLiveCatalog = (c: any) => c.ended == null && !!c.runtime_id
     && rows().some((r) => r.tmuxName === c.tmux_name && r.physicalKey === c.physical_key);
-  const tree = createMemo<RepoGroup<SessionRow, any>[]>(() => buildRepoTree({
+  // 이름을 고치는 동안은 그래프도 얼린다 — 카탈로그 폴링(5초)마다 새 묶음 객체가 오면 <For>가 칸을 다시 만들어 편집 중이던
+  // 입력창이 뜯겨 나간다(행 메모를 얼리는 것과 같은 이유, 위 rows 주석).
+  const tree = createMemo<RepoGroup<SessionRow, any>[]>((prev) => editingSessionKey() && prev ? prev : buildRepoTree({
     rows: running(),
     ended: viewHostId === LOCAL_HOST ? catalog()?.sessions || [] : [],
     workspaces: catalog()?.workspaces || [],
@@ -643,30 +658,40 @@ export function Rail(props: RailProps) {
           </Show>
           {/* 보관함 — 탭이 아니라 같은 자리의 목록 전환이다. 위의 「최근 종료」 아래 한 줄이 여기로 온다. */}
           <Show when={!collapsed() && archiveOpen() && catalog()}>
-            {data => <ArchiveList data={data()} onBack={() => { setArchiveOpen(false); catalogPoll.kick(); }}
+            {data => <ArchiveList data={data()} onBack={() => { setArchiveOpen(false); extraPages = false; catalogPoll.kick(); }}
               onChanged={() => { catalogPoll.kick(); }} onMore={() => { void refreshCatalog(true).catch(() => {}); }} />}
           </Show>
           {/* 저장소 가지 그래프 — 저장소 → (메인 · 워크트리 가지) → 세션 → 위임 하위, 맨 아래 「종료 N」. */}
           <Show when={!collapsed() && !archiveOpen()}>
-            <For each={tree()}>{(group) => (
-              <RepoBranch
-                group={group}
-                collapsed={repoCollapsed(group)}
-                onToggle={() => toggleView('repo:' + repoKey(group))}
-                isActive={isActiveRow}
-                nodeProps={nodeProps}
-                kidProps={(kid) => ({ onOpen: (e: MouseEvent) => openRow(e, kid), onContext: (e: MouseEvent) => contextRow(e, kid) })}
-                kidsCollapsed={kidsCollapsed}
-                afterNode={(row) => <NativeChildren row={row} />}
-                hasEnded={group.ended.length > 0}
-                ended={() => <EndedFold sessions={group.ended} open={endedOpen(group)}
-                  onToggle={() => toggleView('ended:' + repoKey(group))} onChanged={() => { catalogPoll.kick(); }} />}
-              />
+            {/* 저장소는 열쇠(문자열)로 돈다 — 폴링마다 묶음 객체가 새로 와도 칸 DOM(펼친 종료 칸·열린 메뉴·포커스)이 남는다. */}
+            <For each={tree().map((g) => g.key)}>{(key) => (
+              <Show when={tree().find((g) => g.key === key)}>
+                {(group) => (
+                  <RepoBranch
+                    group={group()}
+                    collapsed={repoCollapsed(group())}
+                    onToggle={() => toggleView('repo:' + repoKey(group()))}
+                    isActive={isActiveRow}
+                    nodeProps={nodeProps}
+                    kidsCollapsed={kidsCollapsed}
+                    afterNode={(row) => <NativeChildren row={row} />}
+                    hasEnded={group().ended.length > 0}
+                    ended={() => <EndedFold sessions={group().ended} open={endedOpen(group())}
+                      onToggle={() => toggleView('ended:' + repoKey(group()))} onChanged={() => { catalogPoll.kick(); }} />}
+                  />
+                )}
+              </Show>
             )}</For>
+            {/* 카탈로그 한 쪽(200개) 밖의 오래된 종료 세션 — 더 불러오면 각 저장소의 「종료 N」에 붙는다. */}
+            <Show when={viewHostId === LOCAL_HOST && catalog()?.next}>
+              <button type="button" class="vt-catalog-more-link" onClick={() => { void refreshCatalog(true).catch(() => {}); }}>
+                {t('종료 세션 더 불러오기')}
+              </button>
+            </Show>
           </Show>
           {/* 보관함 한 줄. 카탈로그가 없는 옛 호스트는 위의 실행 중 목록만 남는다. */}
           <Show when={!collapsed() && !archiveOpen() && catalog()}>
-            {data => <ArchiveEntry count={data().archived_count ?? 0} onOpen={() => { setArchiveOpen(true); catalogPoll.kick(); }} />}
+            {data => <ArchiveEntry count={data().archived_count ?? 0} onOpen={() => { setArchiveOpen(true); extraPages = false; catalogPoll.kick(); }} />}
           </Show>
           <Show when={rows().length > lists().sessions.length && !collapsed()}>
             <div class="vt-wgrail-note">{t('세션 목록 설정에서 {n}개를 숨겼습니다.', { n: rows().length - lists().sessions.length })}</div>

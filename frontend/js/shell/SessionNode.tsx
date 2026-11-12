@@ -147,11 +147,9 @@ export function SessionNode(props: {
   );
 }
 
-/** 위임 하위 세션 한 줄(가지에서 갈라진 작은 칸): 이름 · 「보고 도착」/「진행 중」. 누르면 그 세션이 열린다. */
-export function KidNode(props: {
-  row: SessionRow; active: boolean; lane: 1 | 2; lines: string;
-  onOpen: (e: MouseEvent) => void; onContext: (e: MouseEvent) => void;
-}) {
+/** 위임 하위 세션 한 줄(가지에서 갈라진 작은 칸): 이름 · 「보고 도착」/「진행 중」 · ⋯. 누르면 그 세션이 열린다.
+ * 일반 칸과 같은 이름 편집·끌어서 분할·메뉴를 받는다(메뉴는 ⋯ 버튼으로 키보드에서도 열린다). */
+export function KidNode(props: Omit<Parameters<typeof SessionNode>[0], 'geometry'> & { lane: 1 | 2; lines: string }) {
   const l = () => props.row.lineage;
   const label = () => (l() ? kidLabel(l()!) : null);
   const state = () => normalizeState(props.row.status);
@@ -165,19 +163,42 @@ export function KidNode(props: {
       onClick={props.onOpen}
       onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); props.onOpen(e as unknown as MouseEvent); } }}
       onContextMenu={(e) => { e.preventDefault(); props.onContext(e); }}
+      draggable={!!props.draggable}
+      onDragStart={props.onDragStart}
     >
       <div class="vt-rg-gut">
         <svg class="vt-rg-ln" aria-hidden="true" innerHTML={props.lines} />
         <span class="vt-rg-kidmark" data-state={state()} innerHTML={icon('terminal', 13, 2)} />
       </div>
       <div class="vt-rg-body vt-rg-a">
-        <span class="vt-rg-name" data-tip={l()?.task ? t('맡은 일 · {task}', { task: l()!.task }) : undefined} data-tip-side="right">{props.row.name}</span>
+        <Show when={props.editing} fallback={
+          <span class="vt-rg-name" data-tip={l()?.task ? t('맡은 일 · {task}', { task: l()!.task }) : undefined} data-tip-side="right">{props.row.name}</span>
+        }>
+          <input
+            type="text" class="vt-input vt-wgrail-name-edit" value={props.editingValue ?? ''}
+            ref={(el) => { queueMicrotask(() => { el.focus(); el.select(); }); }}
+            onInput={(e) => props.onEditInput?.(e.currentTarget.value)}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); props.onEditCommit?.(); }
+              else if (e.key === 'Escape') { e.preventDefault(); props.onEditCancel?.(); }
+            }}
+            onBlur={() => props.onEditCommit?.()}
+          />
+        </Show>
         <span class="vt-rg-sp" />
         <Show when={state() === 'waiting'} fallback={
           <Show when={label()}>{(x) => <span class="vt-rg-tm" data-tone={x().tone}>{x().text}</span>}</Show>
         }>
           <span class="vt-rg-tm c-waiting">{STATE_LABEL.waiting}</span>
         </Show>
+        <button
+          type="button" class="vt-icon-btn sm vt-rg-more" aria-haspopup="menu"
+          aria-label={t('{name} 메뉴', { name: props.row.name })}
+          data-tip={t('메뉴')} data-tip-side="left"
+          onClick={(e) => { e.stopPropagation(); props.onContext(e); }}
+          innerHTML={icon('more-horizontal', 16, 2)}
+        />
       </div>
     </div>
   );

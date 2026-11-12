@@ -1002,6 +1002,8 @@ window.__VT_I18N = {
   "tmux 3.2+ 필요 (현재: {ver}). 직접 실행:": "Needs tmux 3.2+ (have: {ver}). Run it directly:",
   "tmux pane 밖입니다 — pane id 없이 cwd로만 판정됩니다": "Not inside a tmux pane — matching by cwd only, without a pane id",
   "tmux 리사이즈 안정화": "tmux resize stability",
+  "{name} 연결된 대화 보기": "Show linked conversations of {name}",
+  "종료 세션 더 불러오기": "Load more ended sessions",
   "마지막 활동 후 {n}일": "{n} days after last activity",
   "tmux 이름 · {name}": "tmux name · {name}",
   "{name} 이어서 시작": "Resume {name}",

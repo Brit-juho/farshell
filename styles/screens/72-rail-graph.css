@@ -126,6 +126,10 @@
 #vt-wgrail .vt-rg-er .vt-rg-a { height:20px; }
 #vt-wgrail .vt-rg-er .vt-rg-name { font-weight:var(--weight-medium); color:var(--color-sub); }
 #vt-wgrail .vt-rg-ended.sel .vt-rg-er { background:var(--color-state-selected); }
+#vt-wgrail .vt-rg-er-toggle {
+  flex:1; min-width:0; display:flex; align-items:center; gap:7px; padding:0; margin:0; border:0; background:transparent;
+  color:inherit; font:inherit; text-align:left; cursor:pointer;
+}
 #vt-wgrail .vt-rg-mk2 { flex:none; display:inline-flex; color:var(--color-sub); }
 #vt-wgrail .vt-rg-mk2 svg { width:12px; height:12px; }
 #vt-wgrail .vt-rg-nm { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

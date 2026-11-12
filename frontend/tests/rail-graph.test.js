@@ -206,3 +206,51 @@ test('저장소 밖 묶음 — 머리 이름은 「저장소 밖」', async () =
   assert.match(root.querySelector('.vt-rg-rn').textContent, /저장소 밖/);
   assert.ok(root.querySelector('.vt-rg.outside'));
 });
+
+// ── 교차 검토(Codex)에서 나온 보강 ─────────────────────────────────────────────
+
+const lin = (parent) => ({ delegation: 'd', parent, state: 'running', outcome: null, createdAt: 1, task: '', summary: '' });
+const groupWithKid = (stamp = 0) => ({
+  key: 'P', name: 'farshell', repository: true, root: '/r/f', mainBranch: 'dev', count: 2, attention: false, lastActivity: stamp,
+  lanes: [{ worktree: null, sessions: [{ row: row({ name: 'p', since: stamp }), kids: [row({ name: 'k', lineage: lin('p'), since: stamp })] }] }],
+  ended: [],
+});
+
+test('하위 칸도 ⋯ 메뉴 버튼(키보드)·이름 편집을 받는다', async () => {
+  const m = await mod();
+  const root = m.document.createElement('div');
+  m.document.body.appendChild(root);
+  const calls = [];
+  m.mountRepoBranch(root, groupWithKid(), { calls, editing: 'k' });
+  const kid = root.querySelector('.vt-rg-kid');
+  assert.ok(kid.querySelector('input.vt-wgrail-name-edit'), '하위 칸도 제자리 편집 입력창');
+  kid.querySelector('.vt-rg-more').click();
+  assert.deepStrictEqual(calls, ['menu:k']);
+});
+
+test('폴링으로 새 묶음 객체가 와도 같은 열쇠의 칸 DOM은 그대로다(편집 입력창·열린 메뉴가 안 뜯긴다)', async () => {
+  const m = await mod();
+  const root = m.document.createElement('div');
+  m.document.body.appendChild(root);
+  const { setGroup } = m.mountRepoBranch(root, groupWithKid(1));
+  const before = [root.querySelector('.vt-rg-node'), root.querySelector('.vt-rg-kid')];
+  setGroup(groupWithKid(2));
+  const after = [root.querySelector('.vt-rg-node'), root.querySelector('.vt-rg-kid')];
+  assert.strictEqual(after[0], before[0]);
+  assert.strictEqual(after[1], before[1]);
+});
+
+test('종료 칸 — 칸은 버튼이 아니고, 펼치기·이어서·메뉴가 형제 버튼이다', async () => {
+  const m = await mod();
+  const root = m.document.createElement('div');
+  m.document.body.appendChild(root);
+  m.mountRepoBranch(root, { ...groupWithKid(), lanes: [] }, { endedOpen: true,
+    ended: [{ id: 'e', title: '끝난 일', ended: 1, last_activity: 1, resume_conversation_id: 'c', provider: 'claude' }] });
+  const er = root.querySelector('.vt-rg-er');
+  assert.strictEqual(er.getAttribute('role'), null);
+  const toggle = er.querySelector('button.vt-rg-er-toggle');
+  assert.strictEqual(toggle.getAttribute('aria-expanded'), 'false');
+  assert.ok(!toggle.querySelector('button'), '버튼 안에 버튼이 없다');
+  assert.ok(er.querySelector('button.vt-rg-rs'), '「이어서」는 늘 보인다');
+  assert.ok(er.querySelector('button.vt-rg-more'));
+});

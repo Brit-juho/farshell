@@ -101,14 +101,18 @@ export function EndedItem(p: { session: any; last: boolean; onChanged: () => voi
   const lastText = () => (typeof s().last_user_text === 'string' && s().last_user_text ? s().last_user_text : '');
   return (
     <div class="vt-rg-ended" classList={{ 'is-busy': busy(), sel: opened() }}>
-      <div class="vt-rg-row vt-rg-end vt-rg-er" role="button" tabindex="0" aria-expanded={opened()}
-        onClick={() => { void toggle(); }} onContextMenu={openMenu}
-        onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); void toggle(); } }}>
+      {/* 칸 자체는 버튼이 아니다 — 펼치기(제목 버튼)·이어서·메뉴가 서로 형제인 버튼이다(버튼 안에 버튼을 두지 않는다).
+          칸의 빈 곳을 눌러도 펼쳐지는 것은 마우스 편의일 뿐이고, 키보드는 제목 버튼으로 같은 일을 한다. */}
+      <div class="vt-rg-row vt-rg-end vt-rg-er" onClick={() => { void toggle(); }} onContextMenu={openMenu}>
         <span class="vt-rg-gut"><svg class="vt-rg-ln" aria-hidden="true" innerHTML={itemLines(p.last)} /><span class="vt-rg-hol" /></span>
         <div class="vt-rg-body">
           <div class="vt-rg-a">
-            <Show when={s().provider}><span class="vt-rg-mk2" innerHTML={agentMark(s().provider)} /></Show>
-            <span class="vt-rg-name">{s().title}</span>
+            <button type="button" class="vt-rg-er-toggle" aria-expanded={opened()}
+              aria-label={t('{name} 연결된 대화 보기', { name: s().title })}
+              onClick={(e) => { e.stopPropagation(); void toggle(); }}>
+              <Show when={s().provider}><span class="vt-rg-mk2" innerHTML={agentMark(s().provider)} /></Show>
+              <span class="vt-rg-name">{s().title}</span>
+            </button>
             <span class="vt-rg-sp" />
             <span class="vt-rg-tm">{agoLabel(endedActivity(s()))}</span>
             <Show when={resumable()} fallback={
@@ -126,7 +130,7 @@ export function EndedItem(p: { session: any; last: boolean; onChanged: () => voi
               </button>
             </Show>
             <button type="button" class="vt-icon-btn sm vt-rg-more" aria-haspopup="menu" aria-label={t('{name} 메뉴', { name: s().title })}
-              data-tip={t('메뉴')} data-tip-side="left" onClick={openMenu} innerHTML={icon('more-horizontal', 16, 2)} />
+              data-tip={t('메뉴')} data-tip-side="left" onClick={(e) => { e.stopPropagation(); openMenu(e); }} innerHTML={icon('more-horizontal', 16, 2)} />
           </div>
           <Show when={branch() || s().conversation_count}>
             <div class="vt-rg-b mono">
