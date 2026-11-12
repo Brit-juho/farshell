@@ -108,13 +108,17 @@ test('여러 단계 위임 — 손자도 최상위 세션 밑에 깊이 우선�
     row({ name: 'g1', lineage: lin('c1', 3), home: home('x', '/r/x'), status: 'waiting' }),
     row({ name: 'loopA', lineage: lin('loopB', 1), home: home('x', '/r/x') }),
     row({ name: 'loopB', lineage: lin('loopA', 1), home: home('x', '/r/x') }),
+    row({ name: 'hang', lineage: lin('loopA', 2), home: home('x', '/r/x') }),
+    row({ name: 'hang2', lineage: lin('hang', 3), home: home('x', '/r/x') }),
   ] });
   const p = tree[0].lanes[0].sessions.find((e) => e.row.name === 'p');
   assert.deepStrictEqual(names(p.kids), ['c1', 'g1', 'c2']);
   assert.ok(tree[0].attention, '손자가 입력 대기여도 저장소가 위로');
   const top = names(tree[0].lanes[0].sessions.map((e) => e.row)).sort();
   assert.deepStrictEqual(top, ['loopA', 'loopB', 'p'], '계보 고리(데이터 이상)는 최상위로 — 목록에서 사라지지 않는다');
-  assert.strictEqual(tree[0].count, 6);
+  const a = tree[0].lanes[0].sessions.find((e) => e.row.name === 'loopA');
+  assert.deepStrictEqual(names(a.kids), ['hang', 'hang2'], '고리에 매달린 자손은 그대로 하위');
+  assert.strictEqual(tree[0].count, 8);
 });
 
 test('종료(보관 안 함)는 카탈로그 자리의 저장소 「종료 N」으로, 실행 중으로 그려진 것·보관된 것은 빠진다', async () => {

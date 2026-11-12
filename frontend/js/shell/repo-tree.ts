@@ -117,13 +117,16 @@ export function buildRepoTree<R extends RepoRowLike, E extends EndedLike>(inp: B
   const activity = (r: R) => inp.activityOf?.(r) ?? Number(r.since ?? 0);
   const names = new Set(inp.rows.map((r) => r.tmuxName).filter(Boolean) as string[]);
   // 위임 하위 세션은 부모 밑으로 — 부모가 목록에 있을 때만(부모가 사라졌으면 최상위로 올린다).
-  // 계보가 고리를 이루면(데이터 이상) 그 세션들은 최상위로 둔다 — 하위로 두면 어느 최상위 밑에도 안 그려져 목록에서 사라진다.
+  // 계보가 고리를 이루면(데이터 이상) 고리에 든 세션만 최상위로 둔다 — 하위로 두면 어느 최상위 밑에도 안 그려져 목록에서
+  // 사라진다. 고리에 매달린 자손(C → 고리의 A)은 그대로 하위다(A가 최상위가 되므로 그 밑에 그려진다).
   const byName = new Map(inp.rows.filter((r) => r.tmuxName).map((r) => [r.tmuxName!, r] as const));
   const inCycle = (r: R): boolean => {
-    const seen = new Set<string>([r.tmuxName || '']);
+    const self = r.tmuxName;
+    if (!self) return false;
+    const seen = new Set<string>();
     let p = r.lineage?.parent;
-    while (p && byName.has(p)) {
-      if (seen.has(p)) return true;
+    while (p && byName.has(p) && !seen.has(p)) {
+      if (p === self) return true;
       seen.add(p);
       p = byName.get(p)!.lineage?.parent;
     }

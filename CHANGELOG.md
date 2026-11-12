@@ -35,6 +35,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Conversation titles are refreshed as the transcript grows (Claude writes its title later in the file; Codex conversations take their first prompt).
 
 ### Fixed
+- A delegated session whose parent is itself a delegated session (a grandchild) is listed again under the top session on the rail and phone; before, it was not drawn anywhere. A broken lineage loop no longer hides its sessions.
+- The "Another account, this time only" line in the New session menu now appears as soon as the account list arrives; before, it showed only the next time the menu was opened.
+- A long main branch in a rail repository head is shortened with an ellipsis (full name in the tooltip) instead of pushing the count and buttons aside.
 - On the rail, a selected or waiting session cell raises its secondary text one step on the tint (muted to sub, sub to text, and the amber waiting text to text) so it keeps 4.5:1 contrast, as the old rows did.
 - **Claude Code's own worktrees (`.claude/worktrees/<name>`) show up** in the session location and the repository list, and the catalog places their sessions under the repository. Files inside stay closed to the browser.
 - **A session's repository is no longer lost to a passing Git error** — the first placement is retried, and a session first seen outside a repository moves once into the repository it later works in. Session rows now carry that place (`home`) and the visible name.
