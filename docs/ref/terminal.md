@@ -414,10 +414,26 @@ normal row (`dead`, `dead_status`), not an incomplete snapshot. A mismatch betwe
 after it ended (identity reuse) is skipped and logged for that session only; the rest of the same reconcile — other
 stops, new sessions, and the collection that follows — still commits. Tests: `server/tests/test_catalog_observe.py`.
 
-Catalog resume creates an interactive shell, then sends the quoted Claude/Codex resume
-command to the exact pane ID returned by tmux. Exiting the CLI returns to that shell;
-it does not stop the tmux runtime. Creation or command-delivery uncertainty records
-`needs_review`, and retrying the operation never sends the command again.
+Catalog resume starts the CLI as the pane's own process: it creates the session (named like any other session after
+the conversation's repository), sets `remain-on-exit failed` on the exact pane ID returned by tmux, then
+`respawn-pane -k` replaces the shell with `env PATH=<path> <cli> --resume …`. Nothing is typed into a shell, so no
+quoting or terminal bytes are involved. Exiting the CLI normally ends the session; a CLI that fails to start keeps its
+pane (and the error) on screen. The catalog setting `resume_ends_session` (default on) switches back to the old way —
+an interactive shell with the quoted command sent to that pane, which survives the CLI. Creation or launch
+uncertainty records `needs_review`, and retrying the operation never launches again.
+
+The CLI binary is resolved by `server/cli_resolve.py`, in this order: the path recorded from the process that last ran
+that conversation (read from the process table when its hook reports in, never from the hook body; kept as the
+unresolved link, so a self-updating CLI still works), the PATH recorded from that process, the server's PATH, then
+the usual install folders (`~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `~/.bun/bin`). A candidate is used
+only if it is an absolute, executable regular file named after the CLI whose real file, folders and link folder are
+owned by the user or root and not writable by others. The CLI gets the recorded PATH (else the server's PATH plus the
+binary's folder and the usual folders) so its own tools resolve as before. A conversation recorded under a managed
+account's folder (`~/.vt/agent-profiles/<id>/<tool>`) resumes with that account, the same injection as a new account
+session. Profile launches and Codex usage lookups use the same resolution. `fsh doctor` shows what the server finds.
+Before this, a server started at login (`zsh -l`, which does not read `~/.zshrc`) had no `~/.local/bin` on PATH and
+resume failed with 「CLI 실행 파일을 찾을 수 없습니다」 after a reboot; `bin/fsh` now also appends the usual folders to the
+server's PATH (at the end, without running shell config).
 
 Resume restores permissions as well as the conversation. Claude uses a verified owner-hook
 record keyed by native profile root and conversation ID, explicitly including `default`.

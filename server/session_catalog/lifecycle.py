@@ -13,7 +13,7 @@ import zstandard
 import fsguard
 import store_lock
 import tmux_runner
-from .db import touch_activity, setting, database, directory, identifier, uid, encode, changed, host_id, resume_target, Refused
+from .db import touch_activity, resume_ends_session, database, directory, identifier, uid, encode, changed, host_id, resume_target, Refused
 from . import permission_modes, execution_policy
 from . import inventory
 
@@ -175,7 +175,7 @@ def resume(cid, opid, *, sid=None):
             seen = db.execute('SELECT r.cli_path,r.cli_env_path FROM runtimes r JOIN conversation_executions e ON e.runtime_id=r.id'
                               ' WHERE e.conversation_id=? AND (r.cli_path IS NOT NULL OR r.cli_env_path IS NOT NULL)'
                               ' ORDER BY r.started DESC LIMIT 1', (cid,)).fetchone()
-            ends_with_cli = setting(db, 'resume_ends_session', True) is not False
+            ends_with_cli = resume_ends_session(db)
         recorded_path, recorded_env = (seen['cli_path'], seen['cli_env_path']) if seen else (None, None)
         binary = cli_resolve.resolve(conversation['provider'], recorded_path, recorded_env)
         if not binary:

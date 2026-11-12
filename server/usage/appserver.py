@@ -24,7 +24,6 @@ import json
 import math
 import os
 import select
-import shutil
 import signal
 import subprocess
 import threading
@@ -304,7 +303,8 @@ def _refresh_locked(profile, pid, root, now):
     except registry.Refused:
         _skipped[pid] = time.monotonic() + SKIP_RECHECK
         return "busy"
-    codex = shutil.which("codex")
+    import cli_resolve
+    codex = cli_resolve.resolve("codex")
     if not codex:
         return "no-cli"
     state = _load(pid)

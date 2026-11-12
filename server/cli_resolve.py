@@ -111,13 +111,49 @@ def resolve(tool: str, recorded_path: Optional[str] = None, recorded_env_path: O
     return None
 
 
+def _dir_ok(path: str) -> bool:
+    try:
+        st = os.stat(path)
+    except OSError:
+        return False
+    return stat.S_ISDIR(st.st_mode) and _owner_ok(st)
+
+
+def _append_dirs(current: str, extras) -> str:
+    parts = [p for p in current.split(os.pathsep) if p]
+    for extra in extras:
+        if extra and extra not in parts and _dir_ok(extra):
+            parts.append(extra)
+    return os.pathsep.join(parts)
+
+
 def launch_path(binary: str, recorded_env_path: Optional[str] = None) -> str:
     """이어서 시작한 CLI에 줄 PATH — 그 CLI가 쓰던 PATH(기록), 없으면 서버 PATH에 실행 파일 폴더와 흔한 위치를 덧붙인다.
     CLI가 띄우는 하위 도구(git, node, rg …)도 원래와 같은 PATH에서 찾게 하려는 것이다."""
     if recorded_env_path:
         return recorded_env_path
-    parts = [p for p in os.environ.get("PATH", "").split(os.pathsep) if p]
-    for extra in [os.path.dirname(binary)] + known_dirs():
-        if extra and extra not in parts and os.path.isdir(extra):
-            parts.append(extra)
-    return os.pathsep.join(parts)
+    return _append_dirs(os.environ.get("PATH", ""), [os.path.dirname(binary)] + known_dirs())
+
+
+def server_path(current: Optional[str] = None) -> str:
+    """서버를 띄울 때 줄 PATH(`bin/fsh _start_server`). 지금 PATH 뒤에 흔한 설치 위치 중 있는 것(나 또는 root 소유,
+    아무나 쓸 수 없는 폴더)을 붙인다. 앞이 아니라 뒤에 붙여 사용자가 정한 순서를 바꾸지 않고, 셸 설정(`~/.zshrc`)은
+    실행하지 않는다."""
+    return _append_dirs(os.environ.get("PATH", "") if current is None else current, known_dirs())
+
+
+def report() -> list[tuple[str, str]]:
+    """`fsh doctor`용: CLI마다 서버가 쓸 실행 파일 경로(못 찾으면 빈 문자열)."""
+    return [(tool, resolve(tool) or "") for tool in TOOLS]
+
+
+if __name__ == "__main__":
+    import sys
+    command = sys.argv[1] if len(sys.argv) > 1 else ""
+    if command == "path":
+        print(server_path())
+    elif command == "report":
+        for tool, found in report():
+            print(f"{tool}\t{found}")
+    else:
+        sys.exit("usage: python -m cli_resolve path|report")

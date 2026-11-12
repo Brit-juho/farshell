@@ -8,7 +8,6 @@ import os
 import re
 import secrets
 import shlex
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -81,7 +80,8 @@ def environment(profile_id, project=None, *, record=False):
 def binary(tool):
     if tool not in ("claude", "codex"):
         raise profiles.Refused(tr("지원하지 않는 CLI입니다"))
-    path = shutil.which(tool)
+    import cli_resolve
+    path = cli_resolve.resolve(tool)
     if not path:
         raise profiles.Refused(tr("CLI 실행 파일을 찾지 못했습니다"))
     # Native launchers may be version-named symlink targets. Keep argv[0]'s

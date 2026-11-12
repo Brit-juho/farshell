@@ -289,11 +289,17 @@ _start_server() {
   # macOS 는 FarShell.app 껍데기를 거쳐 띄운다 — 권한 창이 "python3.14" 가 아니라 "FarShell" 로 뜨고 허용이
   # 재시작·업그레이드 뒤에도 유지되게(lib/macos_app.sh). server.pid 에는 껍데기가 아니라 실제 Python 서버 pid 를
   # 넣는다(워치독·fsh stop·SIGUSR1 스택 덤프가 서버를 직접 가리키게). 껍데기를 못 쓰면 예전처럼 직접 띄운다.
+  # 부팅 자동 시작(zsh -l)은 ~/.zshrc 를 읽지 않아 ~/.local/bin 같은 CLI 설치 위치가 PATH에 빠진다 — 그러면 서버가
+  # claude·codex 를 못 찾아 재부팅 뒤 이어서 시작이 실패했다. 흔한 설치 위치 중 있는 것을 PATH 끝에 붙인다
+  # (server/cli_resolve.py server_path — 셸 설정은 실행하지 않고, 남이 쓸 수 있는 폴더는 붙이지 않는다).
+  local _srv_path
+  _srv_path="$("$VT_PYTHON" -m cli_resolve path 2>/dev/null)"
+  _srv_path="${_srv_path:-$PATH}"
   local _app=""
   command -v _vt_app_prefix >/dev/null 2>&1 && _app="$(_vt_app_prefix)"
   if [ -n "$_app" ]; then
     rm -f "$PID_DIR/server.child.pid"
-    FSH_APP_PIDFILE="$PID_DIR/server.child.pid" nohup "$_app" "$VT_PYTHON" -m uvicorn main:app --host "$bind_host" --port $VT_PORT > "$SERVER_LOG" 2>&1 &
+    PATH="$_srv_path" FSH_APP_PIDFILE="$PID_DIR/server.child.pid" nohup "$_app" "$VT_PYTHON" -m uvicorn main:app --host "$bind_host" --port $VT_PORT > "$SERVER_LOG" 2>&1 &
     local _launcher=$! _w=0
     while [ ! -s "$PID_DIR/server.child.pid" ] && [ $_w -lt 50 ]; do sleep 0.1; _w=$((_w + 1)); done
     if [ -s "$PID_DIR/server.child.pid" ]; then
@@ -303,7 +309,7 @@ _start_server() {
     fi
     rm -f "$PID_DIR/server.child.pid"
   else
-    nohup "$VT_PYTHON" -m uvicorn main:app --host "$bind_host" --port $VT_PORT > "$SERVER_LOG" 2>&1 &
+    PATH="$_srv_path" nohup "$VT_PYTHON" -m uvicorn main:app --host "$bind_host" --port $VT_PORT > "$SERVER_LOG" 2>&1 &
     echo $! > "$PID_DIR/server.pid"
   fi
   # 고정 sleep 대신 서버가 실제로 응답할 때까지 폴링한다. uvicorn 기동 시간은
@@ -3636,6 +3642,19 @@ print(('ok|' if sel and sel['ready'] else 'warn|') + (sel['label'] + ('|ready' i
   else
     _check "tmux" fail "brew install tmux / apt install tmux"
   fi
+
+  # 4-0. Claude Code·Codex 위치 — 서버가 이어서 시작·계정 프로필에 쓸 실행 파일(셸 설정 없이도 찾는지).
+  local _cli_tool _cli_path
+  while IFS=$'\t' read -r _cli_tool _cli_path; do
+    [ -n "$_cli_tool" ] || continue
+    if [ -n "$_cli_path" ]; then
+      _check "$_cli_tool CLI" ok "$_cli_path"
+    elif [ "$_cli_tool" = claude ]; then
+      _check "$_cli_tool CLI" warn "$(_t '찾지 못함 — 이 CLI로 한 대화는 이어서 시작할 수 없습니다')"
+    else
+      _check "$_cli_tool CLI" ok "$(_t '설치 안 됨 (쓰지 않으면 괜찮습니다)')"
+    fi
+  done < <(cd "$VT_DIR/server" && "$VT_PYTHON" -m cli_resolve report 2>/dev/null)
 
   # 4-1. tmux 설정 — 레포 conf 가 실제로 들어갔는지, 옛 ~/.config/vt/tmux.conf 사본이 남았는지
   if command -v tmux >/dev/null 2>&1 && [ -x "${VT_PYTHON:-}" ]; then

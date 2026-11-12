@@ -243,7 +243,12 @@ def fake_codex(tmp_path, monkeypatch):
             return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
     fake = Fake()
     fake.mode('ok')
-    return fake
+    yield fake
+    # 백그라운드 갱신(refresh_async)이 끝날 때까지 기다린다 — 남은 스레드가 다음 테스트의 HOME(환경변수는 전역)에
+    # 프로필 폴더를 같이 만들다 FileExistsError로 부딪혔다.
+    deadline = time.monotonic() + 10
+    while appserver._running and time.monotonic() < deadline:
+        time.sleep(0.05)
 
 
 def test_app_server_result_is_stored_and_read_with_codex_window_names(sandbox, fake_codex):

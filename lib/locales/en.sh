@@ -457,6 +457,7 @@ _t_en_lookup() {
     '설정됨') _T_OUT='Set' ;;
     '설정하려면:') _T_OUT='To set it up:' ;;
     '설치 경로: {dir}') _T_OUT='Install path: {dir}' ;;
+    '설치 안 됨 (쓰지 않으면 괜찮습니다)') _T_OUT='Not installed (fine if you don'\''t use it)' ;;
     '설치 후 '\''./install.sh {profile}'\''을 다시 실행하세요.') _T_OUT='After installing, run '\''./install.sh {profile}'\'' again.' ;;
     '설치/환경 진단') _T_OUT='install and environment check' ;;
     '설치:') _T_OUT='Install:' ;;
@@ -637,6 +638,7 @@ _t_en_lookup() {
     '지원하지 않는 터미널: '\''{val}'\''') _T_OUT='Unsupported terminal: '\''{val}'\''' ;;
     '진단하려는 그 pane에서 직접 실행하세요 — 이 명령이 그 자리의') _T_OUT='Run this in the pane you want to diagnose — it reads that' ;;
     '차단 도구: {tools}...') _T_OUT='Blocked tools: {tools}...' ;;
+    '찾지 못함 — 이 CLI로 한 대화는 이어서 시작할 수 없습니다') _T_OUT='Not found — conversations from this CLI can'\''t be resumed' ;;
     '처음 열기: {url}') _T_OUT='First visit: {url}' ;;
     '첫 실행 안내') _T_OUT='First run' ;;
     '최근 24h 토큰 사용 {n}건') _T_OUT='{n} machine-token requests in the last 24h' ;;
