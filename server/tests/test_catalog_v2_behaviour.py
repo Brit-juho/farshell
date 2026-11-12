@@ -164,3 +164,76 @@ def test_branch_at_end_is_recorded_when_a_run_stops(catalog):
         con.execute("UPDATE sessions SET workspace_id=?", ("9" * 32,))
     _reconcile()
     assert catalog.snapshot()["sessions"][0]["branch_at_end"] == "feat/x"
+
+
+# --- 세션 로직 점검 단계 4: 배치 재시도·승격(L3) ---------------------------------------------------
+
+def _git_repo(path):
+    import subprocess
+    path.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q"], cwd=path, check=True)
+    return path
+
+
+def _placement(db_module, name):
+    from session_catalog.db import database
+    with database() as con:
+        return con.execute("SELECT w.kind, p.kind AS pk, p.name FROM sessions s LEFT JOIN workspaces w ON w.id=s.workspace_id"
+                           " LEFT JOIN projects p ON p.id=w.project_id WHERE s.title=?", (name,)).fetchone()
+
+
+def test_a_session_started_outside_a_repository_is_promoted_once(catalog, tmp_path, monkeypatch):
+    from session_catalog import inventory
+    monkeypatch.setattr(inventory, "_placement_tried", {})
+    home = tmp_path / "home"
+    repo = _git_repo(home / "farshell")
+    other = _git_repo(home / "other")
+    _reconcile(_item("$1:1", "w", str(home)))
+    assert tuple(_placement(catalog, "w"))[:2] == ("directory", "directory")
+    _reconcile(_item("$1:1", "w", str(repo)))                       # 저장소로 cd → 한 번 승격
+    assert tuple(_placement(catalog, "w")) == ("checkout", "git", "farshell")
+    _reconcile(_item("$1:1", "w", str(other)))                      # 다른 저장소로 가도 바뀌지 않는다
+    assert tuple(_placement(catalog, "w")) == ("checkout", "git", "farshell")
+
+
+def test_a_failed_first_placement_is_retried(catalog, tmp_path, monkeypatch):
+    from session_catalog import inventory
+    monkeypatch.setattr(inventory, "_placement_tried", {})
+    repo = _git_repo(tmp_path / "home" / "farshell")
+    real = inventory.inspect_workspace
+    monkeypatch.setattr(inventory, "inspect_workspace", lambda cwd: None)    # Git 일시 실패
+    _reconcile(_item("$1:1", "w", str(repo)))
+    assert _placement(catalog, "w")["kind"] is None
+    monkeypatch.setattr(inventory, "inspect_workspace", real)
+    _reconcile(_item("$1:1", "w", str(repo)))
+    assert tuple(_placement(catalog, "w")) == ("checkout", "git", "farshell")
+
+
+def test_a_git_error_is_not_mistaken_for_outside_a_repository(catalog, tmp_path, monkeypatch):
+    import subprocess
+    from session_catalog import inventory
+    repo = _git_repo(tmp_path / "home" / "farshell")
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 128, b"", b"fatal: unable to read index"))
+    assert inventory.inspect_workspace(str(repo)) is None
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 128, b"", b"fatal: not a git repository"))
+    assert inventory.inspect_workspace(str(repo))["kind"] == "directory"
+
+
+def test_a_folder_that_becomes_a_repository_in_place_is_promoted(catalog, tmp_path, monkeypatch):
+    """빈 폴더에서 시작해 그 자리에서 `git init`을 한 세션 — 「저장소 밖」 결과는 1분 뒤 다시 본다."""
+    import subprocess
+    from session_catalog import inventory
+    monkeypatch.setattr(inventory, "_placement_tried", {})
+    folder = tmp_path / "home" / "newproj"
+    folder.mkdir(parents=True)
+    _reconcile(_item("$1:1", "w", str(tmp_path / "home")))
+    _reconcile(_item("$1:1", "w", str(folder)))                 # 저장소 밖으로 확인
+    subprocess.run(["git", "init", "-q"], cwd=folder, check=True)
+    _reconcile(_item("$1:1", "w", str(folder)))
+    assert _placement(catalog, "w")["pk"] == "directory", "1분 안에는 다시 보지 않는다"
+    monkeypatch.setattr(inventory, "_NONREPO_RECHECK", 0.0)
+    for tried in inventory._placement_tried.values():
+        for cwd in tried:
+            tried[cwd] = 0.0
+    _reconcile(_item("$1:1", "w", str(folder)))
+    assert tuple(_placement(catalog, "w")) == ("checkout", "git", "newproj")

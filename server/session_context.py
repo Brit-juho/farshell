@@ -43,12 +43,18 @@ class ContextChanged(OSError):
     pass
 
 
+def _resolve(raw: str, **kwargs):
+    """이 모듈은 Git 위치 정보만 읽는다 — Claude Code가 만든 워크트리(`.claude/worktrees/<이름>`)도 보이게
+    `git_meta`로 경계를 확인한다(fsguard의 좁은 예외, 파일 열람은 그대로 막힌다)."""
+    return fsguard.resolve_under_roots(raw, git_meta=True, **kwargs)
+
+
 def _git_path(top: Path, option: str) -> Path:
     rc, out = _git(top, "rev-parse", "--path-format=absolute", option)
     if rc or not out:
         raise OSError("worktree identity unavailable")
     # git-dir/common-dir 은 `.git` 안을 가리키므로 점 디렉토리 규칙을 끈다(경계·거부 목록은 유지).
-    return fsguard.resolve_under_roots(out.removesuffix("\n"), check_hidden=False)
+    return _resolve(out.removesuffix("\n"), check_hidden=False)
 
 
 def _repository_root(top: Path, common: Path) -> str | None:
@@ -75,7 +81,7 @@ def _repository_root(top: Path, common: Path) -> str | None:
         if not candidate:
             return None
         try:
-            return str(fsguard.resolve_under_roots(candidate))
+            return str(_resolve(candidate))
         except fsguard.FsDenied:
             # A linked tree may be allowed while its primary workspace is not.
             return None
@@ -90,7 +96,7 @@ def _workspace(top: Path) -> dict:
         if hit and time.monotonic() < hit[0]:
             try:
                 for path in hit[2]:
-                    fsguard.resolve_under_roots(path, check_hidden=False)
+                    _resolve(path, check_hidden=False)
                 return dict(hit[1])
             except fsguard.FsDenied:
                 return unknown
@@ -99,7 +105,9 @@ def _workspace(top: Path) -> dict:
             common = _git_path(top, "--git-common-dir")
             kind = "main" if git_dir == common else "linked"
             repository = str(top) if kind == "main" else _repository_root(top, common)
-            data = {"kind": kind, "status": "ready", "repositoryRoot": repository}
+            # gitDir·commonDir: 같은 저장소 판정은 common-dir 비교다(이름·경로 모양으로 추측하지 않는다).
+            data = {"kind": kind, "status": "ready", "repositoryRoot": repository,
+                    "gitDir": str(git_dir), "commonDir": str(common)}
             bounds = tuple(str(p) for p in (git_dir, common)) + ((repository,) if repository else ())
         except (OSError, ValueError, fsguard.FsDenied):
             data, bounds = unknown, ()
@@ -114,7 +122,7 @@ def _workspace(top: Path) -> dict:
 def _with_workspace(data: dict, cwd: Path) -> dict:
     if not data.get("root"):
         return {**data, "worktree": None}
-    top = fsguard.resolve_under_roots(data["root"])
+    top = _resolve(data["root"])
     if not cwd.is_relative_to(top):
         raise ContextChanged("cwd changed during Git lookup")
     # Recheck even on a Git-status cache hit: boundary changes must not leak old metadata.
@@ -124,7 +132,7 @@ def _with_workspace(data: dict, cwd: Path) -> dict:
 
 
 def _read(cwd: str) -> dict:
-    p = fsguard.resolve_under_roots(cwd)
+    p = _resolve(cwd)
     if not p.is_dir():
         raise OSError("cwd missing")
     rc, out = _git(p, "rev-parse", "--show-toplevel")
@@ -134,7 +142,7 @@ def _read(cwd: str) -> dict:
         # 손상된 저장소를 비저장소로 표시하지 않는다. 허용 경계 안의 Git 표식만 확인한다.
         for ancestor in (p, *p.parents):
             try:
-                allowed = fsguard.resolve_under_roots(str(ancestor))
+                allowed = _resolve(str(ancestor))
             except fsguard.FsDenied:
                 break
             if (allowed / ".git").exists():
@@ -142,7 +150,7 @@ def _read(cwd: str) -> dict:
         return {"status": "nonrepo", "cwd": cwd, "root": None,
                 "branch": None, "changed": None}
     # Git의 상위 탐색 결과에도 같은 경계를 적용한다.
-    top = fsguard.resolve_under_roots(out.removesuffix("\n"))
+    top = _resolve(out.removesuffix("\n"))
     data = _collect_status(top, top=top)
     if data.get("error") or not data.get("repo"):
         raise OSError("git status unavailable")
@@ -150,6 +158,8 @@ def _read(cwd: str) -> dict:
         raise ContextChanged("Git root changed during lookup")
     return {"status": "ready", "cwd": cwd, "root": str(top),
             "branch": data.get("branch"),
+            # 같은 status 호출의 헤더 값이라 추가 비용이 없다(예전에는 계산하고 버렸다).
+            "ahead": int(data.get("ahead") or 0), "behind": int(data.get("behind") or 0),
             "changed": {"files": len(data["files"]),
                         "add": data.get("insertions", 0),
                         "del": data.get("deletions", 0)}}
@@ -167,7 +177,18 @@ def _context(cwd: str) -> dict:
     if not reading.acquire(True, STRIPE_WAIT):
         with _lock:
             hit = _cache.get(cwd)
-        return {**hit[1], "status": "unavailable", "reason": "busy"} if hit else _unavailable(cwd, "busy")
+        if not hit:
+            return _unavailable(cwd, "busy")
+        # 기다리지 못해 예전 값을 줄 때도 경계는 지금 기준으로 다시 본다 — 그 사이 허용 범위에서 빠진 경로의
+        # 브랜치·변경량을 내보내지 않는다(Git은 다시 읽지 않는다).
+        try:
+            _resolve(cwd)
+            for path in (hit[1].get("root"), (hit[1].get("worktree") or {}).get("repositoryRoot")):
+                if path:
+                    _resolve(path)
+        except (fsguard.FsDenied, OSError, ValueError):
+            return _unavailable(cwd, "busy")
+        return {**hit[1], "status": "unavailable", "reason": "busy"}
     try:
         return _context_locked(cwd)
     finally:
@@ -180,11 +201,11 @@ def _context_locked(cwd: str) -> dict:
         with _lock:
             hit = _cache.get(cwd)
         try:
-            allowed = fsguard.resolve_under_roots(cwd)
+            allowed = _resolve(cwd)
             if not allowed.is_dir():
                 raise OSError("cwd missing")
             if hit and hit[1].get("root"):
-                fsguard.resolve_under_roots(hit[1]["root"])
+                _resolve(hit[1]["root"])
             if hit and now < hit[0]:
                 with _lock:
                     if cwd in _cache:
@@ -212,9 +233,29 @@ def _context_locked(cwd: str) -> dict:
         return data
 
 
-async def contexts_for(cwds: list[str]) -> dict[str, dict]:
+def disambiguate(result: dict[str, dict], shown: list[str] | None = None) -> dict[str, dict]:
+    """폴더 이름이 같은 작업 트리끼리 구분되게 `worktree.name`에 위 폴더를 붙인다(가장 짧게 구분되는 꼬리 경로).
+    `shown`이 있으면 그 cwd들의 root끼리만 비교한다 — 화면에 없는 root 때문에 이름이 바뀌지 않게."""
+    keys = list(dict.fromkeys(shown)) if shown is not None else list(result)
+    roots = list(dict.fromkeys(result[k]["root"] for k in keys if k in result and result[k].get("root")))
+    out = dict(result)
+    for cwd in keys:
+        data = result.get(cwd)
+        if not data or not data.get("worktree"):
+            continue
+        root = Path(data["root"])
+        peers = [Path(r) for r in roots if Path(r).name == root.name]
+        count = 1
+        while any(p != root and p.parts[-count:] == root.parts[-count:] for p in peers):
+            count += 1
+        out[cwd] = {**data, "worktree": {**data["worktree"], "name": str(Path(*root.parts[-count:]))}}
+    return out
+
+
+async def contexts_for(cwds: list[str], *, name_worktrees: bool = True) -> dict[str, dict]:
     """서버 전체에서 Git 동시 조회를 제한하고 같은 cwd는 한 번만 읽는다. cwd 하나가 기한을 넘기면
-    그 cwd 만 unavailable 이고 나머지는 그대로 답한다(`git` 풀, `CONTEXT_TIMEOUT`)."""
+    그 cwd 만 unavailable 이고 나머지는 그대로 답한다(`git` 풀, `CONTEXT_TIMEOUT`).
+    `name_worktrees=False`면 동명 구분을 호출자가 화면에 쓸 것만 골라 `disambiguate`로 한다."""
     global _GLOBAL_LIMIT
     loop = asyncio.get_running_loop()
     if _GLOBAL_LIMIT is None or _GLOBAL_LIMIT[0] is not loop:
@@ -232,15 +273,4 @@ async def contexts_for(cwds: list[str]) -> dict[str, dict]:
                 return cwd, _unavailable(cwd, "busy")
 
     result = dict(await asyncio.gather(*(one(c) for c in dict.fromkeys(cwds))))
-    roots = list(dict.fromkeys(d["root"] for d in result.values() if d.get("root")))
-    # Resolve duplicate basenames with the shortest distinct trailing path, not CLI names.
-    for cwd, data in result.items():
-        if not data.get("worktree"):
-            continue
-        root = Path(data["root"])
-        peers = [Path(r) for r in roots if Path(r).name == root.name]
-        count = 1
-        while any(p != root and p.parts[-count:] == root.parts[-count:] for p in peers):
-            count += 1
-        result[cwd] = {**data, "worktree": {**data["worktree"], "name": str(Path(*root.parts[-count:]))}}
-    return result
+    return disambiguate(result) if name_worktrees else result

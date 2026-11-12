@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 import re
+import time
 
 from fastapi import APIRouter, Request, WebSocket
 from fastapi.responses import JSONResponse
@@ -224,13 +225,13 @@ async def collect_tmux_sessions() -> list[dict]:
                 parts[3] if len(parts) > 3 else "",
             )
 
-    from session_context import contexts_for
+    from session_context import contexts_for, disambiguate
     import agent_status
     # 위치·브랜치는 터미널(셸)이 아니라 그 세션의 에이전트 CLI 기준이다. CLI가 알린 cwd가 있으면
     # 그걸로 Git을 읽고, 없거나 못 읽으면 pane cwd로 되돌아간다(에이전트 없는 세션은 그대로).
     agent_cwd = {name: agent_status.agent_cwd_for(name) for name in pane_by_session}
     contexts = await contexts_for(["", *(p[1] for p in pane_by_session.values()),
-                                   *(c for c in agent_cwd.values() if c)])
+                                   *(c for c in agent_cwd.values() if c)], name_worktrees=False)
     live_ptys = pty_mgr.sessions  # 복사본이라 한 번만 받는다
     keys: dict[str, str] = {}
     for line in sessions_text.strip().split("\n"):
@@ -238,6 +239,7 @@ async def collect_tmux_sessions() -> list[dict]:
         if len(p) > 8 and p[8].isdigit():
             keys[f"{p[7]}:{int(p[8])}"] = p[0]
     lineage = await asyncio.to_thread(_lineage_by_name, keys)
+    homes = await asyncio.to_thread(_catalog_homes, list(keys))
     # 생성 때 고른 계정(`@fsh_profile`) — 태그가 있는 세션이 하나라도 있을 때만 레지스트리를 읽어 이름을 붙인다.
     tags = {line.split("\t")[10] for line in sessions_text.strip().split("\n")
             if len(line.split("\t")) > 10 and line.split("\t")[10]}
@@ -247,6 +249,8 @@ async def collect_tmux_sessions() -> list[dict]:
         for tag in tags:
             profile_names[tag] = await asyncio.to_thread(session_profile.describe, tag)
     sessions = []
+    shown: list[str] = []
+    seen_keys: set[str] = set()
     for line in sessions_text.strip().split("\n"):
         if not line:
             continue
@@ -257,13 +261,30 @@ async def collect_tmux_sessions() -> list[dict]:
                         if info.session_id in live_ptys]
         web_session = web_sessions[0] if web_sessions else None
         attached = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
+        physical_key = f"{parts[7]}:{parts[8]}" if len(parts) > 8 else None
         context_cwd, context_source = cwd, "terminal"
         a_cwd = agent_cwd.get(name)
-        if a_cwd and a_cwd != cwd and contexts[a_cwd].get("status") != "unavailable":
+        # CLI 위치를 잠깐 못 읽었다고(Git 바쁨·시간 초과) 그 틱만 터미널 위치로 바꾸지 않는다 — 바로 전에도 같은
+        # CLI 위치를 썼으면 그대로 둔다(그 cwd의 마지막 성공 값은 session_context가 남긴다). 예전에는 5초마다 깜빡였다.
+        # 경계에서 빠졌거나 폴더가 사라진 경우(root 없음)는 붙잡지 않는다.
+        if a_cwd and a_cwd != cwd and (contexts[a_cwd].get("status") != "unavailable"
+                                       or (_LAST_CONTEXT.get(physical_key) == a_cwd and contexts[a_cwd].get("root"))):
             context_cwd, context_source = a_cwd, "agent"
+        if physical_key:
+            seen_keys.add(physical_key)
+            if context_source == "agent":
+                _LAST_CONTEXT[physical_key] = a_cwd
+            else:
+                _LAST_CONTEXT.pop(physical_key, None)
+        shown.append(context_cwd)
+        catalog = homes.get(physical_key) if physical_key else None
         sessions.append({
             "name": name,
-            "physical_key": f"{parts[7]}:{parts[8]}" if len(parts) > 8 else None,
+            "physical_key": physical_key,
+            # 카탈로그가 아는 자리(처음 시작한 저장소·작업 트리, cd해도 그대로)와 보이는 이름(별칭). 아직 기록 전이면 null —
+            # 그때는 `context`(지금 위치)로 그린다.
+            "home": catalog["home"] if catalog else None,
+            "catalog": {k: catalog[k] for k in ("catalog_id", "title", "name_source")} if catalog else None,
             "windows": int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1,
             "attached": attached,
             # 웹 화면 = 이 서버가 PTY를 쥔 attach(브라우저 탭·폰 하나가 1개). 나머지는 웹이 아닌 attach
@@ -294,7 +315,27 @@ async def collect_tmux_sessions() -> list[dict]:
             "profile": (profile_names.get(parts[10]) or [None])[0] if len(parts) > 10 and parts[10] else None,
             "profiles": profile_names.get(parts[10], []) if len(parts) > 10 and parts[10] else [],
         })
+    for key in [k for k in _LAST_CONTEXT if k not in seen_keys]:
+        _LAST_CONTEXT.pop(key, None)
+    # 같은 폴더 이름의 작업 트리 구분(`one/task`)은 화면에 실제로 그리는 위치끼리만 비교한다.
+    named = disambiguate(contexts, shown)
+    for row, used in zip(sessions, shown):
+        row["context"] = named[used]
     return sessions
+
+
+# 세션(정체성 키)마다 바로 전에 CLI 위치를 썼다면 그 cwd. 목록을 만들 때마다 살아 있는 세션만 남긴다.
+_LAST_CONTEXT: dict[str, str] = {}
+
+
+def _catalog_homes(keys: list[str]) -> dict:
+    """카탈로그의 자리·보이는 이름. 카탈로그를 못 읽으면(꺼짐·형식 불일치) 빈 값 — 목록은 그대로 나간다."""
+    try:
+        from session_catalog import db as catalog_db
+        return catalog_db.homes(keys)
+    except Exception as e:  # noqa: BLE001
+        logger.debug(f"catalog homes unavailable: {type(e).__name__}")
+        return {}
 
 
 def _lineage_by_name(keys: dict[str, str]) -> dict[str, dict]:
@@ -305,22 +346,40 @@ def _lineage_by_name(keys: dict[str, str]) -> dict[str, dict]:
         items = visible_ledger(delegation.list_all())
     except Exception:  # noqa: BLE001
         return {}
+    import agent_status
+    now = time.time()
     out: dict[str, dict] = {}
     for x in sorted(items, key=lambda x: x.get("created_at", 0)):
         child = keys.get(x["child"]["key"])
         if not child or x.get("state") == "starting":
             continue
+        # 닫힌 위임은 하루 뒤 가지에서 뺀다 — 자식 세션이 남아 있으면 보통 세션으로 보인다.
+        if x.get("state") == "closed" and now - (x.get("closed_at") or now) > CLOSED_LINEAGE_SECONDS:
+            continue
+        parent = keys.get(x["parent"]["key"])     # 부모 세션이 사라졌으면 None
+        reported_at = x.get("reported_at")
+        # 보고가 왔는데 부모가 그 뒤로 새 턴을 시작하지 않았다(보고를 아직 읽지 않았다).
+        unread = False
+        if x.get("state") == "reported" and isinstance(reported_at, (int, float)) and parent:
+            started = agent_status.last_turn_started(parent)
+            unread = started is None or started < reported_at
         summary = x.get("summary") or ""
         out[child] = {
             "delegation": x["id"],
-            "parent": keys.get(x["parent"]["key"]),     # 부모 세션이 사라졌으면 None
+            "parent": parent,
             "state": x.get("state"),
             "outcome": x.get("outcome"),
             "createdAt": x.get("created_at"),
+            "reportedAt": reported_at,
+            "closedAt": x.get("closed_at"),
+            "reportUnread": unread,
             "task": x.get("task_preview", "")[:200],
             "summary": summary[:600] + ("…" if len(summary) > 600 else ""),
         }
     return out
+
+
+CLOSED_LINEAGE_SECONDS = 24 * 3600
 
 
 

@@ -470,18 +470,7 @@ def capture(source, relative, *, max_bytes=PASS_BYTES):
 
 
 # 사람이 친 지시가 아닌 사용자 줄(시스템이 끼워 넣은 글, FarShell이 대신 친 위임·에이전트 메시지 머리말).
-_NOT_HUMAN_PREFIXES = ('<', 'Caveat:', '[FarShell 위임', '[위임 결과', '[FarShell 에이전트')
-
-
-def human_prompt(body):
-    """대화의 사용자 줄 중 사람이 직접 친 지시면 한 줄 요약(200자), 아니면 None."""
-    if not isinstance(body, str):
-        return None
-    text = body.strip()
-    if not text or text.startswith(_NOT_HUMAN_PREFIXES):
-        return None
-    first = text.splitlines()[0].strip()
-    return first[:200] or None
+from human_prompt import human_prompt  # noqa: E402 — 사람 지시 판정은 실행 중 세션(agent_status)과 같은 규칙
 
 
 def _refresh_conversation_summary(db, cid, provider, messages, latest_title, now):

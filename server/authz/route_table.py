@@ -180,6 +180,7 @@ _ROWS: tuple = (
     ("GET", "/api/agent/status", auth()),
     ("WS", "/ws-agent", auth()),
     ("POST", "/api/agent/ack", human()),
+    ("POST", "/api/agent/seen", human()),
 # --- routes/system.py
     ("GET", "/api/capabilities", sock_()),
     ("GET", "/api/health/ready", sock_()),

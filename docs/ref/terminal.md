@@ -134,7 +134,7 @@ and displacing the current one. Rail and Fleet keep grouped-view members togethe
 There is no tab strip; the rail and Fleet represent views. `viewSegments` in `design/state-classes.js` defines the per-view state-segment model, which no current UI draws:
 
 - One equal segment per session in pane order (top-left first); single views get a one-segment bar.
-- `viewSegments` returns `{name, status, unseen, thick, label, branch}` per session; `thick` is true when the state change is not yet seen (`unseen`). Entries without a name (empty panes) are skipped.
+- `viewSegments` returns `{name, status, unseen, thick, label, branch}` per session; `thick` is true when a completion is not yet seen (`unseen`). Entries without a name (empty panes) are skipped.
 - `segmentsTooltip` lists "name · state[ · branch][ · 확인 안 함]" per session and `segmentsAria` gives the same information for screen readers. Only `frontend/tests/state-classes.test.js` calls `viewSegments`; no CSS draws the bar.
 - Mobile's Edit views list shows each view's pane count (including empty, file and panel panes).
 
@@ -143,9 +143,14 @@ There is no tab strip; the rail and Fleet represent views. `viewSegments` in `de
 - Four states — idle, working, waiting, done — each with its own **SVG shape** as well as colour (`stateIcon` in
   `ui/icons.js`; the rail rows and the phone Fleet draw it). There is no `error` state in the UI (unknown values fold to idle). Representative state
   `waiting > done(unseen) > working > done(seen) = idle` is one function, `representativeState`.
-- **Unseen** = any state change the user has not looked at yet (not only done). Shown as a ring around the icon
-  (`agent/state.js`; "looking" = focused pane of the active view with the window visible, injected by
-  `agent/paint.js`; the first snapshot after load flags only `done`).
+- **Unseen** = a completion (`done`) that no device has looked at yet — shared by every device, counted per
+  completion turn. The server numbers each entry into `done` (`turn`) and keeps the highest turn someone saw
+  (`seen_turn`); a row is unseen while `turn > seen_turn`. Looking at the session (focused pane of the active view with
+  the window visible, injected by `agent/paint.js`) sends `POST /api/agent/seen {tmux_session, turn}`; clicking it
+  acknowledges the completion (`/api/agent/ack` with the same `turn`). A newer completion that arrives meanwhile stays
+  unseen. Working/waiting changes are no longer unseen (their state already says so), and a phone that saw a completion
+  clears it on the Mac too. A server without `turn` falls back to "done = unseen", cleared per device
+  (`agent/state.js`). Shown as a ring around the icon.
 - `waiting` shows a fixed keyword instead of the raw question text: Approval request (승인 요청) / Choice requested (선택 요청) / Plan review (계획 확인) / Question (질문)
   (fallback). Measured earlier on Claude Code 2.1.287, codex 0.158.0 and agy 1.1.23 with an isolated tmux socket (not re-run on the locally installed versions):
 

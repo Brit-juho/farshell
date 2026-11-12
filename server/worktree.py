@@ -146,72 +146,81 @@ def _is_within(child: Path, parent: Path) -> bool:
 # --- diff 요약 / ahead-behind --------------------------------------------------
 
 
-def _ahead_behind(path: Path) -> tuple[int, int]:
-    rc, out, _ = _git(["rev-list", "--left-right", "--count", "@{u}...HEAD"], cwd=path)
-    if rc != 0:
-        return 0, 0
-    parts = out.decode("utf-8", errors="replace").split()
-    if len(parts) != 2:
-        return 0, 0
-    try:
-        behind, ahead = int(parts[0]), int(parts[1])
-    except ValueError:
-        return 0, 0
-    return ahead, behind
-
-
-def _changed_stat(path: Path) -> dict:
-    rc, out, _ = _git(["diff", *git_safe.DIFF_FLAGS, "HEAD", "--shortstat"], cwd=path)
-    if rc != 0:
-        return {"files": 0, "add": 0, "del": 0}
-    return parse_shortstat(out.decode("utf-8", errors="replace"))
+def _status_summary(path: Path) -> tuple[int, int, dict]:
+    """(ahead, behind, changed). 세션 목록의 위치 요약(session_context)과 같은 정의다: 바뀐 파일 수는 status 줄 수
+    (추적 안 하는 파일 포함), +/−는 HEAD 기준 numstat, ahead/behind는 같은 status 호출의 헤더.
+    예전에는 여기만 shortstat(추적 파일만)과 별도 rev-list를 써서 같은 트리가 두 화면에서 다른 숫자를 보였다."""
+    from routes.git import _collect_status
+    data = _collect_status(path, top=path)
+    if data.get("error") or not data.get("repo"):
+        return 0, 0, {"files": 0, "add": 0, "del": 0}
+    return (int(data.get("ahead") or 0), int(data.get("behind") or 0),
+            {"files": len(data.get("files") or []), "add": int(data.get("insertions") or 0), "del": int(data.get("deletions") or 0)})
 
 
 # --- 세션 매핑 -----------------------------------------------------------------
 
 
-def _sessions_for_path(path: Path, all_panes, wt_id: str | None = None) -> list[str]:
+def _session_paths(all_panes) -> dict[str, tuple[str, str]]:
+    """세션마다 (태그, 대표 pane 경로). 대표 pane은 활성 window의 활성 pane이고, 표시가 없으면(옛 tmux) 첫 pane.
+    예전에는 세션의 아무 pane이나 워크트리 안이면 소속으로 보고 태그를 영구히 심었다 — 뒤에 띄워 둔 pane 하나 때문에."""
+    out: dict[str, tuple[str, str]] = {}
+    for pane in all_panes:
+        if pane.session not in out or pane.active:
+            out[pane.session] = (pane.wt_tag, pane.path)
+    return out
+
+
+def _resolved_cwd(raw: str) -> Path | None:
+    # 원격·가상 마운트 위의 cwd 는 resolve() 하지 않는다 — 그 한 번이 NFS 에서 멈출 수 있다.
+    if not raw or res_mounts.skip_for_scan(raw):
+        return None
+    try:
+        return Path(raw).resolve()
+    except OSError:
+        return None
+
+
+def _claim_untagged(all_panes, worktrees: dict[str, Path]) -> dict[str, str]:
+    """태그 없는 세션 → 그 대표 pane이 든 워크트리 id. 여러 워크트리가 감싸면(메인 안에 둔 `.claude/worktrees/x`
+    같은 중첩) **가장 깊은** 쪽이다 — 예전에는 메인이 먼저 가져가 메인 태그를 심은 뒤 다음 목록에서 바뀌었다."""
+    by_depth = sorted(worktrees.items(), key=lambda kv: len(kv[1].parts), reverse=True)
+    claims: dict[str, str] = {}
+    for session, (tag, raw) in _session_paths(all_panes).items():
+        if tag:
+            continue
+        cwd = _resolved_cwd(raw)
+        if cwd is None:
+            continue
+        owner = next((wt_id for wt_id, path in by_depth if _is_within(cwd, path)), None)
+        if owner:
+            claims[session] = owner
+    return claims
+
+
+def _sessions_for_path(path: Path, all_panes, wt_id: str | None = None, claims: dict[str, str] | None = None) -> list[str]:
     """이 워크트리에 속한 세션 이름들.
 
-    2.1 D2 — 1차 판정은 tmux가 들고 있는 `@fsh_wt` 태그다(재시작을 견딘다).
-    태그가 하나도 없으면(롤아웃 이전 세션, 또는 사용자가 `-L fsh` 소켓을 직접
-    건드려 태그가 빠진 경우) cwd 포함 여부로 추론하던 예전 방식으로 폴백하고,
-    그 자리에서 태그를 심어 다음 조회부터는 1차 판정만으로 끝나게 한다
-    (self-healing — `open_worktree`/`_open_agent`가 새 세션에 태그를 남기는
-    것과 같은 메커니즘).
+    2.1 D2 — 1차 판정은 tmux가 들고 있는 `@fsh_wt` 태그다(재시작을 견딘다). 태그 없는 세션은 대표 pane의
+    cwd로 추론하고(`claims` — 전체 워크트리 중 가장 깊은 쪽, 없으면 이 경로 하나로 판정), 그 자리에서 태그를
+    심어 다음 조회부터는 1차 판정만으로 끝나게 한다(self-healing).
+    태그 붙은 세션이 하나라도 있으면 추론을 건너뛰던 예전 동작은 같은 트리의 태그 없는 세션을 영영 숨겼다.
     """
     names: list[str] = []
-    seen: set[str] = set()
+    sessions = _session_paths(all_panes)
     if wt_id:
-        for pane in all_panes:
-            if pane.wt_tag == wt_id and pane.session not in seen:
-                seen.add(pane.session)
-                names.append(pane.session)
-    if names:
-        return names
-
-    fallback: list[str] = []
-    for pane in all_panes:
-        # 다른 워크트리 태그가 이미 붙은 세션은 cwd가 겹쳐 보여도 훔쳐오지 않는다.
-        if pane.wt_tag and pane.wt_tag != wt_id:
-            continue
-        if not pane.path:
-            continue
-        # 원격·가상 마운트 위의 cwd 는 resolve() 하지 않는다 — 그 한 번이 NFS 에서 멈출 수 있다.
-        if res_mounts.skip_for_scan(pane.path):
-            continue
-        try:
-            pane_path = Path(pane.path).resolve()
-        except OSError:
-            continue
-        if _is_within(pane_path, path) and pane.session not in seen:
-            seen.add(pane.session)
-            fallback.append(pane.session)
-
+        names = [name for name, (tag, _) in sessions.items() if tag == wt_id]
+    if claims is None:
+        claims = {}
+        for name, (tag, raw) in sessions.items():
+            cwd = None if tag else _resolved_cwd(raw)
+            if cwd is not None and _is_within(cwd, path):
+                claims[name] = wt_id or ""
+    fallback = [name for name, owner in claims.items() if owner == (wt_id or "") and name not in names]
     if fallback and wt_id:
         for name in fallback:
             tmux_runner.set_option(name, "@fsh_wt", wt_id)
-    return fallback
+    return names + fallback
 
 
 # --- 저장소 탐색 ---------------------------------------------------------------
@@ -288,12 +297,14 @@ def _read_origin_remote(repo_top: Path) -> dict | None:
 
 def _build_entry(
     block: dict, repo_top: Path, all_panes, ports_map: dict, remote: dict | None = None,
+    claims: dict[str, str] | None = None,
 ) -> dict | None:
     raw_path = block.get("path")
     if not raw_path:
         return None
     try:
-        path = fsguard.resolve_under_roots(raw_path)
+        # 목록은 Git 위치 정보다 — Claude Code가 만든 워크트리(`.claude/worktrees/<이름>`)도 싣는다(fsguard 좁은 예외).
+        path = fsguard.resolve_under_roots(raw_path, git_meta=True)
     except fsguard.FsDenied:
         return None
 
@@ -302,9 +313,8 @@ def _build_entry(
     is_main = path == repo_top
     repo_name = repo_top.name
     wt_id = hashlib.sha1(f"{repo_top}{path}".encode()).hexdigest()[:12]
-    ahead, behind = _ahead_behind(path)
-    changed = _changed_stat(path)
-    sessions = _sessions_for_path(path, all_panes, wt_id)
+    ahead, behind, changed = _status_summary(path)
+    sessions = _sessions_for_path(path, all_panes, wt_id, claims)
     ports = ports_map.get(wt_id, {}).get("ports")
 
     return {
@@ -339,6 +349,7 @@ def _discover_all() -> list[dict]:
     all_panes = tmux_runner.get_all_panes()
     ports_map = _load_ports_map()
     out: list[dict] = []
+    repos: list[tuple[list, Path, dict | None]] = []
 
     for entry in sorted(entrypoints, key=str):
         try:
@@ -366,10 +377,21 @@ def _discover_all() -> list[dict]:
             except OSError:
                 pass
 
-        remote = _read_origin_remote(repo_top)
+        repos.append((blocks, repo_top, _read_origin_remote(repo_top)))
 
+    # 태그 없는 세션의 소속은 모든 워크트리를 다 본 뒤 한 번에 정한다(중첩 워크트리는 가장 깊은 쪽).
+    worktrees: dict[str, Path] = {}
+    for blocks, repo_top, _ in repos:
         for b in blocks:
-            item = _build_entry(b, repo_top, all_panes, ports_map, remote)
+            try:
+                path = fsguard.resolve_under_roots(b.get("path") or "", git_meta=True)
+            except fsguard.FsDenied:
+                continue
+            worktrees[hashlib.sha1(f"{repo_top}{path}".encode()).hexdigest()[:12]] = path
+    claims = _claim_untagged(all_panes, worktrees)
+    for blocks, repo_top, remote in repos:
+        for b in blocks:
+            item = _build_entry(b, repo_top, all_panes, ports_map, remote, claims)
             if item:
                 out.append(item)
     return out

@@ -69,7 +69,7 @@ def test_route_is_human_only_and_returns_the_count():
             for d in R.human_router.dependencies]
     assert ("auth", "require_human_session") in deps, "기계 토큰(에이전트·훅)은 자기 완료를 지울 수 없다"
     paths = {r.path for r in R.human_router.routes}
-    assert paths == {"/api/agent/ack"}
+    assert paths == {"/api/agent/ack", "/api/agent/seen"}, "본 것·치운 것 모두 사람 화면만 정한다"
 
     _ev("pre", "s1", tool_name="Bash")
     _ev("stop", "s1")
