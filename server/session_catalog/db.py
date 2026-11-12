@@ -552,6 +552,16 @@ def auto_archive(now=None):
         return len(rows)
 
 
+def record_cli(physical_key, path, env_path):
+    """그 tmux 세션에서 지금 도는 실행(런타임)에 CLI 실행 파일 경로와 PATH를 적는다(이어서 시작이 쓴다)."""
+    if not isinstance(physical_key, str) or not physical_key:
+        return False
+    with database(write=True) as db:
+        cur = db.execute("UPDATE runtimes SET cli_path=?,cli_env_path=? WHERE physical_key=? AND ended IS NULL"
+                         " AND (cli_path IS NOT ? OR cli_env_path IS NOT ?)", (path, env_path, physical_key, path, env_path))
+        return cur.rowcount > 0
+
+
 UNKNOWN_DISMISS_SECONDS = 600
 
 

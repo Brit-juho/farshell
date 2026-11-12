@@ -524,6 +524,8 @@ async def agent_event(request: Request):
     if how == "foreign-tmux":
         logger.debug("훅이 우리 소켓이 아닌 tmux에서 왔다 — pane id 폐기")
     verified = {hook_identity.OK: True, hook_identity.CHILD: False}.get(verdict)
+    if verdict == hook_identity.OK and _agent_pid and agent_name in ("claude", "codex") and session:
+        _remember_cli(_agent_pid, agent_name, session)
     (logger.info if verdict in (hook_identity.CHILD, hook_identity.FOREIGN) else logger.debug)(
         "훅 %s sid=%s pane=%s → %s(%s), 프로세스 판정 %s", event,
         str(payload.get("session_id"))[:8], body.get("pane"), session, how, verdict)
@@ -648,6 +650,41 @@ async def agent_event(request: Request):
 
     return {"ok": True, "state": public_state, "queue_scheduled": queued, "resolved_by": how,
             "identity": verdict}
+
+
+# 이미 CLI 경로를 기록한 에이전트 프로세스(pid → 세션 이름). 같은 프로세스의 훅마다 프로세스 표를 다시 읽지 않는다.
+_cli_recorded: dict[int, str] = {}
+
+
+def _remember_cli(pid: int, tool: str, session: str) -> None:
+    """확인된 대화형 CLI 프로세스(hook_identity OK)에서 실행 파일 경로와 PATH를 읽어 세션 기록에 남긴다 — 재부팅 뒤
+    이어서 시작이 서버 PATH에 기대지 않게(cli_resolve). 훅 응답을 늦추지 않도록 백그라운드에서 한 번만."""
+    if _cli_recorded.get(pid) == session:
+        return
+    if len(_cli_recorded) > 512:
+        _cli_recorded.clear()
+    _cli_recorded[pid] = session
+
+    def work():
+        import cli_resolve
+        import tmux_runner
+        from session_catalog import db as catalog_db
+        found = cli_resolve.record_from_process(pid, tool)
+        key = tmux_runner.key_for_name(session)
+        if found and key:
+            catalog_db.record_cli(key, found[0], found[1])
+
+    async def run():
+        try:
+            await asyncio.to_thread(work)
+        except Exception as e:  # noqa: BLE001 — 기록 실패는 훅을 막지 않는다
+            _cli_recorded.pop(pid, None)
+            logger.debug(f"CLI 경로 기록 실패: {type(e).__name__}")
+
+    try:
+        asyncio.get_running_loop().create_task(run())
+    except RuntimeError:
+        pass
 
 
 @router.post("/api/agent/report")
