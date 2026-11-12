@@ -33,12 +33,19 @@ async def _offload(fn,*,on_cancel=None):
         raise
 
 
+# 자동 별칭을 이미 맞춘 실행 → 그때의 CLI 시작 표식. 같은 시작에 두 번 맞추지 않는다(사람이 그사이 이름을 바꿨을 수도).
+_NAMED: dict = {}
+AUTO_ARCHIVE_FIRST_DELAY = 300
+
+
 class Collector:
     def __init__(self):
         self.sources = {}
         self.last_inventory = 0
         self.last_discovery = 0
-        self.last_auto_archive = 0
+        # 첫 자동 보관은 서버가 뜨고 5분 뒤 — 예전에는 OS 부팅 시각(monotonic) 기준 1시간이라 부팅 직후 띄운
+        # 서버는 한 시간 동안 보관을 하지 않았다.
+        self.last_auto_archive = time.monotonic() - 3600 + AUTO_ARCHIVE_FIRST_DELAY
         self.last_beat = None
         self.last_beat_at = 0
 
@@ -86,6 +93,7 @@ class Collector:
                     break
         # Verification observes accepted agent state, never raw unauthenticated hook data.
         self.bind_conversations()
+        self.track_sessions()
         # The heartbeat is committed when it changes or every HEARTBEAT seconds, not on every 2s tick.
         beat = {'state': 'degraded' if failures else 'running', 'updated': updated, 'errors': failures, 'truncated': limited}
         if beat != self.last_beat or now - self.last_beat_at >= HEARTBEAT:
@@ -94,6 +102,62 @@ class Collector:
             self.last_beat, self.last_beat_at = beat, now
         from . import backup
         backup.maybe_snapshot()
+
+    @staticmethod
+    def track_sessions():
+        """실행 중인 에이전트로 세션의 마지막 활동 시각을 앞당기고(분 단위), CLI가 켜지면 자동 이름 세션의 보이는
+        이름(별칭)을 CLI 폴더의 저장소 이름으로 맞춘다. tmux 이름은 바꾸지 않는다 — 이름은 열쇠가 아니라서 바꿔도
+        대기 지시·화면·공유가 깨지지 않는다. 사람이 붙인 별칭(`human`)과 설정을 끈 경우는 건드리지 않는다."""
+        import agent_status
+        import session_names
+        from session_catalog.db import touch_activity, auto_name_enabled, changed
+        entries = [e for e in agent_status.visible_state().values()
+                   if e.get('agent') in ('claude', 'codex') and e.get('tmux_session')]
+        if not entries:
+            return
+        work = []
+        with database() as db:
+            enabled = auto_name_enabled(db)
+            for e in entries:
+                uid_, name = e.get('_tmux_uid'), e.get('tmux_session')
+                if uid_:
+                    runtimes = db.execute("SELECT * FROM runtimes WHERE physical_key LIKE ? AND ended IS NULL", (uid_ + ':%',)).fetchall()
+                    runtimes = [r for r in runtimes if r['name'] == name] if len(runtimes) > 1 else runtimes
+                else:
+                    runtimes = db.execute('SELECT * FROM runtimes WHERE name=? AND ended IS NULL', (name,)).fetchall()
+                if len(runtimes) != 1:
+                    continue
+                runtime = runtimes[0]
+                session = db.execute('SELECT id,title,name_source,last_activity FROM sessions WHERE id=?', (runtime['session_id'],)).fetchone()
+                if not session:
+                    continue
+                activity = e.get('updated_at')
+                touch = activity if activity and (session['last_activity'] or 0) < activity - 60 else None
+                marker = e.get('_session_start_at') or 'seen'
+                rename = (enabled and session['name_source'] == 'auto' and e.get('cwd')
+                          and _NAMED.get(runtime['id']) != marker)
+                if touch or rename:
+                    work.append((session['id'], session['title'], runtime['id'], marker, touch, e.get('cwd') if rename else None))
+        if not work:
+            return
+        if len(_NAMED) > 2000:
+            _NAMED.clear()
+        named = {}
+        for sid, title, rid, marker, touch, cwd in work:
+            if cwd:
+                base = session_names.base_for(cwd)
+                # 홈·이름 없는 폴더는 의미 있는 이름이 아니다 — 지금 이름을 둔다.
+                named[rid] = base if base not in ('home', 'session') else None
+        with database(write=True) as db:
+            for sid, title, rid, marker, touch, cwd in work:
+                touch_activity(db, sid, touch)
+                if cwd:
+                    base = named.get(rid)
+                    if base and base != title:
+                        db.execute("UPDATE sessions SET title=?,updated=?,revision=revision+1 WHERE id=? AND name_source='auto'",
+                                   (base, time.time(), sid))
+                        changed(db, 'session', sid)
+                    _NAMED[rid] = marker
 
     @staticmethod
     def bind_conversations():
@@ -110,9 +174,9 @@ class Collector:
                 # 런타임은 이름이 아니라 tmux 세션 id로 찾는다(엔트리가 새겨 둔 `$N`) — 이름은 바뀔 수 있고, 같은 이름의
                 # 끝나지 않은 런타임이 둘(재부팅 전 세션이 아직 「상태 모름」)이면 영영 연결되지 않았다. id를 아직 못 새긴
                 # 엔트리만 이름으로 찾는다.
-                uid=e.get('_tmux_uid')
-                if uid:
-                    runtimes=db.execute("SELECT * FROM runtimes WHERE physical_key LIKE ? AND ended IS NULL",(uid+':%',)).fetchall()
+                tmux_uid=e.get('_tmux_uid')   # `uid`라 부르면 아래에서 쓰는 uid() 함수를 가린다
+                if tmux_uid:
+                    runtimes=db.execute("SELECT * FROM runtimes WHERE physical_key LIKE ? AND ended IS NULL",(tmux_uid+':%',)).fetchall()
                     if len(runtimes)>1:
                         runtimes=[r for r in runtimes if r['name']==name]
                 else:

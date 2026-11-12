@@ -394,6 +394,16 @@ server socket/PID/birth epoch plus session ID/birth; partial observations mark e
 and cannot terminate them. Stopped catalog rows remain. Archive requires an explicitly stopped
 runtime. Independent delegated tmux sessions are not stopped together.
 
+Visible name and activity (format version 2): `sessions.title` is the visible name and `sessions.name_source` says who chose
+it. While it is `auto` it follows the tmux name (a rename inside tmux included) and, when a CLI starts in the session, takes
+that CLI folder's repository name (`session_history.worker.Collector.track_sessions`, setting `auto_name`); a name a person
+gives (`title` edit) makes it `human` and nothing changes it again until `auto_name:true`. The tmux name itself is never
+changed by the server. `sessions.last_activity` moves forward on run start, agent activity (at most once a minute) and the
+last observation before a run ends; the list is ordered by it and auto-archive uses it. A run's `branch_at_end` is the
+workspace branch known when the run is seen to end. A conversation's title is refreshed whenever new transcript lines
+carry one (Codex: its first prompt), and `conversation_local` keeps the last prompt a person typed and the prompt count for
+this Mac only (not replicated). Tests: `server/tests/test_catalog_v2_behaviour.py`, `test_conversation_summary.py`.
+
 What counts as a complete observation (`session_catalog/inventory.observe`): "the tmux server is absent" is decided in
 one place, `tmux_runner.server_absent`, shared with the delegation ledger — `no server running on` and, after a reboot
 emptied the socket directory, `error connecting to … (No such file or directory)`. Either one is a complete, empty

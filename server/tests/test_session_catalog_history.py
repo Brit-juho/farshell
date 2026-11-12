@@ -1212,3 +1212,25 @@ def test_bind_conversations_finds_the_runtime_by_tmux_id_not_by_name(private_his
     with database() as db:
         rows = db.execute('SELECT runtime_id FROM conversation_executions').fetchall()
     assert [r[0] for r in rows] == ['eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee']
+
+
+def test_bind_conversations_still_records_delegation_edges_after_an_id_match(private_history, monkeypatch):
+    """회귀: tmux id로 런타임을 찾던 변수가 uid() 함수를 가려, 위임 관계를 기록하는 줄에서 터졌다."""
+    import agent_status, agent_config_context, delegation
+    from session_history import worker
+    from session_catalog import identity
+    from session_catalog.db import database
+    with database(write=True) as db:
+        for sid, rid, key in (('a' * 32, 'd' * 32, '$1:1'), ('b' * 32, 'e' * 32, '$2:2')):
+            db.execute("INSERT INTO sessions(id,host,title,origin,created,updated) VALUES(?,'h','t','local',1,1)", (sid,))
+            db.execute("INSERT INTO runtimes(id,session_id,epoch,physical_key,name,state,started,ended,observed,detail)"
+                       " VALUES(?,?,'e',?,'w','running',1,NULL,1,'{}')", (rid, sid, key))
+    monkeypatch.setattr(agent_status, 'visible_state', lambda: {'x': {'session_id': 'n', 'tmux_session': 'w', 'agent': 'claude', '_tmux_uid': '$1'}})
+    monkeypatch.setattr(agent_status, 'public_entry', lambda e: e)
+    monkeypatch.setattr(delegation, 'list_all', lambda: [])
+    monkeypatch.setattr(identity, 'visible_ledger', lambda items, cached=True: [
+        {'id': 'deleg1', 'state': 'running', 'parent': {'key': '$1:1'}, 'child': {'key': '$2:2'}}])
+    monkeypatch.setattr(agent_config_context, 'identify', lambda name: {})
+    worker.Collector.bind_conversations()
+    with database() as db:
+        assert [tuple(r) for r in db.execute("SELECT parent_id,child_id FROM relations")] == [('a' * 32, 'b' * 32)]
