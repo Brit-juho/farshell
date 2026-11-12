@@ -10,6 +10,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Security
+- **Agent tool input no longer leaves the server.** The hook's raw `tool_input` (a Write's whole file content, an Edit's strings, a Bash command that may carry a token) used to go out with every `/api/agent/status` response, `/ws-agent` message and peer relay, though nothing read it. It is kept server-side; clients get a short `summary` instead (a file path relative to the working folder, or the program name of a Bash command).
+- **Session names are checked wherever a session is created or renamed.** `POST /api/tmux/create` used a requested name as is unless an account was chosen, and tmux expands `#(...)` in that value as a shell command; the route is also callable with the machine token. One rule now applies to every create and rename (letters, digits, `_`, `-`; not starting with `-`; up to 64 characters). Lookups by name use tmux exact matching (`=name`), so `app` no longer matches `app-1`.
+
+### Fixed
+- After a reboot, sessions that had been running no longer stay 「state unknown」 until a new tmux server starts. A missing tmux socket now counts as "no server", the same rule the delegation ledger uses, so they are recorded as ended at once and can be resumed or archived.
+- One odd tmux reading no longer marks every session 「state unknown」: a pane kept after its process exited is a normal row, a session appearing between the two tmux listings is read again once, and a runtime seen again after it ended is skipped for that session only instead of undoing the whole update (which also paused conversation collection and auto-archive).
+- A new prompt clears the previous turn's tool, so a session no longer shows 「Working · Bash」 from the last turn; a subagent's approval request no longer replaces the main agent's tool in the session row.
+
+### Changed
+- Agent status sent to another Mac through the relay goes through one filter (`agent_status.remote_view`), and `/ws-agent` sends to local and relayed sockets separately, so fields meant for this Mac only can be kept off the relay.
+
 
 ### Changed
 - Instruction files are split by location: the shared guide is the root `AGENTS.md`, a developer's own working rules live in the git-ignored `.claude/AGENTS.md` (Claude Code reads both when no `CLAUDE.md` exists). `guard_personal.py` refuses to commit `.claude/AGENTS.md` or a root `CLAUDE.md`, and `check_docs.py` fails if a `CLAUDE.md` or `.claude/CLAUDE.md` reappears, because any of them stops Claude Code from reading `AGENTS.md`.
