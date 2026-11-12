@@ -151,3 +151,42 @@
 #vt-wgrail .vt-rg-cvr .vt-rg-nm { flex:1; }
 #vt-wgrail .vt-rg-cvn { margin-top:6px; font-size:var(--fs-xs); line-height:1.45; color:var(--color-muted); }
 #vt-wgrail .vt-rg-record { margin-top:6px; }
+
+/* 보관함(ArchiveView) — 검색 상자와 저장소(루트 폴더) 칩. */
+#vt-wgrail .vt-archive-search { position:relative; margin:4px 8px 6px; }
+#vt-wgrail .vt-archive-search-ico { position:absolute; left:8px; top:50%; transform:translateY(-50%); display:flex; color:var(--color-muted); pointer-events:none; }
+#vt-wgrail .vt-archive-search .vt-input { width:100%; padding-left:28px; }
+#vt-wgrail .vt-archive-chips { display:flex; flex-wrap:wrap; gap:4px; margin:0 8px 6px; }
+#vt-wgrail .vt-archive-chip {
+  display:inline-flex; align-items:center; gap:4px; height:24px; padding:0 8px; border:1px solid var(--color-line);
+  border-radius:var(--radius-full); background:transparent; color:var(--color-sub); font:var(--fs-xs) var(--font-ui); cursor:pointer;
+}
+#vt-wgrail .vt-archive-chip:hover { background:var(--color-state-hover); }
+#vt-wgrail .vt-archive-chip:active { background:var(--color-state-press); }
+#vt-wgrail .vt-archive-chip[aria-pressed="true"] { background:var(--color-acc-soft); border-color:transparent; color:var(--color-acc); }
+#vt-wgrail .vt-archive-chip-name { max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#vt-wgrail .vt-archive-chip-n { font-family:var(--font-mono); color:var(--color-muted); }
+#vt-wgrail .vt-archive-head { cursor:default; }
+#vt-wgrail .vt-archive-head:hover, #vt-wgrail .vt-archive-head:active { background:transparent; }
+
+/* 세션 목록 설정 시트의 탭 줄(저장소 · 보기 · 정리) — 칸 모양은 앱 공용 세그먼트(.vt-segment). */
+.vt-repovis-tabs { display:flex; gap:2px; margin:0 16px 8px; padding:2px; border-radius:var(--radius-sm); background:var(--color-bg-2); }
+
+/* 저장소 머리 줄 — 접기 버튼과 「+」(새 세션)가 형제. 「+」는 머리 오른쪽 끝, 접기 캐럿 앞. */
+#vt-wgrail .vt-rg-headrow { display:flex; align-items:center; }
+#vt-wgrail .vt-rg-headrow > .vt-rg-head { flex:1; min-width:0; }
+#vt-wgrail .vt-rg-new { flex:none; margin-right:6px; color:var(--color-muted); }
+#vt-wgrail .vt-rg-new:hover, #vt-wgrail .vt-rg-new:focus-visible { color:var(--color-txt); }
+
+/* 새 세션 메뉴(shell/NewSessionMenu.tsx) — 메뉴 한 규격(.vt-menu) 위에 머리·검색·이름 미리보기. */
+.vt-nsm { width:320px; padding:6px 0; }
+.vt-nsm-head { padding:4px 12px 8px; font:700 var(--fs-sm) var(--font-ui); color:var(--color-txt); }
+.vt-nsm-search { position:relative; margin:0 8px 6px; }
+.vt-nsm-search > span { position:absolute; left:8px; top:50%; transform:translateY(-50%); display:flex; color:var(--color-muted); pointer-events:none; }
+.vt-nsm-search .vt-input { width:100%; padding-left:28px; }
+.vt-nsm-sec { padding:6px 12px 4px; font:var(--weight-semibold) var(--fs-3xs) var(--font-ui); color:var(--color-muted); }
+.vt-nsm-item .vt-menu-item-sub.mono { font-family:var(--font-mono); }
+.vt-nsm-name { flex:none; margin-left:auto; padding-left:8px; font:var(--fs-xs) var(--font-mono); color:var(--color-muted); }
+.vt-nsm-caret { flex:none; margin-left:auto; display:flex; color:var(--color-muted); }
+.vt-nsm-note { padding:6px 12px; font-size:var(--fs-xs); color:var(--color-muted); }
+.vt-nsm-foot { padding:6px 12px 2px; font-size:var(--fs-3xs); color:var(--color-muted); }

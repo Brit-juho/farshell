@@ -29,7 +29,6 @@ import { updateSessionPicker } from '../picker.js';
 import { setPaneSession, revealSessionPane, openLayoutTab, clearSessionFromLayout, replaceSessionId } from '../layout/store.js';
 import { saveLayoutNow } from '../layout/persist.js';
 import { t } from '../core/i18n.js';
-import { icon } from '../ui/icons.js';
 import { accountsSnapshot, loadAccounts, profileForCreate, refusalText } from './accounts.js';
 import { defaultLine } from './accounts-data.js';
 import { isRelayed } from '../core/host-route.js';
@@ -69,117 +68,37 @@ export async function createSession({ place = 'view' } = {}) {
   if (id) addSession(id, undefined, { place });
 }
 
-// + 버튼: 일반 터미널 / tmux 중 선택하는 드롭다운. (기존 createSession은
-// 온보딩·auto-mac 호환을 위해 그대로 둔다.)
-//
-// 2026-09-18 후속(사용자 지적: "열리는 팝업은 누른 위치에 열리게") — 예전엔
-// 항상 `#add-btn`(상단 탭 바의 + 버튼) 기준으로 위치를 계산했다. 그 버튼을
-// 없애고 레일 하단 "+ 새 세션"으로 발자국을 합친 뒤에는, 그 하드코딩 때문에
-// 메뉴가 클릭 위치와 무관하게 화면 구석(폴백 좌표)에 떴다 — 실제로 누른
-// 요소(`el`)를 받아 그 기준으로 계산한다. `initActionDelegation`(core/
-// dom.js)이 위임 클릭에서 이미 `el`(closest('[data-action]'))을 정확히
-// 계산해 넘겨준다 — delegated listener의 `e.currentTarget`은 델리게이트
-// 루트를 가리켜 못 쓴다는 게 이유였다. Rail.tsx의 레일 버튼처럼 델리게이션을
-// 안 거치는 호출자는 자기 엘리먼트를 직접 넘긴다.
+// + 버튼(레일 머리·바닥, 제목 막대, 플릿, 팔레트)이 여는 「새 세션」 메뉴. 본체는 shell 지연 청크
+// (shell/NewSessionMenu.tsx — 저장소 찾기·최근 저장소·열릴 이름 미리보기·홈 폴더·일반 터미널·이번만 다른 계정)이고,
+// 여기는 그 청크를 불러 만들기 동작만 넘기는 스텁이다(세션 로직 점검 단계 6 — core 크기를 줄인다).
+// `el`은 실제로 누른 요소다(메뉴가 그 옆에 뜬다) — 위임 클릭은 core/dom.js가 closest('[data-action]')로 넘긴다.
+let _menuLoading = false;
 export function showAddMenu(el, e) {
   if (e) e.stopPropagation();
-  // 토글: 이미 열려 있으면 닫기
-  const existing = document.getElementById('add-menu');
-  if (existing) { existing.remove(); return; }
-
-  const menu = document.createElement('div');
-  menu.id = 'add-menu';
-  menu.className = 'vt-menu';
-  // 누른 버튼 바로 아래에 정렬 (기본 .vt-menu는 우측 고정이라 left로 재배치)
-  const r = el ? el.getBoundingClientRect() : { left: 8, right: 8, top: 44, bottom: 44 };
-  // 사이드바 머리의 「+」는 바로 밑에 「이름순」 같은 조작 줄이 붙어 있어, 아래로 펼치면 그 줄을 덮는다
-  // (2026-11 화면 점검). 머리 막대의 버튼이면 사이드바 바깥(오른쪽)으로 연다.
-  const inHead = !!(el && el.closest && el.closest('.vt-wgrail-head'));
-  menu.style.right = 'auto';
-  // 머리 막대 오른쪽에는 접기 버튼이 더 있으므로 버튼이 아니라 **사이드바 패널의 오른쪽 가장자리**를 기준으로 연다.
-  const panelRight = inHead ? (el.closest('.vt-sidepanel') || el).getBoundingClientRect().right : 0;
-  menu.style.left = `${Math.round(inHead ? panelRight + 6 : r.left)}px`;
-  menu.style.top = `${Math.round(inHead ? r.top : r.bottom + 6)}px`;
-
-  // 항목은 메뉴 한 규격(.vt-menu-item.two — components.css): 아이콘 14 + 이름 + 보조 설명.
-  const ICONS = new Map([[createPlainSession, 'terminal'], [createTmuxSession, 'square-terminal']]);
-  const mkItem = (label, hint, onClick, iconName) => {
-    const it = document.createElement('div');
-    it.className = 'vt-menu-item two';
-    it.setAttribute('role', 'button');
-    it.tabIndex = 0;
-    const ico = document.createElement('span');
-    ico.className = 'vt-menu-item-ico';
-    ico.innerHTML = icon(iconName || ICONS.get(onClick) || 'terminal', 14, 2);
-    const body = document.createElement('span');
-    body.className = 'vt-menu-item-body';
-    const name = document.createElement('span');
-    name.className = 'vt-menu-item-label';
-    name.textContent = label;
-    const sub = document.createElement('span');
-    sub.className = 'vt-menu-item-sub';
-    sub.textContent = hint;
-    body.append(name, sub);
-    it.append(ico, body);
-    const run = () => { menu.remove(); onClick(); };
-    it.onclick = run;
-    it.onkeydown = (ev) => {
-      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); run(); }
-      else if (ev.key === 'Escape') { ev.preventDefault(); menu.remove(); el?.focus?.(); }
-      else if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
-        ev.preventDefault();
-        const all = [...menu.querySelectorAll('.vt-menu-item')];
-        all[(all.indexOf(it) + (ev.key === 'ArrowDown' ? 1 : -1) + all.length) % all.length]?.focus();
-      }
-    };
-    return it;
+  if (_menuLoading) return;
+  _menuLoading = true;
+  const relayed = isRelayed();
+  const getJson = async (path) => {
+    const res = await apiFetch(`${API_BASE}${path}`);
+    if (!res.ok) throw new Error(t('불러오지 못했습니다 ({status})', { status: res.status }));
+    return res.json();
   };
-  menu.appendChild(mkItem(t('일반 터미널'), t('단발 셸 (tmux 아님)'), createPlainSession));
-  menu.appendChild(mkItem(t('tmux 세션'), t('화면을 닫아도 유지 · 맥/모바일 공유'), () => createTmuxSession(), 'square-terminal'));
-  // 계정(핫스왑 H1) — 등록된 계정이 하나라도 있을 때만 보인다(없으면 이 메뉴는 예전 그대로). 다른 맥을 보는 중이면 숨긴다.
-  // 기본 계정을 바꾸는 곳은 상태 막대의 계정 칩과 설정 › 에이전트 계정이다 — 여기는 「이번만」 한 줄이고, 지금 기본 계정은 보조 글에 적는다.
-  const addAccountRows = (acc) => {
-    if (menu.querySelector('.vt-menu-accounts') || isRelayed() || !acc.ok || !acc.profiles.length) return false;
-    const group = document.createElement('div');
-    group.className = 'vt-menu-accounts';
-    const sep = document.createElement('div');
-    sep.className = 'vt-menu-sep';
-    const once = mkItem(t('이번만 다른 계정으로'), defaultLine(acc),
-      () => import('./accounts-ui.js').then((m) => m.openAccountMenu({ mode: 'once', anchor: el, onPick: (id) => createTmuxSession({ profile: id }) })), 'user');
-    group.append(sep, once);
-    menu.appendChild(group);
-    return true;
-  };
-  addAccountRows(accountsSnapshot());
-  document.body.appendChild(menu);
-
-  // 레일 하단 버튼처럼 뷰포트 맨 아래에 붙은 경우, 아래로 펼치면 body의
-  // overflow:hidden에 잘려 안 보인다 — 실제 높이를 측정해 필요하면 위로 뒤집는다.
-  const fit = () => {
-    const menuHeight = menu.offsetHeight;
-    if (!inHead && r.bottom + 6 + menuHeight > window.innerHeight) {
-      menu.style.top = `${Math.round(r.top - menuHeight - 6)}px`;
-    }
-    // 뷰포트 안으로 당긴다(오른쪽·아래로 넘치지 않게).
-    const rect = menu.getBoundingClientRect();
-    if (rect.right > window.innerWidth - 8) menu.style.left = `${Math.max(8, Math.round(window.innerWidth - 8 - rect.width))}px`;
-    if (rect.bottom > window.innerHeight - 8) menu.style.top = `${Math.max(8, Math.round(window.innerHeight - 8 - rect.height))}px`;
-  };
-  fit();
-  menu.querySelector('.vt-menu-item')?.focus();
-  // 목록을 아직 못 받았거나 낡았으면 백그라운드로 받아, 메뉴가 열려 있는 동안 계정 줄을 붙인다.
-  if (!isRelayed()) {
-    loadAccounts().then((fresh) => {
-      if (document.body.contains(menu) && addAccountRows(fresh)) { menu.style.top = `${Math.round(inHead ? r.top : r.bottom + 6)}px`; fit(); }
+  import('../shell/NewSessionMenu.js').then((m) => {
+    m.openNewSessionMenu({
+      anchor: el || null,
+      getJson,
+      relayed,
+      createTmux: (opts) => createTmuxSession(opts),
+      createPlain: () => createPlainSession(),
+      // 계정(핫스왑 H1) — 등록된 계정이 하나라도 있을 때만 줄이 보인다. 목록이 낡았으면 뒤에서 받는다(다음에 열 때 반영).
+      accounts: relayed ? null : {
+        line: () => { const acc = accountsSnapshot(); return acc.ok && acc.profiles.length ? defaultLine(acc) : null; },
+        openOnce: (anchor, onPick) => import('./accounts-ui.js').then((a) => a.openAccountMenu({ mode: 'once', anchor, onPick })),
+      },
     });
-  }
-
-  setTimeout(() => {
-    document.addEventListener('click', function _close(ev) {
-      if (!document.body.contains(menu)) { document.removeEventListener('click', _close); return; }
-      if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', _close); }
-    });
-  }, 0);
+    if (!relayed) void loadAccounts();
+  }).catch((err) => { console.error('[FarShell new session menu]', err); showToast(t('메뉴를 열지 못했습니다')); })
+    .finally(() => { _menuLoading = false; });
 }
 
 // 일반(비 tmux) 터미널 세션 생성
@@ -238,7 +157,9 @@ export async function createTmuxSession(opts) {
   const res = await apiFetch(`${API_BASE}/api/tmux/create`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ auto_open_on_mac: !!autoMac, screen: screenId(), operation_id: operationId(), ...(profile ? { profile } : {}) }),
+    // cwd: 새 세션 메뉴·저장소 머리 「+」가 고른 작업 트리(없으면 서버의 기본 시작 폴더 — 홈).
+    body: JSON.stringify({ auto_open_on_mac: !!autoMac, screen: screenId(), operation_id: operationId(), ...(profile ? { profile } : {}),
+      ...(opts && typeof opts === 'object' && typeof opts.cwd === 'string' && opts.cwd ? { cwd: opts.cwd } : {}) }),
   });
   if (!res.ok) {
     if (profile) {
@@ -479,6 +400,8 @@ window.vtRecoverSession = recoverSession;
 // 일(tmux 세션 목록 + 깨우기 + 완전 종료)은 이제 picker.js의 세션 관리
 // 시트(session.manager)가 직접 한다.
 registerAction('session.add-menu', (el, e) => showAddMenu(el, e));
+// 레일 저장소 머리의 「+」 — 그 저장소(메인 작업 트리)에서 바로 새 tmux 세션.
+registerAction('session.create-in', (cwd) => createTmuxSession(typeof cwd === 'string' ? { cwd } : undefined));
 
 // 외부(picker.js/quickopen.js/grid.js/snippets.js/viewer.js/moreMenu.js/voice.js)가
 // bare identifier 또는 window.foo(e) 형태로 참조하므로 브리지 필요.

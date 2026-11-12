@@ -227,6 +227,10 @@ More troubleshooting: `fsh help troubleshoot`
 ## Permissions when resuming a conversation
 
 Resume and Conversation archive's Continue conversation also restore the last recorded permissions.
+
+"Archive" at the bottom of the session list lets you search archived sessions by name, conversation, branch, last instruction or folder, and the repository chips show only one repository's (root folder's) sessions.
+"+ New session" asks for the repository first; the grey text on the right is the name the session will get. The "+" on a repository head opens a new session right there.
+How raw conversations are kept (collection, archive limits, backup, replication with other Macs) is set in Settings › "Conversation archive". The conversation history window only searches and reads.
 Claude bypass and Codex YOLO stay on or off as recorded. OFF is applied explicitly, so a later change
 to global settings cannot turn it on. Codex also restores its approval policy, sandbox and approval reviewer.
 A notice shows the restored mode after launch.

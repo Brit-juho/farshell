@@ -274,3 +274,21 @@ def test_resume_preview_without_a_conversation_or_session(catalog, monkeypatch):
     assert lifecycle.resume_preview(sid) == {"resumable": False, "conversation_id": None}
     with pytest.raises(catalog.Refused, match="session_not_found"):
         lifecycle.resume_preview("f" * 32)
+
+
+def test_archive_search_by_folder_and_counts_per_repository(catalog, tmp_path, monkeypatch):
+    """보관함: 폴더 경로로도 찾고, 저장소별 개수(칩)를 함께 준다(세션 로직 점검 단계 6)."""
+    from session_catalog.db import database
+    from session_catalog import inventory
+    monkeypatch.setattr(inventory, "_placement_tried", {})
+    a = _git_repo(tmp_path / "home" / "alpha")
+    b = _git_repo(tmp_path / "home" / "beta")
+    _reconcile(_item("$1:1", "s1", str(a)), _item("$2:2", "s2", str(a)), _item("$3:3", "s3", str(b)), _item("$4:4", "s4", str(tmp_path / "home")))
+    _reconcile()
+    with database(write=True) as con:
+        con.execute("UPDATE sessions SET archived=1")
+    snap = catalog.snapshot(archived=True, order="activity")
+    pid = {p["name"]: p["id"] for p in snap["projects"] if p["kind"] == "git"}
+    assert snap["project_counts"] == {pid["alpha"]: 2, pid["beta"]: 1, "_none": 1}
+    assert {r["name"] for r in catalog.snapshot(archived=True, order="activity", q=str(b))["sessions"]} == {"s3"}
+    assert {r["name"] for r in catalog.snapshot(archived=True, order="activity", project=pid["alpha"])["sessions"]} == {"s1", "s2"}

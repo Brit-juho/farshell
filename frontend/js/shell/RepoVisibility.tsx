@@ -50,8 +50,10 @@ interface Props {
   deps: RepoVisibilityDeps;
   /** 시트 제목. 기본은 「저장소 관리」 — 레일은 「레일 설정」으로 쓴다. */
   title?: string;
-  /** 저장소 목록 위에 얹는 구획(레일 설정의 표시 토글). 있으면 목록 앞에 「저장소」 소제목이 붙는다. */
-  lead?: JSX.Element;
+  /** 저장소 탭 말고 더 둘 탭(레일 설정의 「보기」·「정리」). 있으면 머리 아래에 탭 줄이 생기고, 저장소 탭이 맨 앞이다. */
+  tabs?: { id: string; label: string; render: () => JSX.Element }[];
+  /** 처음 열 탭(기본 「저장소」). */
+  initialTab?: string;
   onClose: () => void;
   /** 숨김·워크트리 구성이 바뀌면 레일을 다시 불러오라는 신호. */
   onChanged: () => void;
@@ -72,6 +74,8 @@ function shortenPath(path: string, roots: string[]): string {
 }
 
 export function RepoVisibility(props: Props) {
+  const [tab, setTab] = createSignal(props.initialTab || 'repos');
+  const tabList = () => [{ id: 'repos', label: t('저장소') }, ...(props.tabs || [])];
   const [groups, setGroups] = createSignal<RepoGroup[]>([]);
   const [roots, setRoots] = createSignal<string[]>([]);
   const [loading, setLoading] = createSignal(true);
@@ -143,15 +147,11 @@ export function RepoVisibility(props: Props) {
       const tn = s.tmuxName || s.tmux_name;
       if (tn === tmuxName) { sid = id; break; }
     }
-    if (sid) {
-      // 2026-09-21(사용자 지적) — Rail.tsx의 openRow와 같은 수정. openGroupTab
-      // 으로 탭까지만 옮긴 뒤 switchTo로 "배정"하면 그 탭의 활성 pane이
-      // 짝 세션의 칸일 때 짝을 밀어냈다. revealSession이 탭·pane을 함께
-      // 찾아 트리를 건드리지 않고 이동한다.
-      w.revealSession?.(sid);
-    } else {
-      await w.attachTmux?.(tmuxName);
-    }
+    // 레일 클릭과 같은 한 곳(term/session-actions.js openSessionFromRail) — 열린 세션이면 그 칸으로, 닫힌 묶음의
+    // 일원이면 묶음을 통째로, 아니면 새 뷰로. 예전에는 여기만 revealSession/attachTmux를 따로 불러 묶음을 무시했다.
+    if (w.vtOpenSessionFromRail) await w.vtOpenSessionFromRail({ sessionId: sid, tmuxName });
+    else if (sid) w.revealSession?.(sid);
+    else await w.attachTmux?.(tmuxName);
     props.onClose();
   };
 
@@ -215,9 +215,21 @@ export function RepoVisibility(props: Props) {
             <span class="vt-wtd-title">{props.title || t('저장소 관리')}</span>
             <button type="button" class="vt-btn sm quiet vt-wtd-x" onClick={props.onClose} aria-label={t('닫기')}>×</button>
           </div>
-          <div class="vt-wtd-body vt-repovis-body">
-            {props.lead}
-            <Show when={props.lead}><div class="vt-wtd-section-title">{t('저장소')}</div></Show>
+          <Show when={(props.tabs || []).length > 0}>
+            <div class="vt-repovis-tabs" role="tablist" aria-label={props.title || t('저장소 관리')}>
+              <For each={tabList()}>{(x) => (
+                <button type="button" role="tab" class="vt-segment vt-repovis-tab" id={`vt-repovis-tab-${x.id}`} aria-selected={tab() === x.id}
+                  aria-controls="vt-repovis-panel" onClick={() => setTab(x.id)}>{x.label}</button>
+              )}</For>
+            </div>
+          </Show>
+          <Show when={tab() !== 'repos'}>
+            <div class="vt-wtd-body vt-repovis-body" role="tabpanel" id="vt-repovis-panel" aria-labelledby={`vt-repovis-tab-${tab()}`}>
+              {(props.tabs || []).find((x) => x.id === tab())?.render()}
+            </div>
+          </Show>
+          <Show when={tab() === 'repos'}>
+          <div class="vt-wtd-body vt-repovis-body" role={(props.tabs || []).length ? 'tabpanel' : undefined} id="vt-repovis-panel">
             <Show when={loading()}><div class="vt-repovis-empty">{t('불러오는 중…')}</div></Show>
             <Show when={!loading() && groups().length === 0}>
               <div class="vt-repovis-empty">{t('탐색 경계 안에 git 저장소가 없습니다.')}</div>
@@ -318,6 +330,7 @@ export function RepoVisibility(props: Props) {
               </For>
             </Show>
           </section>
+          </Show>
         </div>
       </div>
       <Show when={wtDialogRepo()}>

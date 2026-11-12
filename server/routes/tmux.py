@@ -384,6 +384,27 @@ CLOSED_LINEAGE_SECONDS = 24 * 3600
 
 
 
+@router.get("/api/tmux/name-preview")
+async def tmux_name_preview(cwd: str = ""):
+    """새 세션 메뉴가 「이 이름으로 열립니다」를 미리 보이려고 부른다. 만들 때와 같은 규칙(session_names: 시작 폴더의
+    저장소 이름, 겹치면 -2·-3)이고 아무것도 만들지 않는다. cwd가 없으면 새 세션의 기본 시작 폴더(홈) 기준.
+    실제로 만들 때 그 사이 다른 세션이 이름을 가져가면 다음 번호가 될 수 있다."""
+    requested = (cwd or "").strip()
+    if requested:
+        try:
+            is_dir = os.path.isabs(requested) and await res_pools.run(
+                "fs", os.path.isdir, requested, op="tmux.name_preview", key=requested, timeout=5)
+        except (res_pools.OpTimeout, res_pools.Busy):
+            is_dir = False
+        if not is_dir:
+            return JSONResponse({"error": "invalid_cwd", "reason": tr("cwd가 존재하는 절대경로가 아닙니다")}, status_code=400)
+        start_dir = requested
+    else:
+        start_dir = platform_utils.default_start_dir()
+    base = await asyncio.to_thread(session_names.base_for, start_dir)
+    return {"base": base, "name": await asyncio.to_thread(session_names.allocate, base)}
+
+
 @router.post("/api/tmux/create")
 async def create_tmux_session(request: Request):
     body = await request.json()

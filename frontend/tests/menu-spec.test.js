@@ -61,9 +61,10 @@ test('메뉴를 그리는 코드가 규격 클래스를 쓴다 (열거)', () => 
   assert.match(read('frontend', 'js', 'shell', 'TitleBar.tsx'), /class="vt-mb-pop"/);
   assert.match(read('frontend', 'js', 'files', 'FileTree.tsx'), /class="vt-ft-mi"/);
   assert.match(read('frontend', 'js', 'ui', 'select.js'), /'vt-menu vt-dd-list'/);
-  const sess = read('frontend', 'js', 'term', 'session.js');
-  assert.match(sess, /menu\.className = 'vt-menu'/);
-  assert.match(sess, /'vt-menu-item two'/);
+  // 「+」(새 세션) 메뉴는 shell 청크의 NewSessionMenu.tsx가 그린다(세션 로직 점검 단계 6).
+  const nsm = read('frontend', 'js', 'shell', 'NewSessionMenu.tsx');
+  assert.match(nsm, /class="vt-menu vt-nsm"/);
+  assert.match(nsm, /class="vt-menu-item two vt-nsm-item"/);
   assert.match(read('frontend', 'js', 'panels', 'ports', 'ports.js'), /'vt-pt-menu-item'/);
   const accounts = read('frontend', 'js', 'term', 'accounts-ui.js');
   assert.match(accounts, /menu\.className = 'vt-menu'/);
@@ -72,23 +73,25 @@ test('메뉴를 그리는 코드가 규격 클래스를 쓴다 (열거)', () => 
 });
 
 test('「+」 메뉴: 아이콘이 있고 인라인 스타일이 없으며 머리 막대의 +는 사이드바 바깥으로 연다', () => {
-  const sess = read('frontend', 'js', 'term', 'session.js');
-  const fn = sess.slice(sess.indexOf('export function showAddMenu'), sess.indexOf('// 일반(비 tmux) 터미널 세션 생성'));
+  const fn = read('frontend', 'js', 'shell', 'NewSessionMenu.tsx');
   assert.match(fn, /vt-menu-item-ico/);
   assert.doesNotMatch(fn, /style="/, '인라인 style 문자열이 남았다');
   assert.doesNotMatch(fn, /opacity:\.55/);
-  assert.match(fn, /closest\('\.vt-wgrail-head'\)/);
+  assert.match(fn, /closest(\?\.)?\('\.vt-wgrail-head'\)/);
   assert.match(fn, /panelRight \+ 6/);
 });
 
 test('「+」 메뉴: 계정은 「이번만 다른 계정으로」 한 줄뿐이다 — 기본 계정 바꾸기는 설정·상태 막대 칩의 일이다', () => {
   const sess = read('frontend', 'js', 'term', 'session.js');
   const fn = sess.slice(sess.indexOf('export function showAddMenu'), sess.indexOf('// 일반(비 tmux) 터미널 세션 생성'));
-  assert.match(fn, /이번만 다른 계정으로/);
-  assert.doesNotMatch(fn, /기본 계정 바꾸기/);
-  assert.doesNotMatch(fn, /mode: 'default'/);
-  // 선택기 본체는 core가 아니라 지연 청크(shell)에 있다 — 초기 페이로드 상한 때문이다.
+  const nsm = read('frontend', 'js', 'shell', 'NewSessionMenu.tsx');
+  assert.match(nsm, /이번만 다른 계정으로/);
+  assert.doesNotMatch(nsm + fn, /기본 계정 바꾸기/);
+  assert.doesNotMatch(nsm + fn, /mode: 'default'/);
+  assert.match(fn, /mode: 'once'/);
+  // 선택기 본체는 core가 아니라 지연 청크(shell)에 있다 — 초기 페이로드 상한 때문이다. 메뉴 본체도 지연 청크다.
   assert.match(fn, /import\('\.\/accounts-ui\.js'\)/);
+  assert.match(fn, /import\('\.\.\/shell\/NewSessionMenu\.js'\)/);
   assert.doesNotMatch(sess, /from '\.\/accounts-ui\.js'/);
 });
 

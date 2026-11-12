@@ -36,7 +36,8 @@ import { createRailPrefs } from './rail-prefs.js';
 import { Menu, ROW_MENU_ICON, Row, type MenuItem } from './RailRow.js';
 import { RailHoverCard, type HoverCardSource } from './RailHoverCard.js';
 import { NativeChildren } from './NativeChildren.js';
-import { ArchiveEntry, ArchiveList, type CatalogSnapshot } from './CatalogTree.js';
+import { ArchiveEntry, type CatalogSnapshot } from './CatalogTree.js';
+import { ArchiveView } from './ArchiveView.js';
 import { renameSession as renameCatalogSession } from '../history/session-actions.js';
 import { historyApi } from '../history/api.js';
 import { icon } from '../ui/icons.js';
@@ -44,7 +45,7 @@ import { shellIcon } from '../ui/icons-shell.js';
 
 export type { RailDeps } from './rail-fetch.js';
 import { RepoVisibility } from './RepoVisibility.js';
-import { RailSettingsLead } from './RailSettings.js';
+import { RailViewSettings, RailCleanupSettings } from './RailSettings.js';
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
 // 상태 없는 순수 모듈이라 지연 청크에 복제돼도 된다(위 ⚠의 예외).
 import { createPoll, isStale } from '../core/poll.js';
@@ -140,7 +141,8 @@ export function Rail(props: RailProps) {
     const request = ++catalogRequest;
     try {
       // 최근 활동순(저장소 묶음의 「종료 N」과 세션 정렬이 같은 기준). 보관함은 따로 연다.
-      const params = new URLSearchParams({ archived: String(archiveOpen()), limit: '200', order: 'activity' });
+      // 보관된 세션은 보관함 화면(ArchiveView)이 따로 검색·쪽 넘김으로 읽는다 — 여기는 실행 중·종료만.
+      const params = new URLSearchParams({ archived: 'false', limit: '200', order: 'activity' });
       if (more && catalog()?.next) params.set('cursor', catalog()!.next!);
       const data = await historyApi('/api/session-catalog?' + params);
       if (request !== catalogRequest) return;
@@ -657,9 +659,9 @@ export function Rail(props: RailProps) {
             </Show>
           </Show>
           {/* 보관함 — 탭이 아니라 같은 자리의 목록 전환이다. 위의 「최근 종료」 아래 한 줄이 여기로 온다. */}
-          <Show when={!collapsed() && archiveOpen() && catalog()}>
-            {data => <ArchiveList data={data()} onBack={() => { setArchiveOpen(false); extraPages = false; catalogPoll.kick(); }}
-              onChanged={() => { catalogPoll.kick(); }} onMore={() => { void refreshCatalog(true).catch(() => {}); }} />}
+          <Show when={!collapsed() && archiveOpen()}>
+            <ArchiveView remote={viewHostId !== LOCAL_HOST} onBack={() => { setArchiveOpen(false); catalogPoll.kick(); }}
+              onChanged={() => { catalogPoll.kick(); }} />
           </Show>
           {/* 저장소 가지 그래프 — 저장소 → (메인 · 워크트리 가지) → 세션 → 위임 하위, 맨 아래 「종료 N」. */}
           <Show when={!collapsed() && !archiveOpen()}>
@@ -675,6 +677,9 @@ export function Rail(props: RailProps) {
                     nodeProps={nodeProps}
                     kidsCollapsed={kidsCollapsed}
                     afterNode={(row) => <NativeChildren row={row} />}
+                    onNew={viewHostOffline() ? undefined : (root) => {
+                      (props.deps.getAction('session.create-in') as ((cwd: string) => void) | undefined)?.(root);
+                    }}
                     hasEnded={group().ended.length > 0}
                     ended={() => <EndedFold sessions={group().ended} open={endedOpen(group())}
                       onToggle={() => toggleView('ended:' + repoKey(group()))} onChanged={() => { catalogPoll.kick(); }} />}
@@ -691,7 +696,7 @@ export function Rail(props: RailProps) {
           </Show>
           {/* 보관함 한 줄. 카탈로그가 없는 옛 호스트는 위의 실행 중 목록만 남는다. */}
           <Show when={!collapsed() && !archiveOpen() && catalog()}>
-            {data => <ArchiveEntry count={data().archived_count ?? 0} onOpen={() => { setArchiveOpen(true); extraPages = false; catalogPoll.kick(); }} />}
+            {data => <ArchiveEntry count={data().archived_count ?? 0} onOpen={() => setArchiveOpen(true)} />}
           </Show>
           <Show when={rows().length > lists().sessions.length && !collapsed()}>
             <div class="vt-wgrail-note">{t('세션 목록 설정에서 {n}개를 숨겼습니다.', { n: rows().length - lists().sessions.length })}</div>
@@ -767,7 +772,12 @@ export function Rail(props: RailProps) {
           <RepoVisibility
             deps={props.deps}
             title={t('세션 목록 설정')}
-            lead={<RailSettingsLead />}
+            tabs={[
+              { id: 'view', label: t('보기'), render: () => <RailViewSettings /> },
+              // 정리(자동 보관 등)는 이 맥 서버의 값이다 — 다른 맥을 보고 있으면 숨긴다(그 맥의 값이 아니다).
+              ...(viewHostId === LOCAL_HOST ? [{ id: 'cleanup', label: t('정리'), render: () => <RailCleanupSettings /> }] : []),
+            ]}
+            initialTab="view"
             onClose={() => setRepoSheet(false)}
             onChanged={() => reposPoll.kick()}
           />

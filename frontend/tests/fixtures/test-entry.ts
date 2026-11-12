@@ -68,3 +68,5 @@ export { buildRepoTree, flattenRows, endedActivity, OUTSIDE_KEY } from '../../js
 export { nodeLine, kidLabel } from '../../js/shell/rail-data.js';
 export { normalizeHome } from '../../js/shell/rail-fetch.js';
 export { sessionLines, kidLines, worktreeLines } from '../../js/shell/RepoBranch.js';
+export { groupArchive } from '../../js/shell/ArchiveView.js';
+export { repoChoices, filterChoices } from '../../js/shell/NewSessionMenu.js';
