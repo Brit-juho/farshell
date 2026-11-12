@@ -386,10 +386,20 @@ function Fleet(props: { deps: FleetDeps }) {
   let endedReturn: HTMLElement | null = null;
   const openEnded = (key: string) => { endedReturn = document.activeElement as HTMLElement | null; setEndedSheet(key); };
   const closeEnded = () => {
+    const key = endedSheet();
     setEndedSheet(null);
     const back = endedReturn; endedReturn = null;
-    if (back?.isConnected) queueMicrotask(() => back.focus());
+    queueMicrotask(() => {
+      // 그 사이 「종료 N」 타일이 사라졌으면(마지막 종료 세션을 보관·이어서 시작) 같은 저장소 구역, 그것도 없으면 목록으로.
+      const section = key ? Array.from(document.querySelectorAll<HTMLElement>('#vt-fleet .vt-fleet-repo')).find((x) => x.dataset.repo === key) : undefined;
+      const target = back?.isConnected ? back
+        : section?.querySelector<HTMLElement>('.vt-tile, .vt-fleet-repo-new')
+          ?? document.querySelector<HTMLElement>('#vt-fleet .vt-tile, #vt-fleet .vt-fleet-tool');
+      target?.focus();
+    });
   };
+  // 폴링으로 그 저장소의 종료 세션이 모두 사라지면 시트가 저절로 없어진다 — 그때도 닫기와 같은 길로 포커스를 돌려준다.
+  createEffect(() => { if (endedSheet() && !endedGroup()) closeEnded(); });
 
   const openRow = async (row: SessionRow) => {
     const w = window as any;
@@ -541,7 +551,7 @@ function Fleet(props: { deps: FleetDeps }) {
         <For each={tree().map((g) => g.key)}>{(key) => (
           <Show when={tree().find((g) => g.key === key)}>
             {(g) => (
-              <section class="vt-fleet-repo" classList={{ outside: g().key === OUTSIDE_KEY }} aria-label={g().repository ? g().name : t('저장소 밖')}>
+              <section class="vt-fleet-repo" data-repo={g().key} classList={{ outside: g().key === OUTSIDE_KEY }} aria-label={g().repository ? g().name : t('저장소 밖')}>
                 <div class="vt-fleet-repo-head">
                   <span class="vt-fleet-repo-ic" innerHTML={shellIcon(g().repository ? 'folder' : 'home', 14, 2)} />
                   <b class="vt-fleet-repo-name">{g().repository ? g().name : t('저장소 밖')}</b>
