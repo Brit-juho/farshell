@@ -77,9 +77,16 @@ def _spawn_shell_session(name, cwd, selection, path_env):
     """셸 하나로 세션을 만들고 그 pane id를 돌려준다. 계정을 고르면 새 세션을 계정으로 만들 때와 같은 주입을 쓴다."""
     if selection is not None:
         import session_profile
-        rc, _err, _info = session_profile.spawn(name, 200, 50, str(cwd), selection)
+        rc, _err, info = session_profile.spawn(name, 200, 50, str(cwd), selection)
         if rc:
             return None
+        if 'cleared_env' in (info or {}):
+            # 어느 계정으로 만들었는지 레지스트리에도 남긴다(새 세션 만들기와 같다) — 없으면 이 세션에서 위임한
+            # 자식이 `parent_profile_unverified`로 거절된다. 기록 실패가 실행을 막지는 않는다.
+            try:
+                session_profile.record(name, selection)
+            except Exception:  # noqa: BLE001
+                pass
     else:
         rc, _, _ = tmux_runner.run(['new-session', '-d', '-s', name, '-c', str(cwd)], timeout=5)
         if rc:

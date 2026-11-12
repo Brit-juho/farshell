@@ -426,9 +426,14 @@ The CLI binary is resolved by `server/cli_resolve.py`, in this order: the path r
 that conversation (read from the process table when its hook reports in, never from the hook body; kept as the
 unresolved link, so a self-updating CLI still works), the PATH recorded from that process, the server's PATH, then
 the usual install folders (`~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `~/.bun/bin`). A candidate is used
-only if it is an absolute, executable regular file named after the CLI whose real file, folders and link folder are
-owned by the user or root and not writable by others. The CLI gets the recorded PATH (else the server's PATH plus the
-binary's folder and the usual folders) so its own tools resolve as before. A conversation recorded under a managed
+only if it is an absolute, executable regular file named after the CLI, and every link on the way, the real file and
+all their parent folders are owned by the user or root and not writable by others (world, or a group other than root,
+macOS `admin` or the user's own private group; a sticky shared folder such as `/tmp` is allowed above the immediate
+folder). The recording is taken in the background after the hook is accepted: the process is re-checked to still be
+under the same pane, the session is found by that pane's tmux identity (not its name), and a run whose catalog row does
+not exist yet is retried on the next hooks (up to five times). The CLI gets the recorded PATH, filtered to absolute
+folders that pass the same ownership rule (an npm-installed CLI runs `node` from PATH, so checking the CLI file alone
+is not enough); if nothing is left, the server's PATH plus the binary's folder and the usual folders. A conversation recorded under a managed
 account's folder (`~/.vt/agent-profiles/<id>/<tool>`) resumes with that account, the same injection as a new account
 session. Profile launches and Codex usage lookups use the same resolution. `fsh doctor` shows what the server finds.
 Before this, a server started at login (`zsh -l`, which does not read `~/.zshrc`) had no `~/.local/bin` on PATH and

@@ -12,14 +12,18 @@
 3. 서버 PATH에서 이름으로.
 4. 흔한 설치 위치(`~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `~/.bun/bin`).
 
-쓰기 전 검사(`trusted`): 일반 파일·실행 가능, 이름이 그 CLI, 링크를 따라간 실제 파일과 그 위 폴더들이 나 또는
-root 소유이고 아무나 쓸 수 있는(world-writable) 곳이 아닐 것. 다른 사용자가 바꿔 끼울 수 있는 파일은 실행하지 않는다.
+쓰기 전 검사(`trusted`): 일반 파일·실행 가능, 이름이 그 CLI, 거쳐 가는 링크와 실제 파일, 그 위 폴더 전부가 나 또는
+root 소유이고 다른 사람(아무나, 믿지 않는 그룹)이 쓸 수 없을 것. 기록해 둔 PATH도 같은 기준의 폴더만 쓴다(`safe_path`).
+다른 사용자가 바꿔 끼울 수 있는 파일은 실행하지 않는다.
 """
 from __future__ import annotations
 
+import grp
 import os
+import pwd
 import shutil
 import stat
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -31,35 +35,61 @@ def known_dirs() -> list[str]:
     return [str(home / ".local" / "bin"), "/opt/homebrew/bin", "/usr/local/bin", str(home / ".bun" / "bin")]
 
 
+def _trusted_group(gid: int) -> bool:
+    """그룹 쓰기를 허용해도 되는 그룹. root(0), macOS의 admin(80 — 이미 sudo로 무엇이든 바꿀 수 있는 관리자들,
+    Homebrew의 `/opt/homebrew/bin`이 이 그룹 쓰기다), 그리고 나만 든 사용자 전용 그룹(Linux 기본)."""
+    if gid == 0 or (sys.platform == "darwin" and gid == 80):
+        return True
+    try:
+        group = grp.getgrgid(gid)
+        me = pwd.getpwuid(os.getuid()).pw_name
+    except (KeyError, OSError):
+        return False
+    return group.gr_name == me and set(group.gr_mem) <= {me}
+
+
 def _owner_ok(st) -> bool:
-    return st.st_uid in (os.getuid(), 0) and not (st.st_mode & stat.S_IWOTH)
+    """나 또는 root 소유이고, 다른 사람(아무나·믿지 않는 그룹)이 쓸 수 없다."""
+    if st.st_uid not in (os.getuid(), 0) or st.st_mode & stat.S_IWOTH:
+        return False
+    return not (st.st_mode & stat.S_IWGRP) or _trusted_group(st.st_gid)
+
+
+def _ancestors_ok(path: Path) -> bool:
+    """path의 위 폴더 전부. 바로 위 폴더는 `_owner_ok`, 더 위는 /tmp처럼 아무나 쓰되 sticky인 공용 폴더도 허용한다
+    (sticky면 남이 내 하위 폴더를 지우거나 바꿔 끼울 수 없다)."""
+    for parent in path.parents:
+        st = parent.stat()
+        if _owner_ok(st):
+            continue
+        if st.st_uid in (os.getuid(), 0) and st.st_mode & stat.S_ISVTX and parent != path.parent:
+            continue
+        return False
+    return True
+
+
+_MAX_LINKS = 40
 
 
 def trusted(path, tool: str) -> bool:
+    """실행해도 되는 CLI 파일인가: 절대 경로, 이름이 그 CLI, 링크를 따라간 실제 파일이 실행 가능한 일반 파일이고,
+    거쳐 가는 링크와 그 모든 위 폴더, 실제 파일과 그 모든 위 폴더가 다른 사용자가 바꿔 끼울 수 없는 곳."""
     try:
         p = Path(path)
         if not p.is_absolute() or p.name != tool:
             return False
         real = p.resolve(strict=True)
         st = real.stat()
-        if not stat.S_ISREG(st.st_mode) or not os.access(real, os.X_OK) or not _owner_ok(st):
+        if not stat.S_ISREG(st.st_mode) or not os.access(real, os.X_OK) or not _owner_ok(st) or not _ancestors_ok(real):
             return False
-        for parent in real.parents:
-            pst = parent.stat()
-            # /tmp처럼 아무나 쓰되 sticky인 폴더는 위쪽 경로에만 허용한다 — 실행 파일이 바로 그 안에 있으면 거절.
-            if pst.st_mode & stat.S_IWOTH and not (pst.st_mode & stat.S_ISVTX and parent != real.parent):
+        current = Path(os.path.abspath(p))
+        for _ in range(_MAX_LINKS):
+            if not current.is_symlink():
+                return True
+            if current.lstat().st_uid not in (os.getuid(), 0) or not _ancestors_ok(current):
                 return False
-            if pst.st_uid not in (os.getuid(), 0):
-                return False
-        # 사용자가 실행한 경로(링크) 쪽 폴더도 같은 기준.
-        if p != real:
-            lst = p.lstat()
-            if lst.st_uid not in (os.getuid(), 0):
-                return False
-            pst = p.parent.stat()
-            if pst.st_mode & stat.S_IWOTH or pst.st_uid not in (os.getuid(), 0):
-                return False
-        return True
+            current = Path(os.path.abspath(current.parent / os.readlink(current)))
+        return False
     except (OSError, RuntimeError, ValueError):
         return False
 
@@ -101,8 +131,9 @@ def resolve(tool: str, recorded_path: Optional[str] = None, recorded_env_path: O
     candidates = []
     if recorded_path:
         candidates.append(recorded_path)
-    if recorded_env_path:
-        candidates.append(shutil.which(tool, path=recorded_env_path))
+    recorded = safe_path(recorded_env_path)
+    if recorded:
+        candidates.append(shutil.which(tool, path=recorded))
     candidates.append(shutil.which(tool))
     candidates += [os.path.join(d, tool) for d in known_dirs()]
     for candidate in candidates:
@@ -112,11 +143,24 @@ def resolve(tool: str, recorded_path: Optional[str] = None, recorded_env_path: O
 
 
 def _dir_ok(path: str) -> bool:
+    """PATH에 넣어도 되는 폴더: 절대 경로이고, 그 폴더와 위 폴더를 다른 사용자가 바꿀 수 없다."""
+    if not path or not os.path.isabs(path):
+        return False
     try:
         st = os.stat(path)
-    except OSError:
+        return stat.S_ISDIR(st.st_mode) and _owner_ok(st) and _ancestors_ok(Path(path))
+    except (OSError, RuntimeError, ValueError):
         return False
-    return stat.S_ISDIR(st.st_mode) and _owner_ok(st)
+
+
+def safe_path(value: Optional[str]) -> str:
+    """기록해 둔 PATH에서 쓸 수 있는 폴더만 남긴다. `.`·빈 항목·상대 경로·남이 쓸 수 있는 폴더는 뺀다 — CLI가
+    `#!/usr/bin/env node`로 시작하면 PATH의 `node`가 실행되므로, CLI 파일만 검사해서는 막을 수 없다."""
+    kept = []
+    for part in (value or "").split(os.pathsep):
+        if part not in kept and _dir_ok(part):
+            kept.append(part)
+    return os.pathsep.join(kept)
 
 
 def _append_dirs(current: str, extras) -> str:
@@ -130,8 +174,9 @@ def _append_dirs(current: str, extras) -> str:
 def launch_path(binary: str, recorded_env_path: Optional[str] = None) -> str:
     """이어서 시작한 CLI에 줄 PATH — 그 CLI가 쓰던 PATH(기록), 없으면 서버 PATH에 실행 파일 폴더와 흔한 위치를 덧붙인다.
     CLI가 띄우는 하위 도구(git, node, rg …)도 원래와 같은 PATH에서 찾게 하려는 것이다."""
-    if recorded_env_path:
-        return recorded_env_path
+    recorded = safe_path(recorded_env_path)
+    if recorded:
+        return recorded
     return _append_dirs(os.environ.get("PATH", ""), [os.path.dirname(binary)] + known_dirs())
 
 
@@ -148,7 +193,6 @@ def report() -> list[tuple[str, str]]:
 
 
 if __name__ == "__main__":
-    import sys
     command = sys.argv[1] if len(sys.argv) > 1 else ""
     if command == "path":
         print(server_path())

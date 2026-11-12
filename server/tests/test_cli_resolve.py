@@ -115,7 +115,9 @@ def test_server_path_appends_existing_safe_dirs_at_the_end(tmp_path, monkeypatch
 def test_launch_path_prefers_the_recorded_path(tmp_path, monkeypatch):
     monkeypatch.setattr(cli_resolve, "known_dirs", lambda: [])
     monkeypatch.setenv("PATH", "/usr/bin")
-    assert cli_resolve.launch_path(str(tmp_path / "claude"), "/rec") == "/rec"
+    rec = tmp_path / "rec"
+    rec.mkdir()
+    assert cli_resolve.launch_path(str(tmp_path / "claude"), str(rec)) == str(rec)
     assert cli_resolve.launch_path(str(tmp_path / "claude")) == f"/usr/bin:{tmp_path}"
 
 
@@ -128,3 +130,59 @@ def test_profile_launch_and_codex_lookup_use_the_same_resolution(tmp_path, monke
     monkeypatch.delenv("CODEX_CLI_PATH", raising=False)
     assert agent_profile_runtime.binary("codex") == str(exe)
     assert codex_cli.executable() == str(exe)
+
+
+# --- 교차 검토(Codex)에서 나온 보강 ---------------------------------------------------------------
+
+def test_group_writable_files_and_folders_are_refused_unless_the_group_is_trusted(tmp_path):
+    exe = _exe(tmp_path / "bin")
+    gid = exe.stat().st_gid
+    if cli_resolve._trusted_group(gid):
+        pytest.skip("이 환경의 기본 그룹은 믿는 그룹(사용자 전용 그룹)이다")
+    os.chmod(exe, 0o775)
+    assert not cli_resolve.trusted(str(exe), "claude")
+    os.chmod(exe, 0o755)
+    os.chmod(exe.parent, 0o775)
+    assert not cli_resolve.trusted(str(exe), "claude")
+
+
+def test_every_link_on_the_way_is_checked(tmp_path):
+    real = _exe(tmp_path / "versions", "2.1.0")
+    hop = tmp_path / "open"
+    hop.mkdir()
+    (hop / "middle").symlink_to(real)
+    os.chmod(hop, 0o777)          # 중간 링크가 아무나 쓸 수 있는 폴더에 있다 → 바꿔 끼울 수 있다
+    first = tmp_path / "bin"
+    first.mkdir()
+    (first / "claude").symlink_to(hop / "middle")
+    assert not cli_resolve.trusted(str(first / "claude"), "claude")
+    os.chmod(hop, 0o755)
+    assert cli_resolve.trusted(str(first / "claude"), "claude")
+
+
+def test_a_link_whose_upper_folder_others_can_write_is_refused(tmp_path):
+    real = _exe(tmp_path / "versions", "2.1.0")
+    upper = tmp_path / "shared"
+    (upper / "bin").mkdir(parents=True)
+    (upper / "bin" / "claude").symlink_to(real)
+    os.chmod(upper, 0o777)        # 위 폴더가 열려 있으면 bin 폴더째 바꿔 끼울 수 있다
+    assert not cli_resolve.trusted(str(upper / "bin" / "claude"), "claude")
+
+
+def test_recorded_path_keeps_only_folders_others_cannot_write(tmp_path, monkeypatch):
+    good = tmp_path / "good"
+    good.mkdir()
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    os.chmod(shared, 0o777)
+    recorded = os.pathsep.join([".", "", "rel/bin", str(shared), str(good), str(tmp_path / "missing"), str(good)])
+    assert cli_resolve.safe_path(recorded) == str(good)
+    monkeypatch.setattr(cli_resolve, "known_dirs", lambda: [])
+    monkeypatch.setenv("PATH", "/usr/bin")
+    assert cli_resolve.launch_path(str(tmp_path / "x" / "claude"), recorded) == str(good)
+    # 남는 게 없으면 서버 PATH 쪽으로 간다.
+    assert cli_resolve.launch_path(str(good / "claude"), f".{os.pathsep}{shared}") == f"/usr/bin{os.pathsep}{good}"
+    # 기록한 PATH에서 이름으로 찾을 때도 남이 쓸 수 있는 폴더는 보지 않는다.
+    _exe(shared)
+    os.chmod(shared, 0o777)
+    assert cli_resolve.resolve("claude", None, str(shared)) is None

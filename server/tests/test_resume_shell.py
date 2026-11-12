@@ -134,3 +134,14 @@ def test_path_goes_after_env_unset_options():
     assert lifecycle._with_path(argv, '/p') == ['env', '-u', 'A', '-u', 'B', 'PATH=/p', 'CLAUDE_CONFIG_DIR=/r', '/bin/claude', '--resume', 'x']
     assert lifecycle._with_path(['/bin/x'], '/p') == ['env', 'PATH=/p', '/bin/x']
     assert lifecycle._with_path(['/bin/x'], None) == ['/bin/x']
+
+
+def test_an_account_resume_records_its_profile_like_a_new_account_session(monkeypatch):
+    """계정으로 이어서 시작한 세션도 레지스트리에 남긴다 — 없으면 그 세션에서 위임한 자식이 거절된다."""
+    import session_profile
+    recorded = []
+    monkeypatch.setattr(session_profile, 'spawn', lambda *a: (0, '', {'cleared_env': []}))
+    monkeypatch.setattr(session_profile, 'record', lambda name, selection: recorded.append((name, selection)))
+    monkeypatch.setattr(lifecycle.tmux_runner, 'run_text', lambda *a, **k: '%9\n')
+    assert lifecycle._spawn_shell_session('app', '/tmp', 'SEL', None) == '%9'
+    assert recorded == [('app', 'SEL')]

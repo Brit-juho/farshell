@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
@@ -525,7 +526,7 @@ async def agent_event(request: Request):
         logger.debug("훅이 우리 소켓이 아닌 tmux에서 왔다 — pane id 폐기")
     verified = {hook_identity.OK: True, hook_identity.CHILD: False}.get(verdict)
     if verdict == hook_identity.OK and _agent_pid and agent_name in ("claude", "codex") and session:
-        _remember_cli(_agent_pid, agent_name, session)
+        _remember_cli(_agent_pid, agent_name, body.get("pane"))
     (logger.info if verdict in (hook_identity.CHILD, hook_identity.FOREIGN) else logger.debug)(
         "훅 %s sid=%s pane=%s → %s(%s), 프로세스 판정 %s", event,
         str(payload.get("session_id"))[:8], body.get("pane"), session, how, verdict)
@@ -652,39 +653,57 @@ async def agent_event(request: Request):
             "identity": verdict}
 
 
-# 이미 CLI 경로를 기록한 에이전트 프로세스(pid → 세션 이름). 같은 프로세스의 훅마다 프로세스 표를 다시 읽지 않는다.
-_cli_recorded: dict[int, str] = {}
+# CLI 경로 기록 상태(pid → (pane, 시도 횟수, 끝남)). 같은 프로세스의 훅마다 프로세스 표를 다시 읽지 않는다.
+_cli_recorded: dict[int, tuple[str, int, bool]] = {}
+_CLI_RECORD_TRIES = 5
 
 
-def _remember_cli(pid: int, tool: str, session: str) -> None:
+def _record_cli_now(pid: int, tool: str, pane: str) -> str:
+    """'done'(기록함) · 'retry'(아직 런타임 행이 없거나 잠깐 읽지 못함) · 'stop'(그 pid가 더는 이 pane의 프로세스가 아님)."""
+    import cli_resolve
+    import tmux_runner
+    from session_catalog import db as catalog_db
+    found = cli_resolve.record_from_process(pid, tool)
+    if not found:
+        return "retry"
+    # 읽은 뒤 다시 확인한다: 그 pid가 아직 이 pane 아래의 같은 프로세스인가(pid 재사용·세션 교체를 거른다).
+    verdict, again = hook_identity.classify(pid, pane)
+    if verdict not in (hook_identity.OK, hook_identity.CHILD) or again != pid:
+        return "stop"
+    # 세션은 이름이 아니라 pane이 속한 세션의 정체성 키로 찾는다 — 이름은 그 사이 다른 세션이 가져갈 수 있다.
+    key = (tmux_runner.run_text(["display-message", "-p", "-t", pane, "#{session_id}:#{session_created}"], timeout=2) or "").strip()
+    if not key:
+        return "retry"
+    return "done" if catalog_db.record_cli(key, found[0], found[1]) else "retry"
+
+
+def _remember_cli(pid: int, tool: str, pane: str) -> None:
     """확인된 대화형 CLI 프로세스(hook_identity OK)에서 실행 파일 경로와 PATH를 읽어 세션 기록에 남긴다 — 재부팅 뒤
-    이어서 시작이 서버 PATH에 기대지 않게(cli_resolve). 훅 응답을 늦추지 않도록 백그라운드에서 한 번만."""
-    if _cli_recorded.get(pid) == session:
+    이어서 시작이 서버 PATH에 기대지 않게(cli_resolve). 훅 응답을 늦추지 않도록 백그라운드에서.
+
+    런타임 행이 아직 없으면(이어서 시작 직후 첫 훅이 목록 갱신보다 빠를 때) 다음 훅에서 다시 시도한다(최대 5번)."""
+    if not isinstance(pane, str) or not re.fullmatch(r"%[0-9]+", pane):
+        return
+    seen = _cli_recorded.get(pid)
+    if seen and seen[0] == pane and (seen[2] or seen[1] >= _CLI_RECORD_TRIES):
         return
     if len(_cli_recorded) > 512:
         _cli_recorded.clear()
-    _cli_recorded[pid] = session
-
-    def work():
-        import cli_resolve
-        import tmux_runner
-        from session_catalog import db as catalog_db
-        found = cli_resolve.record_from_process(pid, tool)
-        key = tmux_runner.key_for_name(session)
-        if found and key:
-            catalog_db.record_cli(key, found[0], found[1])
+    tries = seen[1] + 1 if seen and seen[0] == pane else 1
+    _cli_recorded[pid] = (pane, tries, True)   # 도는 동안 같은 pid의 다른 훅이 겹치지 않게
 
     async def run():
+        result = "retry"
         try:
-            await asyncio.to_thread(work)
+            result = await asyncio.to_thread(_record_cli_now, pid, tool, pane)
         except Exception as e:  # noqa: BLE001 — 기록 실패는 훅을 막지 않는다
-            _cli_recorded.pop(pid, None)
             logger.debug(f"CLI 경로 기록 실패: {type(e).__name__}")
+        _cli_recorded[pid] = (pane, tries if result == "retry" else _CLI_RECORD_TRIES, result != "retry")
 
     try:
         asyncio.get_running_loop().create_task(run())
     except RuntimeError:
-        pass
+        _cli_recorded.pop(pid, None)
 
 
 @router.post("/api/agent/report")

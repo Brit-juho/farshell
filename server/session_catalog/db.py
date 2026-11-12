@@ -569,8 +569,9 @@ def record_cli(physical_key, path, env_path):
     if not isinstance(physical_key, str) or not physical_key:
         return False
     with database(write=True) as db:
-        cur = db.execute("UPDATE runtimes SET cli_path=?,cli_env_path=? WHERE physical_key=? AND ended IS NULL"
-                         " AND (cli_path IS NOT ? OR cli_env_path IS NOT ?)", (path, env_path, physical_key, path, env_path))
+        # 값이 같아도 맞는 행이 있으면 성공이다(SQLite는 값이 그대로여도 맞은 행을 센다). 0이면 아직 런타임 행이 없다.
+        cur = db.execute("UPDATE runtimes SET cli_path=?,cli_env_path=? WHERE physical_key=? AND ended IS NULL",
+                         (path, env_path, physical_key))
         return cur.rowcount > 0
 
 
