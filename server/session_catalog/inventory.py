@@ -12,7 +12,7 @@ from pathlib import Path
 import fsguard
 import git_safe
 import tmux_runner
-from .db import database, host_id, uid, encode, changed, Refused
+from .db import database, host_id, uid, encode, changed, Refused, touch_activity
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +142,12 @@ def _reconcile(snapshot=None):
         live = {(epoch, item["physical_key"]) for item in snapshot["sessions"]}
         for row in db.execute("SELECT * FROM runtimes WHERE ended IS NULL").fetchall():
             if (row["epoch"], row["physical_key"]) not in live:
-                db.execute("UPDATE runtimes SET state='stopped',ended=?,observed=? WHERE id=?", (now, now, row["id"]))
+                # 끝날 때의 브랜치(그 세션 작업 공간의 마지막으로 알던 브랜치)와 마지막 활동(마지막으로 살아 있던 관측 시각).
+                branch = db.execute("SELECT w.branch FROM sessions s JOIN workspaces w ON w.id=s.workspace_id WHERE s.id=?",
+                                    (row["session_id"],)).fetchone()
+                db.execute("UPDATE runtimes SET state='stopped',ended=?,observed=?,branch_at_end=COALESCE(branch_at_end,?) WHERE id=?",
+                           (now, now, branch["branch"] if branch else None, row["id"]))
+                touch_activity(db, row["session_id"], row["observed"])
                 changed(db, "runtime", row["id"])
         for item in snapshot["sessions"]:
             row = db.execute("SELECT * FROM runtimes WHERE epoch=? AND physical_key=?", (epoch, item["physical_key"])).fetchone()
@@ -150,17 +155,29 @@ def _reconcile(snapshot=None):
             if not row:
                 sid, rid = uid(), uid()
                 wid = workspace(db, placements.get(item["physical_key"]))
-                db.execute("INSERT INTO sessions(id,host,workspace_id,title,origin,created,updated) VALUES(?,?,?,?,?,?,?)",
-                           (sid, host, wid, item["name"], item["origin"], now, now))
-                db.execute("INSERT INTO runtimes VALUES(?,?,?,?,?,?,?,NULL,?,?)", (rid, sid, epoch, item["physical_key"], item["name"], "running", now, now, detail))
+                db.execute("INSERT INTO sessions(id,host,workspace_id,title,origin,created,updated,last_activity) VALUES(?,?,?,?,?,?,?,?)",
+                           (sid, host, wid, item["name"], item["origin"], now, now, now))
+                db.execute("INSERT INTO runtimes(id,session_id,epoch,physical_key,name,state,started,ended,observed,detail) VALUES(?,?,?,?,?,?,?,NULL,?,?)", (rid, sid, epoch, item["physical_key"], item["name"], "running", now, now, detail))
                 changed(db, "session", sid)
             else:
                 if row["ended"] is not None:
-                    # Identity reuse is a conflict, not resurrection of an old grant. 그 세션 하나만 건너뛴다 —
-                    # 예외로 트랜잭션 전체를 되돌리면 같은 관측의 종료 기록과 이어지는 수집·보관·대화 연결이 모두 멈췄다.
-                    logger.warning("catalog runtime identity conflict: runtime=%s", row["id"])
-                    continue
+                    other = db.execute("SELECT 1 FROM runtimes WHERE session_id=? AND ended IS NULL AND id!=?",
+                                       (row["session_id"], row["id"])).fetchone()
+                    if row["dismissed_at"] is not None and not other:
+                        # 사람이 「종료로 표시」했지만 사실 살아 있던 실행이 다시 보인다 — 신원 재사용이 아니라 표시를 되돌린다.
+                        db.execute("UPDATE runtimes SET state='running',ended=NULL,dismissed_at=NULL,observed=? WHERE id=?", (now, row["id"]))
+                        changed(db, "runtime", row["id"])
+                        row = db.execute("SELECT * FROM runtimes WHERE id=?", (row["id"],)).fetchone()
+                    else:
+                        # Identity reuse is a conflict, not resurrection of an old grant. 그 세션 하나만 건너뛴다 —
+                        # 예외로 트랜잭션 전체를 되돌리면 같은 관측의 종료 기록과 이어지는 수집·보관·대화 연결이 모두 멈췄다.
+                        logger.warning("catalog runtime identity conflict: runtime=%s", row["id"])
+                        continue
                 rid = row["id"]
+                if row["name"] != item["name"]:
+                    # tmux 이름이 바뀌었다(사람이 터미널에서 바꿈). 보이는 이름이 자동이면 따라간다 — 사람이 붙인 별칭은 그대로.
+                    db.execute("UPDATE sessions SET title=?,updated=?,revision=revision+1 WHERE id=? AND name_source='auto' AND title!=?",
+                               (item["name"], now, row["session_id"], item["name"]))
                 if detail != row["detail"] or row["state"] != "running":
                     changed(db, "runtime", rid)
                 # `observed` is a liveness stamp nobody compares; refresh it only with a real change or once a minute.

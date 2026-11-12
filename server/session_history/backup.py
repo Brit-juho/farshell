@@ -82,7 +82,7 @@ def restore_package(package_path, destination_state, *, max_bytes=50*1024**3):
     """
     import shutil
     import stat
-    from session_catalog.db import DDL, SCHEMA_VERSION, HASH
+    from session_catalog.db import SCHEMA_VERSION, HASH, expected_schema, migrate
     destination = private_dir(Path(destination_state).resolve()) / 'session-catalog'
     if destination.exists() or destination.is_symlink():
         raise Refused('restore_target_exists')
@@ -119,11 +119,14 @@ def restore_package(package_path, destination_state, *, max_bytes=50*1024**3):
                     raise Refused('backup_invalid',400)
         if 'catalog.sqlite3' not in seen:
             raise Refused('backup_invalid',400)
-        expected = sqlite3.connect(':memory:')
-        expected.executescript(DDL)
-        schema = list(expected.execute("SELECT type,name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name"))
-        expected.close()
+        schema = expected_schema()
         with sqlite3.connect(staging/'catalog.sqlite3') as restored:
+            # 옛 형식(이전 버전이 만든 백업)은 같은 마이그레이션으로 올린 뒤 비교한다.
+            old = restored.execute('PRAGMA user_version').fetchone()[0]
+            if 1 <= old < SCHEMA_VERSION:
+                restored.execute('BEGIN')
+                migrate(restored, old)
+                restored.commit()
             if (restored.execute('PRAGMA user_version').fetchone()[0] != SCHEMA_VERSION
                     or restored.execute('PRAGMA integrity_check').fetchone()[0] != 'ok'
                     or list(restored.execute("SELECT type,name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name")) != schema

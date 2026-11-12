@@ -45,7 +45,8 @@ def test_hidden_file_is_owner_only(store, tmp_path):
     assert (path.stat().st_mode & 0o777) == 0o600
     import sqlite3
     with sqlite3.connect(path) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 1
+        from session_catalog.db import SCHEMA_VERSION
+        assert db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
 
 
 def test_trailing_slash_is_the_same_repo(store):

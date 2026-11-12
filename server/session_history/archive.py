@@ -211,6 +211,12 @@ def _projection(stream, provider, begin, end, *, seek=True, checkpoint=None):
         except (ValueError, UnicodeError, RecursionError, TypeError):
             reasons.add('invalid_record')
             continue
+        # Claude가 나중에 붙이는 제목 줄(summary/custom-title/ai-title)도 본다 — 앞 256줄만 보던 identity는 대화가
+        # 길어진 뒤 생긴 제목을 놓쳤다. 저장하지 않는 임시 키(`_title`)로 넘기고 capture가 꺼낸다.
+        if provider == 'claude' and isinstance(row, dict) and row.get('type') in ('summary', 'custom-title', 'ai-title'):
+            found = row.get('customTitle', row.get('title', row.get('summary', '')))
+            if isinstance(found, str) and found.strip():
+                checkpoint['_title'] = found.strip()[:128]
         for index, (role, body) in enumerate(projected):
             if body:
                 out.append((position * 1000000 + index, role, body))
@@ -394,6 +400,7 @@ def capture(source, relative, *, max_bytes=PASS_BYTES):
             projection_end = min(end, parsed + max(max_bytes, MAX_LINE + 1))
             messages, next_parsed, partial = _projection(file, source['provider'], parsed, projection_end, checkpoint=projection)
             indexing = next_parsed < end and (projection_end < end or not projection.get('incomplete_record'))
+        latest_title = projection.pop('_title', None)
         projection.update(version=1, omitted_reasons=sorted(set(projection.get('omitted_reasons', []))))
         projection['state'] = 'indexing' if indexing else ('partial' if partial else 'complete')
         after = os.fstat(file.fileno())
@@ -448,14 +455,51 @@ def capture(source, relative, *, max_bytes=PASS_BYTES):
                        (fid, source['id'], relative, cid, generation, end, next_parsed, fingerprint, manifest['state'], now))
         mid = uid()
         db.execute('INSERT INTO manifests VALUES(?,?,?,?,?,?,?,?)', (mid, cid, fid, generation, end, digest.hexdigest(), encode(manifest), now))
+        fresh = []
         for pos, role, body in messages:
             msgid = hashlib.sha256(f'{cid}:{fid}:{generation}:{pos}:{role}'.encode()).hexdigest()[:32]
-            db.execute('INSERT OR IGNORE INTO messages VALUES(?,?,?,?,?,?,?)', (msgid, cid, generation, pos, role, body, now))
+            if db.execute('INSERT OR IGNORE INTO messages VALUES(?,?,?,?,?,?,?)', (msgid, cid, generation, pos, role, body, now)).rowcount:
+                fresh.append((pos, role, body))
+        # 처음 들어온 메시지만 센다 — 옛 형식을 다시 읽는 경로(같은 메시지 id)에서 지시 수가 두 번 늘지 않게.
+        _refresh_conversation_summary(db, cid, source['provider'], fresh, latest_title, now)
         prior_detail=json.loads(conversation['detail']) if conversation else {}
         verified=prior_detail.get('native_identity_verified',False) or (identity is not None and capture_kind=='transcript' and not changing)
         db.execute('UPDATE conversations SET updated=?,state=?,detail=? WHERE id=?', (now, manifest['state'], encode({**prior_detail,'native_identity_verified':verified}), cid))
         changed(db, 'manifest', mid)
     return True
+
+
+# 사람이 친 지시가 아닌 사용자 줄(시스템이 끼워 넣은 글, FarShell이 대신 친 위임·에이전트 메시지 머리말).
+_NOT_HUMAN_PREFIXES = ('<', 'Caveat:', '[FarShell 위임', '[위임 결과', '[FarShell 에이전트')
+
+
+def human_prompt(body):
+    """대화의 사용자 줄 중 사람이 직접 친 지시면 한 줄 요약(200자), 아니면 None."""
+    if not isinstance(body, str):
+        return None
+    text = body.strip()
+    if not text or text.startswith(_NOT_HUMAN_PREFIXES):
+        return None
+    first = text.splitlines()[0].strip()
+    return first[:200] or None
+
+
+def _refresh_conversation_summary(db, cid, provider, messages, latest_title, now):
+    """이번에 읽은 메시지로 대화 제목과 이 맥 전용 요약(마지막 지시·지시 수)을 갱신한다.
+
+    - 제목: Claude가 붙인 제목 줄이 새로 보이면 바꾼다. Codex는 제목 줄이 없어 제목이 비었을 때만 첫 지시로 정한다.
+    - 요약(`conversation_local`)은 복제·원격 응답에 실리지 않는다(사용자 원문은 이 맥에서만, docs/ref/agents.md).
+    """
+    prompts = [p for p in (human_prompt(body) for _, role, body in messages if role == 'user') if p]
+    if latest_title:
+        db.execute("UPDATE conversations SET title=? WHERE id=? AND title!=?", (latest_title, cid, latest_title))
+    elif provider == 'codex' and prompts:
+        db.execute("UPDATE conversations SET title=? WHERE id=? AND title=''", (prompts[0][:60], cid))
+    if prompts:
+        db.execute("INSERT INTO conversation_local(conversation_id,last_user_text,user_message_count,updated) VALUES(?,?,?,?)"
+                   " ON CONFLICT(conversation_id) DO UPDATE SET last_user_text=excluded.last_user_text,"
+                   " user_message_count=conversation_local.user_message_count+excluded.user_message_count,updated=excluded.updated",
+                   (cid, prompts[-1], len(prompts), now))
 
 
 def scan_source(source):

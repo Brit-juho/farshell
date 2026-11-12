@@ -51,8 +51,11 @@ async def _call(fn, *args, **kwargs):
 
 
 @router.get('/api/session-catalog')
-async def catalog(limit: int = 50, after: str | None = None, archived: bool = False):
-    return await _call(db.snapshot, limit=limit, after=after, archived=archived)
+async def catalog(limit: int = 50, after: str | None = None, archived: bool = False, order: str = 'id',
+                  cursor: str | None = None, q: str | None = None, project: str | None = None, meta: bool = True):
+    # 이 라우터는 이 맥의 사람 세션 전용이고 중계되지 않는다 — 마지막 지시(이 맥 전용)를 싣는다.
+    return await _call(db.snapshot, limit=limit, after=after, archived=archived, order=order, cursor=cursor,
+                       q=q, project=project, meta=meta, local=True)
 
 
 @router.get('/api/session-history')
@@ -83,10 +86,20 @@ async def conversation(conversation_id: str, after: int = 0, limit: int = 100):
 @router.post('/api/session-catalog/sessions/{session_id}')
 async def edit_session(session_id: str, request: Request):
     try:
-        body = await _body(request, {'revision', 'title', 'archived'})
+        body = await _body(request, {'revision', 'title', 'archived', 'auto_name'})
     except db.Refused as error:
         return JSONResponse({'error': error.code}, status_code=error.status)
-    return await _call(db.edit_session, session_id, body.get('revision'), title=body.get('title'), archived=body.get('archived'))
+    return await _call(db.edit_session, session_id, body.get('revision'), title=body.get('title'), archived=body.get('archived'),
+                       auto_name=body.get('auto_name'))
+
+
+@router.post('/api/session-catalog/sessions/{session_id}/dismiss')
+async def dismiss_runtime(session_id: str, request: Request):
+    try:
+        body = await _body(request, {'revision'})
+    except db.Refused as error:
+        return JSONResponse({'error': error.code}, status_code=error.status)
+    return await _call(db.dismiss_runtime, session_id, body.get('revision'))
 
 
 @router.delete('/api/session-catalog/sessions/{session_id}')
@@ -101,7 +114,7 @@ async def delete_session(session_id: str, request: Request):
 @router.post('/api/session-catalog/settings')
 async def catalog_settings(request: Request):
     try:
-        body = await _body(request, {'auto_archive_days'})
+        body = await _body(request, {'auto_archive_days', 'auto_name'})
     except db.Refused as error:
         return JSONResponse({'error': error.code}, status_code=error.status)
     return await _call(db.configure, body)

@@ -13,7 +13,7 @@ import zstandard
 import fsguard
 import store_lock
 import tmux_runner
-from .db import database, directory, identifier, uid, encode, changed, host_id, resume_target, Refused
+from .db import touch_activity, database, directory, identifier, uid, encode, changed, host_id, resume_target, Refused
 from . import permission_modes, execution_policy
 from . import inventory
 
@@ -146,8 +146,9 @@ def resume(cid, opid, *, sid=None):
             else:
                 sid = uid()
                 wid = inventory.workspace(db, placement)
-                db.execute('INSERT INTO sessions(id,host,workspace_id,title,origin,created,updated) VALUES(?,?,?,?,?,?,?)',
-                           (sid, host_id(db), wid, conversation['title'] or native, 'local', now, now))
+                db.execute('INSERT INTO sessions(id,host,workspace_id,title,origin,created,updated,last_activity) VALUES(?,?,?,?,?,?,?,?)',
+                           # 보이는 이름은 자동 이름 규칙(새 tmux 이름 = 저장소 이름)이다. 대화 제목·id를 세션 이름으로 쓰지 않는다.
+                           (sid, host_id(db), wid, name, 'local', now, now, now))
             result = {'session_id': sid, 'conversation_id': cid, 'name': name, 'native_id': native}
             if mode:
                 result['permission_mode'] = mode
@@ -180,10 +181,11 @@ def resume(cid, opid, *, sid=None):
             raise Refused('launch_needs_review', 503)
         with database(write=True) as db:
             rid = uid()
-            db.execute('INSERT INTO runtimes VALUES(?,?,?,?,?,?,?,?,?,?)',
+            db.execute('INSERT INTO runtimes(id,session_id,epoch,physical_key,name,state,started,ended,observed,detail) VALUES(?,?,?,?,?,?,?,?,?,?)',
                        (rid, sid, snapshot['epoch'], item['physical_key'], name, 'running', now, None, time.time(), encode(item)))
             for pane in item['panes']:
                 db.execute('INSERT INTO conversation_executions VALUES(?,?,?,0)', (cid, rid, pane['pane_id']))
+            touch_activity(db, sid, now)
             changed(db, 'session', sid)
         result.update(runtime_id=rid, native_verified=False)
         _finish(opid, 'started_unverified', result)
@@ -284,8 +286,8 @@ def create(opid,name,cwd,cols=80,rows=24,*,request_spec=None,launcher=None):
                     raise Refused('launch_needs_review',503)
                 return json.loads(prior['result'])
             sid=uid();now=time.time();wid=inventory.workspace(db,placement)
-            db.execute('INSERT INTO sessions(id,host,workspace_id,title,origin,created,updated) VALUES(?,?,?,?,?,?,?)',
-                       (sid,host_id(db),wid,name,'local',now,now))
+            db.execute('INSERT INTO sessions(id,host,workspace_id,title,origin,created,updated,last_activity) VALUES(?,?,?,?,?,?,?,?)',
+                       (sid,host_id(db),wid,name,'local',now,now,now))
             result={'session_id':sid,'name':name,'host':host_id(db)}
             _begin(db,opid,'create',sid,payload,result)
         # `launcher`: a caller that must create the session itself (account injection). It returns (rc, error, info).
@@ -301,7 +303,7 @@ def create(opid,name,cwd,cols=80,rows=24,*,request_spec=None,launcher=None):
             raise Refused('launch_needs_review',503)
         with database(write=True) as db:
             rid=uid()
-            db.execute('INSERT INTO runtimes VALUES(?,?,?,?,?,?,?,?,?,?)',
+            db.execute('INSERT INTO runtimes(id,session_id,epoch,physical_key,name,state,started,ended,observed,detail) VALUES(?,?,?,?,?,?,?,?,?,?)',
                        (rid,sid,observed['epoch'],item['physical_key'],name,'running',now,None,time.time(),encode(item)))
             for pane in item['panes']:
                 db.execute('INSERT INTO pane_executions VALUES(?,?,?,?)',
