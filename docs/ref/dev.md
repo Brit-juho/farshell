@@ -215,6 +215,23 @@ file changes independently of native watcher permissions. Path tests use a tempo
 HOME. Tests requiring a real process table skip with a reason when process inspection
 is blocked; such skips are not evidence that the feature passed.
 
+## Session catalog format upgrades
+
+The session catalog (`<state>/session-catalog/catalog.sqlite3`, which also holds the conversation archive) carries a format
+version (`PRAGMA user_version`, `session_catalog.db.SCHEMA_VERSION`). A store of an older version is upgraded the first time
+the server opens it, inside one transaction under `migration.lock`, by the ordered statements in
+`session_catalog.db.MIGRATIONS`. A new store takes the same path (version-1 tables, then every upgrade), so a fresh store and
+an upgraded one have byte-identical `sqlite_master` entries — backup restore compares them, and it upgrades an older backup
+the same way before comparing. Before upgrading a store that has sessions, the server writes a consistent copy with the
+SQLite backup API next to it: `catalog.sqlite3.v<old version>.bak` (0600, never overwritten).
+
+Going back to an older FarShell after an upgrade: the older server refuses the newer store (`unsupported_store_version`),
+so session records and the conversation archive are unavailable until you either run the newer version again or stop the
+server and put the copy back (`mv catalog.sqlite3.v1.bak catalog.sqlite3`, removing the `-wal`/`-shm` files next to it);
+records made after the upgrade are not in that copy. Version 2 (2026-11) added the last-activity time and the visible-name
+source of a session, the branch at end, CLI path and "marked ended" time of a run, and a local table of conversation
+summaries. Tests: `server/tests/test_catalog_migration.py`.
+
 ## Storage locking
 
 Disk stores use `server/store_lock.py`. Follow its module documentation: waits are

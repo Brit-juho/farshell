@@ -14,7 +14,7 @@ from pathlib import Path
 
 import vt_paths
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 ID = re.compile(r"[a-f0-9]{32}")
 HASH = re.compile(r"[a-f0-9]{64}")
 
@@ -144,6 +144,84 @@ CREATE TABLE deletion_tombstones(kind TEXT NOT NULL,resource TEXT NOT NULL,creat
  PRIMARY KEY(kind,resource));
 """
 
+# 저장소 형식 올리기(마이그레이션). 새로 만드는 저장소도 「v1 DDL → 차례로 올리기」 같은 길을 밟는다 — 그래야 백업 복원이
+# 비교하는 `sqlite_master`의 SQL 문장이 새 설치와 올린 저장소에서 글자까지 같다(ALTER로 더한 열은 CREATE TABLE 문장에
+# 그대로 덧붙는다). 버전 N의 목록은 N-1에서 N으로 올리는 문장들이고, 한 트랜잭션 안에서 실행한다.
+MIGRATIONS = {
+    2: (
+        # 목록 정렬·자동 보관의 기준 「마지막 활동」(종료 감지 시각이 아니라 작업 시각), 보이는 이름(별칭)의 출처.
+        "ALTER TABLE sessions ADD COLUMN last_activity REAL",
+        "ALTER TABLE sessions ADD COLUMN name_source TEXT NOT NULL DEFAULT 'auto'",
+        # 끝날 때의 브랜치, 이어서 시작에 쓸 CLI 실행 파일과 그 PATH, 「종료로 표시」(상태를 읽지 못한 런타임을 사람이 정리).
+        "ALTER TABLE runtimes ADD COLUMN branch_at_end TEXT",
+        "ALTER TABLE runtimes ADD COLUMN cli_path TEXT",
+        "ALTER TABLE runtimes ADD COLUMN cli_env_path TEXT",
+        "ALTER TABLE runtimes ADD COLUMN dismissed_at REAL",
+        "CREATE INDEX sessions_activity ON sessions(archived,deleted,last_activity,id)",
+        "CREATE INDEX runtimes_session ON runtimes(session_id,started)",
+        "CREATE INDEX conversation_executions_runtime ON conversation_executions(runtime_id)",
+        # 이 맥에서만 쓰는 대화 요약(마지막 사용자 지시 등). 복제 대상이 아니다 — 복제는 정해진 표만 보낸다.
+        "CREATE TABLE conversation_local(conversation_id TEXT PRIMARY KEY REFERENCES conversations(id),"
+        " last_user_text TEXT NOT NULL DEFAULT '',user_message_count INTEGER NOT NULL DEFAULT 0,updated REAL NOT NULL DEFAULT 0)",
+        # 기존 행 채우기. 마지막 활동 = 런타임의 종료·관측·시작 중 가장 늦은 시각, 없으면 세션 갱신·생성 시각.
+        "UPDATE sessions SET last_activity=COALESCE((SELECT MAX(MAX(COALESCE(r.ended,0),r.observed,r.started))"
+        " FROM runtimes r WHERE r.session_id=sessions.id),updated,created)",
+        # 보이는 이름(title)과 출처. 예전에는 title이 생성 때 한 번 정해지고 tmux 이름 변경을 따라가지 않아, 종료된
+        # 세션에 처음 이름(`server`, `fsh-<32자리>`)이 남았다. 그 옛 자동 이름 모양과 마지막 tmux 이름과 같은 값은
+        # 자동(auto)으로, 그 밖에 마지막 tmux 이름과 다르고 연결된 대화의 제목·id도 아닌 값은 사람이 붙인 이름(human)으로 본다.
+        "UPDATE sessions SET name_source='human' WHERE title!=COALESCE((SELECT r.name FROM runtimes r"
+        " WHERE r.session_id=sessions.id ORDER BY r.started DESC LIMIT 1),title)"
+        " AND NOT (title GLOB 'server' OR title GLOB 'server-[0-9]*' OR (title GLOB 'fsh-*' AND length(title)=36))"
+        " AND NOT EXISTS(SELECT 1 FROM conversation_executions e JOIN runtimes r ON r.id=e.runtime_id"
+        " JOIN conversations c ON c.id=e.conversation_id WHERE r.session_id=sessions.id"
+        " AND (c.title=sessions.title OR c.native_id=sessions.title))",
+        # 자동 이름은 마지막 tmux 이름을 보여 준다(사람이 터미널에서 바꾼 이름). 단 옛 `fsh-<32자리>`는 보이는 이름으로 쓰지 않는다.
+        "UPDATE sessions SET title=(SELECT r.name FROM runtimes r WHERE r.session_id=sessions.id ORDER BY r.started DESC LIMIT 1)"
+        " WHERE name_source='auto' AND EXISTS(SELECT 1 FROM runtimes r WHERE r.session_id=sessions.id)"
+        " AND (SELECT r.name FROM runtimes r WHERE r.session_id=sessions.id ORDER BY r.started DESC LIMIT 1) NOT GLOB 'fsh-*'"
+        " AND NOT EXISTS(SELECT 1 FROM conversation_executions e JOIN runtimes r ON r.id=e.runtime_id"
+        " JOIN conversations c ON c.id=e.conversation_id WHERE r.session_id=sessions.id"
+        " AND (c.title=sessions.title OR c.native_id=sessions.title))",
+    ),
+}
+
+
+def migrate(db, from_version):
+    """`from_version`에서 SCHEMA_VERSION까지 올린다. 호출부가 트랜잭션을 연다."""
+    for version in range(from_version + 1, SCHEMA_VERSION + 1):
+        for statement in MIGRATIONS.get(version, ()):
+            db.execute(statement)
+    db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+
+
+def expected_schema():
+    """지금 버전 저장소의 `sqlite_master`(type,name,sql) — 백업 복원 검사가 비교한다."""
+    probe = sqlite3.connect(":memory:")
+    try:
+        probe.executescript(DDL)
+        probe.execute("BEGIN")
+        migrate(probe, 1)
+        probe.commit()
+        return list(probe.execute("SELECT type,name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name"))
+    finally:
+        probe.close()
+
+
+def _backup_before_migration(db, path: Path, version: int):
+    """올리기 전 사본(`catalog.sqlite3.v<N>.bak`, 0600). SQLite backup API라 WAL까지 일관된 사본이다.
+    이미 있으면 덮지 않는다(첫 사본이 원본에 가장 가깝다). 되돌리는 법은 docs/ref/dev.md."""
+    copy = path.with_name(f"{path.name}.v{version}.bak")
+    if copy.exists() or copy.is_symlink():
+        return
+    fd = os.open(copy, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    os.close(fd)
+    target = sqlite3.connect(copy)
+    try:
+        db.backup(target)
+    finally:
+        target.close()
+    os.chmod(copy, 0o600)
+
 
 _anchor = None
 
@@ -205,12 +283,24 @@ def database(*, write=False):
                         raise Refused("store_unavailable", 503)
                     time.sleep(.01)
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, SCHEMA_VERSION):
-                raise Refused("unsupported_store_version", 503)
             if version == 0:
                 if db.execute("SELECT 1 FROM sqlite_master WHERE type='table'").fetchone():
                     raise Refused("unrecognized_store", 503)
-                db.executescript("BEGIN IMMEDIATE;" + DDL + f"PRAGMA user_version={SCHEMA_VERSION}; COMMIT;")
+                db.executescript("BEGIN IMMEDIATE;" + DDL + "PRAGMA user_version=1; COMMIT;")
+                version = 1
+            if version < 1 or version > SCHEMA_VERSION:
+                # 더 새 버전이 만든 저장소(되돌린 뒤 실행)는 건드리지 않는다.
+                raise Refused("unsupported_store_version", 503)
+            if version < SCHEMA_VERSION:
+                if db.execute("SELECT 1 FROM sessions LIMIT 1").fetchone():
+                    _backup_before_migration(db, path, version)
+                db.execute("BEGIN IMMEDIATE")
+                try:
+                    migrate(db, version)
+                    db.commit()
+                except BaseException:
+                    db.rollback()
+                    raise
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("PRAGMA synchronous=FULL")
         # With the WAL kept open (hold_wal) it is reused instead of deleted, so a large batch would

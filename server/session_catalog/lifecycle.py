@@ -180,7 +180,7 @@ def resume(cid, opid, *, sid=None):
             raise Refused('launch_needs_review', 503)
         with database(write=True) as db:
             rid = uid()
-            db.execute('INSERT INTO runtimes VALUES(?,?,?,?,?,?,?,?,?,?)',
+            db.execute('INSERT INTO runtimes(id,session_id,epoch,physical_key,name,state,started,ended,observed,detail) VALUES(?,?,?,?,?,?,?,?,?,?)',
                        (rid, sid, snapshot['epoch'], item['physical_key'], name, 'running', now, None, time.time(), encode(item)))
             for pane in item['panes']:
                 db.execute('INSERT INTO conversation_executions VALUES(?,?,?,0)', (cid, rid, pane['pane_id']))
@@ -301,7 +301,7 @@ def create(opid,name,cwd,cols=80,rows=24,*,request_spec=None,launcher=None):
             raise Refused('launch_needs_review',503)
         with database(write=True) as db:
             rid=uid()
-            db.execute('INSERT INTO runtimes VALUES(?,?,?,?,?,?,?,?,?,?)',
+            db.execute('INSERT INTO runtimes(id,session_id,epoch,physical_key,name,state,started,ended,observed,detail) VALUES(?,?,?,?,?,?,?,?,?,?)',
                        (rid,sid,observed['epoch'],item['physical_key'],name,'running',now,None,time.time(),encode(item)))
             for pane in item['panes']:
                 db.execute('INSERT INTO pane_executions VALUES(?,?,?,?)',

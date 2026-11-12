@@ -152,7 +152,7 @@ def _reconcile(snapshot=None):
                 wid = workspace(db, placements.get(item["physical_key"]))
                 db.execute("INSERT INTO sessions(id,host,workspace_id,title,origin,created,updated) VALUES(?,?,?,?,?,?,?)",
                            (sid, host, wid, item["name"], item["origin"], now, now))
-                db.execute("INSERT INTO runtimes VALUES(?,?,?,?,?,?,?,NULL,?,?)", (rid, sid, epoch, item["physical_key"], item["name"], "running", now, now, detail))
+                db.execute("INSERT INTO runtimes(id,session_id,epoch,physical_key,name,state,started,ended,observed,detail) VALUES(?,?,?,?,?,?,?,NULL,?,?)", (rid, sid, epoch, item["physical_key"], item["name"], "running", now, now, detail))
                 changed(db, "session", sid)
             else:
                 if row["ended"] is not None:

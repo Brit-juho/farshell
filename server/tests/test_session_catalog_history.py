@@ -713,7 +713,7 @@ def test_bind_conversations_verifies_a_live_agent_once_not_every_tick(private_hi
     with database(write=True) as db:
         db.execute("INSERT INTO sources(id,provider,root,scope,enabled,created) VALUES('s','claude',?,'l',1,1)", (str(root),))
         db.execute("INSERT INTO sessions(id,host,title,origin,created,updated) VALUES('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','h','t','local',1,1)")
-        db.execute("INSERT INTO runtimes VALUES('eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','e','k','work','running',1,NULL,1,'{}')")
+        db.execute("INSERT INTO runtimes(id,session_id,epoch,physical_key,name,state,started,ended,observed,detail) VALUES('eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','e','k','work','running',1,NULL,1,'{}')")
         db.execute("INSERT INTO conversations(id,host,provider,scope,native_id,created,updated) VALUES('cccccccccccccccccccccccccccccccc','h','claude','l','n1',1,1)")
     entry = {'session_id': 'n1', 'tmux_session': 'work', 'agent': 'claude'}
     monkeypatch.setattr(agent_status, 'visible_state', lambda: {'x': entry})
@@ -872,7 +872,7 @@ def _stopped_session(home, *, verified=True, parent=None, archived=False):
     from session_catalog.db import database
     with database(write=True) as db:
         db.execute("INSERT INTO sessions(id,host,title,origin,created,updated,archived) VALUES('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','h','작업','local',1,1,?)", (5 if archived else None,))
-        db.execute("INSERT INTO runtimes VALUES('eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','e','k','fsh-old','stopped',1,2,2,'{}')")
+        db.execute("INSERT INTO runtimes(id,session_id,epoch,physical_key,name,state,started,ended,observed,detail) VALUES('eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','e','k','fsh-old','stopped',1,2,2,'{}')")
         db.execute("INSERT INTO conversations(id,host,provider,scope,native_id,title,cwd,parent_native_id,created,updated,detail) VALUES('cccccccccccccccccccccccccccccccc','h','claude','l','n1','t',?,?,1,1,?)",
                    (str(home), parent, json.dumps({'native_identity_verified': verified})))
         db.execute("INSERT INTO conversations(id,host,provider,scope,native_id,title,cwd,created,updated,detail) VALUES('dddddddddddddddddddddddddddddddd','h','claude','l','n2','t',?,1,9,?)",
@@ -1200,8 +1200,8 @@ def test_bind_conversations_finds_the_runtime_by_tmux_id_not_by_name(private_his
         db.execute("INSERT INTO sources(id,provider,root,scope,enabled,created) VALUES('s','claude',?,'l',1,1)", (str(root),))
         db.execute("INSERT INTO sessions(id,host,title,origin,created,updated) VALUES('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','h','t','local',1,1)")
         db.execute("INSERT INTO sessions(id,host,title,origin,created,updated) VALUES('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','h','t','local',1,1)")
-        db.execute("INSERT INTO runtimes VALUES('dddddddddddddddddddddddddddddddd','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','old','$1:50','work','unknown',1,NULL,1,'{}')")
-        db.execute("INSERT INTO runtimes VALUES('eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','new','$4:90','work','running',1,NULL,1,'{}')")
+        db.execute("INSERT INTO runtimes(id,session_id,epoch,physical_key,name,state,started,ended,observed,detail) VALUES('dddddddddddddddddddddddddddddddd','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','old','$1:50','work','unknown',1,NULL,1,'{}')")
+        db.execute("INSERT INTO runtimes(id,session_id,epoch,physical_key,name,state,started,ended,observed,detail) VALUES('eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','new','$4:90','work','running',1,NULL,1,'{}')")
         db.execute("INSERT INTO conversations(id,host,provider,scope,native_id,created,updated) VALUES('cccccccccccccccccccccccccccccccc','h','claude','l','n1',1,1)")
     entry = {'session_id': 'n1', 'tmux_session': 'work', 'agent': 'claude', '_tmux_uid': '$4'}
     monkeypatch.setattr(agent_status, 'visible_state', lambda: {'x': entry})
