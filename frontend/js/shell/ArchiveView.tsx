@@ -78,8 +78,11 @@ export function ArchiveView(p: { remote: boolean; onBack: () => void; onChanged:
   };
   void load();
   const changed = () => { p.onChanged(); void load(); };
-  const onSearch = (v: string) => { setQ(v); clearTimeout(timer); timer = setTimeout(() => { void load(); }, 300); };
-  const pick = (id: string) => { setProject(project() === id ? '' : id); void load(); };
+  // 조건을 바꾸면 그 즉시 진행 중인 요청을 무효로 하고 「더 보기」 커서를 지운다 — 300ms 안에 「더 보기」를 누르면
+  // 새 검색어 + 옛 검색의 커서로 받아 두 결과가 섞였다. 새 첫 쪽이 올 때까지 「더 보기」는 없다.
+  const invalidate = () => { request++; const cur = page(); if (cur && cur.next) setPage({ ...cur, next: null }); };
+  const onSearch = (v: string) => { setQ(v); invalidate(); clearTimeout(timer); timer = setTimeout(() => { void load(); }, 300); };
+  const pick = (id: string) => { setProject(project() === id ? '' : id); invalidate(); void load(); };
   const groups = createMemo(() => (page() ? groupArchive(page()!) : []));
   const total = () => page()?.archived_count ?? 0;
   const days = () => page()?.auto_archive_days ?? 0;

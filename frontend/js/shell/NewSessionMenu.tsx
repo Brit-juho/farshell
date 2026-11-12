@@ -74,8 +74,9 @@ function Menu(p: { deps: NewSessionDeps; close: () => void }) {
   let search: HTMLInputElement | undefined;
   const shown = createMemo(() => filterChoices(choices() || [], q()).slice(0, MAX_SHOWN));
   const asked = new Set<string>();
+  // 다른 맥을 보고 있으면 묻지 않는다 — 미리보기 경로는 중계 허용 목록에 넣지 않았다(이름만 비고 만들기는 된다).
   const preview = (key: string, cwd: string | null) => {
-    if (asked.has(key)) return;
+    if (p.deps.relayed || asked.has(key)) return;
     asked.add(key);
     p.deps.getJson('/api/tmux/name-preview' + (cwd ? '?cwd=' + encodeURIComponent(cwd) : ''))
       .then((d) => { if (d && typeof d.name === 'string') setNames({ ...names(), [key]: d.name }); })
@@ -140,7 +141,7 @@ function Menu(p: { deps: NewSessionDeps; close: () => void }) {
         <Item iconHtml={icon('user', 15, 2)} label={t('이번만 다른 계정으로')} sub={p.deps.accounts!.line()} caret
           onRun={() => { const anchor = p.deps.anchor; p.close(); p.deps.accounts!.openOnce(anchor, (id) => { void p.deps.createTmux({ profile: id }); }); }} />
       </Show>
-      <div class="vt-nsm-foot">{t('오른쪽 회색 글자가 새 세션 이름입니다.')}</div>
+      <Show when={!p.deps.relayed}><div class="vt-nsm-foot">{t('오른쪽 회색 글자가 새 세션 이름입니다.')}</div></Show>
       <Show when={error()}><div class="vt-nsm-note" role="status">{error()}</div></Show>
     </div>
   );

@@ -72,3 +72,12 @@ test('대화 기록 창은 검색·열람만 — 수집·복제·백업은 설�
     assert.ok(sec.includes(api), api);
   }
 });
+
+test('교차 검토 — 보관함 조건을 바꾸면 커서를 지우고, 다른 맥 보기에서는 이름 미리보기를 묻지 않고, 저장소 탭 패널에 이름이 있다', () => {
+  const av = read('frontend', 'js', 'shell', 'ArchiveView.tsx');
+  assert.match(av, /const invalidate = \(\) => \{ request\+\+;/);
+  assert.match(av, /setQ\(v\); invalidate\(\);/);
+  assert.match(av, /setProject\([^;]+\); invalidate\(\);/);
+  assert.match(read('frontend', 'js', 'shell', 'NewSessionMenu.tsx'), /if \(p\.deps\.relayed \|\| asked\.has\(key\)\) return;/);
+  assert.match(read('frontend', 'js', 'shell', 'RepoVisibility.tsx'), /aria-labelledby=\{\(props\.tabs \|\| \[\]\)\.length \? 'vt-repovis-tab-repos'/);
+});

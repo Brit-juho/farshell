@@ -229,7 +229,8 @@ export function RepoVisibility(props: Props) {
             </div>
           </Show>
           <Show when={tab() === 'repos'}>
-          <div class="vt-wtd-body vt-repovis-body" role={(props.tabs || []).length ? 'tabpanel' : undefined} id="vt-repovis-panel">
+          <div class="vt-wtd-body vt-repovis-body" role={(props.tabs || []).length ? 'tabpanel' : undefined} id="vt-repovis-panel"
+            aria-labelledby={(props.tabs || []).length ? 'vt-repovis-tab-repos' : undefined}>
             <Show when={loading()}><div class="vt-repovis-empty">{t('불러오는 중…')}</div></Show>
             <Show when={!loading() && groups().length === 0}>
               <div class="vt-repovis-empty">{t('탐색 경계 안에 git 저장소가 없습니다.')}</div>
