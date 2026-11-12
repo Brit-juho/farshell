@@ -510,7 +510,6 @@ def _entry(sid: str, cwd: Optional[str] = None, host: str = LOCAL_HOST) -> dict:
             "tool": None,
             "since": time.time(),
             "count": 0,
-            "input": {},
             "cwd": cwd,
             "updated_at": time.time(),
             # host/session_id는 엔트리를 보고 "어디의 무엇인지" 알 수 있게 하는
@@ -771,7 +770,11 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
             _emit(ent, "subagents")
 
     if event in ("prompt", "user_prompt_submit"):
+        # 새 턴이다 — 이전 턴의 도구 이름·요약이 「작업 중 · Bash」로 남지 않게 함께 지운다.
         ent["tool"] = None
+        ent.pop("last_tool", None)
+        ent.pop("summary", None)
+        ent.pop("_last_tool_failed", None)
         ent["since"] = time.time()
         _set_status(ent, WORKING)
         _clear_prompt(ent)
@@ -780,16 +783,21 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
 
     if event in ("permission", "permission_request"):
         tool = payload.get("tool_name") or payload.get("tool")
-        ent["tool"] = tool
+        tool_input = payload.get("tool_input", {})
+        if not sub:
+            # 서브에이전트의 승인 요청은 메인의 도구 표시를 덮지 않는다 — 덮으면 그 대기가 풀린 뒤에도
+            # (서브에이전트 post는 메인 도구를 지우지 않는다) 메인 행에 서브에이전트의 도구가 남았다.
+            ent["tool"] = tool
+            ent["summary"] = tool_summary(tool, tool_input, ent.get("cwd"))
         ent["since"] = time.time()
         ent["count"] = ent.get("count", 0) + 1
-        ent["input"] = payload.get("tool_input", {})
+        ent["_input"] = tool_input
         # P1-1 — question/options를 _set_status보다 먼저 채운다. _set_status가
         # 그 자리에서 지문(_prompt_fingerprint)을 계산하므로, 순서가 바뀌면
         # 항상 빈 질문으로 계산돼 토큰이 매번 같아진다.
         # kind는 훅이 아는 tool_name으로 정한다(훅 > 화면 > 폴백). 도구를 모르면 approval.
         kind = _TOOL_KINDS.get(tool, KIND_APPROVAL)
-        _set_hook_prompt(ent, kind, tool, ent["input"])
+        _set_hook_prompt(ent, kind, tool, tool_input)
         ent["_wait_tuid"] = tuid or (ent.get("_pre_tuids") or {}).get(sub or "")
         ent["_wait_agent"] = sub
         _set_status(ent, WAITING)
@@ -815,9 +823,10 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
         if wait_kind:
             ent["tool"] = tool
             ent["since"] = time.time()
-            ent["input"] = payload.get("tool_input", {})
+            ent["_input"] = payload.get("tool_input", {})
+            ent["summary"] = tool_summary(tool, ent["_input"], ent.get("cwd"))
             ent.pop("badge", None)
-            _set_hook_prompt(ent, wait_kind, tool, ent["input"])
+            _set_hook_prompt(ent, wait_kind, tool, ent["_input"])
             ent["_wait_tuid"] = tuid
             ent["_wait_agent"] = sub
             _set_status(ent, WAITING)
@@ -832,7 +841,8 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
             return ent
         ent["tool"] = tool
         ent["since"] = time.time()
-        ent["input"] = payload.get("tool_input", {})
+        ent["_input"] = payload.get("tool_input", {})
+        ent["summary"] = tool_summary(tool, ent["_input"], ent.get("cwd"))
         ent.pop("badge", None)
         # waiting/done에서 pre가 오면 그것도 working으로 — 새 도구가 시작됐다는
         # 뜻이므로 이전 상태(승인 대기/완료 표시)는 더 이상 유효하지 않다.
@@ -1184,6 +1194,41 @@ def consume_prompt(tmux_name: str, prompt_id: str, host: str = LOCAL_HOST) -> bo
             ent["prompt_id"] = None       # 검사와 같은 스텝에서 소비한다.
             return True
     return False
+
+
+_SUMMARY_FILE_TOOLS = ("Read", "Edit", "Write", "MultiEdit", "NotebookEdit")
+_ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def tool_summary(tool, tool_input, cwd=None):
+    """화면에 보일 도구 요약 한 줄. 도구 입력 원문(파일 내용·바꿀 문자열·명령 인자)은 내보내지 않는다.
+
+    - 파일 도구: 작업 폴더 기준 상대 경로(밖이면 파일 이름만), 120자.
+    - Bash: 실행 파일 이름 하나(앞의 `VAR=값`과 인자는 버린다 — 토큰이 섞이는 자리다).
+    - 그 밖(Codex 포함): None. 실측한 필드가 없는 도구는 추측해서 뽑지 않는다.
+    """
+    if not isinstance(tool_input, dict) or not isinstance(tool, str):
+        return None
+    if tool in _SUMMARY_FILE_TOOLS:
+        path = tool_input.get("file_path") or tool_input.get("notebook_path")
+        if not isinstance(path, str) or not path:
+            return None
+        base = cwd.rstrip("/") + "/" if isinstance(cwd, str) and cwd else None
+        shown = path[len(base):] if base and path.startswith(base) else os.path.basename(path.rstrip("/"))
+        shown = _CONTROL_RE.sub("", shown)
+        return shown[:120] or None
+    if tool == "Bash":
+        command = tool_input.get("command")
+        if not isinstance(command, str):
+            return None
+        for word in command.strip().split():
+            if _ASSIGN_RE.match(word):
+                continue
+            name = _CONTROL_RE.sub("", os.path.basename(word))
+            return name[:40] or None
+        return None
+    return None
 
 
 def public_entry(ent: dict) -> dict:
