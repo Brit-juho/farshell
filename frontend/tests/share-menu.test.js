@@ -90,7 +90,7 @@ test('레일·Fleet 행에 공유 표시(ShareMark)와 메뉴 옵션이 연결�
   const fs = require('node:fs');
   const path = require('node:path');
   const read = (p) => fs.readFileSync(path.join(__dirname, '..', '..', p), 'utf8');
-  assert.match(read('frontend/js/shell/RailRow.tsx'), /<ShareMark share=\{props\.row\.share\} \/>/);
+  assert.match(read('frontend/js/shell/SessionNode.tsx'), /<ShareMark share=\{row\(\)\.share\} \/>/);
   assert.match(read('frontend/js/shell/Fleet.tsx'), /<ShareMark share=\{props\.row\.share\} \/>/);
   assert.match(read('frontend/js/shell/Rail.tsx'), /share: viewHostId === LOCAL_HOST/);
   assert.match(read('frontend/js/shell/Fleet.tsx'), /share: viewHostId === LOCAL_HOST/);

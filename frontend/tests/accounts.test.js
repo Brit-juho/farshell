@@ -190,13 +190,13 @@ const base = {
   agent: null, branch: null, isMainWorktree: false, origin: 'local', viewLabel: null, otherScreens: 0, otherClients: 0,
 };
 
-test('레일 행 배지: 서버가 기록한 계정만 이름으로 보이고, 툴팁은 「생성 시 계정」, 없으면 배지가 없다', async () => {
+test('레일 세션 칸 배지: 서버가 기록한 계정만 이름으로 보이고, 툴팁은 「생성 시 계정」, 없으면 배지가 없다', async () => {
   const env = await loadSolidBuild();
   _envs.push(env);
   const mount = (profile) => {
     const root = env.document.createElement('div');
     env.document.body.appendChild(root);
-    env.mountRow(root, { row: { ...base, profile }, active: false, onOpen() {}, onContext() {} });
+    env.mountSessionNode(root, { row: { ...base, profile }, active: false, geometry: { lane: 1, lines: '' }, onOpen() {}, onContext() {} });
     return root;
   };
   const withProfile = mount({ id: 'a'.repeat(32), name: 'alice', tool: 'claude' });

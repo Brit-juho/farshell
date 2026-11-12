@@ -237,3 +237,40 @@ def test_a_folder_that_becomes_a_repository_in_place_is_promoted(catalog, tmp_pa
             tried[cwd] = 0.0
     _reconcile(_item("$1:1", "w", str(folder)))
     assert tuple(_placement(catalog, "w")) == ("checkout", "git", "newproj")
+
+
+# --- 세션 로직 점검 단계 5: 이어서 시작 미리보기 ----------------------------------------------------
+
+def test_resume_preview_names_the_folder_and_next_free_name_without_creating(catalog, tmp_path, monkeypatch):
+    import tmux_runner
+    from session_catalog import lifecycle
+    from session_catalog.db import database
+    repo = _git_repo(tmp_path / "home" / "farshell")
+    _reconcile(_item("$1:1", "farshell", str(repo)))
+    _reconcile()                                            # 끝났다
+    sid = catalog.snapshot()["sessions"][0]["id"]
+    with database(write=True) as con:
+        con.execute("INSERT INTO sources(id,provider,root,scope,enabled,created) VALUES('s','claude','/x','l',1,1)")
+        con.execute("INSERT INTO conversations(id,host,provider,scope,native_id,title,created,updated,cwd) VALUES(?,'h','claude','l','n','결제 버그',1,1,?)",
+                    ("c" * 32, str(repo)))
+        rid = con.execute("SELECT id FROM runtimes").fetchone()[0]
+        con.execute("INSERT INTO conversation_executions VALUES(?,?,'%1',1)", ("c" * 32, rid))
+    monkeypatch.setattr(lifecycle, "resume_target", lambda db, s: "c" * 32)
+    created = []
+    monkeypatch.setattr(tmux_runner, "has_session", lambda name: name == "farshell")   # farshell은 이미 있다
+    monkeypatch.setattr(tmux_runner, "run", lambda *a, **k: created.append(a) or (0, b"", b""))
+    out = lifecycle.resume_preview(sid)
+    assert out == {"resumable": True, "conversation_id": "c" * 32, "conversation_title": "결제 버그", "provider": "claude",
+                   "folder": "farshell", "name": "farshell-2"}
+    assert created == [], "미리보기는 아무것도 만들지 않는다"
+
+
+def test_resume_preview_without_a_conversation_or_session(catalog, monkeypatch):
+    from session_catalog import lifecycle
+    _reconcile(_item("$1:1", "w"))
+    _reconcile()
+    sid = catalog.snapshot()["sessions"][0]["id"]
+    monkeypatch.setattr(lifecycle, "resume_target", lambda db, s: None)
+    assert lifecycle.resume_preview(sid) == {"resumable": False, "conversation_id": None}
+    with pytest.raises(catalog.Refused, match="session_not_found"):
+        lifecycle.resume_preview("f" * 32)

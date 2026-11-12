@@ -240,6 +240,9 @@ function _rebuildDetails() {
       // 서버가 정한 waiting의 유형(approval/choice/plan/question)과 done의 보조 표시(question/plan).
       kind: ent.kind ?? null,
       badge: ent.badge ?? null,
+      // 서버가 만든 안전한 도구 요약(파일 경로·프로그램 이름)과 마지막으로 사람이 친 지시(이 맥 화면에만 온다).
+      summary: ent.summary ?? null,
+      lastPrompt: ent.last_prompt ?? null,
       ...(ent.subagents ? { subagents: ent.subagents } : {}),
     };
   }

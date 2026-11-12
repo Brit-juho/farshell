@@ -9,7 +9,7 @@
 // 파일에 있으면 폴링 주기·캐시 같은 것을 고칠 때 JSX 400줄을 지나쳐야 한다.
 import { createSignal, onCleanup } from 'solid-js';
 
-import { normalizeOrigin, normalizeShare, normalizeProfile, normalizeLineage, normalizeKind, normalizeBadge, type SessionRow } from './rail-data.js';
+import { normalizeOrigin, normalizeShare, normalizeProfile, normalizeLineage, normalizeKind, normalizeBadge, type SessionRow, type SessionHome } from './rail-data.js';
 import { confirmDialog } from '../core/dialog-lazy.js';
 import { t } from '../core/i18n.js';
 import { watchPath, isWatchLive } from './fs-watch.js';
@@ -76,6 +76,10 @@ export interface AgentDetail {
   /** waiting의 유형(approval/choice/plan/question)과 done의 보조 표시. 서버가 정한다. */
   kind: string | null;
   badge: string | null;
+  /** 서버가 만든 도구 요약(파일 경로·프로그램 이름). */
+  summary?: string | null;
+  /** 마지막으로 사람이 친 지시(이 맥 화면에만 온다). */
+  lastPrompt?: string | null;
 }
 
 /** 2026-09-30 — 상태 문장 세부·에이전트 이름은 폴링하지 않고 공용 저장소
@@ -342,6 +346,21 @@ function screenCounts(t: any, attached: number, openHere: boolean): { otherScree
   };
 }
 
+function normalizeTitle(v: unknown): string {
+  return typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 128) : '';
+}
+
+/** 서버 `home`을 검사해 받는다 — 모양이 다르면(옛 서버·손상) 없는 것으로 본다. */
+export function normalizeHome(v: any): SessionHome | null {
+  if (!v || typeof v !== 'object') return null;
+  if (typeof v.project_id !== 'string' || typeof v.root !== 'string' || typeof v.name !== 'string') return null;
+  return {
+    project_id: v.project_id, root: v.root, name: v.name, repository: v.repository === true,
+    workspace_id: typeof v.workspace_id === 'string' ? v.workspace_id : undefined,
+    kind: typeof v.kind === 'string' ? v.kind : undefined, path: typeof v.path === 'string' ? v.path : undefined,
+  };
+}
+
 export function collectSessionRows(inp: CollectInput): SessionRow[] {
   const w = window as any;
   const all = w.allSessions ? w.allSessions() : {};
@@ -395,7 +414,13 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
       sessionId: sid,
       tmuxName: tm.name,
       physicalKey: tm.physical_key,
-      name: tm.name,
+      // 화면 어디서나 보이는 이름(별칭)을 쓴다 — tmux 이름은 열쇠가 아니고 맥 터미널 `tmux attach -t`용이다.
+      name: normalizeTitle(tm.catalog?.title) || tm.name,
+      nameSource: tm.catalog?.name_source === 'human' ? 'human' : tm.catalog ? 'auto' : null,
+      catalogSessionId: typeof tm.catalog?.catalog_id === 'string' ? tm.catalog.catalog_id : undefined,
+      home: normalizeHome(tm.home),
+      summary: typeof detail?.summary === 'string' ? detail.summary : null,
+      lastPrompt: typeof detail?.lastPrompt === 'string' ? detail.lastPrompt : null,
       open: !!sid,
       status: w.getStatus ? w.getStatus(tm.name) : 'idle',
       unseen: !!(w.isUnseen && w.isUnseen(tm.name)),

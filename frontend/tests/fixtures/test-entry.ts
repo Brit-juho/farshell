@@ -10,17 +10,17 @@ export {
 } from '../../js/shell/hud-data.js';
 export {
   formatRelativeTime, statusSentence, stateKeyword, defaultRailCollapsed,
-  buildRailLists, compactRailOrder, readRailPrefs, RAIL_PREF_DEFAULTS, ATTENTION_SHOW_KEY, ATTENTION_COLLAPSED_KEY, originShowKey,
+  buildRailLists, readRailPrefs, RAIL_PREF_DEFAULTS, ATTENTION_SHOW_KEY, ATTENTION_COLLAPSED_KEY, originShowKey,
   HIDEABLE_ORIGINS, normalizeOrigin, originShort, originLabel, normalizeKind, normalizeBadge, rowMenuItems, rowSummary, runRowMenu,
   worktreeIconName, diffLabel, KIND_LABEL, BADGE_LABEL, normalizeShare, shareSentence, normalizeProfile, profileLabel, groupSessionRows,
-  normalizeLineage, lineageLabel, buildSessionTree, kidsProgress, moveInOrder, stepInOrder, parseNameList,
+  normalizeLineage, lineageLabel, buildSessionTree, kidsProgress, stepInOrder, parseNameList,
   ORDER_KEY, LINEAGE_KEY, encodeOrder, encodeLineagePrefs,
   splitRunning, pickRecentEnded, parseRailView, encodeRailView, toggleGroupCollapsed, ORIGIN_SHORT,
 } from '../../js/shell/rail-data.js';
 export { ringSvg, subBadge } from '../../js/shell/compact-mark.js';
 export { logout, clearAppCache, pageAssetUrls } from '../../js/shell/app-session.js';
 export { collectSessionRows } from '../../js/shell/rail-fetch.js';
-export { mountRow, mountMenu, mountNativeChildren, mountFleetRow, mountViewGroup, mountHoverCard } from './row-mount.js';
+export { mountRow, mountMenu, mountNativeChildren, mountFleetRow, mountViewGroup, mountHoverCard, mountSessionNode, mountRepoBranch } from './row-mount.js';
 export {
   buildHoverCard, shortenPath, tildePath, NATIVE_MAX, KIDS_MAX, BODY_MAX_LINES,
 } from '../../js/shell/rail-hover-card.js';
@@ -64,3 +64,7 @@ export {
 export { TreeStore } from '../../js/files/tree-store.js';
 export { mountFileTree } from '../../js/files/mount.tsx';
 export { mountFocus, edgeDelayMs, shouldShowHint, insideReveal, EDGE_CHROME } from '../../js/shell/Focus.tsx';
+export { buildRepoTree, flattenRows, endedActivity, OUTSIDE_KEY } from '../../js/shell/repo-tree.js';
+export { nodeLine, kidLabel } from '../../js/shell/rail-data.js';
+export { normalizeHome } from '../../js/shell/rail-fetch.js';
+export { sessionLines, kidLines, worktreeLines } from '../../js/shell/RepoBranch.js';

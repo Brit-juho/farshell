@@ -58,3 +58,32 @@ export function mountHoverCard(
     remove: (key: string) => { const m = { ...map() }; delete m[key]; setMap(m); },
   };
 }
+
+// ── 저장소 가지 그래프(세션 로직 점검 단계 5) ─────────────────────────────────
+import { SessionNode } from '../../js/shell/SessionNode.js';
+import { RepoBranch } from '../../js/shell/RepoBranch.js';
+import { EndedFold } from '../../js/shell/EndedFold.js';
+
+export function mountSessionNode(root: HTMLElement, props: Parameters<typeof SessionNode>[0]) {
+  return render(() => <SessionNode {...props} />, root);
+}
+
+/** 저장소 묶음 하나를 그린다. calls에 열기·메뉴·접기가 쌓인다. */
+export function mountRepoBranch(root: HTMLElement, group: any, opts: { collapsed?: boolean; ended?: any[]; calls?: string[] } = {}) {
+  const calls = opts.calls || [];
+  return render(() => (
+    <div id="vt-wgrail">
+      <RepoBranch
+        group={group}
+        collapsed={!!opts.collapsed}
+        onToggle={() => calls.push('toggle')}
+        isActive={() => false}
+        nodeProps={(row) => ({ onOpen: () => calls.push('open:' + row.name), onContext: () => calls.push('menu:' + row.name) })}
+        kidProps={(row) => ({ onOpen: () => calls.push('open:' + row.name), onContext: () => calls.push('menu:' + row.name) })}
+        kidsCollapsed={() => false}
+        hasEnded={(opts.ended || []).length > 0}
+        ended={() => <EndedFold sessions={opts.ended || []} open={false} onToggle={() => calls.push('ended')} onChanged={() => {}} />}
+      />
+    </div>
+  ), root);
+}

@@ -92,6 +92,7 @@ GATE_ONLY: dict[tuple[str, str], str] = {
 _ROWS: tuple = (
     ("GET", "/api/session-catalog", human()),
     ("GET", "/api/session-catalog/sessions/{session_id}", human()),
+    ("GET", "/api/session-catalog/sessions/{session_id}/resume-preview", human()),
     ("GET", "/api/session-history/replicas/{origin}/{conversation_id}", human()),
     ("POST", "/api/session-catalog/sessions/{session_id}", human()),
     ("DELETE", "/api/session-catalog/sessions/{session_id}", human()),

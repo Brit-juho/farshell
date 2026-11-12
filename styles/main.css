@@ -69,6 +69,8 @@
 @import "./screens/70-worktree-rail.css"  layer(legacy);
 /* 접힌 세션 띠 칸의 상세 호버 카드(body Portal) — 70의 접힘 칸 위에 얹히는 별도 면이라 바로 뒤. */
 @import "./screens/71-rail-hover-card.css" layer(legacy);
+/* 레일 저장소 가지 그래프(세션 로직 점검 단계 5) — 70의 행 규칙과 겹치지 않는 새 칸(.vt-rg-*)만 다룬다. */
+@import "./screens/72-rail-graph.css"      layer(legacy);
 @import "./screens/80-dock.css"           layer(legacy);
 /* 리디자인 1단계(2026-11) — 작업대(활동 막대 + 사이드바). 70(레일)·80(dock)의 프레임을 덮으므로 마지막. */
 @import "./screens/90-workbench.css"      layer(legacy);
