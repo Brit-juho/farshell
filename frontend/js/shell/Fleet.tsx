@@ -127,7 +127,9 @@ export function tilesOf(group: RepoGroup<SessionRow, any>): TileEntry[] {
     const wt = lane.worktree ? (lane.worktree.branch || lane.worktree.name) : null;
     for (const s of lane.sessions) {
       out.push({ row: s.row, worktree: wt, parent: null });
-      for (const k of s.kids) out.push({ row: k, worktree: wt, parent: s.row });
+      // 자손은 깊이 우선으로 온다(repo-tree.ts) — 「↳ 부모」는 실제 위임한 세션(손자면 그 위의 하위 세션)이다.
+      const byName = new Map([s.row, ...s.kids].map((r) => [r.tmuxName || '', r] as const));
+      for (const k of s.kids) out.push({ row: k, worktree: wt, parent: byName.get(k.lineage?.parent || '') || s.row });
     }
   }
   return out;

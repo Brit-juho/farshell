@@ -336,11 +336,13 @@ test('개입 필요 행 틴트 위에서 txt/sub 가 9스킨 전부 4.5:1 이상
   assert.strictEqual(checked, 9 * 3 * 2);
 });
 
-test('개입 필요 행의 보조 글자는 muted 가 아니라 sub 로 올라간다', () => {
-  const components = stripComments(fs.readFileSync(path.join(ROOT, 'styles/layers/components.css'), 'utf8'));
-  const m = components.match(/\.vt-srow\.is-waiting \.vt-srow-meta,[^{]*\{([^}]*)\}/);
-  assert.ok(m, '보조 글자 승격 규칙이 없다');
-  assert.match(m[1], /color:\s*var\(--color-sub\)/);
+test('틴트 칸(선택 · 입력 대기)의 보조 글자는 muted 가 아니라 sub 로, sub 는 txt 로 올라간다', () => {
+  // 세션 로직 점검 단계 5부터 레일 칸은 가지 그래프 칸(72-rail-graph.css `.vt-rg-row`)이다.
+  const graph = stripComments(fs.readFileSync(path.join(ROOT, 'styles/screens/72-rail-graph.css'), 'utf8'));
+  const rule = (re) => { const m = graph.match(re); assert.ok(m, '보조 글자 승격 규칙이 없다: ' + re); return m[1]; };
+  assert.match(rule(/\.vt-rg-row:is\(\.active, \.is-waiting\) :is\(\.vt-rg-b\.mono,[^{]*\{([^}]*)\}/), /color:\s*var\(--color-sub\)/);
+  assert.match(rule(/\.vt-rg-row:is\(\.active, \.is-waiting\) :is\(\.vt-rg-b:not\(\.mono\),[^{]*\{([^}]*)\}/), /color:\s*var\(--color-txt\)/);
+  assert.match(rule(/\.vt-rg-row\.is-waiting :is\(\.vt-rg-sm\[data-tone="waiting"\],[^{]*\{([^}]*)\}/), /color:\s*var\(--color-txt\)/);
 });
 
 // ── 2026-11 리디자인 3단계: 새 토큰(raised·term-*·크롬 막대·scrim·acc-soft) ──

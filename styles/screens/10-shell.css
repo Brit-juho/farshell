@@ -152,8 +152,6 @@ html[data-skin="windows"] #topbar {
 .vt-session-group-label { padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5) calc(var(--spacing) * 0.5); font-size:var(--fs-xs); color:var(--sub); }
 .vt-session-row.in-group { border:0; border-top:1px solid var(--line); border-radius:0; }
 .vt-session-group-label + .vt-session-row.in-group { border-top:0; }
-.vt-session-group .vt-view-group-title { padding:0; }
-.vt-session-group .vt-view-group-rename { opacity:1; }
 .vt-session-row.in-group.active { box-shadow:inset 3px 0 0 var(--acc); }
 /* 구역 제목(「열려 있지 않은 세션」) */
 .vt-session-section { margin:calc(var(--spacing) * 1.5) calc(var(--spacing) * 0.5) 0; font-size:var(--fs-xs); color:var(--sub); }

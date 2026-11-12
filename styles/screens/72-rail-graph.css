@@ -54,6 +54,12 @@
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-sm[data-tone="working"] { color:var(--color-st-working); }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-sm[data-tone="done"] { color:var(--color-st-done); font-weight:var(--weight-semibold); }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-detail { font-family:var(--font-mono); font-weight:var(--weight-normal); color:var(--color-sub); }
+/* 틴트 칸(선택 · 입력 대기) — 보조 글자 한 단 올림(DESIGN.md 「Tinted rows」: muted → sub, sub → txt). 틴트 위의 muted는
+   4.5:1을 못 넘는다(frontend/tests/tokens-contrast.test.js). 상태색 글자는 그대로 두되, 입력 대기 칸의 호박 글자는 같은 색상각
+   틴트 위라 대비가 더 떨어져 본문색으로 둔다 — 상태는 링이 말한다. */
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg-row:is(.active, .is-waiting) :is(.vt-rg-b.mono, .vt-rg-tm:not([data-tone]):not(.c-waiting), .vt-rg-sm:not([data-tone="waiting"]):not([data-tone="working"]):not([data-tone="done"]), .vt-rg-more, .vt-rg-group) { color:var(--color-sub); }
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg-row:is(.active, .is-waiting) :is(.vt-rg-b:not(.mono), .vt-rg-detail, .vt-rg-name) { color:var(--color-txt); }
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg-row.is-waiting :is(.vt-rg-sm[data-tone="waiting"], .vt-rg-tm.c-waiting) { color:var(--color-txt); }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-diff { flex:none; display:inline-flex; gap:4px; font:var(--fs-xs) var(--font-mono); }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-group { flex:none; display:inline-flex; color:var(--color-muted); }
 
@@ -91,7 +97,10 @@
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg.outside .vt-rg-ic { color:var(--color-sub); }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-head .vt-rg-body { padding:0; }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-rn { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--fs-sm); font-weight:700; color:var(--color-txt); }
-:is(#vt-wgrail, .vt-rg-scope) .vt-rg-rb { flex:none; display:inline-flex; align-items:center; gap:3px; margin-left:2px; font:var(--fs-xs) var(--font-mono); color:var(--color-muted); }
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg-rb { flex:0 0 auto; max-width:55%; min-width:0; display:inline-flex; align-items:center; gap:3px; margin-left:2px; font:var(--fs-xs) var(--font-mono); color:var(--color-muted); }
+/* 메인 브랜치는 들어갈 만하면 온전히(저장소 이름이 먼저 줄어든다), 머리 절반을 넘는 긴 브랜치만 줄임표 — 수·캐럿·「+」는 자리를 지킨다. */
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg-rb > span:first-child { display:flex; flex:none; }
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg-rbn { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-caret { flex:none; display:inline-flex; color:var(--color-muted); transition:transform .12s; }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg.collapsed .vt-rg-head .vt-rg-caret { transform:rotate(-90deg); }
 

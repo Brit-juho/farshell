@@ -229,10 +229,10 @@ The redesign mockups use short names (`--bg`, `--side`, `--sunk`, `--raised`, `-
 **Tinted rows.** On both tints — waiting (`--color-st-waiting-tint`) and selection
 (`--color-acc-soft`) — secondary text steps up one level: muted text is drawn in `sub`,
 sub text in `txt`. Each token must therefore pass the bar of the role it is promoted into
-on the tint (over `bg-0..2`): `txt` ≥ 6.0, `sub` ≥ 4.5, `muted` ≥ 3.0. The waiting row
-already does this in CSS (`.vt-srow.is-waiting .vt-srow-meta`); no row uses `acc-soft`
-yet — selected rows adopt it, with the same promotion, when they are redrawn (redesign
-phase 4).
+on the tint (over `bg-0..2`): `txt` ≥ 6.0, `sub` ≥ 4.5, `muted` ≥ 3.0. The rail's
+session cells do this in CSS for both tints (`.vt-rg-row:is(.active, .is-waiting)` in
+`styles/screens/72-rail-graph.css`); on the waiting tint the amber state text is drawn in
+`txt` too, since the state ring already carries the state.
 
 **Terminal colors** — `--color-term-*`. Everything that draws terminal content outside
 xterm (pane preview cards, the palette's `@` preview, the work log's tool calls, the file

@@ -1,12 +1,4 @@
 @layer components {
-  .vt-catalog-project { margin-block: 4px 12px; }
-  .vt-catalog-project-head { display: flex; width: 100%; justify-content: space-between; gap: 8px; padding: 8px 12px;
-    border: 0; background: none; color: var(--color-txt); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
-  .vt-catalog-project-head small, .vt-catalog-workspace-head { color: var(--color-sub); font-size: var(--fs-xs); }
-  .vt-catalog-workspace-head { display: flex; gap: 8px; padding: 5px 12px; overflow-wrap: anywhere; }
-  .vt-catalog-legacy { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 8px 8px; padding: 6px 8px 6px 12px;
-    border: 1px solid var(--color-line); border-radius: 6px; color: var(--color-sub); font-size: var(--fs-xs); }
-  .vt-catalog-stopped.is-busy { opacity: .6; }
   .vt-history-panel .vt-viewer-card { width: min(1240px, calc(100vw - 32px)); max-width: none; height: min(860px, calc(100dvh - 32px)); }
   .vt-history-panel .vt-vw-body { overflow: auto; min-height: 0; }
   .vt-history { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
@@ -37,7 +29,7 @@
   .vt-history-key { font-size: var(--fs-sm); user-select: text; }
   .vt-history-more { margin-block: 12px; }
   @media (pointer: coarse) {
-    .vt-catalog-project-head, .vt-history button, .vt-catalog-more-link, .vt-catalog-archive-link { min-height: 44px; }
+    .vt-history button, .vt-catalog-more-link, .vt-catalog-archive-link { min-height: 44px; }
   }
   @media (max-width: 719px) {
     .vt-history-panel .vt-viewer-card { width: 100%; height: 100%; max-height: 100%; border-radius: 0; }

@@ -180,7 +180,6 @@ export const SCHEMA = {
   'ui.focus.pill':       { type: 'bool', def: true, scope: 'device' },
   'ui.focus.edgeDelay':  { type: 'enum', def: '250', values: ['0', '250', '500'], scope: 'device' },
   'ui.focus.hintCount':  { type: 'int',  def: 0, min: 0, max: 3, scope: 'device' },
-  'rail.order':   { type: 'str', def: '' },
   'rail.lineage': { type: 'str', def: '', scope: 'device' },
   'rail.view':    { type: 'str', def: '', scope: 'device' },
 };

@@ -43,11 +43,8 @@ export interface SessionRow {
   badge: DoneBadge | null;
   diffFiles: number | null;
   changed?: { files: number; add: number; del: number } | null;
-  /** waiting에서 감지된 질문 원문. 행에는 안 보이고 툴팁·승인 버튼에만 쓴다. */
+  /** waiting에서 감지된 질문 원문. 행에는 안 보이고 툴팁에만 쓴다(목록에서 답하지 않는다 — 답은 터미널에서). */
   question?: string | null;
-  options?: { key: string; label: string }[] | null;
-  /** 승인 응답 경쟁을 막는 토큰(ADR-33). */
-  promptId?: string | null;
   agent?: string | null;
   branch?: string | null;
   cwd?: string;
@@ -317,8 +314,10 @@ export const RAIL_PREF_DEFAULTS: Record<string, boolean> = {
 
 // 계보 접기(기기별)를 설정 키 하나에 JSON으로 묶는다. core/settings.js의 스키마 줄을 아끼려는 것이다 — 초기 번들이
 // 300KiB 상한에 닿아 있고 그 파일은 주석까지 번들에 남는다. 그래서 설명은 여기에 둔다.
-// (예전 정렬 설정 `rail.order`는 세션 로직 점검 단계 5에서 읽지 않는다 — 목록은 저장소 묶음·최근 활동순뿐이다.)
-/** 기기별 설정 하나에 `{"collapsed":[하위를 접은 부모…],"closedOpen":[닫힌 하위를 펼친 부모…]}`. 기본은 펼침·접힘. */
+// (예전 정렬 설정 `rail.order`는 세션 로직 점검 단계 8에서 스키마에서도 뺐다 — 목록은 저장소 묶음·최근 활동순뿐이다.
+//  저장돼 있던 값은 스키마에 없는 키라 읽히지 않는다.)
+/** 기기별 설정 하나에 `{"collapsed":[하위를 접은 부모…]}`. 기본은 펼침. (예전의 `closedOpen` — 닫힌 하위 펼침 — 은 가지 그래프에
+ *  그 접기가 없어 읽지 않는다. 다음에 저장할 때 빠진다.) */
 export const LINEAGE_KEY = 'rail.lineage';
 
 function parseObj(v: unknown): Record<string, unknown> {
@@ -326,8 +325,8 @@ function parseObj(v: unknown): Record<string, unknown> {
   try { const o = JSON.parse(v); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch { return {}; }
 }
 
-export function encodeLineagePrefs(collapsed: string[], closedOpen: string[]): string {
-  return JSON.stringify({ collapsed: collapsed.slice(0, 200), closedOpen: closedOpen.slice(0, 200) });
+export function encodeLineagePrefs(collapsed: string[]): string {
+  return JSON.stringify({ collapsed: collapsed.slice(0, 200) });
 }
 
 /** 기기별 설정 하나에 `{"groupsCollapsed":[열쇠…]}` — 레일의 저장소 접힘(`repo:<저장소 경로>`)과 「종료 N」 펼침
@@ -355,7 +354,6 @@ export interface RailPrefs {
   attentionCollapsed: boolean;
   hiddenOrigins: Origin[];
   kidsCollapsed: string[];
-  closedOpen: string[];
 }
 
 /** get: 값이 없으면 undefined/null을 돌려주는 설정 읽기(window.vtSettingsGet). */
@@ -370,7 +368,6 @@ export function readRailPrefs(get: (key: string) => unknown): RailPrefs {
     attentionCollapsed: flag(ATTENTION_COLLAPSED_KEY),
     hiddenOrigins: HIDEABLE_ORIGINS.filter((o) => !flag(originShowKey(o))),
     kidsCollapsed: parseNameList(parseObj(get(LINEAGE_KEY)).collapsed),
-    closedOpen: parseNameList(parseObj(get(LINEAGE_KEY)).closedOpen),
   };
 }
 

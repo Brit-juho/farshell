@@ -390,24 +390,11 @@
   .vt-sidepanel.left  { left: 0;  border-right: 1px solid var(--color-line); }
   .vt-sidepanel.right { right: 0; border-left: 1px solid var(--color-line); }
 
-  /* ── 세션 행 ───────────────────────────────────────────────────────────
-   * 세션 하나를 한 줄로 보여주는 행. 데스크톱 레일(.vt-wgrail-row)과 폰의 플릿
-   * 홈(.vt-fleet-row)이 **같은 데이터를 같은 구조로** 그리는데 2.1.6 이전에는
-   * CSS가 두 벌이었다. 데이터는 이미 rail-data.ts를 공유하고 있었는데 표현만
-   * 따로였다 — 그래서 한쪽에 무엇을 더해도 다른 쪽이 안 따라왔다. 에이전트
-   * 마크가 데스크톱에만 있던 것이 그 결과다.
-   *
-   * 구조(양쪽 동일):
-   *   [색 막대][상태 막대] [ main [ top: 마크 · 이름 · 배지 · 변경수 ]
-   *                                sub: 상태 문장
-   *                                question: 승인 대기 질문 ]
-   *
-   * 크기만 두 단이다. 폰은 엄지로 훑으므로 이름이 크고 행이 높다(`.lg`).
-   * 그 차이는 `--srow-*` 두 변수에 모았다 — 규칙을 두 벌 쓰지 않는다. */
+  /* ── 세션 칸(.vt-srow) ──────────────────────────────────────────────────
+   * 세션 로직 점검 단계 5·7부터 펼친 레일은 가지 그래프 칸(72-rail-graph.css `.vt-rg-*`), 폰은 타일(`.vt-tile`)이다.
+   * `.vt-srow`는 접힌 48px 띠의 칸(RailRow.tsx `Row`)에만 남았다 — 여기는 그 칸의 뼈대와 레일·타일이 같이 쓰는 표식
+   * (만든 곳 · 다른 화면 · 웹 아닌 attach · 공유 · 계정 · 위임 토글)만 둔다. 띠의 치수는 70-worktree-rail.css가 정한다. */
   .vt-srow {
-    --srow-name: var(--fs-sm);
-    --srow-meta: var(--fs-3xs);
-    --srow-gap: 2px;
     display: flex;
     align-items: stretch;
     gap: calc(var(--spacing) * 2);
@@ -416,128 +403,25 @@
     border-bottom: 1px solid var(--color-line);
     cursor: pointer;
   }
-  .vt-srow.lg {
-    --srow-name: var(--fs-md);
-    --srow-meta: var(--fs-2xs);
-    --srow-gap: 3px;
-    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 1.5);
-  }
-
   .vt-srow:hover { background: var(--color-state-hover); }
   .vt-srow:active { background:var(--color-state-press); }
-  /* "지금 보고 있는 행"은 **두 신호**로 말한다: 표면이 한 단 올라오고
-   * (--color-bg-3) 낮은 그림자가 얹힌다(--shadow-e1). 색 하나에 기대면
-   * 스킨에 따라 사라진다 — farshell에서 배경 단차만으로는 1.06:1이라
-   * 사실상 같은 색이었다(2.1.6에서 e1을 6스킨에 정의해 고쳤다). */
+  /* "지금 보고 있는 칸"은 **두 신호**로 말한다: 표면이 한 단 올라오고 낮은 그림자가 얹힌다(--shadow-e1).
+   * 색 하나에 기대면 스킨에 따라 사라진다(farshell에서 배경 단차만으로는 1.06:1). */
   .vt-srow.active {
     background: var(--color-state-selected);
     box-shadow: var(--shadow-e1);
     position: relative;
     z-index: 1;
   }
-  /* 승인 대기는 **활성과 다른 축**이다 — 활성은 "내가 보고 있다", 대기는
-   * "네 입력이 필요하다". 둘이 동시에 참일 수 있으므로 배경을 다르게 쓴다. */
+  /* 승인 대기는 **활성과 다른 축**이다 — 둘이 동시에 참일 수 있으므로 배경을 다르게 쓴다.
+   * 틴트 위에서는 muted가 4.5:1을 못 넘어 보조 글자를 sub로 한 단 올린다. */
   .vt-srow.is-waiting { background: var(--color-st-waiting-tint); }
-  /* 틴트 위에서는 muted(스킨별 3.3~4.0:1)가 4.5를 못 넘는다 — 보조 글자를 sub 로 한 단 올리고,
-   * 호박색 키워드(틴트와 같은 색상각이라 대비가 더 떨어진다)는 본문색으로 둔다. 상태는 아이콘이 말한다. */
-  .vt-srow.is-waiting .vt-srow-meta,
-  .vt-srow.is-waiting .vt-srow-sub,
-  .vt-srow.is-waiting .vt-srow-wt,
-  .vt-srow.is-waiting .vt-srow-origin,
   .vt-srow.is-waiting .vt-srow-agent { color: var(--color-sub); }
-  .vt-srow.is-waiting .vt-srow-kw[data-state="waiting"] { color: var(--color-txt); }
-
-  .vt-srow-main {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--srow-gap);
-  }
-  .vt-srow-top {
-    display: flex;
-    align-items: center;
-    gap: calc(var(--spacing) * 1.5);
-    min-width: 0;
-  }
-  .vt-srow-name {
-    flex: 1;
-    min-width: 0;
-    color: var(--color-txt);
-    font: var(--weight-medium) var(--srow-name) / var(--leading-row) var(--font-mono);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .vt-srow.active .vt-srow-name { color: var(--color-acc); font-weight: var(--weight-semibold); }
-
-  /* 메타(변경 수·시각)와 상태 문장은 **muted**다. 이전에는 둘 다 sub였는데,
-   * sub는 부제의 자리다 — 메타까지 sub면 4단 램프가 실사용에서 2단으로
-   * 무너진다(2.1.6 디자인 리뷰에서 실측: txt 12 · sub 15 · muted 3 · faint 0). */
-  .vt-srow-meta {
-    flex: none;
-    color: var(--color-muted);
-    font: var(--weight-normal) var(--srow-meta) / 1 var(--font-mono);
-    font-variant-numeric: tabular-nums;
-  }
-  .vt-srow-sub {
-    color: var(--color-muted);
-    font: var(--weight-normal) var(--srow-meta) / var(--leading-row) var(--font-mono);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  /* 행 1줄 앞의 상태 아이콘(ui/icons.js stateIcon) — 색+모양이 상태를 말하고 읽지 않음은
-   * 아이콘 둘레 링이다. 예전의 왼쪽 상태 막대(.vt-srow-mark)를 대체했다. */
+  /* 칸 앞의 상태 링(ui/icons.js) — 색+모양이 상태를 말하고 읽지 않음은 링 옆 점이다. */
   .vt-srow-state { display: inline-flex; flex: none; align-items: center; margin-left: 2px; }
-
-  /* 행의 2~4줄. 모두 한 줄 flex라 넘치는 것은 말줄임 가능한 자리(브랜치·도구·뷰 이름)가 맡고,
-   * 상태 키워드·경과·아이콘은 flex:none으로 항상 보인다. */
-  .vt-srow-line2,
-  .vt-srow-line3,
-  .vt-srow-line4 {
-    display: flex;
-    align-items: center;
-    gap: calc(var(--spacing) * 1.5);
-    min-width: 0;
-  }
-  .vt-srow-wt,
-  .vt-srow-origin { display: inline-flex; flex: none; color: var(--color-muted); }
-  .vt-srow.active .vt-srow-wt { color: var(--color-acc); }
-  .vt-srow-branch {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .vt-srow-workspace-kind { flex: none; color: var(--color-sub); }
-  .vt-srow-directory { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .vt-srow-line2 .vt-srow-branch { min-width: 0; max-width: 35%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .vt-workspace-details { display: grid; gap: var(--spacing); margin: 0; }
   .vt-workspace-details dt { color: var(--color-sub); font-size: var(--fs-xs); }
   .vt-workspace-details dd { margin: 0 0 calc(var(--spacing) * 2); white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-sm); }
-  .vt-srow-directory + .vt-srow-branch::before { content: "· "; }
-  .vt-view-group { margin: var(--spacing) 0 calc(var(--spacing) * 2); border-bottom: 1px solid var(--color-line); }
-  .vt-view-group-head { display: flex; align-items: center; gap: calc(var(--spacing) * 1.5); min-width: 0; min-height: 28px; padding: 0 calc(var(--spacing) * 2.5); }
-  .vt-view-group-ico { display: inline-flex; flex: none; color: var(--color-muted); }
-  /* 묶음 접기 캐럿 — 구역 머리 캐럿과 같은 관용구(chevron-down을 돌린다). */
-  .vt-view-group-toggle { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 16px; height: 20px; padding: 0; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--color-muted); cursor: pointer; }
-  .vt-view-group-toggle svg { transition: transform var(--dur-fast) var(--ease-out-quint); }
-  .vt-view-group-toggle.collapsed svg { transform: rotate(-90deg); }
-  .vt-view-group-toggle:hover { color: var(--color-txt); }
-  @media (prefers-reduced-motion: reduce) { .vt-view-group-toggle svg { transition: none; } }
-  .vt-view-group-rename { display: inline-flex; align-items: center; justify-content: center; }
-  .vt-view-group-title { flex: 1; min-width: 0; padding: 0; text-align: left; background: transparent; border: 0; color: var(--color-sub); font: var(--weight-medium) var(--fs-xs) / var(--leading-row) var(--font-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-  .vt-view-group-title:hover { color: var(--color-txt); }
-  .vt-view-group-count { flex: none; color: var(--color-muted); font: var(--weight-normal) var(--fs-3xs) / 1 var(--font-mono); }
-  .vt-view-group-rename { flex: none; padding: 0 var(--spacing); min-height: 24px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-sub); font: var(--weight-normal) var(--fs-3xs) / 1 var(--font-ui); cursor: pointer; }
-  .vt-view-group-rename:hover { background: var(--color-state-hover); color: var(--color-txt); }
-  .vt-view-group-rename:active { background:var(--color-state-press); }
-  @media (hover: hover) and (pointer: fine) {
-    .vt-view-group-rename { opacity: 0; }
-    .vt-view-group-head:hover .vt-view-group-rename, .vt-view-group-head:focus-within .vt-view-group-rename { opacity: 1; }
-  }
   .vt-session-body { display: flex; flex: 1; min-width: 0; flex-direction: column; }
   .vt-session-body .vt-session-select { width: 100%; text-align: left; }
   .vt-session-meta { display: block; width: 100%; text-align: left; padding: 0; background: transparent; border: 0; font: inherit; font-size: var(--fs-xs); color: var(--color-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
@@ -545,30 +429,10 @@
   .vt-session-error { font-size: var(--fs-xs); color: var(--color-sub); }
   @media (pointer: coarse), (max-width: 719px) {
     .vt-session-meta, .vt-card button.card-meta { min-height: 44px; }
-    .vt-srow-line2 { flex-wrap: wrap; }
-    .vt-srow-line2 .vt-srow-directory { flex-basis: 45%; }
-    .vt-view-group-title, .vt-view-group-rename { min-height: 44px; }
-    .vt-view-group-rename { min-width: 44px; opacity: 1; }
   }
-  @media (max-width: 420px) {
-    .vt-srow-line2 .vt-srow-meta { display: none; }
-  }
-  /* 상태 키워드 — 짧게 고정이라 잘리지 않는다. 색은 상태 아이콘과 같은 토큰. */
-  .vt-srow-kw { flex: none; color: var(--color-muted); font-weight: var(--weight-medium); }
-  .vt-srow-kw[data-state="working"] { color: var(--color-st-working); }
-  .vt-srow-kw[data-state="waiting"] { color: var(--color-st-waiting); }
-  .vt-srow-kw[data-state="done"]    { color: var(--color-st-done); }
-  .vt-srow-tool { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .vt-srow-badge { flex: none; color: var(--color-sub); }
-  .vt-srow-since { flex: none; font-variant-numeric: tabular-nums; }
-  .vt-srow-since::before { content: "·"; margin-right: calc(var(--spacing) * 1.5); opacity: .6; }
-  .vt-srow-origin { margin-left: auto; }
-  /* 만든 곳 글(시안 D02 3줄 「다른 맥에서 만듦」) — 자리가 모자라면 글이 먼저 줄고 아이콘은 남는다. */
-  .vt-srow-origin.with-text { flex: 0 1 auto; min-width: 0; align-items: center; gap: 3px; }
-  .vt-srow-origin-ico { display: inline-flex; flex: none; }
-  .vt-srow-origin-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .vt-srow-view { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* 「다른 화면 N」 — 아이콘 + 글자(시안 D02 4줄). 상자를 두르지 않는다: 줄 자체가 이 정보 하나다. */
+  /* 만든 곳(다른 맥에서 만든 세션만) — 아이콘만, 이름은 툴팁·메뉴 요약 줄에. */
+  .vt-srow-origin { display: inline-flex; flex: none; color: var(--color-muted); }
+  /* 「다른 화면 N」 — 아이콘 + 글자. 상자를 두르지 않는다. */
   .vt-srow-screens {
     display: inline-flex;
     flex: none;
@@ -577,43 +441,9 @@
     color: var(--color-sub);
   }
   .vt-srow-screens-ico { display: inline-flex; flex: none; }
-
-  /* ── 리디자인 4단계 — 레일·Fleet이 같이 쓰는 행 조각 ─────────────────────
-   * 데스크톱 레일의 치수·색 단계는 screens/70-worktree-rail.css(`#vt-wgrail` 범위)가 정한다.
-   * 여기는 두 화면에 모두 나오는 조각의 뼈대만 둔다. */
-  /* 경과 시간 — 1줄 오른쪽 끝(종료 행은 레일·Fleet 모두, 실행 중 행은 레일만). */
-  .vt-srow-elapsed {
-    flex: none;
-    margin-left: auto;
-    color: var(--color-muted);
-    font: var(--weight-normal) var(--srow-meta) / 1 var(--font-mono);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-  .vt-srow-elapsed:empty { display: none; }
-  .vt-srow-note { flex: none; color: var(--color-muted); }
-  /* 아이콘이 붙은 브랜치(git-branch 12 + 이름). 이름만 말줄임한다. */
-  .vt-srow-branch.with-ico { display: inline-flex; align-items: center; gap: 3px; color: var(--color-sub); }
-  .vt-srow-branch-ico { display: inline-flex; flex: none; }
-  .vt-srow-branch-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* 변경량 +추가 −삭제 — 추가는 작업색, 삭제는 오류색(터미널 diff와 같은 뜻). */
   .vt-diff-add { color: var(--color-st-working); }
   .vt-diff-del { color: var(--color-st-error); }
-  /* 행 아래 버튼 줄(답 버튼 · 종료 행 동작). 버튼은 `.vt-btn.sm`(24). */
-  .vt-srow-answers,
-  .vt-srow-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--spacing);
-    margin-top: var(--spacing);
-    min-width: 0;
-  }
-  .vt-srow-answers .vt-btn { max-width: 100%; min-width: 0; }
-  .vt-srow-answer-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .vt-srow-to-term-ico,
-  .vt-srow-resume-ico { display: inline-flex; flex: none; }
-  .vt-srow-resume { margin-left: auto; }
 
   /* 웹이 아닌 attach(맥 터미널 등) — 「다른 화면」과 같은 줄, 아이콘 + 개수만 */
   .vt-srow-clients {
@@ -1493,16 +1323,12 @@
  * 올라온다 — 행이 10개 넘게 늘어선 화면에서 마크가 전부 액센트면 "지금 보고
  * 있는 것"이 묻힌다. */
 @layer components {
-  .vt-wgrail-agent,
-  .vt-fleet-agent {
+  .vt-wgrail-agent {
     display: inline-flex;
     flex: none;
     color: var(--color-muted);
   }
   .vt-wgrail-row.active .vt-wgrail-agent { color: var(--color-acc); }
-  /* 폰의 행은 상태 막대가 이미 왼쪽 끝에 있어, 마크까지 왼쪽에 붙으면 둘이
-   * 한 덩어리로 읽힌다. 이름과의 간격만 준다. */
-  .vt-fleet-agent { margin-right: calc(var(--spacing) * 1.5); }
   .vt-wgrail-agent { margin-right: calc(var(--spacing) * 1.5); }
 }
 

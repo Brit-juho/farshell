@@ -57,7 +57,7 @@ test('rowMenuItems — 하위 세션 메뉴(이 맥에서만), 수동 정렬 이
 test('설정 — 위임 접기는 기기별 키 하나(JSON), 정렬 값은 더 읽지 않는다', async () => {
   const { SETTINGS_SCHEMA, LINEAGE_KEY, encodeLineagePrefs, readRailPrefs } = await mod();
   assert.strictEqual(SETTINGS_SCHEMA[LINEAGE_KEY].scope, 'device');
-  const p = readRailPrefs((k) => (k === LINEAGE_KEY ? encodeLineagePrefs(['main'], []) : '{"sort":"manual","order":["b"]}'));
+  const p = readRailPrefs((k) => (k === LINEAGE_KEY ? encodeLineagePrefs(['main']) : '{"sort":"manual","order":["b"]}'));
   assert.deepStrictEqual(Array.from(p.kidsCollapsed), ['main']);
   assert.strictEqual(p.sort, undefined);
   assert.deepStrictEqual(Array.from(readRailPrefs(() => undefined).kidsCollapsed), []);

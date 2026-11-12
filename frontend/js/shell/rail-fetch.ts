@@ -70,8 +70,7 @@ export interface AgentDetail {
   tool: string | null;
   question: string | null;
   options: { key: string; label: string }[] | null;
-  /** P1-1(ADR-33) — 서버 `agent_status.py`의 `prompt_id`. 승인 응답 경쟁을
-   * 막는 토큰(rail-data.ts의 `RailRowInput.promptId` 참고). */
+  /** P1-1(ADR-33) — 서버 `agent_status.py`의 `prompt_id`(승인 응답 경쟁을 막는 토큰). 목록은 답하지 않아 쓰지 않는다. */
   promptId: string | null;
   /** waiting의 유형(approval/choice/plan/question)과 done의 보조 표시. 서버가 정한다. */
   kind: string | null;
@@ -411,8 +410,6 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
       diffFiles: modern ? (ctx.changed?.files ?? null) : cwd ? (cachedDiffCount(cwd) ?? null) : null,
       changed: modern ? ctx.changed : info?.changed ?? null,
       question: detail?.question ?? null,
-      options: detail?.options ?? null,
-      promptId: detail?.promptId ?? null,
       agent: names[tm.name] ?? null,
       branch: modern ? ctx.branch || (ctx.status === 'ready' || ctx.root ? t('분리된 HEAD') : null) : info?.branch ?? null,
       isMainWorktree: modern ? ctx.worktree?.kind === 'main' : info?.isMain ?? false,

@@ -117,7 +117,22 @@ export function buildRepoTree<R extends RepoRowLike, E extends EndedLike>(inp: B
   const activity = (r: R) => inp.activityOf?.(r) ?? Number(r.since ?? 0);
   const names = new Set(inp.rows.map((r) => r.tmuxName).filter(Boolean) as string[]);
   // 위임 하위 세션은 부모 밑으로 — 부모가 목록에 있을 때만(부모가 사라졌으면 최상위로 올린다).
-  const isKid = (r: R) => !!(r.lineage && r.lineage.parent && names.has(r.lineage.parent));
+  // 계보가 고리를 이루면(데이터 이상) 고리에 든 세션만 최상위로 둔다 — 하위로 두면 어느 최상위 밑에도 안 그려져 목록에서
+  // 사라진다. 고리에 매달린 자손(C → 고리의 A)은 그대로 하위다(A가 최상위가 되므로 그 밑에 그려진다).
+  const byName = new Map(inp.rows.filter((r) => r.tmuxName).map((r) => [r.tmuxName!, r] as const));
+  const inCycle = (r: R): boolean => {
+    const self = r.tmuxName;
+    if (!self) return false;
+    const seen = new Set<string>();
+    let p = r.lineage?.parent;
+    while (p && byName.has(p) && !seen.has(p)) {
+      if (p === self) return true;
+      seen.add(p);
+      p = byName.get(p)!.lineage?.parent;
+    }
+    return false;
+  };
+  const isKid = (r: R) => !!(r.lineage && r.lineage.parent && names.has(r.lineage.parent)) && !inCycle(r);
   const kidsOf = new Map<string, R[]>();
   for (const r of inp.rows) {
     if (!isKid(r)) continue;
@@ -126,6 +141,18 @@ export function buildRepoTree<R extends RepoRowLike, E extends EndedLike>(inp: B
     kidsOf.get(p)!.push(r);
   }
   for (const list of kidsOf.values()) list.sort((a, b) => (a.lineage?.createdAt || 0) - (b.lineage?.createdAt || 0));
+  // 위임은 여러 단계일 수 있다(하위가 또 위임) — 최상위 세션 밑에 자손 전부를 깊이 우선(만든 순서)으로 둔다.
+  // 직계만 붙이면 손자부터는 어디에도 그려지지 않았다. 계보가 고리를 이뤄도 한 번만 넣는다.
+  const descendants = (name: string, seen: Set<string>): R[] => {
+    const out: R[] = [];
+    for (const k of kidsOf.get(name) || []) {
+      const kn = k.tmuxName || '';
+      if (!kn || seen.has(kn)) continue;
+      seen.add(kn);
+      out.push(k, ...descendants(kn, seen));
+    }
+    return out;
+  };
 
   const groups = new Map<string, RepoGroup<R, E>>();
   const group = (key: string, name: string, repository: boolean, root: string | null) => {
@@ -137,7 +164,7 @@ export function buildRepoTree<R extends RepoRowLike, E extends EndedLike>(inp: B
     }
     return g;
   };
-  const urgent = (r: R) => r.status === 'waiting' || (kidsOf.get(r.tmuxName || '') || []).some((k) => k.status === 'waiting');
+  const urgent = (r: R) => r.status === 'waiting' || (r.tmuxName ? descendants(r.tmuxName, new Set([r.tmuxName])) : []).some((k) => k.status === 'waiting');
 
   for (const r of inp.rows) {
     if (isKid(r)) continue;
@@ -148,7 +175,7 @@ export function buildRepoTree<R extends RepoRowLike, E extends EndedLike>(inp: B
     const laneKey = p.lane?.key ?? '';
     let lane = g.lanes.find((l) => (l.worktree?.key ?? '') === laneKey);
     if (!lane) { lane = { worktree: p.lane, sessions: [] }; g.lanes.push(lane); }
-    const kids = kidsOf.get(r.tmuxName || '') || [];
+    const kids = r.tmuxName ? descendants(r.tmuxName, new Set([r.tmuxName])) : [];
     lane.sessions.push({ row: r, kids });
     g.count += 1 + kids.length;
     g.attention = g.attention || urgent(r);

@@ -31,12 +31,10 @@ An agent's kind/state keeps the verified-pane or unique-cwd attribution rule. Di
 
 A group is derived from the current view's pane tree. A closed group uses what the v5 layout remembers. No new group store and no tmux group tag is created.
 
-- The all-sessions area of the rail/Fleet: open groups are gathered under their title in view order, with members in pane order. A closed group is also gathered under one title, and the remaining single sessions are sorted by name. The needs-attention area uses the waiting list as is.
-- The header is a small title plus the session count, with no heavy vertical rule or button border. On desktop the edit button shows when the pointer is over the header or it has keyboard focus; on touch it is always shown.
-- The title is not repeated for each member. Both open and closed groups are edited with the header's **Edit** (편집) button. The title is 1–128 characters after trimming whitespace and is stored independently of the session name and branch.
-- Pressing a group header or a closed member opens the group together. Pressing an open member moves to that pane. Open-together, close and full end are distinct; groups are stored per browser tab, and the group memory is kept even when a save fails.
-- The mobile Sessions (세션) tab (Fleet) also provides title editing for open/closed groups and the work location/branch.
-- The rail/Fleet have neither a window icon meaning "open on the current screen" nor main/separate-worktree SVGs. They do have the status icon, the agent identity, shared read/write and attached-screen markers, and the location is shown as current-directory and branch text.
+- Since session logic review stage 5 (rail) and 7 (Fleet) the session list is grouped by **repository**, not by view group, and there is no group header (decision D5). A session that belongs to a split-screen group (open or remembered closed) gets a small pane mark next to its name (`SessionNode` `groupLabel`, aria label 「분할 화면 묶음 · <title>」). The needs-attention area uses the waiting list as is.
+- The rail row menu's 「묶음 전체 열기」 (Open the whole group) or pressing a closed member opens the group together. Pressing an open member moves to that pane. Open-together, close and full end are distinct; groups are stored per browser tab, and the group memory is kept even when a save fails.
+- The group title (view label, 1–128 characters, stored independently of the session name and branch) is kept in the layout and still shown in the pane mark's label, but there is no UI to edit it since the group header was removed (`window.vtRenameTab` remains as a bridge).
+- The rail/Fleet have no window icon meaning "open on the current screen". They show the state ring, the agent identity, shared read/write, account and attached-screen markers. The location is the repository group (head: name and main branch) plus a 「워크트리 <branch>」 branch only when the session works in a linked worktree; there is no per-row directory text.
 
 ## Regression tests
 

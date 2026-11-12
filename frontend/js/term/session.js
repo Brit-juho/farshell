@@ -90,13 +90,13 @@ export function showAddMenu(el, e) {
       relayed,
       createTmux: (opts) => createTmuxSession(opts),
       createPlain: () => createPlainSession(),
-      // 계정(핫스왑 H1) — 등록된 계정이 하나라도 있을 때만 줄이 보인다. 목록이 낡았으면 뒤에서 받는다(다음에 열 때 반영).
+      // 계정(핫스왑 H1) — 등록된 계정이 하나라도 있을 때만 줄이 보인다. 목록이 낡았으면 메뉴가 refresh로 받아 줄을 다시 그린다.
       accounts: relayed ? null : {
         line: () => { const acc = accountsSnapshot(); return acc.ok && acc.profiles.length ? defaultLine(acc) : null; },
+        refresh: () => loadAccounts(),
         openOnce: (anchor, onPick) => import('./accounts-ui.js').then((a) => a.openAccountMenu({ mode: 'once', anchor, onPick })),
       },
     });
-    if (!relayed) void loadAccounts();
   }).catch((err) => { console.error('[FarShell new session menu]', err); showToast(t('메뉴를 열지 못했습니다')); })
     .finally(() => { _menuLoading = false; });
 }

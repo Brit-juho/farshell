@@ -316,7 +316,7 @@ export function Rail(props: RailProps) {
     isLive: isLiveCatalog,
   }));
   const flip = (list: string[], name: string) => (list.includes(name) ? list.filter((n) => n !== name) : [...list, name]);
-  const toggleKids = (name: string) => setPref(LINEAGE_KEY, encodeLineagePrefs(flip(prefs().kidsCollapsed, name), prefs().closedOpen));
+  const toggleKids = (name: string) => setPref(LINEAGE_KEY, encodeLineagePrefs(flip(prefs().kidsCollapsed, name)));
   const kidsCollapsed = (r: SessionRow) => prefs().kidsCollapsed.includes(rowKey(r));
   // 접힘·「종료 N」 펼침은 저장소 경로를 열쇠로 기기별(rail.view)에 둔다 — 세션이 바뀌어도 같은 저장소면 그대로.
   const repoKey = (g: RepoGroup<SessionRow, any>) => (g.key === OUTSIDE_KEY ? OUTSIDE_KEY : g.root || g.key);
@@ -374,7 +374,7 @@ export function Rail(props: RailProps) {
     e.preventDefault();
     if (!row.sessionId && !row.tmuxName) return; // 웹 세션도 tmux 이름도 없으면 메뉴가 성립하지 않는다.
     // ⋯ 버튼에서 열었으면 버튼 아래에, 우클릭이면 포인터 옆에 띄운다.
-    const btn = (e.target as HTMLElement | null)?.closest?.('.vt-srow-menu, .vt-rg-more');
+    const btn = (e.target as HTMLElement | null)?.closest?.('.vt-rg-more');
     const r = btn?.getBoundingClientRect();
     setCtxMenu({ x: r ? r.left : e.clientX, y: r ? r.bottom + 2 : e.clientY, row });
   };
@@ -605,7 +605,7 @@ export function Rail(props: RailProps) {
                     <div class="vt-wgrail-group-sep" role="separator" />
                   </Show>
                   <Show when={entry.kid} fallback={renderCompact(entry.row)}>
-                    {/* 하위 세션: 부모 바로 아래 축소한 칸 + 왼쪽 가지선(펼침의 .vt-lin-kid와 같은 last·merged·failed). */}
+                    {/* 하위 세션: 부모 바로 아래 축소한 칸 + 왼쪽 가지선(펼침 가지 그래프의 위임 하위 칸과 같은 last·merged·failed). */}
                     <div class="vt-wgrail-kidcell" classList={{ last: entry.kid!.last, merged: entry.kid!.merged, failed: entry.kid!.failed, closed: entry.kid!.closed }}>
                       {renderCompact(entry.row, true)}
                     </div>
