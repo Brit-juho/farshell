@@ -131,12 +131,15 @@ export function makeResolver(sessions) {
   for (const [id, s] of Object.entries(sessions)) {
     liveIds.add(id);
     if (s?.catalogSessionId && s?.runtimeId) byCatalog.set(`${s.host || 'local'}:${s.catalogHost || ''}:${s.catalogSessionId}:${s.runtimeId}`, id);
-    if (s && s.tmuxName && !byTmux.has(s.tmuxName)) byTmux.set(s.tmuxName, id);
+    // 이름은 맥마다 따로다 — 다른 맥의 같은 이름(`dev`) 세션으로 칸을 되살리지 않게 호스트와 함께 찾는다.
+    const tmuxKey = s && s.tmuxName ? `${s.host || 'local'}\u0000${s.tmuxName}` : null;
+    if (tmuxKey && !byTmux.has(tmuxKey)) byTmux.set(tmuxKey, id);
   }
   return (info) => {
     if (!info) return null;
     if (info.catalogSessionId) return byCatalog.get(`${info.host || 'local'}:${info.catalogHost || ''}:${info.catalogSessionId}:${info.runtimeId}`) || null;
-    if (info.tmux && byTmux.has(info.tmux)) return byTmux.get(info.tmux);
+    const tmuxKey = info.tmux ? `${info.host || 'local'}\u0000${info.tmux}` : null;
+    if (tmuxKey && byTmux.has(tmuxKey)) return byTmux.get(tmuxKey);
     // tmux 세션이었는데 그 이름이 지금 없다 → 그 세션은 죽었다. id는 어차피
     // 이전 부팅의 값이라 볼 필요도 없다(빈 pane 강등).
     if (info.tmux) return null;

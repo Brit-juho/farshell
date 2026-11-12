@@ -70,6 +70,14 @@ test('makeResolver — tmux 이름이 새 세션 id로 매핑된다(부팅마다
   assert.strictEqual(resolve({ id: 'old-dead-id', tmux: 'dev' }), 'new-id-after-reboot');
 });
 
+test('makeResolver — 같은 이름이라도 다른 맥의 세션으로 칸을 되살리지 않는다', async () => {
+  const { core, P } = await load();
+  core.registerSession('remote-dev', { tmuxName: 'dev', host: 'gpu', wrapper: null, tabEl: null });
+  const resolve = P.makeResolver(core.allSessions());
+  assert.strictEqual(resolve({ id: 'old', tmux: 'dev' }), null, '이 맥의 dev 칸은 다른 맥의 dev로 채우지 않는다');
+  assert.strictEqual(resolve({ id: 'old', tmux: 'dev', host: 'gpu' }), 'remote-dev');
+});
+
 test('makeResolver — 사라진 tmux 세션은 null(빈 pane 강등)', async () => {
   const { core, P } = await load();
   addLive(core, 'x', 'other');

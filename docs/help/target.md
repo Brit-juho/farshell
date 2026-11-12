@@ -21,7 +21,7 @@ Voice Daemon(`fsh voice` 데스크톱 핫키)이 어느 tmux 세션으로 입력
     fsh voice-target dev          # dev 세션으로 LOCK
     fsh voice-target --auto       # LOCK 해제, AUTO로 복귀
 
-내부적으로 `~/.vt/voice_target` 파일에 세션명 저장. daemon이 매 발화 시 읽음 (재시작 불필요).
+내부적으로 `~/.vt/voice_target` 파일에 세션명과 그 세션의 고유 열쇠(세션 id·생성 시각)를 저장. daemon이 매 발화 시 읽음 (재시작 불필요). 열쇠로 찾기 때문에 lock한 세션의 이름을 바꿔도 따라가고, 그 세션이 끝난 뒤 같은 이름의 새 세션이 생겨도 그쪽으로 보내지 않음.
 
 ## 동작 시나리오
 
