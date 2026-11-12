@@ -9,6 +9,7 @@
 
 from pathlib import Path
 
+import session_names
 import worktree
 import tmux_runner
 
@@ -77,7 +78,9 @@ def test_open_worktree_tags_newly_created_session(monkeypatch, tmp_path):
 
     result = worktree.open_worktree("feedface0001")
     assert result["created"] is True
-    assert [t for t in tagged if t[1] == "@fsh_wt"] == [("wt-farshell-main", "@fsh_wt", "feedface0001")]
+    assert [t for t in tagged if t[1] == "@fsh_wt"] == [(result["tmux_session"], "@fsh_wt", "feedface0001")]
+    # 이름은 session_names 규칙(그 폴더 이름)이다 — 예전 `wt-<저장소>-<브랜치>`가 아니다.
+    assert result["tmux_session"] == session_names.base_for(str(tmp_path))
 
 
 def test_open_worktree_skips_tagging_when_session_reused(monkeypatch, tmp_path):

@@ -98,6 +98,41 @@ def exact_target(name: str) -> str:
     return "=" + name
 
 
+# 세션의 바뀌지 않는 열쇠는 `#{session_id}:#{session_created}`다(위임 장부·카탈로그 physical_key와 같은 모양).
+# 이름은 사람이 바꿀 수 있고 끝난 세션의 이름을 새 세션이 다시 쓸 수 있어서, 나중에 배달할 대상(대기 지시 등)을
+# 이름으로만 적어 두면 엉뚱한 세션에 들어간다.
+SESSION_KEY_RE = re.compile(r"\$[0-9]+:[0-9]+")
+_KEYS_CACHE: tuple[float, dict[str, str] | None] = (0.0, None)
+_KEYS_TTL = 1.0
+
+
+def live_session_keys(*, fresh: bool = False) -> dict[str, str] | None:
+    """{열쇠: 지금 이름}. tmux를 못 읽으면 None(=모름). 서버가 없으면 빈 dict. 1초 캐시."""
+    global _KEYS_CACHE
+    import time as _time
+    now = _time.monotonic()
+    if not fresh and _KEYS_CACHE[1] is not None and now - _KEYS_CACHE[0] < _KEYS_TTL:
+        return dict(_KEYS_CACHE[1])
+    rc, out, err = run(["list-sessions", "-F", "#{session_id}:#{session_created}\t#{session_name}"], timeout=2.0)
+    if rc != 0:
+        result = {} if server_absent(rc, err) else None
+    else:
+        result = {}
+        for line in out.decode("utf-8", errors="replace").splitlines():
+            key, _, name = line.partition("\t")
+            if SESSION_KEY_RE.fullmatch(key) and name:
+                result[key] = name
+    _KEYS_CACHE = (now, result)
+    return dict(result) if result is not None else None
+
+
+def key_for_name(name: str) -> str | None:
+    keys = live_session_keys(fresh=True)
+    if not keys:
+        return None
+    return next((k for k, n in keys.items() if n == name), None)
+
+
 def server_absent(rc: int, err: bytes) -> bool:
     """tmux가 「서버가 없다」고 확정한 응답인가. 소켓 파일이 없을 때(재부팅 뒤 /tmp가 비었을 때)는
     `no server running on`이 아니라 `error connecting to … (No such file or directory)`가 온다.

@@ -58,17 +58,35 @@ def get_any_tmux_pane() -> str | None:
         return None
 
 
-def read_voice_target_lock() -> str | None:
-    """~/.vt/voice_target에 lock된 세션 이름."""
+def read_voice_target_lock(path: str | os.PathLike | None = None) -> str | None:
+    """~/.vt/voice_target에 lock된 세션의 **지금** 이름.
+
+    파일은 첫 줄에 세션 이름, 둘째 줄에 그 세션의 열쇠(`$id:생성시각`)를 적는다(둘째 줄이 없는 옛 파일도 읽는다).
+    열쇠가 있으면 이름이 바뀌어도 따라가고, 그 세션이 끝났으면 같은 이름의 새 세션이 있어도 고정이 풀린 것으로
+    본다(None → AUTO). tmux를 못 읽으면 적힌 이름 그대로."""
     try:
-        path = os.path.expanduser(VOICE_TARGET_LOCK)
+        path = os.path.expanduser(VOICE_TARGET_LOCK) if path is None else os.fspath(path)
         if not os.path.isfile(path):
             return None
         with open(path) as f:
-            target = f.read().strip()
-        return target if target else None
+            lines = [line.strip() for line in f.read().splitlines()]
+        name = lines[0] if lines else ""
+        key = lines[1] if len(lines) > 1 else ""
+        if not name:
+            return None
+        if key and tmux_runner.SESSION_KEY_RE.fullmatch(key):
+            keys = tmux_runner.live_session_keys()
+            if keys is not None:
+                return keys.get(key)
+        return name
     except Exception:
         return None
+
+
+def voice_target_lock_text(name: str) -> str:
+    """고정 파일 내용 — 이름과, 지금 그 이름의 세션 열쇠(있을 때만)."""
+    key = tmux_runner.key_for_name(name)
+    return f"{name}\n{key}\n" if key else f"{name}\n"
 
 
 def pane_label(pane_id: str) -> str | None:
@@ -95,7 +113,7 @@ def get_locked_session_pane(session_name: str) -> str | None:
     """lock된 세션의 active pane id."""
     try:
         result = subprocess.run(
-            TMUX_BASE + ["display-message", "-p", "-t", session_name, "#{pane_id}"],
+            TMUX_BASE + ["display-message", "-p", "-t", tmux_runner.exact_target(session_name), "#{pane_id}"],
             capture_output=True, text=True, timeout=2,
         )
         pane_id = result.stdout.strip()

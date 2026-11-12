@@ -3153,7 +3153,7 @@ cmd_voice_target() {
       echo ""
       if [ -f "$target_file" ]; then
         local locked
-        locked="$(cat "$target_file" 2>/dev/null)"
+        locked="$(head -n 1 "$target_file" 2>/dev/null)"   # 둘째 줄은 세션 열쇠(서버가 이름 변경·종료를 따라간다)
         if [ -n "$locked" ]; then
           echo "    🔒 LOCK: $locked"
         else
@@ -3176,11 +3176,15 @@ cmd_voice_target() {
       ;;
     *)
       # 세션 존재 확인
-      if ! "${TMUX_BASE[@]}" has-session -t "$arg" 2>/dev/null; then
+      if ! "${TMUX_BASE[@]}" has-session -t "=$arg" 2>/dev/null; then
         echo "  ✗ $(_t "tmux 세션 '{name}' 없음" name="$arg")"
         return 1
       fi
-      printf '%s\n' "$arg" > "$target_file"
+      # 둘째 줄에 세션 열쇠(id:생성시각)를 함께 적는다 — 이름이 바뀌거나 그 세션이 끝난 뒤 같은 이름의 새 세션이
+      # 생겨도 엉뚱한 세션에 받아쓰지 않는다(server/tmux_target.read_voice_target_lock).
+      local key
+      key="$("${TMUX_BASE[@]}" display-message -p -t "=$arg" '#{session_id}:#{session_created}' 2>/dev/null)"
+      printf '%s\n%s\n' "$arg" "$key" > "$target_file"
       echo "  ✓ $(_t '음성 타깃 → {name} (lock)' name="$arg")"
       ;;
   esac

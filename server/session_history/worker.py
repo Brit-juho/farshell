@@ -107,7 +107,16 @@ class Collector:
                 native,name,tool=e.get('session_id'),e.get('tmux_session'),e.get('agent')
                 if not native or not name or tool not in ('claude','codex'):
                     continue
-                runtimes=db.execute('SELECT * FROM runtimes WHERE name=? AND ended IS NULL',(name,)).fetchall()
+                # 런타임은 이름이 아니라 tmux 세션 id로 찾는다(엔트리가 새겨 둔 `$N`) — 이름은 바뀔 수 있고, 같은 이름의
+                # 끝나지 않은 런타임이 둘(재부팅 전 세션이 아직 「상태 모름」)이면 영영 연결되지 않았다. id를 아직 못 새긴
+                # 엔트리만 이름으로 찾는다.
+                uid=e.get('_tmux_uid')
+                if uid:
+                    runtimes=db.execute("SELECT * FROM runtimes WHERE physical_key LIKE ? AND ended IS NULL",(uid+':%',)).fetchall()
+                    if len(runtimes)>1:
+                        runtimes=[r for r in runtimes if r['name']==name]
+                else:
+                    runtimes=db.execute('SELECT * FROM runtimes WHERE name=? AND ended IS NULL',(name,)).fetchall()
                 conversations=db.execute('SELECT c.*,s.root FROM conversations c JOIN sources s ON s.scope=c.scope WHERE c.native_id=? AND c.provider=? AND c.deleted IS NULL',(native,tool)).fetchall()
                 if len(runtimes)==1 and len(conversations)==1:
                     known=db.execute('SELECT pane_id FROM conversation_executions WHERE conversation_id=? AND runtime_id=? AND verified=1 ORDER BY pane_id LIMIT 1',

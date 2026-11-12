@@ -77,9 +77,27 @@ def _end_pty_of_dead_session(sid: str) -> None:
     _pty_tmux_uid.pop(sid, None)
 
 
+def _follow_rename(old: str, new: str) -> None:
+    """tmux 세션 이름이 터미널 안에서 바뀌었다(`prefix $`, `tmux rename-session`) — 같은 세션(id 유지)이므로 그 이름을
+    들고 있는 웹 세션 레코드를 새 이름으로 옮긴다. 예전에는 옛 이름이 남아 `GET /api/sessions`가 「없는 세션」으로 보고
+    웹 PTY를 지웠다. 웹 UI의 이름 변경(`PATCH /api/sessions/{id}`)이 하는 일과 같다."""
+    for attached in session_store.find_all_by_tmux_name(old):
+        session_store.update_tmux_name(attached.session_id, new)
+        if attached.name == old:
+            attached.name = new
+    logger.info("tmux 세션 이름 변경을 따라감 (id 유지)")
+
+
 def apply_tmux_state(live: list[tuple[str, str]], by_tty: dict[str, str]) -> None:
     """tmux에서 읽은 값을 반영한다(이벤트 루프에서 — agent_status는 루프 안에서만 바꾼다)."""
     agent_status.reconcile_sessions(live)
+    # 이름이 바뀐 세션을 먼저 따라간다 — 웹 PTY가 기억해 둔 tmux 세션 id가 아직 살아 있는데 이름만 달라졌다면 개명이다.
+    name_of = {uid: name for uid, name in live if uid}
+    for sid in list(pty_mgr.sessions):
+        uid = _pty_tmux_uid.get(sid)
+        info = session_store.get(sid)
+        if uid and info and info.tmux_name and uid in name_of and name_of[uid] != info.tmux_name:
+            _follow_rename(info.tmux_name, name_of[uid])
     for sid in list(_pty_tmux_now):
         if sid not in pty_mgr.sessions:
             del _pty_tmux_now[sid]

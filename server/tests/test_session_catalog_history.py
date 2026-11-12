@@ -1187,3 +1187,28 @@ def test_search_modes_match_terms_in_any_order(private_history):
     for bad in ({'mode': 'fuzzy'}, {'search': ' '.join(f'w{i}' for i in range(9)), 'mode': 'all'}):
         with pytest.raises(Refused):
             query.listing(**{'search': 'x', **bad})
+
+
+def test_bind_conversations_finds_the_runtime_by_tmux_id_not_by_name(private_history, monkeypatch):
+    """런타임은 엔트리가 새겨 둔 tmux 세션 id로 찾는다 — 같은 이름의 끝나지 않은 런타임이 둘이어도(재부팅 전 세션이
+    「상태 모름」으로 남은 경우) 지금 세션에 연결되고, 이름이 바뀌어도 된다."""
+    import agent_status, agent_config_context, delegation
+    from session_history import worker
+    from session_catalog.db import database
+    root = private_history / '.claude'
+    with database(write=True) as db:
+        db.execute("INSERT INTO sources(id,provider,root,scope,enabled,created) VALUES('s','claude',?,'l',1,1)", (str(root),))
+        db.execute("INSERT INTO sessions(id,host,title,origin,created,updated) VALUES('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','h','t','local',1,1)")
+        db.execute("INSERT INTO sessions(id,host,title,origin,created,updated) VALUES('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','h','t','local',1,1)")
+        db.execute("INSERT INTO runtimes VALUES('dddddddddddddddddddddddddddddddd','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','old','$1:50','work','unknown',1,NULL,1,'{}')")
+        db.execute("INSERT INTO runtimes VALUES('eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','new','$4:90','work','running',1,NULL,1,'{}')")
+        db.execute("INSERT INTO conversations(id,host,provider,scope,native_id,created,updated) VALUES('cccccccccccccccccccccccccccccccc','h','claude','l','n1',1,1)")
+    entry = {'session_id': 'n1', 'tmux_session': 'work', 'agent': 'claude', '_tmux_uid': '$4'}
+    monkeypatch.setattr(agent_status, 'visible_state', lambda: {'x': entry})
+    monkeypatch.setattr(agent_status, 'public_entry', lambda e: e)
+    monkeypatch.setattr(delegation, 'list_all', lambda: [])
+    monkeypatch.setattr(agent_config_context, 'identify', lambda name: {'tool': 'claude', 'root': str(root), 'pane': '%1'})
+    worker.Collector.bind_conversations()
+    with database() as db:
+        rows = db.execute('SELECT runtime_id FROM conversation_executions').fetchall()
+    assert [r[0] for r in rows] == ['eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee']

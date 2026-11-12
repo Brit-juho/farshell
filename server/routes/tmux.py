@@ -6,12 +6,12 @@ import asyncio
 import logging
 import os
 import re
-import uuid
 
 from fastapi import APIRouter, Request, WebSocket
 from fastapi.responses import JSONResponse
 
 import platform_utils
+import session_names
 import tmux_runner
 from deps import pty_mgr, session_store, output_watcher
 from session_store import new_session_id
@@ -23,39 +23,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 TMUX_SOCKET = tmux_runner.VT_TMUX_SOCKET
-
-
-# Wave 1 W1-2: 의미있는 디폴트 세션 이름 (cwd basename + 충돌 시 순번)
-def _session_slug(raw: str, limit: int = 20) -> str:
-    """안전한 슬러그: 영숫자/dash/underscore만, 소문자, 최대 `limit`자."""
-    return re.sub(r"[^A-Za-z0-9_-]+", "-", raw).strip("-").lower()[:limit]
-
-
-def _free_session_name(base: str) -> str:
-    """`base`, `base-1`, `base-2` … 중 아직 없는 첫 이름(2026-10-23: 순번은 1부터).
-
-    같은 이름을 동시에 두 번 만들면 안 되므로 호출부는 `_create_lock` 안에서 부르고,
-    같은 락 안에서 곧바로 `new-session`까지 한다.
-    """
-    candidate = base
-    n = 0
-    while tmux_runner.has_session(candidate):
-        n += 1
-        candidate = f"{base}-{n}"
-        if n > 99:
-            # 안전 폴백: uuid
-            return f"web-{str(uuid.uuid4())[:4]}"
-    return candidate
-
-
-def _generate_default_session_name(base: str | None = None) -> str:
-    """`base`(없으면 서버 cwd의 basename) 기반 + 충돌 시 -1, -2 순번."""
-    if base is None:
-        try:
-            base = os.path.basename(os.getcwd()) or "session"
-        except Exception:
-            base = "session"
-    return _free_session_name(_session_slug(base) or "session")
 
 
 # 이름 고르기 → new-session 사이를 한 덩어리로 묶는다. 스니펫 「새 세션에서 실행」을
@@ -430,23 +397,16 @@ async def create_tmux_session(request: Request):
         return result
 
     async with _create_lock:
+        # 이름 짓기는 session_names 한 곳이다(시작 폴더의 저장소 이름, 겹치면 -2·-3). 서버 cwd는 쓰지 않는다.
+        auto_base = None
         if requested_name and not unique_name:
             tmux_name = requested_name
-        elif requested_name:
-            # 앱의 세션 이름 규칙은 [A-Za-z0-9_-]다(`/api/tmux/clients`·open-on-mac 등이 그
-            # 밖의 이름을 400으로 거절한다) — 그 밖의 글자는 `-`로 바꾼다. 한글만 있는
-            # 이름처럼 남는 게 없으면 cwd 폴더 이름으로 간다. 이름이 바뀌었다는 걸
-            # 호출부가 알 수 있게 응답의 `tmux_session`을 그대로 돌려준다.
-            base = re.sub(r"[^A-Za-z0-9_-]+", "-", requested_name).strip("-")[:40]
-            if base:
-                tmux_name = await asyncio.to_thread(_free_session_name, base)
-            else:
-                folder = os.path.basename(requested_cwd.rstrip("/")) if requested_cwd else None
-                tmux_name = await asyncio.to_thread(_generate_default_session_name, folder)
         else:
-            # cwd를 받았으면 그 폴더 이름으로(서버 프로세스의 cwd가 아니라).
-            base = os.path.basename(requested_cwd.rstrip("/")) if requested_cwd else None
-            tmux_name = await asyncio.to_thread(_generate_default_session_name, base)
+            # unique_name(스니펫): 규칙 밖 글자를 `-`로 바꾸고, 남는 게 없으면(한글만 등) 시작 폴더 기준.
+            auto_base = session_names.slug(requested_name) if requested_name else ""
+            if not auto_base:
+                auto_base = await asyncio.to_thread(session_names.base_for, start_dir)
+            tmux_name = await asyncio.to_thread(session_names.allocate, auto_base)
         catalog_binding = None
         if body.get('operation_id') is not None:
             from session_catalog.lifecycle import create as catalog_create
@@ -466,10 +426,17 @@ async def create_tmux_session(request: Request):
             rc, _reason, _info = await asyncio.to_thread(_launch_with_profile, tmux_name, cols, rows, start_dir)
             err = b""
         else:
-            rc, _, err = await tmux_runner.run_async(
-                ["new-session", "-d", "-s", tmux_name, "-x", str(cols), "-y", str(rows), "-c", start_dir],
-                timeout=5.0,
-            )
+            def _spawn(candidate):
+                code, _, stderr = tmux_runner.run(
+                    ["new-session", "-d", "-s", candidate, "-x", str(cols), "-y", str(rows), "-c", start_dir],
+                    timeout=5.0,
+                )
+                return code, stderr
+            if auto_base:
+                # 이름을 고른 뒤 만들기 전에 다른 프로세스(`bin/fsh`, 직접 띄운 tmux)가 같은 이름을 가져가도 다음 번호로 간다.
+                rc, tmux_name, err = await asyncio.to_thread(session_names.spawn_unique, auto_base, _spawn, start=tmux_name)
+            else:
+                rc, err = await asyncio.to_thread(_spawn, tmux_name)
     if rc != 0:
         if launch_info.get("refused"):
             return JSONResponse({"error": launch_info["refused"].code, "reason": launch_info["refused"].message}, status_code=launch_info["refused"].status)

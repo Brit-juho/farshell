@@ -72,8 +72,9 @@ def get_voice_target() -> str | None:
     try:
         if not VT_TARGET_FILE.is_file():
             return None
-        v = VT_TARGET_FILE.read_text().strip()
-        return v if v else None
+        # 첫 줄이 이름, 둘째 줄(있으면)은 세션 열쇠 — 그 열쇠로 지금 이름을 찾는다(서버와 같은 함수).
+        import tmux_target
+        return tmux_target.read_voice_target_lock(VT_TARGET_FILE)
     except Exception:
         return None
 
@@ -81,7 +82,8 @@ def get_voice_target() -> str | None:
 def set_voice_target(name: str | None) -> None:
     VT_TARGET_FILE.parent.mkdir(parents=True, exist_ok=True)
     if name:
-        VT_TARGET_FILE.write_text(name + "\n")
+        import tmux_target
+        VT_TARGET_FILE.write_text(tmux_target.voice_target_lock_text(name))
     else:
         try:
             VT_TARGET_FILE.unlink()

@@ -628,8 +628,9 @@ def _child_name(parent_name: str, title: str, existing: set[str]) -> str:
     base = _NAME_RE.sub("-", title).strip("-")[:40] if title else ""
     if not base:
         base = f"{_NAME_RE.sub('-', parent_name).strip('-')[:32] or 'sub'}-sub"
+    # 번호는 다른 세션 이름과 같은 규칙(base, base-2, base-3 …, session_names)이다. 예전에는 `base2`·`parent-sub1`처럼 달랐다.
     for i in range(1, 50):
-        name = base if i == 1 and title else f"{base}{i}"
+        name = base if i == 1 else f"{base}-{i}"
         if name not in existing:
             return name
     raise DelegationError("name_exhausted", "하위 세션 이름을 정하지 못했습니다", 409)

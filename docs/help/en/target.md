@@ -21,7 +21,7 @@ Controls which tmux session the Voice Daemon (the `fsh voice` desktop hotkey) se
     fsh voice-target dev          # LOCK to the dev session
     fsh voice-target --auto       # clear the lock, back to AUTO
 
-The session name is stored in `~/.vt/voice_target`. The daemon reads it on every utterance, so no restart is needed.
+The session name and that session's own key (its tmux id and creation time) are stored in `~/.vt/voice_target`. The daemon reads it on every utterance, so no restart is needed. Because the key is used, renaming the locked session keeps the lock, and once that session ends a new session with the same name does not receive the input.
 
 ## Scenarios
 

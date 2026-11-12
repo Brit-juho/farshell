@@ -29,6 +29,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import store_lock
+import tmux_runner
 from i18n import tr
 import vt_paths
 
@@ -155,8 +156,11 @@ def _normalize_target(target) -> dict | None:
         # gpu-box에도 있는 게 정상이라, host를 안 적으면 큐가 엉뚱한 기계에
         # 명령을 친다.
         host = str(target.get("host") or "").strip()
+        key = str(target.get("key") or "").strip()
         if session:
             out["session"] = session
+        if key and (not host or host == "local") and tmux_runner.SESSION_KEY_RE.fullmatch(key):
+            out["key"] = key
         if worktree:
             out["worktree"] = worktree
         if host and host != "local":
@@ -165,10 +169,24 @@ def _normalize_target(target) -> dict | None:
     return None
 
 
+# 열쇠로 지목한 세션이 끝났다 — 어떤 세션 이름과도 같지 않은 값. None(=지목 안 함)과 구별해야 한다: None이면
+# 「먼저 끝난 에이전트」에게 가는데, 끝난 세션 몫이 아무 세션에나 들어가면 안 된다.
+GONE = ":gone"   # tmux가 세션 이름에 `:`를 허용하지 않으니 어떤 세션 이름과도 같을 수 없다
+
+
 def target_session(item: dict) -> str | None:
-    """항목의 target에서 세션 이름을 뽑는다 — 2.1.0엔 이것만 실제로 resolve된다."""
+    """항목이 지목한 세션의 **지금** 이름. 넣을 때 열쇠(`key`, tmux 세션 id·생성 시각)를 적어 둔 항목은 열쇠로 지금
+    이름을 찾는다 — 사람이 이름을 바꿔도 따라가고, 그 세션이 끝났으면 같은 이름의 새 세션이 있어도 GONE이다(이름으로
+    되돌아가지 않는다). 열쇠가 없는 옛 항목·원격 항목은 적힌 이름 그대로. tmux를 못 읽으면 적힌 이름(어차피 못 보낸다)."""
     t = item.get("target")
-    return t.get("session") if isinstance(t, dict) else None
+    if not isinstance(t, dict):
+        return None
+    key = t.get("key")
+    if key and not t.get("host"):
+        keys = tmux_runner.live_session_keys()
+        if keys is not None:
+            return keys.get(key) or GONE
+    return t.get("session")
 
 
 def target_host(item: dict) -> str:
@@ -284,6 +302,12 @@ def add(text: str, target: str | dict | None = None, source: dict | None = None,
     if len(text) > MAX_TEXT_LEN:
         return {"ok": False, "error": "too_long",
                 "reason": tr("내용이 너무 깁니다 (최대 {max}자)", max=MAX_TEXT_LEN)}
+    target = _normalize_target(target)
+    if target and target.get("session") and not target.get("host") and not target.get("key"):
+        # 지금 그 이름의 세션 열쇠를 적어 둔다(잠금 밖에서 — tmux 호출). 세션이 없으면 열쇠 없이(옛 동작).
+        key = tmux_runner.key_for_name(target["session"])
+        if key:
+            target["key"] = key
     with _locked():
         items = _read_unlocked()
         if len(items) >= MAX_ITEMS:
@@ -293,7 +317,7 @@ def add(text: str, target: str | dict | None = None, source: dict | None = None,
         item = {
             "id": uuid.uuid4().hex[:12],
             "text": text,
-            "target": _normalize_target(target),
+            "target": target,
             "status": STATUS_PENDING,
             "created_at": time.time(),
         }
