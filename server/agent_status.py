@@ -1231,6 +1231,19 @@ def tool_summary(tool, tool_input, cwd=None):
     return None
 
 
+# 이 맥의 브라우저에만 보내는 공개 필드(다른 맥으로 중계되는 /ws-agent·/api/agent/status 응답에서는 뺀다).
+# 원격 노출 정책: 화면에 나오지 않는 원문은 어디로도 내보내지 않고(`_input`), 사용자 입력 원문(마지막 지시 등)은
+# 이 맥의 사람 화면에만 둔다. 지금은 비어 있다 — 그런 필드가 생기면 여기에 더한다(docs/ref/agents.md).
+LOCAL_ONLY_FIELDS: frozenset = frozenset()
+
+
+def remote_view(pub: dict) -> dict:
+    """`public_entry` 결과에서 이 맥 전용 필드를 뺀 형태 — 다른 맥(peer 중계)으로 나가는 자리에서 쓴다."""
+    if not LOCAL_ONLY_FIELDS:
+        return pub
+    return {k: v for k, v in pub.items() if k not in LOCAL_ONLY_FIELDS}
+
+
 def public_entry(ent: dict) -> dict:
     """클라이언트로 내려가는 형태. `_` 접두 키(내부용, 예: `_prompt_fp`)는 뺀다."""
     out = {k: v for k, v in ent.items() if not k.startswith("_")}
