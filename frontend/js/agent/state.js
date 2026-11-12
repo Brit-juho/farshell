@@ -63,12 +63,25 @@ export function unseenTurn(tmuxName) {
   return (tmuxName && _unseen.get(tmuxName)) ?? null;
 }
 
-function _post(path, body) {
+// onRetry: 연결 실패·서버 오류(5xx)면 불린다 — 호출자가 표시를 되돌려 다음에 다시 보내게 한다. 4xx(중계 화면·
+// 비밀번호 없는 서버의 403 등)는 다시 보내도 같으므로 이 기기 표시만 내린 채 둔다(되돌리면 계속 다시 보낸다).
+function _post(path, body, onRetry) {
   vtFetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  }).catch(() => { /* 이 기기는 이미 내렸다 — 서버는 다음에 볼 때 다시 받는다 */ });
+  }).catch((e) => {
+    const status = e && typeof e.status === 'number' ? e.status : 0;
+    if (onRetry && (status === 0 || status >= 500)) onRetry();
+  });
+}
+
+function _sendSeen(name, turn) {
+  // 실패하면 이 기기 기록만 지운다 — 다음 스냅샷·이벤트(재접속, 15초 하트비트)가 다시 보낸다. 여기서 바로 다시
+  // 계산하면 보고 있는 세션이라 곧바로 또 보내, 연결이 끊긴 동안 요청을 쉬지 않고 쏟는다.
+  _post('/api/agent/seen', { tmux_session: name, turn }, () => {
+    if (_seenLocal.get(name) === turn) _seenLocal.delete(name);
+  });
 }
 
 // 사용자가 그 세션을 실제로 봤다 — 포커스 칸이 되고 창이 보일 때 불린다. done 상태 자체는 건드리지 않는다
@@ -82,7 +95,7 @@ function _markSeen(name) {
   const turn = _unseen.get(name);
   _unseen.delete(name);
   _seenLocal.set(name, turn ?? -1);
-  if (turn != null) _post('/api/agent/seen', { tmux_session: name, turn });
+  if (turn != null) _sendSeen(name, turn);
   return true;
 }
 
@@ -110,7 +123,7 @@ function _computeUnseen() {
       const turn = next.get(name);
       next.delete(name);
       _seenLocal.set(name, turn ?? -1);
-      if (turn != null) _post('/api/agent/seen', { tmux_session: name, turn });
+      if (turn != null) _sendSeen(name, turn);
     }
   }
   const changed = next.size !== _unseen.size || [...next].some(([k, v]) => !_unseen.has(k) || _unseen.get(k) !== v);

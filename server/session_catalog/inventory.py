@@ -134,9 +134,11 @@ def workspace(db, placement):
     return wid
 
 
-# 배치를 다시 본 (세션 정체성 키, cwd) — 같은 cwd를 5초마다 Git으로 다시 읽지 않는다. 위치가 바뀌면 다시 본다.
-_placement_tried: dict[str, set[str]] = {}
+# 배치를 다시 본 (세션 정체성 키 → cwd → 다시 볼 수 있는 시각). 같은 cwd를 5초마다 Git으로 다시 읽지 않는다.
+# 「저장소 밖」 결과는 1분 뒤 다시 본다 — 그 자리에서 `git init`·`git clone … .`을 하면 저장소가 되기 때문이다.
+_placement_tried: dict[str, dict[str, float]] = {}
 _PLACEMENT_TRIES_PER_SESSION = 32
+_NONREPO_RECHECK = 60.0
 
 
 def _agent_cwd(name):
@@ -161,14 +163,17 @@ def _retry_placements(snapshot, known_rows):
         item = live.get(row['physical_key'])
         if not item or (row['workspace_id'] and row['project_kind'] != 'directory'):
             continue
-        tried = _placement_tried.setdefault(row['physical_key'], set())
+        tried = _placement_tried.setdefault(row['physical_key'], {})
+        now = time.monotonic()
         for cwd in dict.fromkeys(c for c in (item.get('cwd'), _agent_cwd(item.get('name'))) if c):
-            if cwd in tried or len(tried) >= _PLACEMENT_TRIES_PER_SESSION:
+            if now < tried.get(cwd, 0.0):
+                continue
+            if cwd not in tried and len(tried) >= _PLACEMENT_TRIES_PER_SESSION:
                 continue
             placement = inspect_workspace(cwd)
             if placement is None:
                 continue          # 일시 실패 — 이 cwd는 다음 관측에서 다시 본다
-            tried.add(cwd)
+            tried[cwd] = now + _NONREPO_RECHECK if placement['project_kind'] == 'directory' else float('inf')
             if not row['workspace_id'] or placement['project_kind'] == 'git':
                 out[row['session_id']] = (row['workspace_id'], placement)
                 break

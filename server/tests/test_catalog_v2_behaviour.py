@@ -217,3 +217,23 @@ def test_a_git_error_is_not_mistaken_for_outside_a_repository(catalog, tmp_path,
     assert inventory.inspect_workspace(str(repo)) is None
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 128, b"", b"fatal: not a git repository"))
     assert inventory.inspect_workspace(str(repo))["kind"] == "directory"
+
+
+def test_a_folder_that_becomes_a_repository_in_place_is_promoted(catalog, tmp_path, monkeypatch):
+    """빈 폴더에서 시작해 그 자리에서 `git init`을 한 세션 — 「저장소 밖」 결과는 1분 뒤 다시 본다."""
+    import subprocess
+    from session_catalog import inventory
+    monkeypatch.setattr(inventory, "_placement_tried", {})
+    folder = tmp_path / "home" / "newproj"
+    folder.mkdir(parents=True)
+    _reconcile(_item("$1:1", "w", str(tmp_path / "home")))
+    _reconcile(_item("$1:1", "w", str(folder)))                 # 저장소 밖으로 확인
+    subprocess.run(["git", "init", "-q"], cwd=folder, check=True)
+    _reconcile(_item("$1:1", "w", str(folder)))
+    assert _placement(catalog, "w")["pk"] == "directory", "1분 안에는 다시 보지 않는다"
+    monkeypatch.setattr(inventory, "_NONREPO_RECHECK", 0.0)
+    for tried in inventory._placement_tried.values():
+        for cwd in tried:
+            tried[cwd] = 0.0
+    _reconcile(_item("$1:1", "w", str(folder)))
+    assert tuple(_placement(catalog, "w")) == ("checkout", "git", "newproj")

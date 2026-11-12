@@ -17,43 +17,59 @@ def clean():
     agent_status._state.clear()
 
 
-def _done(sid="s1"):
-    agent_status.on_event("prompt", {"session_id": sid, "cwd": "/tmp"}, session="w")
-    agent_status.on_event("stop", {"session_id": sid, "cwd": "/tmp"}, session="w")
+def _done(sid="s1", session="w"):
+    agent_status.on_event("prompt", {"session_id": sid, "cwd": "/tmp"}, session=session)
+    agent_status.on_event("stop", {"session_id": sid, "cwd": "/tmp"}, session=session)
     return next(v for v in agent_status._state.values() if v.get("session_id") == sid)
 
 
-def test_each_completion_gets_the_next_turn():
+def test_each_completion_gets_a_new_server_wide_turn():
     ent = _done()
-    assert (ent["status"], ent["turn"]) == ("done", 1)
+    first = ent["turn"]
+    assert ent["status"] == "done"
     _done()
-    assert ent["turn"] == 2
+    assert ent["turn"] > first
+    other = _done("s2", "w2")
+    assert other["turn"] > ent["turn"], "턴 번호는 엔트리마다가 아니라 서버 전체에서 늘어난다"
+
+
+def test_a_late_ack_from_the_previous_cli_does_not_clear_the_new_clis_completion():
+    """같은 tmux 세션에서 CLI를 바꿔 띄운 경우(엔트리가 바뀜). 앞 CLI의 늦은 확인이 새 완료를 지우면 안 된다."""
+    old = _done("cli-a")
+    old_turn = old["turn"]
+    agent_status._state.pop(next(k for k, v in agent_status._state.items() if v is old))
+    new = _done("cli-b")
+    assert agent_status.ack_session("w", turn=old_turn) == 0
+    assert agent_status.mark_seen("w", old_turn) == 0
+    assert new["status"] == "done" and new.get("seen_turn", 0) < new["turn"]
 
 
 def test_seen_marks_the_turn_for_every_device_and_keeps_done():
     ent = _done()
     events = []
     agent_status.subscribe(lambda e, reason: events.append(reason))
-    assert agent_status.mark_seen("w", 1) == 1
-    assert (ent["status"], ent["seen_turn"]) == ("done", 1)
+    assert agent_status.mark_seen("w", ent["turn"]) == 1
+    assert (ent["status"], ent["seen_turn"]) == ("done", ent["turn"])
     assert "seen" in events
-    assert agent_status.mark_seen("w", 1) == 0, "두 번째부터는 바뀌는 게 없다"
+    assert agent_status.mark_seen("w", ent["turn"]) == 0, "두 번째부터는 바뀌는 게 없다"
 
 
 def test_seeing_an_older_turn_does_not_hide_a_newer_completion():
     ent = _done()
-    _done()                                   # 턴 2가 왔다
-    assert agent_status.mark_seen("w", 1) == 0
+    first = ent["turn"]
+    _done()                                   # 다음 완료가 왔다
+    assert agent_status.mark_seen("w", first) == 0
     assert ent.get("seen_turn", 0) < ent["turn"]
 
 
 def test_ack_with_an_older_turn_keeps_the_newer_completion():
     ent = _done()
+    first = ent["turn"]
     _done()
-    assert agent_status.ack_session("w", turn=1) == 0
+    assert agent_status.ack_session("w", turn=first) == 0
     assert ent["status"] == "done"
-    assert agent_status.ack_session("w", turn=2) == 1
-    assert ent["status"] == "idle" and ent["seen_turn"] == 2
+    assert agent_status.ack_session("w", turn=ent["turn"]) == 1
+    assert ent["status"] == "idle" and ent["seen_turn"] == ent["turn"]
 
 
 def test_ack_without_a_turn_still_works_for_old_screens():

@@ -413,6 +413,10 @@ def _sweep_one(sid: str, ent: dict, now: float, ttls: dict) -> int:
 # 첫 요청만 통과시키기 위한 토큰. 모듈 전역 단조 증가 — 서버 재시작 시 0으로
 # 돌아가도 안전하다(`_state`도 함께 비므로 옛 토큰을 든 엔트리가 없다, E8).
 _prompt_seq = 0
+# 완료 턴 번호는 엔트리마다가 아니라 서버 전체에서 늘어난다 — 같은 tmux 세션에서 CLI를 바꿔 띄우면(엔트리가 바뀜)
+# 앞 CLI의 늦은 확인 요청(turn=1)이 새 CLI의 첫 완료(turn=1)를 지웠다. 서버 재시작 뒤에도 옛 화면의 턴과 겹치지 않게
+# 시작값을 시각(ms)으로 둔다.
+_turn_seq = int(time.time() * 1000)
 
 # waiting의 유형(kind). 프런트는 이 값으로 「승인 요청 / 선택 요청 / 계획 확인 / 질문」을
 # 고른다. 우선순위: 훅 kind > 화면 패턴 kind > 폴백(`question`).
@@ -476,7 +480,7 @@ def _prompt_fingerprint(ent: dict) -> str:
 
 
 def _set_status(ent: dict, status: str, now: Optional[float] = None) -> None:
-    global _prompt_seq
+    global _prompt_seq, _turn_seq
     prev = ent.get("status")
     ent["status"] = status
     ent["updated_at"] = time.time() if now is None else now
@@ -492,7 +496,8 @@ def _set_status(ent: dict, status: str, now: Optional[float] = None) -> None:
     elif prev != DONE:
         # 완료 턴 번호. 「확인 안 함」은 기기마다가 아니라 모든 기기 공통이고(D4), 확인은 이 번호 단위다 —
         # 한 기기가 앞 완료를 확인하는 사이 새 완료가 오면 새 완료는 확인되지 않은 채 남는다.
-        ent["turn"] = int(ent.get("turn") or 0) + 1
+        _turn_seq += 1
+        ent["turn"] = _turn_seq
     if status != WAITING:
         # 해소된 프롬프트가 "아직 활성"으로 남지 않게 한다(소비 뒤 활성 표식을 지운다).
         ent["prompt_id"] = None
