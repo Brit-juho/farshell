@@ -302,7 +302,7 @@ def create(opid,name,cwd,cols=80,rows=24,*,request_spec=None,launcher=None):
                        (rid,sid,observed['epoch'],item['physical_key'],name,'running',now,None,time.time(),encode(item)))
             for pane in item['panes']:
                 db.execute('INSERT INTO pane_executions VALUES(?,?,?,?)',
-                           (uid(),rid,pane['pane_id']+':'+str(pane['pid']),encode(pane)))
+                           (uid(),rid,pane['pane_id']+':'+(str(pane['pid']) if pane['pid'] is not None else 'dead'),encode(pane)))
             changed(db,'session',sid)
         result.update(runtime_id=rid,tmux_id=item['tmux_id'])
         _finish(opid,'running',result)

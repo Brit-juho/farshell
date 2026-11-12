@@ -394,6 +394,16 @@ server socket/PID/birth epoch plus session ID/birth; partial observations mark e
 and cannot terminate them. Stopped catalog rows remain. Archive requires an explicitly stopped
 runtime. Independent delegated tmux sessions are not stopped together.
 
+What counts as a complete observation (`session_catalog/inventory.observe`): "the tmux server is absent" is decided in
+one place, `tmux_runner.server_absent`, shared with the delegation ledger — `no server running on` and, after a reboot
+emptied the socket directory, `error connecting to … (No such file or directory)`. Either one is a complete, empty
+snapshot, so the previous runtimes are recorded as stopped at once instead of sitting in `unknown` until a new tmux
+server starts. A permission error or timeout stays unknown. A pane kept after its process exited (`remain-on-exit`) is a
+normal row (`dead`, `dead_status`), not an incomplete snapshot. A mismatch between `list-sessions` and `list-panes`
+(a session created or closed in between) is read once more before it counts as incomplete. A runtime seen again
+after it ended (identity reuse) is skipped and logged for that session only; the rest of the same reconcile — other
+stops, new sessions, and the collection that follows — still commits. Tests: `server/tests/test_catalog_observe.py`.
+
 Catalog resume creates an interactive shell, then sends the quoted Claude/Codex resume
 command to the exact pane ID returned by tmux. Exiting the CLI returns to that shell;
 it does not stop the tmux runtime. Creation or command-delivery uncertainty records

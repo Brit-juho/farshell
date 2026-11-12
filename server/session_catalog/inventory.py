@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import subprocess
 import time
@@ -13,11 +14,24 @@ import git_safe
 import tmux_runner
 from .db import database, host_id, uid, encode, changed, Refused
 
+logger = logging.getLogger(__name__)
+
 
 def observe():
+    """tmux 세션 목록 한 번. `list-sessions`와 `list-panes` 사이에 세션이 생기거나 사라지면 두 결과가
+    어긋난다 — 한 번만 다시 읽는다(그래도 어긋나면 불완전으로 둔다)."""
+    snapshot = _observe_once()
+    if not snapshot["complete"] and snapshot.get("error") == "invalid_snapshot":
+        snapshot = _observe_once()
+    return snapshot
+
+
+def _observe_once():
     rc, raw, err = tmux_runner.run(["list-sessions", "-F", "#{session_id}\t#{session_created}\t#{session_name}\t#{@fsh_origin}"], timeout=2)
     if rc:
-        if rc == 1 and b"no server running on" in err:
+        # 「서버 없음」을 tmux_runner.server_absent 한 곳에서 판정한다(위임 장부와 같은 기준). 재부팅 뒤 소켓 파일이
+        # 없을 때도 여기서 확정해야, 직전 세션들이 몇 시간씩 「상태 모름」으로 남지 않고 곧바로 종료로 기록된다.
+        if tmux_runner.server_absent(rc, err):
             return {"complete": True, "epoch": None, "sessions": []}
         # A socket error or timeout cannot establish that a server is absent.
         return {"complete": False, "sessions": [], "error": "tmux_unavailable"}
@@ -33,16 +47,25 @@ def observe():
         epoch = hashlib.sha256(str((socket, st.st_dev, st.st_ino, pid, birth.stdout)).encode()).hexdigest()
     except (OSError, ValueError, subprocess.TimeoutExpired):
         return {"complete": False, "sessions": [], "error": "identity_unverified"}
-    panes = tmux_runner.run_text(["list-panes", "-a", "-F", "#{session_id}\t#{pane_id}\t#{pane_pid}\t#{window_id}\t#{window_active}#{pane_active}\t#{pane_current_path}\t#{pane_current_command}"], timeout=2)
+    panes = tmux_runner.run_text(["list-panes", "-a", "-F", "#{session_id}\t#{pane_id}\t#{pane_pid}\t#{window_id}\t#{window_active}#{pane_active}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_dead}\t#{pane_dead_status}"], timeout=2)
     if panes is None:
         return {"complete": False, "sessions": [], "error": "panes_unavailable"}
     by_session = {}
     for line in panes.splitlines():
         p = line.split("\t")
-        if len(p) != 7 or not p[2].isdigit():
+        if len(p) != 9:
             return {"complete": False, "sessions": [], "error": "invalid_snapshot"}
-        by_session.setdefault(p[0], []).append({"pane_id": p[1], "pid": int(p[2]), "window": p[3],
-                                               "active": p[4] == "11", "cwd": p[5], "command": p[6]})
+        dead = p[7] == "1"
+        # 프로세스가 끝나고 남겨 둔 pane(`remain-on-exit`)은 정상 상태다. tmux 3.7c는 그 pid를 남기지만 비울 수도
+        # 있다고 보고 받는다 — 예전에는 pid가 숫자가 아닌 한 줄이 스냅샷 전체를 불완전으로 만들어 모든 런타임이 「상태 모름」이 됐다.
+        if not p[2].isdigit() and not dead:
+            return {"complete": False, "sessions": [], "error": "invalid_snapshot"}
+        pane = {"pane_id": p[1], "pid": int(p[2]) if p[2].isdigit() else None, "window": p[3],
+                "active": p[4] == "11", "cwd": p[5], "command": p[6]}
+        if dead:
+            pane["dead"] = True
+            pane["dead_status"] = int(p[8]) if p[8].lstrip("-").isdigit() else None
+        by_session.setdefault(p[0], []).append(pane)
     sessions = []
     for line in raw.decode("utf-8", "strict").splitlines():
         p = line.split("\t")
@@ -133,8 +156,10 @@ def _reconcile(snapshot=None):
                 changed(db, "session", sid)
             else:
                 if row["ended"] is not None:
-                    # Identity reuse is a conflict, not resurrection of an old grant.
-                    raise Refused("runtime_identity_conflict")
+                    # Identity reuse is a conflict, not resurrection of an old grant. 그 세션 하나만 건너뛴다 —
+                    # 예외로 트랜잭션 전체를 되돌리면 같은 관측의 종료 기록과 이어지는 수집·보관·대화 연결이 모두 멈췄다.
+                    logger.warning("catalog runtime identity conflict: runtime=%s", row["id"])
+                    continue
                 rid = row["id"]
                 if detail != row["detail"] or row["state"] != "running":
                     changed(db, "runtime", rid)
@@ -143,7 +168,7 @@ def _reconcile(snapshot=None):
                 if detail != row["detail"] or row["state"] != "running" or row["name"] != item["name"] or now - row["observed"] >= 60:
                     db.execute("UPDATE runtimes SET name=?,state='running',observed=?,detail=? WHERE id=?", (item["name"], now, detail, rid))
             for pane in item["panes"]:
-                key = f"{pane['pane_id']}:{pane['pid']}"
+                key = f"{pane['pane_id']}:{pane['pid'] if pane['pid'] is not None else 'dead'}"
                 encoded = encode(pane)
                 if row and db.execute("SELECT 1 FROM pane_executions WHERE runtime_id=? AND physical_key=? AND detail=?", (rid, key, encoded)).fetchone():
                     continue

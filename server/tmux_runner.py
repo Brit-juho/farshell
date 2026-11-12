@@ -98,6 +98,18 @@ def exact_target(name: str) -> str:
     return "=" + name
 
 
+def server_absent(rc: int, err: bytes) -> bool:
+    """tmux가 「서버가 없다」고 확정한 응답인가. 소켓 파일이 없을 때(재부팅 뒤 /tmp가 비었을 때)는
+    `no server running on`이 아니라 `error connecting to … (No such file or directory)`가 온다.
+    시간 초과·권한 오류 같은 다른 실패는 「모름」이다 — 없는 것으로 확정하지 않는다."""
+    if rc != 1 or not isinstance(err, (bytes, bytearray)):
+        return False
+    if b"no server running on" in err:
+        return True
+    tail = bytes(err).rstrip()
+    return tail.startswith(b"error connecting to ") and tail.endswith(b" (No such file or directory)")
+
+
 def has_session(name: str) -> bool:
     rc, _, _ = run(["has-session", "-t", exact_target(name)], timeout=1.0)
     return rc == 0

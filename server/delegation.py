@@ -298,8 +298,7 @@ def live_sessions() -> Optional[dict[str, str]]:
     rc, out, err = tmux_runner.run(["list-sessions", "-F", "#{session_id}\t#{session_created}\t#{session_name}"])
     if rc != 0:
         # A missing socket permits the first spawn. Timeouts/permissions remain unknown.
-        if rc == 1 and (b"no server running on" in err or
-                (err.startswith(b"error connecting to ") and err.rstrip().endswith(b" (No such file or directory)"))):
+        if tmux_runner.server_absent(rc, err):
             return {}
         return None
     res: dict[str, str] = {}
