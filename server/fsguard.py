@@ -194,15 +194,18 @@ def is_managed_profile_path(path: Path) -> bool:
         return True
 
 
-def _check_denylist(p: Path) -> Optional[str]:
+def _check_denylist(p: Path, skip: Optional[int] = None) -> Optional[str]:
     """경로의 모든 구성요소를 검사한다.
 
     마지막 이름만 보면 ~/GitHub/x/.ssh/config 가 통과한다. .ssh 는 중간 디렉토리다.
+    `skip`: 검사에서 뺄 구성요소 하나의 위치(`_claude_worktree_at`이 확인한 `.claude`).
     """
     if is_managed_profile_path(p):
         return tr("관리 프로필의 비공개 저장소는 열람할 수 없습니다")
     parts = p.parts
     for i, part in enumerate(parts):
+        if i == skip:
+            continue
         if part in DENY_DIR_PARTS:
             return tr("거부된 디렉토리: {name}", name=part)
         # ".config/gcloud" 같은 2단 항목 처리
@@ -477,12 +480,42 @@ def resolve_cli_profile(raw_path: str, home: Path) -> Path:
     return p.resolve()
 
 
-def resolve_under_roots(raw_path: str, *, check_hidden: bool = True) -> Path:
+def _claude_worktree_at(p: Path) -> Optional[int]:
+    """p가 Claude Code가 만든 워크트리(`<저장소>/.claude/worktrees/<이름>`) 안이면 그 `.claude`의 위치.
+
+    Git이 그렇다고 확인해 줄 때만이다: `<저장소>/.git`이 폴더이고, `<워크트리>/.git`이 파일이며 그 `gitdir:`이
+    `<저장소>/.git/worktrees/` 바로 아래를 가리킨다(= 그 워크트리의 common-dir가 `<저장소>/.git`). Git을 실행하지
+    않고 파일 두 개만 읽는다. 첫 번째 `.claude`만 본다 — 그 밖의 점 폴더·거부 폴더는 그대로 막힌다."""
+    parts = p.parts
+    for i in range(1, len(parts) - 2):
+        if parts[i] != ".claude" or parts[i + 1] != "worktrees":
+            continue
+        top, tree = Path(*parts[:i]), Path(*parts[:i + 3])
+        try:
+            if not (top / ".git").is_dir() or not (tree / ".git").is_file():
+                return None
+            line = (tree / ".git").read_text(encoding="utf-8")[:4096].strip()
+            if not line.startswith("gitdir:"):
+                return None
+            target = Path(line[len("gitdir:"):].strip())
+            target = (target if target.is_absolute() else tree / target).resolve()
+            if target.parent != (top / ".git" / "worktrees").resolve():
+                return None
+        except (OSError, UnicodeError, ValueError, RuntimeError):
+            return None
+        return i
+    return None
+
+
+def resolve_under_roots(raw_path: str, *, check_hidden: bool = True, git_meta: bool = False) -> Path:
     """사용자가 준 경로를 검증해 안전한 절대경로로 바꾼다.
 
     실패하면 FsDenied 를 던진다. 호출부는 이 예외를 403으로 매핑하면 된다.
     check_hidden=False 는 점 디렉토리 규칙만 끈다(경계·거부 목록은 그대로). 내용을 내보내지
     않고 `.git` 디렉토리의 경계 소속만 확인하는 내부 호출(session_context)용이다.
+    git_meta=True 는 Git 위치 정보(브랜치·변경량·워크트리 소속)만 읽는 호출용이다 — Claude Code가 만든
+    워크트리(`<저장소>/.claude/worktrees/<이름>`, `_claude_worktree_at`)의 `.claude` 한 칸만 거부에서 뺀다.
+    파일 열람·검색 경로는 이 옵션을 쓰지 않으므로 그 안의 파일은 계속 열 수 없다.
     """
     if not raw_path or not raw_path.strip():
         raise FsDenied(tr("경로가 비었습니다"))
@@ -501,12 +534,13 @@ def resolve_under_roots(raw_path: str, *, check_hidden: bool = True) -> Path:
     if not any(_is_within(p, root) for root in roots):
         raise FsDenied(tr("허용된 루트 밖의 경로입니다"))
 
-    denied = _check_denylist(p)
+    skip = _claude_worktree_at(p) if git_meta else None
+    denied = _check_denylist(p, skip)
     if denied:
         raise FsDenied(denied)
 
     if check_hidden:
-        denied = _check_hidden_state_dir(p, _matching_root(p, roots))
+        denied = _check_hidden_state_dir(p, _matching_root(p, roots), skip)
         if denied:
             raise FsDenied(denied)
 
@@ -518,7 +552,7 @@ def _matching_root(p: Path, roots: list[Path]) -> Path:
     return max((r for r in roots if _is_within(p, r)), key=lambda r: len(r.parts))
 
 
-def _check_hidden_state_dir(p: Path, root: Path) -> Optional[str]:
+def _check_hidden_state_dir(p: Path, root: Path, skip: Optional[int] = None) -> Optional[str]:
     """root 아래 구성요소 중 허용 목록에 없는 점 디렉토리가 있으면 거부 사유를 돌려준다.
 
     root 자신과 그 위쪽은 검사하지 않는다. 마지막 구성요소는 디렉토리일 때만 본다
@@ -529,7 +563,10 @@ def _check_hidden_state_dir(p: Path, root: Path) -> Optional[str]:
         rel = p.relative_to(root).parts
     except ValueError:
         return None
+    offset = len(p.parts) - len(rel)
     for i, part in enumerate(rel):
+        if skip is not None and i + offset == skip:
+            continue
         if not is_hidden_state_dir_name(part):
             continue
         if i == len(rel) - 1 and not p.is_dir():

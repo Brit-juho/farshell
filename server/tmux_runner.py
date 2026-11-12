@@ -200,6 +200,8 @@ class PaneInfo:
     wt_tag: str = ""
     # 세션을 만든 곳(`@fsh_origin`). 기록이 없으면 "external"(normalize_origin).
     origin: str = "external"
+    # 활성 window의 활성 pane인가 — 세션의 「지금 위치」를 대표하는 pane(워크트리 소속 추론이 쓴다).
+    active: bool = False
 
 
 # 세션을 만든 곳. 기록 값은 이 화이트리스트뿐이고 "external"은 값이 아니라 "기록 없음"이다
@@ -257,7 +259,7 @@ def get_all_panes() -> list[PaneInfo]:
 
     purplemux getAllPanesInfo 패턴: list-panes -a 한 번으로 N개 세션 처리.
     """
-    fmt = "#{session_name}\t#{pane_current_command}\t#{pane_pid}\t#{pane_current_path}\t#{pane_id}\t#{@fsh_wt}\t#{@fsh_origin}"
+    fmt = "#{session_name}\t#{pane_current_command}\t#{pane_pid}\t#{pane_current_path}\t#{pane_id}\t#{@fsh_wt}\t#{@fsh_origin}\t#{window_active}#{pane_active}"
     text = run_text(["list-panes", "-a", "-F", fmt])
     if not text:
         return []
@@ -281,6 +283,7 @@ def get_all_panes() -> list[PaneInfo]:
                 pane_id=parts[4] if len(parts) > 4 else "",
                 wt_tag=parts[5] if len(parts) > 5 else "",
                 origin=normalize_origin(parts[6] if len(parts) > 6 else ""),
+                active=len(parts) > 7 and parts[7] == "11",
             )
         )
     return panes

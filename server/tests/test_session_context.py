@@ -113,8 +113,12 @@ def test_main_linked_subdirectory_detached_and_nonrepo(repo, monkeypatch):
     main = context._context(str(repo))
     linked = context._context(str(sub))
     assert main["worktree"]["kind"] == "main"
+    common = repo.resolve() / ".git"
     assert linked["worktree"] == {"kind": "linked", "status": "ready",
-        "repositoryRoot": str(repo.resolve()), "name": tree.name, "relative": "packages/src"}
+        "repositoryRoot": str(repo.resolve()), "name": tree.name, "relative": "packages/src",
+        "gitDir": str(common / "worktrees" / tree.name.replace(" ", "-")), "commonDir": str(common)}
+    assert main["worktree"]["commonDir"] == linked["worktree"]["commonDir"], "같은 저장소는 common-dir가 같다"
+    assert (main["ahead"], main["behind"]) == (0, 0)
     assert linked["branch"] == "feature"
     monkeypatch.setattr(context, "TTL", 0)
     context._cache.clear()
@@ -210,3 +214,27 @@ def test_submodule_git_file_is_main_workspace(repo):
     data = context._context(str(module))
     assert data["worktree"]["kind"] == "main"
     assert data["root"] == str(module.resolve())
+
+
+def test_busy_path_rechecks_the_boundary_before_returning_old_values(repo, monkeypatch):
+    """조회가 밀려 예전 값을 줄 때도 지금 경계에서 빠진 경로면 내보내지 않는다(L6)."""
+    first = context._context(str(repo))
+    assert first["root"]
+    stripe = context._reading[hash(str(repo)) % len(context._reading)]
+    monkeypatch.setattr(context, "STRIPE_WAIT", 0.01)
+    stripe.acquire()
+    try:
+        assert context._context(str(repo))["reason"] == "busy"
+        assert context._context(str(repo))["root"] == first["root"]
+        monkeypatch.setattr(context.fsguard, "resolve_under_roots", lambda *a, **k: (_ for _ in ()).throw(context.fsguard.FsDenied("x")))
+        denied = context._context(str(repo))
+        assert denied["root"] is None and denied["branch"] is None
+    finally:
+        stripe.release()
+
+
+def test_name_suffix_only_counts_the_roots_on_screen(repo):
+    a, b = repo.parent / "one" / "task", repo.parent / "two" / "task"
+    result = {str(a): {"root": str(a), "worktree": {"name": "task"}}, str(b): {"root": str(b), "worktree": {"name": "task"}}}
+    assert context.disambiguate(result)[str(a)]["worktree"]["name"] == "one/task"
+    assert context.disambiguate(result, [str(a)])[str(a)]["worktree"]["name"] == "task", "화면에 없는 root 때문에 이름이 바뀌지 않는다"

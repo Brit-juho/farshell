@@ -25,6 +25,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Conversation titles are refreshed as the transcript grows (Claude writes its title later in the file; Codex conversations take their first prompt).
 
 ### Fixed
+- **Claude Code's own worktrees (`.claude/worktrees/<name>`) show up** in the session location and the repository list, and the catalog places their sessions under the repository. Files inside stay closed to the browser.
+- **A session's repository is no longer lost to a passing Git error** — the first placement is retried, and a session first seen outside a repository moves once into the repository it later works in. Session rows now carry that place (`home`) and the visible name.
+- The session row no longer flips between the CLI's and the terminal's location when Git is briefly busy; same-named repositories are told apart only by the ones on screen.
+- The worktree list and the session row count changes the same way (untracked files included) and show ahead/behind from the same call.
+- Worktree membership: an untagged session in a worktree is listed even when another session there is tagged; a background pane no longer tags its session; a worktree nested in the main checkout keeps its own sessions.
 - **Resume works after a reboot.** The server started at login did not have `~/.local/bin` on its PATH, so resuming said the CLI could not be found. The CLI that ran a conversation is now recorded (from the process itself, not from what its hook says) and resume uses it, then that CLI's PATH, the server's PATH and the usual install folders, skipping any file another user could swap. The server also gets the usual install folders at the end of its PATH, and `fsh doctor` shows which Claude Code and Codex it will use.
 - **A resumed session ends when its CLI ends**, instead of leaving an empty shell; a CLI that fails to start keeps its error on screen. Settings: `resume_ends_session`. A conversation recorded under a managed account resumes with that account.
 - Sending a queued prompt to a chosen session, the voice target lock and starting an agent in a worktree could not find the session's pane (an Unreleased regression from exact name matching).

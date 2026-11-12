@@ -80,16 +80,24 @@ def _observe_once():
 
 
 def inspect_workspace(cwd):
-    """Only initial placement; cd never silently reparents a durable session."""
+    """세션이 놓일 곳(배치). 처음 관측 때 정하고, cd로 다른 저장소에 가도 바꾸지 않는다 — 예외는 「저장소 밖」
+    배치가 나중에 저장소 근거를 얻을 때 한 번 승격하는 것뿐이다(`_retry_placements`).
+
+    Git이 「저장소가 아니다」라고 답할 때만 저장소 밖(directory)이다. 시간 초과·다른 오류는 None(다음 관측에서 다시) —
+    예전에는 일시 실패도 저장소 밖으로 영구 분류했다."""
     try:
-        path = fsguard.resolve_under_roots(cwd)
+        path = fsguard.resolve_under_roots(cwd, git_meta=True)
         if not path.is_dir():
             return None
         result = subprocess.run(git_safe.argv("rev-parse", "--show-toplevel", "--path-format=absolute", "--git-common-dir", cwd=path),
                                 capture_output=True, timeout=2, check=False, env=git_safe.env())
+        if result.returncode != 0 and b"not a git repository" not in (result.stderr or b"").lower():
+            return None
         roots = result.stdout.decode("utf-8", "strict").splitlines() if result.returncode == 0 else []
+        if result.returncode == 0 and len(roots) != 2:
+            return None
         if len(roots) == 2:
-            path = fsguard.resolve_under_roots(roots[0])
+            path = fsguard.resolve_under_roots(roots[0], git_meta=True)
             common = Path(roots[1]).resolve(strict=True)
             marker = common.stat()
             locator = f"git:{common}:{marker.st_dev}:{marker.st_ino}"
@@ -126,19 +134,76 @@ def workspace(db, placement):
     return wid
 
 
+# 배치를 다시 본 (세션 정체성 키, cwd) — 같은 cwd를 5초마다 Git으로 다시 읽지 않는다. 위치가 바뀌면 다시 본다.
+_placement_tried: dict[str, set[str]] = {}
+_PLACEMENT_TRIES_PER_SESSION = 32
+
+
+def _agent_cwd(name):
+    try:
+        import agent_status
+        return agent_status.agent_cwd_for(name)
+    except Exception:  # noqa: BLE001 — 에이전트 상태가 없으면 pane cwd만 본다
+        return None
+
+
+def _retry_placements(snapshot, known_rows):
+    """이미 기록된 실행 중 세션의 배치를 다시 본다(L3).
+    - 배치가 없는(None — 처음 관측 때 Git이 일시 실패) 세션: 활성 pane 또는 CLI가 알린 cwd로 다시 정한다.
+    - 「저장소 밖」 배치: 그 cwd가 저장소 안이 되면 한 번 저장소로 승격한다. 저장소 배치는 다시 바꾸지 않는다.
+    돌려주는 값: {세션 id: 새 배치}."""
+    live = {item['physical_key']: item for item in snapshot['sessions']}
+    for key in list(_placement_tried):
+        if key not in live:
+            _placement_tried.pop(key, None)
+    out = {}
+    for row in known_rows:
+        item = live.get(row['physical_key'])
+        if not item or (row['workspace_id'] and row['project_kind'] != 'directory'):
+            continue
+        tried = _placement_tried.setdefault(row['physical_key'], set())
+        for cwd in dict.fromkeys(c for c in (item.get('cwd'), _agent_cwd(item.get('name'))) if c):
+            if cwd in tried or len(tried) >= _PLACEMENT_TRIES_PER_SESSION:
+                continue
+            placement = inspect_workspace(cwd)
+            if placement is None:
+                continue          # 일시 실패 — 이 cwd는 다음 관측에서 다시 본다
+            tried.add(cwd)
+            if not row['workspace_id'] or placement['project_kind'] == 'git':
+                out[row['session_id']] = (row['workspace_id'], placement)
+                break
+    return out
+
+
 def _reconcile(snapshot=None):
     snapshot = observe() if snapshot is None else snapshot
     now = time.time()
     with database() as check:
         known = {(r['epoch'], r['physical_key']) for r in check.execute('SELECT epoch,physical_key FROM runtimes')}
+        unplaced = []
+        if snapshot.get('complete'):
+            unplaced = [dict(r) for r in check.execute(
+                "SELECT r.physical_key, s.id AS session_id, s.workspace_id, p.kind AS project_kind FROM runtimes r"
+                " JOIN sessions s ON s.id=r.session_id LEFT JOIN workspaces w ON w.id=s.workspace_id"
+                " LEFT JOIN projects p ON p.id=w.project_id"
+                " WHERE r.ended IS NULL AND r.epoch=? AND (s.workspace_id IS NULL OR p.kind='directory')",
+                (snapshot.get('epoch'),))]
     placements = {item['physical_key']: inspect_workspace(item['cwd']) for item in snapshot['sessions']
                   if (snapshot.get('epoch'), item['physical_key']) not in known}
+    replaced = _retry_placements(snapshot, unplaced) if unplaced else {}
     with database(write=True) as db:
         if not snapshot["complete"]:
             db.execute("UPDATE runtimes SET state='unknown' WHERE ended IS NULL")
             return snapshot
         host = host_id(db)
         epoch = snapshot["epoch"]
+        for sid, (old, placement) in replaced.items():
+            wid = workspace(db, placement)
+            # 그 사이 다른 쪽이 이미 바꿨으면(old와 다르면) 건드리지 않는다.
+            cur = db.execute("UPDATE sessions SET workspace_id=?,updated=?,revision=revision+1 WHERE id=? AND workspace_id IS ?",
+                             (wid, now, sid, old))
+            if cur.rowcount:
+                changed(db, "session", sid)
         live = {(epoch, item["physical_key"]) for item in snapshot["sessions"]}
         for row in db.execute("SELECT * FROM runtimes WHERE ended IS NULL").fetchall():
             if (row["epoch"], row["physical_key"]) not in live:

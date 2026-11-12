@@ -93,3 +93,41 @@ def test_open_worktree_skips_tagging_when_session_reused(monkeypatch, tmp_path):
 
     result = worktree.open_worktree("feedface0002")
     assert result == {"ok": True, "tmux_session": "wt-existing", "created": False}
+
+
+# --- 세션 로직 점검 단계 4: 태그 추론 버그 3건 ------------------------------------------------------
+
+def test_untagged_sessions_are_found_even_when_another_session_has_the_tag(tmp_path, monkeypatch):
+    """태그 붙은 세션이 하나 있다고 같은 트리의 태그 없는 세션을 숨기지 않는다."""
+    panes = [_pane("tagged", str(tmp_path / "x"), wt_tag="mine00000001"), _pane("new", str(tmp_path))]
+    calls = []
+    monkeypatch.setattr(tmux_runner, "set_option", lambda *a: calls.append(a) or True)
+    assert worktree._sessions_for_path(tmp_path, panes, wt_id="mine00000001") == ["tagged", "new"]
+    assert calls == [("new", "@fsh_wt", "mine00000001")]
+
+
+def test_only_the_active_pane_decides_membership(tmp_path, monkeypatch):
+    """뒤에 띄워 둔 pane 하나가 워크트리 안이라고 세션 전체에 태그를 영구히 심지 않는다."""
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    tree = tmp_path / "tree"
+    tree.mkdir()
+    panes = [tmux_runner.PaneInfo(session="s", command="zsh", pid=1, path=str(tree), active=False),
+             tmux_runner.PaneInfo(session="s", command="zsh", pid=2, path=str(elsewhere), active=True)]
+    monkeypatch.setattr(tmux_runner, "set_option", lambda *a: (_ for _ in ()).throw(AssertionError("태그를 심었다")))
+    assert worktree._sessions_for_path(tree, panes, wt_id="tree00000001") == []
+
+
+def test_nested_worktree_claims_its_own_sessions(tmp_path, monkeypatch):
+    """메인 작업 트리 안에 둔 링크드 워크트리(`.claude/worktrees/x`)의 세션은 메인이 아니라 그 워크트리 소속이다."""
+    main = tmp_path / "repo"
+    nested = main / ".claude" / "worktrees" / "x"
+    nested.mkdir(parents=True)
+    panes = [_pane("in-nested", str(nested)), _pane("in-main", str(main))]
+    claims = worktree._claim_untagged(panes, {"main00000001": main, "nest00000001": nested})
+    assert claims == {"in-nested": "nest00000001", "in-main": "main00000001"}
+    calls = []
+    monkeypatch.setattr(tmux_runner, "set_option", lambda *a: calls.append(a) or True)
+    assert worktree._sessions_for_path(main, panes, "main00000001", claims) == ["in-main"]
+    assert worktree._sessions_for_path(nested, panes, "nest00000001", claims) == ["in-nested"]
+    assert sorted(calls) == [("in-main", "@fsh_wt", "main00000001"), ("in-nested", "@fsh_wt", "nest00000001")]

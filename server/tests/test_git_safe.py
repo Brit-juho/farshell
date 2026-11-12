@@ -59,7 +59,7 @@ def test_status_paths_do_not_run_planted_fsmonitor(embedded_bare):
     _git(evil, "rev-parse", "--show-toplevel")
     _collect_status(evil, top=evil)
     _git(evil, "diff", *git_safe.DIFF_FLAGS, "--numstat", "HEAD")
-    worktree._changed_stat(evil)
+    worktree._status_summary(evil)
     worktree._git(["status", "--porcelain"], cwd=evil)
     assert not marker.exists()
 
