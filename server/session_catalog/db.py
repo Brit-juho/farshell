@@ -450,6 +450,7 @@ def snapshot(*, limit=50, after=None, archived=False, order="id", cursor=None, q
             following = None
         out = {"host": host, "revision": db.execute("SELECT COALESCE(MAX(seq),0) FROM change_log").fetchone()[0],
                "sessions": sessions, "auto_archive_days": auto_archive_days(db), "auto_name": auto_name_enabled(db),
+               "resume_ends_session": resume_ends_session(db),
                "archived_count": db.execute("SELECT COUNT(*) FROM sessions WHERE deleted IS NULL AND archived IS NOT NULL").fetchone()[0],
                "next": following}
         if meta:
@@ -508,8 +509,14 @@ def auto_name_enabled(db):
     return setting(db, "auto_name_on_cli", True) is not False
 
 
+def resume_ends_session(db):
+    """이어서 시작한 세션이 CLI가 끝나면 같이 끝날지(기본 켬). 끄면 예전처럼 셸을 띄우고 명령을 쳐 넣어, CLI가 끝나도
+    셸이 남는다."""
+    return setting(db, "resume_ends_session", True) is not False
+
+
 def configure(values):
-    """레일 설정에서 바꾸는 서버 쪽 값. 자동 보관 일수(0이면 끔), CLI 시작 때 자동 이름."""
+    """레일 설정에서 바꾸는 서버 쪽 값. 자동 보관 일수(0이면 끔), CLI 시작 때 자동 이름, 이어서 시작한 세션의 끝."""
     if not values:
         raise Refused("invalid_request", 400)
     with database(write=True) as db:
@@ -522,7 +529,12 @@ def configure(values):
             if not isinstance(values["auto_name"], bool):
                 raise Refused("invalid_auto_name", 400)
             set_setting(db, "auto_name_on_cli", values["auto_name"])
-        return {"auto_archive_days": auto_archive_days(db), "auto_name": auto_name_enabled(db)}
+        if "resume_ends_session" in values:
+            if not isinstance(values["resume_ends_session"], bool):
+                raise Refused("invalid_resume_ends_session", 400)
+            set_setting(db, "resume_ends_session", values["resume_ends_session"])
+        return {"auto_archive_days": auto_archive_days(db), "auto_name": auto_name_enabled(db),
+                "resume_ends_session": resume_ends_session(db)}
 
 
 ORPHAN_ARCHIVE_SECONDS = 86400
@@ -550,6 +562,17 @@ def auto_archive(now=None):
             db.execute("UPDATE sessions SET archived=?,updated=?,revision=revision+1 WHERE id=?", (now, now, row["id"]))
             changed(db, "session", row["id"])
         return len(rows)
+
+
+def record_cli(physical_key, path, env_path):
+    """그 tmux 세션에서 지금 도는 실행(런타임)에 CLI 실행 파일 경로와 PATH를 적는다(이어서 시작이 쓴다)."""
+    if not isinstance(physical_key, str) or not physical_key:
+        return False
+    with database(write=True) as db:
+        # 값이 같아도 맞는 행이 있으면 성공이다(SQLite는 값이 그대로여도 맞은 행을 센다). 0이면 아직 런타임 행이 없다.
+        cur = db.execute("UPDATE runtimes SET cli_path=?,cli_env_path=? WHERE physical_key=? AND ended IS NULL",
+                         (path, env_path, physical_key))
+        return cur.rowcount > 0
 
 
 UNKNOWN_DISMISS_SECONDS = 600

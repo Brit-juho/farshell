@@ -1002,6 +1002,8 @@ window.__VT_I18N = {
   "tmux 3.2+ 필요 (현재: {ver}). 직접 실행:": "Needs tmux 3.2+ (have: {ver}). Run it directly:",
   "tmux pane 밖입니다 — pane id 없이 cwd로만 판정됩니다": "Not inside a tmux pane — matching by cwd only, without a pane id",
   "tmux 리사이즈 안정화": "tmux resize stability",
+  "찾지 못함 — 이 CLI로 한 대화는 이어서 시작할 수 없습니다": "Not found — conversations from this CLI can't be resumed",
+  "설치 안 됨 (쓰지 않으면 괜찮습니다)": "Not installed (fine if you don't use it)",
   "tmux 마우스 모드({cmd})가 켜져 있으면 드래그를 tmux가 먼저 가로챔 → {shift}+드래그(맥은 {option}+드래그도 가능)로 강제 선택": "With tmux mouse mode ({cmd}) on, tmux grabs the drag first. Use {shift}+drag ({option}+drag also works on Mac) to force a selection",
   "tmux 미설치": "tmux is not installed",
   "tmux 세션": "tmux sessions",

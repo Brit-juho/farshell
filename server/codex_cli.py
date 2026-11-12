@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import threading
 import time
@@ -39,7 +38,8 @@ def executable() -> Optional[str]:
     explicit = os.environ.get("VT_CODEX_BIN") or os.environ.get("CODEX_CLI_PATH")
     if explicit:
         return explicit
-    return shutil.which("codex")
+    import cli_resolve
+    return cli_resolve.resolve("codex")
 
 
 def run_json(args: list[str], *, timeout: float = 10.0) -> tuple[object | None, str | None]:

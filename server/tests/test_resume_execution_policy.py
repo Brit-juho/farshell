@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+import cli_resolve
+
 from session_catalog import execution_policy as policies
 from session_catalog.db import Refused
 
@@ -199,9 +201,9 @@ def test_resume_unknown_policy_creates_neither_operation_nor_tmux(private_policy
     source = register('claude', root)
     archive.scan_source(source)
     cid = query.listing()['items'][0]['id']
-    monkeypatch.setattr(lifecycle.shutil, 'which', lambda name: '/bin/echo')
+    monkeypatch.setattr(cli_resolve, 'resolve', lambda *args, **kwargs: '/bin/echo')
     monkeypatch.setattr(policies, 'require_cli', lambda binary: None)
-    monkeypatch.setattr(lifecycle, '_launch_resume', lambda *args: pytest.fail('must not launch'))
+    monkeypatch.setattr(lifecycle, '_launch_exec', lambda *args: pytest.fail('must not launch'))
     with pytest.raises(Refused, match='execution_policy_unavailable'):
         lifecycle.resume(cid, 'a' * 32)
     with database() as db:
@@ -217,9 +219,9 @@ def test_catalog_resume_replays_original_codex_policy_and_retry_does_not_launch_
     path.write_bytes(encoded({'type': 'session_meta', 'payload': {'id': NATIVE, 'cwd': str(private_policy)}}, context(approval)))
     source = register('codex', root); archive.scan_source(source)
     cid = query.listing()['items'][0]['id']; calls = []
-    monkeypatch.setattr(lifecycle.shutil, 'which', lambda name: '/bin/echo')
+    monkeypatch.setattr(cli_resolve, 'resolve', lambda *args, **kwargs: '/bin/echo')
     monkeypatch.setattr(policies, 'require_cli', lambda binary: None)
-    monkeypatch.setattr(lifecycle, '_launch_resume', lambda *args: calls.append(args) or False)
+    monkeypatch.setattr(lifecycle, '_launch_exec', lambda *args: calls.append(args) or False)
     opid = 'b' * 32
     with pytest.raises(Refused, match='launch_needs_review'):
         lifecycle.resume(cid, opid)
@@ -266,14 +268,14 @@ def test_policy_change_during_resume_is_refused_before_tmux(private_policy, monk
     root, path = native_file(private_policy)
     source = register('codex', root); archive.scan_source(source)
     cid = query.listing()['items'][0]['id']
-    monkeypatch.setattr(lifecycle.shutil, 'which', lambda name: '/bin/echo')
+    monkeypatch.setattr(cli_resolve, 'resolve', lambda *args, **kwargs: '/bin/echo')
     monkeypatch.setattr(policies, 'require_cli', lambda binary: None)
     original = lifecycle.inventory.inspect_workspace
     def changed(cwd):
         path.write_bytes(path.read_bytes() + encoded(context('on-request')))
         return original(cwd)
     monkeypatch.setattr(lifecycle.inventory, 'inspect_workspace', changed)
-    monkeypatch.setattr(lifecycle, '_launch_resume', lambda *args: pytest.fail('must not launch'))
+    monkeypatch.setattr(lifecycle, '_launch_exec', lambda *args: pytest.fail('must not launch'))
     with pytest.raises(Refused, match='execution_policy_changed'):
         lifecycle.resume(cid, 'c' * 32)
     with database() as db:
@@ -304,3 +306,28 @@ def test_cli_capability_floor_refuses_unknown_or_older_runtime(monkeypatch, vers
     else:
         with pytest.raises(Refused, match='execution_policy_unsupported'):
             policies.require_cli('/bin/codex')
+
+
+def test_resume_launch_follows_the_resume_ends_session_setting(private_policy, monkeypatch):
+    """기본은 CLI로 pane을 바로 띄워 CLI가 끝나면 세션도 끝난다. 끄면 셸을 띄우고 명령을 쳐 넣는다(셸이 남는다)."""
+    from session_catalog import db as catalog, lifecycle
+    root, path = native_file(private_policy)
+    path.write_bytes(encoded({'type': 'session_meta', 'payload': {'id': NATIVE, 'cwd': str(private_policy)}}, context('never')))
+    source = register('codex', root)
+    from session_history import archive, query
+    archive.scan_source(source)
+    cid = query.listing()['items'][0]['id']
+    monkeypatch.setattr(cli_resolve, 'resolve', lambda *args, **kwargs: '/bin/echo')
+    monkeypatch.setattr(policies, 'require_cli', lambda binary: None)
+    used = []
+    monkeypatch.setattr(lifecycle, '_launch_exec', lambda *args: used.append('exec') or False)
+    monkeypatch.setattr(lifecycle, '_launch_in_shell', lambda *args: used.append('shell') or False)
+    assert catalog.snapshot()['resume_ends_session'] is True
+    with pytest.raises(Refused, match='launch_needs_review'):
+        lifecycle.resume(cid, 'c' * 32)
+    assert catalog.configure({'resume_ends_session': False})['resume_ends_session'] is False
+    with pytest.raises(Refused, match='launch_needs_review'):
+        lifecycle.resume(cid, 'd' * 32)
+    assert used == ['exec', 'shell']
+    with pytest.raises(Refused, match='invalid_resume_ends_session'):
+        catalog.configure({'resume_ends_session': 'no'})

@@ -114,7 +114,7 @@ async def delete_session(session_id: str, request: Request):
 @router.post('/api/session-catalog/settings')
 async def catalog_settings(request: Request):
     try:
-        body = await _body(request, {'auto_archive_days', 'auto_name'})
+        body = await _body(request, {'auto_archive_days', 'auto_name', 'resume_ends_session'})
     except db.Refused as error:
         return JSONResponse({'error': error.code}, status_code=error.status)
     return await _call(db.configure, body)

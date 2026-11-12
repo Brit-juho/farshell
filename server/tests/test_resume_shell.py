@@ -1,4 +1,5 @@
-"""A resumed CLI returns to its shell, including after a failed command."""
+"""Resume launch: by default the CLI replaces the shell (the session ends with it, a fast failure stays on screen);
+with the setting off it is typed into a shell that survives it."""
 import json
 import os
 import shutil
@@ -15,27 +16,27 @@ def test_terminal_control_bytes_never_reach_a_shell(monkeypatch, control):
     def unexpected(*args, **kwargs):
         pytest.fail('must reject before creating a pane')
     monkeypatch.setattr(tmux_runner, 'run', unexpected)
-    assert lifecycle._launch_resume('sample', '/tmp', ['echo', 'a' + control + 'b']) is False
+    assert lifecycle._launch_in_shell('sample', '/tmp', ['echo', 'a' + control + 'b'], None, None) is False
 
 
 @pytest.mark.parametrize('failure', ['create', 'pane', 'literal', 'enter'])
 def test_launch_stops_on_uncertain_step(monkeypatch, failure):
     calls = []
 
-    def run(args, **kwargs):
+    def run(args, *rest, **kwargs):
         calls.append(args)
         step = len(calls)
-        if failure == 'pane' and step == 1:
+        if failure == 'pane' and step == 2:
             return 0, b'not-a-pane\n', b''
-        if step == {'create': 1, 'literal': 2, 'enter': 3}.get(failure):
+        if step == {'create': 1, 'literal': 3, 'enter': 4}.get(failure):
             return 124, b'', b'timeout'
         return 0, b'%42\n', b''
 
     monkeypatch.setattr(tmux_runner, 'run', run)
-    assert lifecycle._launch_resume('sample', '/tmp', ['echo', 'hello']) is False
-    assert len(calls) == {'create': 1, 'pane': 1, 'literal': 2, 'enter': 3}[failure]
-    if len(calls) > 1:
-        assert calls[1] == ['send-keys', '-t', '%42', '-l', '--', 'echo hello']
+    assert lifecycle._launch_in_shell('sample', '/tmp', ['echo', 'hello'], None, None) is False
+    assert len(calls) == {'create': 1, 'pane': 2, 'literal': 3, 'enter': 4}[failure]
+    if len(calls) > 2:
+        assert calls[2] == ['send-keys', '-t', '%42', '-l', '--', 'echo hello']
 
 
 @pytest.mark.parametrize('shell', ['bash', 'zsh', 'fish'])
@@ -65,7 +66,7 @@ def test_real_cli_exit_preserves_shell(tmp_path, monkeypatch, shell, exit_code):
     import sys
     values = ['a b', "quote'and\"double", '$(touch INJECTED)', '; touch INJECTED', 'bypassPermissions']
     try:
-        assert lifecycle._launch_resume('sample', tmp_path, [sys.executable, str(cli), str(result), *values])
+        assert lifecycle._launch_in_shell('sample', tmp_path, [sys.executable, str(cli), str(result), *values], None, None)
         deadline = time.monotonic() + 8
         while not result.exists() and time.monotonic() < deadline:
             time.sleep(0.05)
@@ -83,3 +84,64 @@ def test_real_cli_exit_preserves_shell(tmp_path, monkeypatch, shell, exit_code):
         assert tmux_runner.run(['has-session', '-t', '=sample'])[0] == 0
     finally:
         tmux_runner.run(['kill-server'])
+
+
+@pytest.mark.parametrize('exit_code', [0, 7])
+def test_exec_launch_ends_with_the_cli_and_keeps_a_failure_on_screen(tmp_path, monkeypatch, exit_code):
+    """기본 실행 방식: CLI가 셸을 대신한다. 정상 종료하면 세션이 끝나고(자동 보관 대상), 실패하면 화면이 남는다.
+    인자는 셸을 거치지 않으므로 따옴표·`$(...)`가 그대로 전달된다. PATH는 넘긴 값으로 실행된다."""
+    if not shutil.which('tmux'):
+        pytest.skip('tmux unavailable')
+    import sys
+    socket = 'fsh-resume-exec-' + os.urandom(8).hex()
+    config = tmp_path / 'tmux.conf'
+    config.write_text('set -g status off\n')
+    monkeypatch.setattr(tmux_runner, 'VT_TMUX_SOCKET', socket)
+    monkeypatch.setattr(tmux_runner, 'VT_TMUX_CONF', str(config))
+    monkeypatch.setenv('HOME', str(tmp_path))
+    result = tmp_path / 'received.json'
+    cli = tmp_path / 'cli.py'
+    cli.write_text('import json,os,sys\nfrom pathlib import Path\n'
+                   'Path(sys.argv[1]).write_text(json.dumps({"args": sys.argv[2:], "path": os.environ.get("PATH")}))\n'
+                   f'sys.exit({exit_code})\n')
+    values = ['a b', "quote'and\"double", '$(touch INJECTED)']
+    try:
+        assert lifecycle._launch_exec('sample', tmp_path, [sys.executable, str(cli), str(result), *values], '/custom/bin:/usr/bin:/bin', None)
+        deadline = time.monotonic() + 8
+        while not result.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        got = json.loads(result.read_text())
+        assert got['args'] == values and got['path'] == '/custom/bin:/usr/bin:/bin'
+        assert not (tmp_path / 'INJECTED').exists()
+        alive = None
+        while time.monotonic() < deadline:
+            alive = tmux_runner.run(['has-session', '-t', '=sample'])[0] == 0
+            if alive == (exit_code != 0):
+                break
+            time.sleep(0.05)
+        if exit_code == 0:
+            assert alive is False, '정상 종료하면 세션도 끝난다'
+        else:
+            assert alive is True
+            dead = tmux_runner.run_text(['display-message', '-p', '-t', '=sample:', '#{pane_dead} #{pane_dead_status}'])
+            assert dead.strip() == f'1 {exit_code}', '실패는 화면에 남는다'
+    finally:
+        tmux_runner.run(['kill-server'])
+
+
+def test_path_goes_after_env_unset_options():
+    argv = ['env', '-u', 'A', '-u', 'B', 'CLAUDE_CONFIG_DIR=/r', '/bin/claude', '--resume', 'x']
+    assert lifecycle._with_path(argv, '/p') == ['env', '-u', 'A', '-u', 'B', 'PATH=/p', 'CLAUDE_CONFIG_DIR=/r', '/bin/claude', '--resume', 'x']
+    assert lifecycle._with_path(['/bin/x'], '/p') == ['env', 'PATH=/p', '/bin/x']
+    assert lifecycle._with_path(['/bin/x'], None) == ['/bin/x']
+
+
+def test_an_account_resume_records_its_profile_like_a_new_account_session(monkeypatch):
+    """계정으로 이어서 시작한 세션도 레지스트리에 남긴다 — 없으면 그 세션에서 위임한 자식이 거절된다."""
+    import session_profile
+    recorded = []
+    monkeypatch.setattr(session_profile, 'spawn', lambda *a: (0, '', {'cleared_env': []}))
+    monkeypatch.setattr(session_profile, 'record', lambda name, selection: recorded.append((name, selection)))
+    monkeypatch.setattr(lifecycle.tmux_runner, 'run_text', lambda *a, **k: '%9\n')
+    assert lifecycle._spawn_shell_session('app', '/tmp', 'SEL', None) == '%9'
+    assert recorded == [('app', 'SEL')]

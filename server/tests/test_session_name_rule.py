@@ -94,3 +94,28 @@ def test_rename_targets_the_old_name_exactly(monkeypatch):
     rename = next(a for a in calls if a[0] == 'rename-session')
     assert rename == ['rename-session', '-t', '=app', 'app2']
     assert ['has-session', '-t', '=app2'] in calls
+
+
+def test_exact_targets_work_against_a_real_tmux(tmp_path, monkeypatch):
+    """세션 대상은 `=이름`, pane 대상은 `=이름:`이어야 한다(실제 tmux로 확인). 1단계에서 pane 대상에 `=이름`을 써서
+    대기 지시가 지목한 세션의 pane을 못 찾았다."""
+    import os
+    import shutil
+    if not shutil.which('tmux'):
+        pytest.skip('tmux unavailable')
+    import tmux_target
+    socket = 'fsh-target-test-' + os.urandom(6).hex()
+    conf = tmp_path / 'tmux.conf'
+    conf.write_text('set -g status off\n')
+    monkeypatch.setattr(tmux_runner, 'VT_TMUX_SOCKET', socket)
+    monkeypatch.setattr(tmux_runner, 'VT_TMUX_CONF', str(conf))
+    monkeypatch.setattr(tmux_target, 'TMUX_BASE', ['tmux', '-L', socket, '-f', str(conf)])
+    try:
+        assert tmux_runner.run(['new-session', '-d', '-s', 'app-1'])[0] == 0
+        assert tmux_runner.has_session('app-1') and not tmux_runner.has_session('app')
+        pane = tmux_target.get_locked_session_pane('app-1')
+        assert pane and pane.startswith('%')
+        assert tmux_target.get_locked_session_pane('app') is None, '접두사로 app-1을 잡으면 안 된다'
+        assert tmux_runner.run(['send-keys', '-t', tmux_runner.pane_target('app-1'), '-l', 'x'])[0] == 0
+    finally:
+        tmux_runner.run(['kill-server'])

@@ -145,6 +145,14 @@ def server_absent(rc: int, err: bytes) -> bool:
     return tail.startswith(b"error connecting to ") and tail.endswith(b" (No such file or directory)")
 
 
+def pane_target(name: str) -> str:
+    """세션의 활성 pane을 가리키는 `-t` 값(`=이름:`). 정확 매칭 `=이름`은 세션 대상(has-session·rename-session·
+    set-environment)에는 통하지만 pane 대상(display-message·send-keys·respawn-pane)에는 통하지 않는다 — tmux가
+    「can't find pane」으로 거절한다(3.7c 실측). 세션 id(`$3`)는 `$3:`."""
+    target = exact_target(name)
+    return target if target.endswith(":") or target.startswith("%") else target + ":"
+
+
 def has_session(name: str) -> bool:
     rc, _, _ = run(["has-session", "-t", exact_target(name)], timeout=1.0)
     return rc == 0

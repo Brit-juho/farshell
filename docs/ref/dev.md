@@ -31,7 +31,10 @@ mkdir -p ~/.local/bin
 ln -sf "$(pwd)/bin/fsh" ~/.local/bin/fsh
 ```
 
-Ensure `~/.local/bin` is on PATH. Save configuration through the shared writer,
+Ensure `~/.local/bin` is on PATH. The server does not depend on your shell config for Claude Code and Codex:
+`bin/fsh` appends the usual install folders (`~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `~/.bun/bin`)
+to the server's PATH, and `fsh doctor` shows which binaries the server will use (`server/cli_resolve.py`).
+Save configuration through the shared writer,
 which preserves existing keys and enforces mode 0600:
 
 ```bash

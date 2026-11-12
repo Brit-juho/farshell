@@ -5,15 +5,15 @@ import hashlib
 import json
 import re
 import shlex
-import shutil
 import time
+from pathlib import Path
 
 import zstandard
 
 import fsguard
 import store_lock
 import tmux_runner
-from .db import touch_activity, database, directory, identifier, uid, encode, changed, host_id, resume_target, Refused
+from .db import touch_activity, resume_ends_session, database, directory, identifier, uid, encode, changed, host_id, resume_target, Refused
 from . import permission_modes, execution_policy
 from . import inventory
 
@@ -37,11 +37,15 @@ def _finish(opid, state, result):
         changed(db, 'operation', opid)
 
 
-def resume_argv(provider, binary, root, native, mode=None, *, policy=None):
-    """The tmux command for a resume. `mode` is replayed only from the fixed allow-list, never as given."""
+def resume_argv(provider, binary, root, native, mode=None, *, policy=None, account_injected=False):
+    """The tmux command for a resume. `mode` is replayed only from the fixed allow-list, never as given.
+
+    `account_injected`: 그 대화가 기록된 계정을 세션 환경으로 이미 넣었다(session_profile — 장기 토큰·API 주소 계정의
+    인증 변수 포함). 그때는 인증 변수를 지우지 않는다 — 예전에는 언제나 CLAUDE_CODE_OAUTH_TOKEN 등을 지워서 그런 계정의
+    대화는 이어서 시작하면 인증에 실패했다."""
     env_key = 'CLAUDE_CONFIG_DIR' if provider == 'claude' else 'CODEX_HOME'
-    argv = ['env', '-u', 'ANTHROPIC_API_KEY', '-u', 'OPENAI_API_KEY', '-u', 'CLAUDE_CODE_OAUTH_TOKEN',
-            f'{env_key}={root}', binary]
+    unset = [] if account_injected else ['-u', 'ANTHROPIC_API_KEY', '-u', 'OPENAI_API_KEY', '-u', 'CLAUDE_CODE_OAUTH_TOKEN']
+    argv = ['env', *unset, f'{env_key}={root}', binary]
     argv += ['--resume', native] if provider == 'claude' else ['resume', native]
     if provider == 'claude':
         if not isinstance(mode, str) or mode not in permission_modes.REPLAYED:
@@ -56,18 +60,76 @@ def resume_argv(provider, binary, root, native, mode=None, *, policy=None):
     return argv
 
 
-def _launch_resume(name, cwd, argv):
-    """Keep the interactive shell alive after the CLI exits; never retry input."""
-    command = shlex.join(argv)
-    # PTY control bytes are interpreted before shell quoting (e.g. Ctrl-C).
-    if any(ord(char) < 32 or ord(char) == 127 for char in command):
+def _profile_for_root(root, provider):
+    """대화를 수집한 원본 폴더가 FarShell에 등록된 계정 폴더(`<state>/agent-profiles/<id>/<tool>`)면 그 계정 id."""
+    try:
+        import agent_profiles
+        base = agent_profiles.directory().resolve()
+        path = Path(root).resolve()
+    except (OSError, ValueError, RuntimeError, Exception):  # noqa: BLE001 — 레지스트리를 못 읽으면 계정 주입 없음
+        return None
+    if path.name != provider or path.parent.parent != base:
+        return None
+    return path.parent.name
+
+
+def _spawn_shell_session(name, cwd, selection, path_env):
+    """셸 하나로 세션을 만들고 그 pane id를 돌려준다. 계정을 고르면 새 세션을 계정으로 만들 때와 같은 주입을 쓴다."""
+    if selection is not None:
+        import session_profile
+        rc, _err, info = session_profile.spawn(name, 200, 50, str(cwd), selection)
+        if rc:
+            return None
+        if 'cleared_env' in (info or {}):
+            # 어느 계정으로 만들었는지 레지스트리에도 남긴다(새 세션 만들기와 같다) — 없으면 이 세션에서 위임한
+            # 자식이 `parent_profile_unverified`로 거절된다. 기록 실패가 실행을 막지는 않는다.
+            try:
+                session_profile.record(name, selection)
+            except Exception:  # noqa: BLE001
+                pass
+    else:
+        rc, _, _ = tmux_runner.run(['new-session', '-d', '-s', name, '-c', str(cwd)], timeout=5)
+        if rc:
+            return None
+    pane = tmux_runner.run_text(['display-message', '-p', '-t', tmux_runner.pane_target(name), '#{pane_id}'], timeout=2)
+    pane = (pane or '').strip()
+    return pane if re.fullmatch(r'%[0-9]+', pane) else None
+
+
+def _launch_exec(name, cwd, argv, path_env, selection):
+    """CLI가 끝나면 세션도 끝나게 띄운다. 셸 세션을 만든 뒤 그 pane에 「실패하면 화면을 남김」을 걸고 CLI로 교체한다 —
+    CLI가 곧바로 실패해도 오류 화면이 남아 사람이 읽을 수 있고, 정상 종료하면 pane과 세션이 닫힌다(자동 보관 대상)."""
+    pane = _spawn_shell_session(name, cwd, selection, path_env)
+    if not pane:
         return False
-    rc, output, _ = tmux_runner.run(
-        ['new-session', '-d', '-P', '-F', '#{pane_id}', '-s', name, '-c', str(cwd)], timeout=5)
+    rc, _, _ = tmux_runner.run(['set-option', '-p', '-t', pane, 'remain-on-exit', 'failed'], timeout=3)
     if rc:
         return False
-    pane = output.decode('utf-8', errors='replace').strip()
-    if not re.fullmatch(r'%[0-9]+', pane):
+    rc, _, _ = tmux_runner.run(['respawn-pane', '-k', '-t', pane, '-c', str(cwd), '--', *_with_path(argv, path_env)], timeout=5)
+    return rc == 0
+
+
+def _with_path(argv, path_env):
+    """CLI에 줄 PATH를 명령 자체에 싣는다(`env PATH=… <CLI>`). tmux 3.7c는 new-session·respawn-pane의 `-e PATH=…`를
+    무시하고 서버 전체 환경의 PATH를 쓴다(실측) — 그래서 환경 옵션으로는 넘길 수 없다."""
+    if not path_env:
+        return list(argv)
+    if argv and argv[0] == 'env':
+        # `env`의 `-u 이름` 옵션은 첫 `이름=값`보다 앞에 와야 한다 — 그 뒤에 오면 명령 이름으로 읽힌다.
+        i = 1
+        while i + 1 < len(argv) and argv[i] == '-u':
+            i += 2
+        return [*argv[:i], f'PATH={path_env}', *argv[i:]]
+    return ['env', f'PATH={path_env}', *argv]
+
+
+def _launch_in_shell(name, cwd, argv, path_env, selection):
+    """설정 「이어서 시작한 세션은 CLI가 끝나면 함께 종료」를 끈 경우 — 셸에 명령을 쳐서 CLI가 끝나도 셸이 남는다."""
+    command = shlex.join(_with_path(argv, path_env))
+    if any(ord(char) < 32 or ord(char) == 127 for char in command):
+        return False
+    pane = _spawn_shell_session(name, cwd, selection, path_env)
+    if not pane:
         return False
     rc, _, _ = tmux_runner.run(['send-keys', '-t', pane, '-l', '--', command], timeout=5)
     if rc:
@@ -114,9 +176,27 @@ def resume(cid, opid, *, sid=None):
                         if _exists(root, r['relative_path'], source['provider'], conversation['native_id'])]
         if not native_files:
             raise Refused('native_source_missing')
-        binary = shutil.which(conversation['provider'])
+        # CLI 실행 파일: 그 대화를 돌렸던 CLI에서 기록한 경로 → 그 PATH → 서버 PATH → 흔한 위치(cli_resolve).
+        import cli_resolve
+        with database() as db:
+            seen = db.execute('SELECT r.cli_path,r.cli_env_path FROM runtimes r JOIN conversation_executions e ON e.runtime_id=r.id'
+                              ' WHERE e.conversation_id=? AND (r.cli_path IS NOT NULL OR r.cli_env_path IS NOT NULL)'
+                              ' ORDER BY r.started DESC LIMIT 1', (cid,)).fetchone()
+            ends_with_cli = resume_ends_session(db)
+        recorded_path, recorded_env = (seen['cli_path'], seen['cli_env_path']) if seen else (None, None)
+        binary = cli_resolve.resolve(conversation['provider'], recorded_path, recorded_env)
         if not binary:
             raise Refused('cli_unavailable')
+        path_env = cli_resolve.launch_path(binary, recorded_env)
+        # 계정: 대화가 등록된 계정 폴더에서 기록됐으면 그 계정으로 띄운다(새 세션을 계정으로 만들 때와 같은 주입).
+        selection = None
+        profile_id = _profile_for_root(root, conversation['provider'])
+        if profile_id:
+            import session_profile
+            try:
+                selection = session_profile.select(profile_id)
+            except session_profile.SlotRefused as error:
+                raise Refused(error.code) from None
         native = conversation['native_id']
         if not re.fullmatch(r'[A-Za-z0-9_-]{1,160}', native):
             raise Refused('native_identity_unverified')
@@ -128,7 +208,7 @@ def resume(cid, opid, *, sid=None):
         else:
             policy, witnesses = execution_policy.read_codex(root, native_files, native)
             execution_policy.require_cli(binary)
-        argv = resume_argv(source['provider'], binary, root, native, mode, policy=policy)
+        argv = resume_argv(source['provider'], binary, root, native, mode, policy=policy, account_injected=selection is not None)
         placement = inventory.inspect_workspace(str(cwd))
         # 새 tmux 이름은 다른 생성 경로와 같은 규칙(대화를 시작한 폴더의 저장소 이름, 겹치면 -2·-3)이다.
         # 예전 `fsh-<32자리>`는 사람이 읽을 수 없었다. 이름은 열쇠가 아니다 — 이 실행은 런타임 신원으로 묶인다.
@@ -170,7 +250,10 @@ def resume(cid, opid, *, sid=None):
         except Refused:
             _finish(opid, 'needs_review', result)
             raise
-        if not _launch_resume(name, cwd, argv):
+        launched = (_launch_exec if ends_with_cli else _launch_in_shell)(name, cwd, argv, path_env, selection)
+        if launched:
+            tmux_runner.set_origin(name, 'local')   # 예전에는 빠져서 이어서 시작한 세션이 「직접 만듦」으로 보였다
+        if not launched:
             # A timeout can leave a created process: never retry this operation automatically.
             _finish(opid, 'needs_review', result)
             raise Refused('launch_needs_review', 503)
