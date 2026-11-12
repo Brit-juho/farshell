@@ -80,8 +80,38 @@ def run_text(args: list[str], timeout: float = 2.0) -> Optional[str]:
     return out.decode("utf-8", errors="replace")
 
 
+# 앱이 만들거나 바꾸는 tmux 세션 이름의 규칙 하나(생성·개명 입구에서만 검사한다 — 규칙 밖 이름을 가진
+# 기존 세션도 attach·kill은 할 수 있어야 한다). `#`이 들어가면 tmux가 `-s`·`-t` 값을 서식으로 확장해
+# `#(...)`가 셸 명령으로 실행된다. 첫 글자 `-`는 옵션으로 읽힌다.
+SESSION_NAME_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_-]{0,63}")
+
+
+def valid_session_name(name) -> bool:
+    return isinstance(name, str) and SESSION_NAME_RE.fullmatch(name) is not None
+
+
+def exact_target(name: str) -> str:
+    """tmux `-t` 값. 이름은 `=이름`으로 정확히 맞춘다(그냥 쓰면 접두사로도 맞아 `app`이 `app-1`을 가리킨다).
+    세션 id(`$3`)와 이미 `=`가 붙은 값은 그대로 둔다."""
+    if name.startswith(("$", "=")):
+        return name
+    return "=" + name
+
+
+def server_absent(rc: int, err: bytes) -> bool:
+    """tmux가 「서버가 없다」고 확정한 응답인가. 소켓 파일이 없을 때(재부팅 뒤 /tmp가 비었을 때)는
+    `no server running on`이 아니라 `error connecting to … (No such file or directory)`가 온다.
+    시간 초과·권한 오류 같은 다른 실패는 「모름」이다 — 없는 것으로 확정하지 않는다."""
+    if rc != 1 or not isinstance(err, (bytes, bytearray)):
+        return False
+    if b"no server running on" in err:
+        return True
+    tail = bytes(err).rstrip()
+    return tail.startswith(b"error connecting to ") and tail.endswith(b" (No such file or directory)")
+
+
 def has_session(name: str) -> bool:
-    rc, _, _ = run(["has-session", "-t", name], timeout=1.0)
+    rc, _, _ = run(["has-session", "-t", exact_target(name)], timeout=1.0)
     return rc == 0
 
 
@@ -103,7 +133,7 @@ def session_state(name: str) -> str:
     """
     rc, err = 0, b""
     for attempt in range(2):
-        rc, _, err = run(["has-session", "-t", name], timeout=3.0)
+        rc, _, err = run(["has-session", "-t", exact_target(name)], timeout=3.0)
         if rc == 0:
             return SESSION_EXISTS
         if rc == 1 and any(m in err for m in _MISSING_STDERR):

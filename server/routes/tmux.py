@@ -356,7 +356,6 @@ def _lineage_by_name(keys: dict[str, str]) -> dict[str, dict]:
     return out
 
 
-_PROFILE_NAME_RE = re.compile(r"[A-Za-z0-9_-]{1,80}")
 
 
 @router.post("/api/tmux/create")
@@ -372,6 +371,10 @@ async def create_tmux_session(request: Request):
     cols = body.get("cols", 80)
     rows = body.get("rows", 24)
     auto_open = bool(body.get("auto_open_on_mac", False))
+    # 이름을 그대로 쓰는 요청(unique_name 아님)은 계정 선택 여부와 상관없이 앱의 세션 이름 규칙을 지켜야 한다 —
+    # tmux는 `-s` 값을 서식으로 확장해서 `#(...)`가 셸 명령으로 실행된다. 이 라우트는 기계 토큰도 부를 수 있다.
+    if requested_name and not unique_name and not tmux_runner.valid_session_name(requested_name):
+        return JSONResponse({"error": "invalid_name", "reason": tr("세션 이름은 영문자·숫자·_·-만 쓸 수 있습니다(64자까지, 첫 글자는 -가 아님)")}, status_code=400)
 
     # N6(60 §4) 스니펫 「새 섹션」 — 원 세션과 같은 cwd로 새 세션을 열 때 씀.
     # fsguard(코드 뷰어 열람 경계)는 여기 적용하지 않는다: tmux 세션은 그냥 셸이고,
@@ -404,8 +407,6 @@ async def create_tmux_session(request: Request):
         if profile_ref != "none":
             # 계정을 주입하는 생성은 tmux 설정 파일(`source-file`)을 거친다 — tmux는 `-s` 값을 서식으로 확장하므로
             # (`#{session_id}` 등) 앱의 세션 이름 규칙 밖 이름은 세션이 남기 전에 거절한다. 크기도 정수 범위만.
-            if requested_name and not unique_name and not _PROFILE_NAME_RE.fullmatch(requested_name):
-                return JSONResponse({"error": "invalid_name", "reason": tr("세션 이름은 영문자·숫자·_·-만 쓸 수 있습니다(80자까지)")}, status_code=400)
             for dimension in (cols, rows):
                 if type(dimension) is not int or not 1 <= dimension <= 1000:
                     return JSONResponse({"error": "invalid_dimensions", "reason": tr("cols·rows는 1에서 1000 사이의 정수여야 합니다")}, status_code=400)
@@ -550,7 +551,7 @@ async def open_tmux_on_mac(request: Request):
         return JSONResponse({"ok": False, "error": tr("이미 여는 중")}, status_code=409)
     _mac_open_locks.add(tmux_name)
     try:
-        rc, _, _ = await tmux_runner.run_async(["has-session", "-t", tmux_name], timeout=5.0)
+        rc, _, _ = await tmux_runner.run_async(["has-session", "-t", tmux_runner.exact_target(tmux_name)], timeout=5.0)
         if rc != 0:
             return JSONResponse({"ok": False, "error": tr("tmux 세션을 찾을 수 없음")}, status_code=404)
 

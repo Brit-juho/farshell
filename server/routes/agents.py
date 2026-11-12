@@ -51,9 +51,40 @@ def _public_active(active: list) -> list:
     return [agent_status.public_entry(e) for e in active]
 
 
+def _is_relayed(conn) -> bool:
+    """다른 맥이 중계로 연 연결인가. `vt_relay`는 서버 코드(routes/peer_relay.py)만 scope에 심을 수 있다."""
+    return bool(getattr(conn, "scope", {}).get("vt_relay"))
+
+
+def _for_remote(msg: dict) -> dict:
+    """다른 맥으로 나갈 메시지 — 상태 엔트리마다 이 맥 전용 필드를 뺀다(agent_status.remote_view).
+    엔트리가 실리는 키는 셋이다: 단건 `state`, 전체 `all`(이름→엔트리), 도구 실행 중 `active`(목록)."""
+    out = dict(msg)
+    if isinstance(out.get("state"), dict):
+        out["state"] = agent_status.remote_view(out["state"])
+    if isinstance(out.get("all"), dict):
+        out["all"] = {k: agent_status.remote_view(v) if isinstance(v, dict) else v for k, v in out["all"].items()}
+    if isinstance(out.get("active"), list):
+        out["active"] = [agent_status.remote_view(v) if isinstance(v, dict) else v for v in out["active"]]
+    return out
+
+
+def _view_for(conn, msg: dict) -> dict:
+    return _for_remote(msg) if _is_relayed(conn) else msg
+
+
 async def _broadcast_agent(msg: dict) -> None:
-    # 동시에 보내고 2초 안에 못 받는 클라이언트는 끊는다(resilience/wsutil.py).
-    await wsutil.broadcast(_agent_event_clients, msg)
+    # 동시에 보내고 2초 안에 못 받는 클라이언트는 끊는다(resilience/wsutil.py). 다른 맥이 중계로 연 소켓에는
+    # 이 맥 전용 필드를 뺀 메시지를 따로 보낸다 — 같은 집합에 같은 메시지를 보내면 원격 필터가 생기지 않는다.
+    relayed = {ws for ws in _agent_event_clients if _is_relayed(ws)}
+    local = _agent_event_clients - relayed
+    for group, payload in ((local, msg), (relayed, _for_remote(msg) if relayed else None)):
+        if not group:
+            continue
+        before = set(group)
+        await wsutil.broadcast(group, payload)
+        # broadcast는 못 받은 소켓을 넘긴 집합에서 지운다 — 원래 집합에서도 지운다.
+        _agent_event_clients.difference_update(before - group)
 
 
 # 2026-10-13 — 훅 요청 밖에서 일어난 전이(화면 감지·중단 문구·입력
@@ -656,10 +687,10 @@ async def agent_report(request: Request):
 
 
 @router.get("/api/agent/status")
-async def agent_status_get():
+async def agent_status_get(request: Request):
     # 기존 필드(active/all)는 그대로 둔다 — 하위호환. A1에서 각 엔트리에
     # status가 추가됐고, 소비자는 그걸 그대로 쓰면 된다(파생 금지).
-    return {"active": _public_active(agent_status.all_active()), "all": _public_state(agent_status.visible_state())}
+    return _view_for(request, {"active": _public_active(agent_status.all_active()), "all": _public_state(agent_status.visible_state())})
 
 
 class AckRequest(BaseModel):
@@ -718,10 +749,10 @@ async def ws_agent(websocket: WebSocket):
                 # 묶는다 — get_state()가 sweep()을 태우므로 조회 없는 서버에서도
                 # 만료가 제때 도는 부수 효과가 있다. detect_all()(프로세스 스캔)은
                 # 여기 넣지 않는다(비싸다 — 그건 agents_change 때만).
-                await websocket.send_json({
+                await websocket.send_json(_view_for(websocket, {
                     "type": "agent_status_sync",
                     "all": _public_state(agent_status.visible_state()),
-                })
+                }))
             except Exception:
                 return
 
@@ -733,14 +764,14 @@ async def ws_agent(websocket: WebSocket):
         # 빠진 detect_all()만 보내 레일(폴링)과 탭 마크(스냅샷)가 어긋날 수 있었다.
         agents_now = await asyncio.to_thread(_agents_now)
         _agents_last = agents_now
-        await websocket.send_json({
+        await websocket.send_json(_view_for(websocket, {
             "type": "agent_snapshot",
             "active": _public_active(agent_status.all_active()),
             # A1: 재접속·새로고침 시 done/waiting까지 복원되려면 active(=도구
             # 실행 중)만으론 부족하다 — 상태를 가진 엔트리 전체를 함께 보낸다.
             "all": _public_state(agent_status.visible_state()),
             "agents": agents_now,
-        })
+        }))
         while True:
             raw = await websocket.receive_text()
             try:
