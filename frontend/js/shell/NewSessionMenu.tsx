@@ -29,7 +29,12 @@ export interface NewSessionDeps {
   createPlain: () => Promise<unknown> | unknown;
   /** 다른 맥을 보고 있으면 계정 줄을 숨긴다(그 맥의 계정이 아니다). */
   relayed: boolean;
-  accounts?: { line: () => string | null; openOnce: (anchor: HTMLElement | null, onPick: (id: string) => void) => void } | null;
+  /** 계정 줄. line은 지금 캐시로 읽은 글(없으면 줄을 숨긴다), refresh는 낡은 목록을 다시 받는다 — 받으면 줄을 다시 그린다. */
+  accounts?: {
+    line: () => string | null;
+    refresh?: () => Promise<unknown>;
+    openOnce: (anchor: HTMLElement | null, onPick: (id: string) => void) => void;
+  } | null;
 }
 
 export interface RepoChoice { key: string; path: string; label: string; branch: string | null; linked: boolean; sessions: number }
@@ -82,9 +87,14 @@ function Menu(p: { deps: NewSessionDeps; close: () => void }) {
       .then((d) => { if (d && typeof d.name === 'string') setNames({ ...names(), [key]: d.name }); })
       .catch(() => { /* 미리보기는 덤이다 — 실패해도 만들기는 된다 */ });
   };
+  // 계정 목록은 캐시(15초)라 처음 열 때 비어 있을 수 있다 — 받아 오면 줄을 다시 그린다(예전에는 다음에 열 때야 보였다).
+  const [accountLine, setAccountLine] = createSignal<string | null>(p.deps.relayed ? null : p.deps.accounts?.line() ?? null);
   onMount(() => {
     search?.focus();
     preview('__home__', null);
+    if (!p.deps.relayed && p.deps.accounts?.refresh) {
+      p.deps.accounts.refresh().then(() => setAccountLine(p.deps.accounts?.line() ?? null)).catch(() => { /* 계정 줄은 덤이다 */ });
+    }
     p.deps.getJson('/api/repos').then((d) => setChoices(repoChoices(d))).catch((e) => { setChoices([]); setError(e?.message || ''); });
   });
   // 보이는 저장소만 이름을 묻는다(검색으로 바뀌면 새로 보이는 것만).
@@ -136,9 +146,9 @@ function Menu(p: { deps: NewSessionDeps; close: () => void }) {
       <div class="vt-menu-sep" role="separator" />
       <Item iconHtml={shellIcon('home', 15, 2)} label={t('홈 폴더')} name={names().__home__ || null} onRun={() => run(() => p.deps.createTmux())} />
       <Item iconHtml={icon('terminal', 15, 2)} label={t('일반 터미널')} sub={t('tmux 아님 · 화면을 닫으면 끝남')} onRun={() => run(() => p.deps.createPlain())} />
-      <Show when={!p.deps.relayed && p.deps.accounts?.line()}>
+      <Show when={!p.deps.relayed && accountLine()}>
         <div class="vt-menu-sep" role="separator" />
-        <Item iconHtml={icon('user', 15, 2)} label={t('이번만 다른 계정으로')} sub={p.deps.accounts!.line()} caret
+        <Item iconHtml={icon('user', 15, 2)} label={t('이번만 다른 계정으로')} sub={accountLine()!} caret
           onRun={() => { const anchor = p.deps.anchor; p.close(); p.deps.accounts!.openOnce(anchor, (id) => { void p.deps.createTmux({ profile: id }); }); }} />
       </Show>
       <Show when={!p.deps.relayed}><div class="vt-nsm-foot">{t('오른쪽 회색 글자가 새 세션 이름입니다.')}</div></Show>

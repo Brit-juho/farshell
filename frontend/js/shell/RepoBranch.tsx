@@ -83,8 +83,8 @@ export function RepoBranch(p: RepoBranchProps) {
         <span class="vt-rg-body vt-rg-a">
           <span class="vt-rg-rn">{title()}</span>
           <Show when={g().mainBranch}>
-            <span class="vt-rg-rb" data-tip={t('메인 작업 트리의 브랜치')} data-tip-side="right">
-              <span innerHTML={icon('git-branch', 12, 2)} />{g().mainBranch}
+            <span class="vt-rg-rb" data-tip={g().mainBranch!} data-tip-sub={t('메인 작업 트리의 브랜치')} data-tip-side="right">
+              <span innerHTML={icon('git-branch', 12, 2)} /><span class="vt-rg-rbn">{g().mainBranch}</span>
             </span>
           </Show>
           <span class="vt-rg-sp" />

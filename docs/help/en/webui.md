@@ -88,7 +88,7 @@ Open "Ended N" at the bottom of a repository to see the sessions that ended ther
 | Drag a row to a pane edge | Splits in that direction — this is how you group sessions (touch devices can also use the menu items below) |
 | Row menu "Open to the right", "Open below" | Shown only on touch devices at least 720px wide (tablets). Splits the active pane in that direction and puts the session there (a session from another view is moved over, and a view left empty is closed). Not available on phones under 720px |
 | Pane `×` | The session becomes "Not open" in the sidebar (tmux keeps running). The pane stays as an empty pane |
-| Close on a group header | Closes only the group view. Its layout is remembered, and you reopen it from the sidebar |
+| A session in a split-screen group | A small pane mark sits next to the row name. The row menu's "Open the whole group" (or clicking a row of a closed group) opens the whole group. Closing the group's last pane closes the group view and its layout is remembered |
 | Row `⋯` or right-click | Open/close · Rename · Open on Mac · Connected screens · agent sharing items (below) · **Kill** |
 
 - **Kill** ends the tmux session, and the claude or shell inside it, with no undo. A confirmation always appears,
@@ -123,7 +123,7 @@ Open "Ended N" at the bottom of a repository to see the sessions that ended ther
     read & write, the earlier write approval comes back without re-approval. To block it permanently, revoke write access or unshare.
     This feature isn't available on screens that show another Mac, and a session whose name is in Korean can't be shared (rename it in English).
     Approving and sharing don't work on a screen opened with a `?token=` link (password sign-in is required).
-- The sliders icon in the Sessions view header opens **Rail settings**: show the "Needs attention" section, show by origin (other Macs, external), and show repos.
+- The sliders icon in the Sessions view header opens the **session list settings** sheet. The "Repository" tab picks which repositories the list shows, the "View" tab shows or hides the "Needs attention" section and sessions by origin (other Macs, external) on this device, and the "Cleanup" tab holds this Mac's session record settings: auto-archive ended sessions (never deletes), name sessions after the repository when a CLI starts, and end a resumed session when its CLI exits. Changing "Cleanup" asks for your password again.
 
 ## 3. Where new sessions start
 

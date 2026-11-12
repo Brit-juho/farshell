@@ -71,4 +71,4 @@ export { normalizeHome } from '../../js/shell/rail-fetch.js';
 export { sessionLines, kidLines, worktreeLines } from '../../js/shell/RepoBranch.js';
 export { groupArchive, mergeCatalogPage } from '../../js/shell/ArchiveView.js';
 export { onSheetKeyDown } from '../../js/shell/sheet-keys.js';
-export { repoChoices, filterChoices } from '../../js/shell/NewSessionMenu.js';
+export { repoChoices, filterChoices, openNewSessionMenu } from '../../js/shell/NewSessionMenu.js';

@@ -81,3 +81,23 @@ test('교차 검토 — 보관함 조건을 바꾸면 커서를 지우고, 다�
   assert.match(read('frontend', 'js', 'shell', 'NewSessionMenu.tsx'), /if \(p\.deps\.relayed \|\| asked\.has\(key\)\) return;/);
   assert.match(read('frontend', 'js', 'shell', 'RepoVisibility.tsx'), /aria-labelledby=\{\(props\.tabs \|\| \[\]\)\.length \? 'vt-repovis-tab-repos'/);
 });
+
+test('새 세션 메뉴 — 계정 목록이 처음 열 때 비어 있어도 받아 오면 「이번만 다른 계정으로」 줄이 나타난다', async () => {
+  const env = await loadSolidBuild(); _envs.push(env);
+  let line = null;
+  let resolveRefresh;
+  env.openNewSessionMenu({
+    anchor: null, relayed: false,
+    getJson: async () => ({ repos: [] }),
+    createTmux: () => {}, createPlain: () => {},
+    accounts: { line: () => line, refresh: () => new Promise((r) => { resolveRefresh = r; }), openOnce: () => {} },
+  });
+  const menu = env.document.getElementById('add-menu');
+  const has = () => Array.from(menu.querySelectorAll('.vt-menu-item')).some((x) => x.textContent.includes('이번만 다른 계정으로'));
+  assert.ok(!has(), '캐시가 비면 처음에는 없다');
+  line = '기본: alice';
+  resolveRefresh();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.ok(has(), '받아 오면 다시 그린다');
+  env.openNewSessionMenu({});   // 열린 메뉴를 닫는다(같은 버튼 두 번)
+});

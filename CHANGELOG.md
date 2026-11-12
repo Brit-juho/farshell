@@ -35,6 +35,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Conversation titles are refreshed as the transcript grows (Claude writes its title later in the file; Codex conversations take their first prompt).
 
 ### Fixed
+- On the rail, a selected or waiting session cell raises its secondary text one step on the tint (muted to sub, sub to text, and the amber waiting text to text) so it keeps 4.5:1 contrast, as the old rows did.
 - **Claude Code's own worktrees (`.claude/worktrees/<name>`) show up** in the session location and the repository list, and the catalog places their sessions under the repository. Files inside stay closed to the browser.
 - **A session's repository is no longer lost to a passing Git error** — the first placement is retried, and a session first seen outside a repository moves once into the repository it later works in. Session rows now carry that place (`home`) and the visible name.
 - The session row no longer flips between the CLI's and the terminal's location when Git is briefly busy; same-named repositories are told apart only by the ones on screen.
