@@ -302,10 +302,9 @@ async def rename_session(session_id: str, request: Request):
     # 기기·원격 호스트가 서로 다른 이름을 보게 되는 두 번째 진실이 생긴다.
     tmux_renamed = False
     if info.tmux_name and info.tmux_name != name:
-        import re
         import tmux_runner
-        # tmux 세션명 안전 문자 검증 (영숫자, dash, underscore만 허용)
-        if not re.fullmatch(r"[A-Za-z0-9_\-]+", name):
+        # 앱의 세션 이름 규칙(tmux_runner.SESSION_NAME_RE) — 서식 확장·옵션 오인 방지, 64자 상한.
+        if not tmux_runner.valid_session_name(name):
             return JSONResponse(
                 {"error": "tmux session name must be alphanumeric/dash/underscore only", "name": name},
                 status_code=400,
@@ -317,7 +316,7 @@ async def rename_session(session_id: str, request: Request):
                 status_code=409,
             )
         rc, _, err = await tmux_runner.run_async(
-            ["rename-session", "-t", info.tmux_name, name],
+            ["rename-session", "-t", tmux_runner.exact_target(info.tmux_name), name],
             timeout=2.0,
         )
         if rc != 0:

@@ -92,7 +92,8 @@ def _fake_tmux(monkeypatch, existing):
 
     def fake_run(args, timeout=None):
         if args[0] == "has-session":
-            return (0 if args[args.index("-t") + 1] in existing else 1, b"", b"")
+            # 이름 조회는 `=이름` 정확 매칭으로 온다(tmux_runner.exact_target).
+            return (0 if args[args.index("-t") + 1].removeprefix("=") in existing else 1, b"", b"")
         if args[0] == "new-session":
             name = args[args.index("-s") + 1]
             created.append(name)
