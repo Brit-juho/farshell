@@ -11,16 +11,17 @@ export {
 export {
   formatRelativeTime, statusSentence, stateKeyword, defaultRailCollapsed,
   buildRailLists, readRailPrefs, RAIL_PREF_DEFAULTS, ATTENTION_SHOW_KEY, ATTENTION_COLLAPSED_KEY, originShowKey,
-  HIDEABLE_ORIGINS, normalizeOrigin, originShort, originLabel, normalizeKind, normalizeBadge, rowMenuItems, rowSummary, runRowMenu,
-  worktreeIconName, diffLabel, KIND_LABEL, BADGE_LABEL, normalizeShare, shareSentence, normalizeProfile, profileLabel, groupSessionRows,
-  normalizeLineage, lineageLabel, buildSessionTree, kidsProgress, stepInOrder, parseNameList,
-  ORDER_KEY, LINEAGE_KEY, encodeOrder, encodeLineagePrefs,
-  splitRunning, pickRecentEnded, parseRailView, encodeRailView, toggleGroupCollapsed, ORIGIN_SHORT,
+  HIDEABLE_ORIGINS, normalizeOrigin, originLabel, normalizeKind, normalizeBadge, rowMenuItems, rowSummary, runRowMenu,
+  worktreeIconName, diffLabel, KIND_LABEL, BADGE_LABEL, normalizeShare, shareSentence, normalizeProfile, profileLabel,
+  normalizeLineage, lineageLabel, kidsProgress, parseNameList,
+  LINEAGE_KEY, encodeLineagePrefs,
+  splitRunning, parseRailView, encodeRailView, toggleGroupCollapsed,
 } from '../../js/shell/rail-data.js';
 export { ringSvg, subBadge } from '../../js/shell/compact-mark.js';
 export { logout, clearAppCache, pageAssetUrls } from '../../js/shell/app-session.js';
 export { collectSessionRows } from '../../js/shell/rail-fetch.js';
-export { mountRow, mountMenu, mountNativeChildren, mountFleetRow, mountViewGroup, mountHoverCard, mountSessionNode, mountRepoBranch } from './row-mount.js';
+export { mountRow, mountMenu, mountNativeChildren, mountHoverCard, mountSessionNode, mountRepoBranch } from './row-mount.js';
+export { tilesOf, mountFleetTile } from './row-mount.js';
 export {
   buildHoverCard, shortenPath, tildePath, NATIVE_MAX, KIDS_MAX, BODY_MAX_LINES,
 } from '../../js/shell/rail-hover-card.js';
@@ -43,7 +44,7 @@ export {
   buildHostMenu, resolveActiveHost, hostDetail, reasonLabel, LOCAL_HOST,
 } from '../../js/shell/host-data.js';
 export {
-  deleteWorktreeRow, fetchDiffCount, diffCountStale, cachedDiffCount, createDiffWatcher, msUntilDiffRefresh, answerSessionPrompt,
+  deleteWorktreeRow, fetchDiffCount, diffCountStale, cachedDiffCount, createDiffWatcher, msUntilDiffRefresh,
 } from '../../js/shell/rail-fetch.js';
 export {
   ACTIVITIES, TOOL_ACTIVITIES, availableActivities, activityById, activityByPanelId, badgeTip, stepActivityIndex,
@@ -68,5 +69,6 @@ export { buildRepoTree, flattenRows, endedActivity, OUTSIDE_KEY } from '../../js
 export { nodeLine, kidLabel } from '../../js/shell/rail-data.js';
 export { normalizeHome } from '../../js/shell/rail-fetch.js';
 export { sessionLines, kidLines, worktreeLines } from '../../js/shell/RepoBranch.js';
-export { groupArchive } from '../../js/shell/ArchiveView.js';
+export { groupArchive, mergeCatalogPage } from '../../js/shell/ArchiveView.js';
+export { onSheetKeyDown } from '../../js/shell/sheet-keys.js';
 export { repoChoices, filterChoices } from '../../js/shell/NewSessionMenu.js';

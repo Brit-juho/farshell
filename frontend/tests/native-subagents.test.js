@@ -22,7 +22,7 @@ test('native summaries whitelist fields, reject duplicate and unsafe ids and pre
   assert.equal(r.items.length, 1);
   assert.equal(r.items[0].state, 'idle');
   assert.equal(r.items[0]._transcript, undefined);
-  assert.equal(mod.nativeStateLabel('idle'), '유휴');
+  assert.equal(mod.nativeStateLabel('idle'), '대기', '「유휴」는 쓰지 않는다 — Codex 자식은 턴 사이마다 idle이다');
   assert.equal(r.limited, true);
 });
 
@@ -100,4 +100,19 @@ test('같은 label 이 둘 이상이면 시작 시각 순으로 번호를 매기
   assert.equal(o.get('a'), 1);
   assert.equal(o.get('b'), 2);
   assert.equal(o.has('c'), false);
+});
+
+
+test('보이는 행끼리만 번호를 매긴다 — 접힌 끝난 행이 끼면 보이는 두 행이 #2·#3처럼 떨어진다', async () => {
+  const { mod } = await load('shell/native-subagents.js');
+  const r = mod.normalizeSubagents({ items: [
+    { id: 'x', label: 'general-purpose', state: 'done', started_at: 1 },
+    { id: 'y', label: 'general-purpose', state: 'working', started_at: 2, cli: 'codex' },
+    { id: 'z', label: 'general-purpose', state: 'idle', started_at: 3, cli: 'codex' },
+  ] });
+  const visible = r.items.filter((c) => c.state !== 'done');
+  const o = mod.sameLabelOrdinals(visible);
+  assert.equal(o.get('y'), 1);
+  assert.equal(o.get('z'), 2);
+  assert.equal(r.items[1].cli, 'codex');
 });

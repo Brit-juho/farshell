@@ -164,20 +164,6 @@ test('compact — 공용 data-tip 툴팁을 달지 않는다(호버 카드가 �
   assert.strictEqual(wide.root.querySelector('.vt-rg-node').getAttribute('data-card-key'), null, '펼침에는 카드 열쇠가 없다');
 });
 
-test('answerSessionPrompt — 키 + Enter, esc는 ESC 바이트, promptId가 있으면 함께, 실패는 삼킨다', async () => {
-  const env = await loadSolidBuild();
-  _envs.push(env);
-  const sent = [];
-  const deps = { vtFetch: (path, opts) => { sent.push([path, JSON.parse(opts.body)]); return Promise.reject(new Error('409')); } };
-  await env.answerSessionPrompt(deps, { sessionId: 's/1', promptId: 'p9' }, '1');
-  await env.answerSessionPrompt(deps, { sessionId: 's2', promptId: null }, 'esc');
-  await env.answerSessionPrompt(deps, { sessionId: '', promptId: null }, '1');
-  assert.deepStrictEqual(sent, [
-    ['/api/sessions/s%2F1/keys', { text: '1\r', prompt_id: 'p9' }],
-    ['/api/sessions/s2/keys', { text: '\x1b' }],
-  ], '세션 id가 없으면 보내지 않는다');
-});
-
 test('행 메뉴가 뷰포트 아래로 넘치면 안으로 당긴다 — 가로 폰(높이 331px) 실측 2026-10-06', async () => {
   const env = await loadSolidBuild();
   _envs.push(env);
@@ -231,39 +217,3 @@ test('다른 맥에서 만든 칸 — 1줄 이름 옆에 아이콘(툴팁 「다
   assert.match(origin.getAttribute('data-tip'), /다른 맥/);
 });
 
-test('묶음 머리 — 접기 캐럿이 있으면 aria-expanded로 말하고, 접으면 구성원 행을 그리지 않는다(머리·개수는 남는다)', async () => {
-  const env = await loadSolidBuild();
-  _envs.push(env);
-  const { document } = env;
-  const root = document.createElement('div');
-  document.body.appendChild(root);
-  let collapsed = false;
-  let opened = 0;
-  const render = () => {
-    root.replaceChildren();
-    env.mountViewGroup(root, { label: 'api · web', rows: ['a', 'b'], collapsed: () => collapsed, onToggle: () => { collapsed = !collapsed; render(); }, onOpen: () => { opened += 1; } });
-  };
-  render();
-  const toggle = () => root.querySelector('.vt-view-group-toggle');
-  assert.strictEqual(toggle().getAttribute('aria-expanded'), 'true');
-  assert.strictEqual(toggle().getAttribute('aria-label'), 'api · web 묶음 접기');
-  assert.strictEqual(root.querySelectorAll('.member').length, 2);
-  toggle().click();
-  assert.strictEqual(toggle().getAttribute('aria-expanded'), 'false');
-  assert.ok(toggle().classList.contains('collapsed'));
-  assert.strictEqual(root.querySelectorAll('.member').length, 0);
-  assert.strictEqual(root.querySelector('.vt-view-group-title').textContent, 'api · web', '머리는 남는다');
-  assert.strictEqual(opened, 0, '접기는 묶음 열기와 다른 단추다');
-  root.querySelector('.vt-view-group-title').click();
-  assert.strictEqual(opened, 1);
-});
-
-test('묶음 머리 — 접기를 넘기지 않으면(폰 Fleet) 캐럿이 없고 행은 늘 보인다', async () => {
-  const env = await loadSolidBuild();
-  _envs.push(env);
-  const root = env.document.createElement('div');
-  env.document.body.appendChild(root);
-  env.mountViewGroup(root, { label: 'g', rows: ['a', 'b'] });
-  assert.strictEqual(root.querySelector('.vt-view-group-toggle'), null);
-  assert.strictEqual(root.querySelectorAll('.member').length, 2);
-});

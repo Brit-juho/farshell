@@ -124,7 +124,7 @@ export function SessionNode(props: {
               {(l) => (
                 <span class="vt-rg-sm" data-tone={l().tone}
                   data-tip={state() === 'waiting' && row().question ? row().question! : undefined} data-tip-side="right">
-                  {l().text}<Show when={l().detail}><span class="vt-rg-detail">{' '}{l().detail}</span></Show>
+                  <span class="vt-rg-sm-t">{l().text}</span><Show when={l().detail}><span class="vt-rg-detail">{l().detail}</span></Show>
                 </span>
               )}
             </Show>

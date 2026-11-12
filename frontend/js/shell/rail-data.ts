@@ -143,75 +143,10 @@ export function lineageLabel(l: Pick<Lineage, 'state' | 'outcome'>): string {
   return t('진행 중');
 }
 
-export type RailSort = 'name' | 'manual';
-
-export interface TreeEntry<T> {
-  row: T;
-  /** 열린 위임의 하위 세션(진행 중·보고됨) — 만든 순서. */
-  kids: T[];
-  /** 닫힌 위임의 하위 세션 — 「닫힌 하위 N」으로 접혀 있다. */
-  closedKids: T[];
-}
-
-/**
- * 묶음에 속하지 않은 행들을 부모 → 자식 트리로 묶는다.
- * - 자식은 이름순·수동 정렬과 상관없이 부모 바로 밑에, 만든 순서로 선다.
- * - 부모가 목록에 없거나(사라짐·숨김) 고아면 자식은 최상위로 올라온다.
- * - 최상위 순서: `name`은 이름순, `manual`은 저장된 순서(모르는 이름은 뒤에, 이름순).
- */
-export function buildSessionTree<T extends Pick<SessionRow, 'name' | 'tmuxName'> & { lineage?: Lineage | null }>(
-  rows: T[], sort: RailSort = 'name', order: string[] = [],
-): TreeEntry<T>[] {
-  const byTmux = new Map<string, T>();
-  for (const r of rows) if (r.tmuxName) byTmux.set(r.tmuxName, r);
-  const kidsOf = new Map<T, T[]>();
-  const top: T[] = [];
-  for (const r of rows) {
-    const l = r.lineage;
-    const parent = l && l.state !== 'orphaned' && l.parent ? byTmux.get(l.parent) : undefined;
-    // 자기 자신을 부모로 가리키는 값이나 부모가 다시 자식인 값은 서버가 만들지 않지만, 받아도 평평하게 그린다.
-    if (parent && parent !== r && !parent.lineage?.parent) {
-      const list = kidsOf.get(parent) || [];
-      list.push(r);
-      kidsOf.set(parent, list);
-    } else {
-      top.push(r);
-    }
-  }
-  const rank = new Map(order.map((n, i) => [n, i]));
-  const key = (r: T) => r.tmuxName || r.name;
-  top.sort((a, b) => {
-    if (sort === 'manual') {
-      const ra = rank.get(key(a)) ?? Infinity, rb = rank.get(key(b)) ?? Infinity;
-      if (ra !== rb) return ra - rb;
-    }
-    return a.name.localeCompare(b.name);
-  });
-  const byCreated = (a: T, b: T) => (a.lineage?.createdAt || 0) - (b.lineage?.createdAt || 0);
-  return top.map((row) => {
-    const all = (kidsOf.get(row) || []).sort(byCreated);
-    return {
-      row,
-      kids: all.filter((k) => k.lineage!.state === 'running' || k.lineage!.state === 'reported'),
-      closedKids: all.filter((k) => k.lineage!.state === 'closed'),
-    };
-  });
-}
-
 /** 부모 행의 칩: 「하위 보고 1/2」 — 열린 하위 중 보고한 수 / 열린 하위 수. 열린 하위가 없으면 null. */
 export function kidsProgress<T extends { lineage?: Lineage | null }>(kids: T[]): { reported: number; open: number } | null {
   if (kids.length === 0) return null;
   return { reported: kids.filter((k) => k.lineage?.state === 'reported').length, open: kids.length };
-}
-
-/** 위/아래로 한 칸. 끝이면 그대로. */
-export function stepInOrder(current: string[], name: string, dir: -1 | 1): string[] {
-  const i = current.indexOf(name);
-  const j = i + dir;
-  if (i < 0 || j < 0 || j >= current.length) return current.slice();
-  const out = current.slice();
-  [out[i], out[j]] = [out[j], out[i]];
-  return out;
 }
 
 /** 설정 값(JSON 문자열) → 이름 배열. 깨졌으면 빈 배열. */
@@ -233,20 +168,7 @@ export const ORIGIN_LABEL: Record<Origin, string> = {
   peer: t('다른 맥에서 만듦'),
   external: t('직접 만듦 (CLI·tmux)'),
 };
-/** 행 3줄에 아이콘과 함께 쓰는 짧은 글(시안 D02). 긴 문장(ORIGIN_LABEL)은 툴팁과 스크린 리더가 읽는다.
- * 만든 맥의 이름이 기록된 세션은 `originShort`가 「{host}에서 만듦」으로 바꾼다. 이 상수는 이름 기록이 없을 때의 문구다. */
-export const ORIGIN_SHORT: Record<Exclude<Origin, 'local'>, string> = {
-  peer: t('다른 맥에서 만듦'),
-  external: t('직접 만듦'),
-};
 
-/** 만든 곳 문구. peer 세션에 만든 맥의 이름(`originHost`)이 기록돼 있으면 「{host}에서 만듦」, 없으면(옛 세션·옛 서버) 「다른 맥에서 만듦」 그대로. */
-export function originShort(origin: Origin, host?: string | null): string {
-  if (origin === 'local') return '';
-  const h = typeof host === 'string' ? host.trim() : '';
-  if (origin === 'peer' && h) return t('{host}에서 만듦', { host: h });
-  return ORIGIN_SHORT[origin];
-}
 export function originLabel(origin: Origin, host?: string | null): string {
   const h = typeof host === 'string' ? host.trim() : '';
   return origin === 'peer' && h ? t('{host}에서 만듦', { host: h }) : ORIGIN_LABEL[origin];
@@ -393,11 +315,9 @@ export const RAIL_PREF_DEFAULTS: Record<string, boolean> = {
   [originShowKey('external')]: true,
 };
 
-// 정렬(전역 — 기기마다 다르면 헷갈린다)과 계보 접기(기기별)를 각각 설정 키 하나에 JSON으로 묶는다.
-// core/settings.js의 스키마 줄을 아끼려는 것이다 — 초기 번들(app.js + core.js)이 300KiB 상한에 닿아 있고
-// 그 파일은 주석까지 번들에 남는다. 그래서 설명은 여기에 둔다.
-/** 전역 설정 하나에 `{"sort":"name"|"manual","order":[이름…]}`. */
-export const ORDER_KEY = 'rail.order';
+// 계보 접기(기기별)를 설정 키 하나에 JSON으로 묶는다. core/settings.js의 스키마 줄을 아끼려는 것이다 — 초기 번들이
+// 300KiB 상한에 닿아 있고 그 파일은 주석까지 번들에 남는다. 그래서 설명은 여기에 둔다.
+// (예전 정렬 설정 `rail.order`는 세션 로직 점검 단계 5에서 읽지 않는다 — 목록은 저장소 묶음·최근 활동순뿐이다.)
 /** 기기별 설정 하나에 `{"collapsed":[하위를 접은 부모…],"closedOpen":[닫힌 하위를 펼친 부모…]}`. 기본은 펼침·접힘. */
 export const LINEAGE_KEY = 'rail.lineage';
 
@@ -406,39 +326,22 @@ function parseObj(v: unknown): Record<string, unknown> {
   try { const o = JSON.parse(v); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch { return {}; }
 }
 
-/** 정렬 설정 값 만들기 — Rail·Fleet가 저장할 때 쓴다. */
-export function encodeOrder(sort: RailSort, order: string[]): string {
-  return JSON.stringify({ sort, order: order.slice(0, 500) });
-}
 export function encodeLineagePrefs(collapsed: string[], closedOpen: string[]): string {
   return JSON.stringify({ collapsed: collapsed.slice(0, 200), closedOpen: closedOpen.slice(0, 200) });
 }
 
-/** 기기별 설정 하나에 `{"byRepo":bool,"recent":N,"recentCollapsed":bool,"runningCollapsed":bool,"groupsCollapsed":[묶음 id…]}`.
- * 키를 아끼려고 JSON 한 덩어리로 묶는다(LINEAGE_KEY와 같은 이유). 접힘은 폰에서 접은 것이 맥에 새면 안 되므로 기기별이다.
- * 「실행 중」 구역 접힘은 행 수를 세는 머리만 남기고, 묶음 접힘은 묶음 id(layout/store.js의 뷰 id)로 기억한다 —
- * 묶음 제목은 바뀔 수 있고 같은 제목의 묶음이 둘일 수 있다. 사라진 묶음의 id는 남아도 무해하다(200개에서 자른다). */
+/** 기기별 설정 하나에 `{"groupsCollapsed":[열쇠…]}` — 레일의 저장소 접힘(`repo:<저장소 경로>`)과 「종료 N」 펼침
+ * (`ended:<저장소 경로>`). 키를 아끼려고 JSON 한 덩어리로 묶는다(LINEAGE_KEY와 같은 이유). 폰에서 접은 것이 맥에 새면 안
+ * 되므로 기기별이다. 예전 값(byRepo·recent·recentCollapsed·runningCollapsed)은 읽지 않는다(세션 로직 점검 단계 5·7). */
 export const VIEW_KEY = 'rail.view';
-export const RECENT_DEFAULT = 5;
-export const RECENT_MAX = 50;
 export const GROUPS_COLLAPSED_MAX = 200;
-export interface RailView { byRepo: boolean; recent: number; recentCollapsed: boolean; runningCollapsed: boolean; groupsCollapsed: string[] }
+export interface RailView { groupsCollapsed: string[] }
 export function parseRailView(v: unknown): RailView {
   const o = parseObj(v);
-  const n = Number(o.recent);
-  return {
-    byRepo: o.byRepo === true,
-    recent: Number.isInteger(n) && n >= 1 && n <= RECENT_MAX ? n : RECENT_DEFAULT,
-    recentCollapsed: o.recentCollapsed === true,
-    runningCollapsed: o.runningCollapsed === true,
-    groupsCollapsed: parseNameList(o.groupsCollapsed).filter(Boolean).slice(0, GROUPS_COLLAPSED_MAX),
-  };
+  return { groupsCollapsed: parseNameList(o.groupsCollapsed).filter(Boolean).slice(0, GROUPS_COLLAPSED_MAX) };
 }
 export function encodeRailView(v: RailView): string {
-  return JSON.stringify({
-    byRepo: v.byRepo, recent: v.recent, recentCollapsed: v.recentCollapsed,
-    runningCollapsed: !!v.runningCollapsed, groupsCollapsed: (v.groupsCollapsed || []).slice(-GROUPS_COLLAPSED_MAX),
-  });
+  return JSON.stringify({ groupsCollapsed: (v.groupsCollapsed || []).slice(-GROUPS_COLLAPSED_MAX) });
 }
 /** 묶음 하나의 접힘을 뒤집은 새 목록. 새로 접은 것은 끝에 붙어, 자를 때 오래된 것부터 빠진다. */
 export function toggleGroupCollapsed(list: string[], id: string): string[] {
@@ -451,8 +354,6 @@ export interface RailPrefs {
   attentionShow: boolean;
   attentionCollapsed: boolean;
   hiddenOrigins: Origin[];
-  sort: RailSort;
-  order: string[];
   kidsCollapsed: string[];
   closedOpen: string[];
 }
@@ -468,8 +369,6 @@ export function readRailPrefs(get: (key: string) => unknown): RailPrefs {
     attentionShow: flag(ATTENTION_SHOW_KEY),
     attentionCollapsed: flag(ATTENTION_COLLAPSED_KEY),
     hiddenOrigins: HIDEABLE_ORIGINS.filter((o) => !flag(originShowKey(o))),
-    sort: parseObj(get(ORDER_KEY)).sort === 'manual' ? 'manual' : 'name',
-    order: parseNameList(parseObj(get(ORDER_KEY)).order),
     kidsCollapsed: parseNameList(parseObj(get(LINEAGE_KEY)).collapsed),
     closedOpen: parseNameList(parseObj(get(LINEAGE_KEY)).closedOpen),
   };
@@ -482,28 +381,6 @@ const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompar
 export interface RailLists<T> {
   attention: T[];
   sessions: T[];
-}
-
-export interface SessionGroup<T = SessionRow> {
-  id: string; label: string; rows: T[];
-}
-
-/** 같은 제목의 다른 뷰를 섞지 않는다. 묶음은 view id, 구성원은 pane 순서로 묶는다. */
-export function groupSessionRows<T extends Pick<SessionRow, 'sessionId' | 'tmuxName' | 'name'>>(
-  rows: T[], groups: { id: string; label: string; sessionIds: string[]; tmuxNames?: string[] }[],
-): SessionGroup<T>[] {
-  const used = new Set<T>();
-  const out: SessionGroup<T>[] = [];
-  for (const g of groups) {
-    const members = [...g.sessionIds.map((id) => rows.find((r) => r.sessionId === id)),
-      ...(g.tmuxNames || []).map((name) => rows.find((r) => r.tmuxName === name && !r.sessionId))]
-      .filter((r): r is T => !!r && !used.has(r));
-    if (members.length < 2) continue;
-    members.forEach((r) => used.add(r));
-    out.push({ id: g.id, label: g.label, rows: members });
-  }
-  for (const r of rows) if (!used.has(r)) out.push({ id: '', label: '', rows: [r] });
-  return out;
 }
 
 /**
@@ -535,30 +412,12 @@ export function splitRunning<T>(lists: RailLists<T>): T[] {
   return lists.sessions.filter((r) => !top.has(r));
 }
 
-/** 카탈로그 세션이 마지막으로 움직인 시각(epoch초). */
-export function lastActiveOf(s: { ended?: number | null; observed?: number | null; updated?: number | null }): number {
-  return s.ended || s.observed || s.updated || 0;
-}
-
-/**
- * 「최근 종료」 구역에 나올 세션. 보관 안 된 것 중 지금 실행 중으로 그려지지 않는 것을
- * 최근에 움직인 순으로 `limit`개. `total`은 자르기 전 개수(「N개 더 보기」용).
- * 종료 시각이 없지만 실행 중 행도 없는 세션(상태 확인 필요·아직 실행 전)도 여기에 남긴다 —
- * 어디에도 안 보이면 「다시 확인」을 누를 곳이 없다.
- */
-export function pickRecentEnded<S extends { archived?: number | null; ended?: number | null; observed?: number | null; updated?: number | null }>(
-  sessions: S[], isLive: (s: S) => boolean, limit: number,
-): { shown: S[]; total: number } {
-  const all = sessions.filter((s) => !s.archived && !isLive(s)).sort((a, b) => lastActiveOf(b) - lastActiveOf(a));
-  return { shown: all.slice(0, Math.max(0, limit)), total: all.length };
-}
-
 // ── 행 메뉴(⋯ 버튼·우클릭·폰 롱프레스가 같은 항목) ───────────────────────
 
 export type RowMenuId =
   | 'open' | 'close' | 'rename' | 'openOnMac' | 'screens' | 'kill' | 'splitRight' | 'splitDown'
   | 'sessionAccess' | 'share' | 'shareSettings' | 'unshare' | 'agentPerms'
-  | 'moveUp' | 'moveDown' | 'report' | 'closeDelegation' | 'openParent' | 'record';
+  | 'report' | 'closeDelegation' | 'openParent' | 'record';
 
 export interface RowMenuItem {
   id: RowMenuId;
@@ -580,7 +439,8 @@ export function rowSummary(
   if (s === 'waiting') parts.push(KIND_LABEL[normalizeKind(row.kind)]);
   if (row.share) parts.push(shareSentence(row.share));
   if (row.otherClients > 0) parts.push(t('웹 외 {n}', { n: row.otherClients }));
-  parts.push(originLabel(normalizeOrigin(row.origin), row.originHost));
+  // 만든 곳은 다른 맥에서 만든 세션일 때만 — 「직접 만듦」은 대부분의 세션에 붙어 정보가 없었다(세션 로직 점검 단계 7).
+  if (normalizeOrigin(row.origin) === 'peer') parts.push(originLabel('peer', row.originHost));
   if (row.cwd) parts.push(row.cwd);
   if (row.branch) parts.push(row.branch);
   return parts.join(' · ');
@@ -611,8 +471,6 @@ export interface RowMenuOpts {
   split?: boolean;
   /** 에이전트 공유 항목을 넣는다. **이 맥을 보고 있을 때만** true — 승인·공유는 이 맥 전용이다(다른 맥으로 중계되지 않는다). */
   share?: boolean;
-  /** 수동 정렬의 키보드 대안(드래그를 못 쓰는 사람·터치). 최상위 행에서만, 끝이면 그 방향은 뺀다. */
-  move?: { up: boolean; down: boolean };
   /** 이 행이 카탈로그 세션과 이어져 있다 — 작업 기록 항목을 넣고, 열려 있지 않아도 이름 변경을 허용한다. */
   record?: boolean;
 }
@@ -633,9 +491,6 @@ export function rowMenuItems(row: Pick<SessionRow, 'open' | 'tmuxName'> & { shar
       delegationItems.push({ id: 'closeDelegation', label: t('위임 닫기'), detail: t('세션은 남김') });
     }
   }
-  const move: RowMenuItem[] = [];
-  if (opts.move?.up) move.push({ id: 'moveUp', label: t('위로 이동') });
-  if (opts.move?.down) move.push({ id: 'moveDown', label: t('아래로 이동') });
   const split: RowMenuItem[] = opts.split
     ? [{ id: 'splitRight', label: t('오른쪽에 나란히 열기') }, { id: 'splitDown', label: t('아래에 열기') }]
     : [];
@@ -650,7 +505,7 @@ export function rowMenuItems(row: Pick<SessionRow, 'open' | 'tmuxName'> & { shar
   } else {
     items.push({ id: 'open', label: t('열기') }, ...split, ...(opts.record ? [{ id: 'rename' as const, label: t('이름 변경') }] : []));
   }
-  items.push(...record, ...delegationItems, ...move);
+  items.push(...record, ...delegationItems);
   if (opts.share && row.tmuxName) {
     items.push({ id: 'sessionAccess', label: t('공유 및 권한…') });
   }
@@ -664,7 +519,6 @@ export function runRowMenu(
   row: Pick<SessionRow, 'sessionId' | 'tmuxName' | 'name'> & { share?: ShareInfo | null; cwd?: string; context?: any; lineage?: Lineage | null },
   w: any,
   startRename: () => void,
-  move?: (dir: -1 | 1) => void,
 ): void {
   const sid = row.sessionId || null;
   switch (id) {
@@ -680,8 +534,6 @@ export function runRowMenu(
     case 'kill': w.vtConfirmAndKillSession?.(row.tmuxName, sid); break;
     case 'splitRight': w.vtSplitOpenSession?.('right', { sessionId: sid, tmuxName: row.tmuxName }); break;
     case 'splitDown': w.vtSplitOpenSession?.('bottom', { sessionId: sid, tmuxName: row.tmuxName }); break;
-    case 'moveUp': move?.(-1); break;
-    case 'moveDown': move?.(1); break;
     case 'openParent': if (row.lineage?.parent) w.vtOpenSessionFromRail?.({ sessionId: null, tmuxName: row.lineage.parent }); break;
     // 리디자인 6단계(시안 O15-C) — 보고를 알림 창 대신 「작업 기록」으로 연다: 부모 세션 기록 왼쪽, 오른쪽에 이 위임 세션(보고 포함).
     // 부모가 사라졌으면 이 세션 자신의 기록을 연다.

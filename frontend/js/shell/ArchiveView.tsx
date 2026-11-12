@@ -21,6 +21,42 @@ import { EndedItem } from './EndedFold.js';
 
 const PAGE = 50;
 
+export interface CatalogSnapshot {
+  host: string; revision: number; projects: any[]; workspaces: any[]; sessions: any[]; next: string | null; relations?: any[];
+  auto_archive_days?: number; archived_count?: number; auto_name?: boolean; resume_ends_session?: boolean;
+  project_counts?: Record<string, number>;
+}
+
+/**
+ * 카탈로그 쪽 합치기(레일·폰 공용). 목록은 첫 쪽(최근 활동순 200개)만 폴링하고, 「종료 세션 더 불러오기」로 받은 뒤쪽은
+ * - more: 새 쪽을 뒤에 붙인다(이미 있는 id는 건너뜀).
+ * - 폴링(more 아님)인데 뒤쪽을 받아 둔 적이 있으면(extra): 첫 쪽을 새로 받되, 첫 쪽보다 오래된 받아 둔 기록은 버리지 않고
+ *   커서(next)도 받아 둔 끝 자리를 유지한다. 사라진 기록은 목록을 다시 열 때 정리된다.
+ */
+export function mergeCatalogPage(prev: CatalogSnapshot | null, data: CatalogSnapshot, more: boolean, extra: boolean): CatalogSnapshot {
+  if (more && prev) {
+    const have = new Set(prev.sessions.map((x) => x.id));
+    return { ...data, sessions: [...prev.sessions, ...data.sessions.filter((x) => !have.has(x.id))] };
+  }
+  if (prev && extra) {
+    const fresh = new Set(data.sessions.map((x) => x.id));
+    const oldest = data.sessions.length ? Math.min(...data.sessions.map((y) => y.last_activity ?? 0)) : Infinity;
+    const tail = prev.sessions.filter((x) => !fresh.has(x.id) && (x.last_activity ?? 0) <= oldest);
+    return { ...data, sessions: [...data.sessions, ...tail], next: prev.next };
+  }
+  return data;
+}
+
+/** 세션 목록 맨 아래 한 줄. 누르면 같은 자리가 보관함 화면으로 바뀐다(레일·폰 공용). */
+export function ArchiveEntry(p: { count: number; onOpen: () => void }) {
+  return <button type="button" class="vt-catalog-archive-link" onClick={p.onOpen}>
+    <span class="vt-catalog-archive-mark" innerHTML={icon('archive', 14, 2)} />
+    <span class="vt-catalog-archive-label">{t('보관함')}</span>
+    <span class="vt-wgrail-group-count">{p.count}</span>
+    <span class="vt-catalog-archive-go" innerHTML={icon('chevron-right', 12, 2)} />
+  </button>;
+}
+
 export interface ArchivePage { sessions: any[]; projects?: any[]; workspaces?: any[]; project_counts?: Record<string, number>;
   archived_count?: number; auto_archive_days?: number; next: string | null }
 

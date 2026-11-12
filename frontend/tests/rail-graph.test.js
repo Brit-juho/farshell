@@ -41,6 +41,20 @@ test('같은 저장소의 링크드 작업 트리에 있으면 워크트리 가�
   assert.deepStrictEqual(names(lanes[1].sessions.map((s) => s.row)), ['wt']);
 });
 
+test('머리 브랜치 — /api/repos가 먼저, 없으면 메인 작업 트리에 있는 세션의 브랜치(워크트리·다른 곳에 있는 세션 브랜치는 안 씀)', async () => {
+  const m = await mod();
+  const rows = [
+    row({ name: 'wt', branch: 'fix/x', home: home('farshell', '/r/farshell'), context: ctx('/r/farshell-wt', true, '/r/farshell') }),
+    row({ name: 'away', branch: 'other', home: home('farshell', '/r/farshell'), context: ctx('/r/other', false, '/r/other') }),
+  ];
+  assert.strictEqual(m.buildRepoTree({ rows }).find((g) => g.name === 'farshell').mainBranch, null);
+  const withMain = [...rows, row({ name: 'main', branch: 'dev', home: home('farshell', '/r/farshell'), context: ctx('/r/farshell', false, '/r/farshell') })];
+  assert.strictEqual(m.buildRepoTree({ rows: withMain })[0].mainBranch, 'dev');
+  assert.strictEqual(m.buildRepoTree({ rows: withMain, mainBranches: new Map([['/r/farshell', 'master']]) })[0].mainBranch, 'master');
+  const fresh = m.buildRepoTree({ rows: [row({ name: 'n', branch: 'feat/auth', context: ctx('/r/acme', false, '/r/acme') })] });
+  assert.strictEqual(fresh[0].mainBranch, 'feat/auth');
+});
+
 test('자리가 아직 없으면 지금 위치의 저장소, 그것도 없으면 「저장소 밖」(맨 아래)', async () => {
   const m = await mod();
   const tree = m.buildRepoTree({ rows: [
@@ -100,6 +114,15 @@ test('종료(보관 안 함)는 카탈로그 자리의 저장소 「종료 N」�
   });
   assert.deepStrictEqual(plain(tree[0].ended.map((s) => s.id)), ['e2', 'e1'], '최근 활동순');
   assert.deepStrictEqual(plain(tree[1].ended.map((s) => s.id)), ['e4'], '자리가 없으면 저장소 밖');
+  // 실행 중 행으로 안 그려진 끝나지 않은 기록(아직 실행 전·tmux 조회 불완전)은 「다시 확인」할 수 있게 「종료 N」 쪽에 남는다.
+  const stuck = m.buildRepoTree({
+    rows: [],
+    ended: [{ id: 'run', workspace_id: 'W', ended: null, runtime_id: 'r1', last_activity: 5 }, { id: 'drawn', workspace_id: 'W', ended: null, runtime_id: 'r2' }],
+    workspaces: [{ id: 'W', project_id: 'P' }],
+    projects: [{ id: 'P', name: 'farshell', path: '/r/farshell', kind: 'git' }],
+    isLive: (s) => s.id === 'drawn',
+  });
+  assert.deepStrictEqual(plain(stuck[0].ended.map((s) => s.id)), ['run']);
 });
 
 test('nodeLine — 「유휴」 없이 할 말이 있을 때만: 대기 유형 · 도구 요약 · 끝남(확인 안 함) · 마지막 지시', async () => {

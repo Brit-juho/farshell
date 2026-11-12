@@ -1,39 +1,50 @@
-// N38(70-mobile.md §2) — 모바일 플릿 홈. compact(<720px) 하단 내비의 첫 탭
-// (ui.mobile.home 기본값). Rail.tsx와 **같은 데이터·같은 구역 규칙**을 쓴다 —
-// 행 조립(rail-fetch.ts의 collectSessionRows)과 구역(rail-data.ts의 buildRailLists:
-// 개입 필요 · 세션, 묶음과 이름순 단독)이 하나라서 "데스크톱 레일에서 보이는 게 폰에서도 보인다".
-// 상태 키워드·상태 아이콘·읽지 않음 링·만든 곳 아이콘도 레일과 같은 컴포넌트(RailRow.tsx)다.
-// 폰에만 있는 것은 인라인 승인 버튼(개입 필요 구역의 행)과 꾹 눌러 여는 메뉴 시트다.
+// 모바일 플릿 홈 — 저장소 묶음 2열 타일(세션 로직 점검 단계 7, 시안 5차 T1). compact(<720px) 하단 내비의 첫 탭.
 //
-// Rail.tsx와 같은 이유로 데이터 fetch(세션 목록·agent 상태·git diff)를
-// 직접 다시 구현한다(정적 import 금지 — 지연 청크가 core/store.js 등 상태
-// 모듈을 정적 import하면 Vite lib 모드가 복제한다, ADR-26). Dock.tsx의 배지
-// 폴링도 같은 이유로 각자 반복하고 있다 — 이 파일도 그 관행을 따른다.
+//   [폴더] farshell  ⑂ dev                 2  [+]
+//   ┌──────────┐ ┌──────────┐
+//   │(링)   2분 │ │(링)  12초 │      ← 타일: 상태 링 + 에이전트 마크(작업 중 내부 에이전트 수 배지) · 경과
+//   │결제 버그  │ │훅 정리    │      ← 보이는 이름
+//   │승인 요청 npm│ │Edit app.ts│     ← 할 말이 있을 때만(대기 유형·도구·확인 안 함·마지막 지시), 없으면 변경량
+//   │⑂ fix/x    │ │           │      ← 워크트리 가지면 브랜치
+//   └──────────┘ └──────────┘
+//   ┌ ─ ─ ─ ─ ┐
+//     ◌ 종료 2                         ← 누르면 그 저장소의 종료 세션 시트(이어서 시작 · 기록)
+//   └ ─ ─ ─ ─ ┘
+//   [집] 저장소 밖 …
+//   [보관함 12 ›]
+//
+// 데이터·묶는 규칙은 데스크톱 레일과 하나다(rail-fetch.ts 행 조립, repo-tree.ts 저장소 묶음). 목록 안의 답 버튼·정렬·
+// 위임 레인은 없다 — 답은 터미널에서, 위임 하위 세션은 부모 바로 뒤 타일(↳ 부모 이름). 꾹 누르면 행 메뉴 시트.
+//
+// Rail.tsx와 같은 이유로 데이터 fetch(세션 목록·agent 상태·git diff)를 여기서 다시 부른다(정적 import 금지 — 지연 청크가
+// core/store.js 등 상태 모듈을 정적 import하면 Vite lib 모드가 복제한다, ADR-26).
 import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
 import { render, Portal } from 'solid-js/web';
-import { icon, stateIcon } from '../ui/icons.js';
+import { icon } from '../ui/icons.js';
 import { shellIcon } from '../ui/icons-shell.js';
 import { t } from '../core/i18n.js';
-import { CatalogTree, RecentEnded, ArchiveEntry, ArchiveList, type CatalogSnapshot } from './CatalogTree.js';
+import { ArchiveView, ArchiveEntry, mergeCatalogPage, type CatalogSnapshot } from './ArchiveView.js';
+import { EndedItem } from './EndedFold.js';
 import { historyApi } from '../history/api.js';
-import { renameSession as renameCatalogSession } from '../history/session-actions.js';
+import { renameSession as renameCatalogSession, agoLabel } from '../history/session-actions.js';
 import { agentMark } from './agent-mark.js';
+import { ringSvg, subBadge } from './compact-mark.js';
+import { normalizeSubagents } from './native-subagents.js';
 // core 청크의 공유 인스턴스로 연결된다(shell.js가 core.js에서 import — 복제되지 않는다).
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
 // 상태 없는 순수 모듈 — 지연 청크에 복제돼도 된다.
 import { createPoll, isStale } from '../core/poll.js';
 // git 배지 캐시·변경 알림 구독·행 조립은 레일과 **같은 것**을 쓴다(같은 shell 청크).
 import {
-  collectSessionRows, syncAgentsFromServer, createDiffWatcher, useLayoutVersion, pollFetch, isNoResponse, answerSessionPrompt, type RailDeps,
+  collectSessionRows, syncAgentsFromServer, createDiffWatcher, useLayoutVersion, pollFetch, isNoResponse, type RailDeps,
 } from './rail-fetch.js';
 import {
-  buildRailLists, splitRunning, groupSessionRows, rowMenuItems, rowSummaryDetails, runRowMenu, diffLabel, formatRelativeTime, type SessionRow,
-  buildSessionTree, kidsProgress, stepInOrder, ORDER_KEY, LINEAGE_KEY, VIEW_KEY, encodeOrder, encodeLineagePrefs, encodeRailView, type TreeEntry,
+  buildRailLists, rowMenuItems, rowSummaryDetails, runRowMenu, formatRelativeTime, nodeLine, kidLabel, type SessionRow,
 } from './rail-data.js';
+import { buildRepoTree, endedActivity, OUTSIDE_KEY, type RepoGroup } from './repo-tree.js';
 import { createRailPrefs } from './rail-prefs.js';
-import { NativeChip } from './NativeChildren.js';
-import { MenuSummary, KeywordLine, OriginMark, ScreensMark, ShareMark, ProfileMark, LineageMark, KidsToggle, AnswerButtons, ROW_MENU_ICON } from './RailRow.js';
-import { ViewGroup } from './ViewGroup.js';
+import { onSheetKeyDown } from './sheet-keys.js';
+import { MenuSummary, ShareMark, ROW_MENU_ICON } from './RailRow.js';
 import {
   buildHostMenu, hostDetail, LOCAL_HOST,
   type HostEntry,
@@ -45,11 +56,8 @@ const SESSIONS_SAFETY_POLL_MS = 60000;
 // 에이전트 정보의 정본은 /ws-agent push다. 이건 끊긴 동안의 안전망(예전 4초).
 const AGENT_SAFETY_POLL_MS = 60000;
 const HOSTS_POLL_MS = 15000;
-// 보관 세션 카탈로그(로컬·폰 폭에서만). 가장 짧은 주기라 갱신 지연 판정의 기준이다.
+// 카탈로그(종료 세션·자리·최근 활동 — 로컬·폰 폭에서만). 가장 짧은 주기라 갱신 지연 판정의 기준이다.
 const CATALOG_POLL_MS = 5000;
-
-// C1 — Rail.tsx와 **같은 설정 키**를 읽고 쓴다. 폰과 데스크톱이 각자 다른
-// 호스트를 기억하면 창 폭을 바꿨을 때 목록이 이유 없이 바뀐 것처럼 보인다.
 
 export interface FleetDeps {
   vtFetch: (path: string, opts?: RequestInit) => Promise<unknown>;
@@ -109,107 +117,87 @@ function useLongPress(onLongPress: () => void) {
   };
 }
 
-/**
- * 세션 카드(리디자인 8단계, 시안 M01) — 두 줄 64px.
- *   1줄 20  상태 아이콘 16(읽지 않음은 둘레 링) · 에이전트 14 · 이름 15/600 · 위임 토글 · 경과(mono 12, 오른쪽 끝)
- *   2줄 16  (왼쪽 24 들여) 상태 키워드 12/600 · 도구·배지 · 위치(WT · 디렉터리 · 브랜치, mono) · 변경량 · 글리프(오른쪽)
- * 개입 필요 구역의 열린 waiting 카드만 테두리·왼쪽 3px 띠·질문 한 줄(터미널 색)·44px 답 버튼을 갖는다.
- * 부품(키워드·공유·만든 곳·다른 화면·위임 표시)은 데스크톱 레일 행과 같은 컴포넌트(RailRow.tsx)다.
- */
-export function FleetRow(props: {
-  row: SessionRow;
-  /** 인라인 승인 버튼(개입 필요 구역의 행에만). */
-  answers?: boolean;
-  /** 위임 하위 세션(레일과 같은 규칙 — 키워드 대신 위임 상태). */
-  kid?: boolean;
-  entry?: TreeEntry<SessionRow>; kidsCollapsed?: boolean; onToggleKids?: () => void;
-  onOpen: () => void; onLongPress: () => void;
-  onAnswer: (key: string) => Promise<void>; onSeen: () => void;
+/** 타일 하나에 그릴 것 — 저장소 묶음을 펼친 순서(가지 → 세션 → 그 하위 세션). */
+export interface TileEntry { row: SessionRow; worktree: string | null; parent: SessionRow | null }
+
+/** 저장소 묶음 → 타일 순서. 메인 가지가 먼저, 워크트리 가지의 세션은 브랜치 표시, 위임 하위는 부모 바로 뒤. */
+export function tilesOf(group: RepoGroup<SessionRow, any>): TileEntry[] {
+  const out: TileEntry[] = [];
+  for (const lane of group.lanes) {
+    const wt = lane.worktree ? (lane.worktree.branch || lane.worktree.name) : null;
+    for (const s of lane.sessions) {
+      out.push({ row: s.row, worktree: wt, parent: null });
+      for (const k of s.kids) out.push({ row: k, worktree: wt, parent: s.row });
+    }
+  }
+  return out;
+}
+
+/** 세션 타일(시안 T1). 누르면 열고(완료·확인 안 함이면 확인만), 꾹 누르면 행 메뉴 시트. */
+export function FleetTile(props: {
+  entry: TileEntry; onOpen: () => void; onLongPress: () => void; onSeen: () => void;
 }) {
   const [now, setNow] = createSignal(Date.now());
   const clock = setInterval(() => setNow(Date.now()), 30000);
   onCleanup(() => clearInterval(clock));
-  const diff = () => diffLabel(props.row);
-  const elapsed = () => formatRelativeTime(props.row.since, now());
-  const card = () => !!props.answers && props.row.status === 'waiting' && props.row.open;
-
+  const row = () => props.entry.row;
+  const line = () => nodeLine(row());
+  const changed = () => { const c = row().changed; return c && (c.add > 0 || c.del > 0) ? c : null; };
+  const sub = () => normalizeSubagents(row().subagents);
+  const badge = () => subBadge(sub().items.filter((r: any) => r.state === 'working').length, sub().limited);
+  const unseen = () => row().unseen && row().status !== 'idle';
+  const kid = () => (props.entry.parent && row().lineage ? kidLabel(row().lineage!) : null);
   const longPress = useLongPress(props.onLongPress);
-
-  const onRowClick = () => {
-    // 꾹 눌러 메뉴가 막 떴으면 뒤이어 오는 click은 삼킨다 — 안 그러면 메뉴가
-    // 뜬 그 손가락을 떼는 순간 행이 열리기까지 한다(dnd.js의 `_suppressNextClick`과
-    // 같은 관용구, 별도 타이머 없이 `fired` 플래그 하나로 충분하다).
+  const onClick = () => {
+    // 꾹 눌러 메뉴가 막 떴으면 뒤이어 오는 click은 삼킨다(메뉴를 띄운 손가락을 떼는 순간 열리지 않게).
     if (longPress.fired()) return;
-    // 열려 있지 않은 행은 탭하면 곧장 열어서 이동한다 — 확인/미확인 개념이 없다.
-    if (!props.row.open) { props.onOpen(); return; }
-    // 「완료 · 읽지 않음」 행은 탭하면 seen 처리(이동하지 않는다) — 나머지는 전부 터미널로 이동.
-    // 어느 쪽이든 먼저 onSeen을 부른다(ackLocal이라 done→idle까지 내린다) — 안 그러면
-    // 이미 「확인함」으로 넘어온 완료 행이 파란 tone을 못 푼다(2026-09-22).
-    const ackOnly = props.row.status === 'done' && props.row.unseen;
+    if (!row().open) { props.onOpen(); return; }
+    // 「완료 · 확인 안 함」 타일은 누르면 확인만 한다(이동하지 않는다) — 나머지는 터미널로 이동.
+    const ackOnly = row().status === 'done' && row().unseen;
     props.onSeen();
     if (!ackOnly) props.onOpen();
   };
-
   return (
     <div
-      class="vt-srow lg vt-fleet-row"
-      classList={{ 'is-waiting': props.row.status === 'waiting', closed: !props.row.open, 'vt-fleet-card': card(), kid: !!props.kid }}
-      data-state={props.row.status}
-      onClick={onRowClick}
+      class="vt-tile"
+      classList={{ closed: !row().open, kid: !!props.entry.parent }}
+      data-state={row().status}
+      role="button" tabindex="0"
+      aria-label={row().name}
+      onClick={onClick}
       onPointerDown={longPress.onPointerDown}
       onPointerMove={longPress.onPointerMove}
       onPointerUp={longPress.onPointerUp}
       onPointerCancel={longPress.onPointerCancel}
       onContextMenu={(e) => { e.preventDefault(); props.onLongPress(); }}
-      onKeyDown={(e) => {
-        if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
-        e.preventDefault();
-        onRowClick();
-      }}
-      role="button"
-      tabindex="0"
+      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onClick(); } }}
     >
-      <div class="vt-srow-main vt-fleet-row-main">
-        <div class="vt-srow-top vt-fleet-row-top">
-          <span class="vt-srow-state" innerHTML={stateIcon(props.row.status, 16, props.row.unseen && props.row.status !== 'idle')} />
-          <Show when={props.row.agent}>
-            {(a) => <span class="vt-srow-agent vt-fleet-agent" innerHTML={agentMark(a())} />}
-          </Show>
-          <span class="vt-srow-name vt-fleet-name">{props.row.name}</span>
-          <Show when={props.entry}>{(e) => (
-            <KidsToggle progress={kidsProgress(e().kids)} count={e().kids.length + e().closedKids.length}
-              collapsed={!!props.kidsCollapsed} name={props.row.name} onToggle={props.onToggleKids} />
-          )}</Show>
-          <span class="vt-srow-elapsed vt-fleet-el">{elapsed()}</span>
-        </div>
-        <div class="vt-srow-sub vt-fleet-row-sub vt-fleet-line2">
-          {/* 하위 행: 진행 중이면 에이전트 상태(작업 중·입력 대기)가 정보고, 끝났으면 위임 결과가 정보다 — 둘을 같이 쓰면
-              「보고 · 성공 완료」처럼 같은 말이 겹친다(2026-10-13 실화면). */}
-          <Show when={props.kid && props.row.lineage?.state !== 'running'} fallback={<KeywordLine row={props.row} now={now} noSince />}>
-            <LineageMark row={props.row} />
-          </Show>
-          <span class="vt-fleet-loc">
-            <Show when={props.row.contextStatus === 'unavailable'} fallback={<>
-              <Show when={props.row.workspaceKind}><span class="vt-srow-workspace-kind" role="img" aria-label={props.row.workspaceKind === 'WT' ? t('별도 워크트리') : props.row.workspaceKind}>{props.row.workspaceKind}</span></Show>
-              <Show when={props.row.directory}><span class="vt-srow-directory">{props.row.directory}</span></Show>
-              <Show when={props.row.branch}><span class="vt-srow-branch">{props.row.branch}</span></Show>
-            </>}>{t('정보 갱신 대기')}</Show>
-          </span>
-          <Show when={diff()}><span class="vt-srow-meta vt-fleet-diff">{diff()}</span></Show>
-          <span class="vt-fleet-gls">
-            <NativeChip row={props.row} />
-            <ShareMark share={props.row.share} />
-            <ProfileMark profile={props.row.profile} />
-            <ScreensMark row={props.row} />
-            <OriginMark origin={props.row.origin} host={props.row.originHost} />
-          </span>
-        </div>
-        {/* 질문 한 줄 — 터미널에 뜬 것을 터미널 색으로. 열려 있지 않은 세션은 키를 보낼 곳(열린 pane)이 없다 — 인라인 승인 버튼 대신 탭해서 연다. */}
-        <Show when={card()}>
-          <Show when={props.row.question}>{(q) => <div class="vt-fleet-q" data-tip={q()}><span class="vt-fleet-q-mark" aria-hidden="true">$</span>{q()}</div>}</Show>
-          <AnswerButtons row={props.row} variant="fleet" onAnswer={props.onAnswer} onTerminal={props.onOpen} />
-        </Show>
+      <div class="vt-tile-top">
+        <span class="vt-tile-ring" data-state={row().status}>
+          <span class="vt-tile-ring-svg" innerHTML={ringSvg(row().status)} />
+          <span class="vt-tile-mark" innerHTML={agentMark(row().agent || 'shell')} />
+          <Show when={unseen()}><span class="vt-tile-unseen" aria-label={t('아직 확인 안 함')} /></Show>
+          <Show when={badge()}>{(b) => <span class="vt-tile-badge" classList={{ limited: b().limited }}>{b().text}</span>}</Show>
+        </span>
+        <span class="vt-tile-sp" />
+        <span class="vt-tile-tm" classList={{ waiting: row().status === 'waiting' }}>{formatRelativeTime(row().since, now())}</span>
       </div>
+      <div class="vt-tile-namerow"><b class="vt-tile-name">{row().name}</b><ShareMark share={row().share} /></div>
+      <Show when={line()} fallback={
+        <span class="vt-tile-line">
+          <Show when={changed()} fallback={'\u00a0'}>
+            {(c) => <><Show when={c().add > 0}><span class="vt-diff-add">+{c().add}</span></Show>{' '}<Show when={c().del > 0}><span class="vt-diff-del">−{c().del}</span></Show></>}
+          </Show>
+        </span>
+      }>
+        {(l) => <span class="vt-tile-line" data-tone={l().tone} data-tip={row().question || undefined}>{l().text}<Show when={l().detail}><span class="mono">{' '}{l().detail}</span></Show></span>}
+      </Show>
+      <Show when={props.entry.parent}>
+        {(p) => <span class="vt-tile-sub" data-tone={kid()?.tone}>↳ {p().name}<Show when={kid()}>{(k) => <> · {k().text}</>}</Show></span>}
+      </Show>
+      <Show when={!props.entry.parent && props.entry.worktree}>
+        <span class="vt-tile-wt"><span innerHTML={shellIcon('git-fork', 11, 2)} /><span class="vt-tile-wt-name">{props.entry.worktree}</span></span>
+      </Show>
     </div>
   );
 }
@@ -222,7 +210,7 @@ function Fleet(props: { deps: FleetDeps }) {
   const [tmuxSessions, setTmuxSessions] = createSignal<any[]>([]);
   const [repos, setRepos] = createSignal<any[]>([]);
   // 행 메모가 agentVersion()을 구독하므로 에이전트 저장소가 바뀌면 다시 계산된다.
-  const { prefs, set: setPref } = createRailPrefs();
+  const { prefs } = createRailPrefs();
   const [diffTick, setDiffTick] = createSignal(0);
   // 2026-09-30 — 세션 cwd의 변경 알림. 오면 캐시가 dirty가 되고, 다시 셀 수 있는
   // 때(rail-fetch.ts의 간격 규칙)에 한 번 다시 그려 그 행이 fetchDiffCount를 부르게 한다.
@@ -242,15 +230,19 @@ function Fleet(props: { deps: FleetDeps }) {
   const [catalog, setCatalog] = createSignal<CatalogSnapshot | null>(null);
   const [archiveOpen, setArchiveOpen] = createSignal(false);
   let catalogRequest = 0;
+  // 「종료 세션 더 불러오기」로 첫 쪽(200개) 뒤를 받았는가 — 받아 둔 뒤쪽은 폴링에 버리지 않는다(레일과 같은 규칙).
+  let extraPages = false;
   const refreshCatalog = async (more = false) => {
     if (viewHostId !== LOCAL_HOST) return;
     const request = ++catalogRequest;
     try {
-      const params = new URLSearchParams({ archived: String(archiveOpen()), limit: '200' });
-      if (more && catalog()?.next) params.set('after', catalog()!.next!);
+      // 보관된 세션은 보관함 화면(ArchiveView)이 따로 읽는다 — 여기는 실행 중·종료(최근 활동순).
+      const params = new URLSearchParams({ archived: 'false', limit: '200', order: 'activity' });
+      if (more && catalog()?.next) params.set('cursor', catalog()!.next!);
       const value = await historyApi('/api/session-catalog?' + params);
       if (request !== catalogRequest) return;
-      setCatalog(more && catalog() ? { ...value, sessions: [...catalog()!.sessions, ...value.sessions] } : value);
+      setCatalog(mergeCatalogPage(catalog(), value, more, extraPages));
+      if (more) extraPages = true;
     } catch (e) {
       // 옛 호스트는 지금의 라이브 목록을 그대로 쓴다. 답 자체가 없던 실패만 폴러에 알린다.
       if (isNoResponse(e)) throw e;
@@ -354,9 +346,9 @@ function Fleet(props: { deps: FleetDeps }) {
       onDiff: () => setDiffTick((n) => n + 1),
     });
   });
+  // 만든 곳별 표시 설정(레일 설정 「보기」)은 같이 따른다. 개입 필요 구역은 따로 두지 않는다 — 입력 대기 타일은
+  // 호박색 테두리이고, 그 저장소가 맨 위로 온다(repo-tree.ts 정렬).
   const lists = createMemo(() => buildRailLists(rows(), prefs()));
-  // 「실행 중」 = 세션 전체에서 「개입 필요」에 올라간 행을 뺀 것(레일과 같은 규칙).
-  const running = createMemo(() => splitRunning(lists()));
   // 실행 중 행 ↔ 카탈로그 세션(레일과 같은 규칙) — 메뉴의 작업 기록·이름 변경이 쓴다.
   const catalogOf = (row: SessionRow): any | undefined =>
     catalog()?.sessions.find((x) => x.ended == null && x.runtime_id && x.tmux_name === row.tmuxName && x.physical_key === row.physicalKey);
@@ -365,31 +357,51 @@ function Fleet(props: { deps: FleetDeps }) {
     const { openSessionRecord } = await import('../history/session-record.js');
     openSessionRecord(session.id, () => { catalogPoll.kick(); }, { tmuxName: tmuxName || session.tmux_name || '' });
   };
-  const viewGroups = createMemo(() => { layoutVersion(); return groupSessionRows(running(),
-    (window as any).getSessionViewGroups?.() || (window as any).getTabGroups?.() || []); });
-  // 레일과 같은 계보 트리·정렬(rail-data.ts). 폰에는 드래그가 없어 수동 순서는 행 시트의 위로·아래로 이동으로 바꾼다.
-  const fleetTree = createMemo<TreeEntry<SessionRow>[]>(() =>
-    buildSessionTree(viewGroups().filter((g) => !g.id).map((g) => g.rows[0]), prefs().sort, prefs().order));
-  const fleetKey = (r: SessionRow) => r.tmuxName || r.name;
-  const fleetOrder = () => fleetTree().map((e) => fleetKey(e.row));
-  const fleetMove = (row: SessionRow, dir: -1 | 1) => setPref(ORDER_KEY, encodeOrder('manual', stepInOrder(fleetOrder(), fleetKey(row), dir)));
-  const fleetMoveOpts = (row: SessionRow) => {
-    const at = prefs().sort === 'manual' ? fleetOrder().indexOf(fleetKey(row)) : -1;
-    return at < 0 ? undefined : { up: at > 0, down: at < fleetOrder().length - 1 };
+  const mainBranches = createMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const repo of repos()) {
+      const main = (repo.worktrees || []).find((w: any) => w.isMain);
+      if (main && typeof main.path === 'string') m.set(main.path, main.branch || null);
+    }
+    return m;
+  });
+  const activityByKey = createMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of catalog()?.sessions || []) if (c.physical_key && c.ended == null) m.set(c.physical_key, Number(c.last_activity) || 0);
+    return m;
+  });
+  const tree = createMemo<RepoGroup<SessionRow, any>[]>(() => buildRepoTree({
+    rows: lists().sessions,
+    ended: viewHostId === LOCAL_HOST ? catalog()?.sessions || [] : [],
+    workspaces: catalog()?.workspaces || [],
+    projects: catalog()?.projects || [],
+    mainBranches: mainBranches(),
+    activityOf: (r) => (r.physicalKey && activityByKey().get(r.physicalKey)) || Number(r.since || 0),
+    isLive: (c: any) => c.ended == null && !!c.runtime_id && rows().some((r) => r.tmuxName === c.tmux_name && r.physicalKey === c.physical_key),
+  }));
+  // 「종료 N」 타일을 누르면 그 저장소의 종료 세션 시트(열쇠 = 저장소 묶음 key).
+  // 닫으면 누른 「종료 N」 타일로 포커스를 돌려준다(꾹 눌러 메뉴 시트와 같은 규칙, 아래 openMenu).
+  const [endedSheet, setEndedSheet] = createSignal<string | null>(null);
+  const endedGroup = () => tree().find((g) => g.key === endedSheet()) || null;
+  let endedReturn: HTMLElement | null = null;
+  const openEnded = (key: string) => { endedReturn = document.activeElement as HTMLElement | null; setEndedSheet(key); };
+  const closeEnded = () => {
+    setEndedSheet(null);
+    const back = endedReturn; endedReturn = null;
+    if (back?.isConnected) queueMicrotask(() => back.focus());
   };
-  const fleetFlip = (list: string[], name: string) => (list.includes(name) ? list.filter((n) => n !== name) : [...list, name]);
 
   const openRow = async (row: SessionRow) => {
     const w = window as any;
-    // 2026-10-03(세션·뷰 규칙) — 레일 클릭과 같은 함수(term/session-actions.js
-    // openSessionFromRail): 열린 세션은 그 자리로, 아니면 기억된 묶음 뷰를
-    // 통째로 다시 열거나 새 단독 뷰로 연다.
+    // 레일 클릭과 같은 함수(term/session-actions.js openSessionFromRail): 열린 세션은 그 자리로, 아니면 기억된
+    // 묶음 뷰를 통째로 다시 열거나 새 단독 뷰로 연다.
     await w.vtOpenSessionFromRail?.({ sessionId: row.open ? row.sessionId : null, tmuxName: row.tmuxName || null, catalogSessionId: row.catalogSessionId, runtimeId: row.runtimeId });
     props.deps.onOpenTerminal();
   };
-
-  // 답 보내기는 데스크톱 레일과 같은 함수(rail-fetch.ts answerSessionPrompt).
-  const answerRow = (row: SessionRow, key: string): Promise<void> => answerSessionPrompt(props.deps, row, key);
+  const newIn = (root: string) => {
+    (props.deps.getAction('session.create-in') as ((cwd: string) => void) | undefined)?.(root);
+    props.deps.onOpenTerminal();
+  };
 
   const seenRow = (row: SessionRow) => {
     // ackLocal — markSeen의 상위집합(unseen 해제 + done이면 idle로도 내림).
@@ -423,11 +435,18 @@ function Fleet(props: { deps: FleetDeps }) {
   // 꾹 누른 손가락 밑에서 OS가 방금 단어를 선택해 두었을 수 있다(안드로이드 크롬) — 시트가 그 자리에 뜨면 제목에 선택·핸들이 남는다.
   // 시트·행의 user-select:none(98-mobile.css)이 새로 생기는 선택을 막고, 이미 잡힌 DOM 선택은 여기서 지운다.
   // xterm의 선택은 DOM Range가 아니라 자체 모델(term/touch-select.js)이라 이 호출이 터미널 복사 선택을 건드리지 않는다.
+  // 시트를 닫으면 누른 타일로 포커스를 돌려준다(키보드·스크린리더가 목록에서 길을 잃지 않게).
+  let returnFocus: HTMLElement | null = null;
   const openMenu = (row: SessionRow) => {
     try { window.getSelection?.()?.removeAllRanges(); } catch { /* 선택 API가 없으면 CSS만으로 충분하다 */ }
+    returnFocus = document.activeElement as HTMLElement | null;
     setRenaming(false); setMenu({ row });
   };
-  const closeMenu = () => { setMenu(null); setRenaming(false); };
+  const closeMenu = () => {
+    setMenu(null); setRenaming(false);
+    const back = returnFocus; returnFocus = null;
+    if (back?.isConnected) queueMicrotask(() => back.focus());
+  };
   const runMenuAction = (fn: () => void) => { closeMenu(); fn(); };
 
   const startRename = () => {
@@ -451,6 +470,8 @@ function Fleet(props: { deps: FleetDeps }) {
         <span class="vt-fleet-machine">{hosts().length > 1 ? '' : machine()}</span>
         <button type="button" class="vt-icon-btn vt-fleet-tool" aria-label={t('대화 보관함')} data-tip={t('대화 보관함')}
           onClick={() => { void import('../history/panel.js').then(m => m.openHistory()); }} innerHTML={shellIcon('history', 20, 2)} />
+        <button type="button" class="vt-icon-btn vt-fleet-tool" classList={{ active: editViews() }} aria-pressed={editViews()}
+          aria-label={t('뷰 편집')} data-tip={t('뷰 편집')} onClick={() => setEditViews((v) => !v)} innerHTML={icon('square-pen', 20, 2)} />
         <button type="button" class="vt-icon-btn vt-fleet-tool" aria-label={t('새 세션')} data-tip={t('새 세션')}
           onClick={(e) => (props.deps.getAction('session.add-menu') as ((el?: HTMLElement, ev?: MouseEvent) => void) | undefined)?.(e.currentTarget, e)}
           innerHTML={icon('plus', 20, 2)} />
@@ -513,121 +534,86 @@ function Fleet(props: { deps: FleetDeps }) {
           </div>
         </div>
       </Show>
-      {/* 개입 필요 — waiting 세션. 인라인 승인 버튼은 여기 행에만 붙는다. */}
-      <Show when={!archiveOpen() && lists().attention.length > 0}>
-        <div class="vt-fleet-group">
-          <div class="vt-fleet-group-head is-wait">{t('개입 필요')}<span class="vt-fleet-group-n">{lists().attention.length}</span></div>
-          <For each={lists().attention}>
-            {(row) => (
-              <FleetRow
-                row={row}
-                answers
-                onOpen={() => { void openRow(row); }}
-                onLongPress={() => openMenu(row)}
-                onAnswer={(key) => answerRow(row, key)}
-                onSeen={() => seenRow(row)}
-              />
-            )}
-          </For>
-        </div>
-      </Show>
-      <Show when={!archiveOpen() && !(prefs().view.byRepo && catalog()) && running().length > 0}>
-        <div class="vt-fleet-group">
-          <div class="vt-fleet-group-head vt-fleet-group-head-sort">
-            <span>{t('실행 중')}<span class="vt-fleet-group-n">{running().length}</span></span>
-            {/* 폰에도 정렬 전환이 있어야 수동 순서를 이 화면에서 시작할 수 있다(레일 머리와 같은 값) — 순서는 행 시트의 위로·아래로 이동. */}
-            <div class="vt-rail-sort" role="radiogroup" aria-label={t('세션 정렬')}>
-              <For each={[['name', t('이름순')], ['manual', t('수동')]] as ['name' | 'manual', string][]}>{([id, label]) => (
-                <button type="button" role="radio" class="vt-rail-sort-opt" aria-checked={prefs().sort === id}
-                  onClick={() => { if (prefs().sort !== id) setPref(ORDER_KEY, encodeOrder(id, id === 'manual' ? fleetOrder() : prefs().order)); }}>{label}</button>
-              )}</For>
-            </div>
-            <button type="button" class="vt-icon-btn xl vt-fleet-edit-btn" classList={{ active: editViews() }}
-              aria-pressed={editViews()} aria-label={t('뷰 편집')} data-tip={t('뷰 편집')}
-              onClick={() => setEditViews((v) => !v)} innerHTML={icon('square-pen', 16)} />
-          </div>
-          <Show when={editViews()}><div class="vt-fleet-order" ref={(el) => { editorEl = el; }} /></Show>
-          <Show when={!editViews()}>
-          <For each={viewGroups().filter((g) => g.id)}>{(group) => (
-            <ViewGroup group={group} onOpen={() => { void openRow(group.rows[0]); }}>
-              <For each={group.rows}>{(row) => <FleetRow row={row}
-                onOpen={() => { void openRow(row); }} onLongPress={() => openMenu(row)}
-                onAnswer={() => Promise.resolve()} onSeen={() => seenRow(row)} />}</For>
-            </ViewGroup>
-          )}</For>
-          <For each={fleetTree()}>{(entry) => {
-            const collapsed = () => prefs().kidsCollapsed.includes(fleetKey(entry.row));
-            const closedOpen = () => prefs().closedOpen.includes(fleetKey(entry.row));
-            const kid = (row: SessionRow) => <FleetRow row={row} kid
-              onOpen={() => { void openRow(row); }} onLongPress={() => openMenu(row)}
-              onAnswer={() => Promise.resolve()} onSeen={() => seenRow(row)} />;
-            return (
-              <div class="vt-lin vt-lin-fleet" classList={{ 'has-kids': entry.kids.length + entry.closedKids.length > 0 && !collapsed() }}
-                data-lane={entry.row.status}>
-                <FleetRow row={entry.row} entry={entry} kidsCollapsed={collapsed()}
-                  onToggleKids={() => setPref(LINEAGE_KEY, encodeLineagePrefs(fleetFlip(prefs().kidsCollapsed, fleetKey(entry.row)), prefs().closedOpen))}
-                  onOpen={() => { void openRow(entry.row); }} onLongPress={() => openMenu(entry.row)}
-                  onAnswer={() => Promise.resolve()} onSeen={() => seenRow(entry.row)} />
-                <Show when={entry.kids.length + entry.closedKids.length > 0 && !collapsed()}>
-                  <div class="vt-lin-kids" role="group" aria-label={t('{name}의 하위 세션', { name: entry.row.name })}>
-                    <div class="vt-child-heading">{t('FarShell 위임 세션')}<span>{t('별도 터미널')}</span></div>
-                    <For each={entry.kids}>{(k, i) => (
-                      <div class="vt-lin-kid" classList={{
-                        last: i() === entry.kids.length - 1 && entry.closedKids.length === 0,
-                        merged: k.lineage?.state === 'reported', failed: k.lineage?.outcome === 'failed',
-                      }}>{kid(k)}</div>
-                    )}</For>
-                    <Show when={entry.closedKids.length > 0}>
-                      <div class="vt-lin-kid vt-lin-fold" classList={{ last: !closedOpen() }}>
-                        <button type="button" class="vt-lin-fold-btn" aria-expanded={closedOpen()}
-                          onClick={() => setPref(LINEAGE_KEY, encodeLineagePrefs(prefs().kidsCollapsed, fleetFlip(prefs().closedOpen, fleetKey(entry.row))))}>
-                          <span class="vt-lin-fold-caret" innerHTML={icon('chevron-down', 12, 2)} />
-                          {t('닫힌 하위 {n}', { n: entry.closedKids.length })}
-                        </button>
-                      </div>
-                      <Show when={closedOpen()}>
-                        <For each={entry.closedKids}>{(k, i) => (
-                          <div class="vt-lin-kid closed" classList={{ last: i() === entry.closedKids.length - 1 }}>{kid(k)}</div>
-                        )}</For>
-                      </Show>
+      {/* 「뷰 편집」 — 뷰 단위 순서·닫기(layout/session-order.js). 켜져 있으면 목록 대신 편집기를 보인다. */}
+      <Show when={editViews()}><div class="vt-fleet-order" ref={(el) => { editorEl = el; }} /></Show>
+      <Show when={!editViews() && !archiveOpen() && !viewHostOffline()}>
+        {/* 저장소는 열쇠(문자열)로 돈다 — 폴링마다 새 묶음 객체가 와도 타일 DOM이 그대로다(꾹 누르는 중인 손가락·포커스). */}
+        <For each={tree().map((g) => g.key)}>{(key) => (
+          <Show when={tree().find((g) => g.key === key)}>
+            {(g) => (
+              <section class="vt-fleet-repo" classList={{ outside: g().key === OUTSIDE_KEY }} aria-label={g().repository ? g().name : t('저장소 밖')}>
+                <div class="vt-fleet-repo-head">
+                  <span class="vt-fleet-repo-ic" innerHTML={shellIcon(g().repository ? 'folder' : 'home', 14, 2)} />
+                  <b class="vt-fleet-repo-name">{g().repository ? g().name : t('저장소 밖')}</b>
+                  <Show when={g().mainBranch}><span class="vt-fleet-repo-branch" title={g().mainBranch!}><span innerHTML={icon('git-branch', 11, 2)} /><span class="vt-fleet-repo-bn">{g().mainBranch}</span></span></Show>
+                  <span class="vt-tile-sp" />
+                  <Show when={g().count > 0}><span class="vt-fleet-repo-n">{g().count}</span></Show>
+                  <Show when={g().repository && g().root && !viewHostOffline()}>
+                    <button type="button" class="vt-icon-btn vt-fleet-repo-new" aria-label={t('{name}에서 새 세션', { name: g().name })}
+                      onClick={() => newIn(g().root!)} innerHTML={icon('plus', 16, 2)} />
+                  </Show>
+                </div>
+                <div class="vt-tile-grid">
+                  <For each={tilesOf(g()).map((e) => e.row.tmuxName || e.row.sessionId || e.row.name)}>{(tk) => (
+                    <Show when={tilesOf(g()).find((e) => (e.row.tmuxName || e.row.sessionId || e.row.name) === tk)}>
+                      {(e) => <FleetTile entry={e()} onOpen={() => { void openRow(e().row); }}
+                        onLongPress={() => openMenu(e().row)} onSeen={() => seenRow(e().row)} />}
                     </Show>
-                  </div>
-                </Show>
-              </div>
-            );
-          }}</For>
+                  )}</For>
+                  <Show when={g().ended.length > 0}>
+                    <button type="button" class="vt-tile end" onClick={() => openEnded(g().key)}
+                      aria-label={t('{name}의 종료 세션 {n}', { name: g().repository ? g().name : t('저장소 밖'), n: g().ended.length })}>
+                      <span class="vt-tile-hol" aria-hidden="true" />
+                      <b class="vt-tile-name">{t('종료 {n}', { n: g().ended.length })}</b>
+                      <span class="vt-tile-line">{t('마지막 {ago}', { ago: agoLabel(endedActivity(g().ended[0])) })}</span>
+                    </button>
+                  </Show>
+                </div>
+              </section>
+            )}
           </Show>
+        )}</For>
+        {/* 카탈로그 한 쪽(200개) 밖의 오래된 종료 세션 — 더 불러오면 각 저장소의 「종료 N」에 붙는다. */}
+        <Show when={viewHostId === LOCAL_HOST && catalog()?.next}>
+          <button type="button" class="vt-catalog-more-link" onClick={() => { void refreshCatalog(true).catch(() => {}); }}>
+            {t('종료 세션 더 불러오기')}
+          </button>
+        </Show>
+        <Show when={catalog()}>
+          {(data) => <ArchiveEntry count={data().archived_count ?? 0} onOpen={() => setArchiveOpen(true)} />}
+        </Show>
+      </Show>
+      {/* 보관함 — 같은 자리의 목록이 바뀐다(데스크톱과 같은 화면, 칸 모양은 .vt-rg-scope). */}
+      <Show when={archiveOpen()}>
+        <div class="vt-rg-scope vt-fleet-archive">
+          <ArchiveView remote={viewHostId !== LOCAL_HOST} onBack={() => { setArchiveOpen(false); catalogPoll.kick(); }}
+            onChanged={() => { catalogPoll.kick(); }} />
         </div>
       </Show>
-      {/* 종료 세션 — 레일과 같은 구역(CatalogTree.tsx): 최근 종료 → 보관함 한 줄, 보관함을 열면 같은 자리가 보관 목록으로 바뀐다. */}
-      <Show when={!viewHostOffline() && catalog()}>
-        {data => <Show when={archiveOpen()} fallback={<>
-          <Show when={prefs().view.byRepo} fallback={
-            <RecentEnded data={data()} live={lists().sessions} count={prefs().view.recent} collapsed={prefs().view.recentCollapsed}
-              onToggle={() => setPref(VIEW_KEY, encodeRailView({ ...prefs().view, recentCollapsed: !prefs().view.recentCollapsed }))}
-              onChanged={() => { catalogPoll.kick(); }} />}>
-            <CatalogTree data={data()} live={lists().sessions}
-              renderLive={row => <FleetRow row={row} onOpen={() => { void openRow(row); }} onLongPress={() => openMenu(row)}
-                onAnswer={() => Promise.resolve()} onSeen={() => seenRow(row)} />}
-              onChanged={() => { catalogPoll.kick(); }} onMore={() => { void refreshCatalog(true).catch(() => {}); }} />
-          </Show>
-          <ArchiveEntry count={data().archived_count ?? 0} onOpen={() => { setArchiveOpen(true); catalogPoll.kick(); }} />
-        </>}>
-          <ArchiveList data={data()} onBack={() => { setArchiveOpen(false); catalogPoll.kick(); }}
-            onChanged={() => { catalogPoll.kick(); }} onMore={() => { void refreshCatalog(true).catch(() => {}); }} />
-        </Show>}
-      </Show>
-      {/* Rail.tsx 하단의 "+ 새 세션"과 같은 액션(session.add-menu) — 목록이
-          비었을 때는 위 empty-state 버튼 둘이 이미 같은 일을 하므로 겹치지
-          않게 뺀다. */}
-      <Show when={lists().sessions.length > 0}>
-        <button
-          type="button"
-          class="vt-fleet-add-btn"
-          onClick={(e) => (props.deps.getAction('session.add-menu') as ((el?: HTMLElement, ev?: MouseEvent) => void) | undefined)?.(e.currentTarget, e)}
-        >
-          + {t('새 세션')}
-        </button>
+      {/* 「종료 N」 시트 — 그 저장소의 종료 세션. 「이어서」가 늘 보이고, 누르면 연결된 대화·이어서 시작 미리보기. */}
+      <Show when={endedGroup()}>
+        {(g) => (
+          <Portal>
+            <div class="vt-session-backdrop vt-fleet-menu-backdrop" onClick={closeEnded}>
+              <div class="vt-session-sheet vt-fleet-menu-sheet vt-rg-scope vt-fleet-ended-sheet" role="dialog" aria-modal="true"
+                aria-label={t('종료 {n}', { n: g().ended.length })} onClick={(e) => e.stopPropagation()}
+                ref={(el) => { queueMicrotask(() => el.querySelector<HTMLElement>('button')?.focus()); }}
+                onKeyDown={(e) => { onSheetKeyDown(e, e.currentTarget, closeEnded); }}>
+                <div class="vt-session-head"><h2>{g().repository ? g().name : t('저장소 밖')} · {t('종료 {n}', { n: g().ended.length })}</h2></div>
+                <div class="vt-session-list">
+                  <For each={g().ended.map((x: any) => x.id)}>{(id, i) => (
+                    <Show when={g().ended.find((x: any) => x.id === id)}>
+                      {(x) => <EndedItem session={x()} last={i() === g().ended.length - 1} onChanged={() => { catalogPoll.kick(); }} />}
+                    </Show>
+                  )}</For>
+                </div>
+                <div class="vt-session-footer">
+                  <button type="button" class="vt-menu-item vt-session-footer-item" onClick={closeEnded}>{t('닫기')}</button>
+                </div>
+              </div>
+            </div>
+          </Portal>
+        )}
       </Show>
       {/* 꾹 눌러 메뉴 — 시트. 위 상단 주석 참고.
           ⚠ `m()`은 이 블록이 마운트된 동안만 유효한 접근자다 — `runMenuAction`이
@@ -647,7 +633,11 @@ function Fleet(props: { deps: FleetDeps }) {
           return (
             <Portal>
             <div class="vt-session-backdrop vt-fleet-menu-backdrop" onClick={closeMenu}>
-              <div class="vt-session-sheet vt-fleet-menu-sheet" onClick={(e) => e.stopPropagation()}>
+              {/* 시트는 대화상자다 — 열리면 첫 항목으로 포커스, Tab은 시트 안에서 돌고, Esc로 닫고, 닫으면 누른 타일로 돌아간다. */}
+              <div class="vt-session-sheet vt-fleet-menu-sheet" role="dialog" aria-modal="true" aria-label={row.name}
+                onClick={(e) => e.stopPropagation()}
+                ref={(el) => { queueMicrotask(() => el.querySelector<HTMLElement>('.vt-menu-item, input')?.focus()); }}
+                onKeyDown={(e) => { onSheetKeyDown(e, e.currentTarget, closeMenu); }}>
                 <Show when={!renaming()} fallback={
                   <>
                     <div class="vt-session-head"><h2>{t('이름 변경')}</h2></div>
@@ -674,7 +664,7 @@ function Fleet(props: { deps: FleetDeps }) {
                       바뀌고, 나머지는 시트를 닫은 뒤 실행한다 — 콜백에서 m()을 다시 읽으면 이미
                       정리된 뒤라 값은 진입 시점에 한 번 꺼내 쓴다(2026-09-23 실측). */}
                   <div class="vt-session-list">
-                    <For each={rowMenuItems(row, { split: !!(window as any).vtTouchSplitAvailable?.(row.sessionId || null), share: viewHostId === LOCAL_HOST, move: fleetMoveOpts(row), record: !!catalogOf(row) })}>
+                    <For each={rowMenuItems(row, { split: !!(window as any).vtTouchSplitAvailable?.(row.sessionId || null), share: viewHostId === LOCAL_HOST, record: !!catalogOf(row) })}>
                       {(it) => (
                         <button
                           type="button"
@@ -683,7 +673,7 @@ function Fleet(props: { deps: FleetDeps }) {
                           onClick={() => {
                             if (it.id === 'record') { const linked = catalogOf(row); if (linked) runMenuAction(() => { void openRecordOf(linked, row.tmuxName); }); return; }
                             if (it.id === 'rename') { if (row.sessionId) startRename(); else { const linked = catalogOf(row); if (linked) runMenuAction(() => { void renameCatalogSession(linked).then(() => catalogPoll.kick()); }); } return; }
-                            runMenuAction(() => runRowMenu(it.id, row, window, () => {}, (d) => fleetMove(row, d)));
+                            runMenuAction(() => runRowMenu(it.id, row, window, () => {}));
                           }}
                         >
                           <Show when={ROW_MENU_ICON[it.id]}><span class="vt-menu-item-ico" innerHTML={shellIcon(ROW_MENU_ICON[it.id], 14, 2)} /></Show>

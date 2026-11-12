@@ -222,7 +222,7 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus-visib
 [contenteditable]:focus-visible,
 .vt-native-open:focus-visible, .vt-ac-navitem:focus-visible, .vt-ac-itemhead:focus-visible,
 .vt-number-step:focus-visible, .vt-mcp-worktab:focus-visible, .vt-vm-pick:focus-visible,
-.vt-wgrail-new:focus-visible, .vt-rail-sort-opt:focus-visible, #vt-wgrail .vt-srow:focus-visible,
+.vt-wgrail-new:focus-visible, #vt-wgrail .vt-srow:focus-visible, #vt-wgrail .vt-rg-row:focus-visible,
 .vt-act:focus-visible, .vt-act-mic-home #mic-btn-wrap.mic:focus-visible,
 .vt-mb-menu:focus-visible, button.vt-tb-host:focus-visible, .vt-hud-chip.clickable:focus-visible,
 html.vt-focus #vt-focus-pill button:focus-visible, .vt-tb-focus:focus-visible,

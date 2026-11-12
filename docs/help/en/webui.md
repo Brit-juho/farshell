@@ -93,7 +93,7 @@ Open "Ended N" at the bottom of a repository to see the sessions that ended ther
 
 - **Kill** ends the tmux session, and the claude or shell inside it, with no undo. A confirmation always appears,
   and it warns you if the session is working or waiting for input. Panes open in other browser tabs become empty panes.
-- **Mobile session management**: tap the header session name to switch between the Sessions tab and the terminal. Use each session row's menu to open, close, rename or stop it.
+- **Mobile session management**: tap the header session name to switch between the Sessions tab and the terminal. The Sessions tab shows two-column tiles grouped by repository (a tile waiting for input gets an amber border); the repository header's "+" opens a new session in that repository. Long-press a tile to open, close, rename or stop it, and tap the "Ended N" tile to see that repository's ended sessions with a Resume button. You answer prompts in the terminal, not from the list.
 - **Mobile navigation order**: swipe left/right, the header's `n/m`, and the palette use the same order.
   It goes view order → pane order within a view (top left first), skips empty panes, and wraps from the end to the start. Navigating never moves a session;
   it only goes to that session's view and pane. To change the order, enable Edit views on the mobile Sessions tab

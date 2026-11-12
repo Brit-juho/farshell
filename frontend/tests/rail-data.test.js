@@ -263,21 +263,6 @@ test('cwd가 바뀐 context와 nonrepo는 이전 브랜치/변경량을 폴백�
   assert.strictEqual(rows[1].contextStatus, 'nonrepo');
 });
 
-test('묶음 제목이 같아도 view id로 구분하고 구성원은 pane 순서, 닫힌 묶음도 함께 표시한다', async () => {
-  const { groupSessionRows } = await mod();
-  const rows = [
-    { name: 'a', tmuxName: 'a', sessionId: 's1' }, { name: 'b', tmuxName: 'b', sessionId: 's2' },
-    { name: 'c', tmuxName: 'c', sessionId: '' }, { name: 'd', tmuxName: 'd', sessionId: '' },
-  ];
-  const groups = groupSessionRows(rows, [
-    { id: 'open', label: '작업', sessionIds: ['s2', 's1'] },
-    { id: 'closed', label: '작업', sessionIds: [], tmuxNames: ['d', 'c'] },
-  ]);
-  assert.deepStrictEqual(Array.from(groups, (g) => g.id), ['open', 'closed']);
-  assert.deepStrictEqual(Array.from(groups[0].rows, (r) => r.name), ['b', 'a']);
-  assert.deepStrictEqual(Array.from(groups[1].rows, (r) => r.name), ['d', 'c']);
-});
-
 test('collectSessionRows — 브랜치는 main도 담고, origin·열림·묶음 이름·다른 화면을 채운다', async () => {
   const { collectSessionRows, window } = await mod();
   window.allSessions = () => ({ w1: { tmuxName: 'api' }, w2: { tmuxName: 'web' } });
@@ -344,13 +329,13 @@ test('collectSessionRows — 서버의 webScreens/otherClients로 배지를 센�
 test('rowSummary — 상태 · (대기면) 유형 · 웹 외 N · 만든 곳 · 브랜치, 값 없는 조각은 건너뛴다', async () => {
   const { rowSummary } = await mod();
   const r = (o) => ({ status: 'idle', kind: null, otherClients: 0, origin: 'local', branch: null, ...o });
-  assert.strictEqual(rowSummary(r({})), '유휴 · 이 화면에서 만듦');
+  assert.strictEqual(rowSummary(r({})), '유휴');
   assert.strictEqual(
     rowSummary(r({ status: 'waiting', kind: 'approval', otherClients: 2, origin: 'peer', branch: 'feat/x' })),
     '입력 대기 · 승인 요청 · 웹 외 2 · 다른 맥에서 만듦 · feat/x');
-  assert.strictEqual(rowSummary(r({ status: 'waiting', kind: null })), '입력 대기 · 질문 · 이 화면에서 만듦');
+  assert.strictEqual(rowSummary(r({ status: 'waiting', kind: null })), '입력 대기 · 질문');
   assert.strictEqual(rowSummary(r({ status: 'working', origin: 'peer', branch: 'main' })), '작업 중 · 다른 맥에서 만듦 · main');
-  assert.strictEqual(rowSummary(r({ status: 'done', origin: 'external' })), '완료 · 직접 만듦 (CLI·tmux)');
+  assert.strictEqual(rowSummary(r({ status: 'done', origin: 'external' })), '완료', '만든 곳은 다른 맥일 때만');
   // 입력 대기가 아니면 유형은 안 붙는다, 모르는 상태는 유휴
   assert.ok(!rowSummary(r({ status: 'working', kind: 'plan' })).includes('계획 확인'));
   assert.ok(rowSummary(r({ status: 'error' })).startsWith('유휴'));
@@ -396,36 +381,12 @@ test('splitRunning — 개입 필요 구역을 끄면 waiting도 실행 중에 �
   assert.deepStrictEqual(names(splitRunning(lists)), ['a']);
 });
 
-test('pickRecentEnded — 보관된 것과 실행 중인 것을 빼고 최근 순으로 N개', async () => {
-  const { pickRecentEnded } = await mod();
-  const s = [
-    { id: 'old', ended: 10 }, { id: 'new', ended: 30 }, { id: 'mid', ended: 20 },
-    { id: 'arch', ended: 40, archived: 1 }, { id: 'live', ended: null, observed: 50 },
-    { id: 'unknown', ended: null, observed: 5 },
-  ];
-  const r = pickRecentEnded(s, (x) => x.id === 'live', 2);
-  assert.deepStrictEqual(r.shown.map((x) => x.id), ['new', 'mid']);
-  assert.strictEqual(r.total, 4); // old, new, mid, unknown — 상태 확인이 필요한 세션도 구역에 남는다
-});
-
-test('parseRailView — 값이 없거나 깨지면 기본값(5개, 묶지 않음, 펼침)', async () => {
-  const { parseRailView, encodeRailView } = await mod();
-  const flat = (v) => ({ ...v, groupsCollapsed: Array.from(v.groupsCollapsed) });
-  const d = { byRepo: false, recent: 5, recentCollapsed: false, runningCollapsed: false, groupsCollapsed: [] };
-  assert.deepStrictEqual(flat(parseRailView('')), d);
-  assert.deepStrictEqual(flat(parseRailView('{')), d);
-  assert.deepStrictEqual(flat(parseRailView(undefined)), d);
-  for (const bad of [0, -1, 51, 2.5, '9x', null]) assert.strictEqual(parseRailView(JSON.stringify({ recent: bad })).recent, 5);
-  const v = { byRepo: true, recent: 12, recentCollapsed: true, runningCollapsed: true, groupsCollapsed: ['v1', 'v2'] };
-  assert.deepStrictEqual(flat(parseRailView(encodeRailView(v))), v);
-});
-
-test('parseRailView — 옛 저장값(접힘 필드 없음)은 펼침, 묶음 접힘은 문자열 id만 200개까지', async () => {
+test('parseRailView — 접힘 열쇠(저장소·종료 N)만 읽는다, 옛 값(byRepo·recent 등)은 무시, 200개까지', async () => {
   const { parseRailView, encodeRailView, toggleGroupCollapsed } = await mod();
-  const old = parseRailView(JSON.stringify({ byRepo: false, recent: 5, recentCollapsed: true }));
-  assert.strictEqual(old.runningCollapsed, false);
+  const old = parseRailView(JSON.stringify({ byRepo: true, recent: 5, recentCollapsed: true }));
+  assert.deepStrictEqual(Object.keys(old), ['groupsCollapsed'], '저장소별로 묶기·최근 종료 설정은 없앴다');
   assert.deepStrictEqual(Array.from(old.groupsCollapsed), []);
-  assert.strictEqual(old.recentCollapsed, true, '기존 값은 그대로');
+  assert.deepStrictEqual(Array.from(parseRailView('{').groupsCollapsed), []);
   const mixed = parseRailView(JSON.stringify({ groupsCollapsed: ['a', 1, null, '', 'b'] }));
   assert.deepStrictEqual(Array.from(mixed.groupsCollapsed), ['a', 'b']);
   const many = Array.from({ length: 250 }, (_, i) => `v${i}`);
@@ -448,13 +409,8 @@ test('rowMenuItems — 카탈로그에 이어진 행만 작업 기록을 갖고,
   assert.strictEqual(ids({ open: true, tmuxName: 'x' }, { record: true }).filter((i) => i === 'rename').length, 1);
 });
 
-test('originShort·originLabel — 만든 맥 이름이 있으면 「{host}에서 만듦」, 없으면 지금 문구 그대로', async () => {
-  const { originShort, originLabel, rowSummary } = await mod();
-  assert.strictEqual(originShort('peer', 'm5-studio'), 'm5-studio에서 만듦');
-  assert.strictEqual(originShort('peer', ''), '다른 맥에서 만듦');
-  assert.strictEqual(originShort('peer', undefined), '다른 맥에서 만듦');
-  assert.strictEqual(originShort('peer', '  '), '다른 맥에서 만듦');
-  assert.strictEqual(originShort('external', 'x'), '직접 만듦', '이름은 peer 에서만 쓴다');
+test('originLabel — 만든 맥 이름이 있으면 「{host}에서 만듦」, 없으면 지금 문구 그대로(툴팁·메뉴 요약)', async () => {
+  const { originLabel, rowSummary } = await mod();
   assert.strictEqual(originLabel('peer', 'm5-studio'), 'm5-studio에서 만듦');
   assert.strictEqual(originLabel('peer', null), '다른 맥에서 만듦');
   assert.strictEqual(originLabel('external', 'x'), '직접 만듦 (CLI·tmux)');

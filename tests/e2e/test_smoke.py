@@ -646,12 +646,10 @@ def test_세션이_없어도_패널_전용_배치를_복원하고_다음_변경�
 # 1은 정밀하지만 마크업을 테스트가 들고 있고, 2는 데이터 없이도 같은 **종류**의
 # 버그를 잡는다. 둘 다 있어야 한다.
 
-# rail.js가 buildSessionCard 결과에 얹는 클래스 조합. 이게 바뀌면 아래 테스트가
-# 엉뚱한 걸 검사하게 되므로 번들에서 실제로 확인한다.
-# shell/Rail.tsx가 행에 얹는 클래스 조합(N36). 이게 바뀌면 아래 테스트가
+# 레일 칸(shell/SessionNode.tsx 가지 그래프 칸)이 쓰는 클래스 조합. 이게 바뀌면 아래 테스트가
 # 엉뚱한 걸 검사하게 되므로 번들에서 실제로 확인한다 — 레일은 지연 청크
 # (shell.js)에 있으므로 app.js가 아니라 그 파일을 본다.
-_CARD_CLASSES = ["vt-wgrail-row", "vt-wgrail-name", "vt-wgrail-row-sub"]
+_CARD_CLASSES = ["vt-rg-row", "vt-rg-node", "vt-rg-name", "vt-rg-sm-t", "vt-rg-detail", "vt-rg-more"]
 
 
 def test_레일_행_클래스_조합이_아직_코드에_있다(page, server):
@@ -679,37 +677,24 @@ def test_레일_행_레이아웃이_행_안에_갇힌다(page):
         """() => {
           const list = document.querySelector('#vt-wgrail .vt-wgrail-body');
           const row = document.createElement('div');
-          // 2026-09-19 — 실제 행은 `vt-srow vt-wgrail-row` 두 클래스를 함께
-          // 단다(RailRow.tsx). 레이아웃(display:flex 등)은 `vt-srow` 쪽이
-          // 들고 있어서, 옛 이름만 붙이면 flex가 아닌 블록을 재게 된다.
-          // 2026-11(리디자인 4단계) — 아이콘 열 + 최대 4줄 + 답 버튼 줄. 개입 필요 행(틴트)이 가장 많이 싣는다.
-          row.className = 'vt-srow vt-wgrail-row is-waiting';
+          // 세션 로직 점검 단계 5 — 펼친 레일 칸은 가지 그래프 칸(SessionNode.tsx `.vt-rg-row.vt-rg-node`)이다. 긴 이름·긴 브랜치·
+          // 큰 변경량을 다 실어도 ⋯ 버튼(.vt-rg-more)이 칸 안 같은 자리에 남아야 한다(이름이 줄어든다).
+          row.className = 'vt-rg-row vt-rg-node is-waiting';
           row.innerHTML = `
-            <span class="vt-srow-state"><svg width="16" height="16"></svg></span>
-            <div class="vt-srow-main vt-wgrail-row-main">
-              <div class="vt-srow-top vt-wgrail-row-top">
-                <span class="vt-srow-agent vt-wgrail-agent"><svg width="14" height="14"></svg></span>
-                <span class="vt-srow-name vt-wgrail-name">feat/very-long-branch-name-that-never-wraps-anywhere-at-all</span>
+            <div class="vt-rg-gut"><svg class="vt-rg-ln"></svg><span class="vt-rg-mark"><span class="vt-rg-ring"></span><span class="vt-rg-agent"><svg width="11" height="11"></svg></span></span></div>
+            <div class="vt-rg-body">
+              <div class="vt-rg-a">
+                <span class="vt-rg-name">feat/very-long-branch-name-that-never-wraps-anywhere-at-all-and-keeps-going</span>
+                <span class="vt-srow-share"><span><svg width="12" height="12"></svg></span><span class="vt-srow-share-nick">a-very-long-share-nickname</span></span>
                 <button type="button" class="vt-srow-kids"><span>위임 보고 12/20</span></button>
-                <span class="vt-srow-elapsed">59분</span>
-                <button type="button" class="vt-icon-btn sm vt-srow-menu"><svg width="16" height="16"></svg></button>
+                <span class="vt-rg-sp"></span>
+                <span class="vt-rg-tm c-waiting">59분</span>
+                <button type="button" class="vt-icon-btn sm vt-rg-more"><svg width="16" height="16"></svg></button>
               </div>
-              <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line2">
-                <span class="vt-srow-workspace-kind">WT</span>
-                <span class="vt-srow-directory">/Users/x/GitHub/work/proj/very/long/path/that/never/wraps</span>
-                <span class="vt-srow-branch with-ico"><span class="vt-srow-branch-ico"><svg width="12" height="12"></svg></span><span class="vt-srow-branch-name">feat/another-very-long-branch-name</span></span>
-                <span class="vt-srow-meta vt-wgrail-diff"><span class="vt-diff-add">+14200</span> <span class="vt-diff-del">−3800</span></span>
-              </div>
-              <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line3">
-                <span class="vt-srow-kw" data-state="waiting">승인 요청</span>
-                <span class="vt-srow-tool">도구: mcp__very_long_server_name__very_long_tool_name</span>
-                <span class="vt-srow-badge">계획 있음</span>
-              </div>
-              <div class="vt-srow-sub vt-wgrail-row-sub vt-srow-line4"><span class="vt-srow-screens">다른 화면 12</span></div>
-              <div class="vt-srow-answers">
-                <button type="button" class="vt-btn sm vt-srow-answer"><span class="vt-srow-answer-label">1 · Yes, and don&#39;t ask again for this command in this project directory</span></button>
-                <button type="button" class="vt-btn sm">3 · 아니오</button>
-                <button type="button" class="vt-btn sm quiet">터미널로</button>
+              <div class="vt-rg-b">
+                <span class="vt-rg-sm" data-tone="waiting"><span class="vt-rg-sm-t">승인 요청</span><span class="vt-rg-detail">mcp__very_long_server_name__very_long_tool_name/with/a/long/path</span></span>
+                <span class="vt-srow-screens">다른 화면 12</span>
+                <span class="vt-rg-diff"><span class="vt-diff-add">+14200</span><span class="vt-diff-del">−3800</span></span>
               </div>
             </div>`;
           list.appendChild(row);
@@ -3228,7 +3213,7 @@ def test_모바일_플릿_홈에_호스트_스위처가_있다(page):
     page.locator("#vt-fleet .vt-fleet-hostitem", has_text="gpu-box").click()
     # 원격을 고르면 그 호스트의 세션 목록으로 바뀐다(스위처는 필터일 뿐이다).
     page.wait_for_function(
-        "() => [...document.querySelectorAll('#vt-fleet .vt-fleet-name')]"
+        "() => [...document.querySelectorAll('#vt-fleet .vt-tile-name')]"
         ".some(e => e.textContent.trim() === 'train')",
         timeout=10000,
     )
@@ -3515,34 +3500,35 @@ def test_폰_집중_모드는_상단바_버튼으로_들어가고_끌어내리�
     pg.wait_for_function("() => !document.documentElement.classList.contains('vt-focus')")
 
 
-def test_폰_세션_카드는_두_줄_64이고_개입_카드의_답_버튼은_44다(phone_page):
+def test_폰_세션은_저장소_묶음_2열_타일이고_입력_대기는_테두리로_답_버튼은_없다(phone_page):
+    """세션 로직 점검 단계 7(시안 T1) — 폰 세션 목록은 저장소 머리 + 2열 타일. 입력 대기 타일은 호박색 테두리이고,
+    목록 안에서 답하는 버튼은 없다(답은 터미널에서). 하단 탭 「입력 대기」 배지는 그대로 1."""
     pg = phone_page
     _phone_terminal(pg)
     name = pg.evaluate("() => { const s = Object.values(window.allSessions())[0]; return s && (s.tmuxName || s.tmux_name) || null; }")
     pg.locator('#vt-mnav-bottom [data-mnav="fleet"]').click()
-    pg.wait_for_selector("#vt-fleet .vt-fleet-row", timeout=15000)
-    h = pg.evaluate("() => Math.round(document.querySelector('#vt-fleet .vt-fleet-row').getBoundingClientRect().height)")
-    assert h == 64, h
+    pg.wait_for_selector("#vt-fleet .vt-tile", timeout=15000)
+    grid = pg.evaluate("""() => { const g = document.querySelector('#vt-fleet .vt-tile-grid'); const cs = getComputedStyle(g);
+      return { cols: cs.gridTemplateColumns.split(' ').length, head: !!g.closest('.vt-fleet-repo').querySelector('.vt-fleet-repo-head') }; }""")
+    assert grid == {"cols": 2, "head": True}, grid
     if not name:
         return
-    # 서버가 곧바로 실제 상태 스냅숏을 보내면 주입한 가짜 「승인 대기」가 덮어써진다(느린 CI에서 버튼이 나타난 직후
-    # 사라져 `[]`가 됐다). 주입과 측정을 한 프레임 안에 묶고, 덮어써졌으면 다시 주입해 같은 기준(높이 44, 배지 1)을 잰다.
     got = pg.evaluate("""async (n) => {
       const snap = () => window.vtApplyAgentSnapshot({ e2e: { tmux_session: n, session_id: 'e2e-w', status: 'waiting',
         kind: 'approval', question: 'npm test', options: [{ key: '1', label: '예' }, { key: '3', label: '아니요' }] } });
       for (let i = 0; i < 40; i++) {
         snap();
         await new Promise((r) => requestAnimationFrame(() => r()));
-        const hs = [...document.querySelectorAll('#vt-fleet .vt-fleet-card .vt-fleet-answers .vt-btn')]
-          .map((b) => Math.round(b.getBoundingClientRect().height));
+        const tile = document.querySelector('#vt-fleet .vt-tile[data-state="waiting"]');
         const badge = document.getElementById('vt-mnav-badge-waiting');
         const shown = !!badge && badge.getClientRects().length > 0;
-        if (hs.length && shown) return { hs, shown, text: badge.textContent.trim(), tries: i + 1 };
+        if (tile && shown) return { border: getComputedStyle(tile).boxShadow !== 'none', answers: document.querySelectorAll('#vt-fleet .vt-fleet-answers, #vt-fleet .vt-srow-answers').length,
+          line: tile.querySelector('.vt-tile-line').textContent.trim(), text: badge.textContent.trim() };
       }
-      return { hs: [], shown: false, text: '', tries: 40 };
+      return null;
     }""", name)
-    assert got["hs"] and all(x == 44 for x in got["hs"]), got
-    assert got["shown"] and got["text"] == "1", got
+    assert got and got["border"] and got["answers"] == 0 and got["text"] == "1", got
+    assert got["line"].startswith("승인 요청"), got
 
 
 # ── 리디자인 후속(셸) — 활동 막대 순서 · 집중 모드 미리보기 · 레일 접기 · MCP 관리 창 ─────────────────────
@@ -3627,7 +3613,9 @@ def test_집중_모드_미리보기가_토글을_따른다(page):
     page.evaluate("() => { window.vtSettingsSet('ui.focus.edgeReveal', true); window.vtSettingsSet('ui.focus.pill', true); }")
 
 
-def test_레일_실행_중_구역과_묶음을_접고_새로고침에도_유지된다(isolated_page):
+def test_레일_저장소_묶음을_접고_새로고침에도_유지되고_분할_묶음은_칸_표식이다(isolated_page):
+    """세션 로직 점검 단계 5 — 레일은 저장소 묶음(가지 그래프)이다. 머리를 누르면 접히고(기기 설정 rail.view),
+    새로고침해도 유지된다. 분할 화면 묶음은 구역이 따로 없고 칸마다 작은 표식(.vt-rg-group)만 붙는다."""
     page = isolated_page
     page.evaluate("() => window.createSession && window.createSession()")
     page.wait_for_selector(".vt-pane .vt-pane-body", timeout=15000)
@@ -3640,30 +3628,26 @@ def test_레일_실행_중_구역과_묶음을_접고_새로고침에도_유지�
         page.wait_for_function("() => Object.keys(window.allSessions()).length === 2", timeout=10000)
         session_ids = page.evaluate("() => Object.keys(window.allSessions())")
         page.evaluate("() => window.vtSettingsSet('ui.side.activity', 'sessions')")
-        page.wait_for_selector("#vt-wgrail .vt-view-group .vt-view-group-toggle", timeout=15000)
+        page.wait_for_function("() => document.querySelectorAll('#vt-wgrail .vt-rg-node .vt-rg-group').length === 2", timeout=15000)
         _shot(page, "d02-rail-expanded")
-        grp = page.locator("#vt-wgrail .vt-view-group").first
-        rows_before = grp.locator(".vt-srow").count()
-        assert rows_before == 2, rows_before
-        grp.locator(".vt-view-group-toggle").click()
-        expect(grp.locator(".vt-view-group-toggle")).to_have_attribute("aria-expanded", "false")
-        assert grp.locator(".vt-srow").count() == 0
-        _shot(page, "d02-rail-group-collapsed")
-        head = page.locator("#vt-wgrail .vt-wgrail-group-toggle", has_text="실행 중")
+        assert page.locator("#vt-wgrail .vt-view-group").count() == 0, "분할 묶음 구역은 없다"
+        # 접으면 칸(.vt-rg-group)이 사라지므로 묶음은 이름(aria-label)으로 다시 찾는다.
+        label = page.locator("#vt-wgrail .vt-rg", has=page.locator(".vt-rg-group")).first.get_attribute("aria-label")
+        grp = page.locator(f'#vt-wgrail .vt-rg[aria-label="{label}"]')
+        head = grp.locator(".vt-rg-head")
         head.click()
         expect(head).to_have_attribute("aria-expanded", "false")
-        assert page.locator("#vt-wgrail .vt-view-group").count() == 0
-        _shot(page, "d02-rail-running-collapsed")
+        assert grp.locator(".vt-rg-node").count() == 0
+        _shot(page, "d02-rail-repo-collapsed")
         # 기기 설정이라 새로고침해도 남는다(저장은 비동기 PUT — 잠깐 기다린다).
         page.wait_for_timeout(600)
         page.reload()
         page.wait_for_function("() => document.documentElement.dataset.appReady === 'true'", timeout=20000)
-        head = page.locator("#vt-wgrail .vt-wgrail-group-toggle", has_text="실행 중")
-        expect(head).to_have_attribute("aria-expanded", "false", timeout=15000)
+        page.evaluate("() => window.vtSettingsSet('ui.side.activity', 'sessions')")
+        head = page.locator("#vt-wgrail .vt-rg-head[aria-expanded='false']").first
+        expect(head).to_be_visible(timeout=15000)
         head.click()
-        page.wait_for_selector("#vt-wgrail .vt-view-group .vt-view-group-toggle[aria-expanded='false']", timeout=10000)
-        page.locator("#vt-wgrail .vt-view-group-toggle").first.click()
-        page.wait_for_selector("#vt-wgrail .vt-view-group .vt-srow", timeout=5000)
+        page.wait_for_selector("#vt-wgrail .vt-rg-node", timeout=5000)
     finally:
         session_ids = session_ids or page.evaluate("() => Object.keys(window.allSessions())")
         for sid in session_ids:
@@ -3672,8 +3656,9 @@ def test_레일_실행_중_구역과_묶음을_접고_새로고침에도_유지�
         page.wait_for_timeout(300)
 
 
-def test_레일_행_3줄에_만든_곳_글이_보인다(page, server):
-    """CLI로 만든(직접 만든) tmux 세션은 3줄에 아이콘 + 「직접 만듦」."""
+def test_레일_칸에_직접_만든_세션의_만든_곳_글이_없다(page, server):
+    """세션 로직 점검 단계 5 — CLI·tmux로 직접 만든 세션에 붙던 「직접 만듦」은 정보가 없어 지웠다. 만든 곳은 다른 맥에서
+    만든 세션에만 아이콘으로 붙는다. 칸의 ⋯는 늘 칸 안 같은 자리다."""
     base, token = server
     if os.environ.get("VT_E2E_URL"):
         pytest.skip("격리 서버에서만 tmux 소켓을 직접 만진다")
@@ -3681,16 +3666,13 @@ def test_레일_행_3줄에_만든_곳_글이_보인다(page, server):
     subprocess.run(["tmux", "-L", sock, "new-session", "-d", "-s", "fua-ext"], check=True)
     try:
         page.evaluate("() => window.vtSettingsSet('ui.side.activity', 'sessions')")
-        sel = "#vt-wgrail .vt-srow-line3 .vt-srow-origin.with-text"
-        page.wait_for_selector(sel, timeout=20000)
-        el = page.locator(sel).first
-        assert el.locator(".vt-srow-origin-text").inner_text() == "직접 만듦"
-        geo = page.evaluate("""(s) => {
-          const o = document.querySelector(s).getBoundingClientRect();
-          const row = document.querySelector(s).closest('.vt-srow').getBoundingClientRect();
-          return { inside: o.right <= row.right + 0.5 && o.left >= row.left, h: Math.round(o.height) };
-        }""", sel)
-        assert geo["inside"], geo
+        node = page.locator("#vt-wgrail .vt-rg-node", has=page.locator(".vt-rg-name", has_text="fua-ext")).first
+        expect(node).to_be_visible(timeout=20000)
+        assert node.locator(".vt-srow-origin").count() == 0
+        assert "직접 만듦" not in node.inner_text()
+        geo = node.evaluate("""(n) => { const m = n.querySelector('.vt-rg-more').getBoundingClientRect(); const r = n.getBoundingClientRect();
+          return { inside: m.right <= r.right + 0.5 && m.left >= r.left, visible: getComputedStyle(n.querySelector('.vt-rg-more')).display !== 'none' }; }""")
+        assert geo == {"inside": True, "visible": True}, geo
         _shot(page, "d02-rail-origin")
     finally:
         subprocess.run(["tmux", "-L", sock, "kill-session", "-t", "fua-ext"], check=False)
@@ -4051,14 +4033,14 @@ def _git_repo(path: Path, branch: str) -> Path:
     return path
 
 
-def test_모바일_세션_카드_2줄은_브랜치를_온전히_보이고_디렉터리만_줄임표로_줄인다(browser, server):
+def test_모바일_저장소_머리는_브랜치를_온전히_보이고_이름만_줄임표로_줄인다(browser, server):
     """실기기: 「유휴 메인 demo-app /m… +1」 — 브랜치가 `/m…`로 잘려 어느 브랜치인지 알 수 없었다.
-    원인: 기본 규칙의 `.vt-srow-branch{flex:1}`(basis 0) + `.vt-srow-directory{flex:1 1 auto}`가 남는 폭을 나눠
-    칸이 넉넉한데도 브랜치 폭이 0~절반이 됐다. 브랜치가 들어갈 만하면 말줄임이 없어야 하고, 모자랄 때는 디렉터리가 줄어야 한다."""
+    세션 로직 점검 단계 7부터 폰 세션 목록은 저장소별 타일이고 브랜치는 저장소 머리(`.vt-fleet-repo-branch`)에 한 번 나온다.
+    브랜치가 들어갈 만하면 말줄임이 없어야 하고, 모자랄 때는 저장소 이름이 줄어야 하며 머리 밖으로 넘치지 않아야 한다."""
     if _BROWSE_DIR is None:
         pytest.skip("외부 서버(VT_E2E_URL)에서는 시험 저장소를 만들 수 없다")
     base, token = server
-    deep = _git_repo(_BROWSE_DIR / "client-projects" / "acme-platform" / "services" / "api-gateway-long-directory-name", "feat/auth")
+    deep = _git_repo(_BROWSE_DIR / "client-projects" / "acme-platform" / "services" / "api-gateway-long-directory-name-that-keeps-going", "feat/auth")
     short = _git_repo(_BROWSE_DIR / "demo-app", "master")
     made = []
     ctx = None
@@ -4069,25 +4051,27 @@ def test_모바일_세션_카드_2줄은_브랜치를_온전히_보이고_디렉
         ctx = _mobile_ctx(browser, base)
         pg = ctx.new_page()
         _boot(pg, f"{base}/")
-        pg.wait_for_selector(".vt-fleet-loc .vt-srow-branch", state="attached", timeout=20000)   # 잘못되면 폭 0이라 visible이 아니다
+        pg.wait_for_function(
+            "() => [...document.querySelectorAll('#vt-fleet .vt-fleet-repo-bn')].map((e) => e.textContent).filter((t) => t === 'feat/auth' || t === 'master').length === 2",
+            timeout=20000)
         pg.wait_for_timeout(500)
-        rows = pg.evaluate("""() => [...document.querySelectorAll('.vt-fleet-loc')].map((l) => {
-          const q = (s) => l.querySelector(s);
+        heads = pg.evaluate("""() => [...document.querySelectorAll('#vt-fleet .vt-fleet-repo-head')].map((h) => {
           const m = (el) => el && { text: el.textContent, cw: el.clientWidth, sw: el.scrollWidth };
-          const line = l.closest('.vt-fleet-line2').getBoundingClientRect();
-          return { dir: m(q('.vt-srow-directory')), br: m(q('.vt-srow-branch')), loc: m(l), lineW: Math.round(line.width) };
+          // 「+」 버튼은 터치 영역을 위해 머리 오른쪽 여백까지 나간다(음수 여백) — 저장소 구역(좌우 12px 여백) 안이면 된다.
+          const box = h.closest('.vt-fleet-repo').getBoundingClientRect();
+          const over = [...h.children].some((c) => { const r = c.getBoundingClientRect(); return r.right > box.right + 1 || r.left < box.left - 1; });
+          return { name: m(h.querySelector('.vt-fleet-repo-name')), br: m(h.querySelector('.vt-fleet-repo-bn')), over };
         })""")
-        by = {r["br"]["text"]: r for r in rows if r["br"]}
-        assert {"feat/auth", "master"} <= set(by), rows
-        for text, r in by.items():
+        by = {h["br"]["text"]: h for h in heads if h["br"]}
+        assert {"feat/auth", "master"} <= set(by), heads
+        for text in ("feat/auth", "master"):
+            h = by[text]
             # 브랜치는 잘리지 않는다 — 보이는 폭이 내용 폭과 같다.
-            assert r["br"]["sw"] <= r["br"]["cw"] + 1, f"브랜치 {text}가 잘렸다: {r}"
-            assert r["br"]["cw"] > 20, r
-        # 짧은 디렉터리(demo-app)는 이 폭에서 아무것도 안 잘린다.
-        assert by["master"]["dir"]["sw"] <= by["master"]["dir"]["cw"] + 1, by["master"]
-        # 긴 디렉터리는 줄임표로 줄되(브랜치를 위해) 칸 밖으로 넘치지 않는다.
-        deep_row = by["feat/auth"]
-        assert deep_row["loc"]["sw"] <= deep_row["loc"]["cw"] + 1, deep_row
+            assert h["br"]["sw"] <= h["br"]["cw"] + 1, f"브랜치 {text}가 잘렸다: {h}"
+            assert h["br"]["cw"] > 20, h
+            assert not h["over"], f"저장소 구역 밖으로 넘쳤다: {h}"
+        # 짧은 이름(demo-app)은 안 잘리고, 긴 이름은 줄임표로 준다(브랜치를 위해).
+        assert by["master"]["name"]["sw"] <= by["master"]["name"]["cw"] + 1, by["master"]
         _dfx_shot(pg, "dfx-fleet-390")
     finally:
         if ctx is not None:
@@ -4294,8 +4278,9 @@ def _tmux_name_of(page, sid: str) -> str:
 
 
 def _new_session_menu(page) -> None:
+    # 세션 로직 점검 단계 6 — 「새 세션」 메뉴(shell/NewSessionMenu.tsx)는 계정이 있으면 맨 아래에 「이번만 다른 계정으로」 줄을 둔다.
     page.locator(".vt-wgrail-new").click()
-    page.wait_for_selector("#add-menu .vt-menu-accounts", timeout=10000)
+    page.locator("#add-menu .vt-menu-item", has_text="이번만 다른 계정으로").wait_for(timeout=10000)
 
 
 def _pick_account_row(page, label: str) -> None:
@@ -4451,8 +4436,10 @@ def test_계정이_없으면_새_세션_메뉴는_예전_그대로다(isolated_p
     page.locator(".vt-wgrail-new").click()
     page.wait_for_selector("#add-menu", timeout=10000)
     page.wait_for_timeout(600)   # 목록 요청이 끝날 시간
-    assert page.locator("#add-menu .vt-menu-accounts").count() == 0
-    assert page.locator("#add-menu .vt-menu-item").count() == 2
+    assert page.locator("#add-menu .vt-menu-item", has_text="다른 계정").count() == 0
+    # 계정 줄만 빠지고 나머지(홈 폴더·일반 터미널)는 그대로다.
+    assert page.locator("#add-menu .vt-menu-item", has_text="홈 폴더").count() == 1
+    assert page.locator("#add-menu .vt-menu-item", has_text="일반 터미널").count() == 1
 
 
 # --- 계정 핫스왑 H2: 공식 출처(statusline) 사용률이 선택기에 보인다 -----------------------------
@@ -4502,7 +4489,7 @@ def test_선택기_줄에_statusline_사용률과_출처와_갱신_시각이_보
                 page.wait_for_timeout(200)
                 # 폰에는 레일 대신 플릿 화면이 있고 새 세션 단추의 자리가 다르다.
                 page.locator('.vt-fleet-tool[aria-label="새 세션"]' if phone else ".vt-wgrail-new").first.click()
-                page.wait_for_selector("#add-menu .vt-menu-accounts", timeout=10000)
+                page.locator("#add-menu .vt-menu-item", has_text="이번만 다른 계정").wait_for(timeout=10000)
                 page.locator("#add-menu .vt-menu-item", has_text="이번만 다른 계정").click()
                 page.wait_for_selector("#account-menu", timeout=10000)
                 page.wait_for_timeout(300)
@@ -4543,10 +4530,10 @@ def test_폰_꾹_눌러_메뉴_시트는_하단_탭을_덮어_취소와_모든_�
     pg = phone_page
     _phone_terminal(pg)
     pg.locator('#vt-mnav-bottom [data-mnav="fleet"]').click()
-    pg.wait_for_selector("#vt-fleet .vt-fleet-row", timeout=15000)
+    pg.wait_for_selector("#vt-fleet .vt-tile", timeout=15000)
     pg.wait_for_timeout(400)
-    pg.evaluate("""() => { const e = document.querySelector('#vt-fleet .vt-fleet-row'); const r = e.getBoundingClientRect();
-      e.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch', clientX: r.x + 100, clientY: r.y + 20, isPrimary: true })); }""")
+    pg.evaluate("""() => { const e = document.querySelector('#vt-fleet .vt-tile'); const r = e.getBoundingClientRect();
+      e.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch', clientX: r.x + 40, clientY: r.y + 20, isPrimary: true })); }""")
     pg.wait_for_selector(".vt-fleet-menu-sheet", timeout=5000)
     pg.wait_for_timeout(400)
     nav, sheet, cancel = _rect(pg, "#vt-mnav-bottom"), _rect(pg, ".vt-fleet-menu-sheet"), _rect(pg, ".vt-session-footer-item")
@@ -4559,7 +4546,7 @@ def test_폰_꾹_눌러_메뉴_시트는_하단_탭을_덮어_취소와_모든_�
     top = pg.evaluate("(y) => { const h = document.elementFromPoint(195, y); return !!h && !h.closest('#vt-mnav-bottom'); }", nav["y"] + 20)
     assert top, "시트가 떠 있는 동안 하단 탭이 터치를 가져가면 안 된다"
     got = pg.evaluate("""() => ({ sel: String(getSelection()), us: getComputedStyle(document.querySelector('.vt-fleet-menu-sheet .vt-session-head h2')).userSelect,
-      row: getComputedStyle(document.querySelector('#vt-fleet .vt-fleet-row')).userSelect })""")
+      row: getComputedStyle(document.querySelector('#vt-fleet .vt-tile')).userSelect })""")
     assert got == {"sel": "", "us": "none", "row": "none"}, got
     # 롱프레스 단어 선택은 hit-test 대상(백드롭)이 글이 아니면 문서에서 가장 가까운 선택 가능한 글(하단 탭 라벨)을 고른다(실기기 2/2).
     # 에뮬레이션은 OS 선택을 못 만드니 계산값으로 본다 — 백드롭만 none 이고 body·터미널 컨테이너는 막지 않는다

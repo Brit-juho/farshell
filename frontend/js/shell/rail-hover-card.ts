@@ -195,7 +195,8 @@ function metaRows(row: SessionRow, shareable: boolean): HcRow[] {
     rows.push({ key: 'share', icon: row.share.mode === 'readwrite' ? 'share-write' : 'share-read', text: shareSentence(row.share) });
   }
   const origin = normalizeOrigin(row.origin);
-  if (origin !== 'local') rows.push({ key: 'origin', icon: ORIGIN_ICON[origin], text: originLabel(origin, row.originHost) });
+  // 만든 곳은 다른 맥에서 만든 세션만(「직접 만듦」은 대부분의 세션에 붙어 정보가 없다 — 세션 로직 점검 단계 7).
+  if (origin === 'peer') rows.push({ key: 'origin', icon: ORIGIN_ICON[origin], text: originLabel(origin, row.originHost) });
   if (row.unseen && normalizeState(row.status) !== 'idle') rows.push({ key: 'unseen', glyph: 'unseen', text: t('아직 확인 안 함') });
   if (!row.share && shareable) rows.push({ key: 'unshared', icon: 'lock', text: t('공유 안 함'), muted: true });
   return rows;

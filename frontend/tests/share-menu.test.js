@@ -91,7 +91,7 @@ test('레일·Fleet 행에 공유 표시(ShareMark)와 메뉴 옵션이 연결�
   const path = require('node:path');
   const read = (p) => fs.readFileSync(path.join(__dirname, '..', '..', p), 'utf8');
   assert.match(read('frontend/js/shell/SessionNode.tsx'), /<ShareMark share=\{row\(\)\.share\} \/>/);
-  assert.match(read('frontend/js/shell/Fleet.tsx'), /<ShareMark share=\{props\.row\.share\} \/>/);
+  assert.match(read('frontend/js/shell/Fleet.tsx'), /<ShareMark share=\{row\(\)\.share\} \/>/);
   assert.match(read('frontend/js/shell/Rail.tsx'), /share: viewHostId === LOCAL_HOST/);
   assert.match(read('frontend/js/shell/Fleet.tsx'), /share: viewHostId === LOCAL_HOST/);
   // 보안 상태라 레일 설정에 표시 토글을 만들지 않는다

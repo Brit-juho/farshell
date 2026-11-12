@@ -42,11 +42,7 @@
   .vt-fleet-host-name,
   .vt-fleet-host-detail,
   .vt-fleet-hostitem-name,
-  .vt-fleet-name,
-  .vt-fleet-row-sub,
   .vt-wgrail-host-name,
-  .vt-wgrail-name,
-  .vt-wgrail-row-sub,
   .vt-wgrail-new,
   .vt-fl-name {
     overflow: hidden;
@@ -71,7 +67,6 @@
   .vt-set-covtable th,
   .vt-vw-recent-head,
   .vt-qo-section-head,
-  .vt-fleet-group-head,
   .vt-wgrail-group-head,
   .vt-wtd-section-title {
     color: var(--color-sub);
@@ -83,7 +78,6 @@
   .vt-eyebrow.sm,
   .vt-vw-recent-head,
   .vt-qo-section-head,
-  .vt-fleet-group-head,
   .vt-wgrail-group-head,
   .vt-wtd-section-title { font-size: var(--fs-3xs); }
 

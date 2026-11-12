@@ -349,10 +349,6 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
    baseline에 얹혀 살짝 내려앉아 있었다). */
 .vt-usage-live, .vt-counter-live { display:inline-flex; align-items:center; gap:calc(var(--spacing) * 1.25); }
 
-/* idle 행은 서브라인이 비는 경우가 있다(마지막 활동 시각이 없을 때). 빈 줄이
-   높이를 차지하면 행마다 들쭉날쭉해 보이므로 내용이 없으면 아예 접는다. */
-.vt-wgrail-row-sub:empty, .vt-fleet-row-sub:empty { display:none; }
-
 /* ── N4: pane 칸 안의 패널 (2026-09-20) ──────────────────────────────────
  *
  * 패널을 pane 리프로도 띄울 수 있게 되면서 같은 마크업이 서는 자리가 셋이
