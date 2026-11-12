@@ -36,8 +36,7 @@ import { createRailPrefs } from './rail-prefs.js';
 import { Menu, ROW_MENU_ICON, Row, type MenuItem } from './RailRow.js';
 import { RailHoverCard, type HoverCardSource } from './RailHoverCard.js';
 import { NativeChildren } from './NativeChildren.js';
-import { ArchiveEntry, type CatalogSnapshot } from './CatalogTree.js';
-import { ArchiveView } from './ArchiveView.js';
+import { ArchiveView, ArchiveEntry, mergeCatalogPage, type CatalogSnapshot } from './ArchiveView.js';
 import { renameSession as renameCatalogSession } from '../history/session-actions.js';
 import { historyApi } from '../history/api.js';
 import { icon } from '../ui/icons.js';
@@ -146,17 +145,8 @@ export function Rail(props: RailProps) {
       if (more && catalog()?.next) params.set('cursor', catalog()!.next!);
       const data = await historyApi('/api/session-catalog?' + params);
       if (request !== catalogRequest) return;
-      const prev = catalog();
-      if (more && prev) {
-        setCatalog({ ...data, sessions: [...prev.sessions, ...data.sessions.filter((x: any) => !prev.sessions.some((y) => y.id === x.id))] });
-      } else if (prev && extraPages) {
-        // 「더 불러오기」로 받아 둔 뒤쪽은 다음 폴링(첫 쪽만 다시 읽음)에 버리지 않는다. 사라진 기록은 다시 열 때 정리된다.
-        const fresh = new Set(data.sessions.map((x: any) => x.id));
-        const tail = prev.sessions.filter((x) => !fresh.has(x.id) && (x.last_activity ?? 0) <= Math.min(...data.sessions.map((y: any) => y.last_activity ?? 0)));
-        setCatalog({ ...data, sessions: [...data.sessions, ...tail], next: prev.next });
-      } else {
-        setCatalog(data);
-      }
+      // 「더 불러오기」로 받아 둔 뒤쪽은 다음 폴링(첫 쪽만 다시 읽음)에 버리지 않는다(mergeCatalogPage).
+      setCatalog(mergeCatalogPage(catalog(), data, more, extraPages));
       if (more) extraPages = true;
     } catch (e) {
       // 옛 호스트(카탈로그 없음)는 지금의 라이브 레일을 그대로 쓴다. 답 자체가 없던

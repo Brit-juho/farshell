@@ -45,8 +45,8 @@ test('시트를 열 때 DOM 선택을 지우고(openMenu), 시트·행은 user-s
   assert.match(sheet, /-webkit-touch-callout:\s*none/);
   assert.match(sheet, /user-select:\s*none/);
   assert.match(bodies(m, '.vt-session-sheet .vt-input').join(' '), /user-select:\s*text/);
-  // 행은 이미 none — 터미널 본문(xterm)에는 적용되지 않는다.
-  assert.match(bodies(css('60-mobile-hud.css'), '.vt-fleet-row').join(' '), /user-select:\s*none/);
+  // 타일(세션 로직 점검 단계 7)도 none — 터미널 본문(xterm)에는 적용되지 않는다.
+  assert.match(bodies(css('72-rail-graph.css'), '#vt-fleet .vt-tile').join(' '), /user-select:\s*none/);
   assert.ok(!/#terminal-container[^{]*\{[^}]*user-select:\s*none/.test(m), '터미널 본문의 선택 복사를 막지 않는다');
 });
 

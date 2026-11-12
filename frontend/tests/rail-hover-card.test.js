@@ -252,10 +252,9 @@ test('메타 — 다른 화면 · 터미널 · 공유 · 만든 곳 · 읽지 �
   assert.strictEqual(meta[1].icon, 'share-write');
   assert.strictEqual(meta[2].text, '맥미니에서 만듦');
   assert.strictEqual(meta[3].text, '아직 확인 안 함');
-  // 읽기 전용 아이콘, 로컬 출처는 줄 없음, 외부 출처
+  // 읽기 전용 아이콘, 로컬·외부(CLI·tmux) 출처는 줄 없음 — 다른 맥에서 만든 세션만 말한다
   const ro = rowsOf(buildHoverCard(row({ share: { nick: 'a', mode: 'read' }, origin: 'external' }), { now: NOW }), 'meta');
-  same(ro.map((x) => [x.key, x.icon]), [['share', 'share-read'], ['origin', 'square-terminal']]);
-  assert.strictEqual(ro[1].text, '직접 만듦 (CLI·tmux)');
+  same(ro.map((x) => [x.key, x.icon]), [['share', 'share-read']]);
   // 이름 모르는 peer
   assert.strictEqual(rowsOf(buildHoverCard(row({ origin: 'peer' }), { now: NOW }), 'meta')[0].text, '다른 맥에서 만듦');
   // idle은 unseen을 안 말한다(칸의 점과 같은 규칙)
@@ -304,9 +303,9 @@ test('높이 상한 — 넘치면 메타 → 하위 세션 줄 → 내부 에이
   assert.ok(tightKids <= 1);
   assert.strictEqual(tightNative, 1, '내부 에이전트 줄도 마지막에는 줄어든다(바닥 1줄 + 「외 K개」)');
   // 메타는 마지막 줄부터 빠진다 — 「공유 안 함」이 먼저 사라진다
-  const light = buildHoverCard(row({ otherScreens: 1, origin: 'external' }), { now: NOW, maxLines: 2 });
+  const light = buildHoverCard(row({ otherScreens: 1, origin: 'peer' }), { now: NOW, maxLines: 2 });
   same(rowsOf(light, 'meta').map((r) => r.key), ['screens', 'origin']);
-  same(rowsOf(buildHoverCard(row({ otherScreens: 1, origin: 'external' }), { now: NOW, maxLines: 1 }), 'meta').map((r) => r.key), ['screens']);
+  same(rowsOf(buildHoverCard(row({ otherScreens: 1, origin: 'peer' }), { now: NOW, maxLines: 1 }), 'meta').map((r) => r.key), ['screens']);
 });
 
 test('빈 구역·빈 문구가 없다 — 모든 줄에 글이 있고 모든 구역에 줄이 있다', async () => {

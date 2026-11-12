@@ -71,7 +71,11 @@ function currentPlace(row: RepoRowLike): { repoRoot: string | null; treeRoot: st
   return { repoRoot: (linked ? wt?.repositoryRoot : treeRoot) || treeRoot, treeRoot, linked };
 }
 
-interface Placed<R> { row: R; key: string; name: string; repository: boolean; root: string | null; lane: Lane<R>['worktree'] }
+interface Placed<R> {
+  row: R; key: string; name: string; repository: boolean; root: string | null; lane: Lane<R>['worktree'];
+  /** 이 행이 메인 작업 트리에 있으면 그 브랜치 — /api/repos에 없는(등록 안 된) 저장소의 머리 브랜치를 채운다. */
+  mainBranch: string | null;
+}
 
 function place<R extends RepoRowLike>(row: R): Placed<R> {
   const now = currentPlace(row);
@@ -80,13 +84,15 @@ function place<R extends RepoRowLike>(row: R): Placed<R> {
     // 지금 위치가 같은 저장소의 다른(링크드) 작업 트리면 그 워크트리 가지에 둔다.
     const lane = now.linked && now.repoRoot === home.root && now.treeRoot
       ? { key: now.treeRoot, name: base(now.treeRoot), branch: row.branch || null } : null;
-    return { row, key: home.project_id, name: home.name, repository: true, root: home.root, lane };
+    const inMain = !now.linked && !!now.treeRoot && now.treeRoot === home.root;
+    return { row, key: home.project_id, name: home.name, repository: true, root: home.root, lane, mainBranch: inMain ? row.branch || null : null };
   }
   if (!home && now.repoRoot) {
     const lane = now.linked && now.treeRoot ? { key: now.treeRoot, name: base(now.treeRoot), branch: row.branch || null } : null;
-    return { row, key: 'path:' + now.repoRoot, name: base(now.repoRoot), repository: true, root: now.repoRoot, lane };
+    return { row, key: 'path:' + now.repoRoot, name: base(now.repoRoot), repository: true, root: now.repoRoot, lane,
+      mainBranch: now.linked ? null : row.branch || null };
   }
-  return { row, key: OUTSIDE_KEY, name: '', repository: false, root: null, lane: null };
+  return { row, key: OUTSIDE_KEY, name: '', repository: false, root: null, lane: null, mainBranch: null };
 }
 
 export interface BuildInput<R, E> {
@@ -95,11 +101,11 @@ export interface BuildInput<R, E> {
   ended?: E[];
   workspaces?: { id: string; project_id: string | null; path?: string }[];
   projects?: { id: string; name: string; path: string; kind: string }[];
-  /** 저장소 경로 → 메인 작업 트리의 브랜치(/api/repos). */
+  /** 저장소 경로 → 메인 작업 트리의 브랜치(/api/repos). 없는 저장소는 메인 작업 트리에 있는 세션 행의 브랜치로 채운다. */
   mainBranches?: Map<string, string | null>;
   /** 행의 최근 활동(카탈로그 last_activity, 초). 없으면 상태 진입 시각. */
   activityOf?: (row: R) => number;
-  /** 이 카탈로그 세션이 지금 실행 중 행으로 그려지고 있는가. */
+  /** 이 카탈로그 세션이 지금 실행 중 행으로 그려지고 있는가. 아니면 끝나지 않은 기록도 「종료 N」 쪽에 든다. */
   isLive?: (s: E) => boolean;
 }
 
@@ -137,6 +143,8 @@ export function buildRepoTree<R extends RepoRowLike, E extends EndedLike>(inp: B
     if (isKid(r)) continue;
     const p = place(r);
     const g = group(p.key, p.name, p.repository, p.root);
+    // 메인 작업 트리 브랜치는 /api/repos(등록된 저장소)가 먼저고, 거기 없으면 메인 작업 트리에 있는 세션의 브랜치로 채운다.
+    if (!g.mainBranch && p.mainBranch) g.mainBranch = p.mainBranch;
     const laneKey = p.lane?.key ?? '';
     let lane = g.lanes.find((l) => (l.worktree?.key ?? '') === laneKey);
     if (!lane) { lane = { worktree: p.lane, sessions: [] }; g.lanes.push(lane); }
@@ -147,11 +155,14 @@ export function buildRepoTree<R extends RepoRowLike, E extends EndedLike>(inp: B
     g.lastActivity = Math.max(g.lastActivity, activity(r), ...kids.map(activity));
   }
 
-  // 종료(보관 안 함): 카탈로그 자리(workspace → project)로 저장소를 찾는다.
+  // 종료(보관 안 함): 카탈로그 자리(workspace → project)로 저장소를 찾는다. 실행 중으로 그려지지 않은 기록은 끝나지 않았어도
+  // (아직 실행 전·tmux 조회 불완전·연결 확인 중) 여기 든다 — 빼면 목록 어디에도 없어 「다시 확인」·이어서 시작을 못 한다
+  // (EndedItem이 executionStatus로 상태와 「다시 확인」을 보인다). isLive를 안 주면 끝나지 않은 기록을 실행 중으로 본다.
+  const live = inp.isLive ?? ((s: E) => s.ended == null);
   const ws = new Map((inp.workspaces || []).map((w) => [w.id, w]));
   const projects = new Map((inp.projects || []).map((p) => [p.id, p]));
   for (const s of inp.ended || []) {
-    if (s.archived || s.ended == null || inp.isLive?.(s)) continue;
+    if (s.archived || live(s)) continue;
     const w = s.workspace_id ? ws.get(s.workspace_id) : undefined;
     const proj = w?.project_id ? projects.get(w.project_id) : undefined;
     const g = proj && proj.kind === 'git' ? group(proj.id, proj.name, true, proj.path) : group(OUTSIDE_KEY, '', false, null);

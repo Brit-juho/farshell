@@ -31,7 +31,8 @@ export function NativeChip(props: { row: SessionRow }) {
 
 export function NativeChildren(props: { row: SessionRow }) {
   const summary = createMemo(() => normalizeSubagents(props.row.subagents));
-  const current = () => summary().items.filter((r: any) => r.state === 'working' || r.state === 'idle');
+  // 진행 중·대기. 상태를 오래 못 들은(stale) 대기 행은 숨긴다 — 이미 끝났을 가능성이 크다(작업 중이면 둔다).
+  const current = () => summary().items.filter((r: any) => r.state === 'working' || (r.state === 'idle' && !r.stale));
   const ended = () => summary().items.filter((r: any) => r.state === 'done' || r.state === 'failed');
   const manyWorking = () => current().filter((r: any) => r.state === 'working').length > 4;
   const storageKey = () => `vt.native:${(window as any).vtRelayHost?.() || 'local'}:${summary().parentId || props.row.tmuxName}`;
@@ -58,9 +59,10 @@ export function NativeChildren(props: { row: SessionRow }) {
   ];
   // 하위 행(시안 D02 「내부 서브에이전트 하위 행」): 들여쓰기 24 + 가지선, 1줄 상태 아이콘 · 이름 · 경과,
   // 2줄 「내부 · 작업 중」. 도구 이름은 그리지 않는다 — 호출마다 생겼다 사라져 깜빡인다.
-  // 같은 이름이 둘 이상이면 「general-purpose #2」처럼 순번(시작 시각 순, 끝난 행 포함)을 붙이고,
+  // 같은 이름이 둘 이상이면 「general-purpose #2」처럼 순번(시작 시각 순, **지금 보이는 행끼리**)을 붙이고,
   // 2줄 끝에 id 앞 4자(바뀌지 않아 깜빡이지 않는다)를 흐리게 덧붙인다.
-  const ordinals = createMemo(() => sameLabelOrdinals(summary().items));
+  const visible = () => [...(!manyWorking() || expanded() ? current() : []), ...(endedOpen() ? ended() : [])];
+  const ordinals = createMemo(() => sameLabelOrdinals(visible()));
   const shownName = (child: any) => ordinals().has(child.id) ? `${child.label} #${ordinals().get(child.id)}` : child.label;
   const render = (child: any) => <div class="vt-native-row" data-state={child.state}>
     <button type="button" class="vt-native-open" aria-label={`${shownName(child)}, ${nativeStateLabel(child.state)}${child.stale ? `, ${t('상태 확인 필요')}` : ''}`}

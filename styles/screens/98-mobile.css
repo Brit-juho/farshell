@@ -67,84 +67,8 @@
   .vt-fleet-machine { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:400 var(--fs-xs) / 16px var(--font-ui); color:var(--color-muted); }
   .vt-fleet-tool { width:44px; height:44px; flex:none; color:var(--color-sub); border-radius:var(--radius-lg); }
   .vt-fleet-hostbar { padding:0 12px 4px; background:var(--color-bg-0); border-bottom:0; }
-  .vt-fleet-group { display:flex; flex-direction:column; }
-  /* 구역 머리 36 — 「개입 필요 1」만 대기색. 수는 mono 12. */
-  #vt-fleet .vt-fleet-group-head {
-    display:flex; align-items:center; gap:8px; height:36px; margin-top:8px; padding:0 12px 0 16px; box-sizing:border-box;
-    font:600 var(--fs-sm) / 18px var(--font-ui); color:var(--color-sub); letter-spacing:0; text-transform:none;
-  }
-  #vt-fleet .vt-fleet-group-head > span:first-child { flex:1; min-width:0; }
-  .vt-fleet-group-n { margin-left:8px; font:400 var(--fs-xs) / 1 var(--font-mono); color:var(--color-muted); }
-  #vt-fleet .vt-fleet-group-head.is-wait, #vt-fleet .vt-fleet-group-head.is-wait .vt-fleet-group-n { color:var(--color-st-waiting); }
-
-  /* 세션 카드 64 — 두 줄. 행 사이 구분선은 상태 아이콘 열 오른쪽에서 시작한다(시안 m-div 12/50). */
-  #vt-fleet .vt-fleet-row {
-    position:relative; display:flex; flex-direction:column; justify-content:center; box-sizing:border-box;
-    min-height:64px; margin:0 12px; padding:11px 11px 11px 13px; gap:0;   /* 테두리 1 포함 64 */
-    border-radius:var(--radius-lg); background:transparent; border:1px solid transparent;
-  }
-  #vt-fleet .vt-fleet-row:active { background:var(--color-state-press); }
-  #vt-fleet .vt-fleet-row.is-waiting:not(.vt-fleet-card) { background:transparent; box-shadow:none; }
-  #vt-fleet .vt-lin + .vt-lin::before,
-  #vt-fleet .vt-view-group + .vt-lin::before {
-    content:""; display:block; height:1px; margin:0 12px 0 50px; background:var(--color-line);
-  }
-  #vt-fleet .vt-fleet-row-main { display:flex; flex-direction:column; gap:0; min-width:0; }
-  #vt-fleet .vt-fleet-row-top { display:flex; align-items:center; gap:8px; height:20px; min-width:0; }
-  #vt-fleet .vt-fleet-row-top .vt-srow-state { margin-left:0; }
-  #vt-fleet .vt-fleet-name {
-    flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-    font:600 var(--fs-base) / 20px var(--font-ui); color:var(--color-txt);
-  }
-  #vt-fleet .vt-fleet-el { margin-left:auto; padding-left:8px; flex:none; font:400 var(--fs-xs) / 1 var(--font-mono); color:var(--color-muted); }
-  #vt-fleet .vt-fleet-line2 {
-    display:flex; align-items:center; gap:6px; height:16px; margin-top:4px; padding-left:24px; min-width:0;
-    overflow:hidden; white-space:nowrap; font:400 var(--fs-xs) / 16px var(--font-ui); color:var(--color-muted);
-  }
-  #vt-fleet .vt-fleet-line2 .vt-srow-kw { font-weight:600; }
-  #vt-fleet .vt-fleet-line2 .vt-srow-tool,
-  #vt-fleet .vt-fleet-line2 .vt-srow-badge { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; }
-  .vt-fleet-loc {
-    display:inline-flex; gap:0; flex:0 1 auto; min-width:0; overflow:hidden;
-    font:400 var(--fs-xs) / 16px var(--font-mono); color:var(--color-muted);
-  }
-  .vt-fleet-loc > span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .vt-fleet-loc .vt-srow-workspace-kind { margin-right:6px; flex:none; }
-  /* 우선순위: 브랜치는 줄지 않고(너무 길 때만 60%에서 말줄임), 폭이 모자라면 디렉터리가 먼저 말줄임한다.
-     기본 규칙(components.css)의 branch flex:1 · directory flex:1 1 auto가 남는 폭을 나눠 브랜치가 「/m…」로 잘렸다. */
-  .vt-fleet-loc .vt-srow-directory { flex:0 1 auto; }
-  .vt-fleet-loc .vt-srow-branch { flex:0 0 auto; max-width:60%; }
-  .vt-fleet-loc .vt-srow-directory + .vt-srow-branch::before { content:"/"; }
-  #vt-fleet .vt-fleet-diff { flex:none; font:400 var(--fs-xs) / 16px var(--font-mono); color:var(--color-sub); }
-  .vt-fleet-gls { display:inline-flex; align-items:center; gap:4px; margin-left:auto; padding-left:4px; flex:none; color:var(--color-muted); }
-  .vt-fleet-gls:empty { display:none; }
-  /* 위임 하위 행 — 시안 m-card.child: 왼쪽 36 들여(가지선은 레일과 같은 .vt-lin-kid 규칙). */
-  #vt-fleet .vt-fleet-row.kid { margin-left:36px; }
-
-  /* 개입 필요 카드 — raised 면 · 대기색 테두리 · 왼쪽 3px 띠 · 질문 한 줄(터미널 색) · 44px 답 버튼. */
-  #vt-fleet .vt-fleet-row.vt-fleet-card { background:var(--color-bg-raised); border-color:var(--m-wait-line); }
-  #vt-fleet .vt-fleet-row.vt-fleet-card::before {
-    content:""; position:absolute; left:-1px; top:11px; bottom:11px; width:3px; border-radius:0 2px 2px 0; background:var(--color-st-waiting);
-  }
-  .vt-fleet-q {
-    margin:10px 0 0 24px; padding:6px 8px; border-radius:var(--radius-sm); background:var(--color-term-bg);
-    font:400 var(--fs-xs) / 16px var(--font-mono); color:var(--color-term-fg);
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  }
-  .vt-fleet-q-mark { color:var(--color-term-amber); margin-right:6px; }
-  #vt-fleet .vt-fleet-answers { display:flex; flex-wrap:nowrap; gap:6px; margin-top:10px; padding-left:24px; }
-  #vt-fleet .vt-fleet-answers .vt-btn {
-    --btn-h:44px; flex:1 1 0; min-width:0; height:44px; padding:0 8px; gap:6px; border-radius:var(--radius-lg);
-    background:var(--color-bg-raised); border:1px solid var(--color-line-strong); color:var(--color-txt);
-    font:500 var(--fs-base) / 1 var(--font-ui);
-  }
-  #vt-fleet .vt-fleet-answers .vt-btn.solid { background:var(--color-acc-surface); border-color:transparent; color:var(--color-acc-ink); font-weight:600; }
-  .vt-srow-answer-key { flex:none; font:600 var(--fs-xs) / 1 var(--font-mono); color:var(--color-st-waiting); }
-
-  /* 정렬 전환 · 뷰 편집 · 새 세션 — 시안 m-seg 28 · 36 아이콘. */
-  #vt-fleet .vt-fleet-group-head-sort .vt-rail-sort { height:28px; }
-  #vt-fleet .vt-fleet-edit-btn { width:36px; height:36px; }
-  .vt-fleet-add-btn { width:auto; margin:12px 12px 0; }
+  /* 세션 목록은 저장소 묶음 2열 타일이다(72-rail-graph.css 「폰 세션 목록」, 세션 로직 점검 단계 7). 예전 64px 카드·
+     개입 필요 카드·답 버튼·정렬 전환 규칙은 지웠다. */
 
   /* ── 시트(길게 누름 · 이름 변경 · 세션 관리) — 위쪽 반경 16, 손잡이, 항목 44 ── */
   .vt-session-sheet {
@@ -156,7 +80,7 @@
     content:""; display:block; width:36px; height:4px; margin:4px auto 4px; border-radius:2px; background:var(--color-surface-active);
   }
   /* 꾹 누른 손가락 밑에 시트가 뜨면 OS가 제목(「server」)을 단어로 선택해 핸들이 남는다(2026-11-10 실기기). 시트는 버튼 모음이지
-     읽을 글이 아니다 — 선택·콜아웃을 끈다(세션 행 .vt-fleet-row와 같은 처방, 60-mobile-hud.css). 이름 변경 입력은 편집 중 선택이 필요하다. */
+     읽을 글이 아니다 — 선택·콜아웃을 끈다(세션 타일 .vt-tile과 같은 처방, 72-rail-graph.css). 이름 변경 입력은 편집 중 선택이 필요하다. */
   .vt-session-sheet { -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
   .vt-session-sheet .vt-input { -webkit-user-select:text; user-select:text; }
   /* 롱프레스 단어 선택은 터치 좌표의 hit-test 대상(백드롭)이 글이 아니면 문서에서 가장 가까운 '선택 가능한' 글을 고른다.
