@@ -156,6 +156,12 @@ async def list_sessions(screen: str | None = None):
     # 검증해 좀비 세션을 정리하고, 살아있는 것만 반환한다.
     panes = await tmux_runner.get_all_panes_async()
     live_tmux_names = {p.session for p in panes}
+    if panes and any((info := session_store.get(sid)) and info.tmux_name and info.tmux_name not in live_tmux_names
+                     for sid in list(pty_mgr.sessions)):
+        # 목록에 없는 이름이 있다 — 끝난 세션일 수도, 터미널 안에서 이름만 바뀐 세션일 수도 있다. 지우기 전에 tmux 상태를
+        # 한 번 반영해 개명을 따라간다(deps._follow_rename). 그래도 없는 이름만 좀비로 정리한다.
+        from deps import on_tmux_change
+        await on_tmux_change()
     origin_by_tmux = {p.session: p.origin for p in panes}
     result = []
     for s in list(pty_mgr.sessions.values()):
