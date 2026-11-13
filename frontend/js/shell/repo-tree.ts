@@ -1,31 +1,47 @@
-// 레일의 저장소 가지 그래프 모델(세션 로직 점검 단계 5, 설계 P1). 순수 모듈 — DOM·전역을 보지 않는다.
+// 레일·폰의 저장소 묶음 모델(세션 로직 점검 단계 5 → 저장소 2차). 순수 모듈 — DOM·전역을 보지 않는다.
 //
-//   저장소 묶음(머리: 이름 · 메인 작업 트리의 브랜치 · 세션 수)
+//   저장소 묶음(머리: 이름 · 메인 작업 트리의 브랜치 · 세션 수 · 「+」)
 //     ├ 메인 가지의 세션들
 //     ├ 워크트리 가지(「워크트리 <브랜치>」) 아래의 세션들
 //     │   └ 위임으로 만든 하위 세션(부모 밑)
-//     └ 「종료 N」(이 저장소에서 끝난 세션 — 카탈로그)
-//   「저장소 밖」 묶음은 맨 아래 — 그 안은 세션의 지금 폴더별 가지(「폴더 ~/…」)로 묶는다(고정할 저장소가 없어 지금 위치를 따른다).
+//     └ 「종료 N」(이 저장소에서 있었던 끝난 대화 — ProjectEnded.tsx가 펼칠 때 받는다)
+//   「저장소 밖」 묶음은 맨 아래 — 그 안은 세션의 지금 폴더별 가지(「폴더 ~/…」).
 //
-// 세션의 저장소는 카탈로그가 정한 자리(`home`, 처음 시작한 곳 — cd해도 안 바뀜)다. 자리가 아직 없으면(방금 만든
-// 세션·옛 서버) 지금 위치(context)의 저장소로 그린다. 워크트리 가지는 지금 위치가 같은 저장소의 다른 작업 트리일
-// 때만이다(common-dir가 같고 작업 트리가 다를 때).
+// 저장소 = CLI를 켠 곳(서버 session_catalog/placement.py·projects_view.py). 묶음은 **저장소 목록**(`projects`)에서 만든다 —
+// 세션이 없어도 남는다. 실행 중 세션의 자리는 서버가 정한 `home`(CLI가 돌면 CLI 위치, 아니면 셸 위치 — inventory.py)이고, 그
+// 저장소가 목록의 저장소(`home.registered`, 숨김 아님)면 그 묶음, 아니면 「저장소 밖」 폴더 가지다. 워크트리 가지는 지금 위치가
+// 같은 저장소의 다른 작업 트리일 때만이다(common-dir가 같고 작업 트리가 다를 때).
 //
-// 정렬: 저장소는 「입력 대기가 있는 저장소 > 최근 활동」, 저장소 안은 최근 활동순. 저장소 밖은 늘 맨 아래.
+// 정렬(기기별 설정 rail.view — rail-data.ts RailSort): 저장소는 등록순(기본)·이름순·최근 활동, 저장소 안 세션은 만든 순(기본)·
+// 이름순·최근 활동. 「입력 대기 먼저」(기본 끔)를 켜면 입력 대기가 있는 저장소·세션이 어떤 정렬에서도 위로. 저장소 밖은 늘 맨 아래.
 
 export interface RepoRowLike {
   tmuxName: string | null;
   name: string;
   status: string;
   physicalKey?: string;
-  home?: { project_id: string; root: string; name: string; repository: boolean; kind?: string; path?: string } | null;
+  home?: { project_id: string; root: string; name: string; repository: boolean; kind?: string; path?: string;
+          registered?: boolean; hidden?: boolean } | null;
   context?: any;
   branch?: string | null;
   /** 지금 폴더(저장소 밖 세션의 폴더 가지). */
   cwd?: string | null;
   lineage?: { parent: string | null; state: string; createdAt?: number | null } | null;
   since?: number | null;
+  /** 세션을 만든 시각(초) — 「만든 순」 정렬. */
+  created?: number | null;
 }
+
+/** 저장소 목록 API(/api/session-catalog/projects)의 한 줄. */
+export interface ProjectLike {
+  id: string; name: string; path: string; kind: string;
+  branch?: string | null; last_activity?: number | null; registered?: number | null; ended_count?: number;
+}
+
+export type RepoSort = 'registered' | 'name' | 'activity';
+export type SessionSort = 'created' | 'name' | 'activity';
+export interface TreeSort { repos: RepoSort; sessions: SessionSort; waitingFirst: boolean }
+export const DEFAULT_SORT: TreeSort = { repos: 'registered', sessions: 'created', waitingFirst: false };
 
 export interface EndedLike {
   id: string;
@@ -45,18 +61,24 @@ export interface Lane<R> {
   worktree: { key: string; name: string; branch: string | null; folder?: string } | null;
   sessions: SessionNodeEntry<R>[];
 }
-export interface RepoGroup<R, E> {
+export interface RepoGroup<R> {
   key: string;
   name: string;
+  /** 목록의 저장소인가(저장소 밖이 아니다). */
   repository: boolean;
+  /** 'git' · 'directory'(git이 아닌 폴더 저장소) · null(저장소 밖). */
+  kind: string | null;
   root: string | null;
   mainBranch: string | null;
   lanes: Lane<R>[];
-  ended: E[];
+  /** 「종료 N」 — 이 저장소의 끝난 대화 수(저장소 목록 API). 목록은 펼칠 때 받는다. */
+  endedCount: number;
   /** 머리의 세션 수(실행 중 최상위 + 하위). */
   count: number;
   attention: boolean;
   lastActivity: number;
+  /** 처음 CLI를 켠 시각(등록순 정렬). */
+  registered: number;
 }
 
 export const OUTSIDE_KEY = '__outside__';
@@ -82,44 +104,38 @@ interface Placed<R> {
 function place<R extends RepoRowLike>(row: R): Placed<R> {
   const now = currentPlace(row);
   const home = row.home;
-  if (home && home.repository) {
-    // 지금 위치가 같은 저장소의 다른(링크드) 작업 트리면 그 워크트리 가지에 둔다.
-    const lane = now.linked && now.repoRoot === home.root && now.treeRoot
+  if (home && home.registered && !home.hidden) {
+    // 지금 위치가 같은 저장소의 다른(링크드) 작업 트리면 그 워크트리 가지에 둔다(git 저장소만).
+    const lane = home.repository && now.linked && now.repoRoot === home.root && now.treeRoot
       ? { key: now.treeRoot, name: base(now.treeRoot), branch: row.branch || null } : null;
-    const inMain = !now.linked && !!now.treeRoot && now.treeRoot === home.root;
+    const inMain = home.repository && !now.linked && !!now.treeRoot && now.treeRoot === home.root;
     return { row, key: home.project_id, name: home.name, repository: true, root: home.root, lane, mainBranch: inMain ? row.branch || null : null };
   }
-  if (!home && now.repoRoot) {
-    const lane = now.linked && now.treeRoot ? { key: now.treeRoot, name: base(now.treeRoot), branch: row.branch || null } : null;
-    return { row, key: 'path:' + now.repoRoot, name: base(now.repoRoot), repository: true, root: now.repoRoot, lane,
-      mainBranch: now.linked ? null : row.branch || null };
-  }
-  // 저장소 밖 — 지금 폴더별 가지. 폴더를 모르면(옛 서버·조회 전) 가지 없이 바로 둔다.
+  // 목록의 저장소가 아니다(셸로 들어간 미등록 저장소·숨긴 저장소·자리 모름) — 저장소 밖, 지금 폴더별 가지.
   const dir = typeof row.cwd === 'string' && row.cwd ? row.cwd.replace(/\/+$/, '') || '/' : '';
   const lane = dir ? { key: 'dir:' + dir, name: base(dir) || dir, branch: null, folder: dir } : null;
   return { row, key: OUTSIDE_KEY, name: '', repository: false, root: null, lane, mainBranch: null };
 }
 
-export interface BuildInput<R, E> {
+export interface BuildInput<R> {
   rows: R[];
-  /** 카탈로그 스냅샷의 세션들(실행 중·종료·보관 섞임). 종료(보관 안 함)만 「종료 N」으로 간다. */
-  ended?: E[];
-  workspaces?: { id: string; project_id: string | null; path?: string }[];
-  projects?: { id: string; name: string; path: string; kind: string }[];
-  /** 저장소 경로 → 메인 작업 트리의 브랜치(/api/repos). 없는 저장소는 메인 작업 트리에 있는 세션 행의 브랜치로 채운다. */
+  /** 목록의 저장소(보이는 것). 세션이 없어도 묶음이 생긴다. */
+  projects?: ProjectLike[];
+  /** 저장소 경로 → 메인 작업 트리의 브랜치(/api/repos — 저장소 목록에 브랜치가 없을 때). 그것도 없으면 메인 작업 트리 세션의 브랜치. */
   mainBranches?: Map<string, string | null>;
   /** 행의 최근 활동(카탈로그 last_activity, 초). 없으면 상태 진입 시각. */
   activityOf?: (row: R) => number;
-  /** 이 카탈로그 세션이 지금 실행 중 행으로 그려지고 있는가. 아니면 끝나지 않은 기록도 「종료 N」 쪽에 든다. */
-  isLive?: (s: E) => boolean;
+  sort?: TreeSort;
 }
 
+/** 옛 카탈로그 세션 기록의 활동 시각(보관함 — ArchiveView). */
 export function endedActivity(s: EndedLike): number {
   return Number(s.last_activity ?? s.ended ?? s.updated ?? 0) || 0;
 }
 
-export function buildRepoTree<R extends RepoRowLike, E extends EndedLike>(inp: BuildInput<R, E>): RepoGroup<R, E>[] {
+export function buildRepoTree<R extends RepoRowLike>(inp: BuildInput<R>): RepoGroup<R>[] {
   const activity = (r: R) => inp.activityOf?.(r) ?? Number(r.since ?? 0);
+  const sort = inp.sort ?? DEFAULT_SORT;
   const names = new Set(inp.rows.map((r) => r.tmuxName).filter(Boolean) as string[]);
   // 위임 하위 세션은 부모 밑으로 — 부모가 목록에 있을 때만(부모가 사라졌으면 최상위로 올린다).
   // 계보가 고리를 이루면(데이터 이상) 고리에 든 세션만 최상위로 둔다 — 하위로 두면 어느 최상위 밑에도 안 그려져 목록에서
@@ -159,16 +175,25 @@ export function buildRepoTree<R extends RepoRowLike, E extends EndedLike>(inp: B
     return out;
   };
 
-  const groups = new Map<string, RepoGroup<R, E>>();
+  const groups = new Map<string, RepoGroup<R>>();
   const group = (key: string, name: string, repository: boolean, root: string | null) => {
     let g = groups.get(key);
     if (!g) {
-      g = { key, name, repository, root, mainBranch: root ? inp.mainBranches?.get(root) ?? null : null,
-            lanes: [], ended: [], count: 0, attention: false, lastActivity: 0 };
+      g = { key, name, repository, kind: repository ? 'git' : null, root, mainBranch: root ? inp.mainBranches?.get(root) ?? null : null,
+            lanes: [], endedCount: 0, count: 0, attention: false, lastActivity: 0, registered: 0 };
       groups.set(key, g);
     }
     return g;
   };
+  // 저장소 목록 — 세션이 없어도 묶음이 남는다(머리 · 「+」 · 「종료 N」).
+  for (const p of inp.projects || []) {
+    const g = group(p.id, p.name, true, p.path);
+    g.kind = p.kind === 'git' ? 'git' : 'directory';
+    g.mainBranch = p.branch || g.mainBranch;
+    g.endedCount = Math.max(0, Number(p.ended_count) || 0);
+    g.lastActivity = Number(p.last_activity) || 0;
+    g.registered = Number(p.registered) || 0;
+  }
   const urgent = (r: R) => r.status === 'waiting' || (r.tmuxName ? descendants(r.tmuxName, new Set([r.tmuxName])) : []).some((k) => k.status === 'waiting');
 
   for (const r of inp.rows) {
@@ -187,31 +212,28 @@ export function buildRepoTree<R extends RepoRowLike, E extends EndedLike>(inp: B
     g.lastActivity = Math.max(g.lastActivity, activity(r), ...kids.map(activity));
   }
 
-  // 종료(보관 안 함): 카탈로그 자리(workspace → project)로 저장소를 찾는다. 실행 중으로 그려지지 않은 기록은 끝나지 않았어도
-  // (아직 실행 전·tmux 조회 불완전·연결 확인 중) 여기 든다 — 빼면 목록 어디에도 없어 「다시 확인」·이어서 시작을 못 한다
-  // (EndedItem이 executionStatus로 상태와 「다시 확인」을 보인다). isLive를 안 주면 끝나지 않은 기록을 실행 중으로 본다.
-  const live = inp.isLive ?? ((s: E) => s.ended == null);
-  const ws = new Map((inp.workspaces || []).map((w) => [w.id, w]));
-  const projects = new Map((inp.projects || []).map((p) => [p.id, p]));
-  for (const s of inp.ended || []) {
-    if (s.archived || live(s)) continue;
-    const w = s.workspace_id ? ws.get(s.workspace_id) : undefined;
-    const proj = w?.project_id ? projects.get(w.project_id) : undefined;
-    const g = proj && proj.kind === 'git' ? group(proj.id, proj.name, true, proj.path) : group(OUTSIDE_KEY, '', false, null);
-    g.ended.push(s);
-  }
+  const created = (r: R) => Number(r.created) || 0;
+  const waiting = (r: R) => r.status === 'waiting';
+  const bySession = (a: SessionNodeEntry<R>, b: SessionNodeEntry<R>) => {
+    if (sort.waitingFirst && waiting(a.row) !== waiting(b.row)) return waiting(a.row) ? -1 : 1;
+    if (sort.sessions === 'name') return a.row.name.localeCompare(b.row.name) || created(b.row) - created(a.row);
+    if (sort.sessions === 'activity') return activity(b.row) - activity(a.row);
+    return created(b.row) - created(a.row) || a.row.name.localeCompare(b.row.name);
+  };
   for (const g of groups.values()) {
-    g.ended.sort((a, b) => endedActivity(b) - endedActivity(a));
-    // 메인 가지가 먼저, 워크트리 가지는 그 뒤(가지 안 최근 활동순).
+    for (const l of g.lanes) l.sessions.sort(bySession);
+    // 메인 가지가 먼저, 워크트리·폴더 가지는 그 뒤 — 이름순이면 가지 이름(경로)순, 아니면 가지 안 첫 세션 순서를 따른다.
     g.lanes.sort((a, b) => (a.worktree ? 1 : 0) - (b.worktree ? 1 : 0)
-      || laneActivity(b, activity) - laneActivity(a, activity));
-    for (const l of g.lanes) l.sessions.sort((a, b) => activity(b.row) - activity(a.row));
-    if (!g.lastActivity && g.ended.length) g.lastActivity = endedActivity(g.ended[0]);
+      || (sort.sessions === 'name'
+        ? (a.worktree?.folder || a.worktree?.branch || a.worktree?.name || '').localeCompare(b.worktree?.folder || b.worktree?.branch || b.worktree?.name || '')
+        : (a.sessions[0] && b.sessions[0] ? bySession(a.sessions[0], b.sessions[0]) : laneActivity(b, activity) - laneActivity(a, activity))));
   }
   return [...groups.values()].sort((a, b) => {
     if ((a.key === OUTSIDE_KEY) !== (b.key === OUTSIDE_KEY)) return a.key === OUTSIDE_KEY ? 1 : -1;
-    if (a.attention !== b.attention) return a.attention ? -1 : 1;
-    return b.lastActivity - a.lastActivity || a.name.localeCompare(b.name);
+    if (sort.waitingFirst && a.attention !== b.attention) return a.attention ? -1 : 1;
+    if (sort.repos === 'name') return a.name.localeCompare(b.name) || b.registered - a.registered;
+    if (sort.repos === 'activity') return b.lastActivity - a.lastActivity || a.name.localeCompare(b.name);
+    return b.registered - a.registered || a.name.localeCompare(b.name);
   });
 }
 
@@ -220,7 +242,7 @@ function laneActivity<R>(l: Lane<R>, activity: (r: R) => number): number {
 }
 
 /** 접힌 48px 띠의 칸 순서 — 펼친 가지와 같은 순서(저장소 → 가지 → 세션 → 하위). */
-export function flattenRows<R, E>(tree: RepoGroup<R, E>[]): { row: R; kid: boolean }[] {
+export function flattenRows<R>(tree: RepoGroup<R>[]): { row: R; kid: boolean }[] {
   const out: { row: R; kid: boolean }[] = [];
   for (const g of tree) for (const l of g.lanes) for (const s of l.sessions) {
     out.push({ row: s.row, kid: false });

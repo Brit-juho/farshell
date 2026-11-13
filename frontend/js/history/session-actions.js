@@ -30,6 +30,25 @@ export async function resumeSession(id, { signal } = {}) {
   return result;
 }
 
+/** 끝난 대화를 이어서 연다(저장소의 「종료 N」 — 저장소 2차). 그 대화의 폴더에 새 세션이 생기고 터미널로 가져온다.
+ * 대화 보관함의 「이어가기」와 같은 API다(권한 설정 복원은 알림으로 알린다 — 세션 「이어서」와 같은 방식). */
+export async function resumeConversation(id, { signal } = {}) {
+  const result = await historyApi(`/api/session-history/conversations/${encodeURIComponent(id)}/resume`, { body: { operation_id: operationId() }, signal });
+  notify();
+  notifyResumePolicy(result);
+  try {
+    await window.vtOpenSessionFromRail?.({ sessionId: null, tmuxName: result.name, catalogSessionId: result.session_id, runtimeId: result.runtime_id });
+  } catch (_) { /* 시작은 됐다 — 곧 실행 중 칸으로 바뀐다 */ }
+  return result;
+}
+
+/** 대화 보관·해제(보관함은 대화 단위 — 저장소 2차). */
+export async function setConversationArchived(id, archived, { signal } = {}) {
+  const result = await historyApi(`/api/session-history/conversations/${encodeURIComponent(id)}`, { body: { archived: !!archived }, signal });
+  notify();
+  return result;
+}
+
 export async function renameSession(session, { signal } = {}) {
   const title = await promptDialog(t('작업 이름'), { title: t('작업 이름 변경'), okLabel: t('저장'), defaultValue: session.title });
   if (title === null || title.trim() === session.title) return false;

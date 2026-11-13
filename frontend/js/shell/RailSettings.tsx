@@ -9,8 +9,20 @@ import { For, createSignal, onMount, Show } from 'solid-js';
 
 import { createRailPrefs } from './rail-prefs.js';
 import { t } from '../core/i18n.js';
-import { ATTENTION_SHOW_KEY, HIDEABLE_ORIGINS, ORIGIN_LABEL, originShowKey, type Origin } from './rail-data.js';
+import { ATTENTION_SHOW_KEY, HIDEABLE_ORIGINS, ORIGIN_LABEL, originShowKey, VIEW_KEY, encodeRailView, type Origin } from './rail-data.js';
+import type { RepoSort, SessionSort, TreeSort } from './repo-tree.js';
 import { historyApi } from '../history/api.js';
+
+function Choice<T extends string>(props: { label: string; value: T; options: [T, string][]; onChange: (v: T) => void }) {
+  return (
+    <label class="vt-railset-row vt-railset-choice">
+      <span class="vt-railset-label">{props.label}</span>
+      <select class="vt-input sm" value={props.value} onChange={(e) => props.onChange(e.currentTarget.value as T)}>
+        <For each={props.options}>{([v, name]) => <option value={v} selected={v === props.value}>{name}</option>}</For>
+      </select>
+    </label>
+  );
+}
 
 function Toggle(props: { label: string; hint?: string; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -33,8 +45,22 @@ const AUTO_ARCHIVE_CHOICES = [0, 7, 14, 30, 90];
 export function RailViewSettings() {
   const { prefs, set } = createRailPrefs();
   const originOn = (o: Origin) => !prefs().hiddenOrigins.includes(o);
+  // 정렬(저장소 2차) — 기본은 「생성된 순」(최근 활동순은 목록이 계속 바뀐다). 기기별 보기 설정 JSON(rail.view)에 둔다.
+  const sort = () => prefs().view.sort;
+  const setSort = (next: Partial<TreeSort>) => set(VIEW_KEY, encodeRailView({ ...prefs().view, sort: { ...sort(), ...next } }));
   return (
     <div class="vt-railset">
+      <div class="vt-wtd-section-title">{t('정렬')}</div>
+      <Choice<RepoSort> label={t('저장소')} value={sort().repos} onChange={(v) => setSort({ repos: v })}
+        options={[['registered', t('등록순(처음 CLI를 켠 때)')], ['name', t('이름순')], ['activity', t('최근 활동')]]} />
+      <Choice<SessionSort> label={t('세션')} value={sort().sessions} onChange={(v) => setSort({ sessions: v })}
+        options={[['created', t('만든 순')], ['name', t('이름순')], ['activity', t('최근 활동')]]} />
+      <Toggle
+        label={t('입력 대기 먼저')}
+        hint={t('입력을 기다리는 저장소·세션을 어떤 정렬에서도 위로 올립니다')}
+        checked={sort().waitingFirst}
+        onChange={(v) => setSort({ waitingFirst: v })}
+      />
       <div class="vt-wtd-section-title">{t('구역')}</div>
       <Toggle
         label={t('개입 필요 구역 표시')}

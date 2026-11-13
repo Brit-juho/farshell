@@ -48,7 +48,7 @@ const laneKey = (l: Lane<SessionRow>) => l.worktree?.key ?? '';
 const rowKey = (r: SessionRow) => r.tmuxName || r.sessionId || r.name;
 
 export interface RepoBranchProps {
-  group: RepoGroup<SessionRow, any>;
+  group: RepoGroup<SessionRow>;
   collapsed: boolean;
   onToggle: () => void;
   isActive: (row: SessionRow) => boolean;

@@ -378,6 +378,8 @@
 .vt-railset-note { font:400 var(--fs-sm) / var(--leading-body) var(--font-ui); color:var(--color-sub); }
 /* 값 입력(스피너·드롭다운)은 1fr 칸을 채우지 않고 오른쪽에 컴팩트하게 — 설정 패널과 같은 크기. */
 .vt-railset-row { cursor:default; }
+/* 정렬 고르기(보기 탭) — 이름 왼쪽, 고르기 오른쪽(1fr 칸의 끝). */
+.vt-railset-choice > select { justify-self:end; max-width:100%; }
 label.vt-railset-row { cursor:pointer; }
 .vt-railset-row > .vt-number-spinner, .vt-railset-row > .vt-dd { justify-self:end; }
 .vt-railset-row > .vt-dd { min-width:120px; }

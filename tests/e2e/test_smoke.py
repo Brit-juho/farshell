@@ -4045,6 +4045,15 @@ def _git_repo(path: Path, branch: str) -> Path:
     return path
 
 
+def _cli_started(base: str, token: str, name: str, cwd: Path, sid: str) -> None:
+    """그 tmux 세션에서 CLI(Claude Code)를 켰다고 훅으로 알린다 — 저장소는 CLI를 켠 곳에 생긴다(저장소 2차).
+    격리 소켓의 pane id와 $TMUX 모양으로 세션을 특정한다(훅 래퍼가 보내는 것과 같은 모양)."""
+    socket_path = _tmux_for(base, "display-message", "-p", "-t", f"={name}:", "#{socket_path}").strip()
+    pane = _tmux_for(base, "display-message", "-p", "-t", f"={name}:", "#{pane_id}").strip()
+    _api(base, token, "POST", "/api/agent/event", {"event": "session_start", "agent": "claude", "pane": pane, "tmux": f"{socket_path},1,0",
+                                                  "payload": {"session_id": sid, "cwd": str(cwd), "source": "startup"}})
+
+
 def test_모바일_저장소_머리는_브랜치를_온전히_보이고_이름만_줄임표로_줄인다(browser, server):
     """실기기: 「유휴 메인 demo-app /m… +1」 — 브랜치가 `/m…`로 잘려 어느 브랜치인지 알 수 없었다.
     세션 로직 점검 단계 7부터 폰 세션 목록은 저장소별 타일이고 브랜치는 저장소 머리(`.vt-fleet-repo-branch`)에 한 번 나온다.
@@ -4059,6 +4068,9 @@ def test_모바일_저장소_머리는_브랜치를_온전히_보이고_이름�
     try:
         for name, cwd in (("dfx-deep", deep), ("dfx-short", short)):
             made.append(_api(base, token, "POST", "/api/tmux/create", {"name": name, "cwd": str(cwd)})["id"])
+        time.sleep(1)
+        for i, (name, cwd) in enumerate((("dfx-deep", deep), ("dfx-short", short))):
+            _cli_started(base, token, name, cwd, f"dfx-{i}")     # 저장소는 CLI를 켠 곳에 생긴다
         _reset_saved_layout(base, token)
         ctx = _mobile_ctx(browser, base)
         pg = ctx.new_page()
