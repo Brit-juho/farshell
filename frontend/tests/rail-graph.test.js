@@ -65,6 +65,37 @@ test('자리가 아직 없으면 지금 위치의 저장소, 그것도 없으면
   assert.strictEqual(tree[1].key, m.OUTSIDE_KEY);
 });
 
+test('저장소 밖 — 지금 폴더별 가지로 묶고(같은 폴더는 한 가지), 폴더를 모르면 가지 없이', async () => {
+  const m = await mod();
+  const tree = m.buildRepoTree({ rows: [
+    row({ name: 'a', cwd: '/Users/me/Downloads/scratch' }),
+    row({ name: 'b', cwd: '/Users/me/Downloads/scratch/' }),
+    row({ name: 'c', cwd: '/Users/me' }),
+    row({ name: 'd' }),
+    row({ name: 'r', cwd: '/r/acme', context: ctx('/r/acme', false, '/r/acme') }),
+  ] });
+  const out = tree.find((g) => g.key === m.OUTSIDE_KEY);
+  const lanes = out.lanes.map((l) => [l.worktree ? l.worktree.folder : null, names(l.sessions.map((s) => s.row)).sort()]);
+  assert.deepStrictEqual(plain(lanes.sort((x, y) => String(x[0]).localeCompare(String(y[0])))),
+    [['/Users/me', ['c']], ['/Users/me/Downloads/scratch', ['a', 'b']], [null, ['d']]]);
+  const acme = tree.find((g) => g.name === 'acme');
+  assert.strictEqual(acme.lanes[0].worktree, null, '저장소 안 세션은 폴더 가지를 만들지 않는다');
+});
+
+test('저장소 밖 폴더 가지 — 머리는 폴더 아이콘과 ~로 줄인 경로, 전체 경로는 툴팁', async () => {
+  const m = await mod();
+  const root = m.document.createElement('div');
+  m.document.body.appendChild(root);
+  m.mountRepoBranch(root, { key: m.OUTSIDE_KEY, name: '', repository: false, root: null, mainBranch: null, count: 1, attention: false,
+    lastActivity: 0, ended: [], lanes: [{ worktree: { key: 'dir:/Users/me/Downloads/scratch', name: 'scratch', branch: null, folder: '/Users/me/Downloads/scratch' },
+      sessions: [{ row: row({ name: 'notes', cwd: '/Users/me/Downloads/scratch' }), kids: [] }] }] });
+  const head = root.querySelector('.vt-rg-dir');
+  assert.ok(head);
+  assert.strictEqual(head.querySelector('.vt-rg-path').textContent, '~/Downloads/scratch');
+  assert.strictEqual(head.getAttribute('data-tip'), '~/Downloads/scratch');
+  assert.ok(!/워크트리/.test(head.textContent));
+});
+
 test('정렬 — 입력 대기가 있는 저장소가 먼저, 그다음 최근 활동, 저장소 안도 최근 활동순', async () => {
   const m = await mod();
   const act = { a1: 100, a2: 300, b1: 200 };

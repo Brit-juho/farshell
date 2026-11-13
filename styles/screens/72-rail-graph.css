@@ -113,6 +113,8 @@
   color:var(--color-st-done); background:color-mix(in srgb, var(--color-st-done) 12%, transparent);
 }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-wt .vt-rg-name { font:var(--fs-xs) var(--font-mono); color:var(--color-sub); }
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg-dirico { flex:none; display:flex; color:var(--color-muted); }
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg-path { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
 /* 위임 하위 칸 — 부모 마디에서 굽은 가지 끝에 터미널 마크. */
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-kid { height:26px; align-items:center; font-size:var(--fs-xs); }
@@ -261,6 +263,7 @@
 #vt-fleet .vt-tile-sub[data-tone="error"] { color:var(--color-st-error); }
 #vt-fleet .vt-tile-wt { display:flex; align-items:center; gap:3px; min-width:0; font:11.5px var(--font-mono); color:var(--color-st-done); }
 #vt-fleet .vt-tile-wt-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#vt-fleet .vt-tile-dir { color:var(--color-sub); }   /* 저장소 밖의 폴더 — 워크트리(완료색)와 구분되는 중립색 */
 #vt-fleet .vt-tile.end { justify-content:center; background:transparent; box-shadow:inset 0 0 0 1px var(--color-line-strong); }
 #vt-fleet .vt-tile.end .vt-tile-name { color:var(--color-sub); }
 #vt-fleet .vt-tile-hol { display:block; width:26px; height:26px; margin-bottom:10px; border-radius:50%; border:1.5px dashed var(--color-muted); }

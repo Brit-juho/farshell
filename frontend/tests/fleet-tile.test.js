@@ -143,3 +143,16 @@ test('타일 — 실행 중인 백그라운드 셸이 있으면 위 줄에 「�
   assert.ok(mark);
   assert.strictEqual(mark.getAttribute('aria-label'), '백그라운드 셸 1개 실행 중');
 });
+
+test('타일 — 저장소 밖 세션은 지금 폴더 줄(폴더 아이콘, ~로 줄인 경로)', async () => {
+  const m = await mod();
+  const g = { key: m.OUTSIDE_KEY || '__outside__', name: '', repository: false, root: null, mainBranch: null, count: 1, attention: false, lastActivity: 0, ended: [],
+    lanes: [{ worktree: { key: 'dir:/Users/me/tmp', name: 'tmp', branch: null, folder: '/Users/me/tmp' }, sessions: [{ row: row({ name: 'x' }), kids: [] }] }] };
+  const entries = m.tilesOf(g);
+  assert.strictEqual(entries[0].folder, '/Users/me/tmp');
+  assert.strictEqual(entries[0].worktree, null, '폴더 가지는 워크트리가 아니다');
+  const root = mount(m, entries[0], []);
+  const dir = root.querySelector('.vt-tile-dir');
+  assert.ok(dir);
+  assert.strictEqual(dir.textContent.trim(), '~/tmp');
+});

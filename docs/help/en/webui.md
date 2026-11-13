@@ -75,7 +75,7 @@ Everything about using FarShell in the browser. (For the CLI see `fsh help conce
 ### Sidebar Sessions view (session list)
 
 Sessions are grouped by repository. A repository head shows its name and main branch, and a session stays under the repository it started in (even after `cd`).
-A session working in another worktree of the same repository sits under a "Worktree <branch>" branch; sessions outside any repository are listed under "Outside a repository" at the bottom.
+A session working in another worktree of the same repository sits under a "Worktree <branch>" branch; sessions outside any repository are listed under "Outside a repository" at the bottom, grouped by their current folder (a `~/…` folder branch; on a phone, a folder line under the tile).
 Sessions waiting for input move up to the "Needs attention" section. Repositories with a waiting session come first, then by most recent activity.
 Each cell has two lines: state ring and agent · name · elapsed · ⋯ / (only when there is something to say) waiting kind · tool at work · "Finished · not seen" · your last instruction, and the change count.
 When Claude Code has background shells running, a count such as `>_ 2` sits next to the name. The "Background shells" part of the summary at the top of the ⋯ menu (long-press on a phone) lists running and ended shells and the last check time (command lines only on this Mac). An ended shell shows up when Claude Code finishes its turn, so it can lag a little.
