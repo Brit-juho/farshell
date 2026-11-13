@@ -66,6 +66,11 @@ def _last_timestamp(data: bytes):
     return _epoch(found[-1]) if found else None
 
 
+def _num(v):
+    """시각 값 — 유한한 수만. 망가진 값은 없는 것으로."""
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and v == v and abs(v) != float('inf') else None
+
+
 def _obj(text) -> dict:
     """detail JSON — 객체가 아니면(망가짐·null·배열) 빈 것으로. 한 행 때문에 배치 전체가 멈추지 않게."""
     try:
@@ -81,17 +86,12 @@ def _temp(path: str) -> bool:
 
 
 def _gone_path(cwd: str):
-    """지워진 폴더의 경로를 남아 있는 가장 가까운 상위 폴더를 fsguard로 풀어(링크 해석·탐색 허용 폴더·거부 경로 검사) 다시
-    붙인다. 상위가 경계 밖이면 None — 문자열 앞부분만 보고 옛 작업 트리에 붙이면 링크로 밖을 가리키는 경로가 들어온다."""
-    head, rest = cwd, []
-    while head != '/' and not os.path.isdir(head):
-        head, name = os.path.split(head)
-        rest.insert(0, name)
+    """지워진 폴더의 경로를 fsguard로 푼다 — 남아 있는 앞부분의 링크를 펼치고, 전체 경로로 탐색 허용 폴더·거부 경로·숨김 폴더를
+    검사한다(`resolve_under_roots`는 없는 경로도 받는다). 경계 밖이면 None — 문자열 앞부분만 보고 옛 작업 트리에 붙이지 않는다."""
     try:
-        base = fsguard.resolve_under_roots(head, git_meta=True)
+        return str(fsguard.resolve_under_roots(cwd, git_meta=True))
     except Exception:
         return None
-    return os.path.join(str(base), *rest) if rest else str(base)
 
 
 def touch_project(db, workspace_id: str, last_activity: float, now: float) -> None:
@@ -110,18 +110,43 @@ def touch_project(db, workspace_id: str, last_activity: float, now: float) -> No
 TAIL = 262144
 
 
+class _Chunks(io.RawIOBase):
+    """보관된 조각들을 필요할 때 하나씩 읽는 스트림(메모리에 조각 하나만)."""
+
+    def __init__(self, chunks):
+        self._digests = [c['digest'] for c in chunks]
+        self._buf = b''
+
+    def readable(self):
+        return True
+
+    def readinto(self, b):
+        from session_history import archive
+        while not self._buf and self._digests:
+            self._buf = archive.read_chunk(self._digests.pop(0))
+        n = min(len(b), len(self._buf))
+        b[:n] = self._buf[:n]
+        self._buf = self._buf[n:]
+        return n
+
+
 def _tail(info) -> bytes:
-    """보관된 원본의 끝부분(TAIL바이트). 조각을 하나씩 흘려 읽어 메모리는 조각 하나 크기로 묶인다. 압축(.zst)이면 끝까지
-    풀면서 끝부분만 남긴다(압축 조각 하나만으로는 끝을 풀 수 없다)."""
+    """보관된 원본의 끝부분(TAIL바이트). 압축(.zst)이면 처음부터 1MiB씩 흘려 풀며 끝부분만 남긴다 — 메모리는 조각 하나 + 1MiB로
+    묶이고(압축 조각 하나가 크게 풀려도), 이어 붙은 여러 프레임도 끝까지 읽는다(read_across_frames)."""
     from session_history import archive
     chunks = info.get('chunks') or []
+    if not chunks:
+        return b''
     if not info.get('compressed'):
-        return archive.read_chunk(chunks[-1]['digest'])[-TAIL:] if chunks else b''
+        return archive.read_chunk(chunks[-1]['digest'])[-TAIL:]
     import zstandard
-    z = zstandard.ZstdDecompressor(max_window_size=64 * 1024**2).decompressobj()
     tail = b''
-    for c in chunks:
-        tail = (tail + z.decompress(archive.read_chunk(c['digest'])))[-TAIL:]
+    with zstandard.ZstdDecompressor(max_window_size=64 * 1024**2).stream_reader(_Chunks(chunks), read_across_frames=True) as z:
+        while True:
+            block = z.read(1024 * 1024)
+            if not block:
+                break
+            tail = (tail + block)[-TAIL:]
     return tail
 
 
@@ -247,7 +272,7 @@ def place_conversations(now=None, limit=BATCH, budget=BUDGET) -> int:
             d = _obj(cur['detail'])
             for k, v in patch.items():
                 if k == 'last':
-                    d['last'] = max(float(d.get('last') or 0), v)
+                    d['last'] = max(_num(d.get('last')) or 0, v)
                 elif k == 'placement_tries' or k not in d:
                     d[k] = v
             wid = found[1] if isinstance(found, tuple) else (inventory.workspace(db, found) if isinstance(found, dict) else None)
@@ -263,8 +288,8 @@ def place_conversations(now=None, limit=BATCH, budget=BUDGET) -> int:
                            ' JOIN workspaces w ON w.project_id=p.id WHERE w.id=?', (wid,)).fetchone()
             if not p:
                 continue
-            started = d.get('started') or r['created'] or now
-            act = max(p['last_activity'] or 0, d.get('last') or r['updated'] or 0)
+            started = _num(d.get('started')) or r['created'] or now
+            act = max(p['last_activity'] or 0, _num(d.get('last')) or r['updated'] or 0)
             first = p['registered'] is None
             registered = started if first else min(p['registered'], started)
             removed = None if p['removed'] is not None and started > p['removed'] else p['removed']

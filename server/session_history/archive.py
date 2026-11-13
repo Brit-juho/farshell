@@ -474,7 +474,8 @@ def capture(source, relative, *, max_bytes=PASS_BYTES):
             started=first_timestamp(probe)
             if started:
                 detail_next['started']=started
-        last_activity=max(float(prior_detail.get('last') or 0),after.st_mtime)
+        from session_catalog.placement import _num
+        last_activity=max(_num(prior_detail.get('last')) or 0,after.st_mtime)
         detail_next['last']=last_activity
         if conversation and conversation['workspace_id']:
             from session_catalog.placement import touch_project

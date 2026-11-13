@@ -301,3 +301,31 @@ def test_a_compressed_archive_gives_its_real_last_timestamp(catalog):
     parts = [archive.put_chunk(packed[:half]), archive.put_chunk(packed[half:])]
     info = {"compressed": True, "chunks": [{"digest": d, "size": 1} for d in parts]}
     assert placement._last_timestamp(placement._tail(info)) == placement.first_timestamp(b'"timestamp":"2026-03-28T00:00:00Z"')
+
+
+def test_a_missing_denied_folder_inside_a_repo_is_not_mapped(catalog):
+    repo = _repo(catalog / "proj")
+    conv(cwd=repo)
+    place()
+    gone = conv(cwd=repo / ".ssh" / "missing")
+    place()
+    assert row(gone)["placement"] == "skip:cwd", "없는 경로도 거부 경로 검사를 거친다"
+
+
+def test_bad_time_values_in_detail_do_not_stall_the_batch(catalog):
+    a = _repo(catalog / "a")
+    bad = conv(cwd=a, detail={"launch": "cli", "started": 1, "last": "bad"})
+    good = conv(cwd=a)
+    place()
+    assert row(bad)["placement"] == "placed" and row(good)["placement"] == "placed"
+
+
+def test_concatenated_zstd_frames_are_read_to_the_end(catalog):
+    import zstandard
+    from session_catalog import placement
+    from session_history import archive
+    c = zstandard.ZstdCompressor()
+    a = c.compress(b'{"timestamp":"2026-04-01T00:00:00Z"}\n')
+    b = c.compress(b'{"timestamp":"2026-04-09T00:00:00Z"}\n')
+    info = {"compressed": True, "chunks": [{"digest": archive.put_chunk(a + b), "size": 1}]}
+    assert placement._last_timestamp(placement._tail(info)) == placement.first_timestamp(b'"timestamp":"2026-04-09T00:00:00Z"')
