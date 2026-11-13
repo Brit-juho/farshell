@@ -44,6 +44,7 @@ import {
 import { buildRepoTree, endedActivity, OUTSIDE_KEY, type RepoGroup } from './repo-tree.js';
 import { createRailPrefs } from './rail-prefs.js';
 import { onSheetKeyDown } from './sheet-keys.js';
+import { shortenPath } from './rail-hover-card.js';
 import { MenuSummary, ShareMark, ShellsMark, ROW_MENU_ICON } from './RailRow.js';
 import {
   buildHostMenu, hostDetail, LOCAL_HOST,
@@ -118,18 +119,26 @@ function useLongPress(onLongPress: () => void) {
 }
 
 /** 타일 하나에 그릴 것 — 저장소 묶음을 펼친 순서(가지 → 세션 → 그 하위 세션). */
-export interface TileEntry { row: SessionRow; worktree: string | null; parent: SessionRow | null }
+export interface TileEntry {
+  row: SessionRow;
+  /** 워크트리 가지면 그 브랜치. */
+  worktree: string | null;
+  /** 저장소 밖의 폴더 가지면 그 폴더(절대 경로). */
+  folder?: string | null;
+  parent: SessionRow | null;
+}
 
 /** 저장소 묶음 → 타일 순서. 메인 가지가 먼저, 워크트리 가지의 세션은 브랜치 표시, 위임 하위는 부모 바로 뒤. */
 export function tilesOf(group: RepoGroup<SessionRow, any>): TileEntry[] {
   const out: TileEntry[] = [];
   for (const lane of group.lanes) {
-    const wt = lane.worktree ? (lane.worktree.branch || lane.worktree.name) : null;
+    const folder = lane.worktree?.folder || null;
+    const wt = lane.worktree && !folder ? (lane.worktree.branch || lane.worktree.name) : null;
     for (const s of lane.sessions) {
-      out.push({ row: s.row, worktree: wt, parent: null });
+      out.push({ row: s.row, worktree: wt, folder, parent: null });
       // 자손은 깊이 우선으로 온다(repo-tree.ts) — 「↳ 부모」는 실제 위임한 세션(손자면 그 위의 하위 세션)이다.
       const byName = new Map([s.row, ...s.kids].map((r) => [r.tmuxName || '', r] as const));
-      for (const k of s.kids) out.push({ row: k, worktree: wt, parent: byName.get(k.lineage?.parent || '') || s.row });
+      for (const k of s.kids) out.push({ row: k, worktree: wt, folder, parent: byName.get(k.lineage?.parent || '') || s.row });
     }
   }
   return out;
@@ -200,6 +209,10 @@ export function FleetTile(props: {
       </Show>
       <Show when={!props.entry.parent && props.entry.worktree}>
         <span class="vt-tile-wt"><span innerHTML={shellIcon('git-fork', 11, 2)} /><span class="vt-tile-wt-name">{props.entry.worktree}</span></span>
+      </Show>
+      {/* 저장소 밖 세션 — 지금 폴더(홈은 ~, 길면 가운데 줄임). 저장소가 없으니 이 줄이 위치다. */}
+      <Show when={!props.entry.parent && props.entry.folder}>
+        {(f) => <span class="vt-tile-wt vt-tile-dir" title={f()}><span innerHTML={shellIcon('folder', 11, 2)} /><span class="vt-tile-wt-name">{shortenPath(f(), 22)}</span></span>}
       </Show>
     </div>
   );

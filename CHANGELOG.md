@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+- Sessions under "Outside a repository" are grouped by their current folder (`~/…`), so you can see where each one runs; the phone tile shows the folder under the name.
+
 ---
 
 ## [2.12.0] — 2026-11-13

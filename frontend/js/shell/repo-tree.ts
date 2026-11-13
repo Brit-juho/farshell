@@ -5,7 +5,7 @@
 //     ├ 워크트리 가지(「워크트리 <브랜치>」) 아래의 세션들
 //     │   └ 위임으로 만든 하위 세션(부모 밑)
 //     └ 「종료 N」(이 저장소에서 끝난 세션 — 카탈로그)
-//   「저장소 밖」 묶음은 맨 아래.
+//   「저장소 밖」 묶음은 맨 아래 — 그 안은 세션의 지금 폴더별 가지(「폴더 ~/…」)로 묶는다(고정할 저장소가 없어 지금 위치를 따른다).
 //
 // 세션의 저장소는 카탈로그가 정한 자리(`home`, 처음 시작한 곳 — cd해도 안 바뀜)다. 자리가 아직 없으면(방금 만든
 // 세션·옛 서버) 지금 위치(context)의 저장소로 그린다. 워크트리 가지는 지금 위치가 같은 저장소의 다른 작업 트리일
@@ -21,6 +21,8 @@ export interface RepoRowLike {
   home?: { project_id: string; root: string; name: string; repository: boolean; kind?: string; path?: string } | null;
   context?: any;
   branch?: string | null;
+  /** 지금 폴더(저장소 밖 세션의 폴더 가지). */
+  cwd?: string | null;
   lineage?: { parent: string | null; state: string; createdAt?: number | null } | null;
   since?: number | null;
 }
@@ -39,8 +41,8 @@ export interface EndedLike {
 
 export interface SessionNodeEntry<R> { row: R; kids: R[] }
 export interface Lane<R> {
-  /** null이면 메인 작업 트리(머리 없이 바로 세션). */
-  worktree: { key: string; name: string; branch: string | null } | null;
+  /** null이면 메인 작업 트리(머리 없이 바로 세션). 저장소 밖에서는 폴더 가지(`folder`: 그 폴더의 절대 경로). */
+  worktree: { key: string; name: string; branch: string | null; folder?: string } | null;
   sessions: SessionNodeEntry<R>[];
 }
 export interface RepoGroup<R, E> {
@@ -92,7 +94,10 @@ function place<R extends RepoRowLike>(row: R): Placed<R> {
     return { row, key: 'path:' + now.repoRoot, name: base(now.repoRoot), repository: true, root: now.repoRoot, lane,
       mainBranch: now.linked ? null : row.branch || null };
   }
-  return { row, key: OUTSIDE_KEY, name: '', repository: false, root: null, lane: null, mainBranch: null };
+  // 저장소 밖 — 지금 폴더별 가지. 폴더를 모르면(옛 서버·조회 전) 가지 없이 바로 둔다.
+  const dir = typeof row.cwd === 'string' && row.cwd ? row.cwd.replace(/\/+$/, '') || '/' : '';
+  const lane = dir ? { key: 'dir:' + dir, name: base(dir) || dir, branch: null, folder: dir } : null;
+  return { row, key: OUTSIDE_KEY, name: '', repository: false, root: null, lane, mainBranch: null };
 }
 
 export interface BuildInput<R, E> {
