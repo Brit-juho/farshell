@@ -15,7 +15,7 @@ import { showToast } from '../ui/toast.js';
 import { t } from '../core/i18n.js';
 import { createPoll } from '../core/poll.js';
 import { watchSocketLiveness } from '../core/ws-watchdog.js';
-import { retryDelay, onWake, CONNECT_TIMEOUT_MS } from '../core/ws-retry.js';
+import { retryDelay, onWake, startProbe, CONNECT_TIMEOUT_MS } from '../core/ws-retry.js';
 
 // 로그인 게이트가 실제로 걷히기 전까지 기다린다 — index.html의 hideGate()가
 // window.__vtAuthed=true + 'vt:authed' 이벤트로 신호를 준다. 이게 없으면 이
@@ -172,11 +172,15 @@ function connectAgentWs() {
   // 열리기 전에는 연결 기한(10초)만 감시한다.
   const opened = wsAgent;
   let liveness = watchSocketLiveness(opened, { timeout: CONNECT_TIMEOUT_MS });
+  let probe = null;
   // [회귀 fb827a6와 동일 패턴] 3초 이상 안정적으로 열린 뒤에만 백오프 리셋 —
   // accept 직후 닫히는 flap에서 지수가 자라지 못하고 빠르게 재연결하는 것을 방지.
   wsAgent.onopen = () => {
     liveness?.stop();
     liveness = watchSocketLiveness(opened);
+    // 서버가 탐침을 아는 소켓만 복귀 때 탐침한다(옛 서버는 45초 워치독 그대로).
+    probe = _wsAgentProbe = startProbe(opened, { onDead: _reconnectAgentNow });
+    probe.start();
     _sendAgentVisibility();
     clearTimeout(_wsAgentStableTimer);
     _wsAgentStableTimer = setTimeout(() => { _wsAgentRetries = 0; }, 3000);
@@ -188,6 +192,7 @@ function connectAgentWs() {
     liveness?.alive();
     let msg;
     try { msg = JSON.parse(e.data); } catch (_) { return; }
+    probe?.frame(msg);
     if (msg.type === 'ping') {
       try { wsAgent.send(JSON.stringify({ type: 'pong' })); } catch (_) {}
     } else if (msg.type === 'agent_status_sync') {
@@ -239,6 +244,8 @@ function connectAgentWs() {
   sock.onclose = () => {
     liveness?.stop();
     liveness = null;
+    probe?.stop();
+    if (_wsAgentProbe === probe) _wsAgentProbe = null;
     if (sock !== wsAgent) return;
     clearTimeout(_wsAgentStableTimer);
     scheduleAgentReconnect();
@@ -263,6 +270,7 @@ function scheduleAgentReconnect() {
   const delay = retryDelay(_wsAgentRetries - 1, 1000);   // 지터(core/ws-retry.js)
   _wsAgentTimer = setTimeout(() => { _wsAgentTimer = null; connectAgentWs(); }, delay);
 }
+let _wsAgentProbe = null;
 function _reconnectAgentNow() {
   if (document.hidden || !_authed) return;
   if (wsAgent && (wsAgent.readyState === 0 || wsAgent.readyState === 1)) return;
@@ -273,7 +281,12 @@ function _reconnectAgentNow() {
 }
 let _authed = false;
 whenAuthed(() => { _authed = true; });
-onWake(_reconnectAgentNow);   // 화면 복귀·bfcache·online (core/ws-retry.js)
+// 화면 복귀·bfcache·online (core/ws-retry.js): 닫혀 있으면 바로 붙고, 열려 있으면 탐침으로 죽은 소켓을 가린다.
+onWake(({ reason }) => {
+  if (document.hidden || !_authed) return;
+  if (wsAgent && wsAgent.readyState === 1) { _wsAgentProbe?.check(reason); return; }
+  _reconnectAgentNow();
+});
 
 whenAuthed(connectAgentWs);
 // T6: 탭 뱃지가 그리드를 열지 않아도 최신 cwd를 알도록 한다. 2026-09-30부터

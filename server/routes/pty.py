@@ -30,6 +30,7 @@ from deps import (
 )
 from session_store import new_session_id
 from i18n import tr
+from resilience import wsutil
 
 logger = logging.getLogger(__name__)
 
@@ -614,6 +615,7 @@ async def ws_terminal(ws: WebSocket, session_id: str):
         pty_mgr.subscribe(session_id, on_data)
 
         hb_task = asyncio.create_task(_heartbeat_loop())
+        prober = wsutil.Prober()
 
         while True:
             msg = await ws.receive()
@@ -631,6 +633,10 @@ async def ws_terminal(ws: WebSocket, session_id: str):
                             return
                     elif msg_type == "pong":
                         last_pong = loop.time()
+                    elif msg_type == "probe":
+                        # 화면 복귀 뒤 생존 확인(resilience/wsutil.py). 살아 있다는 증거라 last_pong도 갱신한다.
+                        last_pong = loop.time()
+                        await wsutil.send_probe_ack(ws, prober.ack_for(data))
                     elif msg_type == "render_pause":
                         # R2: WS 송신 큐(_on_data)만으로는 "네트워크로는 다 나갔는데
                         # 클라이언트 xterm.js 렌더링이 못 따라가는" 상황을 못 잡는다.
@@ -768,11 +774,14 @@ async def ws_notify(ws: WebSocket):
     await ws.accept()
     notify_clients.add(ws)
     session_watchdog = auth.spawn_session_watchdog(ws, token)
+    prober = wsutil.Prober()
     try:
         while True:
             msg = await ws.receive_text()
             data = json.loads(msg)
-            if data.get("type") == "set_watch":
+            if wsutil.is_probe(data):
+                await wsutil.send_probe_ack(ws, prober.ack_for(data))
+            elif data.get("type") == "set_watch":
                 sid = data.get("session_id")
                 output_watcher.set_enabled(sid, data.get("enabled", True))
             elif data.get("type") == "set_timeout":

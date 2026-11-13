@@ -16,7 +16,7 @@
 import { WS_BASE, _tokenQuery } from './env.js';
 import { relayWsPath } from './host-route.js';
 import { watchSocketLiveness } from './ws-watchdog.js';
-import { retryDelay, onWake, CONNECT_TIMEOUT_MS } from './ws-retry.js';
+import { retryDelay, onWake, startProbe, CONNECT_TIMEOUT_MS } from './ws-retry.js';
 import { waitForAuthentication } from './auth-state.js';
 
 const _subs = new Map();   // type -> Set<fn>
@@ -24,6 +24,7 @@ let _ws = null;
 let _retries = 0;
 let _stableTimer = null;
 let _reconnectTimer = null;
+let _probe = null;   // 지금 연결의 생존 탐침(ws-retry.js)
 let _started = false;
 
 /** 워크스페이스 이벤트 구독. 해제 함수를 돌려준다. */
@@ -77,10 +78,14 @@ function _connectNow() {
   // 생존 감시(core/ws-watchdog.js) — 서버 ping(15초)이 45초 동안 안 오면 닫아 재연결을 돌린다.
   // 열리기 전에는 연결 기한(10초)만 감시한다.
   let liveness = watchSocketLiveness(ws, { timeout: CONNECT_TIMEOUT_MS });
+  let probe = null;
 
   _ws.onopen = () => {
     liveness?.stop();
     liveness = watchSocketLiveness(ws);
+    // 서버가 탐침을 아는 소켓만 복귀 때 탐침한다(옛 서버는 45초 워치독 그대로).
+    probe = _probe = startProbe(ws, { onDead: _wakeNow });
+    probe.start();
     _sendVisibility();
     _emit('ws_open', {});   // 재연결 때 놓친 것을 맞추려는 구독자용(share-lazy.js)
     // [회귀 fb827a6와 같은 이유] accept 직후 닫히는 half-open flap에서 지수가
@@ -93,12 +98,15 @@ function _connectNow() {
     liveness?.alive();
     let msg;
     try { msg = JSON.parse(e.data); } catch (_) { return; }
+    probe?.frame(msg);
     if (msg && msg.type) _emit(msg.type, msg);
   };
 
   _ws.onclose = () => {
     liveness?.stop();
     liveness = null;
+    probe?.stop();
+    if (_probe === probe) _probe = null;
     // 이미 다른 소켓으로 갈아탔으면 옛 소켓의 close가 재연결을 하나 더 만들지 않게 한다.
     if (_ws !== ws) return;
     clearTimeout(_stableTimer);
@@ -119,18 +127,24 @@ function _sendVisibility() {
   try { _ws.send(JSON.stringify({ type: 'visibility', hidden: !!document.hidden })); } catch (_) { /* 다음 전환 때 다시 */ }
 }
 
+// 재연결 타이머를 기다리는 중이면 기다리지 않고 바로 붙는다(복귀·죽은 소켓 교체).
+function _wakeNow() {
+  if (!_reconnectTimer || _ws) return;
+  clearTimeout(_reconnectTimer);
+  _reconnectTimer = null;
+  _retries = 0;
+  connect();
+}
+
 /** 첫 구독자가 생길 때 한 번만 연결한다. */
 export function start() {
   if (_started) return;
   _started = true;
   document.addEventListener('visibilitychange', _sendVisibility);
   // 화면·네트워크 복귀: 재연결 타이머(최대 30초)를 기다리지 않고 바로 붙는다. 열린 소켓은 건드리지 않는다.
-  onWake(() => {
-    if (!_reconnectTimer || _ws) return;
-    clearTimeout(_reconnectTimer);
-    _reconnectTimer = null;
-    _retries = 0;
-    connect();
+  onWake(({ reason }) => {
+    if (_ws) { if (_ws.readyState === 1) _probe?.check(reason); return; }
+    _wakeNow();
   });
   connect();
 }

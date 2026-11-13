@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 
@@ -173,3 +174,38 @@ async def test_proxy_dead_upstream_gives_reconnectable_code(monkeypatch):
     up._closed.set()
     await asyncio.wait_for(task, 2)
     assert ws.closed[-1][0] == 1000
+
+
+@_sync
+async def test_proxy_answers_probe_itself_and_does_not_forward(monkeypatch):
+    """탐침은 브라우저 ↔ 이 서버 구간만 잰다 — 상류(B)로 넘기지 않고 프록시가 직접 probe_ack로 답한다.
+    잘못된 id의 탐침도 B로 새지 않는다(B는 모르는 메시지)."""
+    up = FakeUpstream()
+    _patch_proxy(monkeypatch, up, {})
+    ws = FakeBrowser()
+    task = asyncio.create_task(peer_proxy.ws_remote(ws, "h", "dev"))
+    await ws.inbox.put({"type": "websocket.receive", "text": '{"type":"probe","id":12}'})
+    await ws.inbox.put({"type": "websocket.receive", "text": '{"type":"probe","id":"x"}'})
+    await ws.inbox.put({"type": "websocket.receive", "text": '{"type":"resize","cols":9,"rows":3}'})
+    await asyncio.sleep(0.05)
+    assert '{"type":"probe_ack","id":12}' in ws.sent
+    assert sum(1 for m in ws.sent if isinstance(m, str) and "probe_ack" in m) == 1   # 잘못된 id엔 답 없음
+    assert up.sent == ['{"type":"resize","cols":9,"rows":3}']                      # 탐침은 하나도 안 갔다
+    await ws.inbox.put({"type": "websocket.disconnect"})
+    await asyncio.wait_for(task, 2)
+
+
+@_sync
+async def test_proxy_probe_keeps_browser_hop_alive(monkeypatch):
+    """탐침도 브라우저에서 온 메시지라 프록시의 무응답 시계(last_seen)를 새로 한다."""
+    up = FakeUpstream()
+    _patch_proxy(monkeypatch, up, {})
+    monkeypatch.setattr(peer_proxy.browser_heartbeat, "__defaults__", (0.02, 0.06))
+    ws = FakeBrowser()
+    task = asyncio.create_task(peer_proxy.ws_remote(ws, "h", "dev"))
+    for i in range(1, 9):
+        await ws.inbox.put({"type": "websocket.receive", "text": json.dumps({"type": "probe", "id": i}, separators=(",", ":"))})
+        await asyncio.sleep(0.12 / 8 * 2)
+    assert not task.done()
+    await ws.inbox.put({"type": "websocket.disconnect"})
+    await asyncio.wait_for(task, 2)

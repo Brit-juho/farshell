@@ -8,7 +8,10 @@
 from __future__ import annotations
 
 import asyncio
+import collections
+import json
 import logging
+import time
 from typing import Iterable
 
 logger = logging.getLogger(__name__)
@@ -66,3 +69,55 @@ def start_pinger(ws, interval: float = PING_INTERVAL) -> "asyncio.Task":
                     pass
                 return
     return asyncio.create_task(_loop())
+
+
+# --- 생존 탐침 -----------------------------------------------------------------
+#
+# 브라우저가 화면 복귀·네트워크 복귀 뒤에 "열린 것처럼 보이는 소켓이 정말 살아 있는지"를 재는 왕복이다.
+# 클라이언트 `{"type":"probe","id":n}` → 서버 즉시 `{"type":"probe_ack","id":n}`.
+# 옛 서버는 모르는 type을 무시하므로 클라이언트는 첫 ack를 받은 소켓만 탐침 대상으로 친다.
+# 평문 제어 메시지다(E2E가 켜져도 ping/pong처럼 평문). 소켓당 초당 PROBE_MAX_PER_SEC회를 넘는 탐침은
+# 답하지 않는다 — 탐침이 서버 일을 늘리는 수단이 되면 안 된다.
+
+PROBE_ID_MAX = 2**31 - 1
+PROBE_MAX_PER_SEC = 4
+
+
+def is_probe(msg) -> bool:
+    return isinstance(msg, dict) and msg.get("type") == "probe"
+
+
+class Prober:
+    """소켓 하나당 하나. `ack_for(msg)`가 보낼 ack 문자열을 돌려주거나(보내지 않을 때) None."""
+
+    __slots__ = ("_stamps", "_clock")
+
+    def __init__(self, clock=time.monotonic) -> None:
+        self._stamps: collections.deque = collections.deque()
+        self._clock = clock
+
+    def ack_for(self, msg) -> str | None:
+        if not is_probe(msg):
+            return None
+        pid = msg.get("id")
+        # bool은 int의 하위형이라 따로 거른다. 정수가 아니거나 범위 밖이면 무시.
+        if type(pid) is not int or not 1 <= pid <= PROBE_ID_MAX:
+            return None
+        now = self._clock()
+        stamps = self._stamps
+        while stamps and now - stamps[0] >= 1.0:
+            stamps.popleft()
+        if len(stamps) >= PROBE_MAX_PER_SEC:
+            return None
+        stamps.append(now)
+        return json.dumps({"type": "probe_ack", "id": pid}, separators=(",", ":"))
+
+
+async def send_probe_ack(ws, ack: str | None) -> None:
+    """ack를 SEND_TIMEOUT 안에 보낸다. 못 보내도 조용히 넘어간다 — 수신 루프가 끊김을 정리한다."""
+    if ack is None:
+        return
+    try:
+        await asyncio.wait_for(ws.send_text(ack), SEND_TIMEOUT)
+    except Exception:  # noqa: BLE001
+        pass

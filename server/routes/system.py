@@ -617,8 +617,17 @@ async def ws_workspace(websocket: WebSocket):
         # (_sessions_last는 건드리지 않는다: 다른 연결들은 마지막 브로드캐스트 값을 들고 있다.)
         from routes.tmux import collect_tmux_sessions
         await websocket.send_json({"type": "tmux_sessions", "sessions": await collect_tmux_sessions()})
+        prober = wsutil.Prober()
         while True:
-            handle_visibility(websocket, _workspace_hidden, await websocket.receive_text(), kick_sessions)
+            raw = await websocket.receive_text()
+            try:
+                msg = _json.loads(raw)
+            except (ValueError, TypeError):
+                msg = None
+            if wsutil.is_probe(msg):
+                await wsutil.send_probe_ack(websocket, prober.ack_for(msg))
+                continue
+            handle_visibility(websocket, _workspace_hidden, raw, kick_sessions)
     except WebSocketDisconnect:
         pass
     except Exception:

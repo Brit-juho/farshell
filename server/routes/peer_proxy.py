@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 
@@ -197,6 +198,7 @@ async def ws_remote(ws: WebSocket, host_id: str, tmux_name: str):
         (A가 판정하면 A를 믿는 셈이 되고, 그건 등급의 의미가 없다).
         생존 감시용 pong 만 여기서 걸러 B 로 넘기지 않는다(B 는 모르는 메시지다)."""
         nonlocal last_seen
+        prober = wsutil.Prober()
         while True:
             msg = await ws.receive()
             last_seen = loop.time()
@@ -207,6 +209,16 @@ async def ws_remote(ws: WebSocket, host_id: str, tmux_name: str):
             elif msg.get("text") is not None:
                 if msg["text"] == '{"type":"pong"}':
                     continue
+                # 탐침은 브라우저 ↔ 이 서버 구간만 잰다 — 상류(B)로 넘기지 않고 여기서 답한다
+                # (B가 옛 버전이면 모르는 메시지다). 문자열 비교로 먼저 거르고 그때만 파싱한다.
+                if '"probe"' in msg["text"] and len(msg["text"]) < 128:
+                    try:
+                        probe = json.loads(msg["text"])
+                    except ValueError:
+                        probe = None
+                    if wsutil.is_probe(probe):
+                        await wsutil.send_probe_ack(ws, prober.ack_for(probe))
+                        continue
                 await upstream.send(msg["text"])
 
     down = asyncio.create_task(_down())
