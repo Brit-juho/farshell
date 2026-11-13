@@ -52,12 +52,10 @@ def conv(provider="claude", launch="cli", cwd="", created=None, updated=None, pa
 def row(cid):
     from session_catalog.db import database
     with database() as db:
-        r = db.execute("SELECT c.workspace_id,c.detail,p.name,p.path,p.kind,p.registered,p.removed,p.last_activity,p.hidden"
+        r = db.execute("SELECT c.workspace_id,c.placement,p.name,p.path,p.kind,p.registered,p.removed,p.last_activity,p.hidden"
                        " FROM conversations c LEFT JOIN workspaces w ON w.id=c.workspace_id LEFT JOIN projects p ON p.id=w.project_id"
                        " WHERE c.id=?", (cid,)).fetchone()
-    out = dict(r)
-    out["placement"] = json.loads(out.pop("detail")).get("placement")
-    return out
+    return dict(r)
 
 
 def place():
@@ -96,7 +94,7 @@ def test_temp_and_missing_cwds_and_children_are_skipped(catalog):
     child = conv(cwd=_repo(catalog / "p"), parent="n1")
     place()
     assert row(t)["placement"] == "skip:cwd" and row(e)["placement"] == "skip:cwd"
-    assert row(child)["placement"] is None and row(child)["workspace_id"] is None, "하위 대화는 놓지 않는다"
+    assert row(child)["placement"] == "skip:child" and row(child)["workspace_id"] is None, "하위 대화는 놓지 않는다"
 
 
 def test_a_linked_worktree_goes_to_its_main_repository(catalog):
@@ -213,3 +211,56 @@ def test_new_captures_record_how_the_cli_was_started():
     codex = adapters.identity(json.dumps({"type": "session_meta", "payload": {"id": "c1", "cwd": "/x", "originator": "codex_exec"}}) + "\n",
                               "codex", "2026/a.jsonl")
     assert claude["launch"] == "cli" and codex["launch"] == "codex_exec"
+
+
+def test_a_missing_path_that_escapes_the_roots_is_not_mapped(catalog):
+    repo = _repo(catalog / "proj")
+    conv(cwd=repo)
+    place()
+    sneaky = conv(cwd=f"{repo}/../../outside/missing")
+    place()
+    assert row(sneaky)["placement"] == "skip:cwd", "정규화하면 탐색 허용 폴더 밖 — 문자열 앞부분만으로 옛 작업 트리에 붙이지 않는다"
+
+
+def test_placement_only_patches_its_own_detail_keys(catalog):
+    """배치가 detail 전체를 덮으면 그 사이 수집이 고친 칸(검증 여부 등)이 되돌아간다 — 바꿀 칸만 고친다."""
+    from session_catalog import placement, inventory
+    from session_catalog.db import database
+    a = _repo(catalog / "a")
+    cid = conv(cwd=a)
+    real = inventory.inspect_workspace
+
+    def racing(cwd):
+        with database(write=True) as db:   # git 확인 중에 수집이 detail을 고친다
+            db.execute("UPDATE conversations SET detail=json_set(detail,'$.native_identity_verified',json('true')) WHERE id=?", (cid,))
+        return real(cwd)
+    import pytest as _p
+    mp = _p.MonkeyPatch()
+    mp.setattr(inventory, "inspect_workspace", racing)
+    try:
+        placement.place_conversations()
+    finally:
+        mp.undo()
+    with database() as db:
+        d = json.loads(db.execute("SELECT detail FROM conversations WHERE id=?", (cid,)).fetchone()[0])
+    assert d["native_identity_verified"] is True and row(cid)["placement"] == "placed"
+
+
+def test_new_activity_on_a_placed_conversation_lifts_the_project(catalog):
+    from session_catalog import placement
+    from session_catalog.db import database
+    old = time.time() - 200 * 86400
+    a = _repo(catalog / "a")
+    cid = conv(cwd=a, detail={"launch": "cli", "started": old, "last": old})
+    place()
+    assert row(cid)["hidden"] == 2
+    with database(write=True) as db:
+        wid = db.execute("SELECT workspace_id FROM conversations WHERE id=?", (cid,)).fetchone()[0]
+        placement.touch_project(db, wid, time.time(), time.time())
+    assert row(cid)["hidden"] == 0 and row(cid)["last_activity"] > old, "이어서 쓴 대화가 저장소를 다시 올린다"
+
+
+def test_first_timestamp_reads_the_transcript_not_the_capture_time():
+    from session_catalog import placement
+    assert placement.first_timestamp(b'{"type":"x"}\n{"timestamp":"2026-02-03T04:05:06Z"}\n') == 1770091506.0
+    assert placement.first_timestamp(b"no time") is None

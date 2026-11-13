@@ -190,7 +190,10 @@ MIGRATIONS = {
         "ALTER TABLE projects ADD COLUMN registered REAL",
         "ALTER TABLE projects ADD COLUMN removed REAL",
         "ALTER TABLE projects ADD COLUMN last_activity REAL",
+        # 대화를 저장소에 놓은 결과(session_catalog/placement.py): NULL 아직 · 'placed' · 'skip:<이유>'. 색인이 「아직」만 빨리 찾는다.
+        "ALTER TABLE conversations ADD COLUMN placement TEXT",
         "CREATE INDEX conversations_workspace ON conversations(workspace_id,updated)",
+        "CREATE INDEX conversations_placement ON conversations(placement,updated)",
     ),
 }
 
