@@ -207,7 +207,19 @@ After `VT_WATCHDOG_FAILS` (3) failures in a row:
   permanent codes 4001/4004/4005, notify 4001). A socket that has not opened within `CONNECT_TIMEOUT_MS` (10 s) is
   closed with 4000 through the same `watchSocketLiveness` path (the 45 s silence watchdog starts at `onopen`).
   `/ws-voice` takes only the jitter: its 4000 means "replaced by a newer connection" (`voice_sessions.py`). Tests:
-  `frontend/tests/ws-retry.test.js`. Detecting a dead socket that still looks open is a separate step (probe).
+  `frontend/tests/ws-retry.test.js`.
+- **Liveness probe** (`startProbe` in `core/ws-retry.js`, server `resilience/wsutil.py` `Prober`). A browser can lose a socket
+  without a `close` event (assumed for phones in the background, not yet measured), and the 45 s watchdog then
+  closes it only after the page is back. On a `long` wake (hidden 10 s or more, or a bfcache restore; deadline 2.5 s)
+  or an `online` event (3 s), an open socket sends `{"type":"probe","id":n}`. An answer — `probe_ack` **or any frame** —
+  inside the deadline means alive. Otherwise the handlers are detached, the socket is closed with 4000 (the old `onclose`
+  runs once to clean up) and a new one connects 0-250 ms later, staggered so several panes do not replay their scrollback
+  at once. A `short` wake does nothing. Only a socket whose probe sent right after `onopen` was acked within 5 s is
+  probe-capable (an older server ignores the message), so it is never closed on a missing answer. The server answers
+  at once, ignores a bad `id` and more than 4 probes per second per socket, and on `/ws/{id}` counts a probe as a pong.
+  A remote pane's proxy (`peer_proxy.py`) answers by itself and never forwards the probe to the owner, so the probe measures
+  browser ↔ this server only. `/ws-voice` is excluded (its 4000 means "replaced by a newer connection"). Tests:
+  `server/tests/test_ws_probe.py`, `test_peer_proxy_watchdog.py`, `frontend/tests/ws-retry.test.js`.
 - **Remote panes** (`/ws/remote/{host}/{tmux}`, `routes/peer_proxy.py`). The owner's `/api/peer/ws` sends no
   `ping` and a quiet terminal sends no bytes, so before 2026-11 the browser's 45 s watchdog closed an idle remote
   pane every 45 s. Now both hops are watched with the local-pane constants (`VT_WS_HEARTBEAT_INTERVAL` 15 s,

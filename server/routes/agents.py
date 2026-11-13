@@ -846,6 +846,7 @@ async def ws_agent(websocket: WebSocket):
             "all": _public_state(agent_status.visible_state()),
             "agents": agents_now,
         }))
+        prober = wsutil.Prober()
         while True:
             raw = await websocket.receive_text()
             try:
@@ -854,6 +855,8 @@ async def ws_agent(websocket: WebSocket):
                 continue
             if msg.get("type") == "pong":
                 last_pong = loop.time()
+            elif wsutil.is_probe(msg):
+                await wsutil.send_probe_ack(websocket, prober.ack_for(msg))
             elif msg.get("type") == "visibility":
                 from routes.system import handle_visibility
                 handle_visibility(websocket, _agent_hidden, raw, _kick_agents)

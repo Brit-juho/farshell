@@ -20,7 +20,7 @@ import { fitAndResize } from './resize.js';
 import { updateConnStatus, _setConnOverlayDetail } from './conn-overlay.js';
 import { t } from '../core/i18n.js';
 import { watchSocketLiveness } from '../core/ws-watchdog.js';
-import { retryDelay, onWake, CONNECT_TIMEOUT_MS } from '../core/ws-retry.js';
+import { retryDelay, onWake, startProbe, CONNECT_TIMEOUT_MS } from '../core/ws-retry.js';
 
 const TERMINAL_CLOSE_CODES = new Set([4001, 4004, 4005]);
 
@@ -58,6 +58,7 @@ export function startSessionSocket(id, term) {
   let _stableTimer = null;
   let _waiting = false;      // 재연결 타이머가 걸려 있다(WAITING)
   let _permanent = false;    // 4001/4004/4005 — 화면 복귀로도 다시 붙지 않는다
+  let _probe = null;         // 지금 연결의 생존 탐침(core/ws-retry.js)
 
   // 끊김 재연결 — 지수 백오프(아래). 4004 복구가 '확인 못 함'일 때도 같은 길을 쓴다.
   function _scheduleRetry(s) {
@@ -91,10 +92,14 @@ export function startSessionSocket(id, term) {
     // 안 오면 죽은 연결로 보고 닫는다. 그러면 아래 onclose의 재연결 백오프와 오버레이가 돈다.
     // 열리기 전에는 연결 기한(10초)만 감시한다 — 열리다 멈춘 소켓이 브라우저 기본 시간까지 붙잡지 않게.
     let _liveness = watchSocketLiveness(sock, { timeout: CONNECT_TIMEOUT_MS });
+    let probe = null;
 
     sock.onopen = () => {
       _liveness?.stop();
       _liveness = watchSocketLiveness(sock);
+      // 서버가 탐침을 아는 소켓만 복귀 때 탐침한다(옛 서버는 45초 워치독 그대로).
+      probe = _probe = startProbe(sock, { onDead: _wakeConnect });
+      probe.start();
       updateConnStatus(id, true);
       // 연결(첫 연결 포함) 직후엔 서버가 scrollback을 먼저 재생한다 — 그 안에
       // vim/tmux copy-mode 등에서 나온 과거 OSC52 시퀀스가 섞여 있을 수 있으므로,
@@ -128,9 +133,10 @@ export function startSessionSocket(id, term) {
     // Phase 8 G2: 서버 ping 응답 (heartbeat pong) + scrollback 재생 종료 신호
     sock.addEventListener('message', (e) => {
       _liveness?.alive();   // 바이너리 출력도 살아 있다는 뜻이다
-      if (typeof e.data !== 'string') return;
+      if (typeof e.data !== 'string') { probe?.frame(null); return; }
       try {
         const msg = JSON.parse(e.data);
+        probe?.frame(msg);
         if (msg && msg.type === 'ping') sock.send(JSON.stringify({ type: 'pong' }));
         else if (msg && msg.type === 'scrollback_end') {
           // s.ws가 이 sock과 다르면 이미 재연결로 교체된 뒤 도착한 낡은 메시지 —
@@ -194,6 +200,8 @@ export function startSessionSocket(id, term) {
     sock.onclose = (ev) => {
       _liveness?.stop();
       _liveness = null;
+      probe?.stop();
+      if (_probe === probe) _probe = null;
       clearTimeout(_stableTimer);
       // ⚠ 탭을 사용자가 직접 닫은 경우(removeSession이 세션을 이미 제거)에도
       // 이 close 이벤트가 큐잉돼 나중에 실행된다. 예전엔 이 체크보다 먼저
@@ -243,18 +251,24 @@ export function startSessionSocket(id, term) {
   getSession(id)._reconnectNow = connectTerminalWs;
   connectTerminalWs();
 
-  // 화면 복귀·네트워크 복귀: 백오프 타이머를 기다리지 않고 바로 붙는다. 소켓이 이미 열려 있거나
-  // 열리는 중이면(R1 범위 밖: 탐침은 R2) 건드리지 않고, 「끊기」·영구 실패 상태에서도 아무것도 안 한다.
-  const _unwake = onWake(() => {
+  // 화면 복귀·네트워크 복귀. 백오프 타이머를 기다리는 중이면 바로 붙고, 열려 있으면(서버가 탐침을 아는
+  // 소켓만) 탐침으로 죽은 소켓을 가려 바꾼다. 연결 중이거나 「끊기」·영구 실패 상태면 아무것도 안 한다.
+  function _wakeConnect() {
     const s = getSession(id);
-    if (!s) { _unwake(); return; }   // 탭이 닫혔다
-    if (!_waiting || _permanent || s._reconnectStopped) return;
+    if (!s || !_waiting || _permanent || s._reconnectStopped) return;
     if (s.ws && s.ws.readyState <= 1) return;   // 열려 있거나 열리는 중 — 이중 연결 금지
     clearTimeout(s.reconnTimer);
     s.reconnTimer = null;
     _waiting = false;
     _retries = 0;
     connectTerminalWs();
+  }
+  const _unwake = onWake(({ reason }) => {
+    const s = getSession(id);
+    if (!s) { _unwake(); return; }   // 탭이 닫혔다
+    if (_permanent || s._reconnectStopped) return;
+    if (_waiting) { _wakeConnect(); return; }
+    if (_probe && s.ws && s.ws.readyState === 1) _probe.check(reason);
   });
 
   term.onData((data) => {

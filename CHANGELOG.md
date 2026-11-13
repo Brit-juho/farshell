@@ -12,6 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 - **Sockets reconnect faster and no longer in lockstep.** The terminal, `/ws-agent`, `/ws-workspace`, `/ws-fs-watch` and `/ws-notify` retry with jittered backoff (half to full of the old delay, still capped at 30 s), connect immediately when the screen comes back (visible again, bfcache restore, `online`) instead of waiting out the backoff timer, and give up a connection that has not opened within 10 s. A socket that is already open is left alone; `/ws-voice` gets the jitter only. Shared code: `frontend/js/core/ws-retry.js`.
+- **A dead socket that still looks open is found when you come back.** After the screen has been hidden for 10 s or more (or the network returns) the browser sends a tiny `probe` over each open socket and replaces it if no answer or other frame arrives within 2.5-3 s, instead of waiting for the 45 s silence watchdog. Servers answer `probe` with `probe_ack` on the terminal, `/ws-agent`, `/ws-workspace`, `/ws-fs-watch` and `/ws-notify` (a remote pane's proxy answers for itself); a browser only probes sockets whose server has acked, so an older server is left as it was. See `API.md` «Liveness probe».
 - Sessions under "Outside a repository" are grouped by their current folder (`~/…`), so you can see where each one runs; the phone tile shows the folder under the name.
 
 ---

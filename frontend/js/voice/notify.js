@@ -6,7 +6,7 @@ import { get as setting } from '../core/settings.js';
 import { t } from '../core/i18n.js';
 import { waitForAuthentication } from '../core/auth-state.js';
 import { watchSocketLiveness } from '../core/ws-watchdog.js';
-import { retryDelay, onWake, CONNECT_TIMEOUT_MS } from '../core/ws-retry.js';
+import { retryDelay, onWake, startProbe, CONNECT_TIMEOUT_MS } from '../core/ws-retry.js';
 
 const _vToken = new URLSearchParams(location.search).get('token') || '';
 const _vTokenQ = _vToken ? `?token=${_vToken}` : '';
@@ -18,6 +18,7 @@ let _notifyRetries = 0;
 let _notifyStableTimer = null;
 let _notifyTimer = null;      // 재연결 타이머(WAITING)
 let _notifyStopped = false;  // 4001 — 복귀해도 다시 붙지 않는다
+let _notifyProbe = null;     // 지금 연결의 생존 탐침(core/ws-retry.js)
 
 // 로그인 화면이 떠 있는 동안은 붙지 않는다(인증 없는 접속이 사전 인증 실패로 세어진다). 재연결 타이머도 여기를 지난다.
 let _notifyWaitingAuth = false;
@@ -40,13 +41,21 @@ function _connectNotifyNow() {
   // 열리기 전 연결 기한(10초)만 감시한다. 서버 ping이 없어 열린 뒤 침묵 감시는 하지 않는다(후속).
   const _connGuard = watchSocketLiveness(notifyWs, { timeout: CONNECT_TIMEOUT_MS });
 
+  let probe = null;
+  const ws = notifyWs;
   notifyWs.onopen = () => {
     _connGuard.stop();
+    // 서버가 탐침을 아는 소켓만 복귀 때 탐침한다. 서버 ping이 없어 열린 뒤 침묵 감시는 하지 않는다(후속).
+    probe = _notifyProbe = startProbe(ws, { onDead: _wakeNotify });
+    probe.start();
     clearTimeout(_notifyStableTimer);
     _notifyStableTimer = setTimeout(() => { _notifyRetries = 0; }, 3000);
   };
 
   notifyWs.onmessage = (e) => {
+    let _frame = null;
+    try { if (typeof e.data === 'string') _frame = JSON.parse(e.data); } catch (_) { /* 아래에서 다시 처리 */ }
+    probe?.frame(_frame);
     // 메시지 처리 중 어떤 예외(잘못된 JSON, Notification 생성자 throw 등)가 나도
     // notify 채널 전체가 죽지 않도록 방어한다.
     try {
@@ -84,6 +93,8 @@ function _connectNotifyNow() {
 
   notifyWs.onclose = (ev) => {
     _connGuard.stop();
+    probe?.stop();
+    if (_notifyProbe === probe) _notifyProbe = null;
     clearTimeout(_notifyStableTimer);
     // 인증 실패(4001)는 재시도해도 동일 → 재연결 중단.
     if (ev && ev.code === 4001) { _notifyStopped = true; console.warn('[NOTIFY] 인증 실패 — 재연결 중단'); return; }
@@ -131,12 +142,16 @@ function showBrowserNotification(title, body) {
 }
 
 // 화면·네트워크 복귀: 재연결 타이머(최대 30초)를 기다리지 않고 바로 붙는다.
-onWake(() => {
+function _wakeNotify() {
   if (!_notifyTimer || _notifyStopped) return;
   clearTimeout(_notifyTimer);
   _notifyTimer = null;
   _notifyRetries = 0;
   connectNotify();
+}
+onWake(({ reason }) => {
+  if (notifyWs && notifyWs.readyState === 1) { _notifyProbe?.check(reason); return; }
+  _wakeNotify();
 });
 
 // 알림 WebSocket 연결

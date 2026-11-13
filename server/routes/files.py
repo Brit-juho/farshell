@@ -636,6 +636,7 @@ async def ws_fs_watch(websocket: WebSocket):
     from resilience import wsutil
     pinger = wsutil.start_pinger(websocket)
     client_id = id(websocket)
+    prober = wsutil.Prober()
     try:
         while True:
             text = await websocket.receive_text()
@@ -644,6 +645,9 @@ async def ws_fs_watch(websocket: WebSocket):
             try:
                 msg = json.loads(text)
             except ValueError:
+                continue
+            if wsutil.is_probe(msg):
+                await wsutil.send_probe_ack(websocket, prober.ack_for(msg))
                 continue
             if not isinstance(msg, dict) or msg.get("type") != "watch":
                 continue

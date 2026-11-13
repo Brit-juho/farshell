@@ -20,7 +20,7 @@
 import { WS_BASE, _tokenQuery } from '../core/env.js';
 import { relayWsPath } from '../core/host-route.js';
 import { watchSocketLiveness } from '../core/ws-watchdog.js';
-import { retryDelay, onWake, CONNECT_TIMEOUT_MS } from '../core/ws-retry.js';
+import { retryDelay, onWake, startProbe, CONNECT_TIMEOUT_MS } from '../core/ws-retry.js';
 import { waitForAuthentication } from '../core/auth-state.js';
 
 const _subs = new Map();   // `${kind}\n${path}` -> Set<fn>
@@ -30,6 +30,7 @@ let _everOpened = false;
 let _retries = 0;
 let _stableTimer = null;
 let _reconnectTimer = null;
+let _probe = null;   // 지금 연결의 생존 탐침(core/ws-retry.js)
 let _syncQueued = false;
 let _failed = false;          // 서버가 감시 실패를 알렸다 — 다음 (재)구독까지
 let _rejected = new Set();    // 서버가 거절한 구독 키(경계 밖·저장소 아님 등)
@@ -89,6 +90,7 @@ function _close() {
   _reconnectTimer = null;
   _retries = 0;
   _everOpened = false;
+  if (_probe) { _probe.stop(); _probe = null; }
   const ws = _ws;
   _ws = null;
   _open = false;
@@ -104,13 +106,18 @@ function _scheduleReconnect() {
   _reconnectTimer = setTimeout(() => { _reconnectTimer = null; if (_subs.size && !_ws) _connect(); }, delay);
 }
 
-// 화면·네트워크 복귀: 재연결 타이머(최대 30초)를 기다리지 않고 바로 붙는다. 열린 소켓은 건드리지 않는다.
-onWake(() => {
+// 재연결 타이머를 기다리는 중이면 기다리지 않고 바로 붙는다(복귀·죽은 소켓 교체).
+function _wakeNow() {
   if (!_reconnectTimer || _ws || !_subs.size) return;
   clearTimeout(_reconnectTimer);
   _reconnectTimer = null;
   _retries = 0;
   _connect();
+}
+// 화면·네트워크 복귀: 닫혀 대기 중이면 바로 붙고, 열려 있으면(서버가 탐침을 아는 소켓만) 탐침으로 죽은 소켓을 가린다.
+onWake(({ reason }) => {
+  if (_ws) { if (_ws.readyState === 1) _probe?.check(reason); return; }
+  _wakeNow();
 });
 
 // 로그인 화면이 떠 있는 동안은 붙지 않는다(인증 없는 접속이 사전 인증 실패로 세어진다). 재연결 타이머도 여기를 지난다.
@@ -140,9 +147,12 @@ function _connectNow() {
   // 생존 감시(core/ws-watchdog.js) — 서버 ping(15초)이 45초 동안 안 오면 닫아 재연결을 돌린다.
   // 열리기 전에는 연결 기한(10초)만 감시한다.
   let liveness = watchSocketLiveness(ws, { timeout: CONNECT_TIMEOUT_MS });
+  let probe = null;
   ws.onopen = () => {
     liveness?.stop();
     liveness = watchSocketLiveness(ws);
+    probe = _probe = startProbe(ws, { onDead: _wakeNow });
+    probe.start();
     _open = true;
     clearTimeout(_stableTimer);
     _stableTimer = setTimeout(() => { _retries = 0; }, 3000);
@@ -156,6 +166,7 @@ function _connectNow() {
     liveness?.alive();
     let msg;
     try { msg = JSON.parse(e.data); } catch (_) { return; }
+    probe?.frame(msg);
     if (msg && msg.type === 'ping') {
       try { ws.send(JSON.stringify({ type: 'pong' })); } catch (_) { /* 답하지 않아도 된다 */ }
       return;
@@ -180,6 +191,8 @@ function _connectNow() {
   ws.onclose = () => {
     liveness?.stop();
     liveness = null;
+    probe?.stop();
+    if (_probe === probe) _probe = null;
     clearTimeout(_stableTimer);
     // 이미 다른 소켓으로 갈아탔거나(_close 뒤 새 연결) 닫힌 뒤면 재연결을 또 걸지 않는다.
     if (_ws !== ws) return;
