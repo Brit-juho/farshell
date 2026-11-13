@@ -13,7 +13,7 @@ import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'so
 import { Portal } from 'solid-js/web';
 import { t } from '../core/i18n.js';
 import {
-  buildRailLists, splitRunning, rowMenuItems, rowSummaryDetails, runRowMenu,
+  buildRailLists, splitRunning, rowMenuItems, rowSummaryDetails, runRowMenu, renameViewGroup,
   ATTENTION_COLLAPSED_KEY, ATTENTION_SHOW_KEY, LINEAGE_KEY, VIEW_KEY, encodeLineagePrefs, encodeRailView, toggleGroupCollapsed,
   kidsProgress, canShareName,
   type SessionRow,
@@ -430,7 +430,8 @@ export function Rail(props: RailProps) {
     // D5 — 분할 화면 묶음에 든 세션은 행에 작은 표식만 두고, 묶음을 통째로 여는 길은 메뉴에 둔다(행을 눌러도
     // 닫힌 묶음은 통째로 다시 열린다 — term/session-actions.js openSessionFromRail).
     const group: MenuItem[] = row.viewLabel ? [{ label: t('묶음 전체 열기'), detail: row.viewLabel, icon: 'columns-2',
-      run: () => { void openRow({} as MouseEvent, row); } }] : [];
+      run: () => { void openRow({} as MouseEvent, row); } },
+      ...(row.viewId ? [{ label: t('묶음 이름 바꾸기'), icon: 'pencil', run: () => { void renameViewGroup(row); } }] : [])] : [];
     return [...group, ...rowMenuItems(row, { split: splitAvailable(row), share: viewHostId === LOCAL_HOST, record: !!linked }).map((it) => ({
       label: it.label, detail: it.detail, danger: it.danger, icon: ROW_MENU_ICON[it.id],
       run: () => {

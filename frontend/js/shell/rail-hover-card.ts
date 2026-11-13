@@ -50,6 +50,7 @@ export interface HcModel {
   name: string;
   agent: string | null;
   state: HcState;
+  /** 상태 글. 유휴는 빈 글이다 — 칸·메뉴 요약과 같은 기준으로 「유휴」를 쓰지 않는다(상태 링·이름은 남는다). */
   stateText: string;
   /** 입력 대기의 종류(승인 요청·선택 요청·계획 확인·질문), working·done의 보조 표시(질문 있음·계획 있음). */
   note: string | null;
@@ -245,7 +246,7 @@ export function buildHoverCard(row: SessionRow, opts: HcOptions = {}): HcModel {
   }
 
   return {
-    name: row.name, agent: row.agent || null, state, stateText: STATE_LABEL[state], note: note || null,
+    name: row.name, agent: row.agent || null, state, stateText: state === 'idle' ? '' : STATE_LABEL[state], note: note || null,
     since: formatRelativeTime(row.since, now), sections,
   };
 }

@@ -153,7 +153,7 @@ export const RAIL_TOGGLES = [
   { key: 'rail.attention.show', label: t('개입 필요 구역 표시'), group: t('구역'),
     help: t('입력을 기다리는 세션을 맨 위에 모아 보여줍니다') },
   { key: 'rail.origin.peer.show', label: t('다른 맥에서 만듦'), group: t('만든 곳별 표시') },
-  { key: 'rail.origin.external.show', label: t('직접 만듦 (CLI·tmux)'), group: t('만든 곳별 표시') },
+  { key: 'rail.origin.external.show', label: t('터미널에서 만든 세션'), group: t('만든 곳별 표시') },
 ];
 
 const sectionLabel = (id) => SECTION_META.find((s) => s.id === id)?.label || id;

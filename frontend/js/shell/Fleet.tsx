@@ -39,7 +39,7 @@ import {
   collectSessionRows, syncAgentsFromServer, createDiffWatcher, useLayoutVersion, pollFetch, isNoResponse, type RailDeps,
 } from './rail-fetch.js';
 import {
-  buildRailLists, rowMenuItems, rowSummaryDetails, runRowMenu, formatRelativeTime, nodeLine, kidLabel, type SessionRow,
+  buildRailLists, rowMenuItems, rowSummaryDetails, runRowMenu, renameViewGroup, formatRelativeTime, nodeLine, kidLabel, type SessionRow,
 } from './rail-data.js';
 import { buildRepoTree, endedActivity, OUTSIDE_KEY, type RepoGroup } from './repo-tree.js';
 import { createRailPrefs } from './rail-prefs.js';
@@ -676,6 +676,13 @@ function Fleet(props: { deps: FleetDeps }) {
                       바뀌고, 나머지는 시트를 닫은 뒤 실행한다 — 콜백에서 m()을 다시 읽으면 이미
                       정리된 뒤라 값은 진입 시점에 한 번 꺼내 쓴다(2026-09-23 실측). */}
                   <div class="vt-session-list">
+                    {/* 분할 화면 묶음에 든 세션 — 묶음 이름 바꾸기(레일 메뉴와 같은 함수). 타일을 누르면 묶음이 통째로 열리므로 「묶음 전체 열기」는 따로 두지 않는다. */}
+                    <Show when={row.viewId && row.viewLabel}>
+                      <button type="button" class="vt-menu-item" onClick={() => runMenuAction(() => { void renameViewGroup(row); })}>
+                        <span class="vt-menu-item-ico" innerHTML={shellIcon('pencil', 14, 2)} />
+                        {t('묶음 이름 바꾸기')} · {row.viewLabel}
+                      </button>
+                    </Show>
                     <For each={rowMenuItems(row, { split: !!(window as any).vtTouchSplitAvailable?.(row.sessionId || null), share: viewHostId === LOCAL_HOST, record: !!catalogOf(row) })}>
                       {(it) => (
                         <button
