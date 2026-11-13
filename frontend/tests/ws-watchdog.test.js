@@ -145,10 +145,11 @@ function fakeSockets(window) {
   return made;
 }
 
-// 감시 45초·유예 3초·재연결 백오프(1~2초)를 빨리 돌린다. 그 밖의 타이머는 그대로.
+// 감시 45초·유예 3초·재연결 백오프(지터로 0.5~1초)를 빨리 돌린다. 그 밖의 타이머는 그대로.
 function fastTimers(window) {
   const real = window.setTimeout.bind(window);
-  window.setTimeout = (fn, ms, ...rest) => real(fn, ms >= 1000 ? 5 : ms, ...rest);
+  // 연결 기한(10초)은 그대로 둔다 — 열리지 않은 새 소켓이 계속 닫혀 재연결 횟수 계산을 흐리지 않게.
+  window.setTimeout = (fn, ms, ...rest) => real(fn, ms >= 500 && ms !== 10000 ? 5 : ms, ...rest);
 }
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 

@@ -16,6 +16,7 @@
 import { WS_BASE, _tokenQuery } from './env.js';
 import { relayWsPath } from './host-route.js';
 import { watchSocketLiveness } from './ws-watchdog.js';
+import { retryDelay, onWake, CONNECT_TIMEOUT_MS } from './ws-retry.js';
 import { waitForAuthentication } from './auth-state.js';
 
 const _subs = new Map();   // type -> Set<fn>
@@ -49,9 +50,9 @@ function _scheduleReconnect() {
   clearTimeout(_reconnectTimer);
   // voice/notify.js와 같은 지수 백오프. 상한에 닿아도 포기하지 않는다
   // (모바일 장시간 세션의 flap에서도 채널이 살아 있어야 한다).
-  const delay = Math.min(30000, 1000 * Math.pow(2, Math.min(_retries, 5)));
+  const delay = retryDelay(_retries, 1000);   // 지터(ws-retry.js)
   _retries += 1;
-  _reconnectTimer = setTimeout(connect, delay);
+  _reconnectTimer = setTimeout(() => { _reconnectTimer = null; connect(); }, delay);
 }
 
 // 로그인 화면이 떠 있는 동안은 붙지 않는다(인증 없는 접속이 사전 인증 실패로 세어진다). 재연결 타이머도 여기를 지난다.
@@ -74,7 +75,8 @@ function _connectNow() {
   }
   const ws = _ws;
   // 생존 감시(core/ws-watchdog.js) — 서버 ping(15초)이 45초 동안 안 오면 닫아 재연결을 돌린다.
-  let liveness = null;
+  // 열리기 전에는 연결 기한(10초)만 감시한다.
+  let liveness = watchSocketLiveness(ws, { timeout: CONNECT_TIMEOUT_MS });
 
   _ws.onopen = () => {
     liveness?.stop();
@@ -122,5 +124,13 @@ export function start() {
   if (_started) return;
   _started = true;
   document.addEventListener('visibilitychange', _sendVisibility);
+  // 화면·네트워크 복귀: 재연결 타이머(최대 30초)를 기다리지 않고 바로 붙는다. 열린 소켓은 건드리지 않는다.
+  onWake(() => {
+    if (!_reconnectTimer || _ws) return;
+    clearTimeout(_reconnectTimer);
+    _reconnectTimer = null;
+    _retries = 0;
+    connect();
+  });
   connect();
 }

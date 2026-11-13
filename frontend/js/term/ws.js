@@ -20,6 +20,7 @@ import { fitAndResize } from './resize.js';
 import { updateConnStatus, _setConnOverlayDetail } from './conn-overlay.js';
 import { t } from '../core/i18n.js';
 import { watchSocketLiveness } from '../core/ws-watchdog.js';
+import { retryDelay, onWake, CONNECT_TIMEOUT_MS } from '../core/ws-retry.js';
 
 const TERMINAL_CLOSE_CODES = new Set([4001, 4004, 4005]);
 
@@ -53,7 +54,10 @@ export function startSessionSocket(id, term) {
       : relayWsPath(`/ws/${id}${_wsQuery()}${_wsQuery() ? '&' : '?'}screen=${screenId()}`);
   };
   let _retries = 0;
+  let _everOpened = false;   // 재연결 판정(term.reset)용 — 화면 복귀로 _retries를 0으로 되돌려도 유지된다
   let _stableTimer = null;
+  let _waiting = false;      // 재연결 타이머가 걸려 있다(WAITING)
+  let _permanent = false;    // 4001/4004/4005 — 화면 복귀로도 다시 붙지 않는다
 
   // 끊김 재연결 — 지수 백오프(아래). 4004 복구가 '확인 못 함'일 때도 같은 길을 쓴다.
   function _scheduleRetry(s) {
@@ -65,23 +69,28 @@ export function startSessionSocket(id, term) {
     // 첫 재시도(500ms)가 유예 시간 안에 들어오게 했다 — 지속되는 장애에는
     // 여전히 지수적으로 늘어나 30초 상한까지 백오프하므로 폭풍 재발 위험은 없음.
     // Math.pow(2, retries)는 지수가 커지면 오버플로하므로 지수를 7로 clamp.
-    const delay = Math.min(250 * Math.pow(2, Math.min(_retries, 7)), 30000);
+    // 지터(core/ws-retry.js): 같은 화면의 pane·소켓이 같은 박자로 붙지 않게 [c/2, c)로 흩는다.
+    // 첫 재시도는 250-500ms라 위 오버레이 유예 안에 그대로 들어간다.
+    const delay = retryDelay(_retries - 1, 500);
     _setConnOverlayDetail(id, t('재연결 시도 중... ({n}회)', { n: _retries }));
     // O1: "끊기"를 누른 상태면 사용자가 멈춘 것 — 다음 타이머를 새로 걸지 않는다.
     // "다시 연결"을 누르면 _reconnectNow()가 이 delay를 기다리지 않고 즉시 재시도한다.
     if (!s._reconnectStopped) {
-      s.reconnTimer = setTimeout(connectTerminalWs, delay);
+      _waiting = true;
+      s.reconnTimer = setTimeout(() => { _waiting = false; connectTerminalWs(); }, delay);
     }
   }
 
   function connectTerminalWs() {
     if (!getSession(id)) return;
+    _waiting = false;   // 「다시 연결」처럼 타이머 밖에서 불려도 대기 상태가 남지 않게
     const sock = new WebSocket(`${WS_BASE}${_wsPath()}`);
     sock.binaryType = 'arraybuffer';
     getSession(id).ws = sock;
     // 생존 감시(core/ws-watchdog.js) — 서버 ping이 15초마다 오므로, 45초 동안 아무것도
     // 안 오면 죽은 연결로 보고 닫는다. 그러면 아래 onclose의 재연결 백오프와 오버레이가 돈다.
-    let _liveness = null;
+    // 열리기 전에는 연결 기한(10초)만 감시한다 — 열리다 멈춘 소켓이 브라우저 기본 시간까지 붙잡지 않게.
+    let _liveness = watchSocketLiveness(sock, { timeout: CONNECT_TIMEOUT_MS });
 
     sock.onopen = () => {
       _liveness?.stop();
@@ -101,7 +110,8 @@ export function startSessionSocket(id, term) {
       // R1: "[재연결됨]" 상태 문구는 예전엔 term.write()로 찍어 스크롤백에 영구히
       // 남았다 — updateConnStatus가 이미 오버레이를
       // 지워 "연결됨"을 보여주므로 별도 텍스트 없이 reset만 한다.
-      if (_retries > 0) { term.reset(); }
+      if (_retries > 0 || _everOpened) { term.reset(); }
+      _everOpened = true;
       // 새(재)연결된 PTY는 크기를 모르므로 캐시를 비워 첫 fitAndResize가 반드시 보내게 한다.
       // _lastFitW/H도 같이 비워야 한다 — 컨테이너 픽셀 크기가 그대로면 fitAndResize의
       // fit() 자체를 건너뛰어 sendResize까지 도달 못 하고 새 PTY에 크기를 못 알린다.
@@ -195,6 +205,7 @@ export function startSessionSocket(id, term) {
       updateConnStatus(id, false);
       const code = ev && ev.code;
       if (TERMINAL_CLOSE_CODES.has(code)) {                  // 영구 실패 → 재연결 안 함
+        _permanent = true;
         // 4004 = "서버 재시작으로 PTY만 사라짐"과 "세션이 종료됨"을 둘 다 뜻한다. tmux
         // 세션이 살아 있으면 같은 이름으로 다시 attach해 칸을 지킨다(session.js
         // recoverSession). 확인을 못 했으면(null) 일반 재연결 백오프로 간다.
@@ -203,7 +214,7 @@ export function startSessionSocket(id, term) {
             if (r === true) return;
             if (r === false) { _closeEnded(id); return; }
             const cur = getSession(id);
-            if (cur) _scheduleRetry(cur);
+            if (cur) { _permanent = false; _scheduleRetry(cur); }
           });
           return;
         }
@@ -231,6 +242,20 @@ export function startSessionSocket(id, term) {
 
   getSession(id)._reconnectNow = connectTerminalWs;
   connectTerminalWs();
+
+  // 화면 복귀·네트워크 복귀: 백오프 타이머를 기다리지 않고 바로 붙는다. 소켓이 이미 열려 있거나
+  // 열리는 중이면(R1 범위 밖: 탐침은 R2) 건드리지 않고, 「끊기」·영구 실패 상태에서도 아무것도 안 한다.
+  const _unwake = onWake(() => {
+    const s = getSession(id);
+    if (!s) { _unwake(); return; }   // 탭이 닫혔다
+    if (!_waiting || _permanent || s._reconnectStopped) return;
+    if (s.ws && s.ws.readyState <= 1) return;   // 열려 있거나 열리는 중 — 이중 연결 금지
+    clearTimeout(s.reconnTimer);
+    s.reconnTimer = null;
+    _waiting = false;
+    _retries = 0;
+    connectTerminalWs();
+  });
 
   term.onData((data) => {
     const handle = getSession(id)?.wsHandle;

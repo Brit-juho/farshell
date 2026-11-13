@@ -11,6 +11,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Changed
+- **Sockets reconnect faster and no longer in lockstep.** The terminal, `/ws-agent`, `/ws-workspace`, `/ws-fs-watch` and `/ws-notify` retry with jittered backoff (half to full of the old delay, still capped at 30 s), connect immediately when the screen comes back (visible again, bfcache restore, `online`) instead of waiting out the backoff timer, and give up a connection that has not opened within 10 s. A socket that is already open is left alone; `/ws-voice` gets the jitter only. Shared code: `frontend/js/core/ws-retry.js`.
 - Sessions under "Outside a repository" are grouped by their current folder (`~/…`), so you can see where each one runs; the phone tile shows the folder under the name.
 
 ---

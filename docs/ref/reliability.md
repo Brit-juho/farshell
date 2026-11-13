@@ -197,6 +197,17 @@ After `VT_WATCHDOG_FAILS` (3) failures in a row:
 - **WebSockets.** `core/ws-watchdog.js` closes a socket that received nothing for 45 s (code 4000), so the
   normal reconnect and overlay path runs. The server sends `{"type":"ping"}` every 15 s on `/ws/{id}`,
   `/ws-agent`, `/ws-workspace` and `/ws-fs-watch`.
+- **Reconnect pacing** (`core/ws-retry.js`). Every retry waits `c/2 + U·c/2` (U uniform in [0,1)) with
+  `c = min(30 s, base·2^min(n,6))`, `n` = consecutive failures so far, `base` 500 ms for terminals and 1000 ms for
+  the others (`/ws-agent`, `/ws-workspace`, `/ws-fs-watch`, `/ws-notify`, `/ws-voice`), so panes and channels of one
+  screen do not reconnect on the same beat. The counter still resets only after a socket stayed open 3 s (regression fb827a6).
+  `onWake` joins `visibilitychange` (visible again), `pageshow` with `persisted` (bfcache) and `online`; nothing fires
+  while the page is hidden. A socket that is **waiting on a backoff timer** cancels it, resets `n` and connects at
+  once; a connecting or open socket is not touched, and neither is one stopped on purpose (the terminal's 끊기, the
+  permanent codes 4001/4004/4005, notify 4001). A socket that has not opened within `CONNECT_TIMEOUT_MS` (10 s) is
+  closed with 4000 through the same `watchSocketLiveness` path (the 45 s silence watchdog starts at `onopen`).
+  `/ws-voice` takes only the jitter: its 4000 means "replaced by a newer connection" (`voice_sessions.py`). Tests:
+  `frontend/tests/ws-retry.test.js`. Detecting a dead socket that still looks open is a separate step (probe).
 - **Remote panes** (`/ws/remote/{host}/{tmux}`, `routes/peer_proxy.py`). The owner's `/api/peer/ws` sends no
   `ping` and a quiet terminal sends no bytes, so before 2026-11 the browser's 45 s watchdog closed an idle remote
   pane every 45 s. Now both hops are watched with the local-pane constants (`VT_WS_HEARTBEAT_INTERVAL` 15 s,
