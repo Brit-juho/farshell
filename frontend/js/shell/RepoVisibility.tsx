@@ -24,6 +24,8 @@ import { createSignal, onCleanup, onMount, For, Show, type JSX } from 'solid-js'
 import { openWorktree, deleteWorktreeRow, type RailDeps } from './rail-fetch.js';
 import { WorktreeDialog } from './WorktreeDialog.js';
 import { t } from '../core/i18n.js';
+import { historyApi } from '../history/api.js';
+import { confirmDialog } from '../core/dialog-lazy.js';
 
 export interface RepoVisibilityDeps extends RailDeps {}
 
@@ -44,6 +46,9 @@ interface RepoGroup {
   name: string;
   hidden: boolean;
   worktrees: WorktreeItem[];
+  /** 저장소 2차 — 목록의 저장소(CLI를 켠 곳)면 그 id. 숨김·제거를 이 id로 한다. */
+  projectId?: string;
+  kind?: string;
 }
 
 interface Props {
@@ -57,6 +62,9 @@ interface Props {
   onClose: () => void;
   /** 숨김·워크트리 구성이 바뀌면 레일을 다시 불러오라는 신호. */
   onChanged: () => void;
+  /** 저장소 2차: 이 맥을 보고 있으면 「CLI를 켠 저장소」 목록(보이기·제거). 다른 맥이면 그 맥의 폴더 스캔 목록(예전 방식) —
+   * 저장소 목록 API는 중계되지 않는다. */
+  projects?: boolean;
 }
 
 /** 홈 밑이면 `~/…`로 줄인다. 목록의 관심사는 "어디 있는 것인가"이지 절대경로가
@@ -96,9 +104,23 @@ export function RepoVisibility(props: Props) {
       // 일방통행이 된다(§3 수용 기준).
       const data = (await props.deps.vtFetch('/api/repos?include_hidden=1')) as
         { repos?: RepoGroup[]; roots?: string[] } | null;
+      setRoots(data?.roots || []);
+      if (props.projects) {
+        // 저장소 = CLI를 켠 곳. git 저장소는 폴더 스캔 결과에서 워크트리를 붙인다(만들기·지우기·워크트리에서 새 세션은 그대로).
+        const list = await historyApi('/api/session-catalog/projects?include_hidden=true');
+        const scanned = new Map((data?.repos || []).map((r) => [r.path, r]));
+        setGroups((list?.projects || []).map((p: any): RepoGroup => {
+          const repo = scanned.get(p.path);
+          return {
+            id: p.id, projectId: p.id, kind: p.kind, host: 'local', path: p.path, name: p.name, hidden: Number(p.hidden) !== 0,
+            worktrees: repo?.worktrees?.length ? repo.worktrees
+              : [{ id: '', repo: p.path, repoName: p.name, branch: p.branch || '', isMain: true, path: p.path, sessions: [] }],
+          };
+        }).sort((a: RepoGroup, b: RepoGroup) => a.name.localeCompare(b.name)));
+        return;
+      }
       const repos = [...(data?.repos || [])].sort((a, b) => a.name.localeCompare(b.name));
       setGroups(repos);
-      setRoots(data?.roots || []);
     } catch (e: any) {
       setErrorMsg(e?.data?.error || e?.message || t('저장소 목록을 불러오지 못했습니다'));
     } finally {
@@ -115,11 +137,15 @@ export function RepoVisibility(props: Props) {
     // 실패하면 아래에서 되돌리고 이유를 적는다.
     setGroups((list) => list.map((x) => (x.path === group.path ? { ...x, hidden: nextHidden } : x)));
     try {
-      await props.deps.vtFetch('/api/worktrees/hidden', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: group.path, hidden: nextHidden }),
-      });
+      if (group.projectId) {
+        await historyApi(`/api/session-catalog/projects/${encodeURIComponent(group.projectId)}`, { body: { hidden: nextHidden } });
+      } else {
+        await props.deps.vtFetch('/api/worktrees/hidden', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: group.path, hidden: nextHidden }),
+        });
+      }
       setErrorMsg(null);
       props.onChanged();
     } catch (e: any) {
@@ -155,7 +181,31 @@ export function RepoVisibility(props: Props) {
     props.onClose();
   };
 
+  // 저장소 2차 — 목록에서 제거. 대화 기록은 지우지 않는다(보관함·대화 보관함). 그 자리에서 CLI를 다시 켜면 되살아난다.
+  const removeProject = async (group: RepoGroup) => {
+    if (!group.projectId) return;
+    if (!await confirmDialog(t('「{name}」을 세션 목록에서 제거합니다. 대화 기록은 지우지 않고, 이 폴더에서 CLI를 다시 켜면 다시 나타납니다.', { name: group.name }),
+      { title: t('저장소 제거'), okLabel: t('제거') })) return;
+    setBusyRepo((b) => ({ ...b, [group.path]: true }));
+    try {
+      await historyApi(`/api/session-catalog/projects/${encodeURIComponent(group.projectId)}`, { body: { removed: true } });
+      setErrorMsg(null);
+      await load();
+      props.onChanged();
+    } catch (e: any) {
+      setErrorMsg(e?.message || t('저장에 실패했습니다'));
+    } finally {
+      setBusyRepo((b) => { const n = { ...b }; delete n[group.path]; return n; });
+    }
+  };
+
   const newSessionIn = async (wt: WorktreeItem) => {
+    if (!wt.id) {
+      // 폴더 저장소(git 아님)·스캔에 없는 저장소 — 그 폴더에서 새 tmux 세션(저장소 머리 「+」와 같은 동작).
+      (props.deps.getAction('session.create-in') as ((cwd: string) => void) | undefined)?.(wt.path);
+      props.onClose();
+      return;
+    }
     setBusyWt((b) => ({ ...b, [wt.id]: true }));
     try {
       const tmuxName = await openWorktree(props.deps, wt.id);
@@ -233,7 +283,9 @@ export function RepoVisibility(props: Props) {
             aria-labelledby={(props.tabs || []).length ? 'vt-repovis-tab-repos' : undefined}>
             <Show when={loading()}><div class="vt-repovis-empty">{t('불러오는 중…')}</div></Show>
             <Show when={!loading() && groups().length === 0}>
-              <div class="vt-repovis-empty">{t('탐색 경계 안에 git 저장소가 없습니다.')}</div>
+              <div class="vt-repovis-empty">{props.projects
+                ? t('CLI를 켠 저장소가 아직 없습니다. 폴더에서 Claude Code나 Codex를 켜면 여기에 생깁니다.')
+                : t('탐색 경계 안에 git 저장소가 없습니다.')}</div>
             </Show>
             {/* ⚠ 숨김 표시 클래스를 `hidden`으로 두면 안 된다. 사용자 브라우저에서
                 그 행이 통째로 사라지는 것을 실제로 봤다 — 확장 프로그램이 주입한
@@ -289,12 +341,21 @@ export function RepoVisibility(props: Props) {
                               onClick={() => removeWorktree(wt)}
                             >{t('삭제')}</button>
                           </Show>
-                          <Show when={wt.isMain}>
+                          <Show when={wt.isMain && group.kind !== 'directory'}>
                             <button
                               type="button"
                               class="vt-btn sm quiet vt-repovis-add-wt"
                               onClick={() => setWtDialogRepo({ path: group.path })}
                             >+ {t('워크트리')}</button>
+                          </Show>
+                          <Show when={wt.isMain && group.projectId}>
+                            <button
+                              type="button"
+                              class="vt-btn sm quiet danger"
+                              disabled={!!busyRepo()[group.path]}
+                              aria-label={t('{name} 제거', { name: group.name })}
+                              onClick={() => { void removeProject(group); }}
+                            >{t('제거')}</button>
                           </Show>
                         </div>
                         <Show

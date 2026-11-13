@@ -72,15 +72,6 @@ export async function deleteSession(session, { signal } = {}) {
 }
 
 /** 확인 없이 차례로 삭제한다(호출한 쪽이 이미 한 번 확인했다). 막힌 것(위임 관계·다른 화면에서 바뀜)은 건너뛰고 센다. */
-export async function deleteMany(sessions) {
-  let done = 0, failed = 0;
-  for (const session of sessions) {
-    try { await historyApi(`/api/session-catalog/sessions/${session.id}`, { method: 'DELETE', body: { revision: session.revision } }); done++; }
-    catch (_) { failed++; }
-  }
-  notify();
-  return { done, failed };
-}
 
 /** "3분 전", "2시간 전" 같은 상대 시각. 입력은 초 단위 epoch. */
 export function agoLabel(seconds) {
@@ -124,12 +115,3 @@ export function isLegacy(session) {
 }
 
 /** 순서대로 보관한다. 다른 화면에서 바뀐 세션(revision 충돌)은 건너뛰고 개수만 센다. */
-export async function archiveMany(sessions) {
-  let done = 0, failed = 0;
-  for (const session of sessions) {
-    try { await historyApi(`/api/session-catalog/sessions/${session.id}`, { body: { archived: true, revision: session.revision } }); done++; }
-    catch (_) { failed++; }
-  }
-  notify();
-  return { done, failed };
-}

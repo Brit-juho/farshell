@@ -194,6 +194,14 @@ MIGRATIONS = {
         "ALTER TABLE conversations ADD COLUMN placement TEXT",
         "CREATE INDEX conversations_workspace ON conversations(workspace_id,updated)",
         "CREATE INDEX conversations_placement ON conversations(placement,updated)",
+        # 보관함은 대화 단위가 된다(저장소 2차) — 이미 보관한 세션에 이어진 대화를 보관으로 옮긴다. 그 대화가 보관 안 한 다른 세션에도
+        # 이어져 있으면(같은 대화를 다른 세션에서 이어 씀) 옮기지 않는다.
+        "UPDATE conversations SET archived=(SELECT MAX(s.archived) FROM conversation_executions e JOIN runtimes r ON r.id=e.runtime_id"
+        " JOIN sessions s ON s.id=r.session_id WHERE e.conversation_id=conversations.id)"
+        " WHERE archived IS NULL AND EXISTS(SELECT 1 FROM conversation_executions e JOIN runtimes r ON r.id=e.runtime_id"
+        " JOIN sessions s ON s.id=r.session_id WHERE e.conversation_id=conversations.id AND s.archived IS NOT NULL)"
+        " AND NOT EXISTS(SELECT 1 FROM conversation_executions e JOIN runtimes r ON r.id=e.runtime_id"
+        " JOIN sessions s ON s.id=r.session_id WHERE e.conversation_id=conversations.id AND s.archived IS NULL)",
     ),
 }
 
@@ -559,7 +567,7 @@ ORPHAN_ARCHIVE_SECONDS = 86400
 
 
 def auto_archive(now=None):
-    """마지막 활동 뒤 N일이 지난, 실행 중이 아닌 세션을 보관한다. 삭제하지 않는다.
+    """마지막 활동 뒤 N일이 지난, 실행 중이 아닌 세션과 저장소에 놓인 끝난 대화를 보관한다. 삭제하지 않는다.
 
     - 기준은 마지막 활동(`last_activity`)이다. 「종료로 표시」한 실행은 끝난 것으로 본다.
     - 실행 기록이 없는 세션(만들다 실패해 남은 행)은 만든 지 하루가 지나면 보관한다 — 예전에는 영영 남았다.
@@ -579,7 +587,17 @@ def auto_archive(now=None):
         for row in rows:
             db.execute("UPDATE sessions SET archived=?,updated=?,revision=revision+1 WHERE id=?", (now, now, row["id"]))
             changed(db, "session", row["id"])
-        return len(rows)
+        # 보관함은 대화 단위(저장소 2차) — 저장소의 「종료 N」에 있는 끝난 대화도 마지막 활동(원본 기준) 뒤 N일이 지나면 보관한다.
+        # 지금 열린 실행에 이어진 대화는 건드리지 않는다. 지우지 않는다(보관함·대화 보관함에서 다시 볼 수 있다).
+        conversations = db.execute("""SELECT c.id FROM conversations c WHERE c.placement='placed' AND c.deleted IS NULL
+          AND c.archived IS NULL AND c.parent_native_id IS NULL
+          AND COALESCE(CAST(json_extract(c.detail,'$.last') AS REAL),c.updated)<?
+          AND NOT EXISTS(SELECT 1 FROM conversation_executions e JOIN runtimes r ON r.id=e.runtime_id
+                         WHERE e.conversation_id=c.id AND r.ended IS NULL)""", (cutoff,)).fetchall()
+        for row in conversations:
+            db.execute("UPDATE conversations SET archived=? WHERE id=?", (now, row["id"]))
+            changed(db, "conversation", row["id"])
+        return len(rows) + len(conversations)
 
 
 def record_cli(physical_key, path, env_path):

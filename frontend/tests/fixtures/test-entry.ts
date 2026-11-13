@@ -66,10 +66,10 @@ export {
 export { TreeStore } from '../../js/files/tree-store.js';
 export { mountFileTree } from '../../js/files/mount.tsx';
 export { mountFocus, edgeDelayMs, shouldShowHint, insideReveal, EDGE_CHROME } from '../../js/shell/Focus.tsx';
-export { buildRepoTree, flattenRows, endedActivity, OUTSIDE_KEY } from '../../js/shell/repo-tree.js';
+export { buildRepoTree, flattenRows, OUTSIDE_KEY } from '../../js/shell/repo-tree.js';
 export { nodeLine, kidLabel } from '../../js/shell/rail-data.js';
 export { normalizeHome } from '../../js/shell/rail-fetch.js';
 export { sessionLines, kidLines, worktreeLines } from '../../js/shell/RepoBranch.js';
-export { groupArchive, mergeCatalogPage } from '../../js/shell/ArchiveView.js';
+export { groupConversations } from '../../js/shell/ArchiveView.js';
 export { onSheetKeyDown } from '../../js/shell/sheet-keys.js';
-export { repoChoices, filterChoices, openNewSessionMenu } from '../../js/shell/NewSessionMenu.js';
+export { repoChoices, filterChoices, projectChoices, openNewSessionMenu } from '../../js/shell/NewSessionMenu.js';

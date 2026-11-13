@@ -12,21 +12,14 @@ async function mod() { const env = await loadSolidBuild(); _envs.push(env); retu
 const plain = (v) => JSON.parse(JSON.stringify(v));
 const read = (...p) => fs.readFileSync(path.join(__dirname, '..', '..', ...p), 'utf8');
 
-test('보관함 — 저장소(루트 폴더)별로 묶고, 개수 많은 순, 저장소 밖은 맨 아래', async () => {
+test('보관함 — 보관한 대화를 저장소별로 묶고 개수 많은 순, 목록에 없는(제거한) 저장소는 그 이름으로', async () => {
   const m = await mod();
-  const groups = m.groupArchive({
-    sessions: [
-      { id: 'a', workspace_id: 'WA' }, { id: 'b', workspace_id: 'WB' }, { id: 'c', workspace_id: 'WB' },
-      { id: 'd', workspace_id: null }, { id: 'e', workspace_id: 'WD' },
-    ],
-    workspaces: [{ id: 'WA', project_id: 'PA' }, { id: 'WB', project_id: 'PB' }, { id: 'WD', project_id: 'PD' }],
-    projects: [{ id: 'PA', name: 'alpha', path: '/r/alpha', kind: 'git' }, { id: 'PB', name: 'beta', path: '/r/beta', kind: 'git' },
-      { id: 'PD', name: 'notes', path: '/r/notes', kind: 'directory' }],
-    project_counts: { PA: 1, PB: 7, _none: 2 },
-    next: null,
-  });
-  assert.deepStrictEqual(plain(groups.map((g) => [g.key, g.sessions.map((s) => s.id)])), [['PB', ['b', 'c']], ['PA', ['a']], ['_none', ['d', 'e']]]);
+  const names = new Map([['PA', { name: 'alpha', path: '/r/alpha' }], ['PB', { name: 'beta', path: '/r/beta' }]]);
+  const groups = m.groupConversations([{ id: 'a', project_id: 'PA' }, { id: 'b', project_id: 'PB' }, { id: 'c', project_id: 'PB' }, { id: 'd', project_id: 'PX' }],
+    names, { PA: 1, PB: 7, PX: 1 });
+  assert.deepStrictEqual(plain(groups.map((g) => [g.key, g.items.map((s) => s.id)])), [['PB', ['b', 'c']], ['PA', ['a']], ['PX', ['d']]]);
   assert.strictEqual(groups[0].root, '/r/beta');
+  assert.strictEqual(groups[2].name, '제거한 저장소');
 });
 
 test('새 세션 메뉴 — 세션이 많은 저장소가 먼저, 메인 작업 트리가 그 워크트리보다 먼저, 검색은 이름·브랜치·경로', async () => {
@@ -100,4 +93,22 @@ test('새 세션 메뉴 — 계정 목록이 처음 열 때 비어 있어도 받
   await new Promise((r) => setTimeout(r, 0));
   assert.ok(has(), '받아 오면 다시 그린다');
   env.openNewSessionMenu({});   // 열린 메뉴를 닫는다(같은 버튼 두 번)
+});
+
+test('새 세션 메뉴 — 최근 저장소는 목록의 저장소(최근 활동순, 숨김 제외), 검색은 아직 안 켠 저장소도(「처음」)', async () => {
+  const m = await mod();
+  const projects = { projects: [
+    { id: 'a', name: 'alpha', path: '/r/alpha', kind: 'git', last_activity: 10, branch: 'main', hidden: 0 },
+    { id: 'b', name: 'beta', path: '/r/beta', kind: 'directory', last_activity: 50, hidden: 0 },
+    { id: 'h', name: 'hid', path: '/r/hid', kind: 'git', last_activity: 99, hidden: 1 },
+  ] };
+  const repos = { repos: [
+    { name: 'alpha', worktrees: [{ id: 'w1', path: '/r/alpha', isMain: true, branch: 'main', sessions: [] },
+      { id: 'w2', path: '/r/alpha-wt', isMain: false, branch: 'fix', repoName: 'alpha', sessions: [] }] },
+    { name: 'gamma', worktrees: [{ id: 'w3', path: '/r/gamma', isMain: true, branch: 'dev', sessions: [] }] },
+  ] };
+  const { recent, all } = m.projectChoices(projects, repos);
+  assert.deepStrictEqual(plain(recent.map((c) => c.label)), ['beta', 'alpha']);
+  const fresh = Object.fromEntries(all.map((c) => [c.path, !!c.fresh]));
+  assert.deepStrictEqual(fresh, { '/r/beta': false, '/r/alpha': false, '/r/alpha-wt': false, '/r/gamma': true });
 });

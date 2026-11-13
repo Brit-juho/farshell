@@ -121,6 +121,8 @@ export function Rail(props: RailProps) {
   const [catalog, setCatalog] = createSignal<CatalogSnapshot | null>(null);
   // 목록의 저장소(저장소 = CLI를 켠 곳, /api/session-catalog/projects) — 세션이 없어도 묶음이 남는다. 이 맥 전용.
   const [projects, setProjects] = createSignal<ProjectLike[]>([]);
+  // 보관함의 대화 수(보관함은 대화 단위 — 저장소 2차). 저장소 목록 API가 같이 준다.
+  const [archivedCount, setArchivedCount] = createSignal(0);
   // 보관함을 열면 같은 자리의 목록이 보관된 세션으로 바뀐다(탭은 없다).
   const [archiveOpen, setArchiveOpen] = createSignal(false);
   // 갱신 지연 표식 — 폴링이든 push든 서버에서 새 값을 마지막으로 받은 시각.
@@ -147,7 +149,7 @@ export function Rail(props: RailProps) {
       ]);
       if (request !== catalogRequest) return;
       setCatalog(data);
-      if (list && Array.isArray(list.projects)) setProjects(list.projects);
+      if (list && Array.isArray(list.projects)) { setProjects(list.projects); setArchivedCount(Number(list.archived_count) || 0); }
     } catch (e) {
       // 옛 호스트(카탈로그 없음)는 지금의 라이브 레일을 그대로 쓴다. 답 자체가 없던
       // 실패(마감·네트워크)만 폴러에 알려 간격을 늘린다.
@@ -677,7 +679,7 @@ export function Rail(props: RailProps) {
           </Show>
           {/* 보관함 한 줄. 카탈로그가 없는 옛 호스트는 위의 실행 중 목록만 남는다. */}
           <Show when={!collapsed() && !archiveOpen() && catalog()}>
-            {data => <ArchiveEntry count={data().archived_count ?? 0} onOpen={() => setArchiveOpen(true)} />}
+            <ArchiveEntry count={archivedCount()} onOpen={() => setArchiveOpen(true)} />
           </Show>
           <Show when={rows().length > lists().sessions.length && !collapsed()}>
             <div class="vt-wgrail-note">{t('세션 목록 설정에서 {n}개를 숨겼습니다.', { n: rows().length - lists().sessions.length })}</div>
@@ -759,8 +761,9 @@ export function Rail(props: RailProps) {
               ...(viewHostId === LOCAL_HOST ? [{ id: 'cleanup', label: t('정리'), render: () => <RailCleanupSettings /> }] : []),
             ]}
             initialTab="view"
+            projects={viewHostId === LOCAL_HOST}
             onClose={() => setRepoSheet(false)}
-            onChanged={() => reposPoll.kick()}
+            onChanged={() => { reposPoll.kick(); catalogPoll.kick(); }}
           />
         </Portal>
       </Show>

@@ -246,6 +246,8 @@ function Fleet(props: { deps: FleetDeps }) {
   const [catalog, setCatalog] = createSignal<CatalogSnapshot | null>(null);
   // 목록의 저장소(저장소 = CLI를 켠 곳) — 세션이 없어도 묶음이 남는다. 이 맥 전용(레일과 같은 규칙).
   const [projects, setProjects] = createSignal<ProjectLike[]>([]);
+  // 보관함의 대화 수(보관함은 대화 단위 — 저장소 2차). 저장소 목록 API가 같이 준다.
+  const [archivedCount, setArchivedCount] = createSignal(0);
   const [archiveOpen, setArchiveOpen] = createSignal(false);
   let catalogRequest = 0;
   const refreshCatalog = async () => {
@@ -259,7 +261,7 @@ function Fleet(props: { deps: FleetDeps }) {
       ]);
       if (request !== catalogRequest) return;
       setCatalog(value);
-      if (list && Array.isArray(list.projects)) setProjects(list.projects);
+      if (list && Array.isArray(list.projects)) { setProjects(list.projects); setArchivedCount(Number(list.archived_count) || 0); }
     } catch (e) {
       // 옛 호스트는 지금의 라이브 목록을 그대로 쓴다. 답 자체가 없던 실패만 폴러에 알린다.
       if (isNoResponse(e)) throw e;
@@ -599,7 +601,7 @@ function Fleet(props: { deps: FleetDeps }) {
           </Show>
         )}</For>
         <Show when={catalog()}>
-          {(data) => <ArchiveEntry count={data().archived_count ?? 0} onOpen={() => setArchiveOpen(true)} />}
+          <ArchiveEntry count={archivedCount()} onOpen={() => setArchiveOpen(true)} />
         </Show>
       </Show>
       {/* 보관함 — 같은 자리의 목록이 바뀐다(데스크톱과 같은 화면, 칸 모양은 .vt-rg-scope). */}

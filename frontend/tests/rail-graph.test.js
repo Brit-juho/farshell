@@ -261,9 +261,9 @@ test('저장소 묶음 — 머리(이름·메인 브랜치·수), 워크트리 �
       { worktree: null, sessions: [{ row: row({ name: 'a' }), kids: [] }] },
       { worktree: { key: '/r/wt', name: 'wt', branch: 'fix/x' }, sessions: [{ row: row({ name: 'b' }), kids: [] }] },
     ],
-    ended: [],
+    endedCount: 1,
   };
-  m.mountRepoBranch(root, group, { calls, ended: [{ id: 'e', title: '끝난 일', ended: 1, last_activity: 1 }] });
+  m.mountRepoBranch(root, group, { calls, endedCount: 1 });
   const head = root.querySelector('.vt-rg-head');
   assert.match(head.textContent, /farshell/);
   assert.match(head.textContent, /dev/);
@@ -318,12 +318,11 @@ test('폴링으로 새 묶음 객체가 와도 같은 열쇠의 칸 DOM은 그�
   assert.strictEqual(after[1], before[1]);
 });
 
-test('종료 칸 — 칸은 버튼이 아니고, 펼치기·이어서·메뉴가 형제 버튼이다', async () => {
+test('종료 칸(대화) — 칸은 버튼이 아니고, 펼치기·이어서·메뉴가 형제 버튼이다', async () => {
   const m = await mod();
   const root = m.document.createElement('div');
   m.document.body.appendChild(root);
-  m.mountRepoBranch(root, { ...groupWithKid(), lanes: [] }, { endedOpen: true,
-    ended: [{ id: 'e', title: '끝난 일', ended: 1, last_activity: 1, resume_conversation_id: 'c', provider: 'claude' }] });
+  m.mountConversationItem(root, { conversation: { id: 'c', provider: 'claude', title: '끝난 일', activity: 1 }, last: true });
   const er = root.querySelector('.vt-rg-er');
   assert.strictEqual(er.getAttribute('role'), null);
   const toggle = er.querySelector('button.vt-rg-er-toggle');
