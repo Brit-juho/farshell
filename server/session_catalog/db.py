@@ -595,7 +595,7 @@ def record_cli(physical_key, path, env_path):
 
 def homes(physical_keys):
     """실행 중인 tmux 세션(정체성 키) → 카탈로그가 아는 그 세션의 자리와 보이는 이름. 세션 목록(`/api/tmux/sessions`)이
-    붙인다. 자리(home)는 처음 관측 때 정한 저장소·작업 트리라 cd해도 바뀌지 않는다(「저장소 밖」만 한 번 승격).
+    붙인다. 자리(home)는 지금 위치의 저장소다 — CLI가 돌면 CLI 위치, 아니면 셸 위치를 같은 자리 10초 뒤 따른다(inventory.py).
     아직 기록되지 않은 세션(방금 만듦)은 빠진다 — 호출자는 그때 지금 위치(context)로 그린다."""
     keys = [k for k in dict.fromkeys(physical_keys) if isinstance(k, str) and k]
     if not keys:
@@ -606,14 +606,17 @@ def homes(physical_keys):
             chunk = keys[start:start + 400]
             rows = db.execute(
                 "SELECT r.physical_key, s.id AS sid, s.title, s.name_source, s.workspace_id, w.path AS wpath, w.kind AS wkind,"
-                " p.id AS pid, p.name AS pname, p.path AS ppath, p.kind AS pkind FROM runtimes r JOIN sessions s ON s.id=r.session_id"
+                " p.id AS pid, p.name AS pname, p.path AS ppath, p.kind AS pkind, p.registered AS preg, p.removed AS prem,"
+                " p.hidden AS phid FROM runtimes r JOIN sessions s ON s.id=r.session_id"
                 " LEFT JOIN workspaces w ON w.id=s.workspace_id LEFT JOIN projects p ON p.id=w.project_id"
                 f" WHERE r.ended IS NULL AND s.deleted IS NULL AND r.physical_key IN ({','.join('?' * len(chunk))})", chunk).fetchall()
             for r in rows:
                 home = None
                 if r["workspace_id"] and r["pid"]:
                     home = {"project_id": r["pid"], "workspace_id": r["workspace_id"], "root": r["ppath"], "name": r["pname"],
-                            "repository": r["pkind"] == "git", "kind": r["wkind"], "path": r["wpath"]}
+                            "repository": r["pkind"] == "git", "kind": r["wkind"], "path": r["wpath"],
+                            # 목록의 저장소인가(CLI를 켠 곳으로 등록됨·제거 안 됨)와 숨김 — 아니면 화면이 「저장소 밖」 폴더 가지로 그린다.
+                            "registered": r["preg"] is not None and r["prem"] is None, "hidden": bool(r["phid"])}
                 out[r["physical_key"]] = {"catalog_id": r["sid"], "title": r["title"], "name_source": r["name_source"], "home": home}
     return out
 

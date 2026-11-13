@@ -182,23 +182,74 @@ def _placement(db_module, name):
                            " LEFT JOIN projects p ON p.id=w.project_id WHERE s.title=?", (name,)).fetchone()
 
 
-def test_a_session_started_outside_a_repository_is_promoted_once(catalog, tmp_path, monkeypatch):
+def _fresh_places(monkeypatch, settle=0.0):
     from session_catalog import inventory
-    monkeypatch.setattr(inventory, "_placement_tried", {})
+    monkeypatch.setattr(inventory, "_place_cache", {})
+    monkeypatch.setattr(inventory, "_pending", {})
+    monkeypatch.setattr(inventory, "SETTLE", settle)
+    monkeypatch.setattr(inventory, "_agent_cli", lambda name: None)
+    return inventory
+
+
+def test_a_shell_session_follows_its_folder_after_it_settles(catalog, tmp_path, monkeypatch):
+    """저장소 2차(설계 §3.3): 셸만 있는 세션은 지금 위치를 따른다 — 같은 자리가 SETTLE초 이어질 때."""
+    inventory = _fresh_places(monkeypatch, settle=3600.0)
     home = tmp_path / "home"
     repo = _git_repo(home / "farshell")
     other = _git_repo(home / "other")
     _reconcile(_item("$1:1", "w", str(home)))
     assert tuple(_placement(catalog, "w"))[:2] == ("directory", "directory")
-    _reconcile(_item("$1:1", "w", str(repo)))                       # 저장소로 cd → 한 번 승격
+    _reconcile(_item("$1:1", "w", str(repo)))                       # 처음 본 새 자리 — 아직 안 옮긴다
+    assert tuple(_placement(catalog, "w"))[:2] == ("directory", "directory")
+    monkeypatch.setattr(inventory, "SETTLE", 0.0)
+    _reconcile(_item("$1:1", "w", str(repo)))
     assert tuple(_placement(catalog, "w")) == ("checkout", "git", "farshell")
-    _reconcile(_item("$1:1", "w", str(other)))                      # 다른 저장소로 가도 바뀌지 않는다
+    _reconcile(_item("$1:1", "w", str(other)))
+    assert tuple(_placement(catalog, "w")) == ("checkout", "git", "other"), "다른 저장소로 가면 따라간다(고정 없음)"
+
+
+def test_a_running_cli_places_the_session_at_once_and_registers_the_project(catalog, tmp_path, monkeypatch):
+    inventory = _fresh_places(monkeypatch, settle=3600.0)
+    home = tmp_path / "home"
+    repo = _git_repo(home / "farshell")
+    _reconcile(_item("$1:1", "w", str(home)))
+    monkeypatch.setattr(inventory, "_agent_cli", lambda name: {"cwd": str(repo), "started": time.time()})
+    _reconcile(_item("$1:1", "w", str(home)))                       # 셸은 홈인데 CLI는 저장소 — 바로 따른다
     assert tuple(_placement(catalog, "w")) == ("checkout", "git", "farshell")
+    from session_catalog.db import database
+    with database() as con:
+        p = con.execute("SELECT registered,removed FROM projects WHERE name='farshell'").fetchone()
+    assert p["registered"] is not None and p["removed"] is None
+    home_of = catalog.homes(["$1:1"])["$1:1"]["home"]
+    assert home_of["registered"] is True and home_of["name"] == "farshell"
+
+
+def test_a_removed_project_is_revived_only_by_a_cli_started_after_removal(catalog, tmp_path, monkeypatch):
+    inventory = _fresh_places(monkeypatch)
+    repo = _git_repo(tmp_path / "home" / "farshell")
+    started = time.time() - 100
+    monkeypatch.setattr(inventory, "_agent_cli", lambda name: {"cwd": str(repo), "started": started})
+    _reconcile(_item("$1:1", "w", str(repo)))
+    from session_catalog.db import database
+    with database(write=True) as con:
+        con.execute("UPDATE projects SET removed=? WHERE name='farshell'", (time.time() - 10,))
+    _reconcile(_item("$1:1", "w", str(repo)))
+    assert catalog.homes(["$1:1"])["$1:1"]["home"]["registered"] is False, "제거 전에 켠 CLI가 돌고 있어도 되살리지 않는다"
+    monkeypatch.setattr(inventory, "_agent_cli", lambda name: {"cwd": str(repo), "started": time.time()})
+    _reconcile(_item("$1:1", "w", str(repo)))
+    assert catalog.homes(["$1:1"])["$1:1"]["home"]["registered"] is True
+
+
+def test_a_shell_in_an_unregistered_repository_is_not_a_listed_project(catalog, tmp_path, monkeypatch):
+    _fresh_places(monkeypatch)
+    repo = _git_repo(tmp_path / "home" / "farshell")
+    _reconcile(_item("$1:1", "w", str(repo)))
+    home_of = catalog.homes(["$1:1"])["$1:1"]["home"]
+    assert home_of["name"] == "farshell" and home_of["registered"] is False, "셸로 들어간 것만으로는 저장소가 생기지 않는다"
 
 
 def test_a_failed_first_placement_is_retried(catalog, tmp_path, monkeypatch):
-    from session_catalog import inventory
-    monkeypatch.setattr(inventory, "_placement_tried", {})
+    inventory = _fresh_places(monkeypatch)
     repo = _git_repo(tmp_path / "home" / "farshell")
     real = inventory.inspect_workspace
     monkeypatch.setattr(inventory, "inspect_workspace", lambda cwd: None)    # Git 일시 실패
@@ -219,22 +270,17 @@ def test_a_git_error_is_not_mistaken_for_outside_a_repository(catalog, tmp_path,
     assert inventory.inspect_workspace(str(repo))["kind"] == "directory"
 
 
-def test_a_folder_that_becomes_a_repository_in_place_is_promoted(catalog, tmp_path, monkeypatch):
-    """빈 폴더에서 시작해 그 자리에서 `git init`을 한 세션 — 「저장소 밖」 결과는 1분 뒤 다시 본다."""
+def test_a_folder_that_becomes_a_repository_in_place_is_followed(catalog, tmp_path, monkeypatch):
+    """빈 폴더에서 시작해 그 자리에서 `git init`을 한 세션 — 「저장소 밖」 결과는 _DIR_TTL 뒤 다시 본다."""
     import subprocess
-    from session_catalog import inventory
-    monkeypatch.setattr(inventory, "_placement_tried", {})
+    inventory = _fresh_places(monkeypatch)
     folder = tmp_path / "home" / "newproj"
     folder.mkdir(parents=True)
-    _reconcile(_item("$1:1", "w", str(tmp_path / "home")))
-    _reconcile(_item("$1:1", "w", str(folder)))                 # 저장소 밖으로 확인
+    _reconcile(_item("$1:1", "w", str(folder)))
     subprocess.run(["git", "init", "-q"], cwd=folder, check=True)
     _reconcile(_item("$1:1", "w", str(folder)))
-    assert _placement(catalog, "w")["pk"] == "directory", "1분 안에는 다시 보지 않는다"
-    monkeypatch.setattr(inventory, "_NONREPO_RECHECK", 0.0)
-    for tried in inventory._placement_tried.values():
-        for cwd in tried:
-            tried[cwd] = 0.0
+    assert _placement(catalog, "w")["pk"] == "directory", "캐시 동안은 다시 보지 않는다"
+    inventory._place_cache.clear()
     _reconcile(_item("$1:1", "w", str(folder)))
     assert tuple(_placement(catalog, "w")) == ("checkout", "git", "newproj")
 
@@ -280,7 +326,7 @@ def test_archive_search_by_folder_and_counts_per_repository(catalog, tmp_path, m
     """보관함: 폴더 경로로도 찾고, 저장소별 개수(칩)를 함께 준다(세션 로직 점검 단계 6)."""
     from session_catalog.db import database
     from session_catalog import inventory
-    monkeypatch.setattr(inventory, "_placement_tried", {})
+    _fresh_places(monkeypatch)
     a = _git_repo(tmp_path / "home" / "alpha")
     b = _git_repo(tmp_path / "home" / "beta")
     _reconcile(_item("$1:1", "s1", str(a)), _item("$2:2", "s2", str(a)), _item("$3:3", "s3", str(b)), _item("$4:4", "s4", str(tmp_path / "home")))

@@ -1172,6 +1172,17 @@ def agent_cwd_for(tmux_name: str, host: str = LOCAL_HOST) -> Optional[str]:
     return cwd
 
 
+def agent_cli_for(tmux_name: str, host: str = LOCAL_HOST) -> Optional[dict]:
+    """그 tmux 세션에서 돌고 있는 CLI의 위치와 시작 시각 — 세션 자리(session_catalog/inventory.py)와 저장소 등록이 쓴다.
+    위치는 `agent_cwd_for`와 같은 규칙(확실할 때만), 시작 시각은 그 엔트리의 SessionStart 수신 시각(없으면 None)."""
+    cwd = agent_cwd_for(tmux_name, host)
+    if not cwd:
+        return None
+    starts = [e.get("_session_start_at") for e in _entries_for(tmux_name, host)
+              if not e.get("released") and e.get("cwd") == cwd and isinstance(e.get("_session_start_at"), (int, float))]
+    return {"cwd": cwd, "started": max(starts) if starts else None}
+
+
 _last_uid_of: dict[str, dict[str, str]] = {}
 
 
