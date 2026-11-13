@@ -27,9 +27,22 @@ def _text(value, limit: int) -> str:
     return " ".join(value.split())[:limit] if isinstance(value, str) else ""
 
 
-def clear(ent: dict) -> None:
+def clear(ent: dict, ts=None) -> None:
+    """새 대화 — 목록을 비우고, 그보다 옛 이벤트가 늦게 와도 되살리지 않게 시각 경계를 둔다."""
     ent.pop("_shells", None)
     ent.pop("_shells_checked", None)
+    if isinstance(ts, int):
+        ent["_shells_ts"] = ts
+
+
+def fresh(ent: dict, ts) -> bool:
+    """이 이벤트가 셸 목록의 마지막 근거(목록·새 대화)보다 옛 것이 아닌가. 시각이 없으면 받는다(옛 훅)."""
+    last = ent.get("_shells_ts")
+    return not (isinstance(ts, int) and isinstance(last, int) and ts < last)
+
+
+def has_running(ent: dict) -> bool:
+    return any(r["state"] == "running" for r in (ent.get("_shells") or {}).values())
 
 
 def _make_room(rows: dict) -> bool:
@@ -42,9 +55,9 @@ def _make_room(rows: dict) -> bool:
     return len(rows) < LIMIT
 
 
-def started(ent: dict, payload: dict, now=None) -> bool:
+def started(ent: dict, payload: dict, now=None, ts=None) -> bool:
     """post 훅: Bash를 백그라운드로 실행했으면 확인 전 행을 만든다. 바뀌었으면 True."""
-    if payload.get("tool_name") != "Bash":
+    if payload.get("tool_name") != "Bash" or not fresh(ent, ts):
         return False
     ti = payload.get("tool_input")
     if not isinstance(ti, dict) or ti.get("run_in_background") is not True:
@@ -60,8 +73,11 @@ def started(ent: dict, payload: dict, now=None) -> bool:
     return True
 
 
-def fold(ent: dict, payload: dict, now=None) -> bool:
-    """Stop·SubagentStop의 `background_tasks`로 목록을 맞춘다. 목록이 없거나 모양이 틀리면 아무것도 바꾸지 않는다."""
+def fold(ent: dict, payload: dict, now=None, ts=None) -> bool:
+    """Stop·SubagentStop의 `background_tasks`로 목록을 맞춘다. 목록이 없거나 모양이 틀리거나 이미 받은 목록보다 옛 것이면
+    아무것도 바꾸지 않는다."""
+    if not fresh(ent, ts):
+        return False
     tasks = payload.get("background_tasks")
     if not isinstance(tasks, list) or len(tasks) > 1000:
         return False
@@ -76,6 +92,12 @@ def fold(ent: dict, payload: dict, now=None) -> bool:
     if not rows and not listed and ent.get("_shells_checked") is None:
         return False   # 셸을 쓴 적이 없는 세션 — 화면에 아무것도 안 나가게 둔다
     ent["_shells_checked"] = now
+    if isinstance(ts, int):
+        ent["_shells_ts"] = ts
+    # 먼저 빠진 셸을 끝남으로 — 그래야 자리가 꽉 찼을 때도 같은 목록의 새 셸이 들어갈 자리를 비울 수 있다.
+    for i, row in rows.items():
+        if row["state"] == "running" and not row.get("pending") and i not in listed:
+            row.update(state="done", ended_at=now)
     carried: dict[str, float] = {}
     for key, row in list(rows.items()):
         if not row.get("pending"):
@@ -98,9 +120,6 @@ def fold(ent: dict, payload: dict, now=None) -> bool:
                        "started_at": carried.get(i, now), "ended_at": None, "pending": False}
         else:
             row.update(state="running", ended_at=None, description=desc or row["description"], command=cmd or row["command"])
-    for i, row in rows.items():
-        if row["state"] == "running" and not row.get("pending") and i not in listed:
-            row.update(state="done", ended_at=now)
     return True
 
 

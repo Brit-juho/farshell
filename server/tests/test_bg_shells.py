@@ -136,3 +136,40 @@ def test_commands_stay_on_this_mac():
     assert remote["shells"]["items"][0] == {k: v for k, v in pub["shells"]["items"][0].items() if k != "command"}
     assert "secret" not in repr(remote)
     assert pub["shells"]["items"][0]["command"] == "deploy --token secret", "원본은 건드리지 않는다"
+
+
+def test_late_child_events_cannot_rewrite_a_newer_roster_or_revive_a_cleared_list():
+    event("session_start", ts=10, source="startup")
+    event("subagent_start", "child", ts=11)
+    event("stop", ts=200, background_tasks=[shell("b1", "npm run dev")])
+    event("subagent_stop", "child", ts=150, background_tasks=[])   # 늦게 온 옛 목록
+    assert A.public_entry(A.get_state("parent"))["shells"]["items"][0]["state"] == "running"
+    event("session_start", ts=300, source="clear")
+    event("post", ts=250, **bg("old"))                              # 새 대화보다 옛 실행
+    event("stop", ts=260, background_tasks=[shell("b9", "old")])
+    assert "shells" not in A.public_entry(A.get_state("parent"))
+
+
+def test_a_full_list_of_running_shells_still_takes_the_new_one_when_old_ones_ended():
+    ent = {}
+    B.fold(ent, {"background_tasks": [shell(f"r{i}", f"c{i}") for i in range(B.LIMIT)]}, now=1)
+    B.fold(ent, {"background_tasks": [shell("new", "n")]}, now=2)
+    rows = items(ent)
+    assert rows["new"]["state"] == "running"
+    assert sum(r["state"] == "running" for r in rows.values()) == 1
+
+
+def test_an_idle_parent_with_a_running_shell_is_not_dropped(monkeypatch):
+    event("session_start", ts=10, source="startup")
+    event("stop", ts=11, background_tasks=[shell("b1", "npm run dev")])
+    ent = A.get_state("parent")
+    ent["status"] = A.IDLE
+    ent["updated_at"] = 0
+    A.sweep()
+    assert "parent" in A._state, "실행 중인 셸이 있으면 쉬는 부모 엔트리를 지우지 않는다"
+    event("stop", ts=12, background_tasks=[])
+    ent = A.get_state("parent")
+    ent["status"] = A.IDLE
+    ent["updated_at"] = 0
+    A.sweep()
+    assert "parent" not in A._state, "셸이 끝나면 예전처럼 정리된다"

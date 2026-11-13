@@ -463,6 +463,9 @@ parent session; it lists only in-flight tasks). FarShell keeps entries whose `ty
   time); a pending row with no match already ended. Listed shells are `running`.
 - **End**: a shell that was listed and is missing from a later list becomes `done` and is kept for one hour (the
   idle sweep removes it). So an end shows up at the next turn end; the UI shows the last check time (`checked_at`).
+- Ordering: parent and child hooks can arrive late and out of order, so the list keeps its own time mark (the last
+  list or the `session_start` that cleared it); a `post`/Stop/SubagentStop older than that mark is ignored.
+- An idle parent entry is not dropped by the idle sweep while it still has a running shell.
 - A new conversation (`session_start`) clears the list; `session_end` retires the whole entry. At most 32 rows (ended
   rows are evicted first, running rows never); description 200 and command 300 characters, one line. A truncated or
   incomplete list (`background_tasks_truncated`, `background_tasks_complete: false`) or a malformed one changes nothing.
