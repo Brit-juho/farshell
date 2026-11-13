@@ -256,6 +256,7 @@ def test_a_failed_first_placement_is_retried(catalog, tmp_path, monkeypatch):
     _reconcile(_item("$1:1", "w", str(repo)))
     assert _placement(catalog, "w")["kind"] is None
     monkeypatch.setattr(inventory, "inspect_workspace", real)
+    inventory._place_cache.clear()          # 실패 기억(_FAIL_TTL)이 지난 뒤
     _reconcile(_item("$1:1", "w", str(repo)))
     assert tuple(_placement(catalog, "w")) == ("checkout", "git", "farshell")
 
@@ -338,3 +339,30 @@ def test_archive_search_by_folder_and_counts_per_repository(catalog, tmp_path, m
     assert snap["project_counts"] == {pid["alpha"]: 2, pid["beta"]: 1, "_none": 1}
     assert {r["name"] for r in catalog.snapshot(archived=True, order="activity", q=str(b))["sessions"]} == {"s3"}
     assert {r["name"] for r in catalog.snapshot(archived=True, order="activity", project=pid["alpha"])["sessions"]} == {"s1", "s2"}
+
+
+def test_a_cli_in_an_auto_hidden_project_lifts_it(catalog, tmp_path, monkeypatch):
+    inventory = _fresh_places(monkeypatch)
+    repo = _git_repo(tmp_path / "home" / "farshell")
+    monkeypatch.setattr(inventory, "_agent_cli", lambda name: {"cwd": str(repo), "started": time.time()})
+    _reconcile(_item("$1:1", "w", str(repo)))
+    from session_catalog.db import database
+    with database(write=True) as con:
+        con.execute("UPDATE projects SET hidden=2 WHERE name='farshell'")
+    _reconcile(_item("$1:1", "w", str(repo)))
+    assert catalog.homes(["$1:1"])["$1:1"]["home"]["hidden"] is False
+
+
+def test_git_calls_per_reconcile_are_bounded_and_failures_are_remembered(catalog, tmp_path, monkeypatch):
+    inventory = _fresh_places(monkeypatch)
+    calls = []
+    monkeypatch.setattr(inventory, "inspect_workspace", lambda cwd: calls.append(cwd))   # 늘 실패
+    monkeypatch.setattr(inventory, "GIT_PER_RECONCILE", 2)
+    items = [_item(f"${i}:{i}", f"s{i}", str(tmp_path / f"d{i}")) for i in range(5)]
+    _reconcile(*items)                           # 새 세션 5개 — 첫 자리는 상한 밖(만들 때 한 번씩)
+    calls.clear()
+    _reconcile(*items)
+    assert calls == [], "실패한 폴더는 잠깐 기억한다 — 다시 부르지 않는다"
+    inventory._place_cache.clear()
+    _reconcile(*items)
+    assert len(calls) == 2, "관측 한 번에 새로 부르는 git은 상한까지만"

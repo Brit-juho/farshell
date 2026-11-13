@@ -141,8 +141,12 @@ def workspace(db, placement):
 SETTLE = 10.0
 _GIT_TTL = 300.0
 _DIR_TTL = 60.0
+_FAIL_TTL = 30.0          # git 실패(시간 초과·권한)도 잠깐 기억한다 — 실패하는 폴더가 매 관측마다 2초씩 잡아먹지 않게
+_CACHE_MAX = 512
+GIT_PER_RECONCILE = 4     # 관측 한 번에 새로 부르는 git 수 상한(나머지는 다음 관측에서)
 _place_cache: dict[str, tuple] = {}
 _pending: dict[str, tuple] = {}
+_FAILED = object()
 
 
 def _agent_cli(name):
@@ -153,16 +157,24 @@ def _agent_cli(name):
         return None
 
 
-def _placement_for(cwd, now):
+def _placement_for(cwd, now, budget=None):
+    """폴더 → 배치(캐시). budget(남은 git 호출 수, [n])이 0이면 캐시에 없는 폴더는 None(다음 관측에서)."""
     hit = _place_cache.get(cwd)
     if hit and now < hit[1]:
-        return hit[0]
+        return None if hit[0] is _FAILED else hit[0]
+    if budget is not None:
+        if budget[0] <= 0:
+            return None
+        budget[0] -= 1
     placement = inspect_workspace(cwd)
+    if len(_place_cache) >= _CACHE_MAX:
+        for key in [k for k, v in _place_cache.items() if v[1] <= now]:
+            del _place_cache[key]
+        for key in sorted(_place_cache, key=lambda k: _place_cache[k][1])[:len(_place_cache) - _CACHE_MAX + 1]:
+            del _place_cache[key]
     if placement is None:
-        _place_cache.pop(cwd, None)
+        _place_cache[cwd] = (_FAILED, now + _FAIL_TTL)
         return None
-    if len(_place_cache) > 512:
-        _place_cache.clear()
     _place_cache[cwd] = (placement, now + (_DIR_TTL if placement["project_kind"] == "directory" else _GIT_TTL))
     return placement
 
@@ -175,6 +187,7 @@ def _live_placements(snapshot, rows):
         if key not in live:
             del _pending[key]
     now = time.monotonic()
+    budget = [GIT_PER_RECONCILE]
     out = {}
     for row in rows:
         item = live.get(row["physical_key"])
@@ -184,13 +197,16 @@ def _live_placements(snapshot, rows):
         cwd = cli["cwd"] if cli else item.get("cwd")
         if not cwd:
             continue
-        placement = _placement_for(cwd, now)
+        placement = _placement_for(cwd, now, budget)
         if placement is None:
-            continue          # 일시 실패 — 지금 자리를 둔다
-        here = row["workspace_id"] and row["wlocator"] == placement["locator"] and row["wpath"] == placement["path"]
+            continue          # 일시 실패·이번 관측의 git 상한 — 지금 자리를 둔다
+        # 같은 자리 = 같은 저장소·같은 작업 트리 경로·같은 incarnation(같은 경로에 다시 만든 워크트리는 새 작업 트리).
+        here = (row["workspace_id"] and row["wlocator"] == placement["locator"] and row["wpath"] == placement["path"]
+                and row["wincarnation"] == placement["incarnation"])
         if here:
             _pending.pop(row["physical_key"], None)
-            if cli and (row["registered"] is None or row["removed"] is not None):
+            # CLI가 돌고 있는데 저장소가 미등록·제거·자동 숨김 — 등록하고 숨김을 푼다(_register_cli가 제거 전 CLI는 거른다).
+            if cli and (row["registered"] is None or row["removed"] is not None or row["hidden"] == 2):
                 out[row["session_id"]] = (row["workspace_id"], placement, cli)
             continue
         if not cli:
@@ -232,8 +248,8 @@ def _reconcile(snapshot=None):
         running = []
         if snapshot.get('complete'):
             running = [dict(r) for r in check.execute(
-                "SELECT r.physical_key, s.id AS session_id, s.workspace_id, w.path AS wpath, p.locator AS wlocator,"
-                " p.registered, p.removed FROM runtimes r JOIN sessions s ON s.id=r.session_id"
+                "SELECT r.physical_key, s.id AS session_id, s.workspace_id, w.path AS wpath, w.incarnation AS wincarnation,"
+                " p.locator AS wlocator, p.registered, p.removed, p.hidden FROM runtimes r JOIN sessions s ON s.id=r.session_id"
                 " LEFT JOIN workspaces w ON w.id=s.workspace_id LEFT JOIN projects p ON p.id=w.project_id"
                 " WHERE r.ended IS NULL AND r.epoch=?", (snapshot.get('epoch'),))]
     mono = time.monotonic()
