@@ -5483,5 +5483,12 @@ window.__VT_I18N = {
   "세션 이름은 영문자·숫자·_·-만 쓸 수 있습니다(64자까지, 첫 글자는 -가 아님)": "A session name may use only letters, digits, _ and - (up to 64 characters, not starting with -)",
   "엔드포인트가 http:// 입니다. 키가 암호화되지 않고 네트워크로 전송됩니다": "The endpoint is http://. The key is sent over the network unencrypted.",
   "이 계정의 사용량을 읽는 중입니다. 잠시 뒤 다시 시도하세요": "This account's usage is being read. Try again in a moment.",
-  "프로필을 지금 쓸 수 없습니다. 프로필 상태를 확인하세요": "The profile cannot be used right now. Check the profile's state."
+  "프로필을 지금 쓸 수 없습니다. 프로필 상태를 확인하세요": "The profile cannot be used right now. Check the profile's state.",
+  "git 저장소가 아니라 체크포인트를 만들 수 없습니다": "This is not a git repository, so checkpoints cannot be made",
+  "이 서버에서 체크포인트가 꺼져 있습니다": "Checkpoints are turned off on this server",
+  "이 위치(원격·보호된 폴더)에서는 체크포인트를 만들지 않습니다": "Checkpoints are not made in this location (a remote or protected folder)",
+  "지금은 바쁩니다. 잠시 뒤 다시 시도하세요": "Busy right now. Try again in a moment",
+  "체크포인트를 읽지 못했습니다": "Could not read the checkpoints",
+  "체크포인트를 찾을 수 없습니다": "Checkpoint not found",
+  "켠 저장소가 너무 많습니다": "Too many repositories are switched on"
 };

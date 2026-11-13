@@ -225,6 +225,8 @@ The release-path table, the terminal-reply root cause (DA1/DA2/XTVERSION/OSC 10/
 Codex posts prompt, permission, tool, stop, and session lifecycle events while adding
 `agent: "codex"`. Both drive status badges and prompt-queue auto-feed. The `stop` event of either CLI reports completion to the server; the session's voice policy decides whether it is spoken. `tts_hook.sh` only forwards to ntfy, and only when `VT_NOTIFY_URL` is set.
 
+**Turn checkpoints ride on these events and change nothing about them.** `agent_event` hands `session_start`, `prompt`, `pre` and `stop` to `checkpoint_jobs.on_agent_event` *without waiting* after `on_event` has answered (the hook response, its content and its time are unchanged; no new hook is registered, `PermissionRequest` stays unused, and the server still never writes agent settings). Only events `on_event` accepted count: a child's or retired session's event (`state` None), a sub-agent (`agent_id`) and a release are ignored. Git work runs in the `ckpt` pool for repositories switched on in `checkpoint_store` only. Details: `docs/ref/worktree.md` «Agent turn checkpoints».
+
 **Codex session attribution:** its shared app-server can run hooks with
 the `TMUX_PANE` it inherited from an earlier TUI, which would attach a Codex
 entry to the wrong tmux session. Codex hook

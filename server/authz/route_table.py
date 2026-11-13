@@ -447,6 +447,10 @@ _ROWS: tuple = (
     ("GET", "/api/update/status", human()),
     ("POST", "/api/update/check", human()),
     ("PUT", "/api/update/settings", human(elevated=True)),
+# --- routes/checkpoints.py (에이전트 턴 체크포인트 — 사람 세션만. 기계 토큰·소켓·다른 Mac 불허, 중계 밖. 복원·삭제는 이후 단계에서 승격으로)
+    ("GET", "/api/checkpoints", human()),
+    ("GET", "/api/checkpoints/diff", human()),
+    ("PUT", "/api/checkpoints/settings", human()),
 # --- main.py
     ("GET", "/", public("login gate page; has to render unauthenticated")),
     ("GET", "/sw.js", public("static asset of the login gate")),

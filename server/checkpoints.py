@@ -186,6 +186,23 @@ def _open(top: Path, deadline: _Deadline) -> Optional[_Repo]:
     return _Repo(toplevel, toplevel, git_dir, head)
 
 
+def repo_key(path, *, timeout: Optional[float] = None) -> Optional[dict]:
+    """경로가 속한 저장소의 키 — git 공통 디렉터리의 실경로. 한 저장소의 linked worktree는 같은 키를 갖는다(객체·ref를 같이 쓰므로
+    「켜기」 단위가 저장소다). 결과 `{key, top}`(`top`은 이 경로의 작업 트리 루트). git 저장소가 아니거나 실패하면 None."""
+    deadline = _Deadline(timeout if timeout and timeout > 0 else min(timeout_seconds(), 10))
+    try:
+        top = Path(path)
+        cp = _git(top, deadline, "rev-parse", "--show-toplevel", "--path-format=absolute", "--git-common-dir", check=False)
+        if cp.returncode != 0:
+            return None
+        lines = _text(cp.stdout).splitlines()
+        if len(lines) != 2:
+            return None
+        return {"key": os.path.realpath(lines[1]), "top": lines[0]}
+    except (_Timeout, OSError):
+        return None
+
+
 def _busy_state(git_dir: str) -> bool:
     return any(os.path.exists(os.path.join(git_dir, n)) for n in
                ("MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply"))
@@ -227,7 +244,7 @@ def _fs(path: bytes) -> str:
 
 def _result(status: str, **kw) -> dict:
     out = {"status": status, "ref": None, "id": None, "seq": None, "tree": None, "commit": None,
-           "skipped": 0, "paths": 0, "reason": ""}
+           "skipped": 0, "paths": 0, "reason": "", "tree_at_ns": None}
     out.update(kw)
     return out
 
@@ -276,6 +293,7 @@ def _entries(top: Path, deadline: _Deadline, wt12: str) -> list[dict]:
             "kind": meta.get("kind", ""), "turn": int(meta["turn"]) if meta.get("turn", "").isdigit() else None,
             "agent": meta.get("agent", ""), "trusted": meta.get("trusted") == "yes",
             "skipped": int(meta["skipped"]) if meta.get("skipped", "").isdigit() else 0,
+            "pre_trusted": meta.get("pretrusted") == "yes",
         })
     out.sort(key=lambda e: (e["sess"], e["seq"]))
     return out
@@ -285,12 +303,15 @@ def _entries(top: Path, deadline: _Deadline, wt12: str) -> list[dict]:
 
 
 def capture(top, *, kind: str, sess_key: str = "", agent: str = "", turn: Optional[int] = None,
-            trusted: bool = True, timeout: Optional[float] = None) -> dict:
+            trusted: bool = True, pre_trusted: Optional[bool] = None, timeout: Optional[float] = None) -> dict:
     """작업 폴더 상태를 체크포인트 ref 하나로 남긴다. 결과는 항상 dict(예외를 던지지 않는다):
 
     `status`: `ok` | `unchanged`(직전 체크포인트와 트리·HEAD가 같아 ref 없음) | `norepo` | `unsupported`(sparse checkout)
     | `skipped_busy`(병합·리베이스 진행 중) | `too_large` | `busy`(같은 작업 폴더의 다른 캡처가 잠금을 쥠) | `timeout` | `error`.
     `ok`에서만 `ref`·`id`·`seq`·`tree`·`commit`이 채워진다. `skipped`는 큰 파일·거부 경로 등으로 뺀 경로 수, `paths`는 담은 경로 수.
+    `tree_at_ns`: `write-tree`가 끝난 시각(`time.time_ns()`) — 훅이 보낸 첫 `pre`의 시각과 견줘 `pre-turn`을 믿을지 정한다(호출자 몫).
+    `pre_trusted`: `turn-end`에만 쓴다. 같은 턴의 `pre-turn`이 "턴 시작 전 상태"로 믿을 만했는지(턴이 끝나야 알 수 있다 —
+    `pre` 훅이 늦게 도착할 수 있으므로) 커밋 메시지에 남긴다. None이면 적지 않는다(= 모름 → 믿지 않음).
     """
     if kind not in KINDS:
         return _result("error", reason="bad_kind")
@@ -308,7 +329,7 @@ def capture(top, *, kind: str, sess_key: str = "", agent: str = "", turn: Option
         try:
             with lock.hold(LOCK_WAIT_SECONDS, op="ckpt.capture"):
                 return _capture_locked(repo, deadline, kind=kind, sess_key=sess_key, agent=agent, turn=turn,
-                                       trusted=trusted, restore=restore)
+                                       trusted=trusted, pre_trusted=pre_trusted, restore=restore)
         except LockTimeout:
             return _result("busy")
     except _Timeout:
@@ -323,7 +344,7 @@ def capture(top, *, kind: str, sess_key: str = "", agent: str = "", turn: Option
 
 
 def _capture_locked(repo: _Repo, deadline: _Deadline, *, kind: str, sess_key: str, agent: str,
-                    turn: Optional[int], trusted: bool, restore: bool) -> dict:
+                    turn: Optional[int], trusted: bool, pre_trusted: Optional[bool], restore: bool) -> dict:
     if _config_bool(repo, deadline, "core.sparseCheckout"):
         return _result("unsupported", reason="sparse_checkout")
     if _busy_state(repo.git_dir):
@@ -384,19 +405,20 @@ def _capture_locked(repo: _Repo, deadline: _Deadline, *, kind: str, sess_key: st
             _git(top, deadline, *_INDEX_CFG, "-c", "core.safecrlf=false", "add", "-A",
                  "--pathspec-from-file=-", "--pathspec-file-nul", env=env, input=b"\0".join(keep))
         tree = _text(_git(top, deadline, *_INDEX_CFG, "write-tree", env=env).stdout)
+        tree_at_ns = time.time_ns()
 
         entries = _entries(top, deadline, repo.wt12)
         if not restore:
             mine = [e for e in entries if e["sess"] == sess_key]
             last = max(mine, key=lambda e: e["seq"]) if mine else None
             if last and last["tree"] == tree and last["parent"] == repo.head:
-                return _result("unchanged", tree=tree, skipped=skipped, paths=len(keep))
+                return _result("unchanged", tree=tree, skipped=skipped, paths=len(keep), tree_at_ns=tree_at_ns)
             seq = (last["seq"] + 1) if last else 1
         else:
             seq = int(time.time())
 
         # 4) commit-tree → update-ref. 같은 seq를 다른 프로세스가 먼저 만들었으면 다음 번호로 다시 시도한다.
-        message = _message(kind, turn if turn is not None else seq, agent, trusted, skipped)
+        message = _message(kind, turn if turn is not None else seq, agent, trusted, skipped, pre_trusted)
         cargs = ["-c", "commit.gpgSign=false", "commit-tree", tree, "-m", message] + (["-p", repo.head] if repo.head else [])
         commit = _text(_git(top, deadline, *cargs, env=dict(_IDENT)).stdout)
         for _ in range(5):
@@ -405,7 +427,7 @@ def _capture_locked(repo: _Repo, deadline: _Deadline, *, kind: str, sess_key: st
                       "update-ref", ref, commit, "", check=False)
             if cp.returncode == 0:
                 return _result("ok", ref=ref, id="v1/" + ref[len(REF_PREFIX):], seq=seq, tree=tree, commit=commit,
-                               skipped=skipped, paths=len(keep))
+                               skipped=skipped, paths=len(keep), tree_at_ns=tree_at_ns)
             seq += 1
         return _result("error", reason="update-ref", tree=tree)
     finally:
@@ -420,15 +442,16 @@ def _ref(wt12: str, sess: str, seq: int) -> str:
     return f"{REF_PREFIX}{wt12}/{sess}/{seq:010d}" if sess == "restore" else f"{REF_PREFIX}{wt12}/{sess}/{seq:06d}"
 
 
-def _message(kind: str, turn: int, agent: str, trusted: bool, skipped: int) -> str:
+def _message(kind: str, turn: int, agent: str, trusted: bool, skipped: int, pre_trusted: Optional[bool] = None) -> str:
     # 경로·지시문·tmux 이름은 넣지 않는다.
+    extra = "" if pre_trusted is None else f"FarShell-PreTrusted: {'yes' if pre_trusted else 'no'}\n"
     return ("FarShell checkpoint\n\n"
             "FarShell-Checkpoint: 1\n"
             f"FarShell-Kind: {kind}\n"
             f"FarShell-Turn: {int(turn)}\n"
             f"FarShell-Agent: {agent}\n"
             f"FarShell-Trusted: {'yes' if trusted else 'no'}\n"
-            f"FarShell-Skipped: {int(skipped)}\n")
+            f"FarShell-Skipped: {int(skipped)}\n" + extra)
 
 
 # --- 읽기 ----------------------------------------------------------------------
@@ -445,13 +468,15 @@ def list_refs(top, *, timeout: Optional[float] = None) -> list[dict]:
 
 
 def turn_base(entries: list[dict], to_id: str) -> Optional[dict]:
-    """턴의 비교 기준: 같은 턴의 신뢰된 `pre-turn` → 없으면 앞선 `turn-end`/`baseline` 중 가장 최근 것 → 없으면 None.
+    """턴의 비교 기준: 같은 턴의 `pre-turn`(그 턴의 `turn-end`가 `PreTrusted: yes`로 보증한 경우만) → 없으면 앞선
+    `turn-end`/`baseline` 중 가장 최근 것 → 없으면 None. 신뢰는 `pre` 훅이 늦게 올 수 있어 턴이 끝난 뒤에야 확정된다.
     (`pre-turn`을 못 믿을 때는 턴 사이에 사람이 고친 것이 섞일 수 있다 — 표시는 호출자가 한다.)"""
     to = next((e for e in entries if e["id"] == to_id), None)
     if to is None or to["restore"]:
         return None
     mine = [e for e in entries if e["sess"] == to["sess"] and e["seq"] < to["seq"]]
-    pre = [e for e in mine if e["kind"] == "pre-turn" and e["trusted"] and e["turn"] == to["turn"]]
+    pre = ([e for e in mine if e["kind"] == "pre-turn" and e["trusted"] and e["turn"] == to["turn"]]
+           if to.get("pre_trusted") else [])
     if pre:
         return max(pre, key=lambda e: e["seq"])
     earlier = [e for e in mine if e["kind"] in ("turn-end", "baseline")]

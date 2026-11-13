@@ -583,6 +583,11 @@ async def agent_event(request: Request):
             coordinator.completion(body, session or state.get("tmux_session"))
         except Exception as e:
             logger.warning("음성 완료 예약 실패: %s", type(e).__name__)
+    # 턴 체크포인트(checkpoint_jobs.py) — 저장소별로 켠 곳에서만 동작하고, 기다리지 않으며(git은 `ckpt` 풀),
+    # 훅 응답의 내용·시간을 바꾸지 않는다. 자식·은퇴 세션(state None)·서브에이전트·반납은 예약하지 않는다.
+    if state is not None and not released:
+        import checkpoint_jobs
+        checkpoint_jobs.on_agent_event(event, state, payload, ts, agent=agent_name)
     # 2026-09-30 — 에이전트가 시작·끝나는 순간이 곧 pane의 실행 중 명령이 바뀌는
     # 순간이다. tmux엔 그 훅이 없어 세션 감시 주기(30초)를 기다리지 않게 알린다.
     import routes.system as _system_routes
