@@ -545,6 +545,7 @@ async def lifespan(_app: FastAPI):
     history_replica_task = asyncio.create_task(history_worker.replicate())
     history_discovery_task = asyncio.create_task(history_worker.discover())
     history_index_task = asyncio.create_task(history_worker.index_history())
+    history_place_task = asyncio.create_task(history_worker.place_projects())
     try:
         yield
     finally:
@@ -556,6 +557,9 @@ async def lifespan(_app: FastAPI):
         history_discovery_task.cancel()
         with suppress(asyncio.CancelledError):
             await history_discovery_task
+        history_place_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await history_place_task
         with suppress(asyncio.CancelledError):
             await history_task
         with suppress(asyncio.CancelledError):

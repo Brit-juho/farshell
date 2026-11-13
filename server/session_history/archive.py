@@ -464,7 +464,23 @@ def capture(source, relative, *, max_bytes=PASS_BYTES):
         _refresh_conversation_summary(db, cid, source['provider'], fresh, latest_title, now)
         prior_detail=json.loads(conversation['detail']) if conversation else {}
         verified=prior_detail.get('native_identity_verified',False) or (identity is not None and capture_kind=='transcript' and not changing)
-        db.execute('UPDATE conversations SET updated=?,state=?,detail=? WHERE id=?', (now, manifest['state'], encode({**prior_detail,'native_identity_verified':verified}), cid))
+        detail_next={**prior_detail,'native_identity_verified':verified}
+        # 저장소(session_catalog/placement.py)가 읽는 사실: 실행 방식, 실제 시작(원본 첫 timestamp), 마지막 활동(원본 파일 수정 시각).
+        # 기록 저장소의 created·updated는 수집 시각이라 옛 파일을 처음 읽은 날이 「활동」이 돼 버린다.
+        if identity and identity.get('launch') and not prior_detail.get('launch'):
+            detail_next['launch']=identity['launch']
+        if 'started' not in prior_detail and capture_kind=='transcript':
+            from session_catalog.placement import first_timestamp
+            started=first_timestamp(probe)
+            if started:
+                detail_next['started']=started
+        from session_catalog.placement import _num
+        last_activity=max(_num(prior_detail.get('last')) or 0,after.st_mtime)
+        detail_next['last']=last_activity
+        if conversation and conversation['workspace_id']:
+            from session_catalog.placement import touch_project
+            touch_project(db,conversation['workspace_id'],last_activity,now)
+        db.execute('UPDATE conversations SET updated=?,state=?,detail=? WHERE id=?', (now, manifest['state'], encode(detail_next), cid))
         changed(db, 'manifest', mid)
     return True
 

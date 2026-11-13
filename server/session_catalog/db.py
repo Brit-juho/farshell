@@ -14,7 +14,7 @@ from pathlib import Path
 
 import vt_paths
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 ID = re.compile(r"[a-f0-9]{32}")
 HASH = re.compile(r"[a-f0-9]{64}")
 
@@ -182,6 +182,18 @@ MIGRATIONS = {
         " AND NOT EXISTS(SELECT 1 FROM conversation_executions e JOIN runtimes r ON r.id=e.runtime_id"
         " JOIN conversations c ON c.id=e.conversation_id WHERE r.session_id=sessions.id"
         " AND (c.title=sessions.title OR c.native_id=sessions.title))",
+    ),
+    3: (
+        # 저장소 = CLI를 켠 곳(docs/ref/session-ui.md 「Projects」). registered: 처음 CLI 대화가 시작된 시각(NULL이면 스캔·터미널이
+        # 만든 내부 행 — 목록의 저장소가 아니다). removed: 설정에서 제거한 시각(그 뒤 그 자리에서 CLI를 켜면 다시 NULL).
+        # last_activity: 이 저장소 대화의 마지막 활동. hidden은 0 보임 · 1 사람이 숨김 · 2 오래돼 자동 숨김(새 활동이면 풀린다).
+        "ALTER TABLE projects ADD COLUMN registered REAL",
+        "ALTER TABLE projects ADD COLUMN removed REAL",
+        "ALTER TABLE projects ADD COLUMN last_activity REAL",
+        # 대화를 저장소에 놓은 결과(session_catalog/placement.py): NULL 아직 · 'placed' · 'skip:<이유>'. 색인이 「아직」만 빨리 찾는다.
+        "ALTER TABLE conversations ADD COLUMN placement TEXT",
+        "CREATE INDEX conversations_workspace ON conversations(workspace_id,updated)",
+        "CREATE INDEX conversations_placement ON conversations(placement,updated)",
     ),
 }
 

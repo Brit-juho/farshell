@@ -56,7 +56,7 @@ def test_existing_v1_store_is_upgraded_with_a_private_copy_and_backfill(state):
     path = state / "session-catalog" / "catalog.sqlite3"
     _v1_store(path)
     with db.database() as con:
-        assert con.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION == 2
+        assert con.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION == 3
         rows = {r["id"][0]: dict(r) for r in con.execute("SELECT id,last_activity,name_source FROM sessions")}
     assert rows["a"] == {"id": "a" * 32, "last_activity": 300.0, "name_source": "auto"}
     assert rows["b"]["last_activity"] == 400.0 and rows["b"]["name_source"] == "human"
@@ -107,7 +107,7 @@ def test_an_old_v1_backup_is_upgraded_on_restore(state, tmp_path):
     destination = tmp_path / "restored-state"
     assert backup.restore_package(package, destination)["state"] == "restored"
     with sqlite3.connect(destination / "session-catalog" / "catalog.sqlite3") as con:
-        assert con.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert con.execute("PRAGMA user_version").fetchone()[0] == 3
         assert con.execute("SELECT name_source FROM sessions WHERE title='내 작업'").fetchone()[0] == "human"
 
 
