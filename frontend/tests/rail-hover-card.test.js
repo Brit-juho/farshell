@@ -72,7 +72,7 @@ test('머리 — 이름 · 에이전트 · 상태 글자 · 경과, 비어 있�
   const none = buildHoverCard(row(), { now: NOW });
   assert.strictEqual(none.since, '');
   assert.strictEqual(none.agent, null);
-  assert.strictEqual(none.stateText, '유휴');
+  assert.strictEqual(none.stateText, '', '유휴는 쓰지 않는다(칸·메뉴 요약과 같은 기준) — 상태 줄 자체가 빠진다');
   assert.strictEqual(none.note, null);
 });
 
@@ -574,4 +574,13 @@ test('공용 툴팁은 그대로 — tooltip.js는 data-tip만 보고 카드는 
   assert.ok(!tip.includes('data-card-key'));
   const card = fs.readFileSync(path.join(__dirname, '../js/shell/RailHoverCard.tsx'), 'utf8');
   assert.ok(!/['"`]\[data-tip\]|data-tip=/.test(card.replace(/\/\/.*$/gm, '')), '카드는 data-tip을 읽지도 달지도 않는다');
+});
+
+test('유휴는 눈에 보이는 메뉴 요약·호버 카드에 쓰지 않고, 화면 읽기용 요약에는 남긴다', async () => {
+  const m = await mod();
+  const base = { status: 'idle', kind: null, otherClients: 0, origin: 'local', originHost: null, branch: 'main' };
+  const d = m.rowSummaryDetails(base);
+  assert.ok(!d.status.includes('유휴'), d.status);
+  assert.ok(d.accessible.includes('유휴'), d.accessible);
+  assert.ok(m.rowSummaryDetails({ ...base, status: 'working' }).status.includes('작업 중'));
 });

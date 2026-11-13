@@ -413,7 +413,7 @@ test('originLabel — 만든 맥 이름이 있으면 「{host}에서 만듦」, 
   const { originLabel, rowSummary } = await mod();
   assert.strictEqual(originLabel('peer', 'm5-studio'), 'm5-studio에서 만듦');
   assert.strictEqual(originLabel('peer', null), '다른 맥에서 만듦');
-  assert.strictEqual(originLabel('external', 'x'), '직접 만듦 (CLI·tmux)');
+  assert.strictEqual(originLabel('external', 'x'), '터미널에서 만든 세션');
   const r = { status: 'working', kind: null, otherClients: 0, branch: null };
   assert.strictEqual(rowSummary({ ...r, origin: 'peer', originHost: 'm5-studio' }), '작업 중 · m5-studio에서 만듦');
   assert.strictEqual(rowSummary({ ...r, origin: 'peer' }), '작업 중 · 다른 맥에서 만듦');

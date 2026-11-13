@@ -88,7 +88,7 @@ Open "Ended N" at the bottom of a repository to see the sessions that ended ther
 | Drag a row to a pane edge | Splits in that direction — this is how you group sessions (touch devices can also use the menu items below) |
 | Row menu "Open to the right", "Open below" | Shown only on touch devices at least 720px wide (tablets). Splits the active pane in that direction and puts the session there (a session from another view is moved over, and a view left empty is closed). Not available on phones under 720px |
 | Pane `×` | The session becomes "Not open" in the sidebar (tmux keeps running). The pane stays as an empty pane |
-| A session in a split-screen group | A small pane mark sits next to the row name. The row menu's "Open the whole group" (or clicking a row of a closed group) opens the whole group. Closing the group's last pane closes the group view and its layout is remembered |
+| A session in a split-screen group | A small pane mark sits next to the row name. The row menu's "Open the whole group" (or clicking a row of a closed group) opens the whole group, and "Rename group" renames it (on a phone, long-press the tile). Closing the group's last pane closes the group view and its layout is remembered |
 | Row `⋯` or right-click | Open/close · Rename · Open on Mac · Connected screens · agent sharing items (below) · **Kill** |
 
 - **Kill** ends the tmux session, and the claude or shell inside it, with no undo. A confirmation always appears,

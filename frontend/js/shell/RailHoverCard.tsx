@@ -281,16 +281,20 @@ export function RailHoverCard(props: {
               <span class="vt-hc-val vt-hc-name" title={m().name}>{m().name}</span>
               <Show when={m().since}><span class="vt-hc-extra">{m().since}</span></Show>
             </div>
-            <div class="vt-hc-row vt-hc-status">
-              <span class="vt-hc-ico" />
-              <span class="vt-hc-val">
-                <span class="vt-hc-chip" data-state={m().state}>
-                  <span class="vt-hc-glyph" data-state={m().state} aria-hidden="true" innerHTML={icon(GLYPH_ICON[m().state], 12, 2)} />
-                  {m().stateText}
+            <Show when={m().stateText || m().note}>
+              <div class="vt-hc-row vt-hc-status">
+                <span class="vt-hc-ico" />
+                <span class="vt-hc-val">
+                  <Show when={m().stateText}>
+                    <span class="vt-hc-chip" data-state={m().state}>
+                      <span class="vt-hc-glyph" data-state={m().state} aria-hidden="true" innerHTML={icon(GLYPH_ICON[m().state], 12, 2)} />
+                      {m().stateText}
+                    </span>
+                  </Show>
+                  <Show when={m().note}><span class="vt-hc-note">{m().note}</span></Show>
                 </span>
-                <Show when={m().note}><span class="vt-hc-note">{m().note}</span></Show>
-              </span>
-            </div>
+              </div>
+            </Show>
             <For each={m().sections}>
               {(s) => (
                 <div class="vt-hc-sec" data-sec={s.id}>

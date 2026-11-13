@@ -11,7 +11,7 @@ export {
 export {
   formatRelativeTime, statusSentence, stateKeyword, defaultRailCollapsed,
   buildRailLists, readRailPrefs, RAIL_PREF_DEFAULTS, ATTENTION_SHOW_KEY, ATTENTION_COLLAPSED_KEY, originShowKey,
-  HIDEABLE_ORIGINS, normalizeOrigin, originLabel, normalizeKind, normalizeBadge, rowMenuItems, rowSummary, runRowMenu,
+  HIDEABLE_ORIGINS, normalizeOrigin, originLabel, normalizeKind, normalizeBadge, rowMenuItems, rowSummary, rowSummaryDetails, renameViewGroup, runRowMenu,
   worktreeIconName, diffLabel, KIND_LABEL, BADGE_LABEL, normalizeShare, shareSentence, normalizeProfile, profileLabel,
   normalizeLineage, lineageLabel, kidsProgress, parseNameList,
   LINEAGE_KEY, encodeLineagePrefs,

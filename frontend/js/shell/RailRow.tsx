@@ -234,7 +234,7 @@ export function MenuSummary(props: { summary: string | RowSummaryDetails }) {
   const accessible = () => typeof props.summary === 'string' ? props.summary : props.summary.accessible;
   return (
     <div class="vt-menu-summary" role="note" aria-label={t('요약: {summary}', { summary: accessible() })}>
-      <div class="vt-menu-summary-status">{details()?.status ?? accessible()}</div>
+      <Show when={details()?.status ?? accessible()}><div class="vt-menu-summary-status">{details()?.status ?? accessible()}</div></Show>
       <Show when={details()?.cwd}>
         <div class="vt-menu-summary-section">
           <span class="vt-menu-summary-label">{t('작업 위치')}</span>

@@ -3615,7 +3615,7 @@ def test_집중_모드_미리보기가_토글을_따른다(page):
 
 def test_레일_저장소_묶음을_접고_새로고침에도_유지되고_분할_묶음은_칸_표식이다(isolated_page):
     """세션 로직 점검 단계 5 — 레일은 저장소 묶음(가지 그래프)이다. 머리를 누르면 접히고(기기 설정 rail.view),
-    새로고침해도 유지된다. 분할 화면 묶음은 구역이 따로 없고 칸마다 작은 표식(.vt-rg-group)만 붙는다."""
+    새로고침해도 유지된다. 분할 화면 묶음은 구역이 따로 없고 칸마다 작은 표식(.vt-rg-group)만 붙으며, 이름은 칸 메뉴로 바꾼다."""
     page = isolated_page
     page.evaluate("() => window.createSession && window.createSession()")
     page.wait_for_selector(".vt-pane .vt-pane-body", timeout=15000)
@@ -3631,6 +3631,18 @@ def test_레일_저장소_묶음을_접고_새로고침에도_유지되고_분�
         page.wait_for_function("() => document.querySelectorAll('#vt-wgrail .vt-rg-node .vt-rg-group').length === 2", timeout=15000)
         _shot(page, "d02-rail-expanded")
         assert page.locator("#vt-wgrail .vt-view-group").count() == 0, "분할 묶음 구역은 없다"
+        # 묶음 머리가 없으니 이름은 칸 메뉴 「묶음 이름 바꾸기」로 바꾼다(세션 로직 점검 후속) — 두 칸의 표식 이름이 함께 바뀐다.
+        node = page.locator("#vt-wgrail .vt-rg-node", has=page.locator(".vt-rg-group")).first
+        node.hover()
+        node.locator(".vt-rg-more").click()
+        page.locator(".vt-menu-item", has_text="묶음 이름 바꾸기").first.click()
+        dlg = page.locator(".vt-dialog-input").last
+        dlg.wait_for(timeout=5000)
+        dlg.fill("e2e 묶음")
+        dlg.press("Enter")
+        page.wait_for_function(
+            "() => [...document.querySelectorAll('#vt-wgrail .vt-rg-node .vt-rg-group')].filter((e) => (e.getAttribute('aria-label') || '').includes('e2e 묶음')).length === 2",
+            timeout=10000)
         # 접으면 칸(.vt-rg-group)이 사라지므로 묶음은 이름(aria-label)으로 다시 찾는다.
         label = page.locator("#vt-wgrail .vt-rg", has=page.locator(".vt-rg-group")).first.get_attribute("aria-label")
         grp = page.locator(f'#vt-wgrail .vt-rg[aria-label="{label}"]')

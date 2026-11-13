@@ -8,7 +8,7 @@
 import type { AgentState } from '../core/types.js';
 import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
 import { t } from '../core/i18n.js';
-import { alertDialog } from '../core/dialog-lazy.js';
+import { alertDialog, promptDialog } from '../core/dialog-lazy.js';
 import { timedFetch } from '../core/api.js';
 
 // ── 행 모양 ────────────────────────────────────────────────────────────────
@@ -163,7 +163,8 @@ export const HIDEABLE_ORIGINS: Origin[] = ['peer', 'external'];
 export const ORIGIN_LABEL: Record<Origin, string> = {
   local: t('이 화면에서 만듦'),
   peer: t('다른 맥에서 만듦'),
-  external: t('직접 만듦 (CLI·tmux)'),
+  // 예전 이름 「직접 만듦」은 칸에서 지운 말이라 설정 필터 이름도 바꿨다(세션 로직 점검 후속).
+  external: t('터미널에서 만든 세션'),
 };
 
 export function originLabel(origin: Origin, host?: string | null): string {
@@ -427,12 +428,15 @@ export interface RowMenuItem {
  * 행 메뉴 맨 위의 요약 한 줄 — 호버 툴팁이 없는 터치에서 행의 숨은 정보를 읽는 유일한 자리다
  * (ui/tooltip.js는 터치 포인터에서 꺼져 있다). 상태 · (입력 대기면) 유형 · 웹 외 attach 수 ·
  * 만든 곳 · 브랜치. 값이 없는 조각은 건너뛴다. 선택 불가 헤더 행(`.vt-menu-summary`)에 그린다.
+ * hideIdle — 눈에 보이는 요약에서는 「유휴」를 쓰지 않는다(칸에서 지운 말과 같은 기준). 화면 읽기용(accessible)은 남긴다 —
+ * 링 모양만으로는 상태를 읽을 수 없다.
  */
 export function rowSummary(
   row: Pick<SessionRow, 'status' | 'kind' | 'otherClients' | 'origin' | 'originHost' | 'branch'> & { share?: ShareInfo | null; cwd?: string },
+  opts: { hideIdle?: boolean } = {},
 ): string {
   const s = normalizeState(row.status);
-  const parts: string[] = [(STATE_LABEL as Record<string, string>)[s]];
+  const parts: string[] = opts.hideIdle && s === 'idle' ? [] : [(STATE_LABEL as Record<string, string>)[s]];
   if (s === 'waiting') parts.push(KIND_LABEL[normalizeKind(row.kind)]);
   if (row.share) parts.push(shareSentence(row.share));
   if (row.otherClients > 0) parts.push(t('웹 외 {n}', { n: row.otherClients }));
@@ -454,7 +458,7 @@ export interface RowSummaryDetails {
 export function rowSummaryDetails(row: Parameters<typeof rowSummary>[0]): RowSummaryDetails {
   const cwd = row.cwd || undefined;
   return {
-    status: rowSummary({ ...row, cwd: undefined, branch: undefined }),
+    status: rowSummary({ ...row, cwd: undefined, branch: undefined }, { hideIdle: true }),
     cwd,
     project: cwd ? cwd.replace(/\/+$/, '').split('/').pop() || cwd : undefined,
     branch: row.branch || undefined,
@@ -508,6 +512,24 @@ export function rowMenuItems(row: Pick<SessionRow, 'open' | 'tmuxName'> & { shar
   }
   if (row.tmuxName) items.push({ id: 'kill', label: t('종료'), detail: t('되돌릴 수 없음'), danger: true });
   return items;
+}
+
+/** 분할 화면 묶음 이름 바꾸기(행 메뉴 「묶음 이름 바꾸기」 — 레일·폰 공용). 묶음 머리가 없어진 뒤(세션 로직 점검 단계 5)
+ * 남은 유일한 길이다. 이름은 뷰 라벨이라 세션 이름·브랜치와 따로 저장된다(layout/store.js setTabLabel, 앞뒤 공백 제거 1~128자).
+ * 열린 묶음과 닫혀 기억된 묶음 모두 된다. 바꿨으면 true. */
+export async function renameViewGroup(row: Pick<SessionRow, 'viewId' | 'viewLabel'>, w: any = window): Promise<boolean> {
+  if (!row.viewId) return false;
+  const v = await promptDialog(t('세션 이름과 따로 저장됩니다. 1~128자.'), {
+    title: t('묶음 이름 바꾸기'), defaultValue: row.viewLabel || '', okLabel: t('저장'),
+  });
+  if (v === null || v === undefined) return false;
+  const value = String(v).trim();
+  if (!value || value === (row.viewLabel || '')) return false;
+  if (value.length > 128 || !w.vtRenameTab?.(row.viewId, value)) {
+    await alertDialog(t('묶음 이름을 바꾸지 못했습니다. 1~128자로 정하거나, 묶음이 아직 있는지 확인하세요.'));
+    return false;
+  }
+  return true;
 }
 
 /** 메뉴 항목을 실행한다. 지연 청크는 세션 모듈을 정적 import 못 해 window 브리지를 받는다. */
