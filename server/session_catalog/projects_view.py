@@ -104,7 +104,7 @@ def conversation_list(project: str | None = None, archived: bool = False, q: str
                                 " WHERE c.placement='placed' AND c.deleted IS NULL AND c.archived IS NOT NULL GROUP BY w.project_id"):
                 counts[r['pid']] = r['n']
     page, more = rows[:limit], len(rows) > limit
-    out = {'conversations': [{'id': r['id'], 'provider': r['provider'], 'title': r['title'] or '', 'cwd': r['cwd'],
+    out = {'conversations': [{'id': r['id'], 'native_id': r['native_id'], 'provider': r['provider'], 'title': r['title'] or '', 'cwd': r['cwd'],
                               'project_id': r['project_id'], 'activity': r['activity'], 'started': r['started'],
                               'archived': r['archived'], 'branch': r['branch'], 'last_user_text': r['last_user_text'] or '',
                               'user_message_count': r['user_message_count'] or 0} for r in page],

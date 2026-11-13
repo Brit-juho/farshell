@@ -335,7 +335,15 @@ export function normalizeHome(v: any): SessionHome | null {
     project_id: v.project_id, root: v.root, name: v.name, repository: v.repository === true,
     workspace_id: typeof v.workspace_id === 'string' ? v.workspace_id : undefined,
     kind: typeof v.kind === 'string' ? v.kind : undefined, path: typeof v.path === 'string' ? v.path : undefined,
+    // 목록의 저장소인가(CLI를 켠 곳으로 등록됨 · 제거 안 됨)와 숨김 — 옛 서버(칸 없음)는 git 저장소를 등록된 것으로 본다.
+    registered: typeof v.registered === 'boolean' ? v.registered : v.repository === true,
+    hidden: v.hidden === true,
   };
+}
+
+function createdOf(key: unknown): number | null {
+  const m = typeof key === 'string' ? /:(\d{9,11})$/.exec(key) : null;
+  return m ? Number(m[1]) : null;
 }
 
 export function collectSessionRows(inp: CollectInput): SessionRow[] {
@@ -391,6 +399,8 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
       sessionId: sid,
       tmuxName: tm.name,
       physicalKey: tm.physical_key,
+      // 만든 시각 — 정체성 키 `#{session_id}:#{session_created}`의 뒤쪽(tmux가 정한 생성 시각, 초). 「만든 순」 정렬.
+      created: createdOf(tm.physical_key),
       // 화면 어디서나 보이는 이름(별칭)을 쓴다 — tmux 이름은 열쇠가 아니고 맥 터미널 `tmux attach -t`용이다.
       name: normalizeTitle(tm.catalog?.title) || tm.name,
       nameSource: tm.catalog?.name_source === 'human' ? 'human' : tm.catalog ? 'auto' : null,

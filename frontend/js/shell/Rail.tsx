@@ -18,10 +18,10 @@ import {
   kidsProgress, canShareName,
   type SessionRow,
 } from './rail-data.js';
-import { buildRepoTree, flattenRows, OUTSIDE_KEY, type RepoGroup } from './repo-tree.js';
+import { buildRepoTree, flattenRows, OUTSIDE_KEY, type RepoGroup, type ProjectLike } from './repo-tree.js';
 import { RepoBranch } from './RepoBranch.js';
 import { SessionNode } from './SessionNode.js';
-import { EndedFold } from './EndedFold.js';
+import { ProjectEnded } from './ProjectEnded.js';
 import {
   buildHostMenu, hostDetail, LOCAL_HOST,
   type HostEntry,
@@ -36,7 +36,7 @@ import { createRailPrefs } from './rail-prefs.js';
 import { Menu, ROW_MENU_ICON, Row, type MenuItem } from './RailRow.js';
 import { RailHoverCard, type HoverCardSource } from './RailHoverCard.js';
 import { NativeChildren } from './NativeChildren.js';
-import { ArchiveView, ArchiveEntry, mergeCatalogPage, type CatalogSnapshot } from './ArchiveView.js';
+import { ArchiveView, ArchiveEntry, type CatalogSnapshot } from './ArchiveView.js';
 import { renameSession as renameCatalogSession } from '../history/session-actions.js';
 import { historyApi } from '../history/api.js';
 import { icon } from '../ui/icons.js';
@@ -119,6 +119,8 @@ export function Rail(props: RailProps) {
   // 레일의 세션 행은 그 맥의 API(중계)에서 오므로 로컬과 같은 경로로 그린다.
   const viewHostId = String((window as any).vtRelayHost?.() || LOCAL_HOST);
   const [catalog, setCatalog] = createSignal<CatalogSnapshot | null>(null);
+  // 목록의 저장소(저장소 = CLI를 켠 곳, /api/session-catalog/projects) — 세션이 없어도 묶음이 남는다. 이 맥 전용.
+  const [projects, setProjects] = createSignal<ProjectLike[]>([]);
   // 보관함을 열면 같은 자리의 목록이 보관된 세션으로 바뀐다(탭은 없다).
   const [archiveOpen, setArchiveOpen] = createSignal(false);
   // 갱신 지연 표식 — 폴링이든 push든 서버에서 새 값을 마지막으로 받은 시각.
@@ -133,21 +135,19 @@ export function Rail(props: RailProps) {
   onCleanup(() => clearInterval(staleTimer));
 
   let catalogRequest = 0;
-  // 「종료 세션 더 불러오기」로 첫 쪽 뒤를 받았는가. 보관함↔목록을 바꾸면 다시 첫 쪽부터다.
-  let extraPages = false;
-  const refreshCatalog = async (more = false) => {
+  const refreshCatalog = async () => {
     if (viewHostId !== LOCAL_HOST) return;
     const request = ++catalogRequest;
     try {
-      // 최근 활동순(저장소 묶음의 「종료 N」과 세션 정렬이 같은 기준). 보관함은 따로 연다.
-      // 보관된 세션은 보관함 화면(ArchiveView)이 따로 검색·쪽 넘김으로 읽는다 — 여기는 실행 중·종료만.
-      const params = new URLSearchParams({ archived: 'false', limit: '200', order: 'activity' });
-      if (more && catalog()?.next) params.set('cursor', catalog()!.next!);
-      const data = await historyApi('/api/session-catalog?' + params);
+      // 실행 중 세션의 카탈로그 기록(최근 활동·이름 변경·작업 기록)과 저장소 목록. 끝난 것은 저장소의 「종료 N」(대화)이
+      // 펼칠 때 따로 받고(ProjectEnded.tsx), 보관한 것은 보관함 화면(ArchiveView)이 받는다.
+      const [data, list] = await Promise.all([
+        historyApi('/api/session-catalog?' + new URLSearchParams({ archived: 'false', limit: '200', order: 'activity' })),
+        historyApi('/api/session-catalog/projects').catch(() => null),
+      ]);
       if (request !== catalogRequest) return;
-      // 「더 불러오기」로 받아 둔 뒤쪽은 다음 폴링(첫 쪽만 다시 읽음)에 버리지 않는다(mergeCatalogPage).
-      setCatalog(mergeCatalogPage(catalog(), data, more, extraPages));
-      if (more) extraPages = true;
+      setCatalog(data);
+      if (list && Array.isArray(list.projects)) setProjects(list.projects);
     } catch (e) {
       // 옛 호스트(카탈로그 없음)는 지금의 라이브 레일을 그대로 쓴다. 답 자체가 없던
       // 실패(마감·네트워크)만 폴러에 알려 간격을 늘린다.
@@ -285,9 +285,9 @@ export function Rail(props: RailProps) {
   const lists = createMemo(() => buildRailLists(rows(), prefs()));
   // 「실행 중」 구역 = 세션 전체에서 개입 필요에 올라간 행을 뺀 것(같은 세션이 두 번 나오지 않는다).
   const running = createMemo(() => splitRunning(lists()));
-  // ── 저장소 가지 그래프(설계 P1·P2) ────────────────────────────────────────
-  // 저장소 → (메인 · 워크트리 가지) → 세션 → 위임 하위 · 「종료 N」. 정렬은 입력 대기가 있는 저장소 > 최근 활동,
-  // 저장소 안은 최근 활동(카탈로그 last_activity)순이다. 수동 정렬·이름순 정렬·「저장소별로 묶기」 토글은 없다.
+  // ── 저장소 가지 그래프(설계 P1·P2 → 저장소 2차) ───────────────────────────────
+  // 저장소(CLI를 켠 곳, 세션이 없어도 남음) → (메인 · 워크트리 가지) → 세션 → 위임 하위 · 「종료 N」(끝난 대화). 정렬은 기기별
+  // 설정(보기 탭): 저장소 등록순·세션 만든 순이 기본, 이름순·최근 활동, 「입력 대기 먼저」. 손으로 끌어 정하는 순서는 없다.
   const rowKey = (r: SessionRow) => r.tmuxName || r.name;
   const mainBranches = createMemo(() => {
     const m = new Map<string, string | null>();
@@ -302,26 +302,22 @@ export function Rail(props: RailProps) {
     for (const c of catalog()?.sessions || []) if (c.physical_key && c.ended == null) m.set(c.physical_key, Number(c.last_activity) || 0);
     return m;
   });
-  const isLiveCatalog = (c: any) => c.ended == null && !!c.runtime_id
-    && rows().some((r) => r.tmuxName === c.tmux_name && r.physicalKey === c.physical_key);
   // 이름을 고치는 동안은 그래프도 얼린다 — 카탈로그 폴링(5초)마다 새 묶음 객체가 오면 <For>가 칸을 다시 만들어 편집 중이던
   // 입력창이 뜯겨 나간다(행 메모를 얼리는 것과 같은 이유, 위 rows 주석).
-  const tree = createMemo<RepoGroup<SessionRow, any>[]>((prev) => editingSessionKey() && prev ? prev : buildRepoTree({
+  const tree = createMemo<RepoGroup<SessionRow>[]>((prev) => editingSessionKey() && prev ? prev : buildRepoTree({
     rows: running(),
-    ended: viewHostId === LOCAL_HOST ? catalog()?.sessions || [] : [],
-    workspaces: catalog()?.workspaces || [],
-    projects: catalog()?.projects || [],
+    projects: viewHostId === LOCAL_HOST ? projects() : [],
     mainBranches: mainBranches(),
     activityOf: (r) => (r.physicalKey && activityByKey().get(r.physicalKey)) || Number(r.since || 0),
-    isLive: isLiveCatalog,
+    sort: prefs().view.sort,
   }));
   const flip = (list: string[], name: string) => (list.includes(name) ? list.filter((n) => n !== name) : [...list, name]);
   const toggleKids = (name: string) => setPref(LINEAGE_KEY, encodeLineagePrefs(flip(prefs().kidsCollapsed, name)));
   const kidsCollapsed = (r: SessionRow) => prefs().kidsCollapsed.includes(rowKey(r));
   // 접힘·「종료 N」 펼침은 저장소 경로를 열쇠로 기기별(rail.view)에 둔다 — 세션이 바뀌어도 같은 저장소면 그대로.
-  const repoKey = (g: RepoGroup<SessionRow, any>) => (g.key === OUTSIDE_KEY ? OUTSIDE_KEY : g.root || g.key);
-  const repoCollapsed = (g: RepoGroup<SessionRow, any>) => prefs().view.groupsCollapsed.includes('repo:' + repoKey(g));
-  const endedOpen = (g: RepoGroup<SessionRow, any>) => prefs().view.groupsCollapsed.includes('ended:' + repoKey(g));
+  const repoKey = (g: RepoGroup<SessionRow>) => (g.key === OUTSIDE_KEY ? OUTSIDE_KEY : g.root || g.key);
+  const repoCollapsed = (g: RepoGroup<SessionRow>) => prefs().view.groupsCollapsed.includes('repo:' + repoKey(g));
+  const endedOpen = (g: RepoGroup<SessionRow>) => prefs().view.groupsCollapsed.includes('ended:' + repoKey(g));
   const toggleView = (id: string) => setPref(VIEW_KEY, encodeRailView({ ...prefs().view, groupsCollapsed: toggleGroupCollapsed(prefs().view.groupsCollapsed, id) }));
   // 접힌 띠(48px)의 칸 순서 — 개입 필요가 위, 나머지는 펼친 가지와 같은 순서.
   const compact = createMemo(() => {
@@ -671,19 +667,13 @@ export function Rail(props: RailProps) {
                     onNew={viewHostOffline() ? undefined : (root) => {
                       (props.deps.getAction('session.create-in') as ((cwd: string) => void) | undefined)?.(root);
                     }}
-                    hasEnded={group().ended.length > 0}
-                    ended={() => <EndedFold sessions={group().ended} open={endedOpen(group())}
-                      onToggle={() => toggleView('ended:' + repoKey(group()))} onChanged={() => { catalogPoll.kick(); }} />}
+                    hasEnded={viewHostId === LOCAL_HOST && group().endedCount > 0}
+                    ended={() => <ProjectEnded projectId={group().key} count={group().endedCount} latest={group().lastActivity}
+                      open={endedOpen(group())} onToggle={() => toggleView('ended:' + repoKey(group()))} />}
                   />
                 )}
               </Show>
             )}</For>
-            {/* 카탈로그 한 쪽(200개) 밖의 오래된 종료 세션 — 더 불러오면 각 저장소의 「종료 N」에 붙는다. */}
-            <Show when={viewHostId === LOCAL_HOST && catalog()?.next}>
-              <button type="button" class="vt-catalog-more-link" onClick={() => { void refreshCatalog(true).catch(() => {}); }}>
-                {t('종료 세션 더 불러오기')}
-              </button>
-            </Show>
           </Show>
           {/* 보관함 한 줄. 카탈로그가 없는 옛 호스트는 위의 실행 중 목록만 남는다. */}
           <Show when={!collapsed() && !archiveOpen() && catalog()}>

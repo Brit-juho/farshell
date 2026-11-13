@@ -165,6 +165,8 @@
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-cvr.on { background:var(--color-acc-soft); color:var(--color-txt); }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-cvr .vt-rg-nm { flex:1; }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-cvn { margin-top:6px; font-size:var(--fs-xs); line-height:1.45; color:var(--color-muted); }
+/* 「종료 N」 대화 목록을 받는 중·빈 목록 한 줄(ProjectEnded.tsx) — 칸 줄기 오른쪽에 맞춘다. */
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg-note { padding:4px 12px 6px 44px; font-size:var(--fs-xs); color:var(--color-muted); }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-record { margin-top:6px; }
 
 /* 보관함(ArchiveView) — 검색 상자와 저장소(루트 폴더) 칩. */

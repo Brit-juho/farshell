@@ -76,3 +76,12 @@ export function mountRepoBranch(root: HTMLElement, group: any, opts: { collapsed
   ), root);
   return { setGroup };
 }
+
+// 저장소 2차 — 「종료 N」의 대화 칸과 접기(ProjectEnded.tsx).
+import { ConversationItem, ProjectEnded } from '../../js/shell/ProjectEnded.js';
+export function mountConversationItem(root: HTMLElement, props: Parameters<typeof ConversationItem>[0]) {
+  return render(() => <ConversationItem {...props} />, root);
+}
+export function mountProjectEnded(root: HTMLElement, props: Parameters<typeof ProjectEnded>[0]) {
+  return render(() => <ProjectEnded {...props} />, root);
+}

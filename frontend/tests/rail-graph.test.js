@@ -13,12 +13,12 @@ const row = (over) => ({
   since: null, tool: null, kind: null, badge: null, diffFiles: null, origin: 'local', viewLabel: null,
   otherScreens: 0, otherClients: 0, ...over,
 });
-const home = (name, root, id = 'p-' + name) => ({ project_id: id, root, name, repository: true, kind: 'checkout', path: root });
+const home = (name, root, id = 'p-' + name, over = {}) => ({ project_id: id, root, name, repository: true, kind: 'checkout', path: root, registered: true, hidden: false, ...over });
 const ctx = (root, linked, repositoryRoot) => ({ status: 'ready', root, worktree: { kind: linked ? 'linked' : 'main', repositoryRoot } });
 const names = (xs) => Array.from(xs, (r) => r.name);
 const plain = (v) => JSON.parse(JSON.stringify(v));   // vm 컨텍스트 객체를 이 쪽 값으로
 
-test('세션은 카탈로그 자리(home)의 저장소 밑으로 — cd해서 다른 저장소에 있어도 옮겨 가지 않는다', async () => {
+test('세션은 서버가 정한 자리(home — CLI 위치 또는 셸 위치)의 저장소 밑으로', async () => {
   const m = await mod();
   const tree = m.buildRepoTree({ rows: [
     row({ name: 'a', home: home('farshell', '/r/farshell'), context: ctx('/r/other', false, '/r/other') }),
@@ -51,18 +51,22 @@ test('머리 브랜치 — /api/repos가 먼저, 없으면 메인 작업 트리�
   const withMain = [...rows, row({ name: 'main', branch: 'dev', home: home('farshell', '/r/farshell'), context: ctx('/r/farshell', false, '/r/farshell') })];
   assert.strictEqual(m.buildRepoTree({ rows: withMain })[0].mainBranch, 'dev');
   assert.strictEqual(m.buildRepoTree({ rows: withMain, mainBranches: new Map([['/r/farshell', 'master']]) })[0].mainBranch, 'master');
-  const fresh = m.buildRepoTree({ rows: [row({ name: 'n', branch: 'feat/auth', context: ctx('/r/acme', false, '/r/acme') })] });
-  assert.strictEqual(fresh[0].mainBranch, 'feat/auth');
+  const listed = m.buildRepoTree({ rows: [], projects: [{ id: 'A', name: 'acme', path: '/r/acme', kind: 'git', branch: 'feat/auth' }] });
+  assert.strictEqual(listed[0].mainBranch, 'feat/auth', '저장소 목록의 브랜치가 먼저');
 });
 
-test('자리가 아직 없으면 지금 위치의 저장소, 그것도 없으면 「저장소 밖」(맨 아래)', async () => {
+test('목록의 저장소가 아니면(자리 모름·셸로 들어간 미등록 저장소·숨김) 「저장소 밖」(맨 아래)', async () => {
   const m = await mod();
   const tree = m.buildRepoTree({ rows: [
     row({ name: 'tmp' }),
-    row({ name: 'new', context: ctx('/r/acme', false, '/r/acme') }),
+    row({ name: 'new', context: ctx('/r/acme', false, '/r/acme'), cwd: '/r/acme' }),
+    row({ name: 'unreg', home: home('acme', '/r/acme', 'A', { registered: false }), cwd: '/r/acme' }),
+    row({ name: 'hid', home: home('beta', '/r/beta', 'B', { hidden: true }), cwd: '/r/beta' }),
+    row({ name: 'ok', home: home('gamma', '/r/gamma') }),
   ] });
-  assert.deepStrictEqual(plain(tree.map((g) => [g.name, g.repository])), [['acme', true], ['', false]]);
+  assert.deepStrictEqual(plain(tree.map((g) => [g.name, g.repository])), [['gamma', true], ['', false]]);
   assert.strictEqual(tree[1].key, m.OUTSIDE_KEY);
+  assert.deepStrictEqual(names(tree[1].lanes.flatMap((l) => l.sessions.map((s) => s.row))).sort(), ['hid', 'new', 'tmp', 'unreg']);
 });
 
 test('저장소 밖 — 지금 폴더별 가지로 묶고(같은 폴더는 한 가지), 폴더를 모르면 가지 없이', async () => {
@@ -72,22 +76,22 @@ test('저장소 밖 — 지금 폴더별 가지로 묶고(같은 폴더는 한 �
     row({ name: 'b', cwd: '/Users/me/Downloads/scratch/' }),
     row({ name: 'c', cwd: '/Users/me' }),
     row({ name: 'd' }),
-    row({ name: 'r', cwd: '/r/acme', context: ctx('/r/acme', false, '/r/acme') }),
+    row({ name: 'r', cwd: '/r/acme', home: home('acme', '/r/acme') }),
   ] });
   const out = tree.find((g) => g.key === m.OUTSIDE_KEY);
   const lanes = out.lanes.map((l) => [l.worktree ? l.worktree.folder : null, names(l.sessions.map((s) => s.row)).sort()]);
   assert.deepStrictEqual(plain(lanes.sort((x, y) => String(x[0]).localeCompare(String(y[0])))),
     [['/Users/me', ['c']], ['/Users/me/Downloads/scratch', ['a', 'b']], [null, ['d']]]);
   const acme = tree.find((g) => g.name === 'acme');
-  assert.strictEqual(acme.lanes[0].worktree, null, '저장소 안 세션은 폴더 가지를 만들지 않는다');
+  assert.strictEqual(acme.lanes[0].worktree, null, '목록의 저장소 안 세션은 폴더 가지를 만들지 않는다');
 });
 
 test('저장소 밖 폴더 가지 — 머리는 폴더 아이콘과 ~로 줄인 경로, 전체 경로는 툴팁', async () => {
   const m = await mod();
   const root = m.document.createElement('div');
   m.document.body.appendChild(root);
-  m.mountRepoBranch(root, { key: m.OUTSIDE_KEY, name: '', repository: false, root: null, mainBranch: null, count: 1, attention: false,
-    lastActivity: 0, ended: [], lanes: [{ worktree: { key: 'dir:/Users/me/Downloads/scratch', name: 'scratch', branch: null, folder: '/Users/me/Downloads/scratch' },
+  m.mountRepoBranch(root, { key: m.OUTSIDE_KEY, name: '', repository: false, kind: null, root: null, mainBranch: null, count: 1, attention: false,
+    lastActivity: 0, endedCount: 0, registered: 0, lanes: [{ worktree: { key: 'dir:/Users/me/Downloads/scratch', name: 'scratch', branch: null, folder: '/Users/me/Downloads/scratch' },
       sessions: [{ row: row({ name: 'notes', cwd: '/Users/me/Downloads/scratch' }), kids: [] }] }] });
   const head = root.querySelector('.vt-rg-dir');
   assert.ok(head);
@@ -98,18 +102,28 @@ test('저장소 밖 폴더 가지 — 머리는 폴더 아이콘과 ~로 줄인 
   assert.ok(!/워크트리/.test(head.textContent));
 });
 
-test('정렬 — 입력 대기가 있는 저장소가 먼저, 그다음 최근 활동, 저장소 안도 최근 활동순', async () => {
+test('정렬 — 기본은 생성된 순(저장소 등록순·세션 만든 순, 최근 것 먼저), 입력 대기 먼저는 끔', async () => {
   const m = await mod();
-  const act = { a1: 100, a2: 300, b1: 200 };
-  const tree = m.buildRepoTree({
-    rows: [
-      row({ name: 'a1', home: home('alpha', '/r/a') }), row({ name: 'a2', home: home('alpha', '/r/a') }),
-      row({ name: 'b1', home: home('beta', '/r/b') }), row({ name: 'c1', status: 'waiting', home: home('gamma', '/r/c') }),
-    ],
-    activityOf: (r) => act[r.name] || 0,
-  });
-  assert.deepStrictEqual(plain(tree.map((g) => g.name)), ['gamma', 'alpha', 'beta']);
-  assert.deepStrictEqual(names(tree[1].lanes[0].sessions.map((s) => s.row)), ['a2', 'a1']);
+  const rows = [
+    row({ name: 'a1', created: 10, home: home('alpha', '/r/a', 'A') }), row({ name: 'a2', created: 30, home: home('alpha', '/r/a', 'A') }),
+    row({ name: 'b1', created: 20, home: home('beta', '/r/b', 'B') }),
+    row({ name: 'c1', created: 5, status: 'waiting', home: home('gamma', '/r/c', 'C') }),
+  ];
+  const projects = [{ id: 'A', name: 'alpha', path: '/r/a', kind: 'git', registered: 300, last_activity: 1 },
+    { id: 'B', name: 'beta', path: '/r/b', kind: 'git', registered: 100, last_activity: 9 },
+    { id: 'C', name: 'gamma', path: '/r/c', kind: 'directory', registered: 200, last_activity: 5 }];
+  const tree = m.buildRepoTree({ rows, projects });
+  assert.deepStrictEqual(plain(tree.map((g) => g.name)), ['alpha', 'gamma', 'beta'], '등록순(최근 등록 먼저) — 입력 대기도 순서를 바꾸지 않는다');
+  assert.deepStrictEqual(names(tree[0].lanes[0].sessions.map((s) => s.row)), ['a2', 'a1'], '만든 순(최근 것 먼저)');
+  assert.strictEqual(tree[1].kind, 'directory');
+  const byName = m.buildRepoTree({ rows, projects, sort: { repos: 'name', sessions: 'name', waitingFirst: false } });
+  assert.deepStrictEqual(plain(byName.map((g) => g.name)), ['alpha', 'beta', 'gamma']);
+  assert.deepStrictEqual(names(byName[0].lanes[0].sessions.map((s) => s.row)), ['a1', 'a2']);
+  const act = m.buildRepoTree({ rows, projects, sort: { repos: 'activity', sessions: 'activity', waitingFirst: false }, activityOf: (r) => ({ a1: 2, a2: 1 })[r.name] || 0 });
+  assert.deepStrictEqual(plain(act.map((g) => g.name)), ['beta', 'gamma', 'alpha']);
+  assert.deepStrictEqual(names(act[2].lanes[0].sessions.map((s) => s.row)), ['a1', 'a2']);
+  const wait = m.buildRepoTree({ rows, projects, sort: { repos: 'registered', sessions: 'created', waitingFirst: true } });
+  assert.strictEqual(wait[0].name, 'gamma', '입력 대기 먼저를 켜면 맨 위');
 });
 
 test('위임 하위 세션은 부모 밑(만든 순서), 부모가 목록에 없으면 최상위로', async () => {
@@ -154,31 +168,14 @@ test('여러 단계 위임 — 손자도 최상위 세션 밑에 깊이 우선�
   assert.strictEqual(tree[0].count, 8);
 });
 
-test('종료(보관 안 함)는 카탈로그 자리의 저장소 「종료 N」으로, 실행 중으로 그려진 것·보관된 것은 빠진다', async () => {
+test('저장소 목록에서 묶음이 생긴다 — 세션이 없어도 남고, 「종료 N」은 끝난 대화 수', async () => {
   const m = await mod();
   const tree = m.buildRepoTree({
     rows: [row({ name: 'live', home: home('farshell', '/r/farshell', 'P') })],
-    ended: [
-      { id: 'e1', workspace_id: 'W', ended: 10, last_activity: 50 },
-      { id: 'e2', workspace_id: 'W', ended: 10, last_activity: 90 },
-      { id: 'e3', workspace_id: 'W', ended: 10, archived: 5 },
-      { id: 'e4', workspace_id: null, ended: 10 },
-      { id: 'run', workspace_id: 'W', ended: null },
-    ],
-    workspaces: [{ id: 'W', project_id: 'P' }],
-    projects: [{ id: 'P', name: 'farshell', path: '/r/farshell', kind: 'git' }],
+    projects: [{ id: 'P', name: 'farshell', path: '/r/farshell', kind: 'git', ended_count: 12, registered: 2, last_activity: 50 },
+      { id: 'Q', name: 'notes', path: '/r/notes', kind: 'directory', ended_count: 0, registered: 1 }],
   });
-  assert.deepStrictEqual(plain(tree[0].ended.map((s) => s.id)), ['e2', 'e1'], '최근 활동순');
-  assert.deepStrictEqual(plain(tree[1].ended.map((s) => s.id)), ['e4'], '자리가 없으면 저장소 밖');
-  // 실행 중 행으로 안 그려진 끝나지 않은 기록(아직 실행 전·tmux 조회 불완전)은 「다시 확인」할 수 있게 「종료 N」 쪽에 남는다.
-  const stuck = m.buildRepoTree({
-    rows: [],
-    ended: [{ id: 'run', workspace_id: 'W', ended: null, runtime_id: 'r1', last_activity: 5 }, { id: 'drawn', workspace_id: 'W', ended: null, runtime_id: 'r2' }],
-    workspaces: [{ id: 'W', project_id: 'P' }],
-    projects: [{ id: 'P', name: 'farshell', path: '/r/farshell', kind: 'git' }],
-    isLive: (s) => s.id === 'drawn',
-  });
-  assert.deepStrictEqual(plain(stuck[0].ended.map((s) => s.id)), ['run']);
+  assert.deepStrictEqual(plain(tree.map((g) => [g.name, g.count, g.endedCount, g.lanes.length])), [['farshell', 1, 12, 1], ['notes', 0, 0, 0]]);
 });
 
 test('nodeLine — 「유휴」 없이 할 말이 있을 때만: 대기 유형 · 도구 요약 · 끝남(확인 안 함) · 마지막 지시', async () => {
@@ -204,7 +201,9 @@ test('normalizeHome — 모양이 다르면 없는 것으로', async () => {
   assert.strictEqual(m.normalizeHome(null), null);
   assert.strictEqual(m.normalizeHome({ project_id: 1, root: '/r', name: 'x' }), null);
   assert.deepStrictEqual({ ...m.normalizeHome({ project_id: 'p', root: '/r', name: 'x', repository: true }) },
-    { project_id: 'p', root: '/r', name: 'x', repository: true, workspace_id: undefined, kind: undefined, path: undefined });
+    { project_id: 'p', root: '/r', name: 'x', repository: true, workspace_id: undefined, kind: undefined, path: undefined, registered: true, hidden: false },
+    '옛 서버(등록 칸 없음)는 git 저장소를 등록된 것으로 본다');
+  assert.strictEqual(m.normalizeHome({ project_id: 'p', root: '/r', name: 'x', repository: true, registered: false }).registered, false);
 });
 
 test('가지선 — 마지막 세션은 마디에서 멈추고, 워크트리 가지는 x=35, 줄기는 뒤에 더 있을 때만', async () => {
@@ -332,4 +331,16 @@ test('종료 칸 — 칸은 버튼이 아니고, 펼치기·이어서·메뉴가
   assert.ok(!toggle.querySelector('button'), '버튼 안에 버튼이 없다');
   assert.ok(er.querySelector('button.vt-rg-rs'), '「이어서」는 늘 보인다');
   assert.ok(er.querySelector('button.vt-rg-more'));
+});
+
+test('입력 대기 먼저 — 대기 세션이 있는 워크트리 가지가 메인 가지보다 위로', async () => {
+  const m = await mod();
+  const rows = [
+    row({ name: 'main', created: 9, home: home('farshell', '/r/f', 'P'), context: ctx('/r/f', false, '/r/f') }),
+    row({ name: 'wt', created: 1, status: 'waiting', branch: 'fix/x', home: home('farshell', '/r/f', 'P'), context: ctx('/r/f-wt', true, '/r/f') }),
+  ];
+  const off = m.buildRepoTree({ rows });
+  assert.strictEqual(off[0].lanes[0].worktree, null, '끄면 메인 가지가 먼저');
+  const on = m.buildRepoTree({ rows, sort: { repos: 'registered', sessions: 'created', waitingFirst: true } });
+  assert.strictEqual(on[0].lanes[0].worktree.branch, 'fix/x');
 });

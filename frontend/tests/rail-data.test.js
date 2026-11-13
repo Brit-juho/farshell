@@ -384,7 +384,10 @@ test('splitRunning — 개입 필요 구역을 끄면 waiting도 실행 중에 �
 test('parseRailView — 접힘 열쇠(저장소·종료 N)만 읽는다, 옛 값(byRepo·recent 등)은 무시, 200개까지', async () => {
   const { parseRailView, encodeRailView, toggleGroupCollapsed } = await mod();
   const old = parseRailView(JSON.stringify({ byRepo: true, recent: 5, recentCollapsed: true }));
-  assert.deepStrictEqual(Object.keys(old), ['groupsCollapsed'], '저장소별로 묶기·최근 종료 설정은 없앴다');
+  assert.deepStrictEqual(Object.keys(old), ['groupsCollapsed', 'sort'], '저장소별로 묶기·최근 종료 설정은 없앴다');
+  assert.deepStrictEqual({ ...old.sort }, { repos: 'registered', sessions: 'created', waitingFirst: false }, '기본은 생성된 순');
+  assert.deepStrictEqual({ ...parseRailView(JSON.stringify({ sort: { repos: 'name', sessions: 'bogus', waitingFirst: 'x' } })).sort },
+    { repos: 'name', sessions: 'created', waitingFirst: false }, '모르는 값은 기본으로');
   assert.deepStrictEqual(Array.from(old.groupsCollapsed), []);
   assert.deepStrictEqual(Array.from(parseRailView('{').groupsCollapsed), []);
   const mixed = parseRailView(JSON.stringify({ groupsCollapsed: ['a', 1, null, '', 'b'] }));

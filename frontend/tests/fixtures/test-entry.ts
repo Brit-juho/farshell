@@ -21,7 +21,7 @@ export { ringSvg, subBadge } from '../../js/shell/compact-mark.js';
 export { logout, clearAppCache, pageAssetUrls } from '../../js/shell/app-session.js';
 export { collectSessionRows } from '../../js/shell/rail-fetch.js';
 export { mountRow, mountMenu, mountNativeChildren, mountHoverCard, mountSessionNode, mountRepoBranch } from './row-mount.js';
-export { tilesOf, mountFleetTile } from './row-mount.js';
+export { tilesOf, mountFleetTile, mountConversationItem, mountProjectEnded } from './row-mount.js';
 export { normalizeShells, shellLabel, shellCounts } from '../../js/shell/bg-shells.js';
 export {
   buildHoverCard, shortenPath, tildePath, NATIVE_MAX, KIDS_MAX, BODY_MAX_LINES,

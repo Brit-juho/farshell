@@ -10,6 +10,7 @@ import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
 import { t } from '../core/i18n.js';
 import { alertDialog, promptDialog } from '../core/dialog-lazy.js';
 import { timedFetch } from '../core/api.js';
+import { DEFAULT_SORT, type RepoSort, type SessionSort, type TreeSort } from './repo-tree.js';
 import { normalizeShells, type BgShells } from './bg-shells.js';
 
 // ── 행 모양 ────────────────────────────────────────────────────────────────
@@ -22,6 +23,8 @@ export type DoneBadge = 'question' | 'plan';
 
 export interface SessionRow {
   physicalKey?: string;
+  /** 세션을 만든 시각(초, tmux) — 「만든 순」 정렬. */
+  created?: number | null;
   catalogSessionId?: string;
   runtimeId?: string;
   subagents?: unknown;
@@ -87,6 +90,8 @@ export interface SessionRow {
 
 export interface SessionHome {
   project_id: string; workspace_id?: string; root: string; name: string; repository: boolean; kind?: string; path?: string;
+  /** 목록의 저장소(CLI를 켠 곳으로 등록됨·제거 안 됨)인가, 숨겼나 — 아니면 「저장소 밖」으로 그린다. */
+  registered?: boolean; hidden?: boolean;
 }
 
 // ── 계보(에이전트 위임) ───────────────────────────────────────────────────────
@@ -338,13 +343,25 @@ export function encodeLineagePrefs(collapsed: string[]): string {
  * 되므로 기기별이다. 예전 값(byRepo·recent·recentCollapsed·runningCollapsed)은 읽지 않는다(세션 로직 점검 단계 5·7). */
 export const VIEW_KEY = 'rail.view';
 export const GROUPS_COLLAPSED_MAX = 200;
-export interface RailView { groupsCollapsed: string[] }
+/** 정렬(저장소 2차, 설계 §3.7) — 같은 기기 설정 JSON에 칸을 더한다(새 설정 키를 만들지 않아 초기 번들에 영향 없음).
+ * 기본은 「생성된 순」: 저장소 등록순·세션 만든 순, 입력 대기 먼저는 끔 — 최근 활동순은 목록이 계속 바뀐다. */
+export interface RailView { groupsCollapsed: string[]; sort: TreeSort }
+const REPO_SORTS: RepoSort[] = ['registered', 'name', 'activity'];
+const SESSION_SORTS: SessionSort[] = ['created', 'name', 'activity'];
 export function parseRailView(v: unknown): RailView {
   const o = parseObj(v);
-  return { groupsCollapsed: parseNameList(o.groupsCollapsed).filter(Boolean).slice(0, GROUPS_COLLAPSED_MAX) };
+  const s = o.sort && typeof o.sort === 'object' && !Array.isArray(o.sort) ? o.sort as Record<string, unknown> : {};
+  return {
+    groupsCollapsed: parseNameList(o.groupsCollapsed).filter(Boolean).slice(0, GROUPS_COLLAPSED_MAX),
+    sort: {
+      repos: REPO_SORTS.includes(s.repos as RepoSort) ? s.repos as RepoSort : DEFAULT_SORT.repos,
+      sessions: SESSION_SORTS.includes(s.sessions as SessionSort) ? s.sessions as SessionSort : DEFAULT_SORT.sessions,
+      waitingFirst: typeof s.waitingFirst === 'boolean' ? s.waitingFirst : DEFAULT_SORT.waitingFirst,
+    },
+  };
 }
 export function encodeRailView(v: RailView): string {
-  return JSON.stringify({ groupsCollapsed: (v.groupsCollapsed || []).slice(-GROUPS_COLLAPSED_MAX) });
+  return JSON.stringify({ groupsCollapsed: (v.groupsCollapsed || []).slice(-GROUPS_COLLAPSED_MAX), sort: v.sort || DEFAULT_SORT });
 }
 /** 묶음 하나의 접힘을 뒤집은 새 목록. 새로 접은 것은 끝에 붙어, 자를 때 오래된 것부터 빠진다. */
 export function toggleGroupCollapsed(list: string[], id: string): string[] {

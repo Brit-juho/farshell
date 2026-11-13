@@ -23,8 +23,8 @@ import { render, Portal } from 'solid-js/web';
 import { icon } from '../ui/icons.js';
 import { shellIcon } from '../ui/icons-shell.js';
 import { t } from '../core/i18n.js';
-import { ArchiveView, ArchiveEntry, mergeCatalogPage, type CatalogSnapshot } from './ArchiveView.js';
-import { EndedItem } from './EndedFold.js';
+import { ArchiveView, ArchiveEntry, type CatalogSnapshot } from './ArchiveView.js';
+import { ConversationList } from './ProjectEnded.js';
 import { historyApi } from '../history/api.js';
 import { renameSession as renameCatalogSession, agoLabel } from '../history/session-actions.js';
 import { agentMark } from './agent-mark.js';
@@ -41,7 +41,7 @@ import {
 import {
   buildRailLists, rowMenuItems, rowSummaryDetails, runRowMenu, renameViewGroup, formatRelativeTime, nodeLine, kidLabel, type SessionRow,
 } from './rail-data.js';
-import { buildRepoTree, endedActivity, OUTSIDE_KEY, type RepoGroup } from './repo-tree.js';
+import { buildRepoTree, OUTSIDE_KEY, type RepoGroup, type ProjectLike } from './repo-tree.js';
 import { createRailPrefs } from './rail-prefs.js';
 import { onSheetKeyDown } from './sheet-keys.js';
 import { shortenPath } from './rail-hover-card.js';
@@ -129,7 +129,7 @@ export interface TileEntry {
 }
 
 /** 저장소 묶음 → 타일 순서. 메인 가지가 먼저, 워크트리 가지의 세션은 브랜치 표시, 위임 하위는 부모 바로 뒤. */
-export function tilesOf(group: RepoGroup<SessionRow, any>): TileEntry[] {
+export function tilesOf(group: RepoGroup<SessionRow>): TileEntry[] {
   const out: TileEntry[] = [];
   for (const lane of group.lanes) {
     const folder = lane.worktree?.folder || null;
@@ -244,21 +244,22 @@ function Fleet(props: { deps: FleetDeps }) {
   // (core/host-route.js, Rail.tsx와 같은 규칙). 세션 목록은 그 맥의 API에서 온다.
   const viewHostId = String((window as any).vtRelayHost?.() || LOCAL_HOST);
   const [catalog, setCatalog] = createSignal<CatalogSnapshot | null>(null);
+  // 목록의 저장소(저장소 = CLI를 켠 곳) — 세션이 없어도 묶음이 남는다. 이 맥 전용(레일과 같은 규칙).
+  const [projects, setProjects] = createSignal<ProjectLike[]>([]);
   const [archiveOpen, setArchiveOpen] = createSignal(false);
   let catalogRequest = 0;
-  // 「종료 세션 더 불러오기」로 첫 쪽(200개) 뒤를 받았는가 — 받아 둔 뒤쪽은 폴링에 버리지 않는다(레일과 같은 규칙).
-  let extraPages = false;
-  const refreshCatalog = async (more = false) => {
+  const refreshCatalog = async () => {
     if (viewHostId !== LOCAL_HOST) return;
     const request = ++catalogRequest;
     try {
-      // 보관된 세션은 보관함 화면(ArchiveView)이 따로 읽는다 — 여기는 실행 중·종료(최근 활동순).
-      const params = new URLSearchParams({ archived: 'false', limit: '200', order: 'activity' });
-      if (more && catalog()?.next) params.set('cursor', catalog()!.next!);
-      const value = await historyApi('/api/session-catalog?' + params);
+      // 실행 중 세션의 카탈로그 기록과 저장소 목록. 끝난 대화는 「종료 N」 시트가, 보관한 것은 보관함 화면이 따로 받는다.
+      const [value, list] = await Promise.all([
+        historyApi('/api/session-catalog?' + new URLSearchParams({ archived: 'false', limit: '200', order: 'activity' })),
+        historyApi('/api/session-catalog/projects').catch(() => null),
+      ]);
       if (request !== catalogRequest) return;
-      setCatalog(mergeCatalogPage(catalog(), value, more, extraPages));
-      if (more) extraPages = true;
+      setCatalog(value);
+      if (list && Array.isArray(list.projects)) setProjects(list.projects);
     } catch (e) {
       // 옛 호스트는 지금의 라이브 목록을 그대로 쓴다. 답 자체가 없던 실패만 폴러에 알린다.
       if (isNoResponse(e)) throw e;
@@ -386,16 +387,14 @@ function Fleet(props: { deps: FleetDeps }) {
     for (const c of catalog()?.sessions || []) if (c.physical_key && c.ended == null) m.set(c.physical_key, Number(c.last_activity) || 0);
     return m;
   });
-  const tree = createMemo<RepoGroup<SessionRow, any>[]>(() => buildRepoTree({
+  const tree = createMemo<RepoGroup<SessionRow>[]>(() => buildRepoTree({
     rows: lists().sessions,
-    ended: viewHostId === LOCAL_HOST ? catalog()?.sessions || [] : [],
-    workspaces: catalog()?.workspaces || [],
-    projects: catalog()?.projects || [],
+    projects: viewHostId === LOCAL_HOST ? projects() : [],
     mainBranches: mainBranches(),
     activityOf: (r) => (r.physicalKey && activityByKey().get(r.physicalKey)) || Number(r.since || 0),
-    isLive: (c: any) => c.ended == null && !!c.runtime_id && rows().some((r) => r.tmuxName === c.tmux_name && r.physicalKey === c.physical_key),
+    sort: prefs().view.sort,
   }));
-  // 「종료 N」 타일을 누르면 그 저장소의 종료 세션 시트(열쇠 = 저장소 묶음 key).
+  // 「종료 N」 타일을 누르면 그 저장소의 끝난 대화 시트(열쇠 = 저장소 묶음 key).
   // 닫으면 누른 「종료 N」 타일로 포커스를 돌려준다(꾹 눌러 메뉴 시트와 같은 규칙, 아래 openMenu).
   const [endedSheet, setEndedSheet] = createSignal<string | null>(null);
   const endedGroup = () => tree().find((g) => g.key === endedSheet()) || null;
@@ -406,7 +405,7 @@ function Fleet(props: { deps: FleetDeps }) {
     setEndedSheet(null);
     const back = endedReturn; endedReturn = null;
     queueMicrotask(() => {
-      // 그 사이 「종료 N」 타일이 사라졌으면(마지막 종료 세션을 보관·이어서 시작) 같은 저장소 구역, 그것도 없으면 목록으로.
+      // 그 사이 「종료 N」 타일이 사라졌으면(마지막 대화를 보관·저장소를 숨김) 같은 저장소 구역, 그것도 없으면 목록으로.
       const section = key ? Array.from(document.querySelectorAll<HTMLElement>('#vt-fleet .vt-fleet-repo')).find((x) => x.dataset.repo === key) : undefined;
       const target = back?.isConnected ? back
         : section?.querySelector<HTMLElement>('.vt-tile, .vt-fleet-repo-new')
@@ -414,7 +413,7 @@ function Fleet(props: { deps: FleetDeps }) {
       target?.focus();
     });
   };
-  // 폴링으로 그 저장소의 종료 세션이 모두 사라지면 시트가 저절로 없어진다 — 그때도 닫기와 같은 길로 포커스를 돌려준다.
+  // 폴링으로 그 저장소가 목록에서 사라지면(숨김·제거) 시트가 저절로 없어진다 — 그때도 닫기와 같은 길로 포커스를 돌려준다.
   createEffect(() => { if (endedSheet() && !endedGroup()) closeEnded(); });
 
   const openRow = async (row: SessionRow) => {
@@ -586,12 +585,12 @@ function Fleet(props: { deps: FleetDeps }) {
                         onLongPress={() => openMenu(e().row)} onSeen={() => seenRow(e().row)} />}
                     </Show>
                   )}</For>
-                  <Show when={g().ended.length > 0}>
+                  <Show when={viewHostId === LOCAL_HOST && g().endedCount > 0}>
                     <button type="button" class="vt-tile end" onClick={() => openEnded(g().key)}
-                      aria-label={t('{name}의 종료 세션 {n}', { name: g().repository ? g().name : t('저장소 밖'), n: g().ended.length })}>
+                      aria-label={t('{name}의 끝난 대화 {n}', { name: g().name, n: g().endedCount })}>
                       <span class="vt-tile-hol" aria-hidden="true" />
-                      <b class="vt-tile-name">{t('종료 {n}', { n: g().ended.length })}</b>
-                      <span class="vt-tile-line">{t('마지막 {ago}', { ago: agoLabel(endedActivity(g().ended[0])) })}</span>
+                      <b class="vt-tile-name">{t('종료 {n}', { n: g().endedCount })}</b>
+                      <Show when={g().lastActivity}><span class="vt-tile-line">{t('마지막 {ago}', { ago: agoLabel(g().lastActivity) })}</span></Show>
                     </button>
                   </Show>
                 </div>
@@ -599,12 +598,6 @@ function Fleet(props: { deps: FleetDeps }) {
             )}
           </Show>
         )}</For>
-        {/* 카탈로그 한 쪽(200개) 밖의 오래된 종료 세션 — 더 불러오면 각 저장소의 「종료 N」에 붙는다. */}
-        <Show when={viewHostId === LOCAL_HOST && catalog()?.next}>
-          <button type="button" class="vt-catalog-more-link" onClick={() => { void refreshCatalog(true).catch(() => {}); }}>
-            {t('종료 세션 더 불러오기')}
-          </button>
-        </Show>
         <Show when={catalog()}>
           {(data) => <ArchiveEntry count={data().archived_count ?? 0} onOpen={() => setArchiveOpen(true)} />}
         </Show>
@@ -616,22 +609,18 @@ function Fleet(props: { deps: FleetDeps }) {
             onChanged={() => { catalogPoll.kick(); }} />
         </div>
       </Show>
-      {/* 「종료 N」 시트 — 그 저장소의 종료 세션. 「이어서」가 늘 보이고, 누르면 연결된 대화·이어서 시작 미리보기. */}
+      {/* 「종료 N」 시트 — 그 저장소의 끝난 대화. 「이어서」가 늘 보이고, 칸을 누르면 이어서 열 곳 미리보기와 「대화 보기」. */}
       <Show when={endedGroup()}>
         {(g) => (
           <Portal>
             <div class="vt-session-backdrop vt-fleet-menu-backdrop" onClick={closeEnded}>
               <div class="vt-session-sheet vt-fleet-menu-sheet vt-rg-scope vt-fleet-ended-sheet" role="dialog" aria-modal="true"
-                aria-label={t('종료 {n}', { n: g().ended.length })} onClick={(e) => e.stopPropagation()}
+                aria-label={t('종료 {n}', { n: g().endedCount })} onClick={(e) => e.stopPropagation()}
                 ref={(el) => { queueMicrotask(() => el.querySelector<HTMLElement>('button')?.focus()); }}
                 onKeyDown={(e) => { onSheetKeyDown(e, e.currentTarget, closeEnded); }}>
-                <div class="vt-session-head"><h2>{g().repository ? g().name : t('저장소 밖')} · {t('종료 {n}', { n: g().ended.length })}</h2></div>
+                <div class="vt-session-head"><h2>{g().name} · {t('종료 {n}', { n: g().endedCount })}</h2></div>
                 <div class="vt-session-list">
-                  <For each={g().ended.map((x: any) => x.id)}>{(id, i) => (
-                    <Show when={g().ended.find((x: any) => x.id === id)}>
-                      {(x) => <EndedItem session={x()} last={i() === g().ended.length - 1} onChanged={() => { catalogPoll.kick(); }} />}
-                    </Show>
-                  )}</For>
+                  <ConversationList params={{ project: g().key }} reloadKey={g().endedCount} lastLine />
                 </div>
                 <div class="vt-session-footer">
                   <button type="button" class="vt-menu-item vt-session-footer-item" onClick={closeEnded}>{t('닫기')}</button>
