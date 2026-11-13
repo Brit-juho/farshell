@@ -92,7 +92,9 @@ test('저장소 밖 폴더 가지 — 머리는 폴더 아이콘과 ~로 줄인 
   const head = root.querySelector('.vt-rg-dir');
   assert.ok(head);
   assert.strictEqual(head.querySelector('.vt-rg-path').textContent, '~/Downloads/scratch');
-  assert.strictEqual(head.getAttribute('data-tip'), '~/Downloads/scratch');
+  assert.strictEqual(head.getAttribute('data-tip'), '/Users/me/Downloads/scratch', '툴팁은 줄이지 않은 절대 경로');
+  // 마지막 가지(뒤에 가지·종료가 없음)의 머리는 줄기를 아래로 잇지 않는다.
+  assert.ok(!/y2="100%"/.test(head.querySelector('svg').innerHTML.split('<path')[0]), head.querySelector('svg').innerHTML);
   assert.ok(!/워크트리/.test(head.textContent));
 });
 

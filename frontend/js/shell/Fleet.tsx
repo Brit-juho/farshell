@@ -44,7 +44,7 @@ import {
 import { buildRepoTree, endedActivity, OUTSIDE_KEY, type RepoGroup } from './repo-tree.js';
 import { createRailPrefs } from './rail-prefs.js';
 import { onSheetKeyDown } from './sheet-keys.js';
-import { shortenPath, tildePath } from './rail-hover-card.js';
+import { shortenPath } from './rail-hover-card.js';
 import { MenuSummary, ShareMark, ShellsMark, ROW_MENU_ICON } from './RailRow.js';
 import {
   buildHostMenu, hostDetail, LOCAL_HOST,
@@ -212,7 +212,7 @@ export function FleetTile(props: {
       </Show>
       {/* 저장소 밖 세션 — 지금 폴더(홈은 ~, 길면 가운데 줄임). 저장소가 없으니 이 줄이 위치다. */}
       <Show when={!props.entry.parent && props.entry.folder}>
-        {(f) => <span class="vt-tile-wt vt-tile-dir" title={tildePath(f())}><span innerHTML={shellIcon('folder', 11, 2)} /><span class="vt-tile-wt-name">{shortenPath(f(), 22)}</span></span>}
+        {(f) => <span class="vt-tile-wt vt-tile-dir" title={f()}><span innerHTML={shellIcon('folder', 11, 2)} /><span class="vt-tile-wt-name">{shortenPath(f(), 22)}</span></span>}
       </Show>
     </div>
   );

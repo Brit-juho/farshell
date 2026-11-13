@@ -16,7 +16,7 @@ import { shellIcon } from '../ui/icons-shell.js';
 import type { RepoGroup, Lane } from './repo-tree.js';
 import type { SessionRow } from './rail-data.js';
 import { SessionNode, KidNode } from './SessionNode.js';
-import { shortenPath, tildePath } from './rail-hover-card.js';
+import { shortenPath } from './rail-hover-card.js';
 
 export const X1 = 21;
 export const X2 = 35;
@@ -122,16 +122,16 @@ function LaneView(props: RepoBranchProps & { lane: Lane<SessionRow>; more: boole
         {(w) => (
           <Show when={w().folder} fallback={
             <div class="vt-rg-row vt-rg-wt" data-tip={w().key} data-tip-side="right">
-              <span class="vt-rg-gut"><svg class="vt-rg-ln" aria-hidden="true" innerHTML={worktreeLines(true)} /></span>
+              <span class="vt-rg-gut"><svg class="vt-rg-ln" aria-hidden="true" innerHTML={worktreeLines(props.more)} /></span>
               <span class="vt-rg-body">
                 <span class="vt-rg-wtl">{t('워크트리')}</span>
                 <span class="vt-rg-name">{w().branch || w().name}</span>
               </span>
             </div>
           }>
-            {/* 저장소 밖의 폴더 가지 — 워크트리 가지와 같은 모양, 이름 자리에 경로(홈은 ~, 길면 가운데 줄임 · 전체는 툴팁). */}
-            <div class="vt-rg-row vt-rg-wt vt-rg-dir" data-tip={tildePath(w().folder!)} data-tip-side="right">
-              <span class="vt-rg-gut"><svg class="vt-rg-ln" aria-hidden="true" innerHTML={worktreeLines(true)} /></span>
+            {/* 저장소 밖의 폴더 가지 — 워크트리 가지와 같은 모양, 이름 자리에 경로(홈은 ~, 길면 가운데 줄임 · 툴팁은 줄이지 않은 절대 경로 — 다른 맥에서 사용자 이름이 달라도 구별된다). */}
+            <div class="vt-rg-row vt-rg-wt vt-rg-dir" data-tip={w().folder!} data-tip-side="right">
+              <span class="vt-rg-gut"><svg class="vt-rg-ln" aria-hidden="true" innerHTML={worktreeLines(props.more)} /></span>
               <span class="vt-rg-body">
                 <span class="vt-rg-dirico" innerHTML={shellIcon('folder', 12, 2)} />
                 <span class="vt-rg-name vt-rg-path">{shortenPath(w().folder!, 34)}</span>
