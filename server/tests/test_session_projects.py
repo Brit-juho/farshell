@@ -335,3 +335,121 @@ def test_huge_numbers_are_not_times():
     from session_catalog import placement
     assert placement._num(10 ** 309) is None and placement._num(float("nan")) is None and placement._num(True) is None
     assert placement._num(5) == 5.0
+
+
+# --- P4: 저장소·대화 목록 API(projects_view) -------------------------------------------------------------
+
+def _view(monkeypatch, running=()):
+    from session_catalog import projects_view
+    monkeypatch.setattr(projects_view, "_running_native_ids", lambda: set(running))
+    return projects_view
+
+
+def _native(cid):
+    from session_catalog.db import database
+    with database() as db:
+        return db.execute("SELECT native_id FROM conversations WHERE id=?", (cid,)).fetchone()[0]
+
+
+def test_project_list_shows_registered_projects_with_ended_counts(catalog, monkeypatch):
+    a, b = _repo(catalog / "a"), _repo(catalog / "b")
+    live = conv(cwd=a)
+    conv(cwd=a)
+    conv(cwd=b)
+    place()
+    view = _view(monkeypatch, running={_native(live)})
+    got = {p["name"]: p for p in view.project_list()["projects"]}
+    assert got["a"]["ended_count"] == 1, "돌고 있는 대화는 「종료 N」에 넣지 않는다"
+    assert got["b"]["ended_count"] == 1 and got["a"]["kind"] == "git"
+    view.update_project(got["b"]["id"], {"hidden": True})
+    assert [p["name"] for p in view.project_list()["projects"]] == ["a"]
+    assert {p["name"] for p in view.project_list(include_hidden=True)["projects"]} == {"a", "b"}
+    view.update_project(got["a"]["id"], {"removed": True})
+    assert view.project_list(include_hidden=True)["projects"][0]["name"] == "b", "제거한 저장소는 설정에도 없다"
+
+
+def test_conversation_list_pages_by_activity_and_searches(catalog, monkeypatch):
+    from session_catalog.db import database
+    a = _repo(catalog / "a")
+    t = time.time() - 100
+    ids = [conv(cwd=a, detail={"launch": "cli", "started": t + i, "last": t + 10 + i}) for i in range(5)]
+    place()
+    with database(write=True) as db:
+        db.execute("INSERT INTO conversation_local(conversation_id,last_user_text,user_message_count,updated) VALUES(?,?,?,?)",
+                   (ids[1], "결제 버그 고쳐줘", 3, 0))
+    view = _view(monkeypatch)
+    pid = view.project_list()["projects"][0]["id"]
+    first = view.conversation_list(project=pid, limit=2)
+    assert [c["id"] for c in first["conversations"]] == [ids[4], ids[3]] and first["next"]
+    second = view.conversation_list(project=pid, limit=2, cursor=first["next"])
+    assert [c["id"] for c in second["conversations"]] == [ids[2], ids[1]]
+    hit = view.conversation_list(q="결제")["conversations"]
+    assert [c["id"] for c in hit] == [ids[1]] and hit[0]["user_message_count"] == 3
+    assert view.conversation_list(q="100%")["conversations"] == [], "% 는 글자 그대로"
+
+
+def test_archived_conversations_have_their_own_list_and_counts(catalog, monkeypatch):
+    from session_catalog.db import database
+    a = _repo(catalog / "a")
+    keep, gone = conv(cwd=a), conv(cwd=a)
+    place()
+    with database(write=True) as db:
+        db.execute("UPDATE conversations SET archived=? WHERE id=?", (time.time(), gone))
+    view = _view(monkeypatch)
+    assert [c["id"] for c in view.conversation_list()["conversations"]] == [keep]
+    arch = view.conversation_list(archived=True)
+    assert [c["id"] for c in arch["conversations"]] == [gone] and sum(arch["project_counts"].values()) == 1
+
+
+def test_bad_arguments_are_refused(catalog, monkeypatch):
+    view = _view(monkeypatch)
+    from session_catalog.db import Refused
+    for kw in ({"limit": 0}, {"limit": 101}, {"cursor": "bad"}, {"q": "x" * 201}, {"project": "../x"}):
+        with pytest.raises(Refused):
+            view.conversation_list(**kw)
+    for value in ({}, {"hidden": "yes"}, {"removed": False}):
+        with pytest.raises(Refused):
+            view.update_project("p" * 8, value)
+
+
+def test_conversation_resume_preview_names_the_folder(catalog, monkeypatch):
+    a = _repo(catalog / "farshell")
+    cid = conv(cwd=a)
+    view = _view(monkeypatch)
+    import session_names
+    monkeypatch.setattr(session_names, "allocate", lambda base: base + "-2")
+    got = view.conversation_resume_preview(cid)
+    assert got["resumable"] and got["folder"] == "farshell" and got["name"] == "farshell-2"
+
+
+def test_project_routes_are_human_only_and_registered():
+    from authz import route_table
+    paths = {(m, p) for m, p, *_ in route_table._ROWS}
+    for row in (("GET", "/api/session-catalog/projects"), ("GET", "/api/session-catalog/conversations"),
+                ("POST", "/api/session-catalog/projects/{project_id}"),
+                ("GET", "/api/session-history/conversations/{conversation_id}/resume-preview")):
+        assert row in paths
+
+
+def test_running_conversations_are_excluded_in_sql_so_pages_stay_full(catalog, monkeypatch):
+    from session_catalog.db import database
+    a = _repo(catalog / "a")
+    t = time.time() - 100
+    live = [conv(cwd=a, detail={"launch": "cli", "started": t, "last": t + 50 + i}) for i in range(3)]
+    ended = [conv(cwd=a, detail={"launch": "cli", "started": t, "last": t + i}) for i in range(2)]
+    with database(write=True) as db:   # 같은 대화 id가 여러 계정(scope)에 — 파이썬에서 거르면 쪽이 짧아졌다
+        for n, cid in enumerate(live):
+            db.execute("UPDATE conversations SET native_id='same',scope=? WHERE id=?", (f"s{n}", cid))
+    place()
+    view = _view(monkeypatch, running={"same"})
+    first = view.conversation_list(limit=1)
+    second = view.conversation_list(limit=1, cursor=first["next"])
+    assert [c["id"] for c in first["conversations"] + second["conversations"]] == [ended[1], ended[0]]
+
+
+def test_resume_preview_is_not_resumable_for_a_missing_folder(catalog, monkeypatch):
+    import shutil
+    a = _repo(catalog / "gone")
+    cid = conv(cwd=a)
+    shutil.rmtree(a)
+    assert _view(monkeypatch).conversation_resume_preview(cid)["resumable"] is False
