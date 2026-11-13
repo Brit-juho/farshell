@@ -469,6 +469,8 @@ parent session; it lists only in-flight tasks). FarShell keeps entries whose `ty
   nothing. Hooks always send their receive time; once a mark exists an event without one is ignored, and an untimed
   `session_start` (old hook) clears the list and the mark. A child hook that the sub-agent roster rejects as stale
   can still add a shell: the shell did start at that time.
+  A parent Stop that arrives after a newer parent hook is dropped as a whole (the entry-wide rule), so its roster is
+  lost; the newer turn's own Stop brings the next roster and corrects the list.
 - An idle parent entry is not dropped by the idle sweep while it still has a running shell.
 - A new conversation (`session_start`) clears the list; `session_end` retires the whole entry. At most 32 rows (ended
   rows are evicted first, running rows never); description 200 and command 300 characters, one line. A truncated or
