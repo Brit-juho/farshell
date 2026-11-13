@@ -54,7 +54,9 @@ def project_list(include_hidden: bool = False) -> dict:
                 "SELECT w.project_id AS pid,count(*) AS n FROM conversations c JOIN workspaces w ON w.id=c.workspace_id"
                 " WHERE c.placement='placed' AND c.deleted IS NULL AND c.archived IS NULL AND c.parent_native_id IS NULL"
                 f" AND w.project_id IN ({','.join('?' * len(ids))}){not_running} GROUP BY w.project_id", (*ids, *run_args))}
-    return {'projects': [{'id': r['id'], 'name': r['name'], 'path': r['path'], 'kind': r['kind'],
+        archived = db.execute("SELECT count(*) FROM conversations c WHERE c.placement='placed' AND c.deleted IS NULL"
+                              " AND c.archived IS NOT NULL AND c.parent_native_id IS NULL").fetchone()[0]
+    return {'archived_count': archived, 'projects': [{'id': r['id'], 'name': r['name'], 'path': r['path'], 'kind': r['kind'],
                           'hidden': r['hidden'], 'registered': r['registered'], 'last_activity': r['last_activity'],
                           'branch': r['branch'], 'ended_count': counts.get(r['id'], 0)} for r in rows]}
 

@@ -43,18 +43,6 @@ export type SessionSort = 'created' | 'name' | 'activity';
 export interface TreeSort { repos: RepoSort; sessions: SessionSort; waitingFirst: boolean }
 export const DEFAULT_SORT: TreeSort = { repos: 'registered', sessions: 'created', waitingFirst: false };
 
-export interface EndedLike {
-  id: string;
-  workspace_id?: string | null;
-  last_activity?: number | null;
-  updated?: number | null;
-  ended?: number | null;
-  archived?: number | null;
-  runtime_id?: string | null;
-  tmux_name?: string | null;
-  physical_key?: string | null;
-}
-
 export interface SessionNodeEntry<R> { row: R; kids: R[] }
 export interface Lane<R> {
   /** null이면 메인 작업 트리(머리 없이 바로 세션). 저장소 밖에서는 폴더 가지(`folder`: 그 폴더의 절대 경로). */
@@ -126,11 +114,6 @@ export interface BuildInput<R> {
   /** 행의 최근 활동(카탈로그 last_activity, 초). 없으면 상태 진입 시각. */
   activityOf?: (row: R) => number;
   sort?: TreeSort;
-}
-
-/** 옛 카탈로그 세션 기록의 활동 시각(보관함 — ArchiveView). */
-export function endedActivity(s: EndedLike): number {
-  return Number(s.last_activity ?? s.ended ?? s.updated ?? 0) || 0;
 }
 
 export function buildRepoTree<R extends RepoRowLike>(inp: BuildInput<R>): RepoGroup<R>[] {

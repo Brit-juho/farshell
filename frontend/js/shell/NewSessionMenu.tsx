@@ -37,7 +37,11 @@ export interface NewSessionDeps {
   } | null;
 }
 
-export interface RepoChoice { key: string; path: string; label: string; branch: string | null; linked: boolean; sessions: number }
+export interface RepoChoice {
+  key: string; path: string; label: string; branch: string | null; linked: boolean; sessions: number;
+  /** 저장소 2차 — 아직 CLI를 켠 적 없는(목록에 없는) 저장소. 검색에서만 나오고 「처음」이 붙는다. */
+  fresh?: boolean;
+}
 
 /** /api/repos 응답 → 고를 수 있는 작업 트리. 세션이 많은(최근에 쓴) 저장소가 먼저, 메인 작업 트리가 그 저장소의 워크트리보다 먼저. */
 export function repoChoices(data: any): RepoChoice[] {
@@ -62,6 +66,23 @@ export function repoChoices(data: any): RepoChoice[] {
   });
 }
 
+/** 저장소 2차 — 「최근 저장소」는 목록의 저장소(CLI를 켠 곳, 최근 활동순)이고, 검색은 거기에 폴더 스캔 결과(/api/repos — 워크트리 포함,
+ * 아직 CLI를 안 켠 저장소는 fresh)를 더한다. 같은 경로는 한 번. */
+export function projectChoices(projectsData: any, reposData: any): { recent: RepoChoice[]; all: RepoChoice[] } {
+  const projects = (Array.isArray(projectsData?.projects) ? projectsData.projects : [])
+    .filter((p: any) => typeof p?.path === 'string' && p.path && !Number(p.hidden))
+    .sort((a: any, b: any) => (Number(b.last_activity) || 0) - (Number(a.last_activity) || 0));
+  const recent: RepoChoice[] = projects.map((p: any) => ({
+    key: 'p:' + p.id, path: p.path, label: String(p.name || p.path.split('/').pop()), branch: typeof p.branch === 'string' ? p.branch : null,
+    linked: false, sessions: 0,
+  }));
+  const known = new Set(recent.map((c) => c.path));
+  // 스캔 결과 중 목록에 없는 저장소의 메인 작업 트리는 「처음」. 목록 저장소의 워크트리(라벨 「이름 · 워크트리」)는 처음이 아니다.
+  const scanned = repoChoices(reposData).filter((c) => !known.has(c.path))
+    .map((c) => ({ ...c, fresh: c.linked ? !recent.some((r) => c.label === `${r.label} · ${t('워크트리')}`) : true }));
+  return { recent, all: [...recent, ...scanned] };
+}
+
 export function filterChoices(list: RepoChoice[], q: string): RepoChoice[] {
   const needle = q.trim().toLowerCase();
   if (!needle) return list;
@@ -72,12 +93,14 @@ const MAX_SHOWN = 8;
 
 function Menu(p: { deps: NewSessionDeps; close: () => void }) {
   const [choices, setChoices] = createSignal<RepoChoice[] | null>(null);
+  // 검색 대상(목록의 저장소 + 폴더 스캔). 없으면 choices와 같다(다른 맥·옛 서버 — 저장소 목록 API가 없다).
+  const [searchable, setSearchable] = createSignal<RepoChoice[] | null>(null);
   const [q, setQ] = createSignal('');
   const [names, setNames] = createSignal<Record<string, string>>({});
   const [error, setError] = createSignal('');
   let root: HTMLDivElement | undefined;
   let search: HTMLInputElement | undefined;
-  const shown = createMemo(() => filterChoices(choices() || [], q()).slice(0, MAX_SHOWN));
+  const shown = createMemo(() => (q().trim() ? filterChoices(searchable() || choices() || [], q()) : choices() || []).slice(0, MAX_SHOWN));
   const asked = new Set<string>();
   // 다른 맥을 보고 있으면 묻지 않는다 — 미리보기 경로는 중계 허용 목록에 넣지 않았다(이름만 비고 만들기는 된다).
   const preview = (key: string, cwd: string | null) => {
@@ -95,7 +118,18 @@ function Menu(p: { deps: NewSessionDeps; close: () => void }) {
     if (!p.deps.relayed && p.deps.accounts?.refresh) {
       p.deps.accounts.refresh().then(() => setAccountLine(p.deps.accounts?.line() ?? null)).catch(() => { /* 계정 줄은 덤이다 */ });
     }
-    p.deps.getJson('/api/repos').then((d) => setChoices(repoChoices(d))).catch((e) => { setChoices([]); setError(e?.message || ''); });
+    // 이 맥이면 「최근 저장소」 = 목록의 저장소(CLI를 켠 곳). 저장소 목록 API는 중계되지 않아 다른 맥에서는 그 맥의 폴더 스캔만 쓴다.
+    const repos = p.deps.getJson('/api/repos').catch((e) => { setError(e?.message || ''); return null; });
+    const projects = p.deps.relayed ? Promise.resolve(null) : p.deps.getJson('/api/session-catalog/projects').catch(() => null);
+    void Promise.all([projects, repos]).then(([pr, rr]) => {
+      const listed = pr ? projectChoices(pr, rr) : null;
+      if (listed && listed.recent.length) {
+        setChoices(listed.recent);
+        setSearchable(listed.all);
+      } else {
+        setChoices(repoChoices(rr));
+      }
+    });
   });
   // 보이는 저장소만 이름을 묻는다(검색으로 바뀌면 새로 보이는 것만).
   const ensureNames = () => { for (const c of shown()) preview(c.key, c.path); };
@@ -138,7 +172,8 @@ function Menu(p: { deps: NewSessionDeps; close: () => void }) {
       <Show when={(choices() || []).length > 0}>
         <div class="vt-nsm-sec">{q().trim() ? t('찾은 저장소') : t('최근 저장소')}</div>
         <For each={shown()}>{(c) => (
-          <Item iconHtml={shellIcon(c.linked ? 'git-fork' : 'folder', 15, 2)} label={c.label} sub={c.branch} mono
+          <Item iconHtml={shellIcon(c.linked ? 'git-fork' : 'folder', 15, 2)} label={c.label}
+            sub={c.fresh ? [c.branch, t('처음')].filter(Boolean).join(' · ') : c.branch} mono
             name={names()[c.key] || null} onRun={() => run(() => p.deps.createTmux({ cwd: c.path }))} />
         )}</For>
         <Show when={q().trim() && shown().length === 0}><div class="vt-nsm-note">{t('맞는 저장소가 없습니다.')}</div></Show>

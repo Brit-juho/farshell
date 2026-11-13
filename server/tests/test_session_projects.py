@@ -453,3 +453,63 @@ def test_resume_preview_is_not_resumable_for_a_missing_folder(catalog, monkeypat
     cid = conv(cwd=a)
     shutil.rmtree(a)
     assert _view(monkeypatch).conversation_resume_preview(cid)["resumable"] is False
+
+
+# --- P6: 보관함·자동 보관은 대화 단위 --------------------------------------------------------------------
+
+def test_auto_archive_archives_old_ended_conversations_but_not_running_ones(catalog, monkeypatch):
+    from session_catalog import db as catalog_db
+    from session_catalog.db import database
+    a = _repo(catalog / "a")
+    old = time.time() - 40 * 86400
+    stale = conv(cwd=a, detail={"launch": "cli", "started": old, "last": old})
+    fresh = conv(cwd=a)
+    place()
+    catalog_db.auto_archive()
+    with database() as db:
+        got = {r[0]: r[1] for r in db.execute("SELECT id,archived FROM conversations WHERE id IN (?,?)", (stale, fresh))}
+    assert got[stale] is not None and got[fresh] is None
+    view = _view(monkeypatch)
+    assert view.project_list(include_hidden=True)["archived_count"] == 1
+
+
+def test_v3_moves_archived_sessions_conversations_to_the_archive(tmp_path, monkeypatch):
+    """v2 → v3: 보관한 세션에 이어진 대화는 보관으로(보관함이 대화 단위가 된다). 보관 안 한 세션에도 이어졌으면 그대로."""
+    import sqlite3
+    from session_catalog import db as catalog_db
+    con = sqlite3.connect(":memory:")
+    con.executescript(catalog_db.DDL)
+    for stmt in catalog_db.MIGRATIONS[2]:
+        con.execute(stmt)
+    con.execute("INSERT INTO sessions(id,host,title,origin,created,updated,archived) VALUES('s1','h','t','local',1,1,500)")
+    con.execute("INSERT INTO sessions(id,host,title,origin,created,updated) VALUES('s2','h','t','local',1,1)")
+    for rid, sid in (("r1", "s1"), ("r2", "s2")):
+        con.execute("INSERT INTO runtimes(id,session_id,epoch,physical_key,name,state,started,observed,detail) VALUES(?,?,'e',?,'n','stopped',1,1,'{}')", (rid, sid, rid))
+    for cid in ("c1", "c2"):
+        con.execute("INSERT INTO conversations(id,host,provider,scope,native_id,created,updated) VALUES(?,'h','claude','s',?,1,1)", (cid, cid))
+    con.execute("INSERT INTO conversation_executions VALUES('c1','r1','p',1)")
+    con.execute("INSERT INTO conversation_executions VALUES('c2','r1','p',1)")
+    con.execute("INSERT INTO conversation_executions VALUES('c2','r2','p',1)")
+    for stmt in catalog_db.MIGRATIONS[3]:
+        con.execute(stmt)
+    got = dict(con.execute("SELECT id,archived FROM conversations"))
+    assert got == {"c1": 500, "c2": None}
+
+
+def test_auto_archive_skips_running_and_recently_unarchived_conversations(catalog, monkeypatch):
+    from session_catalog import db as catalog_db, projects_view
+    from session_catalog.db import database
+    from session_history import query
+    a = _repo(catalog / "a")
+    old = time.time() - 40 * 86400
+    run = conv(cwd=a, detail={"launch": "cli", "started": old, "last": old})
+    back = conv(cwd=a, detail={"launch": "cli", "started": old, "last": old})
+    place()
+    monkeypatch.setattr(projects_view, "_running_native_ids", lambda: {_native(run)})
+    catalog_db.auto_archive()
+    query.mutate(back, archived=False)
+    catalog_db.auto_archive()
+    with database() as db:
+        got = {r[0]: r[1] for r in db.execute("SELECT id,archived FROM conversations WHERE id IN (?,?)", (run, back))}
+    assert got[run] is None, "훅 상태로 돌고 있는 대화는 연결 기록이 없어도 보관하지 않는다"
+    assert got[back] is None, "사람이 보관을 푼 대화는 바로 다시 보관하지 않는다"

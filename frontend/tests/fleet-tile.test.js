@@ -97,20 +97,6 @@ test('폰 목록 — 저장소 묶음·「종료 N」 시트·보관함, 정렬�
   assert.match(src, /e\.key === 'Escape'\) \{ e\.preventDefault\(\); closeMenu\(\);/);
 });
 
-test('카탈로그 쪽 합치기 — 더 불러온 뒤쪽은 폴링에도 남고 커서도 유지된다', async () => {
-  const m = await mod();
-  const snap = (ids, next, acts) => ({ host: 'h', revision: 1, projects: [], workspaces: [], next, sessions: ids.map((id, i) => ({ id, last_activity: acts[i] })) });
-  const first = snap(['a', 'b'], 'c1', [90, 80]);
-  const more = m.mergeCatalogPage(first, snap(['b', 'c'], null, [80, 10]), true, false);
-  assert.deepStrictEqual(Array.from(more.sessions, (x) => x.id), ['a', 'b', 'c'], '겹친 id는 한 번');
-  assert.strictEqual(more.next, null);
-  const polled = m.mergeCatalogPage(more, snap(['n', 'a'], 'c2', [99, 90]), false, true);
-  assert.deepStrictEqual(Array.from(polled.sessions, (x) => x.id), ['n', 'a', 'b', 'c'], '첫 쪽보다 오래된 받아 둔 뒤쪽은 남는다');
-  assert.strictEqual(polled.next, null, '받아 둔 끝 자리 커서');
-  const plainPoll = m.mergeCatalogPage(more, snap(['n'], 'c3', [99]), false, false);
-  assert.deepStrictEqual(Array.from(plainPoll.sessions, (x) => x.id), ['n']);
-});
-
 test('시트 키 — Esc는 닫고, Tab은 시트 안에서 돈다', async () => {
   const m = await mod();
   const doc = m.document || globalThis.document;

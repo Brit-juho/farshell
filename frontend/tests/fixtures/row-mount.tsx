@@ -49,14 +49,14 @@ export function mountHoverCard(
 // ── 저장소 가지 그래프(세션 로직 점검 단계 5) ─────────────────────────────────
 import { SessionNode } from '../../js/shell/SessionNode.js';
 import { RepoBranch } from '../../js/shell/RepoBranch.js';
-import { EndedFold } from '../../js/shell/EndedFold.js';
+import { ConversationItem, ProjectEnded } from '../../js/shell/ProjectEnded.js';
 
 export function mountSessionNode(root: HTMLElement, props: Parameters<typeof SessionNode>[0]) {
   return render(() => <SessionNode {...props} />, root);
 }
 
 /** 저장소 묶음 하나를 그린다. calls에 열기·메뉴·접기가 쌓인다. 돌려준 setGroup으로 새 묶음 객체를 넣어 볼 수 있다. */
-export function mountRepoBranch(root: HTMLElement, group: any, opts: { collapsed?: boolean; ended?: any[]; endedOpen?: boolean; calls?: string[]; editing?: string } = {}) {
+export function mountRepoBranch(root: HTMLElement, group: any, opts: { collapsed?: boolean; endedCount?: number; endedOpen?: boolean; calls?: string[]; editing?: string } = {}) {
   const calls = opts.calls || [];
   const [g, setGroup] = createSignal<any>(group);
   render(() => (
@@ -69,8 +69,8 @@ export function mountRepoBranch(root: HTMLElement, group: any, opts: { collapsed
         nodeProps={(row) => ({ onOpen: () => calls.push('open:' + row.name), onContext: () => calls.push('menu:' + row.name),
           editing: opts.editing === row.name, editingValue: row.name, onEditCommit: () => calls.push('commit:' + row.name) })}
         kidsCollapsed={() => false}
-        hasEnded={(opts.ended || []).length > 0}
-        ended={() => <EndedFold sessions={opts.ended || []} open={!!opts.endedOpen} onToggle={() => calls.push('ended')} onChanged={() => {}} />}
+        hasEnded={(opts.endedCount || 0) > 0}
+        ended={() => <ProjectEnded projectId={group.key || 'p'} count={opts.endedCount || 0} latest={null} open={!!opts.endedOpen} onToggle={() => calls.push('ended')} />}
       />
     </div>
   ), root);
@@ -78,7 +78,6 @@ export function mountRepoBranch(root: HTMLElement, group: any, opts: { collapsed
 }
 
 // 저장소 2차 — 「종료 N」의 대화 칸과 접기(ProjectEnded.tsx).
-import { ConversationItem, ProjectEnded } from '../../js/shell/ProjectEnded.js';
 export function mountConversationItem(root: HTMLElement, props: Parameters<typeof ConversationItem>[0]) {
   return render(() => <ConversationItem {...props} />, root);
 }
