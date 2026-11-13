@@ -5,6 +5,8 @@
 import { get as setting } from '../core/settings.js';
 import { t } from '../core/i18n.js';
 import { waitForAuthentication } from '../core/auth-state.js';
+import { watchSocketLiveness } from '../core/ws-watchdog.js';
+import { retryDelay, onWake, CONNECT_TIMEOUT_MS } from '../core/ws-retry.js';
 
 const _vToken = new URLSearchParams(location.search).get('token') || '';
 const _vTokenQ = _vToken ? `?token=${_vToken}` : '';
@@ -14,6 +16,8 @@ let notifyWs = null;
 let pendingMeta = null;
 let _notifyRetries = 0;
 let _notifyStableTimer = null;
+let _notifyTimer = null;      // 재연결 타이머(WAITING)
+let _notifyStopped = false;  // 4001 — 복귀해도 다시 붙지 않는다
 
 // 로그인 화면이 떠 있는 동안은 붙지 않는다(인증 없는 접속이 사전 인증 실패로 세어진다). 재연결 타이머도 여기를 지난다.
 let _notifyWaitingAuth = false;
@@ -33,8 +37,11 @@ function _connectNotifyNow() {
   // 직후 닫는 half-open flap에서 지수 백오프가 자라지 못해 2초마다 영구 재연결한다
   // (터미널 WS와 동일한 메모리 스톰). 3초 이상 안정적으로 열린 뒤에만 리셋한다.
   notifyWs = new WebSocket(WS_NOTIFY);
+  // 열리기 전 연결 기한(10초)만 감시한다. 서버 ping이 없어 열린 뒤 침묵 감시는 하지 않는다(후속).
+  const _connGuard = watchSocketLiveness(notifyWs, { timeout: CONNECT_TIMEOUT_MS });
 
   notifyWs.onopen = () => {
+    _connGuard.stop();
     clearTimeout(_notifyStableTimer);
     _notifyStableTimer = setTimeout(() => { _notifyRetries = 0; }, 3000);
   };
@@ -76,13 +83,14 @@ function _connectNotifyNow() {
   };
 
   notifyWs.onclose = (ev) => {
+    _connGuard.stop();
     clearTimeout(_notifyStableTimer);
     // 인증 실패(4001)는 재시도해도 동일 → 재연결 중단.
-    if (ev && ev.code === 4001) { console.warn('[NOTIFY] 인증 실패 — 재연결 중단'); return; }
+    if (ev && ev.code === 4001) { _notifyStopped = true; console.warn('[NOTIFY] 인증 실패 — 재연결 중단'); return; }
     // [M2] 지수 백오프 재연결 (무한 — 지수는 5로 clamp해 오버플로 방지)
     _notifyRetries++;
-    const delay = Math.min(1000 * Math.pow(2, Math.min(_notifyRetries, 5)), 30000);
-    setTimeout(connectNotify, delay);
+    const delay = retryDelay(_notifyRetries - 1, 1000);   // 지터(core/ws-retry.js)
+    _notifyTimer = setTimeout(() => { _notifyTimer = null; connectNotify(); }, delay);
   };
 
   notifyWs.onerror = () => {
@@ -121,6 +129,15 @@ function showBrowserNotification(title, body) {
     new Notification(title, { body });
   } catch (_) { /* 알림 생성 실패는 무시 — 화면 토스트로 이미 알렸다 */ }
 }
+
+// 화면·네트워크 복귀: 재연결 타이머(최대 30초)를 기다리지 않고 바로 붙는다.
+onWake(() => {
+  if (!_notifyTimer || _notifyStopped) return;
+  clearTimeout(_notifyTimer);
+  _notifyTimer = null;
+  _notifyRetries = 0;
+  connectNotify();
+});
 
 // 알림 WebSocket 연결
 connectNotify();

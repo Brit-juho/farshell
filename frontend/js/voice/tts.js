@@ -2,6 +2,7 @@
 import { vtFetch } from '../core/api.js';
 import { screenId } from '../core/screen-id.js';
 import { t } from '../core/i18n.js';
+import { retryDelay } from '../core/ws-retry.js';
 let socket = null;
 let generation = '';
 let current = null;
@@ -132,7 +133,7 @@ function connect() {
     generation = ''; _stopCurrentTTS();
     if (ev.code === 4001 || ev.code === 4000) return;
     clearTimeout(reconnect);
-    reconnect = setTimeout(connect, Math.min(30000, 1000 * 2 ** Math.min(++retries, 5)));
+    reconnect = setTimeout(connect, retryDelay(retries++, 1000));   // 지터만(core/ws-retry.js). 4000은 '새 연결로 교체됨'이라 워치독·복귀 재연결 대상이 아니다
   };
   socket.onerror = () => socket.close();
 }

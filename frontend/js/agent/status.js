@@ -15,6 +15,7 @@ import { showToast } from '../ui/toast.js';
 import { t } from '../core/i18n.js';
 import { createPoll } from '../core/poll.js';
 import { watchSocketLiveness } from '../core/ws-watchdog.js';
+import { retryDelay, onWake, CONNECT_TIMEOUT_MS } from '../core/ws-retry.js';
 
 // 로그인 게이트가 실제로 걷히기 전까지 기다린다 — index.html의 hideGate()가
 // window.__vtAuthed=true + 'vt:authed' 이벤트로 신호를 준다. 이게 없으면 이
@@ -168,8 +169,9 @@ function connectAgentWs() {
     wsAgent = new WebSocket(`${WS_BASE}${relayWsPath(`/ws-agent${_tokenQuery}`)}`);
   } catch (e) { return scheduleAgentReconnect(); }
   // 생존 감시(core/ws-watchdog.js) — 서버 ping(15초)이 45초 동안 안 오면 닫아 재연결을 돌린다.
-  let liveness = null;
+  // 열리기 전에는 연결 기한(10초)만 감시한다.
   const opened = wsAgent;
+  let liveness = watchSocketLiveness(opened, { timeout: CONNECT_TIMEOUT_MS });
   // [회귀 fb827a6와 동일 패턴] 3초 이상 안정적으로 열린 뒤에만 백오프 리셋 —
   // accept 직후 닫히는 flap에서 지수가 자라지 못하고 빠르게 재연결하는 것을 방지.
   wsAgent.onopen = () => {
@@ -258,7 +260,7 @@ let _wsAgentTimer = null;
 function scheduleAgentReconnect() {
   if (_wsAgentTimer) return;
   _wsAgentRetries = Math.min(_wsAgentRetries + 1, 15);
-  const delay = Math.min(1000 * Math.pow(2, _wsAgentRetries), 30000);
+  const delay = retryDelay(_wsAgentRetries - 1, 1000);   // 지터(core/ws-retry.js)
   _wsAgentTimer = setTimeout(() => { _wsAgentTimer = null; connectAgentWs(); }, delay);
 }
 function _reconnectAgentNow() {
@@ -271,8 +273,7 @@ function _reconnectAgentNow() {
 }
 let _authed = false;
 whenAuthed(() => { _authed = true; });
-document.addEventListener('visibilitychange', _reconnectAgentNow);
-window.addEventListener('online', _reconnectAgentNow);
+onWake(_reconnectAgentNow);   // 화면 복귀·bfcache·online (core/ws-retry.js)
 
 whenAuthed(connectAgentWs);
 // T6: 탭 뱃지가 그리드를 열지 않아도 최신 cwd를 알도록 한다. 2026-09-30부터
