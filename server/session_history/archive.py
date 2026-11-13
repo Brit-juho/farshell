@@ -464,7 +464,10 @@ def capture(source, relative, *, max_bytes=PASS_BYTES):
         _refresh_conversation_summary(db, cid, source['provider'], fresh, latest_title, now)
         prior_detail=json.loads(conversation['detail']) if conversation else {}
         verified=prior_detail.get('native_identity_verified',False) or (identity is not None and capture_kind=='transcript' and not changing)
-        db.execute('UPDATE conversations SET updated=?,state=?,detail=? WHERE id=?', (now, manifest['state'], encode({**prior_detail,'native_identity_verified':verified}), cid))
+        detail_next={**prior_detail,'native_identity_verified':verified}
+        if identity and identity.get('launch') and not prior_detail.get('launch'):
+            detail_next['launch']=identity['launch']   # 저장소 판정(placement.cli_started)이 읽는다
+        db.execute('UPDATE conversations SET updated=?,state=?,detail=? WHERE id=?', (now, manifest['state'], encode(detail_next), cid))
         changed(db, 'manifest', mid)
     return True
 

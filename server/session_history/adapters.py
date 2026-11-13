@@ -69,7 +69,7 @@ def records(record, provider):
 
 
 def identity(data, provider, relative):
-    native, cwd, parent, title = '', '', None, ''
+    native, cwd, parent, title, launch = '', '', None, '', ''
     for raw in data.splitlines()[:256]:
         try:
             row = json.loads(raw)
@@ -80,6 +80,7 @@ def identity(data, provider, relative):
         if provider == 'codex' and row.get('type') == 'session_meta' and isinstance(row.get('payload'), dict):
             p = row['payload']
             native, cwd = p.get('id', ''), p.get('cwd', '')
+            launch = launch or (p.get('originator') if isinstance(p.get('originator'), str) else '')
             source = p.get('source')
             if isinstance(source, dict):
                 sub = source.get('subagent', {})
@@ -88,6 +89,7 @@ def identity(data, provider, relative):
         elif provider == 'claude':
             native = native or row.get('sessionId', '')
             cwd = cwd or row.get('cwd', '')
+            launch = launch or (row.get('entrypoint') if isinstance(row.get('entrypoint'), str) else '')
             if row.get('type') in ('summary', 'custom-title', 'ai-title'):
                 title = row.get('customTitle', row.get('title', row.get('summary', '')))
     # Claude child sessionId can be the parent's. Path-owned child ID stays distinct.
@@ -101,4 +103,6 @@ def identity(data, provider, relative):
         return None
     return {'native_id': native, 'cwd': cwd if isinstance(cwd, str) else '',
             'parent_native_id': parent if isinstance(parent, str) else None,
-            'title': title[:128] if isinstance(title, str) else ''}
+            'title': title[:128] if isinstance(title, str) else '',
+            # 어떻게 켰나(Claude `entrypoint`, Codex `originator`) — 저장소는 터미널 CLI 대화만 만든다(session_catalog/placement.py).
+            'launch': launch[:40]}

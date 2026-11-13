@@ -317,6 +317,19 @@ async def discover():
         await asyncio.sleep(60)
 
 
+async def place_projects():
+    """대화를 저장소에 놓는다(session_catalog/placement.py) — 새 대화와 옛 기록(백필)이 같은 길. 밀린 게 많으면 1초마다,
+    없으면 10초마다. 폴더마다 git을 부르므로 수집 주기(2초)와 떼어 둔다."""
+    from session_catalog import placement
+    while True:
+        done = 0
+        try:
+            done = await _offload(placement.place_conversations)
+        except Exception:
+            logger.warning('session project placement unavailable')
+        await asyncio.sleep(1 if done >= placement.BATCH else 10)
+
+
 async def index_history():
     from . import search
     while True:
