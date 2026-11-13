@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import os
 import re
 import time
@@ -68,7 +69,13 @@ def _last_timestamp(data: bytes):
 
 def _num(v):
     """시각 값 — 유한한 수만. 망가진 값은 없는 것으로."""
-    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and v == v and abs(v) != float('inf') else None
+    if not isinstance(v, (int, float)) or isinstance(v, bool):
+        return None
+    try:
+        f = float(v)
+    except OverflowError:   # 아주 큰 정수
+        return None
+    return f if math.isfinite(f) else None
 
 
 def _obj(text) -> dict:

@@ -329,3 +329,9 @@ def test_concatenated_zstd_frames_are_read_to_the_end(catalog):
     b = c.compress(b'{"timestamp":"2026-04-09T00:00:00Z"}\n')
     info = {"compressed": True, "chunks": [{"digest": archive.put_chunk(a + b), "size": 1}]}
     assert placement._last_timestamp(placement._tail(info)) == placement.first_timestamp(b'"timestamp":"2026-04-09T00:00:00Z"')
+
+
+def test_huge_numbers_are_not_times():
+    from session_catalog import placement
+    assert placement._num(10 ** 309) is None and placement._num(float("nan")) is None and placement._num(True) is None
+    assert placement._num(5) == 5.0
