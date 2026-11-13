@@ -44,7 +44,7 @@ Each link in that chain has its own guard:
 
 ## Pieces
 
-**`pools`.** Pool sizes: `fs` 4, `git` 6, `proc` 6, `net` 8, `slow` 3, `grep` 2 (file content search waits on its child process here so a 10 s search never holds an `fs` worker), `hooks` 2 (the agent-hook health check reads a few settings files; a hung read there cannot starve other pools). `VT_POOL_<NAME>_SIZE` overrides a
+**`pools`.** Pool sizes: `fs` 4, `git` 6, `proc` 6, `net` 8, `slow` 3, `grep` 2 (file content search waits on its child process here so a 10 s search never holds an `fs` worker), `hooks` 2 (the agent-hook health check reads a few settings files; a hung read there cannot starve other pools), `ckpt` 2 (agent turn checkpoints wait on git child processes here so they never take a slot from the `git` pool the rail badges use; a full pool means that capture is skipped, never queued). `VT_POOL_<NAME>_SIZE` overrides a
 size; `default` uses the stdlib formula.
 - Admission is capped at size × 5. Beyond that the call raises `Busy` immediately instead of queueing
   behind a stuck pool.

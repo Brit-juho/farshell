@@ -36,6 +36,8 @@ BLOCKING = {
     "subprocess.run", "subprocess.check_output", "subprocess.check_call",
     "subprocess.call", "subprocess.Popen",
     "worktree.list_worktrees",
+    # 에이전트 턴 체크포인트 — git 서브프로세스를 기다린다. `ckpt` 풀·스레드에서만 부른다.
+    "checkpoints.capture", "checkpoints.list_refs", "checkpoints.turn_files", "checkpoints.diff", "checkpoints.gc",
     # ADR-29 A0 — 2026-09-18에 발견: 이 셋이 to_thread 없이 직접 불렸다.
     # create_worktree는 git worktree add + node_modules 복사(수십 초 가능),
     # open_worktree/delete_worktree는 find_by_id(force=True)로 캐시를 무시한

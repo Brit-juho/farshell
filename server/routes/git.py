@@ -320,21 +320,8 @@ def _section_paths(section: list[str]) -> list[str] | None:
     return paths
 
 
-def _diff_path_denied(path: str) -> bool:
-    """git diff 헤더에 나온 저장소 상대경로가 열람 규칙에 걸리는지 확인.
-
-    fsguard.resolve_under_roots()는 루트 경계 검사 + 존재 확인까지 하므로 여기서는
-    쓸 수 없다(diff에 나온 경로는 루트 기준 절대경로가 아니고, 삭제된 파일은 더는
-    존재하지 않을 수도 있다). 순수 이름 판정 로직을 재구현 없이 그대로 재사용한다 —
-    규칙은 fsguard.py 한 곳에만 있어야 한다:
-    - 거부 목록(`_check_denylist`): .env·*.pem·id_rsa·.ssh/ …
-    - 점 디렉터리(`ALLOWED_DOT_DIRS` 밖): 뷰어가 `.sometool/state.json`을 거부하는데 diff 가 내주면 그 방어가
-      무의미하다. 마지막 구성요소(파일)는 점 파일(`.gitignore`)이라도 열람 대상이므로 보지 않는다.
-    """
-    p = Path(path)
-    if fsguard._check_denylist(p) is not None:
-        return True
-    return any(fsguard.is_hidden_state_dir_name(part) for part in p.parts[:-1])
+# 규칙은 fsguard 한 곳에 있다(체크포인트 캡처 제외·diff 가림이 같이 쓴다). 이 이름은 옛 호출부용 별칭.
+_diff_path_denied = fsguard.repo_relpath_denied
 
 
 def _redact_diff(diff_text: str, is_denied=_diff_path_denied) -> str:
