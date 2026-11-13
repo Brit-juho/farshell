@@ -6,7 +6,7 @@
 //
 // ⚠ 여기도 `shell` 지연 청크다 — core/store.js 계열을 직접 import하지 않는다
 // (Rail.tsx 머리말과 같은 이유, ADR-26/N35).
-import { For, Show, onCleanup, onMount } from 'solid-js';
+import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 
 import { icon } from '../ui/icons.js';
 import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
@@ -16,8 +16,9 @@ import { shellIcon } from '../ui/icons-shell.js';
 import { agentMark } from './agent-mark.js';
 import { t } from '../core/i18n.js';
 import {
-  ORIGIN_ICON, originLabel, SHARE_MODE_LABEL, shareSentence, profileLabel, type SessionRow, type SessionProfile, type Origin, type ShareInfo, type RowSummaryDetails,
+  ORIGIN_ICON, originLabel, SHARE_MODE_LABEL, shareSentence, profileLabel, formatRelativeTime, type SessionRow, type SessionProfile, type Origin, type ShareInfo, type RowSummaryDetails,
 } from './rail-data.js';
+import { normalizeShells, shellLabel, shellCounts, type BgShells } from './bg-shells.js';
 
 
 /** 만든 곳 아이콘(local은 없다) — 레일 칸은 다른 맥에서 만든 세션에만 붙인다. 글(「직접 만듦」 등)은 칸에 쓰지 않고
@@ -248,7 +249,52 @@ export function MenuSummary(props: { summary: string | RowSummaryDetails }) {
           <span class="vt-menu-summary-branch">{details()?.branch}</span>
         </div>
       </Show>
+      <Show when={details()?.shells}>{(s) => <ShellsSummary shells={s()} />}</Show>
     </div>
+  );
+}
+
+const SHELLS_SHOWN = 6;
+
+/** 메뉴 요약의 「백그라운드 셸」 구역 — 실행 중 먼저(오래된 순), 끝난 것은 최근 순. 명령줄은 이 맥 화면에만 온다. */
+function ShellsSummary(props: { shells: BgShells }) {
+  const [now] = createSignal(Date.now());
+  const list = () => [...props.shells.running, ...props.shells.ended];
+  const checked = () => props.shells.checkedAt;
+  return (
+    <div class="vt-menu-summary-section vt-shells-summary">
+      <span class="vt-menu-summary-label">{t('백그라운드 셸')}</span>
+      <span class="vt-shells-counts">
+        {shellCounts(props.shells)}
+        <Show when={checked()}>{(c) => <span class="vt-shells-checked">{' · '}{t('마지막 확인 {ago} 전', { ago: formatRelativeTime(c(), now()) })}</span>}</Show>
+      </span>
+      <For each={list().slice(0, SHELLS_SHOWN)}>{(s) => (
+        <div class="vt-shells-row" classList={{ ended: !s.running }}>
+          <span class="vt-shells-dot" data-state={s.running ? (s.pending ? 'pending' : 'running') : 'done'} aria-hidden="true" />
+          <span class="vt-shells-label" classList={{ mono: !s.description }} title={s.command || shellLabel(s)}>{shellLabel(s)}</span>
+          <span class="vt-shells-when">{s.running
+            ? (s.pending ? t('확인 전') : formatRelativeTime(s.startedAt, now()))
+            : t('끝남')}</span>
+          <Show when={s.command && s.description}><span class="vt-shells-cmd">{s.command}</span></Show>
+        </div>
+      )}</For>
+      <Show when={list().length > SHELLS_SHOWN}><span class="vt-shells-more">{t('외 {n}개', { n: list().length - SHELLS_SHOWN })}</span></Show>
+    </div>
+  );
+}
+
+/** 칸·타일의 「셸 N」 표식 — 실행 중인 백그라운드 셸이 있을 때만. 자세한 목록은 ⋯ 메뉴(폰은 꾹 누름) 요약에 있다. */
+export function ShellsMark(props: { shells: unknown }) {
+  const s = () => normalizeShells(props.shells);
+  const n = () => s().running.length;
+  const label = () => t('백그라운드 셸 {n}개 실행 중', { n: n() });
+  return (
+    <Show when={n() > 0}>
+      <span class="vt-shells-mark" role="img" aria-label={label()} data-tip={label()}
+        data-tip-sub={s().running.slice(0, 3).map(shellLabel).join(' · ') || undefined} data-tip-side="right">
+        <span innerHTML={icon('terminal', 11, 2)} />{n()}
+      </span>
+    </Show>
   );
 }
 

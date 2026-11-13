@@ -450,6 +450,39 @@ components. The remote host performs its own checks through the `agents` relay g
 The viewer uses bounded incremental reads, file-generation cursors, cancellation and
 final reads after completion. Unsupported transcript formats fail explicitly.
 
+## Background shells
+
+Claude Code sessions only (`server/bg_shells.py`, held on the agent entry like the native roster; no disk state).
+The source is the `background_tasks` array Claude Code sends with **Stop** and **SubagentStop** (both scoped to the
+parent session; it lists only in-flight tasks). FarShell keeps entries whose `type` is `shell`; other types
+(`subagent`, `teammate`, `monitor`, …) are not shells.
+
+- **Start**: a `post` hook for `Bash` with `tool_input.run_in_background: true` adds a *pending* row right away
+  (description, command, start time). There is no hook when a background shell exits.
+- **Confirm**: on the next list, a pending row moves to the listed shell with the same command (keeping its start
+  time); a pending row with no match already ended. Listed shells are `running`.
+- **End**: a shell that was listed and is missing from a later list becomes `done` and is kept for one hour (the
+  idle sweep removes it). So an end shows up at the next turn end; the UI shows the last check time (`checked_at`).
+- Ordering: parent and child hooks can arrive late and out of order, so the list keeps a time mark — the latest
+  receive time of any hook that changed it (a background `post`, a roster even when empty, or the `session_start`
+  that cleared it); it never moves back. A `post`/Stop/SubagentStop/`session_start` older than the mark changes
+  nothing. Hooks always send their receive time; once a mark exists an event without one is ignored, and an untimed
+  `session_start` (old hook) clears the list and the mark. A child hook that the sub-agent roster rejects as stale
+  can still add a shell: the shell did start at that time.
+  A parent Stop that arrives after a newer parent hook is dropped as a whole (the entry-wide rule), so its roster is
+  lost; the newer turn's own Stop brings the next roster and corrects the list.
+- An idle parent entry is not dropped by the idle sweep while it still has a running shell.
+- A new conversation (`session_start`) clears the list; `session_end` retires the whole entry. At most 32 rows (ended
+  rows are evicted first, running rows never); description 200 and command 300 characters, one line. A truncated or
+  incomplete list (`background_tasks_truncated`, `background_tasks_complete: false`) or a malformed one changes nothing.
+- Exposure: `public_entry` adds `shells: {items, checked_at}`. The **command line stays on this Mac** —
+  `remote_view` drops `command` for relayed views (`bg_shells.without_commands`); other Macs see description, state
+  and times.
+- UI: a `>_ N` mark (running count) on the rail cell and phone tile (`ShellsMark`, `shell/RailRow.tsx`); the row
+  menu summary (rail ⋯, phone long-press) lists running shells (oldest first) then ended ones with the command under
+  the description; the collapsed strip's hover card has a shells section. Codex has no equivalent list.
+- Tests: `server/tests/test_bg_shells.py`, `frontend/tests/bg-shells.test.js`.
+
 ## Managed launch profiles
 
 `agent_profiles.py` owns a private SQLite registry and persistent per-profile native

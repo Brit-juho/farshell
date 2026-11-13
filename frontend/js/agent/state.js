@@ -244,6 +244,8 @@ function _rebuildDetails() {
       summary: ent.summary ?? null,
       lastPrompt: ent.last_prompt ?? null,
       ...(ent.subagents ? { subagents: ent.subagents } : {}),
+      // 백그라운드 셸(서버 bg_shells.py) — 명령줄은 이 맥 화면에만 온다.
+      ...(ent.shells ? { shells: ent.shells } : {}),
     };
   }
   if (_canon(next) === _canon(_details)) return false;

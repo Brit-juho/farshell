@@ -66,6 +66,7 @@ export function useLayoutVersion() {
 
 export interface AgentDetail {
   subagents?: unknown;
+  shells?: unknown;
   since: number | null;
   tool: string | null;
   question: string | null;
@@ -402,6 +403,7 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
       unseen: !!(w.isUnseen && w.isUnseen(tm.name)),
       since: detail?.since ?? null,
       subagents: detail?.subagents,
+      shells: detail?.shells,
       tool: detail?.tool ?? null,
       kind: detail?.kind ? normalizeKind(detail.kind) : null,
       badge: normalizeBadge(detail?.badge),

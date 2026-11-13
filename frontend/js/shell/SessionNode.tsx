@@ -13,7 +13,7 @@ import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
 import { ringSvg } from './compact-mark.js';
 import { agentMark } from './agent-mark.js';
 import { formatRelativeTime, nodeLine, kidLabel, type SessionRow } from './rail-data.js';
-import { ShareMark, ProfileMark, ScreensMark, OriginMark, KidsToggle } from './RailRow.js';
+import { ShareMark, ProfileMark, ScreensMark, OriginMark, KidsToggle, ShellsMark } from './RailRow.js';
 import { NativeChip } from './NativeChildren.js';
 import { normalizeSubagents } from './native-subagents.js';
 
@@ -99,6 +99,7 @@ export function SessionNode(props: {
             />
           </Show>
           <ShareMark share={row().share} />
+          <ShellsMark shells={row().shells} />
           {/* 만든 곳은 다른 맥에서 만든 세션일 때만(「직접 만듦」·외부 tmux는 알릴 가치가 없다). */}
           <Show when={row().origin === 'peer'}><OriginMark origin={row().origin} host={row().originHost} /></Show>
           <Show when={props.groupLabel}>
