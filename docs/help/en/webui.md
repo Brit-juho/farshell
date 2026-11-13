@@ -78,6 +78,7 @@ Sessions are grouped by repository. A repository head shows its name and main br
 A session working in another worktree of the same repository sits under a "Worktree <branch>" branch; sessions outside any repository are listed under "Outside a repository" at the bottom.
 Sessions waiting for input move up to the "Needs attention" section. Repositories with a waiting session come first, then by most recent activity.
 Each cell has two lines: state ring and agent · name · elapsed · ⋯ / (only when there is something to say) waiting kind · tool at work · "Finished · not seen" · your last instruction, and the change count.
+When Claude Code has background shells running, a count such as `>_ 2` sits next to the name. The "Background shells" part of the summary at the top of the ⋯ menu (long-press on a phone) lists running and ended shells and the last check time (command lines only on this Mac). An ended shell shows up when Claude Code finishes its turn, so it can lag a little.
 Open "Ended N" at the bottom of a repository to see the sessions that ended there; the "Resume" button is always visible. Clicking an ended session shows its linked conversations and where and under which name a resume will open.
 
 | Action | Result |

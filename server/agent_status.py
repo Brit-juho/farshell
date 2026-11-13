@@ -67,6 +67,7 @@ import os
 import re
 import time
 
+import bg_shells
 import subagents
 from typing import Callable, Optional
 from i18n import tr
@@ -366,6 +367,8 @@ def _sweep_one(sid: str, ent: dict, now: float, ttls: dict) -> int:
     if True:
         if subagents.sweep(ent, now):
             _emit(ent, "subagents")
+        if bg_shells.sweep(ent, now):
+            _emit(ent, "shells")
         status = ent.get("status", IDLE)
         age = now - ent.get("updated_at", now)
         if status == WORKING and age > ttls[WORKING] and (shot := _probe(ent)) is not None \
@@ -758,7 +761,14 @@ def on_event(event: str, payload: dict, session: Optional[str] = None,
         ent["_ts"] = ts
     if event == "session_start":
         subagents.clear(ent)
+        bg_shells.clear(ent)
         ent["_subagents_since"] = ts
+    # 백그라운드 셸(bg_shells.py) — 실행은 post 훅에서 바로, 목록은 Stop·SubagentStop의 background_tasks(부모 세션 범위).
+    # 서브에이전트가 띄운 셸도 부모 세션의 셸이라 같은 엔트리(ent = prev)에 모은다.
+    if event in ("stop", "subagent_stop") and bg_shells.fold(ent, payload):
+        _emit(ent, "shells")
+    elif event == "post" and bg_shells.started(ent, payload):
+        _emit(ent, "shells")
     if sub:
         accepted = subagents.accept(ent, event, payload, agent or ent.get("agent") or "claude", ts)
         if not accepted:
@@ -1287,9 +1297,11 @@ LOCAL_ONLY_FIELDS: frozenset = frozenset({"last_prompt", "last_prompt_at"})
 
 def remote_view(pub: dict) -> dict:
     """`public_entry` 결과에서 이 맥 전용 필드를 뺀 형태 — 다른 맥(peer 중계)으로 나가는 자리에서 쓴다."""
-    if not LOCAL_ONLY_FIELDS:
-        return pub
-    return {k: v for k, v in pub.items() if k not in LOCAL_ONLY_FIELDS}
+    out = {k: v for k, v in pub.items() if k not in LOCAL_ONLY_FIELDS}
+    # 백그라운드 셸의 명령줄(토큰·경로가 들 수 있다)도 이 맥 화면에만 — 다른 맥에는 설명·상태·시각만 간다.
+    if isinstance(out.get("shells"), dict):
+        out["shells"] = bg_shells.without_commands(out["shells"])
+    return out
 
 
 def public_entry(ent: dict) -> dict:
@@ -1297,6 +1309,9 @@ def public_entry(ent: dict) -> dict:
     out = {k: v for k, v in ent.items() if not k.startswith("_")}
     if ent.get("_subagents") or ent.get("_subagents_limited"):
         out["subagents"] = subagents.public(ent)
+    shells = bg_shells.public(ent)
+    if shells is not None:
+        out["shells"] = shells
     return out
 
 

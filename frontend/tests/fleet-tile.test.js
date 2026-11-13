@@ -131,3 +131,15 @@ test('시트 키 — Esc는 닫고, Tab은 시트 안에서 돈다', async () =>
   assert.strictEqual(closed, 1);
   sheet.remove();
 });
+
+test('타일 — 실행 중인 백그라운드 셸이 있으면 위 줄에 「셸 N」 표식', async () => {
+  const sec = Date.now() / 1000;
+  const m = await mod();
+  const root = mount(m, { row: row({ name: 'a', shells: { checked_at: sec, items: [
+    { id: 'b1', state: 'running', description: '개발 서버', started_at: sec - 10, ended_at: null, pending: false },
+    { id: 'b2', state: 'done', description: '빌드', started_at: sec - 100, ended_at: sec - 5, pending: false },
+  ] } }), worktree: null, parent: null }, []);
+  const mark = root.querySelector('.vt-tile-top .vt-shells-mark');
+  assert.ok(mark);
+  assert.strictEqual(mark.getAttribute('aria-label'), '백그라운드 셸 1개 실행 중');
+});

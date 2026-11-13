@@ -10,6 +10,7 @@ import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
 import { t } from '../core/i18n.js';
 import { alertDialog, promptDialog } from '../core/dialog-lazy.js';
 import { timedFetch } from '../core/api.js';
+import { normalizeShells, type BgShells } from './bg-shells.js';
 
 // ── 행 모양 ────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,8 @@ export interface SessionRow {
   catalogSessionId?: string;
   runtimeId?: string;
   subagents?: unknown;
+  /** 백그라운드 셸(서버 bg_shells.py 원본). 화면은 bg-shells.ts `normalizeShells`로 읽는다. */
+  shells?: unknown;
   /** 이 브라우저 탭의 웹 세션 id. 열려 있지 않으면 빈 문자열. */
   sessionId: string;
   tmuxName: string | null;
@@ -449,20 +452,24 @@ export function rowSummary(
 
 export interface RowSummaryDetails {
   status: string;
+  /** 백그라운드 셸 — 하나라도 있으면(실행 중·끝남) 메뉴 요약에 구역이 생긴다. */
+  shells?: BgShells;
   cwd?: string;
   project?: string;
   branch?: string;
   accessible: string;
 }
 
-export function rowSummaryDetails(row: Parameters<typeof rowSummary>[0]): RowSummaryDetails {
+export function rowSummaryDetails(row: Parameters<typeof rowSummary>[0] & { shells?: unknown }): RowSummaryDetails {
   const cwd = row.cwd || undefined;
+  const shells = normalizeShells(row.shells);
   return {
+    ...(shells.running.length || shells.ended.length ? { shells } : {}),
     status: rowSummary({ ...row, cwd: undefined, branch: undefined }, { hideIdle: true }),
     cwd,
     project: cwd ? cwd.replace(/\/+$/, '').split('/').pop() || cwd : undefined,
     branch: row.branch || undefined,
-    accessible: rowSummary(row),
+    accessible: rowSummary(row) + (shells.running.length ? ' · ' + t('백그라운드 셸 {n}개 실행 중', { n: shells.running.length }) : ''),
   };
 }
 

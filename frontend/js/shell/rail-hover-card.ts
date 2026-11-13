@@ -3,8 +3,8 @@
 // 값은 전부 이미 클라이언트에 있는 것(세션 행 `SessionRow`, 호스트 목록, 하위 세션 행)만 쓴다 — 올리는 순간 네트워크 요청은 없다.
 // 비어 있는 값은 줄 자체를 만들지 않는다(「정보 갱신 대기」 같은 빈 문구 없음).
 //
-// 구성 순서(위 → 아래):  머리(마크 · 이름 · 경과) · 상태 칩(+ 입력 대기 종류) · 활동 · 위치 · 서브에이전트 · 메타.
-// 높이가 정해져 있어 넘치면 **중요도 낮은 쪽부터** 자른다: 메타 → 하위 세션 줄 → 내부 에이전트 줄(위치는 자르지 않는다).
+// 구성 순서(위 → 아래):  머리(마크 · 이름 · 경과) · 상태 칩(+ 입력 대기 종류) · 활동 · 위치 · 서브에이전트 · 백그라운드 셸 · 메타.
+// 높이가 정해져 있어 넘치면 **중요도 낮은 쪽부터** 자른다: 메타 → 하위 세션 줄 → 셸 줄 → 내부 에이전트 줄(위치는 자르지 않는다).
 //
 // 도구 이름(`tool`)은 호출마다 바뀌어 깜빡이므로(NativeChildren의 「도구 이름을 안 그린다」와 같은 이유) 이 함수는 **받은 값 그대로**만
 // 쓴다. 카드 컴포넌트(RailHoverCard.tsx)가 열릴 때 한 번 찍은 값과 상태가 바뀔 때만 갱신한 값을 넘긴다.
@@ -12,6 +12,7 @@ import { t } from '../core/i18n.js';
 import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
 import { normalizeSubagents, nativeStateLabel, sameLabelOrdinals } from './native-subagents.js';
 import { reasonLabel } from './host-data.js';
+import { normalizeShells, shellCounts, shellLabel } from './bg-shells.js';
 import {
   KIND_LABEL, ORIGIN_ICON, diffLabel, formatRelativeTime, kidsProgress, lineageLabel, normalizeKind, normalizeOrigin,
   originLabel, shareSentence, stateKeyword, type SessionRow,
@@ -43,7 +44,7 @@ export interface HcRow {
   diff?: { add: number; del: number };
 }
 
-export type HcSectionId = 'activity' | 'location' | 'subagents' | 'meta';
+export type HcSectionId = 'activity' | 'location' | 'subagents' | 'shells' | 'meta';
 export interface HcSection { id: HcSectionId; rows: HcRow[]; }
 
 export interface HcModel {
@@ -76,6 +77,7 @@ export interface HcOptions {
 
 export const NATIVE_MAX = 5;
 export const KIDS_MAX = 3;
+export const SHELLS_MAX = 3;
 /** 본문 줄 상한 — 카드 최대 높이 380px(CSS)에서 머리 24 + 칩 22 + 위아래 여백 20 + 구역 사이 8×3을 빼고 줄 높이 20으로 나눈 값. */
 export const BODY_MAX_LINES = 14;
 export const PATH_MAX_CHARS = 34;
@@ -133,6 +135,21 @@ function nativeRows(row: SessionRow, now: number, cap: number): HcRow[] {
     });
   }
   if (ranked.length > cap) rows.push({ key: 'native-more', text: t('외 {n}개', { n: ranked.length - cap }), muted: true });
+  return rows;
+}
+
+/** 백그라운드 셸 — 머리(실행 중 N · 끝남 M) + 실행 중인 셸(오래된 순). 끝난 셸은 개수만(자세히는 ⋯ 메뉴 요약). */
+function shellRows(row: SessionRow, now: number, cap: number): HcRow[] {
+  const s = normalizeShells(row.shells);
+  if (!s.running.length && !s.ended.length) return [];
+  const rows: HcRow[] = [{ key: 'shells', icon: 'terminal', text: t('백그라운드 셸 · {counts}', { counts: shellCounts(s) }) }];
+  for (const x of s.running.slice(0, cap)) {
+    rows.push({
+      key: 'shell:' + x.id, glyph: 'working', text: shellLabel(x), mono: !x.description, title: x.command || shellLabel(x),
+      extra: x.pending ? t('확인 전') : formatRelativeTime(x.startedAt, now) || undefined,
+    });
+  }
+  if (s.running.length > cap) rows.push({ key: 'shells-more', text: t('외 {n}개', { n: s.running.length - cap }), muted: true });
   return rows;
 }
 
@@ -226,20 +243,21 @@ export function buildHoverCard(row: SessionRow, opts: HcOptions = {}): HcModel {
     if (lin.task) delegated.push({ key: 'task', icon: 'file-text', text: lin.task, muted: true, title: lin.task });
   }
 
-  let metaKeep = meta.length, kidsCap = KIDS_MAX, nativeCap = NATIVE_MAX;
+  let metaKeep = meta.length, kidsCap = KIDS_MAX, nativeCap = NATIVE_MAX, shellCap = SHELLS_MAX;
   const assemble = (): HcSection[] => {
     const subagents = [...nativeRows(row, now, nativeCap), ...kidRows(opts.kids || [], kidsCap), ...delegated];
     const all: HcSection[] = [
       { id: 'activity', rows: activity }, { id: 'location', rows: location },
-      { id: 'subagents', rows: subagents }, { id: 'meta', rows: meta.slice(0, metaKeep) },
+      { id: 'subagents', rows: subagents }, { id: 'shells', rows: shellRows(row, now, shellCap) }, { id: 'meta', rows: meta.slice(0, metaKeep) },
     ];
     return all.filter((s) => s.rows.length > 0);
   };
   let sections = assemble();
-  // 넘치면 메타 → 하위 세션 줄 → 내부 에이전트 줄 순으로(위치는 안 자른다). 더 못 줄이면 CSS max-height가 마지막 안전장치다.
+  // 넘치면 메타 → 하위 세션 줄 → 셸 줄 → 내부 에이전트 줄 순으로(위치는 안 자른다). 더 못 줄이면 CSS max-height가 마지막 안전장치다.
   while (lineCount(sections) > max) {
     if (metaKeep > 0) metaKeep--;
     else if (kidsCap > 1) kidsCap--;
+    else if (shellCap > 1) shellCap--;
     else if (nativeCap > 1) nativeCap--;
     else break;
     sections = assemble();

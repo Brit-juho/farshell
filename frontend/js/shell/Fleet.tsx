@@ -44,7 +44,7 @@ import {
 import { buildRepoTree, endedActivity, OUTSIDE_KEY, type RepoGroup } from './repo-tree.js';
 import { createRailPrefs } from './rail-prefs.js';
 import { onSheetKeyDown } from './sheet-keys.js';
-import { MenuSummary, ShareMark, ROW_MENU_ICON } from './RailRow.js';
+import { MenuSummary, ShareMark, ShellsMark, ROW_MENU_ICON } from './RailRow.js';
 import {
   buildHostMenu, hostDetail, LOCAL_HOST,
   type HostEntry,
@@ -181,6 +181,7 @@ export function FleetTile(props: {
           <Show when={unseen()}><span class="vt-tile-unseen" aria-label={t('아직 확인 안 함')} /></Show>
           <Show when={badge()}>{(b) => <span class="vt-tile-badge" classList={{ limited: b().limited }}>{b().text}</span>}</Show>
         </span>
+        <ShellsMark shells={row().shells} />
         <span class="vt-tile-sp" />
         <span class="vt-tile-tm" classList={{ waiting: row().status === 'waiting' }}>{formatRelativeTime(row().since, now())}</span>
       </div>
