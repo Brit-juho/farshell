@@ -10,6 +10,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+---
+
+## [2.12.0] — 2026-11-13
+
 ### Security
 - **Agent tool input no longer leaves the server.** The hook's raw `tool_input` (a Write's whole file content, an Edit's strings, a Bash command that may carry a token) used to go out with every `/api/agent/status` response, `/ws-agent` message and peer relay, though nothing read it. It is kept server-side; clients get a short `summary` instead (a file path relative to the working folder, or the program name of a Bash command).
 - **Session names are checked wherever a session is created or renamed.** `POST /api/tmux/create` used a requested name as is unless an account was chosen, and tmux expands `#(...)` in that value as a shell command; the route is also callable with the machine token. One rule now applies to every create and rename (letters, digits, `_`, `-`; not starting with `-`; up to 64 characters). Lookups by name use tmux exact matching (`=name`), so `app` no longer matches `app-1`.
