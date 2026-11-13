@@ -37,6 +37,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **The session catalog format is upgraded to version 2 on first start.** A copy of the old store is kept next to it (`catalog.sqlite3.v1.bak`), and old backups are upgraded when restored. Running an older FarShell afterwards disables session records and the conversation archive until the newer version runs again or the copy is put back (see `docs/ref/dev.md`). Sessions that ended under their first automatic name (`server`) now show the name they last had in tmux.
 - Auto-archive counts from a session's last activity instead of its last run's end; a session that never started is archived a day after it was created; the first pass runs five minutes after the server starts.
 - Conversation titles are refreshed as the transcript grows (Claude writes its title later in the file; Codex conversations take their first prompt).
+- Agent status sent to another Mac through the relay goes through one filter (`agent_status.remote_view`), and `/ws-agent` sends to local and relayed sockets separately, so fields meant for this Mac only can be kept off the relay.
+- Instruction files are split by location: the shared guide is the root `AGENTS.md`, a developer's own working rules live in the git-ignored `.claude/AGENTS.md` (Claude Code reads both when no `CLAUDE.md` exists). `guard_personal.py` refuses to commit `.claude/AGENTS.md` or a root `CLAUDE.md`, and `check_docs.py` fails if a `CLAUDE.md` or `.claude/CLAUDE.md` reappears, because any of them stops Claude Code from reading `AGENTS.md`.
+- `AGENTS.md` is brought up to date: the build-output contract names `core.js` and the lazy chunks and states the 300 KiB initial-payload cap, the area index lists `keyboard-input.md` and `session-ui.md` (a new check fails when a `docs/ref` document is missing from it), the validation list matches CI, and isolated test servers must also set `VT_STATE_DIR` and `VT_UPDATE_CHECK=0` so the background update check cannot touch the real state directory. `docs/ref/dev.md` documents that e2e tests must not run under a `.claude` path.
+- The repository has one agent instruction file, `AGENTS.md` (project overview, document map, area index, validation, contracts, branches). `CLAUDE.md` is gone: Claude Code reads `AGENTS.md` itself, so keeping a second file only invited drift. `scripts/check_docs.py` now checks `AGENTS.md` for the endpoint-table and index-size rules it used to apply to `CLAUDE.md`.
 
 ### Fixed
 - A delegated session whose parent is itself a delegated session (a grandchild) is listed again under the top session on the rail and phone; before, it was not drawn anywhere. A broken lineage loop no longer hides its sessions.
@@ -58,14 +62,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - One odd tmux reading no longer marks every session 「state unknown」: a pane kept after its process exited is a normal row, a session appearing between the two tmux listings is read again once, and a runtime seen again after it ended is skipped for that session only instead of undoing the whole update (which also paused conversation collection and auto-archive).
 - A new prompt clears the previous turn's tool, so a session no longer shows 「Working · Bash」 from the last turn; a subagent's approval request no longer replaces the main agent's tool in the session row.
 
-### Changed
-- Agent status sent to another Mac through the relay goes through one filter (`agent_status.remote_view`), and `/ws-agent` sends to local and relayed sockets separately, so fields meant for this Mac only can be kept off the relay.
-
-
-### Changed
-- Instruction files are split by location: the shared guide is the root `AGENTS.md`, a developer's own working rules live in the git-ignored `.claude/AGENTS.md` (Claude Code reads both when no `CLAUDE.md` exists). `guard_personal.py` refuses to commit `.claude/AGENTS.md` or a root `CLAUDE.md`, and `check_docs.py` fails if a `CLAUDE.md` or `.claude/CLAUDE.md` reappears, because any of them stops Claude Code from reading `AGENTS.md`.
-- `AGENTS.md` is brought up to date: the build-output contract names `core.js` and the lazy chunks and states the 300 KiB initial-payload cap, the area index lists `keyboard-input.md` and `session-ui.md` (a new check fails when a `docs/ref` document is missing from it), the validation list matches CI, and isolated test servers must also set `VT_STATE_DIR` and `VT_UPDATE_CHECK=0` so the background update check cannot touch the real state directory. `docs/ref/dev.md` documents that e2e tests must not run under a `.claude` path.
-- The repository has one agent instruction file, `AGENTS.md` (project overview, document map, area index, validation, contracts, branches). `CLAUDE.md` is gone: Claude Code reads `AGENTS.md` itself, so keeping a second file only invited drift. `scripts/check_docs.py` now checks `AGENTS.md` for the endpoint-table and index-size rules it used to apply to `CLAUDE.md`.
 ---
 
 ## [2.11.0] — 2026-11-11
