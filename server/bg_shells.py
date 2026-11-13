@@ -33,12 +33,18 @@ def clear(ent: dict, ts=None) -> None:
     ent.pop("_shells_checked", None)
     if isinstance(ts, int):
         ent["_shells_ts"] = ts
+    else:
+        ent.pop("_shells_ts", None)   # 시각 없는 새 대화(옛 훅) — 경계를 남기면 다음 이벤트를 영영 막을 수 있다
 
 
 def fresh(ent: dict, ts) -> bool:
-    """이 이벤트가 셸 목록의 마지막 근거(목록·새 대화)보다 옛 것이 아닌가. 시각이 없으면 받는다(옛 훅)."""
+    """이 이벤트가 셸 목록의 마지막 근거(목록·새 대화)보다 옛 것이 아닌가.
+    훅(agent_hook.sh)은 늘 수신 시각을 보낸다. 경계가 있는데 시각이 없는 이벤트는 순서를 알 수 없어 버리고,
+    경계가 없으면(시각 없는 옛 훅만 쓰는 설치) 받는다."""
     last = ent.get("_shells_ts")
-    return not (isinstance(ts, int) and isinstance(last, int) and ts < last)
+    if not isinstance(last, int):
+        return True
+    return isinstance(ts, int) and ts >= last
 
 
 def has_running(ent: dict) -> bool:
@@ -88,12 +94,13 @@ def fold(ent: dict, payload: dict, now=None, ts=None) -> bool:
     for t in tasks:
         if isinstance(t, dict) and t.get("type") == "shell" and subagents.valid_id(t.get("id")):
             listed[t["id"]] = t
+    # 시각 경계는 빈 목록이어도 옮긴다 — 늦게 온 옛 목록이 끝난 셸을 되살리지 못하게.
+    if isinstance(ts, int):
+        ent["_shells_ts"] = ts
     rows = ent.setdefault("_shells", {})
     if not rows and not listed and ent.get("_shells_checked") is None:
         return False   # 셸을 쓴 적이 없는 세션 — 화면에 아무것도 안 나가게 둔다
     ent["_shells_checked"] = now
-    if isinstance(ts, int):
-        ent["_shells_ts"] = ts
     # 먼저 빠진 셸을 끝남으로 — 그래야 자리가 꽉 찼을 때도 같은 목록의 새 셸이 들어갈 자리를 비울 수 있다.
     for i, row in rows.items():
         if row["state"] == "running" and not row.get("pending") and i not in listed:

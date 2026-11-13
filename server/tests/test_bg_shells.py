@@ -173,3 +173,16 @@ def test_an_idle_parent_with_a_running_shell_is_not_dropped(monkeypatch):
     ent["updated_at"] = 0
     A.sweep()
     assert "parent" not in A._state, "셸이 끝나면 예전처럼 정리된다"
+
+
+def test_an_empty_roster_also_moves_the_time_mark_and_untimed_events_follow_the_mark():
+    ent = {}
+    B.clear(ent, ts=100)
+    assert not B.fold(ent, {"background_tasks": []}, now=1, ts=200)
+    assert ent["_shells_ts"] == 200
+    assert not B.fold(ent, {"background_tasks": [shell("old", "x")]}, now=2, ts=150), "빈 목록 뒤의 옛 목록"
+    assert B.public(ent) is None
+    assert not B.started(ent, bg("y"), now=3), "경계가 있으면 시각 없는 이벤트는 순서를 몰라 버린다"
+    B.clear(ent)   # 시각 없는 새 대화(옛 훅)
+    assert "_shells_ts" not in ent
+    assert B.started(ent, bg("y"), now=4), "경계가 없으면 시각 없는 옛 훅도 받는다"
