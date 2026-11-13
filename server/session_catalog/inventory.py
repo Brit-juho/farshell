@@ -80,8 +80,7 @@ def _observe_once():
 
 
 def inspect_workspace(cwd):
-    """세션이 놓일 곳(배치). 처음 관측 때 정하고, cd로 다른 저장소에 가도 바꾸지 않는다 — 예외는 「저장소 밖」
-    배치가 나중에 저장소 근거를 얻을 때 한 번 승격하는 것뿐이다(`_retry_placements`).
+    """폴더 → 배치(저장소·작업 트리). 실행 중 세션의 자리(`_live_placements`)와 대화를 저장소에 놓기(placement.py)가 쓴다.
 
     Git이 「저장소가 아니다」라고 답할 때만 저장소 밖(directory)이다. 시간 초과·다른 오류는 None(다음 관측에서 다시) —
     예전에는 일시 실패도 저장소 밖으로 영구 분류했다."""
@@ -134,50 +133,111 @@ def workspace(db, placement):
     return wid
 
 
-# 배치를 다시 본 (세션 정체성 키 → cwd → 다시 볼 수 있는 시각). 같은 cwd를 5초마다 Git으로 다시 읽지 않는다.
-# 「저장소 밖」 결과는 1분 뒤 다시 본다 — 그 자리에서 `git init`·`git clone … .`을 하면 저장소가 되기 때문이다.
-_placement_tried: dict[str, dict[str, float]] = {}
-_PLACEMENT_TRIES_PER_SESSION = 32
-_NONREPO_RECHECK = 60.0
+# 실행 중 세션의 자리(docs/ref/session-ui.md 「Projects」): CLI가 돌고 있으면 CLI의 위치, 아니면 셸(활성 pane) 위치. 자리는 늘 그
+# 위치의 저장소(git이면 본 체크아웃, 아니면 그 폴더)이고, 등록되지 않은 저장소면 화면이 「저장소 밖」 폴더 가지로 그린다(homes의
+# registered). CLI 위치는 바로 따르고 그 저장소를 등록한다(CLI를 켠 곳). 셸 위치는 같은 자리가 SETTLE초 이어질 때 따른다 — cd하며
+# 둘러볼 때 목록이 들썩이지 않게. 폴더 → 배치 결과는 캐시한다(같은 폴더를 5초마다 git으로 다시 읽지 않는다; 저장소 밖 결과는
+# _DIR_TTL 뒤 다시 본다 — 그 자리에서 `git init`·`git clone … .`을 하면 저장소가 된다). git 실패(None)는 캐시하지 않고 지금 자리를 둔다.
+SETTLE = 10.0
+_GIT_TTL = 300.0
+_DIR_TTL = 60.0
+_FAIL_TTL = 30.0          # git 실패(시간 초과·권한)도 잠깐 기억한다 — 실패하는 폴더가 매 관측마다 2초씩 잡아먹지 않게
+_CACHE_MAX = 512
+GIT_PER_RECONCILE = 4     # 관측 한 번에 새로 부르는 git 수 상한(나머지는 다음 관측에서)
+_place_cache: dict[str, tuple] = {}
+_pending: dict[str, tuple] = {}
+_FAILED = object()
 
 
-def _agent_cwd(name):
+def _agent_cli(name):
     try:
         import agent_status
-        return agent_status.agent_cwd_for(name)
-    except Exception:  # noqa: BLE001 — 에이전트 상태가 없으면 pane cwd만 본다
+        return agent_status.agent_cli_for(name)
+    except Exception:  # noqa: BLE001 — 에이전트 상태가 없으면 셸 위치만 본다
         return None
 
 
-def _retry_placements(snapshot, known_rows):
-    """이미 기록된 실행 중 세션의 배치를 다시 본다(L3).
-    - 배치가 없는(None — 처음 관측 때 Git이 일시 실패) 세션: 활성 pane 또는 CLI가 알린 cwd로 다시 정한다.
-    - 「저장소 밖」 배치: 그 cwd가 저장소 안이 되면 한 번 저장소로 승격한다. 저장소 배치는 다시 바꾸지 않는다.
-    돌려주는 값: {세션 id: 새 배치}."""
-    live = {item['physical_key']: item for item in snapshot['sessions']}
-    for key in list(_placement_tried):
+def _placement_for(cwd, now, budget=None):
+    """폴더 → 배치(캐시). budget(남은 git 호출 수, [n])이 0이면 캐시에 없는 폴더는 None(다음 관측에서)."""
+    hit = _place_cache.get(cwd)
+    if hit and now < hit[1]:
+        return None if hit[0] is _FAILED else hit[0]
+    if budget is not None:
+        if budget[0] <= 0:
+            return None
+        budget[0] -= 1
+    placement = inspect_workspace(cwd)
+    if len(_place_cache) >= _CACHE_MAX:
+        for key in [k for k, v in _place_cache.items() if v[1] <= now]:
+            del _place_cache[key]
+        for key in sorted(_place_cache, key=lambda k: _place_cache[k][1])[:len(_place_cache) - _CACHE_MAX + 1]:
+            del _place_cache[key]
+    if placement is None:
+        _place_cache[cwd] = (_FAILED, now + _FAIL_TTL)
+        return None
+    _place_cache[cwd] = (placement, now + (_DIR_TTL if placement["project_kind"] == "directory" else _GIT_TTL))
+    return placement
+
+
+def _live_placements(snapshot, rows):
+    """실행 중 세션마다 지금 있어야 할 자리. 돌려주는 값: {세션 id: (지금 workspace_id, 배치, CLI 정보|None)} — 옮길 세션과,
+    CLI가 돌고 있어 저장소를 등록해야 하는 세션."""
+    live = {item["physical_key"]: item for item in snapshot["sessions"]}
+    for key in list(_pending):
         if key not in live:
-            _placement_tried.pop(key, None)
+            del _pending[key]
+    now = time.monotonic()
+    budget = [GIT_PER_RECONCILE]
     out = {}
-    for row in known_rows:
-        item = live.get(row['physical_key'])
-        if not item or (row['workspace_id'] and row['project_kind'] != 'directory'):
+    for row in rows:
+        item = live.get(row["physical_key"])
+        if not item:
             continue
-        tried = _placement_tried.setdefault(row['physical_key'], {})
-        now = time.monotonic()
-        for cwd in dict.fromkeys(c for c in (item.get('cwd'), _agent_cwd(item.get('name'))) if c):
-            if now < tried.get(cwd, 0.0):
+        cli = _agent_cli(item.get("name"))
+        cwd = cli["cwd"] if cli else item.get("cwd")
+        if not cwd:
+            continue
+        placement = _placement_for(cwd, now, budget)
+        if placement is None:
+            continue          # 일시 실패·이번 관측의 git 상한 — 지금 자리를 둔다
+        # 같은 자리 = 같은 저장소·같은 작업 트리 경로·같은 incarnation(같은 경로에 다시 만든 워크트리는 새 작업 트리).
+        here = (row["workspace_id"] and row["wlocator"] == placement["locator"] and row["wpath"] == placement["path"]
+                and row["wincarnation"] == placement["incarnation"])
+        if here:
+            _pending.pop(row["physical_key"], None)
+            # CLI가 돌고 있는데 저장소가 미등록·제거·자동 숨김 — 등록하고 숨김을 푼다(_register_cli가 제거 전 CLI는 거른다).
+            if cli and (row["registered"] is None or row["removed"] is not None or row["hidden"] == 2):
+                out[row["session_id"]] = (row["workspace_id"], placement, cli)
+            continue
+        if not cli:
+            target = (placement["locator"], placement["path"])
+            pend = _pending.get(row["physical_key"])
+            if not pend or pend[0] != target:
+                _pending[row["physical_key"]] = (target, now)
+                if SETTLE > 0:
+                    continue
+            elif now - pend[1] < SETTLE:
                 continue
-            if cwd not in tried and len(tried) >= _PLACEMENT_TRIES_PER_SESSION:
-                continue
-            placement = inspect_workspace(cwd)
-            if placement is None:
-                continue          # 일시 실패 — 이 cwd는 다음 관측에서 다시 본다
-            tried[cwd] = now + _NONREPO_RECHECK if placement['project_kind'] == 'directory' else float('inf')
-            if not row['workspace_id'] or placement['project_kind'] == 'git':
-                out[row['session_id']] = (row['workspace_id'], placement)
-                break
+        _pending.pop(row["physical_key"], None)
+        out[row["session_id"]] = (row["workspace_id"], placement, cli)
     return out
+
+
+def _register_cli(db, wid, cli, now):
+    """CLI가 이 저장소에서 돌고 있다 — 처음이면 등록, 제거 뒤 새로 켠 CLI면 되살림, 마지막 활동·자동 숨김 해제."""
+    p = db.execute("SELECT p.id,p.registered,p.removed,p.last_activity,p.hidden FROM projects p JOIN workspaces w"
+                   " ON w.project_id=p.id WHERE w.id=?", (wid,)).fetchone()
+    if not p:
+        return
+    started = cli.get("started")
+    if p["removed"] is not None and not (started and started > p["removed"]):
+        return            # 제거 전에 켠 CLI가 아직 돌고 있다 — 되살리지 않는다
+    registered = p["registered"] if p["registered"] is not None else (started or now)
+    hidden = 0 if p["hidden"] == 2 else p["hidden"]
+    act = max(p["last_activity"] or 0, now)
+    db.execute("UPDATE projects SET registered=?,removed=NULL,last_activity=?,hidden=?,revision=revision+1 WHERE id=?",
+               (registered, act, hidden, p["id"]))
+    changed(db, "project", p["id"])
 
 
 def _reconcile(snapshot=None):
@@ -185,30 +245,33 @@ def _reconcile(snapshot=None):
     now = time.time()
     with database() as check:
         known = {(r['epoch'], r['physical_key']) for r in check.execute('SELECT epoch,physical_key FROM runtimes')}
-        unplaced = []
+        running = []
         if snapshot.get('complete'):
-            unplaced = [dict(r) for r in check.execute(
-                "SELECT r.physical_key, s.id AS session_id, s.workspace_id, p.kind AS project_kind FROM runtimes r"
-                " JOIN sessions s ON s.id=r.session_id LEFT JOIN workspaces w ON w.id=s.workspace_id"
-                " LEFT JOIN projects p ON p.id=w.project_id"
-                " WHERE r.ended IS NULL AND r.epoch=? AND (s.workspace_id IS NULL OR p.kind='directory')",
-                (snapshot.get('epoch'),))]
-    placements = {item['physical_key']: inspect_workspace(item['cwd']) for item in snapshot['sessions']
+            running = [dict(r) for r in check.execute(
+                "SELECT r.physical_key, s.id AS session_id, s.workspace_id, w.path AS wpath, w.incarnation AS wincarnation,"
+                " p.locator AS wlocator, p.registered, p.removed, p.hidden FROM runtimes r JOIN sessions s ON s.id=r.session_id"
+                " LEFT JOIN workspaces w ON w.id=s.workspace_id LEFT JOIN projects p ON p.id=w.project_id"
+                " WHERE r.ended IS NULL AND r.epoch=?", (snapshot.get('epoch'),))]
+    mono = time.monotonic()
+    placements = {item['physical_key']: _placement_for(item['cwd'], mono) if item.get('cwd') else None for item in snapshot['sessions']
                   if (snapshot.get('epoch'), item['physical_key']) not in known}
-    replaced = _retry_placements(snapshot, unplaced) if unplaced else {}
+    replaced = _live_placements(snapshot, running) if running else {}
     with database(write=True) as db:
         if not snapshot["complete"]:
             db.execute("UPDATE runtimes SET state='unknown' WHERE ended IS NULL")
             return snapshot
         host = host_id(db)
         epoch = snapshot["epoch"]
-        for sid, (old, placement) in replaced.items():
+        for sid, (old, placement, cli) in replaced.items():
             wid = workspace(db, placement)
-            # 그 사이 다른 쪽이 이미 바꿨으면(old와 다르면) 건드리지 않는다.
-            cur = db.execute("UPDATE sessions SET workspace_id=?,updated=?,revision=revision+1 WHERE id=? AND workspace_id IS ?",
-                             (wid, now, sid, old))
-            if cur.rowcount:
-                changed(db, "session", sid)
+            if wid != old:
+                # 그 사이 다른 쪽이 이미 바꿨으면(old와 다르면) 건드리지 않는다.
+                cur = db.execute("UPDATE sessions SET workspace_id=?,updated=?,revision=revision+1 WHERE id=? AND workspace_id IS ?",
+                                 (wid, now, sid, old))
+                if cur.rowcount:
+                    changed(db, "session", sid)
+            if cli:
+                _register_cli(db, wid, cli, now)
         live = {(epoch, item["physical_key"]) for item in snapshot["sessions"]}
         for row in db.execute("SELECT * FROM runtimes WHERE ended IS NULL").fetchall():
             if (row["epoch"], row["physical_key"]) not in live:
