@@ -429,3 +429,27 @@ def test_project_routes_are_human_only_and_registered():
                 ("POST", "/api/session-catalog/projects/{project_id}"),
                 ("GET", "/api/session-history/conversations/{conversation_id}/resume-preview")):
         assert row in paths
+
+
+def test_running_conversations_are_excluded_in_sql_so_pages_stay_full(catalog, monkeypatch):
+    from session_catalog.db import database
+    a = _repo(catalog / "a")
+    t = time.time() - 100
+    live = [conv(cwd=a, detail={"launch": "cli", "started": t, "last": t + 50 + i}) for i in range(3)]
+    ended = [conv(cwd=a, detail={"launch": "cli", "started": t, "last": t + i}) for i in range(2)]
+    with database(write=True) as db:   # 같은 대화 id가 여러 계정(scope)에 — 파이썬에서 거르면 쪽이 짧아졌다
+        for cid in live:
+            db.execute("UPDATE conversations SET native_id='same' WHERE id=?", (cid,))
+    place()
+    view = _view(monkeypatch, running={"same"})
+    first = view.conversation_list(limit=1)
+    second = view.conversation_list(limit=1, cursor=first["next"])
+    assert [c["id"] for c in first["conversations"] + second["conversations"]] == [ended[1], ended[0]]
+
+
+def test_resume_preview_is_not_resumable_for_a_missing_folder(catalog, monkeypatch):
+    import shutil
+    a = _repo(catalog / "gone")
+    cid = conv(cwd=a)
+    shutil.rmtree(a)
+    assert _view(monkeypatch).conversation_resume_preview(cid)["resumable"] is False

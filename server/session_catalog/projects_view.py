@@ -30,6 +30,12 @@ def _running_native_ids() -> set[str]:
         return set()
 
 
+def _not_running(running):
+    """지금 돌고 있는 대화를 SQL에서 뺀다(파이썬에서 거르면 쪽 넘김이 짧아지거나 건너뛴다)."""
+    ids = sorted(i for i in running if isinstance(i, str))[:500]
+    return (f" AND c.native_id NOT IN ({','.join('?' * len(ids))})", ids) if ids else ('', [])
+
+
 def project_list(include_hidden: bool = False) -> dict:
     running = _running_native_ids()
     with database() as db:
@@ -40,12 +46,14 @@ def project_list(include_hidden: bool = False) -> dict:
             "  ORDER BY w.rowid DESC LIMIT 1) AS branch"
             " FROM projects p WHERE p.host=? AND p.registered IS NOT NULL AND p.removed IS NULL"
             + ('' if include_hidden else ' AND p.hidden=0'), (host,)).fetchall()
+        ids = [r['id'] for r in rows]
         counts = {}
-        for r in db.execute(
-                "SELECT w.project_id AS pid,c.native_id FROM conversations c JOIN workspaces w ON w.id=c.workspace_id"
-                " WHERE c.placement='placed' AND c.deleted IS NULL AND c.archived IS NULL"):
-            if r['native_id'] not in running:
-                counts[r['pid']] = counts.get(r['pid'], 0) + 1
+        if ids:
+            not_running, run_args = _not_running(running)
+            counts = {r['pid']: r['n'] for r in db.execute(
+                "SELECT w.project_id AS pid,count(*) AS n FROM conversations c JOIN workspaces w ON w.id=c.workspace_id"
+                " WHERE c.placement='placed' AND c.deleted IS NULL AND c.archived IS NULL AND c.parent_native_id IS NULL"
+                f" AND w.project_id IN ({','.join('?' * len(ids))}){not_running} GROUP BY w.project_id", (*ids, *run_args))}
     return {'projects': [{'id': r['id'], 'name': r['name'], 'path': r['path'], 'kind': r['kind'],
                           'hidden': r['hidden'], 'registered': r['registered'], 'last_activity': r['last_activity'],
                           'branch': r['branch'], 'ended_count': counts.get(r['id'], 0)} for r in rows]}
@@ -75,7 +83,10 @@ def conversation_list(project: str | None = None, archived: bool = False, q: str
             raise Refused('invalid_cursor', 400)
         where.append(f'({_ACTIVITY}<? OR ({_ACTIVITY}=? AND c.id<?))')
         args += [float(m.group(1)), float(m.group(1)), m.group(2)]
-    running = set() if archived else _running_native_ids()
+    if not archived:
+        not_running, run_args = _not_running(_running_native_ids())
+        where.append(not_running.removeprefix(' AND ') or '1')
+        args += run_args
     with database() as db:
         rows = db.execute(
             f"SELECT c.id,c.provider,c.native_id,c.title,c.cwd,c.archived,{_ACTIVITY} AS activity,"
@@ -86,14 +97,13 @@ def conversation_list(project: str | None = None, archived: bool = False, q: str
             " FROM conversations c JOIN workspaces w ON w.id=c.workspace_id"
             " LEFT JOIN conversation_local l ON l.conversation_id=c.id"
             f" WHERE {' AND '.join(where)} ORDER BY activity DESC,c.id DESC LIMIT ?",
-            (*args, limit + 1 + len(running))).fetchall()
+            (*args, limit + 1)).fetchall()
         counts = {}
         if archived and not cursor:
             for r in db.execute("SELECT w.project_id AS pid,count(*) AS n FROM conversations c JOIN workspaces w ON w.id=c.workspace_id"
                                 " WHERE c.placement='placed' AND c.deleted IS NULL AND c.archived IS NOT NULL GROUP BY w.project_id"):
                 counts[r['pid']] = r['n']
-    items = [r for r in rows if r['native_id'] not in running]
-    page, more = items[:limit], len(items) > limit
+    page, more = rows[:limit], len(rows) > limit
     out = {'conversations': [{'id': r['id'], 'provider': r['provider'], 'title': r['title'] or '', 'cwd': r['cwd'],
                               'project_id': r['project_id'], 'activity': r['activity'], 'started': r['started'],
                               'archived': r['archived'], 'branch': r['branch'], 'last_user_text': r['last_user_text'] or '',
@@ -133,9 +143,11 @@ def conversation_resume_preview(cid: str) -> dict:
         c = db.execute('SELECT id,title,provider,cwd,archived FROM conversations WHERE id=? AND deleted IS NULL', (cid,)).fetchone()
     if not c:
         raise Refused('conversation_not_found', 404)
+    # 실제 이어서 시작(lifecycle.resume)과 같은 경로 검사 + 폴더가 있어야 한다 — 미리보기가 「된다」고 하고 누르면 거절되지 않게.
     try:
-        cwd = str(fsguard.resolve_under_roots(c['cwd'], git_meta=True))
-    except (fsguard.FsDenied, TypeError):
+        resolved = fsguard.resolve_under_roots(c['cwd'])
+        cwd = str(resolved) if resolved.is_dir() else None
+    except (fsguard.FsDenied, TypeError, OSError):
         cwd = None
     base = session_names.base_for(cwd) if cwd else None
     return {'resumable': bool(cwd), 'conversation_id': c['id'], 'conversation_title': c['title'] or '', 'provider': c['provider'],
