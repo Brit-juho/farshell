@@ -15,8 +15,9 @@ def catalog(tmp_path, monkeypatch):
     monkeypatch.setenv("VT_BROWSE_ROOTS", str(home))
     from session_catalog import db, placement
     db.snapshot()
-    # pytest 임시 폴더는 /var/folders 아래라 실제 규칙(임시 폴더 거르기)에 걸린다 — 시험에서는 /tmp만 임시로 본다.
-    monkeypatch.setattr(placement, "_TEMP", ("/tmp", "/private/tmp"))
+    # pytest 임시 폴더는 맥에서 /var/folders, 리눅스(CI)에서 /tmp 아래라 실제 규칙(임시 폴더 거르기)에 걸린다 — 시험에서는
+    # 따로 정한 가짜 임시 폴더만 임시로 본다.
+    monkeypatch.setattr(placement, "_TEMP", ("/fsh-test-temp",))
     return home
 
 
@@ -89,7 +90,7 @@ def test_automation_and_desktop_apps_do_not_make_projects(catalog, provider, lau
 
 
 def test_temp_and_missing_cwds_and_children_are_skipped(catalog):
-    t = conv(cwd="/private/tmp/x")
+    t = conv(cwd="/fsh-test-temp/x")
     e = conv(cwd="")
     child = conv(cwd=_repo(catalog / "p"), parent="n1")
     place()
