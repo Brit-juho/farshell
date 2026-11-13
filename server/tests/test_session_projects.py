@@ -494,3 +494,22 @@ def test_v3_moves_archived_sessions_conversations_to_the_archive(tmp_path, monke
         con.execute(stmt)
     got = dict(con.execute("SELECT id,archived FROM conversations"))
     assert got == {"c1": 500, "c2": None}
+
+
+def test_auto_archive_skips_running_and_recently_unarchived_conversations(catalog, monkeypatch):
+    from session_catalog import db as catalog_db, projects_view
+    from session_catalog.db import database
+    from session_history import query
+    a = _repo(catalog / "a")
+    old = time.time() - 40 * 86400
+    run = conv(cwd=a, detail={"launch": "cli", "started": old, "last": old})
+    back = conv(cwd=a, detail={"launch": "cli", "started": old, "last": old})
+    place()
+    monkeypatch.setattr(projects_view, "_running_native_ids", lambda: {_native(run)})
+    catalog_db.auto_archive()
+    query.mutate(back, archived=False)
+    catalog_db.auto_archive()
+    with database() as db:
+        got = {r[0]: r[1] for r in db.execute("SELECT id,archived FROM conversations WHERE id IN (?,?)", (run, back))}
+    assert got[run] is None, "훅 상태로 돌고 있는 대화는 연결 기록이 없어도 보관하지 않는다"
+    assert got[back] is None, "사람이 보관을 푼 대화는 바로 다시 보관하지 않는다"

@@ -159,6 +159,9 @@ def mutate(cid, *, archived=None, deleted=False,delete_scope="local"):
                 set_setting(db,'deletion_delivery:'+cid,{r['peer']:{'state':'pending'} for r in db.execute("SELECT peer FROM replication_grants WHERE direction='send' AND enabled=1")})
         elif archived is not None:
             db.execute('UPDATE conversations SET archived=?,updated=? WHERE id=?', (time.time() if archived else None,time.time(), cid))
+            if not archived:
+                # 사람이 보관을 풀었다 — 자동 보관이 다음 주기에 바로 되돌리지 않게 그 시각을 남긴다(db.auto_archive가 본다).
+                db.execute("UPDATE conversations SET detail=json_set(detail,'$.unarchived',?) WHERE id=? AND json_valid(detail)", (time.time(), cid))
         changed(db, 'conversation', cid)
         return {'id': cid, 'deleted': deleted, 'archived': archived,'delete_scope':delete_scope,'replica_delivery':setting(db,'deletion_delivery:'+cid,{})}
 

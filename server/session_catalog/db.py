@@ -589,11 +589,16 @@ def auto_archive(now=None):
             changed(db, "session", row["id"])
         # 보관함은 대화 단위(저장소 2차) — 저장소의 「종료 N」에 있는 끝난 대화도 마지막 활동(원본 기준) 뒤 N일이 지나면 보관한다.
         # 지금 열린 실행에 이어진 대화는 건드리지 않는다. 지우지 않는다(보관함·대화 보관함에서 다시 볼 수 있다).
-        conversations = db.execute("""SELECT c.id FROM conversations c WHERE c.placement='placed' AND c.deleted IS NULL
-          AND c.archived IS NULL AND c.parent_native_id IS NULL
-          AND COALESCE(CAST(json_extract(c.detail,'$.last') AS REAL),c.updated)<?
+        # 사람이 보관을 푼 대화는 그 뒤 N일 동안 다시 보관하지 않는다(detail.unarchived — query.mutate). 지금 돌고 있는 대화(에이전트
+        # 훅 상태 — 연결 기록이 아직 없어도)는 뺀다.
+        from .projects_view import _running_native_ids
+        running = _running_native_ids()
+        conversations = [r for r in db.execute("""SELECT c.id,c.native_id FROM conversations c WHERE c.placement='placed'
+          AND c.deleted IS NULL AND c.archived IS NULL AND c.parent_native_id IS NULL
+          AND MAX(COALESCE(CAST(json_extract(c.detail,'$.last') AS REAL),c.updated),
+                  COALESCE(CAST(json_extract(c.detail,'$.unarchived') AS REAL),0))<?
           AND NOT EXISTS(SELECT 1 FROM conversation_executions e JOIN runtimes r ON r.id=e.runtime_id
-                         WHERE e.conversation_id=c.id AND r.ended IS NULL)""", (cutoff,)).fetchall()
+                         WHERE e.conversation_id=c.id AND r.ended IS NULL)""", (cutoff,)).fetchall() if r["native_id"] not in running]
         for row in conversations:
             db.execute("UPDATE conversations SET archived=? WHERE id=?", (now, row["id"]))
             changed(db, "conversation", row["id"])
