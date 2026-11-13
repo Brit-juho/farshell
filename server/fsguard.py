@@ -194,6 +194,22 @@ def is_managed_profile_path(path: Path) -> bool:
         return True
 
 
+def repo_relpath_denied(path: str) -> bool:
+    """저장소 상대경로(git diff 헤더·`ls-files` 출력)가 열람 규칙에 걸리는지 — 순수 이름 판정.
+
+    `resolve_under_roots()`는 루트 경계 검사 + 존재 확인까지 하므로 여기서는 쓸 수 없다(diff에 나온 경로는
+    루트 기준 절대경로가 아니고, 삭제된 파일은 더는 존재하지 않을 수도 있다). 규칙은 이 파일 한 곳에만 둔다:
+    - 거부 목록(`_check_denylist`): .env·*.pem·id_rsa·.ssh/ …
+    - 점 디렉터리(`ALLOWED_DOT_DIRS` 밖): 뷰어가 `.sometool/state.json`을 거부하는데 diff·체크포인트가 내주면
+      그 방어가 무의미하다. 마지막 구성요소(파일)는 점 파일(`.gitignore`)이라도 열람 대상이므로 보지 않는다.
+    `routes/git.py`의 diff 가림과 `checkpoints.py`의 캡처 제외가 같은 함수를 쓴다.
+    """
+    p = Path(path)
+    if _check_denylist(p) is not None:
+        return True
+    return any(is_hidden_state_dir_name(part) for part in p.parts[:-1])
+
+
 def _check_denylist(p: Path, skip: Optional[int] = None) -> Optional[str]:
     """경로의 모든 구성요소를 검사한다.
 
