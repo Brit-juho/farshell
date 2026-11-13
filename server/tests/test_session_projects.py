@@ -438,8 +438,8 @@ def test_running_conversations_are_excluded_in_sql_so_pages_stay_full(catalog, m
     live = [conv(cwd=a, detail={"launch": "cli", "started": t, "last": t + 50 + i}) for i in range(3)]
     ended = [conv(cwd=a, detail={"launch": "cli", "started": t, "last": t + i}) for i in range(2)]
     with database(write=True) as db:   # 같은 대화 id가 여러 계정(scope)에 — 파이썬에서 거르면 쪽이 짧아졌다
-        for cid in live:
-            db.execute("UPDATE conversations SET native_id='same' WHERE id=?", (cid,))
+        for n, cid in enumerate(live):
+            db.execute("UPDATE conversations SET native_id='same',scope=? WHERE id=?", (f"s{n}", cid))
     place()
     view = _view(monkeypatch, running={"same"})
     first = view.conversation_list(limit=1)
