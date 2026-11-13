@@ -264,3 +264,40 @@ def test_first_timestamp_reads_the_transcript_not_the_capture_time():
     from session_catalog import placement
     assert placement.first_timestamp(b'{"type":"x"}\n{"timestamp":"2026-02-03T04:05:06Z"}\n') == 1770091506.0
     assert placement.first_timestamp(b"no time") is None
+
+
+def test_a_broken_detail_does_not_stall_the_batch(catalog):
+    from session_catalog.db import database
+    a = _repo(catalog / "a")
+    bad = conv(cwd=a)
+    good = conv(cwd=a)
+    with database(write=True) as db:
+        db.execute("UPDATE conversations SET detail='[1,2]' WHERE id=?", (bad,))
+    place()
+    assert row(good)["placement"] == "placed"
+    assert row(bad)["placement"] is not None, "망가진 detail도 결정된다(빈 것으로 보고 실행 방식을 원본에서 찾는다)"
+
+
+def test_a_symlinked_folder_pointing_outside_is_not_mapped_after_it_disappears(catalog, tmp_path):
+    repo = _repo(catalog / "proj")
+    conv(cwd=repo)
+    place()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (repo / "link").symlink_to(outside)
+    gone = conv(cwd=repo / "link" / "missing")
+    place()
+    assert row(gone)["placement"] == "skip:cwd", "링크를 풀면 탐색 허용 폴더 밖"
+
+
+def test_a_compressed_archive_gives_its_real_last_timestamp(catalog):
+    import zstandard
+    from session_catalog import placement
+    from session_catalog.db import database, uid
+    from session_history import archive
+    body = b"".join(json.dumps({"timestamp": f"2026-03-{d:02d}T00:00:00Z", "pad": "x" * 2000}).encode() + b"\n" for d in range(1, 29))
+    packed = zstandard.ZstdCompressor().compress(body)
+    half = len(packed) // 2
+    parts = [archive.put_chunk(packed[:half]), archive.put_chunk(packed[half:])]
+    info = {"compressed": True, "chunks": [{"digest": d, "size": 1} for d in parts]}
+    assert placement._last_timestamp(placement._tail(info)) == placement.first_timestamp(b'"timestamp":"2026-03-28T00:00:00Z"')

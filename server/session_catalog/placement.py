@@ -11,7 +11,7 @@
 - `skip:launch` 터미널 CLI가 아니다(`cli_started` — Claude `entrypoint=cli`, Codex `originator=codex-tui`만).
   데스크톱 앱·`claude -p`·`codex exec`는 「대화 보관함」에만 남는다(P0 실측, 설계서 §3.2).
 - `skip:child` 하위 대화(서브에이전트 기록).
-- `skip:cwd` 실행 폴더가 없거나 임시 폴더(/tmp·/var/folders)거나 탐색 허용 폴더(fsguard roots) 밖이다.
+- `skip:cwd` 실행 폴더가 없거나 임시 폴더(/tmp·/var/folders)거나 탐색 허용 폴더·거부 경로(fsguard) 밖이다(지운 폴더는 남은 상위 폴더로 확인).
 - `skip:gone` 폴더가 지워졌고, 기록의 옛 작업 트리로도 원래 git 저장소를 못 찾았다.
 - `skip:git` 폴더는 있는데 git 확인이 GIT_TRIES번 실패했다(느린 볼륨·권한).
 
@@ -40,7 +40,6 @@ BATCH = 50
 BUDGET = 5.0
 AUTO_HIDE_DAYS = 90
 GIT_TRIES = 2
-DECODE_LIMIT = 64 * 1024 * 1024
 _TEMP = ('/tmp', '/private/tmp', '/var/folders', '/private/var/folders')
 _TS = re.compile(rb'"timestamp"\s*:\s*"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d))"')
 
@@ -67,16 +66,32 @@ def _last_timestamp(data: bytes):
     return _epoch(found[-1]) if found else None
 
 
+def _obj(text) -> dict:
+    """detail JSON — 객체가 아니면(망가짐·null·배열) 빈 것으로. 한 행 때문에 배치 전체가 멈추지 않게."""
+    try:
+        v = json.loads(text or '{}')
+    except (ValueError, TypeError):
+        return {}
+    return v if isinstance(v, dict) else {}
+
+
 def _temp(path: str) -> bool:
     p = path.rstrip('/')
     return any(p == t or p.startswith(t + '/') for t in _TEMP)
 
 
-def _within_roots(path: str) -> bool:
+def _gone_path(cwd: str):
+    """지워진 폴더의 경로를 남아 있는 가장 가까운 상위 폴더를 fsguard로 풀어(링크 해석·탐색 허용 폴더·거부 경로 검사) 다시
+    붙인다. 상위가 경계 밖이면 None — 문자열 앞부분만 보고 옛 작업 트리에 붙이면 링크로 밖을 가리키는 경로가 들어온다."""
+    head, rest = cwd, []
+    while head != '/' and not os.path.isdir(head):
+        head, name = os.path.split(head)
+        rest.insert(0, name)
     try:
-        return any(path == str(r) or path.startswith(str(r).rstrip('/') + '/') for r in fsguard.get_roots())
+        base = fsguard.resolve_under_roots(head, git_meta=True)
     except Exception:
-        return False
+        return None
+    return os.path.join(str(base), *rest) if rest else str(base)
 
 
 def touch_project(db, workspace_id: str, last_activity: float, now: float) -> None:
@@ -92,21 +107,22 @@ def touch_project(db, workspace_id: str, last_activity: float, now: float) -> No
         changed(db, 'project', p['id'])
 
 
-def _stream(info) -> bytes:
-    """보관된 원본(조각들)을 이어 읽는다. 압축(.zst)이면 풀어서. DECODE_LIMIT까지만."""
+TAIL = 262144
+
+
+def _tail(info) -> bytes:
+    """보관된 원본의 끝부분(TAIL바이트). 조각을 하나씩 흘려 읽어 메모리는 조각 하나 크기로 묶인다. 압축(.zst)이면 끝까지
+    풀면서 끝부분만 남긴다(압축 조각 하나만으로는 끝을 풀 수 없다)."""
     from session_history import archive
-    raw = b''.join(archive.read_chunk(c['digest']) for c in (info.get('chunks') or []))
+    chunks = info.get('chunks') or []
     if not info.get('compressed'):
-        return raw[-DECODE_LIMIT:]
+        return archive.read_chunk(chunks[-1]['digest'])[-TAIL:] if chunks else b''
     import zstandard
-    out = io.BytesIO()
-    with zstandard.ZstdDecompressor(max_window_size=64 * 1024**2).stream_reader(io.BytesIO(raw)) as z:
-        while out.tell() < DECODE_LIMIT:
-            block = z.read(1024 * 1024)
-            if not block:
-                break
-            out.write(block)
-    return out.getvalue()
+    z = zstandard.ZstdDecompressor(max_window_size=64 * 1024**2).decompressobj()
+    tail = b''
+    for c in chunks:
+        tail = (tail + z.decompress(archive.read_chunk(c['digest'])))[-TAIL:]
+    return tail
 
 
 def history_facts(db, cid: str, provider: str) -> dict:
@@ -139,7 +155,7 @@ def history_facts(db, cid: str, provider: str) -> dict:
         if 'last' not in out and path and os.path.isfile(path):
             out['last'] = os.stat(path).st_mtime
         if 'last' not in out and rows:
-            last = _last_timestamp(_stream(json.loads(rows[-1]['detail'])))
+            last = _last_timestamp(_tail(json.loads(rows[-1]['detail'])))
             if last:
                 out['last'] = last
     except Exception:   # 손상·형식 차이 — 읽은 데까지만
@@ -162,10 +178,7 @@ def _decide(r, cache, known):
     patch: dict = {}
     if r['parent_native_id']:
         return 'skip:child', patch, None
-    try:
-        detail = json.loads(r['detail'] or '{}')
-    except ValueError:
-        detail = {}
+    detail = _obj(r['detail'])
     launch = detail.get('launch')
     if not isinstance(launch, str) or 'started' not in detail:
         with database() as db:
@@ -178,15 +191,24 @@ def _decide(r, cache, known):
     if not cli_started(r['provider'], launch):
         return 'skip:launch', patch, None
     cwd = os.path.normpath(r['cwd']) if (r['cwd'] or '').startswith('/') else ''
-    if not cwd or _temp(cwd) or not _within_roots(cwd):
+    if not cwd or _temp(cwd):
         return 'skip:cwd', patch, None
     if cwd not in cache:
         if os.path.isdir(cwd):
-            cache[cwd] = inventory.inspect_workspace(cwd)   # git 2초 제한, 실패는 None
+            # 있는 폴더는 inspect_workspace가 fsguard(탐색 허용 폴더·거부 경로)로 확인한다. 경계 밖이면 None → git 실패와 구분 못 하므로
+            # 먼저 경계를 본다.
+            try:
+                fsguard.resolve_under_roots(cwd, git_meta=True)
+                cache[cwd] = inventory.inspect_workspace(cwd)   # git 2초 제한, 실패는 None
+            except Exception:
+                cache[cwd] = 'outside'
         else:
-            wid = _gone_workspace(known, cwd)
-            cache[cwd] = ('wid', wid) if wid else 'gone'
+            safe = _gone_path(cwd)
+            wid = _gone_workspace(known, safe) if safe else None
+            cache[cwd] = ('wid', wid) if wid else ('gone' if safe else 'outside')
     found = cache[cwd]
+    if found == 'outside':
+        return 'skip:cwd', patch, None
     if found == 'gone':
         return 'skip:gone', patch, None
     if found is None:
@@ -218,20 +240,25 @@ def place_conversations(now=None, limit=BATCH, budget=BUDGET) -> int:
     done = 0
     with database(write=True) as db:
         for r, placement, patch, found in decided:
+            # git·파일 읽기 동안 수집이 이 대화를 고쳤을 수 있다 — 쓰기 트랜잭션 안에서 다시 읽어 합친다(옛 스냅샷으로 덮지 않는다).
+            cur = db.execute('SELECT detail,placement FROM conversations WHERE id=?', (r['id'],)).fetchone()
+            if not cur or cur['placement'] is not None:
+                continue
+            d = _obj(cur['detail'])
+            for k, v in patch.items():
+                if k == 'last':
+                    d['last'] = max(float(d.get('last') or 0), v)
+                elif k == 'placement_tries' or k not in d:
+                    d[k] = v
             wid = found[1] if isinstance(found, tuple) else (inventory.workspace(db, found) if isinstance(found, dict) else None)
-            # detail은 바꿀 칸만(json_set) — 그 사이 수집이 고친 칸(검증 여부·마지막 활동)을 덮지 않는다.
-            sets = ''.join(f",'$.{k}',json(?)" for k in patch)
-            values = [json.dumps(v) for v in patch.values()]
-            db.execute(f"UPDATE conversations SET placement=?,workspace_id=COALESCE(?,workspace_id)"
-                       f"{(',detail=json_set(detail' + sets + ')') if patch else ''} WHERE id=? AND placement IS NULL",
-                       (placement, wid, *values, r['id']))
+            db.execute('UPDATE conversations SET placement=?,workspace_id=COALESCE(?,workspace_id),detail=? WHERE id=?',
+                       (placement, wid, json.dumps(d, separators=(',', ':'), sort_keys=True), r['id']))
             if patch:
                 changed(db, 'conversation', r['id'])   # 복제: 바뀐 detail을 다른 맥에도
             if placement:
                 done += 1
             if not wid:
                 continue
-            d = {**json.loads(r['detail'] or '{}'), **patch}
             p = db.execute('SELECT p.id,p.registered,p.removed,p.last_activity,p.hidden FROM projects p'
                            ' JOIN workspaces w ON w.project_id=p.id WHERE w.id=?', (wid,)).fetchone()
             if not p:
