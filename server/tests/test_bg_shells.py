@@ -186,3 +186,15 @@ def test_an_empty_roster_also_moves_the_time_mark_and_untimed_events_follow_the_
     B.clear(ent)   # 시각 없는 새 대화(옛 훅)
     assert "_shells_ts" not in ent
     assert B.started(ent, bg("y"), now=4), "경계가 없으면 시각 없는 옛 훅도 받는다"
+
+
+def test_the_time_mark_never_moves_back():
+    ent = {}
+    B.clear(ent, ts=100)
+    assert B.started(ent, bg("npm run dev"), now=1, ts=300)
+    assert not B.fold(ent, {"background_tasks": []}, now=2, ts=200), "실행보다 옛 목록이 확인 전 행을 끝내지 못한다"
+    assert items(ent)["pending-toolu_1"]["state"] == "running"
+    B.fold(ent, {"background_tasks": [shell("b1", "npm run dev")]}, now=3, ts=400)
+    assert not B.clear(ent, ts=350), "늦게 온 옛 새 대화가 최신 목록을 지우지 못한다"
+    assert ent["_shells_ts"] == 400 and "b1" in items(ent)
+    assert B.clear(ent, ts=500) and B.public(ent) is None

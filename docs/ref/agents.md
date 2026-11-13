@@ -463,10 +463,12 @@ parent session; it lists only in-flight tasks). FarShell keeps entries whose `ty
   time); a pending row with no match already ended. Listed shells are `running`.
 - **End**: a shell that was listed and is missing from a later list becomes `done` and is kept for one hour (the
   idle sweep removes it). So an end shows up at the next turn end; the UI shows the last check time (`checked_at`).
-- Ordering: parent and child hooks can arrive late and out of order, so the list keeps its own time mark (the last
-  list — an empty one too — or the `session_start` that cleared it); a `post`/Stop/SubagentStop older than that
-  mark is ignored. Hooks always send their receive time; once a mark exists an event without one is ignored, and an
-  untimed `session_start` (old hook) removes the mark.
+- Ordering: parent and child hooks can arrive late and out of order, so the list keeps a time mark — the latest
+  receive time of any hook that changed it (a background `post`, a roster even when empty, or the `session_start`
+  that cleared it); it never moves back. A `post`/Stop/SubagentStop/`session_start` older than the mark changes
+  nothing. Hooks always send their receive time; once a mark exists an event without one is ignored, and an untimed
+  `session_start` (old hook) clears the list and the mark. A child hook that the sub-agent roster rejects as stale
+  can still add a shell: the shell did start at that time.
 - An idle parent entry is not dropped by the idle sweep while it still has a running shell.
 - A new conversation (`session_start`) clears the list; `session_end` retires the whole entry. At most 32 rows (ended
   rows are evicted first, running rows never); description 200 and command 300 characters, one line. A truncated or

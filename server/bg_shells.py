@@ -27,14 +27,25 @@ def _text(value, limit: int) -> str:
     return " ".join(value.split())[:limit] if isinstance(value, str) else ""
 
 
-def clear(ent: dict, ts=None) -> None:
-    """새 대화 — 목록을 비우고, 그보다 옛 이벤트가 늦게 와도 되살리지 않게 시각 경계를 둔다."""
+def _mark(ent: dict, ts) -> None:
+    """시각 경계 = 셸 목록을 바꾼 이벤트(실행·목록·새 대화) 중 가장 늦은 수신 시각. 줄어들지 않는다."""
+    if isinstance(ts, int):
+        last = ent.get("_shells_ts")
+        ent["_shells_ts"] = max(ts, last) if isinstance(last, int) else ts
+
+
+def clear(ent: dict, ts=None) -> bool:
+    """새 대화 — 목록을 비우고 경계를 그 시각으로 옮긴다. 경계보다 옛 새 대화(늦게 온 훅)는 최신 목록을 지우지 않는다.
+    시각 없는 새 대화(옛 훅)는 비우고 경계도 지운다 — 남기면 그 뒤의 시각 없는 이벤트를 영영 막는다."""
+    if ts is not None and not fresh(ent, ts):
+        return False
     ent.pop("_shells", None)
     ent.pop("_shells_checked", None)
     if isinstance(ts, int):
-        ent["_shells_ts"] = ts
+        _mark(ent, ts)
     else:
-        ent.pop("_shells_ts", None)   # 시각 없는 새 대화(옛 훅) — 경계를 남기면 다음 이벤트를 영영 막을 수 있다
+        ent.pop("_shells_ts", None)
+    return True
 
 
 def fresh(ent: dict, ts) -> bool:
@@ -76,6 +87,7 @@ def started(ent: dict, payload: dict, now=None, ts=None) -> bool:
         return False
     rows[key] = {"id": key, "state": "running", "description": _text(ti.get("description"), DESC_MAX),
                  "command": _text(ti.get("command"), CMD_MAX), "started_at": now, "ended_at": None, "pending": True}
+    _mark(ent, ts)   # 이 실행보다 옛 목록이 늦게 와서 확인 전 행을 끝남으로 바꾸지 못하게
     return True
 
 
@@ -95,8 +107,7 @@ def fold(ent: dict, payload: dict, now=None, ts=None) -> bool:
         if isinstance(t, dict) and t.get("type") == "shell" and subagents.valid_id(t.get("id")):
             listed[t["id"]] = t
     # 시각 경계는 빈 목록이어도 옮긴다 — 늦게 온 옛 목록이 끝난 셸을 되살리지 못하게.
-    if isinstance(ts, int):
-        ent["_shells_ts"] = ts
+    _mark(ent, ts)
     rows = ent.setdefault("_shells", {})
     if not rows and not listed and ent.get("_shells_checked") is None:
         return False   # 셸을 쓴 적이 없는 세션 — 화면에 아무것도 안 나가게 둔다
