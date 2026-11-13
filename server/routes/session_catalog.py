@@ -13,7 +13,7 @@ from starlette.background import BackgroundTask
 import auth
 import fsguard
 import mcp_plans
-from session_catalog import db, inventory, lifecycle, identity
+from session_catalog import db, inventory, lifecycle, identity, projects_view
 from session_history import archive, query, restore, replication, backup
 
 router = APIRouter(dependencies=[Depends(auth.require_human_session)])
@@ -71,6 +71,32 @@ async def history_status():
 @router.get('/api/session-catalog/sessions/{session_id}')
 async def session_detail(session_id: str):
     return await _call(db.session_detail, session_id)
+
+
+# 저장소 = CLI를 켠 곳(session_catalog/projects_view.py). 목록의 저장소, 「종료 N」·보관함의 대화, 숨김·제거.
+@router.get('/api/session-catalog/projects')
+async def projects(include_hidden: bool = False):
+    return await _call(projects_view.project_list, include_hidden)
+
+
+@router.get('/api/session-catalog/conversations')
+async def conversations(project: str | None = None, archived: bool = False, q: str | None = None,
+                        cursor: str | None = None, limit: int = 20):
+    return await _call(projects_view.conversation_list, project=project, archived=archived, q=q, cursor=cursor, limit=limit)
+
+
+@router.post('/api/session-catalog/projects/{project_id}')
+async def update_project(project_id: str, request: Request):
+    try:
+        value = await _body(request, ('hidden', 'removed'))
+    except db.Refused as error:
+        return JSONResponse({'error': error.code}, status_code=error.status)
+    return await _call(projects_view.update_project, project_id, value)
+
+
+@router.get('/api/session-history/conversations/{conversation_id}/resume-preview')
+async def conversation_resume_preview(conversation_id: str):
+    return await _call(projects_view.conversation_resume_preview, conversation_id)
 
 
 @router.get('/api/session-catalog/sessions/{session_id}/resume-preview')
