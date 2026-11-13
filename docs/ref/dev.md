@@ -233,7 +233,11 @@ so session records and the conversation archive are unavailable until you either
 server and put the copy back (`mv catalog.sqlite3.v1.bak catalog.sqlite3`, removing the `-wal`/`-shm` files next to it);
 records made after the upgrade are not in that copy. Version 2 (2026-11) added the last-activity time and the visible-name
 source of a session, the branch at end, CLI path and "marked ended" time of a run, and a local table of conversation
-summaries. Tests: `server/tests/test_catalog_migration.py`.
+summaries. Version 3 (2026-11) added projects as the place where a CLI started (`projects.registered`, `removed`, `last_activity`; `hidden` 2 =
+auto-hidden), `conversations.placement` and two indexes, and moved archived sessions' conversations to the archive. After the upgrade a background
+worker places existing conversations into projects from their archived transcripts (`session_catalog/placement.py`, a batch every second while
+there is a backlog); each Mac builds its own projects from its own records. Tests: `server/tests/test_catalog_migration.py`,
+`server/tests/test_session_projects.py`.
 
 ## Storage locking
 

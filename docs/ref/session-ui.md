@@ -27,6 +27,25 @@ An agent's kind/state keeps the verified-pane or unique-cwd attribution rule. Di
 
 `server/session_names.py` is the one place that names a new tmux session; every create path uses it — `POST /api/tmux/create` (with or without `unique_name`), opening a worktree or an agent in one, catalog resume, a peer's create, and a delegated child (`<parent>-sub`, `-2`, `-3`). The base is the start folder's repository name (a linked worktree's own folder name inside one), else the folder name, `home` for the home folder; never the server's folder. A taken name gets `-2`, `-3` … (`base-<4 hex>` after 99), checked with tmux exact matching (`=name`); paths that create directly retry with the next number when tmux answers "duplicate session", so a name taken by `bin/fsh` or a hand-started tmux in between is not fatal. The server does not rename a session after creating it. Later references to a session use its key (`#{session_id}:#{session_created}`, `tmux_runner.live_session_keys`) rather than its name where a name could be reused or changed: prompt-queue targets, the voice target lock file (second line), conversation binding in the catalog (the entry's tmux id), and layout restore (name together with the host). A rename made inside tmux is followed by the web session records (`deps._follow_rename`). Not covered: `bin/fsh`'s `dev` (a user contract) and managed-profile sessions `profile-<hex>` (the name is their key). Tests: `server/tests/test_session_names.py`.
 
+## Projects
+
+A **project** (저장소) is the folder where a Claude Code or Codex CLI conversation started — the git top-level (main checkout) when
+inside git, so linked worktrees belong to their main repository; otherwise that folder itself. It is created by
+`server/session_catalog/placement.py` and kept independently of terminal sessions.
+
+- **Registration.** Every captured conversation is placed once (`conversations.placement`): a terminal CLI (`entrypoint=cli` for Claude,
+  `originator=codex-tui` for Codex — desktop apps, `claude -p` and `codex exec` are not projects) whose `cwd` is inside the browse roots and not a
+  temp folder sets `conversations.workspace_id` and, the first time, `projects.registered`. A CLI running in a FarShell tmux session registers its
+  project at once from the hook (`inventory._register_cli`). Child conversations, unknown launches and gone folders are skipped with a reason
+  (`skip:*`); a deleted worktree folder is mapped to its repository through the recorded workspaces.
+- **Times** come from the transcript, not the capture: `detail.started` (first `timestamp`) and `detail.last` (the transcript file's last write).
+  Conversations captured before v3 are read back from the archived raw copy (backfill, newest first, in the background).
+- **Visibility.** `projects.hidden` 0 visible · 1 hidden by a person · 2 auto-hidden (registered with its last activity over 90 days ago; new
+  activity lifts it). `projects.removed` takes it out of the list and settings; a CLI started there afterwards brings it back. Records are never deleted.
+- **Ended list.** A project's 「종료 N」 is its placed, not archived, not running conversations; the archive (보관함) and auto-archive work on conversations.
+- **Running sessions** sit at their current place (`db.homes`): the CLI's project while a CLI runs, otherwise the shell's folder after it stays 10 s
+  (`inventory.SETTLE`); the rail shows them in a project group only when that project is registered and not hidden.
+
 ## Groups and titles
 
 A group is derived from the current view's pane tree. A closed group uses what the v5 layout remembers. No new group store and no tmux group tag is created.

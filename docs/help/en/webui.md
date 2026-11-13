@@ -74,12 +74,12 @@ Everything about using FarShell in the browser. (For the CLI see `fsh help conce
 
 ### Sidebar Sessions view (session list)
 
-Sessions are grouped by repository. A repository head shows its name and main branch, and a session stays under the repository it started in (even after `cd`).
-A session working in another worktree of the same repository sits under a "Worktree <branch>" branch; sessions outside any repository are listed under "Outside a repository" at the bottom, grouped by their current folder (a `~/…` folder branch; on a phone, a folder line under the tile).
-Sessions waiting for input move up to the "Needs attention" section. Repositories with a waiting session come first, then by most recent activity.
+**A repository is where you start Claude Code or Codex.** Starting a CLI in a folder makes that folder a repository (the git top-level inside git; worktrees belong to their main repository), and it stays in the list even with no sessions. Just `cd`-ing in a shell does not create one. A repository head shows its name, main branch, session count and a "+" to start a session there.
+A running session sits at **where it is now**: the CLI's repository while a CLI runs, otherwise the shell's folder (it moves after staying in the same place for 10 seconds). If that is not a listed repository it appears under "Outside a repository" at the bottom, grouped by its current folder (a `~/…` folder branch; on a phone, a folder line under the tile). A session working in another worktree of the same repository sits under a "Worktree <branch>" branch.
+Sessions waiting for input move up to the "Needs attention" section. The order is chosen in the session list settings' "View" tab — repositories by registration (first CLI run, default), name or recent activity; sessions by creation (default), name or recent activity; and "Waiting first" (off by default).
 Each cell has two lines: state ring and agent · name · elapsed · ⋯ / (only when there is something to say) waiting kind · tool at work · "Finished · not seen" · your last instruction, and the change count.
 When Claude Code has background shells running, a count such as `>_ 2` sits next to the name. The "Background shells" part of the summary at the top of the ⋯ menu (long-press on a phone) lists running and ended shells and the last check time (command lines only on this Mac). An ended shell shows up when Claude Code finishes its turn, so it can lag a little.
-Open "Ended N" at the bottom of a repository to see the sessions that ended there; the "Resume" button is always visible. Clicking an ended session shows its linked conversations and where and under which name a resume will open.
+Open "Ended N" at the bottom of a repository to see **the conversations that ended there**, most recent first, 20 at a time ("More"); the "Resume" button is always visible and reopens the conversation in a new session in the folder where it ran. Clicking a conversation shows where and under which name it would open, and "View conversation". Whatever happens to the terminal session, the record stays with the repository where the conversation ran.
 
 | Action | Result |
 |------|------|
@@ -124,7 +124,7 @@ Open "Ended N" at the bottom of a repository to see the sessions that ended ther
     read & write, the earlier write approval comes back without re-approval. To block it permanently, revoke write access or unshare.
     This feature isn't available on screens that show another Mac, and a session whose name is in Korean can't be shared (rename it in English).
     Approving and sharing don't work on a screen opened with a `?token=` link (password sign-in is required).
-- The sliders icon in the Sessions view header opens the **session list settings** sheet. The "Repository" tab picks which repositories the list shows, the "View" tab shows or hides the "Needs attention" section and sessions by origin (other Macs, external) on this device, and the "Cleanup" tab holds this Mac's session record settings: auto-archive ended sessions (never deletes), name sessions after the repository when a CLI starts, and end a resumed session when its CLI exits. Changing "Cleanup" asks for your password again.
+- The sliders icon in the Sessions view header opens the **session list settings** sheet. The "Repository" tab lists the repositories where a CLI ran — a show checkbox, "Remove" (conversation records stay; it comes back when a CLI starts there again) and worktree management for git repositories; repositories with no activity for 90 days start hidden. the "View" tab sets the order and shows or hides the "Needs attention" section and sessions by origin (other Macs, external) on this device, and the "Cleanup" tab holds this Mac's session record settings: auto-archive ended conversations (never deletes), name sessions after the repository when a CLI starts, and end a resumed session when its CLI exits. Changing "Cleanup" asks for your password again.
 
 ## 3. Where new sessions start
 
@@ -229,8 +229,8 @@ More troubleshooting: `fsh help troubleshoot`
 
 Resume and Conversation archive's Continue conversation also restore the last recorded permissions.
 
-"Archive" at the bottom of the session list lets you search archived sessions by name, conversation, branch, last instruction or folder, and the repository chips show only one repository's (root folder's) sessions.
-"+ New session" asks for the repository first; the grey text on the right is the name the session will get. The "+" on a repository head opens a new session right there.
+"Archive" at the bottom of the session list lets you search archived **conversations** by title, last instruction or folder, and the repository chips show only one repository's conversations ("Unarchive" brings one back). Deleting conversation records is done in the conversation archive.
+"+ New session" asks for the repository first — "Recent repositories" are the ones where a CLI ran (most recent activity first), and a search also finds repositories where no CLI has run yet (marked "new"); the grey text on the right is the name the session will get. The "+" on a repository head opens a new session right there.
 How raw conversations are kept (collection, archive limits, backup, replication with other Macs) is set in Settings › "Conversation archive". The conversation history window only searches and reads.
 Claude bypass and Codex YOLO stay on or off as recorded. OFF is applied explicitly, so a later change
 to global settings cannot turn it on. Codex also restores its approval policy, sandbox and approval reviewer.
