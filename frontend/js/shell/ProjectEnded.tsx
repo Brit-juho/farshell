@@ -10,7 +10,7 @@
 //
 // 「이어서」 버튼은 늘 보인다. 메뉴: 이어서 시작 · 대화 보기(대화 보관함) · 대화 보관(보관함에서는 보관 해제).
 // 같은 칸을 보관함(ArchiveView)과 폰 「종료 N」 시트가 쓴다. 이 맥 전용 API라 다른 맥을 볼 때는 그리지 않는다(호출부가 거른다).
-import { For, Show, createEffect, createSignal, on, onCleanup } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { t } from '../core/i18n.js';
 import { icon } from '../ui/icons.js';
@@ -32,8 +32,8 @@ export interface EndedConversation {
 const itemLines = (last: boolean) => (last ? '<line x1="21" y1="0" x2="21" y2="12"/>' : endLines(false));
 
 /** 대화 목록 한 쪽을 받는다(커서 이어 받기). params는 project·archived·q. */
-export async function fetchConversations(params: Record<string, string>, cursor?: string | null) {
-  const q = new URLSearchParams({ limit: String(ENDED_PAGE), ...params });
+export async function fetchConversations(params: Record<string, string>, cursor?: string | null, limit = ENDED_PAGE) {
+  const q = new URLSearchParams({ limit: String(Math.min(100, Math.max(1, limit))), ...params });
   if (cursor) q.set('cursor', cursor);
   const data = await historyApi('/api/session-catalog/conversations?' + q);
   return { items: (Array.isArray(data?.conversations) ? data.conversations : []) as EndedConversation[],
@@ -49,14 +49,17 @@ export function ConversationList(p: { params: Record<string, string>; reloadKey?
   const load = async (more = false) => {
     const mine = ++request;
     try {
-      const page = await fetchConversations(p.params, more ? next() : null);
+      // 다시 받을 때(기록이 바뀜)는 이미 「더 보기」로 받은 만큼 받는다 — 펼쳐 둔 목록이 첫 쪽으로 줄지 않게.
+      const page = await fetchConversations(p.params, more ? next() : null, more ? ENDED_PAGE : Math.max(ENDED_PAGE, items()?.length || 0));
       if (mine !== request) return;
       setItems(more ? [...(items() || []), ...page.items.filter((x) => !(items() || []).some((y) => y.id === x.id))] : page.items);
       setNext(page.next);
       setError('');
     } catch (e: any) { if (mine === request) setError(e?.message || t('기록을 읽지 못했습니다')); }
   };
-  createEffect(on(() => [JSON.stringify(p.params), p.reloadKey], () => { void load(); }));
+  // 같은 값이면 다시 받지 않는다 — 폴링마다 묶음 객체가 새로 와도(조건·끝난 대화 수가 같으면) 요청이 생기지 않게.
+  const key = createMemo(() => JSON.stringify(p.params) + '|' + String(p.reloadKey ?? ''));
+  createEffect(on(key, () => { void load(); }));
   const changed = () => { void load(); };
   window.addEventListener('vt:catalog-changed', changed);
   onCleanup(() => window.removeEventListener('vt:catalog-changed', changed));
@@ -65,7 +68,12 @@ export function ConversationList(p: { params: Record<string, string>; reloadKey?
       <Show when={items()} fallback={<Show when={!error()}><div class="vt-rg-note">{t('불러오는 중…')}</div></Show>}>
         {(list) => (
           <>
-            <For each={list()}>{(c, i) => <ConversationItem conversation={c} last={!!p.lastLine && i() === list().length - 1 && !next()} />}</For>
+            {/* 대화 id 열쇠로 돈다 — 다시 받아도 같은 대화의 칸 DOM(펼친 미리보기·열린 메뉴·포커스)이 남는다. */}
+            <For each={list().map((x) => x.id)}>{(id, i) => (
+              <Show when={list().find((x) => x.id === id)}>
+                {(c) => <ConversationItem conversation={c()} last={!!p.lastLine && i() === list().length - 1 && !next()} />}
+              </Show>
+            )}</For>
             <Show when={list().length === 0 && p.empty}><div class="vt-rg-note">{p.empty}</div></Show>
           </>
         )}

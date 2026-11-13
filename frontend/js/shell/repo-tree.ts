@@ -223,7 +223,10 @@ export function buildRepoTree<R extends RepoRowLike>(inp: BuildInput<R>): RepoGr
   for (const g of groups.values()) {
     for (const l of g.lanes) l.sessions.sort(bySession);
     // 메인 가지가 먼저, 워크트리·폴더 가지는 그 뒤 — 이름순이면 가지 이름(경로)순, 아니면 가지 안 첫 세션 순서를 따른다.
-    g.lanes.sort((a, b) => (a.worktree ? 1 : 0) - (b.worktree ? 1 : 0)
+    // 「입력 대기 먼저」를 켜면 입력 대기 세션이 있는 가지가 그보다 먼저다(설정 안내 「어떤 정렬에서도 위로」).
+    const laneWaiting = (l: Lane<R>) => l.sessions.some((x) => waiting(x.row) || x.kids.some(waiting));
+    g.lanes.sort((a, b) => (sort.waitingFirst && laneWaiting(a) !== laneWaiting(b) ? (laneWaiting(a) ? -1 : 1) : 0)
+      || (a.worktree ? 1 : 0) - (b.worktree ? 1 : 0)
       || (sort.sessions === 'name'
         ? (a.worktree?.folder || a.worktree?.branch || a.worktree?.name || '').localeCompare(b.worktree?.folder || b.worktree?.branch || b.worktree?.name || '')
         : (a.sessions[0] && b.sessions[0] ? bySession(a.sessions[0], b.sessions[0]) : laneActivity(b, activity) - laneActivity(a, activity))));

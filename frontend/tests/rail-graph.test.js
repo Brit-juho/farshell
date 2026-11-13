@@ -332,3 +332,15 @@ test('종료 칸 — 칸은 버튼이 아니고, 펼치기·이어서·메뉴가
   assert.ok(er.querySelector('button.vt-rg-rs'), '「이어서」는 늘 보인다');
   assert.ok(er.querySelector('button.vt-rg-more'));
 });
+
+test('입력 대기 먼저 — 대기 세션이 있는 워크트리 가지가 메인 가지보다 위로', async () => {
+  const m = await mod();
+  const rows = [
+    row({ name: 'main', created: 9, home: home('farshell', '/r/f', 'P'), context: ctx('/r/f', false, '/r/f') }),
+    row({ name: 'wt', created: 1, status: 'waiting', branch: 'fix/x', home: home('farshell', '/r/f', 'P'), context: ctx('/r/f-wt', true, '/r/f') }),
+  ];
+  const off = m.buildRepoTree({ rows });
+  assert.strictEqual(off[0].lanes[0].worktree, null, '끄면 메인 가지가 먼저');
+  const on = m.buildRepoTree({ rows, sort: { repos: 'registered', sessions: 'created', waitingFirst: true } });
+  assert.strictEqual(on[0].lanes[0].worktree.branch, 'fix/x');
+});
