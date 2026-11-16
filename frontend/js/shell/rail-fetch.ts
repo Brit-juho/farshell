@@ -404,7 +404,9 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
       // 화면 어디서나 보이는 이름(별칭)을 쓴다 — tmux 이름은 열쇠가 아니고 맥 터미널 `tmux attach -t`용이다.
       name: normalizeTitle(tm.catalog?.title) || tm.name,
       nameSource: tm.catalog?.name_source === 'human' ? 'human' : tm.catalog ? 'auto' : null,
+      // 둘은 짝이다 — attach는 카탈로그 세션 id를 받으면 실행 회차(runtime_id)도 요구한다(없으면 400, 2.12.0~2.12.1 목록 클릭 실패).
       catalogSessionId: typeof tm.catalog?.catalog_id === 'string' ? tm.catalog.catalog_id : undefined,
+      runtimeId: typeof tm.catalog?.catalog_id === 'string' && typeof tm.catalog?.runtime_id === 'string' ? tm.catalog.runtime_id : undefined,
       home: normalizeHome(tm.home),
       summary: typeof detail?.summary === 'string' ? detail.summary : null,
       lastPrompt: typeof detail?.lastPrompt === 'string' ? detail.lastPrompt : null,

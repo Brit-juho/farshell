@@ -20,6 +20,8 @@ import { renderFileDiff } from './diff.js';
 import { _viewerState } from './state.js';
 import { t } from '../../core/i18n.js';
 import { watchPath, coalesce } from '../../shell/fs-watch.js';
+import { onWorkspaceEvent } from '../../core/workspace-ws.js';
+import { renderCheckpoints, renderTurn } from './checkpoints.js';
 
 const PANEL_ID = 'vt-dock-scm';
 
@@ -139,12 +141,41 @@ export async function showScm(opts = {}) {
     });
     // 조용한 갱신이 실패하면(null) 머리말도 지금 것을 둔다.
     if (d || !quiet) _renderHead(headEl, repo, d);
+    // 변경 목록과 커밋 기록 사이 「에이전트 체크포인트」 절(읽기 전용). 켜지 않은 저장소에서는 켜기 안내만 보인다.
+    if (d && d.repo && listing) {
+      const host = document.createElement('div');
+      host.className = 'vt-ckpt-host';
+      // 변경 목록과 커밋 기록 **사이**에 둔다 — 기록 아래(30줄 넘게 이어진다)에 두면 스크롤해야 보인다.
+      const log = body.querySelector('.vt-vw-glog');
+      if (log && log.parentNode) log.parentNode.insertBefore(host, log); else body.appendChild(host);
+      ckHost = host;
+      ckRepo = repo;
+      await drawCheckpoints();
+    }
   };
+
+  let ckHost = null;
+  let ckRepo = null;
+  const drawCheckpoints = () => {
+    const host = ckHost;
+    const repo = ckRepo;
+    if (!host || !repo) return Promise.resolve();
+    return renderCheckpoints(host, repo, {
+      isCurrent: () => listing && ckHost === host,
+      reload: drawCheckpoints,
+      onTurn: (c) => {
+        listing = false;
+        renderTurn(body, repo, c, { onBack: () => paint() });
+      },
+    });
+  };
+  // 서버가 기록을 남기거나 켜기가 바뀌면 이 절만 다시 읽는다(폴링 없음).
+  const offCk = onWorkspaceEvent('checkpoints_changed', () => { if (listing && ckHost && ckHost.isConnected) drawCheckpoints(); });
 
   panel.ctx.byId('vt-scm-refresh').addEventListener('click', () => paint());
   // 세션을 바꾸면 보는 저장소도 바뀐다 — dock은 "지금 보고 있는 페인"을 따라간다.
   const unsub = window.storeSubscribe ? window.storeSubscribe(() => paint()) : null;
-  panel.el._vtOnClose = () => { if (unsub) unsub(); stopWatch(); };
+  panel.el._vtOnClose = () => { if (unsub) unsub(); offCk(); stopWatch(); };
 
   await paint();
 }
