@@ -457,6 +457,8 @@ _ROWS: tuple = (
     ("GET", "/api/checkpoints", human()),
     ("GET", "/api/checkpoints/diff", human()),
     ("PUT", "/api/checkpoints/settings", human()),
+# --- routes/client_log.py (화면의 오류·경고 기록 — 사람 세션만. 기계 토큰·소켓·다른 Mac 불허, 중계 밖)
+    ("POST GET DELETE", "/api/client-log", human()),
 # --- main.py
     ("GET", "/", public("login gate page; has to render unauthenticated")),
     ("GET", "/sw.js", public("static asset of the login gate")),
