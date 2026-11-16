@@ -628,7 +628,7 @@ def homes(physical_keys):
         for start in range(0, len(keys), 400):
             chunk = keys[start:start + 400]
             rows = db.execute(
-                "SELECT r.physical_key, s.id AS sid, s.title, s.name_source, s.workspace_id, w.path AS wpath, w.kind AS wkind,"
+                "SELECT r.physical_key, r.id AS rid, s.id AS sid, s.title, s.name_source, s.workspace_id, w.path AS wpath, w.kind AS wkind,"
                 " p.id AS pid, p.name AS pname, p.path AS ppath, p.kind AS pkind, p.registered AS preg, p.removed AS prem,"
                 " p.hidden AS phid FROM runtimes r JOIN sessions s ON s.id=r.session_id"
                 " LEFT JOIN workspaces w ON w.id=s.workspace_id LEFT JOIN projects p ON p.id=w.project_id"
@@ -640,7 +640,7 @@ def homes(physical_keys):
                             "repository": r["pkind"] == "git", "kind": r["wkind"], "path": r["wpath"],
                             # 목록의 저장소인가(CLI를 켠 곳으로 등록됨·제거 안 됨)와 숨김 — 아니면 화면이 「저장소 밖」 폴더 가지로 그린다.
                             "registered": r["preg"] is not None and r["prem"] is None, "hidden": bool(r["phid"])}
-                out[r["physical_key"]] = {"catalog_id": r["sid"], "title": r["title"], "name_source": r["name_source"], "home": home}
+                out[r["physical_key"]] = {"catalog_id": r["sid"], "runtime_id": r["rid"], "title": r["title"], "name_source": r["name_source"], "home": home}
     return out
 
 

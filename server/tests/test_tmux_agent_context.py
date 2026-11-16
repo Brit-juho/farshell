@@ -135,13 +135,13 @@ def test_rows_carry_the_catalog_home_and_visible_name(trees, monkeypatch):
 
     def fake_homes(keys):
         seen.append(keys)
-        return {"$1:100": {"catalog_id": "c" * 32, "title": "결제 버그", "name_source": "human",
+        return {"$1:100": {"catalog_id": "c" * 32, "runtime_id": "r" * 32, "title": "결제 버그", "name_source": "human",
                            "home": {"project_id": "p", "workspace_id": "w", "root": str(main), "name": "project",
                                     "repository": True, "kind": "checkout", "path": str(main)}}}
     monkeypatch.setattr(tmux_route, "_catalog_homes", fake_homes)
     row = _row()
     assert seen == [["$1:100"]]
-    assert row["home"]["name"] == "project" and row["catalog"] == {"catalog_id": "c" * 32, "title": "결제 버그", "name_source": "human"}
+    assert row["home"]["name"] == "project" and row["catalog"] == {"catalog_id": "c" * 32, "runtime_id": "r" * 32, "title": "결제 버그", "name_source": "human"}
 
 
 def test_rows_without_a_catalog_record_have_no_home(trees, monkeypatch):

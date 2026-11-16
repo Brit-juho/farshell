@@ -284,7 +284,8 @@ async def collect_tmux_sessions() -> list[dict]:
             # 카탈로그가 아는 자리(처음 시작한 저장소·작업 트리, cd해도 그대로)와 보이는 이름(별칭). 아직 기록 전이면 null —
             # 그때는 `context`(지금 위치)로 그린다.
             "home": catalog["home"] if catalog else None,
-            "catalog": {k: catalog[k] for k in ("catalog_id", "title", "name_source")} if catalog else None,
+            # runtime_id — 목록에서 연 세션을 attach가 이 실행 회차에 묶는다(catalog_session_id와 짝; 빠지면 attach가 400).
+            "catalog": {k: catalog[k] for k in ("catalog_id", "runtime_id", "title", "name_source")} if catalog else None,
             "windows": int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1,
             "attached": attached,
             # 웹 화면 = 이 서버가 PTY를 쥔 attach(브라우저 탭·폰 하나가 1개). 나머지는 웹이 아닌 attach
