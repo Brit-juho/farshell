@@ -488,29 +488,6 @@ export function rowSummary(
   return parts.join(' · ');
 }
 
-export interface RowSummaryDetails {
-  status: string;
-  /** 백그라운드 셸 — 하나라도 있으면(실행 중·끝남) 메뉴 요약에 구역이 생긴다. */
-  shells?: BgShells;
-  cwd?: string;
-  project?: string;
-  branch?: string;
-  accessible: string;
-}
-
-export function rowSummaryDetails(row: Parameters<typeof rowSummary>[0] & { shells?: unknown }): RowSummaryDetails {
-  const cwd = row.cwd || undefined;
-  const shells = normalizeShells(row.shells);
-  return {
-    ...(shells.running.length || shells.ended.length ? { shells } : {}),
-    status: rowSummary({ ...row, cwd: undefined, branch: undefined }, { hideIdle: true }),
-    cwd,
-    project: cwd ? cwd.replace(/\/+$/, '').split('/').pop() || cwd : undefined,
-    branch: row.branch || undefined,
-    accessible: rowSummary(row) + (shells.running.length ? ' · ' + t('백그라운드 셸 {n}개 실행 중', { n: shells.running.length }) : ''),
-  };
-}
-
 export interface RowMenuOpts {
   /** 「오른쪽에 나란히 열기」「아래에 열기」를 넣는다. 폭 720px 이상 + 터치일 때만 true로 준다
    * (term/session-actions.js `touchSplitAvailable`). 터치 드래그를 만들지 않는 대신의 길이다. */

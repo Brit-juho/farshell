@@ -13,7 +13,7 @@ import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'so
 import { Portal } from 'solid-js/web';
 import { t } from '../core/i18n.js';
 import {
-  buildRailLists, splitRunning, rowMenuItems, rowSummaryDetails, runRowMenu, renameViewGroup,
+  buildRailLists, splitRunning, rowMenuItems, runRowMenu, renameViewGroup,
   ATTENTION_COLLAPSED_KEY, ATTENTION_SHOW_KEY, LINEAGE_KEY, VIEW_KEY, ORDER_KEY, encodeLineagePrefs, encodeRailView, encodeRailOrder,
   toggleGroupCollapsed,
   kidsProgress, canShareName,
@@ -36,6 +36,7 @@ import {
 import { createRailPrefs } from './rail-prefs.js';
 import { Menu, ROW_MENU_ICON, Row, type MenuItem } from './RailRow.js';
 import { RailHoverCard, type HoverCardSource } from './RailHoverCard.js';
+import { buildHoverCard } from './rail-hover-card.js';
 import { NativeChildren } from './NativeChildren.js';
 import { ArchiveView, ArchiveEntry, type CatalogSnapshot } from './ArchiveView.js';
 import { renameSession as renameCatalogSession } from '../history/session-actions.js';
@@ -393,6 +394,12 @@ export function Rail(props: RailProps) {
       host: viewHostId === LOCAL_HOST ? null : { label: h?.label || viewHostId, online: h ? !!h.online : true, latencyMs: h?.latencyMs ?? null, reason: h?.reason ?? null },
       shareable: viewHostId === LOCAL_HOST && canShareName(row.tmuxName),
     };
+  };
+  // 행 메뉴 맨 위의 세션 정보 — 접힌 띠 호버 카드와 같은 모델(RailRow.tsx MenuSummary). 셸 명령은 설명 아래 한 줄로 싣는다.
+  // 메뉴를 연 순간의 행(ctxMenu의 사본)으로 만들어, 도구 이름이 바뀌어도 열린 메뉴가 깜빡이지 않는다.
+  const summaryOf = (row: SessionRow) => {
+    const src = resolveCard(rowKey(row));
+    return buildHoverCard(row, { tool: row.tool, kids: src?.kids || [], host: src?.host ?? null, shareable: !!src?.shareable, commands: true });
   };
   let railEl: HTMLElement | undefined;
   const totalRows = createMemo(() => lists().sessions.length);
@@ -790,7 +797,7 @@ export function Rail(props: RailProps) {
       <Show when={ctxMenu()}>
         {(m) => (
           <Portal>
-            <Menu x={m().x} y={m().y} onClose={() => setCtxMenu(null)} items={ctxMenuItems()} summary={rowSummaryDetails(m().row)} />
+            <Menu x={m().x} y={m().y} onClose={() => setCtxMenu(null)} items={ctxMenuItems()} summary={summaryOf(m().row)} />
           </Portal>
         )}
       </Show>

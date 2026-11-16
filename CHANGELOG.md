@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+- **The information at the top of a row menu is clearer.** It now uses the same layout and data as the folded strip's hover card: a state chip, then aligned icon · value · right-hand lines — the folder once, shortened with `~` (the full path on hover; it used to repeat the project name above the absolute path), the branch with its +N −N and worktree tag, internal agents and delegated sessions, background shells with their elapsed time and the command on a muted line under the description, other screens and sharing. Empty lines are left out, long lists collapse to "N more", and the text can still be selected and copied. The old separate summary code is gone.
+
 ---
 
 ## [2.12.3] — 2026-11-16

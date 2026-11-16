@@ -16,9 +16,11 @@ import { shellIcon } from '../ui/icons-shell.js';
 import { agentMark } from './agent-mark.js';
 import { t } from '../core/i18n.js';
 import {
-  ORIGIN_ICON, originLabel, SHARE_MODE_LABEL, shareSentence, profileLabel, formatRelativeTime, type SessionRow, type SessionProfile, type Origin, type ShareInfo, type RowSummaryDetails,
+  ORIGIN_ICON, originLabel, SHARE_MODE_LABEL, shareSentence, profileLabel, type SessionRow, type SessionProfile, type Origin, type ShareInfo,
 } from './rail-data.js';
-import { normalizeShells, shellLabel, shellCounts, type BgShells } from './bg-shells.js';
+import { normalizeShells, shellLabel } from './bg-shells.js';
+import { CardBody, cardText } from './RailHoverCard.js';
+import type { HcModel } from './rail-hover-card.js';
 
 
 /** 만든 곳 아이콘(local은 없다) — 레일 칸은 다른 맥에서 만든 세션에만 붙인다. 글(「직접 만듦」 등)은 칸에 쓰지 않고
@@ -229,56 +231,14 @@ export const ROW_MENU_ICON: Record<string, string> = {
   openParent: 'corner-down-left', record: 'history',
 };
 
-/** 레일과 모바일 시트가 공유하는 선택 불가 정보 헤더. */
-export function MenuSummary(props: { summary: string | RowSummaryDetails }) {
-  const details = () => typeof props.summary === 'string' ? null : props.summary;
-  const accessible = () => typeof props.summary === 'string' ? props.summary : props.summary.accessible;
+/** 레일 ⋯·우클릭 메뉴와 폰 꾹 누름 시트 맨 위의 세션 정보 — 접힌 띠 호버 카드와 같은 모델(rail-hover-card.ts buildHoverCard,
+ * commands)과 같은 그리기(RailHoverCard.tsx CardBody). 머리(이름·경과)는 메뉴를 연 칸에 이미 보여 빼고 상태 칩부터 그린다.
+ * (예전에는 따로 만든 옛 요약 — 위치를 이름과 절대 경로로 두 번, 셸을 제각각 모양으로 — 이었다. 2026-11-16 통일.)
+ * 글자는 끌어서 골라 복사할 수 있다(components.css .vt-menu-summary). */
+export function MenuSummary(props: { model: HcModel }) {
   return (
-    <div class="vt-menu-summary" role="note" aria-label={t('요약: {summary}', { summary: accessible() })}>
-      <Show when={details()?.status ?? accessible()}><div class="vt-menu-summary-status">{details()?.status ?? accessible()}</div></Show>
-      <Show when={details()?.cwd}>
-        <div class="vt-menu-summary-section">
-          <span class="vt-menu-summary-label">{t('작업 위치')}</span>
-          <strong class="vt-menu-summary-project">{details()?.project}</strong>
-          <span class="vt-menu-summary-path">{details()?.cwd}</span>
-        </div>
-      </Show>
-      <Show when={details()?.branch}>
-        <div class="vt-menu-summary-section">
-          <span class="vt-menu-summary-label">{t('브랜치')}</span>
-          <span class="vt-menu-summary-branch">{details()?.branch}</span>
-        </div>
-      </Show>
-      <Show when={details()?.shells}>{(s) => <ShellsSummary shells={s()} />}</Show>
-    </div>
-  );
-}
-
-const SHELLS_SHOWN = 6;
-
-/** 메뉴 요약의 「백그라운드 셸」 구역 — 실행 중 먼저(오래된 순), 끝난 것은 최근 순. 명령줄은 이 맥 화면에만 온다. */
-function ShellsSummary(props: { shells: BgShells }) {
-  const [now] = createSignal(Date.now());
-  const list = () => [...props.shells.running, ...props.shells.ended];
-  const checked = () => props.shells.checkedAt;
-  return (
-    <div class="vt-menu-summary-section vt-shells-summary">
-      <span class="vt-menu-summary-label">{t('백그라운드 셸')}</span>
-      <span class="vt-shells-counts">
-        {shellCounts(props.shells)}
-        <Show when={checked()}>{(c) => <span class="vt-shells-checked">{' · '}{t('마지막 확인 {ago} 전', { ago: formatRelativeTime(c(), now()) })}</span>}</Show>
-      </span>
-      <For each={list().slice(0, SHELLS_SHOWN)}>{(s) => (
-        <div class="vt-shells-row" classList={{ ended: !s.running }}>
-          <span class="vt-shells-dot" data-state={s.running ? (s.pending ? 'pending' : 'running') : 'done'} aria-hidden="true" />
-          <span class="vt-shells-label" classList={{ mono: !s.description }} title={s.command || shellLabel(s)}>{shellLabel(s)}</span>
-          <span class="vt-shells-when">{s.running
-            ? (s.pending ? t('확인 전') : formatRelativeTime(s.startedAt, now()))
-            : t('끝남')}</span>
-          <Show when={s.command && s.description}><span class="vt-shells-cmd">{s.command}</span></Show>
-        </div>
-      )}</For>
-      <Show when={list().length > SHELLS_SHOWN}><span class="vt-shells-more">{t('외 {n}개', { n: list().length - SHELLS_SHOWN })}</span></Show>
+    <div class="vt-menu-summary" role="note" aria-label={t('요약: {summary}', { summary: cardText(props.model) })}>
+      <CardBody model={props.model} />
     </div>
   );
 }
@@ -299,7 +259,7 @@ export function ShellsMark(props: { shells: unknown }) {
 }
 
 /** `summary`: 선택 불가 정보 헤더. 일반 문자열 메뉴도 그대로 지원한다. */
-export function Menu(props: { x: number; y: number; onClose: () => void; items: MenuItem[]; summary?: string | RowSummaryDetails }) {
+export function Menu(props: { x: number; y: number; onClose: () => void; items: MenuItem[]; summary?: HcModel | null }) {
   let ref: HTMLDivElement | undefined;
   const previousFocus = document.activeElement as HTMLElement | null;
   const onDocClick = (e: MouseEvent) => { if (ref && !ref.contains(e.target as Node)) props.onClose(); };
@@ -336,7 +296,7 @@ export function Menu(props: { x: number; y: number; onClose: () => void; items: 
         items[(index + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
       }}>
       <Show when={props.summary}>
-        <MenuSummary summary={props.summary!} />
+        <MenuSummary model={props.summary!} />
       </Show>
       <For each={props.items}>
         {(it, i) => (<>
