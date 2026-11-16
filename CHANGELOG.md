@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- **Agent checkpoints section in the source-control tab.** Between the change list and the commit history: turn checkpoints on for the repository with one button (off by default), see each Claude Code / Codex turn (when, files changed, `+N −M`, tags such as `HEAD moved` or `Some left out`), open a turn to read its changed files and each file's diff. Read-only; restore comes later. It re-reads itself when a checkpoint is recorded.
+
 ---
 
 ## [2.12.1] — 2026-11-16

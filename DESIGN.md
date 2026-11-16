@@ -696,6 +696,7 @@ pane use the same classes. In the 720px+ sidebar `.vt-input.lg` drops to 13px (t
 on phones, which get sheets, not `.vt-dock-panel`).
 
 **The source-control tab supports status, diff, stage, unstage and commit.**
+Between the change list and the commit history it draws an «Agent checkpoints» section (`panels/viewer/checkpoints.js`, read-only): off by default with a «Turn on for this repository» button, otherwise per-session groups of two-line turn rows (`.vt-prow.two`: «Turn 7 · 3 min» / «4 files · +20 −3», word tags `.vt-ptag` for `HEAD moved`, `Some left out`, `May include changes between turns`), a turn sub-screen (`.vt-psub`) with the changed files and each file's diff. It re-reads only itself on `/ws-workspace` `checkpoints_changed`. File rows show `+N −M` or `binary`, not a status letter (the checkpoint API reports counts, not A/M/D).
 Push and PR/MR creation are not offered. Commits use the repository's ambient Git
 configuration; the stored git accounts are not connected to this workflow.
 See [docs/ref/worktree.md](./docs/ref/worktree.md) for the guards.
