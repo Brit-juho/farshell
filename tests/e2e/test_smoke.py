@@ -4605,3 +4605,90 @@ def test_폰_하단_탭_화면_머리는_오른쪽_거터가_16이고_훅_표_�
     assert rows, "보이는 훅 행이 있어야 한다(격리 HOME 에는 훅이 없어 전부 미등록 행)"
     assert all(left >= 16 and right >= 16 for left, right in rows), rows[:3]
     assert pg.evaluate("() => document.documentElement.scrollWidth <= innerWidth")
+
+
+# ── 에이전트 체크포인트 절(dock 소스컨트롤) ──────────────────────────────────────
+
+def test_dock_소스컨트롤_체크포인트_절은_꺼진_상태로_뜨고_켜기가_실동작한다(page, server):
+    """저장소별 켜기(기본 꺼짐) → 「이 저장소에서 켜기」를 누르면 PUT 한 번 뒤 기록 없음 안내와 끄기 버튼이 나온다.
+    켜기 상태는 격리 서버의 상태 폴더에만 쓴다. 끝에서 다시 꺼 둔다."""
+    base, token = server
+    _open_dock(page, "변경")
+    page.wait_for_selector("#vt-dock-scm .vt-ckpt", timeout=15000)
+    sec = page.locator("#vt-dock-scm .vt-ckpt")
+    try:
+        assert "에이전트 체크포인트" in sec.inner_text()
+        assert sec.locator(".vt-ckpt-row").count() == 0
+        sec.get_by_role("button", name="이 저장소에서 켜기").click()
+        page.wait_for_selector("#vt-dock-scm .vt-ckpt .vt-ckpt-off", timeout=10000)
+        assert "아직 기록이 없습니다" in sec.inner_text() or "fsh hooks install" in sec.inner_text()
+        assert page.evaluate("() => window.__csp || []") == []
+    finally:
+        loc = page.locator("#vt-dock-scm .vt-ckpt .vt-ckpt-off")
+        if loc.count():
+            loc.click()
+            page.wait_for_selector("#vt-dock-scm .vt-ckpt >> text=이 저장소에서 켜기", timeout=10000)
+    csp = [e for e in page.console_errors if "Content Security Policy" in e or "Refused to" in e]
+    assert csp == [], csp
+
+
+def test_dock_소스컨트롤_체크포인트_턴_목록과_하위_화면이_그려진다(page):
+    """서버 응답만 가짜로 채워(레이아웃·CSP·클릭 흐름은 실제 브라우저) 턴 행·태그·하위 화면·diff를 본다."""
+    import json as _json
+    now = int(time.time())
+    cid = "v1/aaaaaaaaaaaa/bbbbbbbbbbbbbbbb/000003"
+    listing = {"repo": True, "enabled": True, "lastJob": None, "limits": {"fileMB": 2, "keepTurns": 30, "keepDays": 14},
+               "sessions": [{"id": "bbbbbbbbbbbbbbbb", "agent": "claude", "tmux": "dev", "last": now, "checkpoints": [
+                   {"id": cid, "kind": "turn-end", "turn": 7, "seq": 3, "created": now - 180, "skipped": 2, "trusted": True,
+                    "preTrusted": False, "summary": {"files": 2, "added": 20, "deleted": 3, "headMoved": True, "from": None}}]}]}
+    files = {"from": None, "to": cid, "head_moved": True,
+             "files": [{"path": "src/app.py", "added": 18, "deleted": 3, "binary": False}, {"path": "logo.png", "added": 0, "deleted": 0, "binary": True}]}
+    one = {"diff": "diff --git a/src/app.py b/src/app.py\n--- a/src/app.py\n+++ b/src/app.py\n@@ -1,2 +1,2 @@\n x = 1\n-y = 2\n+y = 3\n", "truncated": False}
+
+    # 서비스 워커가 API 요청을 가로채면 playwright route가 안 닿는다(page·context 모두 실측으로 흔들렸다). 앱이 부르는
+    # window.fetch를 이 페이지 안에서 바꿔 서버 응답만 대신한다 — 렌더링·CSP·클릭 흐름은 그대로 실제 브라우저다.
+    page.evaluate(
+        """([listing, files, one]) => {
+             const real = window.fetch.bind(window);
+             window.fetch = (url, opts) => {
+               const u = String(url);
+               if (u.includes('/api/checkpoints') && !u.includes('/settings')) {
+                 const body = u.includes('file=') ? one : u.includes('/api/checkpoints/diff') ? files : listing;
+                 return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+               }
+               return real(url, opts);
+             };
+           }""",
+        [listing, files, one],
+    )
+    _open_dock(page, "변경")
+    # 앞 테스트가 소스컨트롤 활동을 열어 둔 채로 시작하면 패널이 route 설치 전에 실제 응답으로 이미 그려졌다 — 새로고침으로 다시 읽는다.
+    page.wait_for_selector("#vt-dock-scm .vt-ckpt", timeout=15000)
+    page.locator("#vt-scm-refresh").click()
+    page.wait_for_selector("#vt-dock-scm .vt-ckpt-row", timeout=15000)
+    row = page.locator("#vt-dock-scm .vt-ckpt-row").first
+    row.wait_for(state="visible")
+    text = row.inner_text()
+    assert "턴 7" in text and "파일 2개" in text and "+20" in text, text
+    tags = [t.strip() for t in row.locator(".vt-ptag").all_inner_texts()]
+    assert tags == ["HEAD 이동", "일부 제외", "턴 사이 변경 포함 가능"], tags
+    # 소스컨트롤은 저장소 변경을 보면 조용히 다시 그린다 — 읽는 순간 행이 잠깐 없을 수 있어 기다리며 읽는다.
+    geo = page.wait_for_function(
+        """() => { const r = document.querySelector('#vt-dock-scm .vt-ckpt-row'); const d = document.querySelector('#vt-dock-scm');
+                   return r && d ? { h: r.getBoundingClientRect().height, overflowX: d.scrollWidth > d.clientWidth + 1 } : null; }""",
+        timeout=10000).json_value()
+    assert geo["h"] >= 48 and not geo["overflowX"], geo
+    row.click()
+    page.wait_for_selector("#vt-scm-body .vt-psub", timeout=10000)
+    page.wait_for_selector("#vt-scm-body .vt-prow", timeout=10000)        # 파일 목록이 도착할 때까지(불러오는 중… 이 지나야 한다)
+    body = page.locator("#vt-scm-body").inner_text()
+    assert "app.py" in body and "바이너리" in body and "믿을 수 없어" in body, body
+    page.locator("#vt-scm-body .vt-prow", has_text="app.py").click()
+    page.wait_for_selector("#vt-scm-body .vt-vw-dfile", timeout=10000)
+    assert "y = 3" in page.locator("#vt-scm-body").inner_text()
+    page.locator("#vt-scm-body .vt-vw-cback").click()          # 턴으로
+    page.wait_for_selector("#vt-scm-body .vt-psub", timeout=10000)
+    page.locator("#vt-scm-body .vt-vw-cback").click()          # 체크포인트로(목록으로 다시 그린다)
+    page.wait_for_selector("#vt-dock-scm .vt-ckpt-row", timeout=15000)
+    csp = [e for e in page.console_errors if "Content Security Policy" in e or "Refused to" in e]
+    assert csp == [], csp

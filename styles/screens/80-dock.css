@@ -405,3 +405,14 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 .vt-sys-dual .vt-sys-spark{ position:absolute; inset:0; }
 .vt-sys-spark.rx{ color:var(--color-acc); }
 .vt-sys-spark.tx{ color:var(--color-st-working); }
+
+/* 에이전트 체크포인트 절(소스컨트롤) — 두 줄 행: 1줄 「턴 7 · 3분 전」, 2줄 「파일 4개 · +20 −3」. 패널 공통 치수(.vt-psec/.vt-prow/.vt-ptag)를 그대로 쓴다. */
+.vt-ckpt { margin-top:calc(var(--spacing) * 2); }
+.vt-ckpt .vt-vw-note { padding:calc(var(--spacing) * 1) calc(var(--spacing) * 3.5); white-space:normal; }
+.vt-ckpt > .vt-btn { margin:calc(var(--spacing) * 1) calc(var(--spacing) * 3.5); }
+.vt-ckpt-sess { padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3.5) calc(var(--spacing) * 0.5); font:var(--weight-medium) var(--fs-3xs) / 1 var(--font-mono); color:var(--color-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-ckpt-row { cursor:pointer; }
+.vt-ckpt-cols { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1); min-width:0; flex:1 1 auto; }
+.vt-ckpt-l1 { font:var(--weight-normal) var(--fs-sm) / 1 var(--font-ui); color:var(--color-txt); overflow:hidden; text-overflow:ellipsis; }
+.vt-ckpt-l2 { font:var(--weight-normal) var(--fs-3xs) / 1 var(--font-mono); color:var(--color-muted); }
+.vt-ckpt-tags { display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 1); padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3.5); }
