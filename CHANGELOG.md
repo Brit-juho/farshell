@@ -19,6 +19,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **A dead socket that still looks open is found when you come back.** After the screen has been hidden for 10 s or more (or the network returns) the browser sends a tiny `probe` over each open socket and replaces it if no answer or other frame arrives within 2.5-3 s, instead of waiting for the 45 s silence watchdog. Servers answer `probe` with `probe_ack` on the terminal, `/ws-agent`, `/ws-workspace`, `/ws-fs-watch` and `/ws-notify` (a remote pane's proxy answers for itself); a browser only probes sockets whose server has acked, so an older server is left as it was. See `API.md` «Liveness probe».
 - Sessions under "Outside a repository" are grouped by their current folder (`~/…`), so you can see where each one runs; the phone tile shows the folder under the name.
 
+### Fixed
+- **The status bar no longer swaps chips in and out as live values change.** CPU, GPU, RAM and NET values now sit in fixed-width slots, and a network rate is at most four characters per direction (999.6K rounds up to 1M, not 1000K), so on a narrow window the chips that are folded away stay the same until the window itself is resized.
+
 ---
 
 ## [2.12.0] — 2026-11-13

@@ -143,6 +143,12 @@
 .vt-hud-chip[data-chip="hooks"] .vt-hud-label { color:var(--warn); font-weight:var(--weight-semibold); }
 .vt-hud-label { color:var(--sub); }
 .vt-hud-value { color:var(--txt); font-weight:var(--weight-semibold); font-variant-numeric:tabular-nums; }
+/* 3초마다 바뀌는 CPU·GPU·RAM·NET 값은 고정 칸이다. 값 길이에 따라 칩 폭이 흔들리면 좁은 화면에서 fitChips가
+   그때마다 다른 칩을 넣었다 뺐다 했다(값이 줄면 접힌 칩이 돌아오고, 늘면 다시 사라짐). 칸은 가장 긴 값
+   (「100%」 4.55ch, 「↓999M ↑999M」 12.1ch — Wanted Sans 실측, formatRate가 한쪽을 4글자 이하로
+   묶는다)보다 조금 넉넉히 잡고 오른쪽 정렬한다. ch 단위라 글자 크기 설정을 따라간다. */
+.vt-hud-chip[data-chip^="stats:"] .vt-hud-value { min-width:var(--vt-hud-slot, 4.8ch); text-align:right; }
+.vt-hud-chip[data-chip="stats:net"] .vt-hud-value { --vt-hud-slot:12.6ch; }
 .vt-hud-hint  { color:var(--color-muted); }
 /* 계정 칩(hud-data.ts의 `account`) — 눌러서 메뉴가 열리는 칩이라 값 뒤에 ▾를 둔다. 값이 없는 「계정 지정 안 함」은 라벨이 본문이다. */
 .vt-hud-caret { display:inline-flex; align-items:center; color:var(--color-muted); margin-left:calc(var(--spacing) * -0.5); }
