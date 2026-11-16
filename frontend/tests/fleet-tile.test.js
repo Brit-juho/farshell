@@ -92,7 +92,7 @@ test('폰 목록 — 저장소 묶음·「종료 N」 시트·보관함, 정렬�
   assert.match(src, /class="vt-tile-grid"/);
   assert.match(src, /openEnded\(g\(\)\.key\)/);
   assert.match(src, /<ArchiveView remote=/);
-  assert.doesNotMatch(src, /AnswerButtons|answerSessionPrompt|vt-rail-sort|vt-lin-kid|ORDER_KEY/);
+  assert.doesNotMatch(src, /AnswerButtons|answerSessionPrompt|vt-rail-sort|vt-lin-kid/);   // 수동 순서(ORDER_KEY)는 2026-11 맥 전역 설정으로 다시 생겼다 — 폰은 메뉴 「위로/아래로 이동」
   assert.match(src, /class="vt-session-sheet vt-fleet-menu-sheet" role="dialog" aria-modal="true"/);
   assert.match(src, /e\.key === 'Escape'\) \{ e\.preventDefault\(\); closeMenu\(\);/);
 });

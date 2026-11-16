@@ -54,11 +54,14 @@ test('rowMenuItems — 하위 세션 메뉴(이 맥에서만), 수동 정렬 이
   assert.ok(!top.includes('moveDown') && !top.includes('moveUp'), '목록은 저장소·최근 활동순이라 손으로 옮기지 않는다');
 });
 
-test('설정 — 위임 접기는 기기별 키 하나(JSON), 정렬 값은 더 읽지 않는다', async () => {
+test('설정 — 위임 접기는 기기별 키 하나(JSON), 정렬·수동 순서는 맥 전역 키(rail.sort·rail.order)', async () => {
   const { SETTINGS_SCHEMA, LINEAGE_KEY, encodeLineagePrefs, readRailPrefs } = await mod();
   assert.strictEqual(SETTINGS_SCHEMA[LINEAGE_KEY].scope, 'device');
-  const p = readRailPrefs((k) => (k === LINEAGE_KEY ? encodeLineagePrefs(['main']) : '{"sort":"manual","order":["b"]}'));
+  assert.strictEqual(SETTINGS_SCHEMA['rail.sort'].scope, undefined, '전역(그 맥을 보는 모든 기기가 같다)');
+  assert.strictEqual(SETTINGS_SCHEMA['rail.order'].scope, undefined);
+  const p = readRailPrefs((k) => (k === LINEAGE_KEY ? encodeLineagePrefs(['main']) : k === 'rail.order' ? '{"order":["b"]}' : k === 'rail.sort' ? '{"sessions":"manual"}' : undefined));
   assert.deepStrictEqual(Array.from(p.kidsCollapsed), ['main']);
-  assert.strictEqual(p.sort, undefined);
+  assert.strictEqual(p.sort.sessions, 'manual');
+  assert.deepStrictEqual(Array.from(p.order), ['b']);
   assert.deepStrictEqual(Array.from(readRailPrefs(() => undefined).kidsCollapsed), []);
 });

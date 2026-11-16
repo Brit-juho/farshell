@@ -413,3 +413,18 @@ test('terminal.osc52Untrusted는 기본 꺼짐 + 기기 스코프', async () => 
   assert.strictEqual(S.scopeOf('terminal.osc52Untrusted'), 'device');
   assert.strictEqual(S.get('terminal.osc52Untrusted'), false);
 });
+
+test('applyRemoteGlobal — 다른 기기가 바꾼 전역 값 중 접두어(rail.) 키만 들이고 통지, 기기 키·다른 키·같은 값은 무시', async () => {
+  const { S } = await load();
+  const seen = [];
+  S.subscribe((c) => seen.push(c));
+  S.applyRemoteGlobal({ 'rail.sort': '{"sessions":"manual"}', 'rail.view': '{"groupsCollapsed":["x"]}', 'ui.theme': 'light', 'rail.order': '' }, 'rail.');
+  assert.strictEqual(S.get('rail.sort'), '{"sessions":"manual"}');
+  assert.strictEqual(S.get('rail.view'), '', '기기 설정(rail.view)은 다른 기기 값으로 바꾸지 않는다');
+  assert.deepEqual(seen, [{ 'rail.sort': '{"sessions":"manual"}' }], '같은 값(rail.order 빈 값)과 접두어 밖 키는 통지하지 않는다');
+  S.applyRemoteGlobal({ 'rail.sort': '{"sessions":"manual"}' }, 'rail.');
+  assert.strictEqual(seen.length, 1, '바뀐 게 없으면 통지 없음');
+  S.applyRemoteGlobal(null, 'rail.');
+  S.applyRemoteGlobal({ 'rail.sort': 'x' }, '');
+  assert.strictEqual(S.get('rail.sort'), '{"sessions":"manual"}', '접두어 없이는 아무것도 안 들인다');
+});

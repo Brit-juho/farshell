@@ -43,6 +43,14 @@ inside git, so linked worktrees belong to their main repository; otherwise that 
 - **Visibility.** `projects.hidden` 0 visible · 1 hidden by a person · 2 auto-hidden (registered with its last activity over 90 days ago; new
   activity lifts it). `projects.removed` takes it out of the list and settings; a CLI started there afterwards brings it back. Records are never deleted.
 - **Ended list.** A project's 「종료 N」 is its placed, not archived, not running conversations; the archive (보관함) and auto-archive work on conversations.
+  Its ⋯ menu (and settings › Cleanup for every project) archives them in one go — all, or those older than `ended_cleanup_days` (default 7) —
+  through `projects_view.archive_ended` (running conversations and ones tied to an open runtime are skipped); the toast's Undo calls
+  `unarchive_many` for exactly the moved ids.
+- **Order.** `rail.sort` and `rail.order` are this Mac's global settings (`/api/workspace`), so every device viewing the Mac shares them.
+  Repositories chain up to three keys (`sessions`, `waiting`, `name`, `registered`, `activity`; default `sessions → name`, then name and
+  registration break ties); 「저장소 밖」 is inserted right after the last project with live sessions. Sessions: `created` (default), `name`,
+  `activity` or `manual` — `rail.order` lists `orderKey`s (catalog session id, else `tmux:<name>`); unknown sessions go to the end of their branch;
+  moves stay within one branch and save only the visible keys (≤500).
 - **Running sessions** sit at their current place (`db.homes`): the CLI's project while a CLI runs, otherwise the shell's folder after it stays 10 s
   (`inventory.SETTLE`); the rail shows them in a project group only when that project is registered and not hidden.
 

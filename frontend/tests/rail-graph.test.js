@@ -55,7 +55,7 @@ test('머리 브랜치 — /api/repos가 먼저, 없으면 메인 작업 트리�
   assert.strictEqual(listed[0].mainBranch, 'feat/auth', '저장소 목록의 브랜치가 먼저');
 });
 
-test('목록의 저장소가 아니면(자리 모름·셸로 들어간 미등록 저장소·숨김) 「저장소 밖」(맨 아래)', async () => {
+test('목록의 저장소가 아니면(자리 모름·셸로 들어간 미등록 저장소·숨김) 「저장소 밖」(세션 있는 저장소 아래)', async () => {
   const m = await mod();
   const tree = m.buildRepoTree({ rows: [
     row({ name: 'tmp' }),
@@ -102,28 +102,64 @@ test('저장소 밖 폴더 가지 — 머리는 폴더 아이콘과 ~로 줄인 
   assert.ok(!/워크트리/.test(head.textContent));
 });
 
-test('정렬 — 기본은 생성된 순(저장소 등록순·세션 만든 순, 최근 것 먼저), 입력 대기 먼저는 끔', async () => {
+test('정렬 — 기본은 세션 있는 저장소 먼저 → 이름순, 세션은 만든 순(최근 것 먼저), 기준은 여러 단계', async () => {
   const m = await mod();
   const rows = [
     row({ name: 'a1', created: 10, home: home('alpha', '/r/a', 'A') }), row({ name: 'a2', created: 30, home: home('alpha', '/r/a', 'A') }),
-    row({ name: 'b1', created: 20, home: home('beta', '/r/b', 'B') }),
     row({ name: 'c1', created: 5, status: 'waiting', home: home('gamma', '/r/c', 'C') }),
   ];
   const projects = [{ id: 'A', name: 'alpha', path: '/r/a', kind: 'git', registered: 300, last_activity: 1 },
     { id: 'B', name: 'beta', path: '/r/b', kind: 'git', registered: 100, last_activity: 9 },
-    { id: 'C', name: 'gamma', path: '/r/c', kind: 'directory', registered: 200, last_activity: 5 }];
+    { id: 'C', name: 'gamma', path: '/r/c', kind: 'directory', registered: 200, last_activity: 5 },
+    { id: 'D', name: 'delta', path: '/r/d', kind: 'git', registered: 400, last_activity: 2 }];
   const tree = m.buildRepoTree({ rows, projects });
-  assert.deepStrictEqual(plain(tree.map((g) => g.name)), ['alpha', 'gamma', 'beta'], '등록순(최근 등록 먼저) — 입력 대기도 순서를 바꾸지 않는다');
+  assert.deepStrictEqual(plain(tree.map((g) => g.name)), ['alpha', 'gamma', 'beta', 'delta'], '세션 있는 저장소(이름순) → 없는 저장소(이름순)');
   assert.deepStrictEqual(names(tree[0].lanes[0].sessions.map((s) => s.row)), ['a2', 'a1'], '만든 순(최근 것 먼저)');
-  assert.strictEqual(tree[1].kind, 'directory');
-  const byName = m.buildRepoTree({ rows, projects, sort: { repos: 'name', sessions: 'name', waitingFirst: false } });
-  assert.deepStrictEqual(plain(byName.map((g) => g.name)), ['alpha', 'beta', 'gamma']);
-  assert.deepStrictEqual(names(byName[0].lanes[0].sessions.map((s) => s.row)), ['a1', 'a2']);
-  const act = m.buildRepoTree({ rows, projects, sort: { repos: 'activity', sessions: 'activity', waitingFirst: false }, activityOf: (r) => ({ a1: 2, a2: 1 })[r.name] || 0 });
-  assert.deepStrictEqual(plain(act.map((g) => g.name)), ['beta', 'gamma', 'alpha']);
+  const reg = m.buildRepoTree({ rows, projects, sort: { repos: ['registered'], sessions: 'name', waitingFirst: false } });
+  assert.deepStrictEqual(plain(reg.map((g) => g.name)), ['delta', 'alpha', 'gamma', 'beta']);
+  assert.deepStrictEqual(names(reg[1].lanes[0].sessions.map((s) => s.row)), ['a1', 'a2']);
+  const act = m.buildRepoTree({ rows, projects, sort: { repos: ['activity'], sessions: 'activity', waitingFirst: false }, activityOf: (r) => ({ a1: 2, a2: 1 })[r.name] || 0 });
+  assert.deepStrictEqual(plain(act.map((g) => g.name)), ['beta', 'gamma', 'alpha', 'delta'], '최근 활동 같으면(alpha 2 = delta 2) 이름순');
   assert.deepStrictEqual(names(act[2].lanes[0].sessions.map((s) => s.row)), ['a1', 'a2']);
-  const wait = m.buildRepoTree({ rows, projects, sort: { repos: 'registered', sessions: 'created', waitingFirst: true } });
-  assert.strictEqual(wait[0].name, 'gamma', '입력 대기 먼저를 켜면 맨 위');
+  const wait = m.buildRepoTree({ rows, projects, sort: { repos: ['waiting', 'sessions', 'name'], sessions: 'created', waitingFirst: false } });
+  assert.deepStrictEqual(plain(wait.map((g) => g.name)), ['gamma', 'alpha', 'beta', 'delta'], '입력 대기 → 세션 있음 → 이름');
+});
+
+test('저장소 밖은 세션이 살아 있는 마지막 저장소 바로 아래 — 정렬 기준과 상관없이', async () => {
+  const m = await mod();
+  const projects = [{ id: 'A', name: 'alpha', path: '/r/a', kind: 'git', registered: 1 },
+    { id: 'B', name: 'beta', path: '/r/b', kind: 'git', registered: 2 },
+    { id: 'Z', name: 'zeta', path: '/r/z', kind: 'git', registered: 3 }];
+  const rows = [row({ name: 'z1', home: home('zeta', '/r/z', 'Z') }), row({ name: 'x', cwd: '/tmp/x' })];
+  const keys = (tree) => plain(tree.map((g) => g.key === m.OUTSIDE_KEY ? '밖' : g.name));
+  assert.deepStrictEqual(keys(m.buildRepoTree({ rows, projects })), ['zeta', '밖', 'alpha', 'beta']);
+  assert.deepStrictEqual(keys(m.buildRepoTree({ rows, projects, sort: { repos: ['name'], sessions: 'created', waitingFirst: false } })),
+    ['alpha', 'beta', 'zeta', '밖'], '이름순이면 세션 있는 zeta가 맨 끝 — 그 바로 아래');
+  assert.deepStrictEqual(keys(m.buildRepoTree({ rows: [rows[1]], projects })), ['밖', 'alpha', 'beta', 'zeta'], '세션 있는 저장소가 없으면 맨 위');
+});
+
+test('수동 정렬 — 정한 순서대로, 순서에 없는 새 세션은 가지 맨 아래(먼저 만든 것 위), 입력 대기 먼저는 쓰지 않는다', async () => {
+  const m = await mod();
+  const h = home('alpha', '/r/a', 'A');
+  const rows = [row({ name: 'n1', created: 1, home: h, catalogSessionId: 'c1' }), row({ name: 'n2', created: 2, home: h, catalogSessionId: 'c2', status: 'waiting' }),
+    row({ name: 'n3', created: 3, home: h, catalogSessionId: 'c3' }), row({ name: 'n4', created: 4, home: h })];
+  const tree = m.buildRepoTree({ rows, sort: { repos: ['name'], sessions: 'manual', waitingFirst: true }, order: ['c3', 'c1', 'gone'] });
+  assert.deepStrictEqual(names(tree[0].lanes[0].sessions.map((s) => s.row)), ['n3', 'n1', 'n2', 'n4']);
+  assert.strictEqual(m.orderKey(rows[3]), 'tmux:n4', '카탈로그 기록 전이면 tmux 이름');
+});
+
+test('moveInOrder — 대상의 앞·뒤로 옮기고, 안 보이는 세션의 자리는 지키고, 넘치면 안 보이는 것부터 버린다', async () => {
+  const m = await mod();
+  assert.deepStrictEqual(plain(m.moveInOrder([], ['a', 'b', 'c', 'd'], 'd', 'b', 'before')), ['a', 'd', 'b', 'c']);
+  assert.deepStrictEqual(plain(m.moveInOrder([], ['a', 'b', 'c', 'd'], 'a', 'c', 'after')), ['b', 'c', 'a', 'd']);
+  assert.deepStrictEqual(plain(m.moveInOrder([], ['a', 'b'], 'a', 'zz', 'after')), ['a', 'b'], '대상이 없으면 그대로');
+  assert.deepStrictEqual(plain(m.moveInOrder(['a', 'h', 'b', 'c'], ['a', 'b', 'c', 'n'], 'c', 'a', 'before')), ['c', 'a', 'h', 'b', 'n'],
+    '입력 대기로 빠진 h의 자리는 남고, 새 세션 n은 뒤에 붙는다');
+  const stored = Array.from({ length: 600 }, (_, i) => 'old' + i);
+  const out = m.moveInOrder(stored, ['x', 'y'], 'y', 'x', 'before');
+  assert.strictEqual(out.length, 500);
+  assert.deepStrictEqual(plain(out.slice(-2)), ['y', 'x'], '보이는 것은 남는다');
+  assert.ok(!out.includes('old0'), '안 보이는 오래된 것부터 버린다');
 });
 
 test('위임 하위 세션은 부모 밑(만든 순서), 부모가 목록에 없으면 최상위로', async () => {

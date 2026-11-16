@@ -22,7 +22,7 @@ const PAGE = 50;
 
 export interface CatalogSnapshot {
   host: string; revision: number; projects: any[]; workspaces: any[]; sessions: any[]; next: string | null; relations?: any[];
-  auto_archive_days?: number; archived_count?: number; auto_name?: boolean; resume_ends_session?: boolean;
+  auto_archive_days?: number; ended_cleanup_days?: number; archived_count?: number; auto_name?: boolean; resume_ends_session?: boolean;
   project_counts?: Record<string, number>;
 }
 

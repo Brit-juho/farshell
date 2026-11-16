@@ -35,6 +35,9 @@ export function SessionNode(props: {
   editing?: boolean; editingValue?: string;
   onEditInput?: (v: string) => void; onEditCommit?: () => void; onEditCancel?: () => void;
   draggable?: boolean; onDragStart?: (e: DragEvent) => void;
+  /** 수동 정렬 — 끌어 온 세션을 놓을 자리 표시(이 칸의 위·아래)와 놓기 처리. */
+  dropPlace?: 'before' | 'after' | null;
+  onDragOver?: (e: DragEvent) => void; onDragLeave?: (e: DragEvent) => void; onDrop?: (e: DragEvent) => void; onDragEnd?: (e: DragEvent) => void;
   onOpen: (e: MouseEvent) => void;
   onContext: (e: MouseEvent) => void;
 }) {
@@ -59,6 +62,7 @@ export function SessionNode(props: {
       classList={{
         active: props.active, closed: !row().open, 'is-waiting': state() === 'waiting', 'is-quiet': state() === 'idle',
         l2: g().lane === 2,
+        'drop-before': props.dropPlace === 'before', 'drop-after': props.dropPlace === 'after',
       }}
       data-state={state()}
       role="button" tabindex="0"
@@ -70,6 +74,10 @@ export function SessionNode(props: {
       onContextMenu={(e) => { e.preventDefault(); props.onContext(e); }}
       draggable={!!props.draggable}
       onDragStart={props.onDragStart}
+      onDragOver={props.onDragOver}
+      onDragLeave={props.onDragLeave}
+      onDrop={props.onDrop}
+      onDragEnd={props.onDragEnd}
     >
       <div class="vt-rg-gut">
         <svg class="vt-rg-ln" aria-hidden="true" innerHTML={g().lines} />

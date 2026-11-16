@@ -10,7 +10,7 @@ import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
 import { t } from '../core/i18n.js';
 import { alertDialog, promptDialog } from '../core/dialog-lazy.js';
 import { timedFetch } from '../core/api.js';
-import { DEFAULT_SORT, type RepoSort, type SessionSort, type TreeSort } from './repo-tree.js';
+import { DEFAULT_SORT, REPO_SORTS, REPO_SORT_LEVELS, SESSION_SORTS, type RepoSort, type SessionSort, type TreeSort } from './repo-tree.js';
 import { normalizeShells, type BgShells } from './bg-shells.js';
 
 // ── 행 모양 ────────────────────────────────────────────────────────────────
@@ -323,8 +323,8 @@ export const RAIL_PREF_DEFAULTS: Record<string, boolean> = {
 
 // 계보 접기(기기별)를 설정 키 하나에 JSON으로 묶는다. core/settings.js의 스키마 줄을 아끼려는 것이다 — 초기 번들이
 // 300KiB 상한에 닿아 있고 그 파일은 주석까지 번들에 남는다. 그래서 설명은 여기에 둔다.
-// (예전 정렬 설정 `rail.order`는 세션 로직 점검 단계 8에서 스키마에서도 뺐다 — 목록은 저장소 묶음·최근 활동순뿐이다.
-//  저장돼 있던 값은 스키마에 없는 키라 읽히지 않는다.)
+// (예전 기기별 정렬 설정 `rail.order`(문자열 "manual:…")는 세션 로직 점검 단계 8에서 뺐다. 2026-11 같은 이름을 그 맥의 전역
+//  설정으로 다시 쓴다 — 아래 ORDER_KEY. 옛 기기별 값은 저장소가 달라(기기 설정) 읽히지 않는다.)
 /** 기기별 설정 하나에 `{"collapsed":[하위를 접은 부모…]}`. 기본은 펼침. (예전의 `closedOpen` — 닫힌 하위 펼침 — 은 가지 그래프에
  *  그 접기가 없어 읽지 않는다. 다음에 저장할 때 빠진다.) */
 export const LINEAGE_KEY = 'rail.lineage';
@@ -343,25 +343,42 @@ export function encodeLineagePrefs(collapsed: string[]): string {
  * 되므로 기기별이다. 예전 값(byRepo·recent·recentCollapsed·runningCollapsed)은 읽지 않는다(세션 로직 점검 단계 5·7). */
 export const VIEW_KEY = 'rail.view';
 export const GROUPS_COLLAPSED_MAX = 200;
-/** 정렬(저장소 2차, 설계 §3.7) — 같은 기기 설정 JSON에 칸을 더한다(새 설정 키를 만들지 않아 초기 번들에 영향 없음).
- * 기본은 「생성된 순」: 저장소 등록순·세션 만든 순, 입력 대기 먼저는 끔 — 최근 활동순은 목록이 계속 바뀐다. */
-export interface RailView { groupsCollapsed: string[]; sort: TreeSort }
-const REPO_SORTS: RepoSort[] = ['registered', 'name', 'activity'];
-const SESSION_SORTS: SessionSort[] = ['created', 'name', 'activity'];
+export interface RailView { groupsCollapsed: string[] }
 export function parseRailView(v: unknown): RailView {
   const o = parseObj(v);
-  const s = o.sort && typeof o.sort === 'object' && !Array.isArray(o.sort) ? o.sort as Record<string, unknown> : {};
+  return { groupsCollapsed: parseNameList(o.groupsCollapsed).filter(Boolean).slice(0, GROUPS_COLLAPSED_MAX) };
+}
+/** (예전에 이 JSON에 있던 `sort` — 기기별 정렬 — 는 2026-11 그 맥의 전역 설정 SORT_KEY로 옮겼다. 다음 저장 때 빠진다.) */
+export function encodeRailView(v: RailView): string {
+  return JSON.stringify({ groupsCollapsed: (v.groupsCollapsed || []).slice(-GROUPS_COLLAPSED_MAX) });
+}
+
+/** 정렬(2026-11) — **그 맥의 전역 설정**(`/api/workspace`)이라 그 맥을 보는 모든 기기가 같은 순서를 쓴다. 바뀌면 서버가
+ * workspace_updated로 다른 기기에도 알린다. `{"repos":[기준…],"sessions":"…","waitingFirst":false}`. 저장소 기준은 1~3단계
+ * (repo-tree.ts RepoSort), 같은 기준을 두 번 쓰지 않는다. 기본은 「세션 있는 저장소 먼저 → 이름순」 · 세션 만든 순. */
+export const SORT_KEY = 'rail.sort';
+export function parseRailSort(v: unknown): TreeSort {
+  const o = parseObj(v);
+  const repos = (Array.isArray(o.repos) ? o.repos : []).filter((k, i, a): k is RepoSort =>
+    REPO_SORTS.includes(k as RepoSort) && a.indexOf(k) === i).slice(0, REPO_SORT_LEVELS);
   return {
-    groupsCollapsed: parseNameList(o.groupsCollapsed).filter(Boolean).slice(0, GROUPS_COLLAPSED_MAX),
-    sort: {
-      repos: REPO_SORTS.includes(s.repos as RepoSort) ? s.repos as RepoSort : DEFAULT_SORT.repos,
-      sessions: SESSION_SORTS.includes(s.sessions as SessionSort) ? s.sessions as SessionSort : DEFAULT_SORT.sessions,
-      waitingFirst: typeof s.waitingFirst === 'boolean' ? s.waitingFirst : DEFAULT_SORT.waitingFirst,
-    },
+    repos: repos.length ? repos : [...DEFAULT_SORT.repos],
+    sessions: SESSION_SORTS.includes(o.sessions as SessionSort) ? o.sessions as SessionSort : DEFAULT_SORT.sessions,
+    waitingFirst: typeof o.waitingFirst === 'boolean' ? o.waitingFirst : DEFAULT_SORT.waitingFirst,
   };
 }
-export function encodeRailView(v: RailView): string {
-  return JSON.stringify({ groupsCollapsed: (v.groupsCollapsed || []).slice(-GROUPS_COLLAPSED_MAX), sort: v.sort || DEFAULT_SORT });
+export function encodeRailSort(v: TreeSort): string {
+  return JSON.stringify(parseRailSort(JSON.stringify(v)));
+}
+/** 세션 수동 순서(그 맥의 전역 설정) — repo-tree.ts orderKey의 배열. 옮길 때 지금 보이는 세션만 남겨 저장한다(moveInOrder). */
+export const ORDER_KEY = 'rail.order';
+export const ORDER_MAX = 500;
+export function parseRailOrder(v: unknown): string[] {
+  const o = parseObj(v);
+  return parseNameList(o.order).filter((k) => k && k.length <= 200).slice(0, ORDER_MAX);
+}
+export function encodeRailOrder(order: string[]): string {
+  return JSON.stringify({ order: order.filter((k) => typeof k === 'string' && k && k.length <= 200).slice(0, ORDER_MAX) });
 }
 /** 묶음 하나의 접힘을 뒤집은 새 목록. 새로 접은 것은 끝에 붙어, 자를 때 오래된 것부터 빠진다. */
 export function toggleGroupCollapsed(list: string[], id: string): string[] {
@@ -371,6 +388,8 @@ export function toggleGroupCollapsed(list: string[], id: string): string[] {
 
 export interface RailPrefs {
   view: RailView;
+  sort: TreeSort;
+  order: string[];
   attentionShow: boolean;
   attentionCollapsed: boolean;
   hiddenOrigins: Origin[];
@@ -385,6 +404,8 @@ export function readRailPrefs(get: (key: string) => unknown): RailPrefs {
   };
   return {
     view: parseRailView(get(VIEW_KEY)),
+    sort: parseRailSort(get(SORT_KEY)),
+    order: parseRailOrder(get(ORDER_KEY)),
     attentionShow: flag(ATTENTION_SHOW_KEY),
     attentionCollapsed: flag(ATTENTION_COLLAPSED_KEY),
     hiddenOrigins: HIDEABLE_ORIGINS.filter((o) => !flag(originShowKey(o))),

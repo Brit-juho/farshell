@@ -19,7 +19,7 @@ import { agentMark } from './agent-mark.js';
 import { Menu, type MenuItem } from './RailRow.js';
 import { endLines } from './RepoBranch.js';
 import { historyApi } from '../history/api.js';
-import { resumeConversation, setConversationArchived, agoLabel } from '../history/session-actions.js';
+import { resumeConversation, setConversationArchived, agoLabel, archiveEnded } from '../history/session-actions.js';
 
 export const ENDED_PAGE = 20;
 
@@ -86,10 +86,32 @@ export function ConversationList(p: { params: Record<string, string>; reloadKey?
   );
 }
 
-/** 저장소 묶음 맨 아래의 「종료 N」 접기. count는 저장소 목록 API의 끝난 대화 수. */
-export function ProjectEnded(p: { projectId: string; count: number; latest?: number | null; open: boolean; onToggle: () => void }) {
+/** 「종료 N」 정리 메뉴 항목 — 모두 · N일 지난 것만(N은 설정 › 세션 목록 › 정리, 서버 값). project가 없으면 모든 저장소. */
+export function cleanupItems(project: string | null, days: number, busy: () => boolean, run: (fn: () => Promise<unknown>) => void): MenuItem[] {
+  const n = days > 0 ? days : 7;
+  return [
+    { icon: 'archive', label: t('{n}일 지난 것만 보관함으로', { n }), run: () => { if (!busy()) run(() => archiveEnded({ project, olderThanDays: n })); } },
+    { icon: 'archive', label: t('모두 보관함으로'), run: () => { if (!busy()) run(() => archiveEnded({ project })); } },
+  ];
+}
+
+/** 저장소 묶음 맨 아래의 「종료 N」 접기. count는 저장소 목록 API의 끝난 대화 수. ⋯(또는 우클릭)은 이 저장소의 정리 메뉴. */
+export function ProjectEnded(p: { projectId: string; count: number; latest?: number | null; open: boolean; onToggle: () => void; cleanupDays?: number }) {
+  const [menuAt, setMenuAt] = createSignal<{ x: number; y: number } | null>(null);
+  const [busy, setBusy] = createSignal(false);
+  const run = (fn: () => Promise<unknown>) => {
+    setBusy(true);
+    fn().catch((e: any) => (window as any).showToast?.(e?.message || t('정리하지 못했습니다'), 'error')).finally(() => setBusy(false));
+  };
+  const openMenu = (e: MouseEvent) => {
+    e.preventDefault();
+    const btn = (e.target as HTMLElement | null)?.closest?.('.vt-rg-more');
+    const r = btn?.getBoundingClientRect();
+    setMenuAt({ x: r ? r.left : e.clientX, y: r ? r.bottom + 2 : e.clientY });
+  };
   return (
     <>
+      <div class="vt-rg-headrow" onContextMenu={openMenu}>
       <button type="button" class="vt-rg-row vt-rg-end vt-rg-fold" aria-expanded={p.open} onClick={p.onToggle}>
         <span class="vt-rg-gut"><svg class="vt-rg-ln" aria-hidden="true" innerHTML={endLines(!p.open)} /><span class="vt-rg-hol" /></span>
         <span class="vt-rg-body vt-rg-a">
@@ -99,6 +121,11 @@ export function ProjectEnded(p: { projectId: string; count: number; latest?: num
           <Show when={p.latest}><span class="vt-rg-tm">{t('마지막 {ago}', { ago: agoLabel(p.latest) })}</span></Show>
         </span>
       </button>
+      <button type="button" class="vt-icon-btn sm vt-rg-more vt-rg-end-more" aria-haspopup="menu" disabled={busy()}
+        aria-label={t('종료 대화 정리')} data-tip={t('종료 대화 정리')} data-tip-side="left"
+        onClick={openMenu} innerHTML={icon('more-horizontal', 16, 2)} />
+      </div>
+      <Show when={menuAt()}>{(m) => <Portal><Menu x={m().x} y={m().y} onClose={() => setMenuAt(null)} items={cleanupItems(p.projectId, p.cleanupDays ?? 7, busy, run)} /></Portal>}</Show>
       <Show when={p.open}>
         <ConversationList params={{ project: p.projectId }} reloadKey={p.count} lastLine />
       </Show>

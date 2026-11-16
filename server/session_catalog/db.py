@@ -470,7 +470,7 @@ def snapshot(*, limit=50, after=None, archived=False, order="id", cursor=None, q
         else:
             following = None
         out = {"host": host, "revision": db.execute("SELECT COALESCE(MAX(seq),0) FROM change_log").fetchone()[0],
-               "sessions": sessions, "auto_archive_days": auto_archive_days(db), "auto_name": auto_name_enabled(db),
+               "sessions": sessions, "auto_archive_days": auto_archive_days(db), "ended_cleanup_days": cleanup_days(db), "auto_name": auto_name_enabled(db),
                "resume_ends_session": resume_ends_session(db),
                "archived_count": db.execute("SELECT COUNT(*) FROM sessions WHERE deleted IS NULL AND archived IS NOT NULL").fetchone()[0],
                "next": following}
@@ -523,6 +523,13 @@ def edit_session(sid, revision, *, title=None, archived=None, auto_name=None):
 
 AUTO_ARCHIVE_DEFAULT_DAYS = 30
 AUTO_ARCHIVE_MAX_DAYS = 3650
+CLEANUP_DEFAULT_DAYS = 7
+
+
+def cleanup_days(db):
+    """「종료 N」 정리 메뉴의 「N일 지난 것만 보관함으로」 N(이 맥 전체 설정, 기본 7, 1~3650)."""
+    value = setting(db, "ended_cleanup_days", CLEANUP_DEFAULT_DAYS)
+    return value if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= AUTO_ARCHIVE_MAX_DAYS else CLEANUP_DEFAULT_DAYS
 
 
 def auto_archive_days(db):
@@ -551,6 +558,11 @@ def configure(values):
             if isinstance(days, bool) or not isinstance(days, int) or not 0 <= days <= AUTO_ARCHIVE_MAX_DAYS:
                 raise Refused("invalid_auto_archive_days", 400)
             set_setting(db, "auto_archive_days", days)
+        if "ended_cleanup_days" in values:
+            days = values.get("ended_cleanup_days")
+            if isinstance(days, bool) or not isinstance(days, int) or not 1 <= days <= AUTO_ARCHIVE_MAX_DAYS:
+                raise Refused("invalid_ended_cleanup_days", 400)
+            set_setting(db, "ended_cleanup_days", days)
         if "auto_name" in values:
             if not isinstance(values["auto_name"], bool):
                 raise Refused("invalid_auto_name", 400)
@@ -560,7 +572,7 @@ def configure(values):
                 raise Refused("invalid_resume_ends_session", 400)
             set_setting(db, "resume_ends_session", values["resume_ends_session"])
         return {"auto_archive_days": auto_archive_days(db), "auto_name": auto_name_enabled(db),
-                "resume_ends_session": resume_ends_session(db)}
+                "resume_ends_session": resume_ends_session(db), "ended_cleanup_days": cleanup_days(db)}
 
 
 ORPHAN_ARCHIVE_SECONDS = 86400

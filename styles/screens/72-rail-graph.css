@@ -276,3 +276,9 @@
 #vt-fleet .vt-catalog-more-link { margin:6px 12px 0; width:calc(100% - 24px); }
 /* 「종료 N」 시트 — 종료 칸은 레일과 같은 모양(.vt-rg-scope), 시트 폭에 맞춰 오른쪽 여백만 둔다. */
 .vt-fleet-ended-sheet .vt-session-list { padding-right:8px; }
+
+/* 수동 정렬 — 끌어 온 세션을 놓을 자리(이 칸의 위·아래 선). */
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg-node.drop-before { box-shadow:inset 0 2px 0 var(--color-acc); }
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg-node.drop-after { box-shadow:inset 0 -2px 0 var(--color-acc); }
+/* 「종료 N」 줄의 ⋯(정리 메뉴) — 접기 버튼 옆 형제(버튼 안에 버튼을 두지 않는다). */
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg-end-more { flex:none; margin-right:6px; }

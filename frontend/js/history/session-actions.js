@@ -49,6 +49,39 @@ export async function setConversationArchived(id, archived, { signal } = {}) {
   return result;
 }
 
+/** 「종료 N」 정리 — 저장소(없으면 전부)의 끝난 대화를 보관함으로. olderThanDays가 있으면 그보다 오래된 것만. 옮긴 뒤
+ * 「되돌리기」 알림을 띄운다(방금 옮긴 것만 되돌린다). 옮긴 개수를 돌려준다. */
+/** 서버 projects_view.BULK_MAX와 같다 — 일괄 보관·되돌리기 한 번의 상한. */
+const BULK_MAX = 2000;
+/** @param {{ project?: string | null, olderThanDays?: number }} [opts] */
+export async function archiveEnded({ project = null, olderThanDays = 0 } = {}) {
+  const body = {};
+  if (project) body.project = project;
+  if (olderThanDays) body.older_than_days = olderThanDays;
+  // 서버는 한 번에 2000개까지 옮긴다 — 다 찰 때까지 이어서 부른다(옮길 것이 남았는데 끝났다고 알리지 않게). 고리 상한 50번.
+  const ids = [];
+  for (let round = 0; round < 50; round++) {
+    const result = await historyApi('/api/session-catalog/conversations/archive-ended', { body });
+    const got = Array.isArray(result?.archived) ? result.archived : [];
+    ids.push(...got);
+    if (got.length < BULK_MAX) break;
+  }
+  notify();
+  if (!ids.length) { window.showToast?.(t('보관할 종료 대화가 없습니다')); return 0; }
+  window.showToast?.(t('종료 대화 {n}개를 보관함으로 옮겼습니다', { n: ids.length }), 'success', {
+    duration: 10000,
+    actions: [{ label: t('되돌리기'), onClick: () => {
+      const chunks = [];
+      for (let i = 0; i < ids.length; i += BULK_MAX) chunks.push(ids.slice(i, i + BULK_MAX));
+      chunks.reduce((p, chunk) => p.then((n) => historyApi('/api/session-catalog/conversations/unarchive', { body: { ids: chunk } })
+        .then((r) => n + (Number(r?.count) || 0))), Promise.resolve(0))
+        .then((n) => { notify(); window.showToast?.(t('{n}개를 되돌렸습니다', { n })); })
+        .catch(() => window.showToast?.(t('되돌리지 못했습니다 — 보관함에서 하나씩 꺼낼 수 있습니다'), 'error'));
+    } }],
+  });
+  return ids.length;
+}
+
 export async function renameSession(session, { signal } = {}) {
   const title = await promptDialog(t('작업 이름'), { title: t('작업 이름 변경'), okLabel: t('저장'), defaultValue: session.title });
   if (title === null || title.trim() === session.title) return false;

@@ -40,8 +40,9 @@ import {
 } from './rail-fetch.js';
 import {
   buildRailLists, rowMenuItems, rowSummaryDetails, runRowMenu, renameViewGroup, formatRelativeTime, nodeLine, kidLabel, type SessionRow,
+  ORDER_KEY, encodeRailOrder,
 } from './rail-data.js';
-import { buildRepoTree, OUTSIDE_KEY, type RepoGroup, type ProjectLike } from './repo-tree.js';
+import { buildRepoTree, flattenRows, moveInOrder, orderKey, OUTSIDE_KEY, type RepoGroup, type ProjectLike } from './repo-tree.js';
 import { createRailPrefs } from './rail-prefs.js';
 import { onSheetKeyDown } from './sheet-keys.js';
 import { shortenPath } from './rail-hover-card.js';
@@ -226,7 +227,7 @@ function Fleet(props: { deps: FleetDeps }) {
   const [tmuxSessions, setTmuxSessions] = createSignal<any[]>([]);
   const [repos, setRepos] = createSignal<any[]>([]);
   // 행 메모가 agentVersion()을 구독하므로 에이전트 저장소가 바뀌면 다시 계산된다.
-  const { prefs } = createRailPrefs();
+  const { prefs, set: setPref } = createRailPrefs();
   const [diffTick, setDiffTick] = createSignal(0);
   // 2026-09-30 — 세션 cwd의 변경 알림. 오면 캐시가 dirty가 되고, 다시 셀 수 있는
   // 때(rail-fetch.ts의 간격 규칙)에 한 번 다시 그려 그 행이 fetchDiffCount를 부르게 한다.
@@ -394,8 +395,23 @@ function Fleet(props: { deps: FleetDeps }) {
     projects: viewHostId === LOCAL_HOST ? projects() : [],
     mainBranches: mainBranches(),
     activityOf: (r) => (r.physicalKey && activityByKey().get(r.physicalKey)) || Number(r.since || 0),
-    sort: prefs().view.sort,
+    sort: prefs().sort,
+    order: prefs().order,
   }));
+  // 수동 정렬 — 폰은 끌기 대신 꾹 눌러 메뉴의 「위로/아래로 이동」(레일과 같은 순서, 그 맥의 전역 설정).
+  const laneOf = (row: SessionRow): SessionRow[] | null => {
+    if (prefs().sort.sessions !== 'manual' || !orderKey(row)) return null;
+    for (const g of tree()) for (const l of g.lanes) if (l.sessions.some((s) => orderKey(s.row) === orderKey(row))) return l.sessions.map((s) => s.row);
+    return null;
+  };
+  const moveBy = (row: SessionRow, step: -1 | 1) => {
+    const lane = laneOf(row);
+    const i = lane ? lane.findIndex((r) => orderKey(r) === orderKey(row)) : -1;
+    const target = lane && i >= 0 ? lane[i + step] : undefined;
+    if (!target) return;
+    const visible = flattenRows(tree()).filter((e) => !e.kid).map((e) => orderKey(e.row)).filter(Boolean);
+    setPref(ORDER_KEY, encodeRailOrder(moveInOrder(prefs().order, visible, orderKey(row), orderKey(target), step < 0 ? 'before' : 'after')));
+  };
   // 「종료 N」 타일을 누르면 그 저장소의 끝난 대화 시트(열쇠 = 저장소 묶음 key).
   // 닫으면 누른 「종료 N」 타일로 포커스를 돌려준다(꾹 눌러 메뉴 시트와 같은 규칙, 아래 openMenu).
   const [endedSheet, setEndedSheet] = createSignal<string | null>(null);
@@ -682,6 +698,21 @@ function Fleet(props: { deps: FleetDeps }) {
                       정리된 뒤라 값은 진입 시점에 한 번 꺼내 쓴다(2026-09-23 실측). */}
                   <div class="vt-session-list">
                     {/* 분할 화면 묶음에 든 세션 — 묶음 이름 바꾸기(레일 메뉴와 같은 함수). 타일을 누르면 묶음이 통째로 열리므로 「묶음 전체 열기」는 따로 두지 않는다. */}
+                    <Show when={laneOf(row)}>{(lane) => {
+                      const at = () => lane().findIndex((r) => orderKey(r) === orderKey(row));
+                      return (<>
+                        <Show when={at() > 0}>
+                          <button type="button" class="vt-menu-item" onClick={() => runMenuAction(() => moveBy(row, -1))}>
+                            <span class="vt-menu-item-ico" innerHTML={shellIcon('arrow-up', 14, 2)} />{t('위로 이동')}
+                          </button>
+                        </Show>
+                        <Show when={at() >= 0 && at() < lane().length - 1}>
+                          <button type="button" class="vt-menu-item" onClick={() => runMenuAction(() => moveBy(row, 1))}>
+                            <span class="vt-menu-item-ico" innerHTML={shellIcon('arrow-down', 14, 2)} />{t('아래로 이동')}
+                          </button>
+                        </Show>
+                      </>);
+                    }}</Show>
                     <Show when={row.viewId && row.viewLabel}>
                       <button type="button" class="vt-menu-item" onClick={() => runMenuAction(() => { void renameViewGroup(row); })}>
                         <span class="vt-menu-item-ico" innerHTML={shellIcon('pencil', 14, 2)} />

@@ -14,11 +14,12 @@ import { Portal } from 'solid-js/web';
 import { t } from '../core/i18n.js';
 import {
   buildRailLists, splitRunning, rowMenuItems, rowSummaryDetails, runRowMenu, renameViewGroup,
-  ATTENTION_COLLAPSED_KEY, ATTENTION_SHOW_KEY, LINEAGE_KEY, VIEW_KEY, encodeLineagePrefs, encodeRailView, toggleGroupCollapsed,
+  ATTENTION_COLLAPSED_KEY, ATTENTION_SHOW_KEY, LINEAGE_KEY, VIEW_KEY, ORDER_KEY, encodeLineagePrefs, encodeRailView, encodeRailOrder,
+  toggleGroupCollapsed,
   kidsProgress, canShareName,
   type SessionRow,
 } from './rail-data.js';
-import { buildRepoTree, flattenRows, OUTSIDE_KEY, type RepoGroup, type ProjectLike } from './repo-tree.js';
+import { buildRepoTree, flattenRows, moveInOrder, orderKey, OUTSIDE_KEY, type RepoGroup, type ProjectLike } from './repo-tree.js';
 import { RepoBranch } from './RepoBranch.js';
 import { SessionNode } from './SessionNode.js';
 import { ProjectEnded } from './ProjectEnded.js';
@@ -311,7 +312,8 @@ export function Rail(props: RailProps) {
     projects: viewHostId === LOCAL_HOST ? projects() : [],
     mainBranches: mainBranches(),
     activityOf: (r) => (r.physicalKey && activityByKey().get(r.physicalKey)) || Number(r.since || 0),
-    sort: prefs().view.sort,
+    sort: prefs().sort,
+    order: prefs().order,
   }));
   const flip = (list: string[], name: string) => (list.includes(name) ? list.filter((n) => n !== name) : [...list, name]);
   const toggleKids = (name: string) => setPref(LINEAGE_KEY, encodeLineagePrefs(flip(prefs().kidsCollapsed, name)));
@@ -321,6 +323,49 @@ export function Rail(props: RailProps) {
   const repoCollapsed = (g: RepoGroup<SessionRow>) => prefs().view.groupsCollapsed.includes('repo:' + repoKey(g));
   const endedOpen = (g: RepoGroup<SessionRow>) => prefs().view.groupsCollapsed.includes('ended:' + repoKey(g));
   const toggleView = (id: string) => setPref(VIEW_KEY, encodeRailView({ ...prefs().view, groupsCollapsed: toggleGroupCollapsed(prefs().view.groupsCollapsed, id) }));
+  // ── 수동 정렬(정렬 설정 「세션: 수동」) — 같은 가지(메인 또는 같은 워크트리·폴더) 안에서만 옮긴다. 하위 세션은 부모를 따른다.
+  // 순서는 그 맥의 전역 설정(ORDER_KEY)이라 그 맥을 보는 모든 기기가 같다. 저장할 때 지금 보이는 최상위 세션만 남긴다.
+  const manual = () => prefs().sort.sessions === 'manual';
+  const laneOf = (row: SessionRow): SessionRow[] | null => {
+    const k = orderKey(row);
+    if (!k) return null;
+    for (const g of tree()) for (const l of g.lanes) if (l.sessions.some((s) => orderKey(s.row) === k)) return l.sessions.map((s) => s.row);
+    return null;
+  };
+  const moveRow = (row: SessionRow, target: SessionRow, place: 'before' | 'after') => {
+    const lane = laneOf(row);
+    if (!lane || !lane.some((r) => orderKey(r) === orderKey(target))) return;   // 다른 가지로는 못 옮긴다
+    const visible = flattenRows(tree()).filter((e) => !e.kid).map((e) => orderKey(e.row)).filter(Boolean);
+    setPref(ORDER_KEY, encodeRailOrder(moveInOrder(prefs().order, visible, orderKey(row), orderKey(target), place)));
+  };
+  const moveBy = (row: SessionRow, step: -1 | 1) => {
+    const lane = laneOf(row);
+    const i = lane ? lane.findIndex((r) => orderKey(r) === orderKey(row)) : -1;
+    const target = lane && i >= 0 ? lane[i + step] : undefined;
+    if (target) moveRow(row, target, step < 0 ? 'before' : 'after');
+  };
+  const ORDER_MIME = 'text/vt-rail-order';
+  const [dropAt, setDropAt] = createSignal<{ key: string; place: 'before' | 'after' } | null>(null);
+  let draggingKey = '';
+  const isTop = (row: SessionRow) => !!laneOf(row);
+  const onOrderDragOver = (e: DragEvent, row: SessionRow) => {
+    if (!manual() || !draggingKey || !e.dataTransfer?.types.includes(ORDER_MIME)) return;
+    const lane = laneOf(row);
+    if (!lane || !lane.some((r) => orderKey(r) === draggingKey) || orderKey(row) === draggingKey) { setDropAt(null); return; }
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setDropAt({ key: orderKey(row), place: e.clientY < r.top + r.height / 2 ? 'before' : 'after' });
+  };
+  const onOrderDrop = (e: DragEvent, row: SessionRow) => {
+    const at = dropAt();
+    setDropAt(null);
+    if (!manual() || !at || at.key !== orderKey(row) || !e.dataTransfer?.types.includes(ORDER_MIME)) return;
+    e.preventDefault();
+    const moved = flattenRows(tree()).find((x) => !x.kid && orderKey(x.row) === draggingKey)?.row;
+    if (moved) moveRow(moved, row, at.place);
+  };
+  const onOrderDragEnd = () => { draggingKey = ''; setDropAt(null); };
   // 접힌 띠(48px)의 칸 순서 — 개입 필요가 위, 나머지는 펼친 가지와 같은 순서.
   const compact = createMemo(() => {
     const top = lists().attention.map((row) => ({ row, kid: null as null | { last: boolean; merged: boolean; failed: boolean; closed: boolean } }));
@@ -381,9 +426,13 @@ export function Rail(props: RailProps) {
   // (layout/dnd.js)의 드래그 소스다. mime 이름은 그 파일의 `SESSION_MIME`과 같은
   // 문자열이어야 한다(이 파일은 레이아웃 모듈을 정적 import 못 한다). 열려 있지 않은
   // 세션은 웹 세션 id가 없어 끌 수 없다.
+  // 수동 정렬이면 같은 끌기로 순서도 옮긴다(ORDER_MIME) — 화면에 놓으면 분할, 같은 가지의 세션 칸에 놓으면 순서.
   const onRowDragStart = (e: DragEvent, row: SessionRow) => {
-    if (!row.open || !row.sessionId) { e.preventDefault(); return; }
-    e.dataTransfer?.setData('text/vt-tab-id', row.sessionId);
+    const reorder = manual() && isTop(row) && !!orderKey(row);
+    const split = row.open && !!row.sessionId;
+    if (!reorder && !split) { e.preventDefault(); return; }
+    if (split) e.dataTransfer?.setData('text/vt-tab-id', row.sessionId);
+    if (reorder) { e.dataTransfer?.setData(ORDER_MIME, orderKey(row)); draggingKey = orderKey(row); }
     if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
   };
 
@@ -427,10 +476,16 @@ export function Rail(props: RailProps) {
     const linked = catalogOf(row);
     // D5 — 분할 화면 묶음에 든 세션은 행에 작은 표식만 두고, 묶음을 통째로 여는 길은 메뉴에 둔다(행을 눌러도
     // 닫힌 묶음은 통째로 다시 열린다 — term/session-actions.js openSessionFromRail).
+    const lane = manual() ? laneOf(row) : null;
+    const at = lane ? lane.findIndex((r) => orderKey(r) === orderKey(row)) : -1;
+    const order: MenuItem[] = lane && at >= 0 && lane.length > 1 ? [
+      ...(at > 0 ? [{ label: t('위로 이동'), icon: 'arrow-up', run: () => moveBy(row, -1) }] : []),
+      ...(at < lane.length - 1 ? [{ label: t('아래로 이동'), icon: 'arrow-down', run: () => moveBy(row, 1) }] : []),
+    ] : [];
     const group: MenuItem[] = row.viewLabel ? [{ label: t('묶음 전체 열기'), detail: row.viewLabel, icon: 'columns-2',
       run: () => { void openRow({} as MouseEvent, row); } },
       ...(row.viewId ? [{ label: t('묶음 이름 바꾸기'), icon: 'pencil', run: () => { void renameViewGroup(row); } }] : [])] : [];
-    return [...group, ...rowMenuItems(row, { split: splitAvailable(row), share: viewHostId === LOCAL_HOST, record: !!linked }).map((it) => ({
+    return [...order, ...group, ...rowMenuItems(row, { split: splitAvailable(row), share: viewHostId === LOCAL_HOST, record: !!linked }).map((it) => ({
       label: it.label, detail: it.detail, danger: it.danger, icon: ROW_MENU_ICON[it.id],
       run: () => {
         if (it.id === 'record' && linked) { void openRecordOf(linked, row.tmuxName); return; }
@@ -498,8 +553,13 @@ export function Rail(props: RailProps) {
     onEditInput: setEditingSessionValue,
     onEditCommit: () => commitRenameSession(row.sessionId),
     onEditCancel: () => setEditingSessionKey(null),
-    draggable: row.open && !!row.sessionId,
+    draggable: (row.open && !!row.sessionId) || (manual() && isTop(row)),
     onDragStart: (e: DragEvent) => onRowDragStart(e, row),
+    dropPlace: dropAt()?.key === orderKey(row) ? dropAt()!.place : null,
+    onDragOver: (e: DragEvent) => onOrderDragOver(e, row),
+    onDragLeave: (e: DragEvent) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) setDropAt(null); },
+    onDrop: (e: DragEvent) => onOrderDrop(e, row),
+    onDragEnd: onOrderDragEnd,
     onOpen: (e: MouseEvent) => openRow(e, row),
     onContext: (e: MouseEvent) => contextRow(e, row),
   });
@@ -670,7 +730,7 @@ export function Rail(props: RailProps) {
                       (props.deps.getAction('session.create-in') as ((cwd: string) => void) | undefined)?.(root);
                     }}
                     hasEnded={viewHostId === LOCAL_HOST && group().endedCount > 0}
-                    ended={() => <ProjectEnded projectId={group().key} count={group().endedCount} latest={group().lastActivity}
+                    ended={() => <ProjectEnded projectId={group().key} count={group().endedCount} latest={group().lastActivity} cleanupDays={Number(catalog()?.ended_cleanup_days) || 7}
                       open={endedOpen(group())} onToggle={() => toggleView('ended:' + repoKey(group()))} />}
                   />
                 )}
