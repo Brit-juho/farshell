@@ -411,7 +411,9 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 .vt-ckpt .vt-vw-note { padding:calc(var(--spacing) * 1) calc(var(--spacing) * 3.5); white-space:normal; }
 .vt-ckpt > .vt-btn { margin:calc(var(--spacing) * 1) calc(var(--spacing) * 3.5); }
 .vt-ckpt-sess { padding:calc(var(--spacing) * 1.5) calc(var(--spacing) * 3.5) calc(var(--spacing) * 0.5); font:var(--weight-medium) var(--fs-3xs) / 1 var(--font-mono); color:var(--color-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.vt-ckpt-row { cursor:pointer; }
+.vt-ckpt-row { cursor:pointer; padding-top:calc(var(--spacing) * 1.5); padding-bottom:calc(var(--spacing) * 1.5); }
+.vt-ckpt-tagline { display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 1); }
+.vt-ckpt-tagline .vt-ptag { max-width:100%; overflow:hidden; text-overflow:ellipsis; }
 .vt-ckpt-cols { display:flex; flex-direction:column; gap:calc(var(--spacing) * 1); min-width:0; flex:1 1 auto; }
 .vt-ckpt-l1 { font:var(--weight-normal) var(--fs-sm) / 1 var(--font-ui); color:var(--color-txt); overflow:hidden; text-overflow:ellipsis; }
 .vt-ckpt-l2 { font:var(--weight-normal) var(--fs-3xs) / 1 var(--font-mono); color:var(--color-muted); }

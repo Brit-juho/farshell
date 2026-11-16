@@ -192,8 +192,14 @@ function turnRow(c, onClick) {
   const col = el('span', 'vt-ckpt-cols');
   col.appendChild(el('span', 'vt-ckpt-l1', first));
   if (second) col.appendChild(el('span', 'vt-ckpt-l2 mono', second));
+  // 태그는 글 아래 줄에 둔다 — 행 오른쪽에 두면 폰 폭(390)에서 글을 밀어내고 행 밖으로 넘친다.
+  const tags = turnTags(c);
+  if (tags.length) {
+    const line = el('span', 'vt-ckpt-tagline');
+    for (const tag of tags) line.appendChild(tagEl(tag));
+    col.appendChild(line);
+  }
   row.appendChild(col);
-  for (const tag of turnTags(c)) row.appendChild(tagEl(tag));
   row.addEventListener('click', onClick);
   row.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onClick(); } });
   return row;
