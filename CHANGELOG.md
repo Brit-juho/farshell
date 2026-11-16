@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- **Agent turn checkpoints (API only, off by default).** When you switch a repository on (`PUT /api/checkpoints/settings`, browser login only), FarShell records the work folder's state in hidden refs inside that repository's `.git` at the start and end of each Claude Code / Codex turn, so a later screen can show what a turn changed. Your branch, HEAD, index and files are never changed; names the viewer refuses (`.env`, `*.pem`, …), untracked files over 2 MB and nested repositories are left out; a repository's linked worktrees share one switch; the switch is kept on this Mac only. `VT_CHECKPOINTS=0` turns it off server-wide. Reading: `GET /api/checkpoints`, `GET /api/checkpoints/diff`. The dock screen and restore come later. Details: `docs/ref/worktree.md`.
+
 ### Changed
 - **A repository is now where you start a CLI.** Starting Claude Code or Codex in a folder makes it a repository (the git top-level inside git), and it stays in the session list even with no sessions; just `cd`-ing does not create one. Existing conversations are placed into repositories in the background after the upgrade (each Mac from its own records; repositories idle for 90 days start hidden). Running sessions follow where they are now: the CLI's repository while a CLI runs, otherwise the shell's folder after 10 seconds there; anything outside a listed repository is under "Outside a repository".
 - **"Ended N" lists the conversations that ended in that repository**, 20 at a time, each with an always-visible Resume that reopens it in its folder. The archive and auto-archive work on conversations too (a conversation you unarchive is not re-archived right away).

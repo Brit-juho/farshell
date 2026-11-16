@@ -86,6 +86,28 @@ def test_capture_creates_ref_and_leaves_user_repo_untouched(repo):
     assert not [n for n in os.listdir(gd) if n.startswith("fsh-ckpt-index-")]    # 임시 인덱스가 남지 않음
 
 
+def test_pre_trusted_trailer_and_tree_time(repo):
+    (repo / "n.txt").write_text("n")
+    t0 = time.time_ns()
+    r = cap(repo, kind="turn-end", pre_trusted=True)
+    assert t0 <= r["tree_at_ns"] <= time.time_ns()
+    assert checkpoints.list_refs(repo)[-1]["pre_trusted"] is True
+    assert "FarShell-PreTrusted: yes" in g(repo, "log", "-1", "--format=%B", r["commit"])
+    (repo / "n.txt").write_text("m")
+    r2 = cap(repo, kind="turn-end")                       # 모름 → 트레일러 없음 → 믿지 않음
+    assert "PreTrusted" not in g(repo, "log", "-1", "--format=%B", r2["commit"])
+    assert checkpoints.list_refs(repo)[-1]["pre_trusted"] is False
+
+
+def test_repo_key_is_shared_by_linked_worktrees(repo, tmp_path):
+    wt = tmp_path / "wt"
+    g(repo, "worktree", "add", "-q", "-b", "feat", str(wt))
+    a, b = checkpoints.repo_key(repo), checkpoints.repo_key(wt)
+    assert a and b and a["key"] == b["key"] and a["top"] != b["top"]
+    assert a["key"] == os.path.realpath(str(repo / ".git"))
+    assert checkpoints.repo_key(tmp_path / "nope") is None
+
+
 def test_commit_message_has_trailers_and_no_paths(repo):
     (repo / "new.txt").write_text("n\n")
     r = cap(repo, agent="claude", turn=3, trusted=False)
@@ -355,9 +377,11 @@ def test_turn_base_prefers_trusted_pre_turn_then_previous_turn_end():
         return {"id": f"v1/aaaaaaaaaaaa/{sess}/{i:06d}", "sess": sess, "seq": i, "kind": kind, "turn": turn,
                 "trusted": trusted, "restore": False, "commit": f"c{i}", "parent": "p"}
     es = [e(1, "baseline", 0), e(2, "turn-end", 1), e(3, "pre-turn", 2), e(4, "turn-end", 2)]
-    assert checkpoints.turn_base(es, es[3]["id"])["seq"] == 3                # 신뢰된 pre-turn
+    assert checkpoints.turn_base(es, es[3]["id"])["seq"] == 2                # turn-end가 PreTrusted를 보증하지 않으면 앞 턴
+    es[3]["pre_trusted"] = True
+    assert checkpoints.turn_base(es, es[3]["id"])["seq"] == 3                # 보증된 pre-turn
     es[2]["trusted"] = False
-    assert checkpoints.turn_base(es, es[3]["id"])["seq"] == 2                # 못 믿으면 앞 턴의 turn-end
+    assert checkpoints.turn_base(es, es[3]["id"])["seq"] == 2                # pre-turn 자체가 못 믿을 것이면 앞 턴의 turn-end
     assert checkpoints.turn_base(es, es[0]["id"]) is None
     assert checkpoints.turn_base(es, "v1/aaaaaaaaaaaa/nope") is None
 
