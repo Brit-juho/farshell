@@ -65,3 +65,42 @@ def test_attach_missing_is_404(monkeypatch):
 def test_attach_unknown_is_503_not_404(monkeypatch):
     res = _attach(monkeypatch, tmux_runner.SESSION_UNKNOWN)
     assert res.status_code == 503
+
+
+def _screen_session(runtime_id, catalog_session_id=None):
+    sid = "w-" + (runtime_id or "none")
+    tmux_route.session_store.add(sid, name="dev", screen_id="a" * 32)
+    tmux_route.session_store.update_tmux_name(sid, "dev")
+    info = tmux_route.session_store.get(sid)
+    info.runtime_id, info.catalog_session_id = runtime_id, catalog_session_id
+    return sid
+
+
+def test_a_screen_session_without_a_runtime_is_bound_not_refused(monkeypatch):
+    """옛 복원이 실행 회차 없이 만든 이 화면의 웹 세션 — 목록에서 카탈로그 짝으로 열면 거절(409)하지 않고 묶어서 쓴다.
+    예전에는 서버를 재시작할 때까지 영영 runtime_changed였다(새로고침해도 같은 웹 세션이 남는다, 2026-11-16 M5)."""
+    sid = _screen_session(None)
+    monkeypatch.setitem(tmux_route.pty_mgr._sessions, sid, object())   # sessions는 사본을 돌려주는 속성
+    try:
+        res = asyncio.run(tmux_route.attach_screen("dev", 80, 24, None, "a" * 32,
+                                                   {"session_id": "c" * 32, "runtime_id": "r" * 32, "tmux_id": "$1", "host": "h" * 32}))
+        assert isinstance(res, dict) and res["id"] == sid and res["runtime_id"] == "r" * 32
+        info = tmux_route.session_store.get(sid)
+        assert (info.catalog_session_id, info.runtime_id) == ("c" * 32, "r" * 32)
+    finally:
+        tmux_route.session_store.remove(sid)
+
+
+def test_a_screen_session_of_an_old_runtime_is_replaced(monkeypatch):
+    """같은 이름의 다른 실행 회차에 붙어 있던 옛 웹 세션은 걷어내고 새로 붙인다(거절하면 이 화면에서 다시 열 길이 없다)."""
+    sid = _screen_session("o" * 32, "c" * 32)
+    destroyed = []
+    monkeypatch.setattr(tmux_route.pty_mgr, "destroy_session", lambda s: destroyed.append(s))
+
+    async def fake_attach(*args, **kwargs):
+        return {"id": "fresh"}
+    monkeypatch.setattr(tmux_route, "_attach_tmux", fake_attach)
+    res = asyncio.run(tmux_route.attach_screen("dev", 80, 24, None, "a" * 32,
+                                               {"session_id": "c" * 32, "runtime_id": "r" * 32, "tmux_id": "$1", "host": "h" * 32}))
+    assert res == {"id": "fresh"} and destroyed == [sid]
+    assert tmux_route.session_store.get(sid) is None

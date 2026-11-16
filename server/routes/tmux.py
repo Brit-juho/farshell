@@ -148,9 +148,24 @@ async def attach_screen(tmux_name: str, cols: int, rows: int, request: Request,
                         screen_id: str, catalog_binding: dict | None = None):
     """같은 화면은 복구하고 다른 화면에는 새 PTY를 준다. attach 락 안에서 호출."""
     existing = session_store.find_by_tmux_and_screen(tmux_name, screen_id)
+    if existing and catalog_binding and existing.runtime_id != catalog_binding['runtime_id']:
+        if existing.runtime_id is None and existing.catalog_session_id in (None, catalog_binding['session_id']):
+            # 실행 회차 없이 붙어 있던 이 화면의 웹 세션(옛 복원·이름만으로 연 길) — 같은 tmux 세션이다(route가 카탈로그로
+            # tmux_name을 이미 맞췄다). 거절하지 않고 이 실행 회차에 묶어 그대로 쓴다. 예전에는 409(runtime_changed)를 돌려줘,
+            # 서버를 재시작하기 전까지 목록에서 눌러도 영영 열리지 않았다(새로고침해도 같은 웹 세션이 남는다, 2026-11-16 M5).
+            existing.catalog_session_id = catalog_binding['session_id']
+            existing.runtime_id = catalog_binding['runtime_id']
+            existing.catalog_host = catalog_binding.get('host')
+        else:
+            # 다른 실행 회차(같은 이름으로 새로 만든 tmux 세션)에 붙어 있던 옛 웹 세션 — 그 PTY는 옛 세션 것이다. 걷어내고
+            # 새로 붙인다(거절하면 이 화면에서는 다시 열 길이 없다).
+            from deps import _auto_responder
+            pty_mgr.destroy_session(existing.session_id)
+            session_store.remove(existing.session_id)
+            output_watcher.remove_session(existing.session_id)
+            _auto_responder.remove(existing.session_id)
+            existing = None
     if existing:
-        if catalog_binding and existing.runtime_id != catalog_binding['runtime_id']:
-            return JSONResponse({"error":"runtime_changed"},status_code=409)
         if existing.session_id in pty_mgr.sessions or await revive_tmux_attach(existing):
             return {"id": existing.session_id, "name": existing.name, "tmux_session": tmux_name,
                     **({"catalog_session_id": existing.catalog_session_id, "runtime_id": existing.runtime_id, "catalog_host": existing.catalog_host} if existing.catalog_session_id else {})}
