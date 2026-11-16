@@ -181,7 +181,7 @@ test('compact — 더보기 첫 화면에 도구와 설정 진입점이 나온�
   const { document, P } = await build({ compact: true });
   P.showSettings();
   const links = Array.from(document.querySelectorAll('.vt-set-mobile-link strong')).map((e) => e.textContent);
-  assert.deepEqual(links, ['파일', '포트', '사용량', '터미널', '음성 및 알림', '에이전트', '에이전트 계정', '키맵', '모양', '대화 보관', '권한', '계정 및 보안', '업데이트', '정보 및 진단']);
+  assert.deepEqual(links, ['파일', '포트', '사용량', '기록', '터미널', '음성 및 알림', '에이전트', '에이전트 계정', '키맵', '모양', '대화 보관', '권한', '계정 및 보안', '업데이트', '정보 및 진단']);
   assert.strictEqual(document.querySelector('.vt-set-nav'), null, 'compact 첫 화면은 숨은 가로 탭을 만들지 않는다');
 });
 

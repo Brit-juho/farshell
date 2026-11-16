@@ -600,3 +600,21 @@ test('훅 점검 칩: 이상이 있는 CLI만 적고, 정상·absent면 칩이 �
   assert.ok(!Array.from(HUD_KINDS).includes('hooks') && Array.from(ALERT_HUD_KINDS).includes('hooks'), '설정 목록에는 없고 경고 종류다');
   assert.strictEqual(moveHudKind(base, 'hooks', 'right', 0), base, '배치 밖 종류는 옮길 수 없다');
 });
+
+test('기록 칩: 아직 안 본 오류·경고가 있을 때만 생기고, 오류가 있으면 err·없으면 warn — 배치 밖이라 배치를 꺼도 남는다', async () => {
+  const { buildHudChips, ALERT_HUD_KINDS, HUD_KINDS } = await mod();
+  const none = { left: [], right: [] };
+  assert.deepStrictEqual(ids(buildHudChips({ unseenLog: { error: 0, warn: 0 } }, none)), []);
+  assert.deepStrictEqual(ids(buildHudChips({ unseenLog: null }, none)), []);
+  const err = buildHudChips({ unseenLog: { error: 2, warn: 3 } }, none).find((c) => c.id === 'log');
+  assert.strictEqual(err.value, '5');
+  assert.strictEqual(err.tone, 'err');
+  assert.strictEqual(err.label, '오류');
+  assert.strictEqual(err.action, 'eventlog.open');
+  const warn = buildHudChips({ unseenLog: { error: 0, warn: 1 } }, none).find((c) => c.id === 'log');
+  assert.strictEqual(warn.tone, 'warn');
+  assert.strictEqual(warn.label, '경고');
+  assert.ok(Array.from(ALERT_HUD_KINDS).includes('log') && !Array.from(HUD_KINDS).includes('log'), '설정 목록에는 없는 경고 종류');
+  const withAgents = buildHudChips({ unseenLog: { error: 1, warn: 0 }, agents: { waiting: 1, working: 0, done: 0 } }, none);
+  assert.deepStrictEqual(ids(withAgents), ['agents', 'log'], '에이전트 칩 바로 다음');
+});

@@ -135,6 +135,10 @@ function trim() {
 export function logEvent(o) {
   try {
     if (!o) return '';
+    // 이 파일이 voice.js 번들에도 한 벌 더 들어간다(voice/confirm.js 가 core/api.js 를 import 하기 때문). 두 번째 사본은
+    // 자기 링 버퍼에 쌓지 않고 먼저 올라온 앱 사본에 넘긴다 — 안 그러면 그 기록은 패널에도 서버에도 안 간다.
+    const owner = typeof window !== 'undefined' && window.vtLogEvent;
+    if (owner && owner !== logEvent) return owner(o);
     const level = LEVELS.includes(o.level) ? o.level : 'info';
     const source = SOURCES.includes(o.source) ? o.source : 'ui';
     const err = o.error && typeof o.error === 'object' ? o.error : null;
@@ -224,10 +228,15 @@ export function getEvent(id) {
 }
 
 /** 마지막으로 기록을 본 뒤에 난 오류·경고 수 — 상태 막대 칩이 쓴다. */
-export function unseenCount() {
-  let n = 0;
-  for (const e of events) if ((e.level === 'error' || e.level === 'warn') && e.last > seenAt) n += 1;
+export function unseenLevels() {
+  const n = { error: 0, warn: 0 };
+  for (const e of events) if ((e.level === 'error' || e.level === 'warn') && e.last > seenAt) n[e.level] += 1;
   return n;
+}
+
+export function unseenCount() {
+  const n = unseenLevels();
+  return n.error + n.warn;
 }
 
 export function markSeen() {
@@ -249,7 +258,7 @@ export function subscribeEvents(fn) {
 }
 
 // voice.js 는 app.js 와 따로 빌드되는 번들이라 import 할 수 없다(ui/toast.js 머리말과 같은 사정).
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && !window.vtLogEvent) {   // 먼저 올라온 사본이 주인이다(위 logEvent 주석)
   window.vtLogEvent = logEvent;
   window.vtReportError = reportError;
 }

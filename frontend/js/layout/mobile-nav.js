@@ -64,6 +64,7 @@ const PANEL_TAB = {
   'vt-dir': 'files',
   'vt-ports': 'more',
   'vt-usage': 'more',
+  'vt-eventlog': 'more',
 };
 
 function _paintNav(tab) {

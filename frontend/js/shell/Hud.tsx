@@ -52,6 +52,10 @@ export interface HudDeps {
   agentCounts?: () => AgentCounts;
   /** 집계가 바뀔 수 있을 때 부른다. 해제 함수를 돌려준다. */
   subscribeAgents?: (fn: () => void) => () => void;
+  /** 아직 보지 않은 오류·경고 수(core/event-log.js). 지연 청크가 core/*를 직접 못 읽으니 main.js가 넘긴다. */
+  unseenLog?: () => { error: number; warn: number };
+  /** 기록이 늘거나 패널에서 읽음 처리될 때 부른다. 해제 함수를 돌려준다. */
+  subscribeLog?: (fn: () => void) => () => void;
   /** 이 브라우저의 푸시 구독 상태. */
   pushState?: () => Promise<'on' | 'off' | 'unavailable'>;
   /** 시계 표기용 로케일(`ko-KR`/`en-US`). */
@@ -240,6 +244,7 @@ function Hud(props: { deps: HudDeps; root: HTMLElement }) {
       now,
       locale: props.deps.locale?.(),
       push: push ?? snapshot.push,
+      unseenLog: props.deps.unseenLog?.() ?? null,
     }, layout));
   };
   const unsubscribe = props.deps.subscribeLayout?.(() => {
@@ -281,6 +286,14 @@ function Hud(props: { deps: HudDeps; root: HTMLElement }) {
     });
   });
   onCleanup(() => { unsubAgents?.(); if (agentRaf) cancelAnimationFrame(agentRaf); });
+
+  // 기록 칩 — 오류·경고가 생기거나 패널에서 읽음 처리되면 한 프레임에 한 번만 다시 만든다(폴링을 기다리지 않는다).
+  let logRaf = 0;
+  const unsubLog = props.deps.subscribeLog?.(() => {
+    if (logRaf) return;
+    logRaf = requestAnimationFrame(() => { logRaf = 0; publish(); });
+  });
+  onCleanup(() => { unsubLog?.(); if (logRaf) cancelAnimationFrame(logRaf); });
 
   // 시계: 분이 바뀔 때만 칩을 다시 만든다(5초마다 보되 같은 분이면 아무것도 안 한다).
   let lastMinute = Math.floor(now / 60000);

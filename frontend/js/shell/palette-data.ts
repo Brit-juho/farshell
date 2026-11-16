@@ -100,6 +100,7 @@ export const DEFAULT_COMMANDS: CommandDescriptor[] = [
   { label: t('포트 대시보드'), action: 'ports.show', gate: 'ports', isPanel: true },
   { label: t('사용량'), action: 'usage.open', gate: 'usage', isPanel: true },
   { label: t('시스템'), action: 'system.open', isPanel: true },
+  { label: t('기록 — 알림 · 오류 · 요청'), action: 'eventlog.open' },   // 활동 막대 도구가 아니라 isPanel 을 안 붙인다(활동-팔레트 패리티 대상 밖)
   { label: t('터미널 내 검색'), action: 'search.toggle' },
   { label: t('음성 전용 모드'), action: 'voice.only-toggle', gate: 'voice' },
   { label: t('음성 입력 상태'), action: 'voice.status' },

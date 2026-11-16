@@ -14,7 +14,7 @@ applyI18n(document.body);
 
 // 이벤트 기록 — 어떤 모듈보다 먼저 전역 오류를 잡아야 부팅 중 예외와 청크 로드 실패도 남는다.
 import { installGlobalErrors } from './core/global-errors.js';
-import { reportError, setLogContext } from './core/event-log.js';
+import { reportError, setLogContext, subscribeEvents, unseenLevels } from './core/event-log.js';
 import { startEventSender } from './core/event-log-send.js';
 installGlobalErrors();
 startEventSender();   // 오류·경고를 서버 기록(/api/client-log)으로 — 로그인 전 것은 로그인 뒤에 나간다(api.js 관문)
@@ -116,6 +116,7 @@ import './panels/viewer-lazy.js';
 import './term/search-bar.js';
 import './picker.js';
 import './panels/ports-lazy.js';
+import './panels/event-log-lazy.js';   // 기록(알림·오류·요청) — 토스트 「자세히」·상태 막대·팔레트가 연다
 import './panels/system-lazy.js';   // 시스템(CPU·RAM·네트워크) — HUD 칩과 dock 탭이 연다
 import './panels/files-lazy.js';
 import './queue-lazy.js';
@@ -213,6 +214,7 @@ try {
       .then(({ mountHud }) => mountHud(hudRoot, {
         vtFetch, activeTmuxName, activeClientsPath, getAction, e2eEnabled: E2E_ENABLED,
         agentCounts, subscribeAgents: onStatusChange, pushState,
+        unseenLog: unseenLevels, subscribeLog: subscribeEvents,   // 기록 칩 — 아직 안 본 오류·경고
         locale: () => (lang() === 'en' ? 'en-US' : 'ko-KR'),
         // 배치(ui.hud.layout)는 설정 화면에서 바뀐다 — core/settings.js는 지연 청크가 직접 못 읽으므로 여기서 넘긴다.
         getLayout: () => settingGet('ui.hud.layout'),

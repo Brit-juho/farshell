@@ -147,3 +147,14 @@ test('reportError: 콘솔 출력과 기록을 함께 한다', async () => {
   assert.strictEqual(calls[0][0], '[FarShell HUD]');
   assert.match(E.getEvent(id).msg, /HUD: boom/);
 });
+
+test('두 번째 사본(voice.js 번들)은 자기 버퍼에 쌓지 않고 먼저 올라온 사본에 넘긴다', async () => {
+  const env = createDomEnv('<!doctype html><html><body></body></html>');
+  _doms.push(env.dom);
+  const app = await importFresh(MOD, env.context, new Map());     // 앱 번들의 사본
+  const voice = await importFresh(MOD, env.context, new Map());   // 같은 창에 올라온 또 하나의 사본
+  const id = voice.logEvent({ level: 'error', source: 'js', msg: '음성 번들에서' });
+  assert.strictEqual(app.getEvent(id).msg, '음성 번들에서', '앱 사본에 쌓였다');
+  assert.strictEqual(voice.getEvents().length, 0, '자기 버퍼는 비어 있다');
+  assert.strictEqual(env.window.vtLogEvent, app.logEvent, '브리지는 먼저 올라온 쪽');
+});
