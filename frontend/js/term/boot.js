@@ -19,6 +19,7 @@ import { displayComboHtml } from '../core/keymap.js';
 import { tmuxStatus, tmuxStatusDot } from '../ui/session-badge.js';
 import { showToast } from '../ui/toast.js';
 import { t } from '../core/i18n.js';
+import { reportError } from '../core/event-log.js';
 
 export function showOnboarding() {
   const el = document.createElement('div');
@@ -185,7 +186,7 @@ export async function bootApp() {
     // 새로고침·터널 끊김만으로 서버에 요청하지 않은 셸이 하나씩 생겼다(e2e 온보딩
     // 간헐 실패의 원인). 세션은 온보딩 버튼으로 사용자가 만든다.
     if (_leaving) return;
-    console.error('[FarShell boot]', e);
+    reportError('boot', e);
     if (Object.keys(allSessions()).length === 0) showOnboarding();
     showToast(t('서버에서 세션 목록을 받지 못했습니다 — 새로고침해 보세요'), 'warn');
   }

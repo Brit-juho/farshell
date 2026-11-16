@@ -153,7 +153,7 @@ export async function unshareSession(name) {
     }
     return true;
   } catch (e) {
-    if (typeof window.showToast === 'function') window.showToast(errorText(e), 'error');
+    if (typeof window.showToast === 'function') window.showToast(errorText(e), 'error', { error: e });
     return false;
   }
 }

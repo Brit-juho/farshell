@@ -8,6 +8,7 @@
 // 목록에도 없고 눌러도 안 먹는다.
 import { registerAction } from '../core/dom.js';
 import { register as registerKey } from '../core/keymap.js';
+import { reportError } from '../core/event-log.js';
 
 // 재진입 가드: 청크가 도착하기 전에 한 번 더 열리면 showSettings()가 두 번
 // 불려 두 번째가 토글로 닫아버린다(ports-lazy.js의 _opening과 같은 이유).
@@ -18,7 +19,7 @@ function open(section) {
   _opening = true;
   import('./settings.js')
     .then((m) => m.showSettings(section))
-    .catch((e) => console.error('[FarShell settings]', e))
+    .catch((e) => reportError('settings', e))
     .finally(() => { _opening = false; });
 }
 

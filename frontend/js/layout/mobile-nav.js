@@ -30,6 +30,7 @@ import { getSession, activeSessionId } from '../core/store.js';
 import { allStatuses, onStatusChange } from '../agent/state.js';
 import { pruneBlankViews } from './store.js';
 import { saveLayoutNow } from './persist.js';
+import { reportError } from '../core/event-log.js';
 
 const BADGE_POLL_MS = 15000;
 
@@ -91,7 +92,7 @@ function _ensureFleetMounted() {
       getAction,
       onOpenTerminal: () => setTab('terminal'),
     }))
-    .catch((e) => { console.error('[FarShell fleet]', e); _fleetMountPromise = null; });
+    .catch((e) => { reportError('fleet', e); _fleetMountPromise = null; });
 }
 
 // 「플릿」·「터미널」 전환 — 하단 내비의 두 "진짜" 탭(§1: 나머지 셋은 이미

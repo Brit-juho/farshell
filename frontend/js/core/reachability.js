@@ -39,6 +39,7 @@
 // 같은 문제를 이미 해결했고, 여기서도 같은 원칙을 쓴다.
 
 import { t } from './i18n.js';
+import { logEvent } from './event-log.js';
 
 // 연속 실패 임계치. 폴링 주기가 짧아(수 초) 2회면 몇 초 안에 뜬다.
 export const FAIL_THRESHOLD = 2;
@@ -69,6 +70,7 @@ const MESSAGES = {
 
 let _fails = 0;
 let _reason = null;   // 'offline' | 'gateway' | 'hung' | null
+let _since = 0;       // 끊김이 판정된 시각(ms) — 회복 기록에 「몇 초 끊겼나」를 적는다
 
 /** 현재 도달 불가로 판정된 상태인가. */
 export function isUnreachable() {
@@ -127,11 +129,24 @@ function _render() {
   document.body.appendChild(el);
 }
 
+// 판정이 바뀔 때만 기록한다(같은 사유로 계속 실패하는 동안 줄이 늘지 않게). 배너는 사라지면 끝이라, 언제 왜 끊겼는지는 여기서만 남는다.
+function _set(next) {
+  const prev = _reason;
+  _reason = next;
+  if (next && next !== prev) {
+    if (!prev) _since = Date.now();
+    logEvent({ level: 'warn', source: 'net', msg: `${MESSAGES[next].title} (${next})`, detail: MESSAGES[next].sub });
+  } else if (!next && prev) {
+    logEvent({ level: 'info', source: 'net', msg: t('서버 연결이 돌아왔습니다 — {n}초 끊김', { n: Math.round((Date.now() - _since) / 1000) }) });
+  }
+  _render();
+}
+
 /** 요청이 서버까지 닿아 응답을 받았다 — 상태 코드로 판정. */
 export function noteResponse(status) {
   if (GATEWAY_DOWN.has(status)) {
     _fails += 1;
-    if (_fails >= FAIL_THRESHOLD) { _reason = 'gateway'; _render(); }
+    if (_fails >= FAIL_THRESHOLD) _set('gateway');
     return;
   }
   // 4xx(401 포함)와 5xx 나머지는 **서버가 살아서 답한 것**이다 — 도달은 됐다.
@@ -141,7 +156,7 @@ export function noteResponse(status) {
 /** `fetch`가 거부됐다 — 주소에 아예 못 닿았다. */
 export function noteNetworkError() {
   _fails += 1;
-  if (_fails >= FAIL_THRESHOLD) { _reason = 'offline'; _render(); }
+  if (_fails >= FAIL_THRESHOLD) _set('offline');
 }
 
 /**
@@ -151,13 +166,13 @@ export function noteNetworkError() {
  */
 export function noteTimeout() {
   _fails += 1;
-  if (_fails >= FAIL_THRESHOLD) { _reason = 'hung'; _render(); }
+  if (_fails >= FAIL_THRESHOLD) _set('hung');
 }
 
 /** 정상 응답 — 카운터를 리셋하고 배너를 내린다. */
 export function noteReachable() {
   _fails = 0;
-  if (_reason !== null) { _reason = null; _render(); }
+  if (_reason !== null) _set(null);
 }
 
 /** 테스트 전용 — 모듈 스코프 상태를 초기화한다. */

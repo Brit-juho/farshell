@@ -187,7 +187,7 @@ export function mountClients(container, tmuxName, remote = null, sessionId = act
       });
     } catch (e) {
       if (!_handleDenied(e) && typeof window.showToast === 'function') {
-        window.showToast(e.message || t('끊기 실패'), 'error');
+        window.showToast(e.message || t('끊기 실패'), 'error', { error: e });
       }
     }
     poll.kick();
@@ -208,7 +208,7 @@ export function mountClients(container, tmuxName, remote = null, sessionId = act
       }
     } catch (e) {
       if (!_handleDenied(e) && typeof window.showToast === 'function') {
-        window.showToast(e.message || t('실패'), 'error');
+        window.showToast(e.message || t('실패'), 'error', { error: e });
       }
     }
     poll.kick();

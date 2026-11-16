@@ -2,7 +2,8 @@
 // 본문(섹션 정의와 마크업, 4KB)은 term/guide-view.js로 뺐다 — 열 때만 받는다(`panel` 청크).
 // 온보딩(showOnboarding, boot.js)은 첫 실행 시 세션 생성을 강제하는 화면이라 재사용하지 않고 별도로 둔다.
 import { registerAction } from '../core/dom.js';
+import { reportError } from '../core/event-log.js';
 
 registerAction('guide.show', () => {
-  import('./guide-view.js').then((m) => m.showGuide()).catch((e) => console.error('[FarShell guide]', e));
+  import('./guide-view.js').then((m) => m.showGuide()).catch((e) => reportError('guide', e));
 });

@@ -3,11 +3,12 @@
 // 이 파일만 상시 로드에 남는다. 본체가 평가되면 같은 이름으로 액션·브리지를
 // 다시 등록하므로(Map.set) 두 번째 호출부터는 이 스텁을 거치지 않는다.
 import { registerAction } from '../core/dom.js';
+import { reportError } from '../core/event-log.js';
 
 function open(sessionId) {
   return import('./connected-screens.js')
     .then((m) => m.openPanel(typeof sessionId === 'string' ? sessionId : undefined))
-    .catch((e) => console.error('[FarShell clients]', e));
+    .catch((e) => reportError('clients', e));
 }
 
 registerAction('clients.show', open);

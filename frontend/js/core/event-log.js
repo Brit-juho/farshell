@@ -190,6 +190,8 @@ export function logEvent(o) {
 /**
  * 콘솔에 그대로 찍고 기록도 남긴다. 예전의 `console.error('[FarShell x]', e)` 자리에 쓴다.
  * @param {string} scope 어느 기능에서 났는지(짧은 이름)
+ * @param {any} [err]
+ * @param {object} [opts] logEvent 에 그대로 넘길 추가 필드
  */
 export function reportError(scope, err, opts) {
   safe(() => console.error(`[FarShell ${scope}]`, err));

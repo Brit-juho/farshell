@@ -5578,5 +5578,8 @@ window.__VT_I18N = {
   "콘솔": "Console",
   "화면": "Screen",
   "화면 ID": "Screen ID",
-  "알림 · 오류 · 요청 기록": "Notification, error and request log"
+  "알림 · 오류 · 요청 기록": "Notification, error and request log",
+  "터미널 연결이 끊겼습니다": "The terminal connection was lost",
+  "터미널 연결이 돌아왔습니다 — {n}초 끊김": "The terminal connection is back — down for {n}s",
+  "서버 연결이 돌아왔습니다 — {n}초 끊김": "The server connection is back — down for {n}s"
 };

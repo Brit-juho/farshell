@@ -421,7 +421,7 @@ async function _save() {
       body: JSON.stringify(payload),
     });
   } catch (e) {
-    showToast(t('저장 실패: {error}', { error: e.message }), 'error');
+    showToast(t('저장 실패: {error}', { error: e.message }), 'error', { error: e });
     return;                       // 폼은 그대로 둔다 — 쓰던 내용을 잃지 않는다
   }
   _closeEditor();
@@ -440,7 +440,7 @@ async function _askDelete(it) {
 
 async function _remove(id) {
   try { await vtFetch(`/api/snippets/${id}`, { method: 'DELETE' }); }
-  catch (e) { showToast(t('삭제 실패: {error}', { error: e.message }), 'error'); }
+  catch (e) { showToast(t('삭제 실패: {error}', { error: e.message }), 'error', { error: e }); }
   _expanded.delete(id);
   await _refresh();
 }
@@ -502,7 +502,7 @@ async function _runInNewSession(it, name) {
       }),
     });
   } catch (e) {
-    showToast(t('새 세션 생성 실패: {error}', { error: e.message }), 'error');
+    showToast(t('새 세션 생성 실패: {error}', { error: e.message }), 'error', { error: e });
     return;
   }
   if (name && sessionNameAdjusted(name, data.tmux_session)) {

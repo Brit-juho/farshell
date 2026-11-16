@@ -190,7 +190,7 @@ function toggleButton(entry, facts, onDone) {
         showToast(next ? t('{name} 켬 — {note}', { name: entry.name, note }) : t('{name} 끔 — {note}', { name: entry.name, note }));
       }
     } catch (e) {
-      showToast(e.message || t('바꾸지 못했습니다'), 'error');
+      showToast(e.message || t('바꾸지 못했습니다'), 'error', { error: e });
     } finally {
       btn.disabled = false;
       if (onDone) onDone();
@@ -364,7 +364,7 @@ function renderGroupBar(data) {
         if (!r) return;                       // 비밀번호 입력을 취소했다
         reportGroupResult(tag, next, r, data.facts || {});
       } catch (e) {
-        showToast(e.message || t('그룹을 바꾸지 못했습니다'), 'error');
+        showToast(e.message || t('그룹을 바꾸지 못했습니다'), 'error', { error: e });
       } finally {
         refresh();
       }
@@ -416,7 +416,7 @@ function tagEditor(name, tags) {
           name, tags: current.filter((x) => x !== tag),
         });
       } catch (e) {
-        showToast(e.message || t('태그를 떼지 못했습니다'), 'error');
+        showToast(e.message || t('태그를 떼지 못했습니다'), 'error', { error: e });
       } finally {
         refresh();
       }
@@ -436,7 +436,7 @@ function tagEditor(name, tags) {
     try {
       await postJson('/api/mcp/tags', { name, tags: [...current, input.trim()] });
     } catch (e) {
-      showToast(e.message || t('태그를 붙이지 못했습니다'), 'error');
+      showToast(e.message || t('태그를 붙이지 못했습니다'), 'error', { error: e });
     } finally {
       refresh();
     }
@@ -489,7 +489,7 @@ function credRow(group, slot, creds) {
         const r = await postElevated('/api/mcp/creds/delete', { id: saved.id });
         if (r) showToast(t('{key} 보관 해제 — 설정 파일의 참조는 그대로입니다', { key: slot.key }));
       } catch (e) {
-        showToast(e.message || t('지우지 못했습니다'), 'error');
+        showToast(e.message || t('지우지 못했습니다'), 'error', { error: e });
       } finally { refresh(); }
     });
     row.appendChild(del);
@@ -516,7 +516,7 @@ function credRow(group, slot, creds) {
         });
         if (r) showToast(t('{key} 보관했습니다 — 참조 이름 {env}', { key: slot.key, env: r.cred.env }));
       } catch (e) {
-        showToast(e.message || t('보관하지 못했습니다'), 'error');
+        showToast(e.message || t('보관하지 못했습니다'), 'error', { error: e });
       } finally { refresh(); }
     });
     row.appendChild(add);
@@ -570,7 +570,7 @@ function deployControls(group, data) {
         });
         if (r) showToast(`${group.name} → ${label} (${r.target || ''})`);
       } catch (e) {
-        showToast(e.message || t('복제하지 못했습니다'), 'error');
+        showToast(e.message || t('복제하지 못했습니다'), 'error', { error: e });
       } finally { refresh(); }
     });
     box.appendChild(btn);
@@ -741,7 +741,7 @@ function renderServer(group, facts, tags, data) {
         worktree: src.worktree_id || _worktreeId, source_id: src.source_id,
       });
       if (r) showToast(t('{name} 보관함에 저장했습니다', { name: group.name }));
-    } catch (e) { showToast(e.message || t('보관하지 못했습니다'), 'error'); }
+    } catch (e) { showToast(e.message || t('보관하지 못했습니다'), 'error', { error: e }); }
     finally { save.disabled = false; }
   });
   body.appendChild(save);
@@ -1043,7 +1043,7 @@ function renderSkills(data, tool) {
           const r = await postElevated('/api/mcp/skills/toggle',
             { id: skill.id, enabled: !skill.enabled, worktree: _worktreeId });
           if (r) { showToast(t('스킬 설정을 바꿨습니다 — 다음 세션부터 반영됩니다')); refresh(); }
-        } catch (e) { showToast(e.message || t('바꾸지 못했습니다'), 'error'); }
+        } catch (e) { showToast(e.message || t('바꾸지 못했습니다'), 'error', { error: e }); }
         finally { btn.disabled = false; }
       });
       row.appendChild(btn);
@@ -1076,7 +1076,7 @@ function renderSkills(data, tool) {
             { title: t('스킬 복사 미리보기'), okLabel: t('추가') }))) return;
             const result = await postElevated('/api/mcp/skills/import', { ...payload, token: preview.token });
             if (result) { showToast(t('스킬을 추가했습니다 — 다음 세션부터 반영됩니다')); refresh(); }
-          } catch (e) { showToast(e.message || t('복사하지 못했습니다'), 'error'); }
+          } catch (e) { showToast(e.message || t('복사하지 못했습니다'), 'error', { error: e }); }
           finally { btn.disabled = false; }
         });
         copy.appendChild(btn);
@@ -1131,7 +1131,7 @@ function renderLibrary(data) {
             if (await confirmDialog(JSON.stringify(p.diff, null, 2), { title: t('원본 갱신'), okLabel: t('갱신') })) {
               if (await postElevated('/api/mcp/library/refresh', { id: item.id, token: p.token })) refresh();
             }
-          } catch (e) { showToast(e.message, 'error'); }
+          } catch (e) { showToast(e.message, 'error', { error: e }); }
         });
         info.appendChild(review);
       }
@@ -1159,7 +1159,7 @@ function renderLibrary(data) {
           refresh();
         } catch (e) {
           manage.value = targets.length > 1 ? 'common' : targets[0];
-          showToast(e.message || t('관리 대상을 바꾸지 못했습니다'), 'error');
+          showToast(e.message || t('관리 대상을 바꾸지 못했습니다'), 'error', { error: e });
         } finally { manage.disabled = false; }
       });
       row.appendChild(manage);
@@ -1196,7 +1196,7 @@ function renderLibrary(data) {
             if (!(await confirmDialog(message, { title: t('MCP 추가 미리보기'), okLabel: t('추가') }))) return;
             const r = await postElevated('/api/mcp/library/apply', { ...payload, token: preview.token });
             if (r) { showToast(t('MCP를 추가했습니다 — 다음 세션부터 반영됩니다')); refresh(); }
-          } catch (e) { showToast(e.message || t('추가하지 못했습니다'), 'error'); }
+          } catch (e) { showToast(e.message || t('추가하지 못했습니다'), 'error', { error: e }); }
           finally { updateDestination(); }
         });
         row.appendChild(btn);
@@ -1241,7 +1241,7 @@ function renderLibrary(data) {
           if (result.status === 'partial') showToast(t('{n}개 저장, 일부는 확인이 필요합니다', { n: result.saved }), 'error');
           else showToast(t('{n}개를 보관함에 저장했습니다', { n: result.saved }));
           refresh();
-        } catch (e) { showToast(e.message || t('가져오지 못했습니다'), 'error'); }
+        } catch (e) { showToast(e.message || t('가져오지 못했습니다'), 'error', { error: e }); }
         finally { button.disabled = false; }
       });
       importBox.appendChild(button);
@@ -1256,7 +1256,7 @@ function renderLibrary(data) {
     const toggle = el('button', 'vt-chip sm', rule?.enabled ? t('원본 추적 끄기') : t('원본 변경 추적'));
     toggle.addEventListener('click', async () => {
       try { if (await postElevated('/api/mcp/sync/toggle', { id: deployment.id, enabled: !rule?.enabled })) refresh(); }
-      catch (e) { showToast(e.message, 'error'); }
+      catch (e) { showToast(e.message, 'error', { error: e }); }
     });
     row.appendChild(toggle);
     if (rule?.state === 'pending') {
@@ -1267,7 +1267,7 @@ function renderLibrary(data) {
           if (await confirmDialog(`${JSON.stringify(p.diff, null, 2)}\n${p.apply}`, { title: t('원본 변경 적용'), okLabel: t('적용') })) {
             if (await postElevated('/api/mcp/sync/apply', { id: rule.id, token: p.token })) refresh();
           }
-        } catch (e) { showToast(e.message, 'error'); }
+        } catch (e) { showToast(e.message, 'error', { error: e }); }
       });
       row.appendChild(review);
     }
@@ -1481,7 +1481,7 @@ function refresh() {
   if (!_host) return;
   return load()
     .then((data) => paint(_host, data))
-    .catch((e) => showToast(e.message || t('MCP 설정을 다시 읽지 못했습니다'), 'error'));
+    .catch((e) => showToast(e.message || t('MCP 설정을 다시 읽지 못했습니다'), 'error', { error: e }));
 }
 
 /** settings.js의 스텁이 부른다. 실패해도 설정 화면 전체를 깨뜨리지 않는다. */
@@ -1583,7 +1583,7 @@ function pluginToggle(p) {
         if (r.warning) showToast(r.warning, 'error');
       }
     } catch (e) {
-      showToast(e.message || t('바꾸지 못했습니다'), 'error');
+      showToast(e.message || t('바꾸지 못했습니다'), 'error', { error: e });
     } finally { loadPlugins(); }
   });
   return btn;

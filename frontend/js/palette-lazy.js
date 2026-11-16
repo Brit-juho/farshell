@@ -25,6 +25,7 @@ import { showToast } from './ui/toast.js';
 import { relayHost } from './core/host-route.js';
 import { isMacKeyboard } from './core/platform.js';
 import { t } from './core/i18n.js';
+import { reportError } from './core/event-log.js';
 
 // 이름의 출처는 세션 레코드다(core/store.js의 sessionDisplayName) — 예전엔
 // 탭 DOM의 텍스트를 읽었는데, 그 DOM은 10 §4 3단계에서 사라진다.
@@ -86,7 +87,7 @@ function ensureMounted() {
   document.body.appendChild(root);
   import('./shell/Palette.tsx')
     .then(({ mountPalette }) => { _api = mountPalette(root, deps); })
-    .catch((e) => console.error('[FarShell palette]', e))
+    .catch((e) => reportError('palette', e))
     .finally(() => { _loading = false; });
 }
 

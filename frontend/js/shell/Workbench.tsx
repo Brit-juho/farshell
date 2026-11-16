@@ -38,6 +38,7 @@ import { wireRatioResizer } from '../layout/resizer.js';
 // 마이크 노드를 활동 막대 아래 무리로 옮긴다. 자리를 정하는 곳이 keybar.js 하나뿐이어야
 // 데스크톱/터치가 갈리는 판정이 두 군데로 흩어지지 않는다(옛 Dock.tsx와 같은 import).
 import { placeMicButton } from '../term/keybar.js';
+import { reportError } from '../core/event-log.js';
 
 const BADGE_POLL_MS = 15000;
 
@@ -59,7 +60,7 @@ function showMcp() {
   _mcpOpening = true;
   import('../panels/mcp-open.js').then(
     (m) => { _mcpOpening = false; m.showMcp(); },
-    (e) => { _mcpOpening = false; console.error('[FarShell mcp]', e); },
+    (e) => { _mcpOpening = false; reportError('mcp', e); },
   );
 }
 

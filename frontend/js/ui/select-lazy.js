@@ -6,6 +6,7 @@
 //   2. 부팅 뒤 유휴 시간에 미리 받아, 첫 화면을 열 때 기본 select가 비치는 일을 없앤다.
 // 청크 로드가 실패해도 기본 <select>가 그대로 동작한다(값·이벤트는 원래부터 네이티브가 정본).
 
+import { reportError } from '../core/event-log.js';
 const defaultLoad = () => import('./select.js');
 
 export function watchSelects({ load = defaultLoad, root = document, idle = true } = {}) {
@@ -16,7 +17,7 @@ export function watchSelects({ load = defaultLoad, root = document, idle = true 
       pending = Promise.resolve()
         .then(load)
         .then((m) => { observer?.disconnect(); observer = null; m.autoEnhanceSelects(root); })
-        .catch((e) => { pending = null; console.error('[FarShell select]', e); });
+        .catch((e) => { pending = null; reportError('select', e); });
     }
     return pending;
   };

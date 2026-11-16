@@ -4,6 +4,7 @@
 // 300KiB 상한을 넘어 build-output.test.js가 실제로 떨어졌다 — 파일 탭은
 // 자주 여는 화면이 아니므로 열 때 받는 게 맞다.
 import { registerAction } from '../core/dom.js';
+import { reportError } from '../core/event-log.js';
 
 // 재진입 가드: dock은 "활성 탭의 패널이 DOM에 없으면 연다"는 effect로 돌아서,
 // 청크가 도착하기 전에 effect가 한 번 더 돌면 showFiles()가 두 번 불리고
@@ -15,6 +16,6 @@ registerAction('files.show', () => {
   _opening = true;
   import('./files/files.js')
     .then((m) => m.showFiles())
-    .catch((e) => console.error('[FarShell files]', e))
+    .catch((e) => reportError('files', e))
     .finally(() => { _opening = false; });
 });

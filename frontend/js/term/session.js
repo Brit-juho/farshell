@@ -32,6 +32,7 @@ import { t } from '../core/i18n.js';
 import { accountsSnapshot, loadAccounts, profileForCreate, refusalText } from './accounts.js';
 import { defaultLine } from './accounts-data.js';
 import { isRelayed } from '../core/host-route.js';
+import { reportError } from '../core/event-log.js';
 
 // opts.place — 새 세션을 어디에 놓나(addSession 주석). 기본은 새 단독 뷰.
 export async function createSession({ place = 'view' } = {}) {
@@ -97,7 +98,7 @@ export function showAddMenu(el, e) {
         openOnce: (anchor, onPick) => import('./accounts-ui.js').then((a) => a.openAccountMenu({ mode: 'once', anchor, onPick })),
       },
     });
-  }).catch((err) => { console.error('[FarShell new session menu]', err); showToast(t('메뉴를 열지 못했습니다')); })
+  }).catch((err) => { reportError('new session menu', err); showToast(t('메뉴를 열지 못했습니다')); })
     .finally(() => { _menuLoading = false; });
 }
 

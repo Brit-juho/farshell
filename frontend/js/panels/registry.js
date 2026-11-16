@@ -13,6 +13,7 @@
 // 반드시 동적 import여야 한다.
 
 import { t } from '../core/i18n.js';
+import { reportError } from '../core/event-log.js';
 
 /** 패널 이름 → 메타. 이름은 스냅샷에 그대로 저장되므로 바꾸면 옛 배치가 깨진다. */
 export const PANELS = {
@@ -81,7 +82,7 @@ export async function mountPanelInPane(name, bodyEl, paneId) {
     const show = await meta.load();
     return show({ paneHost: bodyEl, paneId }) || null;
   } catch (e) {
-    console.error('[FarShell panel-pane]', name, e);
+    reportError(`panel-pane ${name}`, e);
     bodyEl.replaceChildren();
     const err = document.createElement('div');
     err.className = 'vt-vw-empty warn';

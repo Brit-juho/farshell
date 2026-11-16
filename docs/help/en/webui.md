@@ -190,6 +190,14 @@ Hand that path to claude as is. (The upload files button does the same.)
 | **Phone 「Files」 tab** | The 4th bottom tab. It opens the file tree; the 「Files \| Attachments」 switch at the top reaches the attachments screen (the last side is remembered). The upload badge sits on this tab. A long press on a row opens the row menu as a bottom sheet |
 | **Landscape phone + soft keyboard** | (Automatic focus) When the height visible above the keyboard drops below 300px, the tab bar, pane headers and workbench hide and the terminal uses all the remaining height. Dismiss the keyboard and the usual screen returns. (On a portrait phone the bottom nav hides while the keyboard is up. This is intended.) |
 
+- **Notification and error log.** Notifications and errors that have gone away are kept in the **Log**. Open it from the palette
+  (`Cmd+K` → "Log"), the **Details** button on an error card, the message in the bottom bar, the **Errors N** chip that appears in the
+  status bar while you have unseen errors, or on a phone from Settings → Tools → Log. "This screen" is every notification, request and error
+  in this tab; "All screens" is the errors and warnings the server keeps from every device (7 days, up to 20 MB). Click a row to unfold the
+  stack, the request path, status and server error code; **Copy for an issue** builds text to paste into an issue. Tokens, cookies and
+  passwords are masked before anything is stored, but paths and session names can remain, so check before sharing publicly. Only a logged-in
+  person can read or clear the server log (agents and other Macs cannot).
+
 ---
 
 ## 6. Voice bar (bottom right)

@@ -421,7 +421,7 @@ function _issuedSection(inst) {
     copy.addEventListener('click', async () => {
       if (!token) return;
       try { await navigator.clipboard.writeText(absoluteShareUrl(`/s/${token}`)); okFlash(copy); }
-      catch (err) { showToast(t('복사 실패: {msg}', { msg: err.message }), 'error'); }
+      catch (err) { showToast(t('복사 실패: {msg}', { msg: err.message }), 'error', { error: err }); }
     });
     const cancel = document.createElement('button');
     cancel.type = 'button';
@@ -444,8 +444,8 @@ async function _revokeShare(item, shareId) {
   } catch (e) {
     if (/elevation_required|401/.test(e.message || '') && await elevate()) {
       try { await del(); showToast(t('취소됨 — 링크가 즉시 404가 됩니다'), 'success'); }
-      catch (e2) { showToast(t('취소 실패: {msg}', { msg: e2.message }), 'error'); }
-    } else { showToast(t('취소 실패: {msg}', { msg: e.message }), 'error'); }
+      catch (e2) { showToast(t('취소 실패: {msg}', { msg: e2.message }), 'error', { error: e2 }); }
+    } else { showToast(t('취소 실패: {msg}', { msg: e.message }), 'error', { error: e }); }
   }
   refreshAllFiles();
 }
@@ -546,7 +546,7 @@ async function bulkDeleteSelected(inst) {
       showToast(t('{n}개는 이미 지워져 있었습니다', { n: r.missing.length }), 'info');
     }
   } catch (e) {
-    showToast(t('일괄 삭제 실패: {msg}', { msg: e.message }), 'error');
+    showToast(t('일괄 삭제 실패: {msg}', { msg: e.message }), 'error', { error: e });
   }
   inst.selectMode = false;
   inst.selected.clear();
@@ -719,7 +719,7 @@ async function copyPath(item, btn) {
     // 남지 않지만, 알려야 할 범위도 이 버튼 하나다.
     okFlash(btn);
   } catch (e) {
-    showToast(t('복사 실패: {msg}', { msg: e.message }), 'error');
+    showToast(t('복사 실패: {msg}', { msg: e.message }), 'error', { error: e });
   }
 }
 
@@ -742,7 +742,7 @@ async function insertFile(item) {
         ? (r.reused ? t('{host}에 전송 후 경로 삽입됨 (이미 있던 파일 재사용)', { host }) : t('{host}에 전송 후 경로 삽입됨', { host }))
         : t('{host}에 전송됨 — 페인을 못 찾아 경로는 못 넣었습니다', { host }), r.typed ? 'success' : 'error');
     } catch (e) {
-      showToast(t('전송 실패: {msg}', { msg: e.message }), 'error');
+      showToast(t('전송 실패: {msg}', { msg: e.message }), 'error', { error: e });
     }
     return;
   }
@@ -758,7 +758,7 @@ async function insertFile(item) {
     });
     // 성공을 말하지 않는다 — 터미널에 경로가 실제로 타이핑된 것이 증거다.
   } catch (e) {
-    showToast(t('삽입 실패: {msg}', { msg: e.message }), 'error');
+    showToast(t('삽입 실패: {msg}', { msg: e.message }), 'error', { error: e });
   }
 }
 
@@ -774,7 +774,7 @@ async function togglePin(item, btn) {
       body: JSON.stringify({ pin: next }),
     });
   } catch (e) {
-    showToast(t('고정 변경 실패: {msg}', { msg: e.message }), 'error');
+    showToast(t('고정 변경 실패: {msg}', { msg: e.message }), 'error', { error: e });
     if (btn) btn.disabled = false;
     return;
   }
@@ -791,7 +791,7 @@ async function deleteFile(item) {
     await vtFetch(`/api/files/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
     // 성공을 말하지 않는다 — 아래 refreshAllFiles()로 행이 사라지는 것이 증거다.
   } catch (e) {
-    showToast(t('삭제 실패: {msg}', { msg: e.message }), 'error');
+    showToast(t('삭제 실패: {msg}', { msg: e.message }), 'error', { error: e });
   }
   refreshAllFiles();
 }
@@ -917,11 +917,11 @@ async function issueShareOnce(item, wrap) {
   } catch (e) {
     // 파일 상단 2번: 승격이 필요한 첫 UI 경로. 비밀번호를 한 번 더 받고 재시도.
     if (!/elevation_required|401/.test(e.message || '')) {
-      showToast(t('발급 실패: {msg}', { msg: e.message }), 'error');
+      showToast(t('발급 실패: {msg}', { msg: e.message }), 'error', { error: e });
       return;
     }
     if (!(await elevate())) return;
-    try { res = await post(); } catch (e2) { showToast(t('발급 실패: {msg}', { msg: e2.message }), 'error'); return; }
+    try { res = await post(); } catch (e2) { showToast(t('발급 실패: {msg}', { msg: e2.message }), 'error', { error: e2 }); return; }
   }
 
   if (res?.share?.shareId && res?.token) _issuedTokens.set(res.share.shareId, res.token);
@@ -948,11 +948,11 @@ export async function shareFsPath(path) {
     res = await post();
   } catch (e) {
     if (!/elevation_required|401/.test(e.message || '')) {
-      showToast(t('공유 준비 실패: {msg}', { msg: e.message }), 'error');
+      showToast(t('공유 준비 실패: {msg}', { msg: e.message }), 'error', { error: e });
       return;
     }
     if (!(await elevate())) return;
-    try { res = await post(); } catch (e2) { showToast(t('공유 준비 실패: {msg}', { msg: e2.message }), 'error'); return; }
+    try { res = await post(); } catch (e2) { showToast(t('공유 준비 실패: {msg}', { msg: e2.message }), 'error', { error: e2 }); return; }
   }
   if (!res || !res.item) { showToast(t('공유 준비 실패: {msg}', { msg: '?' }), 'error'); return; }
   openShareDialog(res.item, { snapshot: true });
@@ -1015,7 +1015,7 @@ async function renderShareList(item, wrap) {
     const copyBtn = iconBtn('clipboard-copy', token ? t('링크 복사') : t('이 링크의 주소는 발급한 그 순간에만 알 수 있습니다(서버가 보관하지 않음) — 필요하면 취소 후 새로 발급하세요'), 'copy', async (e) => {
       if (!token) return;
       try { await navigator.clipboard.writeText(absoluteShareUrl(`/s/${token}`)); okFlash(e.currentTarget); }
-      catch (err) { showToast(t('복사 실패: {msg}', { msg: err.message }), 'error'); }
+      catch (err) { showToast(t('복사 실패: {msg}', { msg: err.message }), 'error', { error: err }); }
     });
     copyBtn.disabled = !token;
     acts.appendChild(copyBtn);
@@ -1026,8 +1026,8 @@ async function renderShareList(item, wrap) {
       } catch (e) {
         if (/elevation_required|401/.test(e.message || '') && await elevate()) {
           try { await vtFetch(`/api/files/${encodeURIComponent(item.id)}/share/${encodeURIComponent(s.shareId)}`, { method: 'DELETE' }); }
-          catch (e2) { showToast(t('취소 실패: {msg}', { msg: e2.message }), 'error'); }
-        } else { showToast(t('취소 실패: {msg}', { msg: e.message }), 'error'); }
+          catch (e2) { showToast(t('취소 실패: {msg}', { msg: e2.message }), 'error', { error: e2 }); }
+        } else { showToast(t('취소 실패: {msg}', { msg: e.message }), 'error', { error: e }); }
       }
       await renderShareList(item, wrap);
       refreshAllFiles();

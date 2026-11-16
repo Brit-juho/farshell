@@ -60,7 +60,7 @@ async function openSessionOnMac(explicitSessionId) {
     else if (data.ok) showToast(t("맥 터미널에 '{name}' 열림", { name: tmuxName }), 'success');
     else showToast(t('맥에서 열기 실패: {error}', { error: data.error || '' }), 'error');
   } catch (e) {
-    showToast(t('맥에서 열기 실패: {error}', { error: e.message }), 'error');
+    showToast(t('맥에서 열기 실패: {error}', { error: e.message }), 'error', { error: e });
   }
 }
 

@@ -7,6 +7,7 @@
 //      Jobs는 [], Cancel은 0이 정확한 답이다.
 import { showToast } from '../ui/toast.js';
 import { t } from '../core/i18n.js';
+import { reportError } from '../core/event-log.js';
 
 /** DataTransfer에 OS 파일이 실려 있는가. 앱 내부 드래그(세션·dock 탭)와
  *  구분하는 유일한 기준이다 — 그쪽은 자기 mime을 싣고 'Files'는 안 싣는다. */
@@ -49,7 +50,7 @@ export function uploadFiles(list, opts) {
   const files = (list && typeof list.getData === 'function') ? filesFromDataTransfer(list) : Array.from(list || []);
   if (!files.length) return Promise.resolve([]);
   return loadUpload().then((m) => m.uploadFiles(files, opts)).catch((e) => {
-    console.error('[FarShell upload]', e);
+    reportError('upload', e);
     showToast(t('업로드 모듈을 불러오지 못했습니다 — 새로고침 후 다시 시도하세요'), 'error');
     return [];
   });

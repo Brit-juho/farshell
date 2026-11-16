@@ -1,5 +1,6 @@
 // 승인함·권한·감사 화면이 쓰는 순수 로직(DOM·fetch 없음). 문구 규칙은 docs/ref/auth.md 「Inbox and grants」.
 import { t } from '../core/i18n.js';
+import { logEvent } from '../core/event-log.js';
 
 /** 프리셋 이름 — 서버가 주는 id 를 화면 언어로. 알 수 없는 id 는 그대로 보인다. */
 export const PRESET_LABEL = {
@@ -104,7 +105,7 @@ export function choicesFor(item) {
   ];
 }
 
-export function errorText(e) {
+function errorTextOf(e) {
   const code = e && (e.code || (e.data && e.data.error));
   if (code === 'human_session_required') return t('비밀번호로 로그인한 브라우저에서만 할 수 있습니다 (토큰 링크 접속에서는 불가)');
   if (code === 'elevation_required') return t('비밀번호를 다시 확인해야 합니다');
@@ -114,6 +115,13 @@ export function errorText(e) {
   if (code === 'pair_disabled') return t('페어 기능이 꺼져 있습니다');
   const reason = e && e.data && e.data.reason;
   return reason || (e && e.message) || t('요청에 실패했습니다');
+}
+
+/** 서버 오류 → 한 줄. 화면에 보이는 오류 줄은 사라지면 끝이라 기록(core/event-log.js)에도 남긴다. */
+export function errorText(e) {
+  const text = errorTextOf(e);
+  logEvent({ level: 'warn', source: 'ui', msg: text, error: e && typeof e === 'object' ? e : undefined });
+  return text;
 }
 
 // ── 권한 ─────────────────────────────────────────────────────────────────

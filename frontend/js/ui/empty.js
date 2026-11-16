@@ -10,6 +10,7 @@
 // 계약: 제목은 사람 말, 원문은 detail, 할 수 있는 일이 있으면 action.
 // 스타일은 styles/layers/components.css의 .vt-empty.
 import { icon } from './icons.js';
+import { logEvent } from '../core/event-log.js';
 import { t } from '../core/i18n.js';
 
 /**
@@ -60,6 +61,8 @@ export function emptyState(o) {
 // 에러에서 가장 흔한 모양 — 제목은 사람 말, 원문은 detail, [다시 시도] 하나.
 // retry가 없으면 버튼을 만들지 않는다(누르면 아무 일도 안 나는 버튼을 두지 않는다).
 export function errorState(title, err, retry) {
+  // 오류 상태는 다시 그려지면 사라진다 — 무엇이 왜 실패했는지 기록에 남긴다(같은 오류는 60초 안에 한 줄로 합쳐진다).
+  logEvent({ level: 'warn', source: 'ui', msg: String(title || ''), error: err && typeof err === 'object' ? err : undefined, detail: err && typeof err !== 'object' ? String(err) : undefined });
   return emptyState({
     error: true,
     icon: 'alert-triangle',

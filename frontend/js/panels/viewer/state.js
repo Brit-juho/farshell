@@ -4,6 +4,7 @@
 //
 // root/cwd는 dock 소스컨트롤 탭이 "어느 저장소를 볼지" 정할 때도 폴백으로 쓴다
 // — scm.js가 이 값이 비면 /api/fs/roots로 대신 폴백한다. 오버레이(overlay.js)는 제목의 상대 경로에 쓴다.
+import { reportError } from '../../core/event-log.js';
 export let _viewerState = {
   root: null,
   cwd: null,
@@ -15,7 +16,7 @@ export function _shareFile(path) {
   if (!path) return;
   import('../files/files.js')
     .then((m) => m.shareFsPath(path))
-    .catch((e) => console.error('[FarShell share]', e));
+    .catch((e) => reportError('share', e));
 }
 
 // 정적 안내 메시지용 — textContent 만 쓰므로 이스케이프가 필요 없다.

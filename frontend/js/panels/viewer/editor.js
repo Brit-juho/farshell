@@ -23,6 +23,7 @@ import { history, historyKeymap, defaultKeymap, indentWithTab } from '@codemirro
 import { t } from '../../core/i18n.js';
 import { vtEsc } from '../../core/api.js';
 import { textChange, editorLangKey } from './editor-text.js';
+import { logEvent } from '../../core/event-log.js';
 
 // 언어 팩은 쓸 때만 평가한다. 청크는 같지만(번들 크기는 단계 2에서 실측) 파서 초기화 비용을 열지 않은 언어에
 // 치르지 않는다. 키는 editorLangKey()가 돌려주는 이름이다.
@@ -157,7 +158,7 @@ export function loadLanguage(key) {
   if (!_langCache.has(key)) {
     _langCache.set(key, load().catch((e) => {
       _langCache.delete(key);
-      console.warn('[FarShell viewer] language load failed', key, e);
+      logEvent({ level: 'warn', source: 'console', msg: `viewer: language load failed (${key})`, error: e });
       return null;
     }));
   }
@@ -180,7 +181,7 @@ export async function highlighterFor(path, hljsName) {
         (s, cls) => { cur += cls ? `<span class="${cls}">${vtEsc(s)}</span>` : vtEsc(s); },
         () => { out.push(cur); cur = ''; });
     } catch (e) {
-      console.warn('[FarShell diff] highlight failed', e);
+      logEvent({ level: 'warn', source: 'console', msg: 'diff: highlight failed', error: e });
       return null;
     }
     out.push(cur);

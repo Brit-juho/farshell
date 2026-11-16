@@ -4,6 +4,7 @@
 // 지웠다. 둘 다 작업대(활동 막대 · 사이드바)로 바뀐 뒤 화면에 없는 DOM에만 그리고 있었다 — 아무도 못 보는 배지를
 // 위해 /api/usage를 1분마다 부르던 셈이다. 사용량은 활동 막대 「사용량」(사이드바 도구 보기)에서 본다.
 import { registerAction } from '../core/dom.js';
+import { reportError } from '../core/event-log.js';
 
 // 재진입 가드 — ports-lazy.js의 _opening과 같은 이유(청크 도착 전 두 번째 호출이 토글로 닫아버린다).
 let _opening = false;
@@ -13,6 +14,6 @@ registerAction('usage.open', () => {
   _opening = true;
   import('./usage.js')
     .then((m) => m.showUsage())
-    .catch((e) => console.error('[FarShell usage]', e))
+    .catch((e) => reportError('usage', e))
     .finally(() => { _opening = false; });
 });

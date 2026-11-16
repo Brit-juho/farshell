@@ -21,6 +21,7 @@ import { register as registerKey } from '../core/keymap.js';
 import { get as setting, set as setSetting, subscribe as onSettings } from '../core/settings.js';
 import { getSession, activeSessionId, allSessions, sessionDisplayName } from '../core/store.js';
 import { allStatuses, agentDetails } from '../agent/state.js';
+import { reportError } from '../core/event-log.js';
 
 export const FOCUS_ACTIVE_KEY = 'ui.focus.active';
 export const FOCUS_CLASS = 'vt-focus';
@@ -56,7 +57,7 @@ function _ensureUi() {
   _uiRequested = true;
   Promise.resolve()
     .then(() => _loader())
-    .catch((e) => { _uiRequested = false; console.error('[FarShell focus]', e); });
+    .catch((e) => { _uiRequested = false; reportError('focus', e); });
 }
 
 function _apply(on) {

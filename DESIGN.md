@@ -755,6 +755,14 @@ default), a spacer, and the right chips (CPU · GPU · RAM · NET · usage · No
 unavailable) and **`clock`** (date + 24-hour time, rebuilt only when the minute changes). Clickable chips are
 `role="button"` with Enter/Space.
 
+**Log chip (`log`, `hud-data.ts` `logChip`).** An alert kind like `hooks`: pinned after the agents chip, outside the layout
+setting, present only while an error or warning is unseen (`오류 N` in the error colour, `경고 N` in the warning colour). Click or
+Enter opens the log panel (`eventlog.open`); opening the panel marks everything seen and the chip disappears.
+
+**Safe-mode strip.** The red full-width strip at the top (`.vt-banner`, `agent/status.js`) is gone from screens that have a status
+bar: the `safe-mode` chip says it there, and red means error or danger while safe mode is a protection. Below 720px, where there is no
+status bar, a thin neutral strip (raised surface, `--color-sub`, 11px) stays.
+
 **Account chip (`account`, `hud-data.ts` `accountChips`).** Shows the current default account and its most-used usage window
 (`alice 5h 23% · 3h10m ▾`), right side, ahead of the usage chips; clicking opens the account chooser **above** the chip as a
 «set as default» menu (`term/accounts-ui.js` `openAccountMenu({mode:'default', placement:'above'})`, a menu in the Hud chunk, not a core
@@ -1490,6 +1498,12 @@ creation time, and on skin switch `setVtSkin()` (`js/theme.js`) updates
   same 16px box, so nothing shifts. One action never fires two toasts — issuing
   and copying a share link is one sentence, and a progress message is replaced
   in place by its outcome through a shared `key`.
+  **Nothing a toast says is lost.** Every `showToast` call is also written to the event log
+  (`js/core/event-log.js`, [`docs/ref/event-log.md`](./docs/ref/event-log.md)). An `error`/`warn` card with fewer than two
+  actions gets a «Details» (자세히) button that opens the log panel on that entry, and clicking the status-bar message slot opens
+  it too instead of dismissing — the slot's tooltip ends with «Click to open the log». Pass the caught error
+  (`showToast(msg, 'error', { error: e })`) so the entry keeps the stack and the request (method, path, status, server error
+  code) instead of only `e.message`. A `key`ed `info` is progress and is logged as `debug`.
   At most 3 cards at once; past that the oldest goes, but an `error`/`warn`
   outlives an `info` — letting information evict a failure inverts severity.
   Tapping dismisses; hovering (fine pointer) holds the timer. Default duration is

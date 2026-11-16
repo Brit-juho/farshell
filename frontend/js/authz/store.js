@@ -7,6 +7,7 @@
 // 페어·폴더 lease 화면은 `{type:'pairs'}`·`{type:'leases'}` 변경 알림을 구독해 다시 읽는다 — 같은 이벤트 묶음(요청→결정→회수)이 잇따라 와도
 // 종류마다 한 번만 알린다(signal). 서버는 페어를 만들거나 코드를 받거나 역할을 바꿀 때는 이벤트를 내지 않으므로 그 화면은 자기 동작 뒤에 직접 다시 읽는다.
 import { authzApi } from './api.js';
+import { reportError } from '../core/event-log.js';
 
 export const COALESCE_MS = 40;
 
@@ -20,7 +21,7 @@ const subs = new Set();
 const sigTimers = {};
 
 const byCreated = (a, b) => (a.created || 0) - (b.created || 0);
-const emit = (ev) => { for (const fn of [...subs]) { try { fn(ev); } catch (e) { console.error('[FarShell authz]', e); } } };
+const emit = (ev) => { for (const fn of [...subs]) { try { fn(ev); } catch (e) { reportError('authz', e); } } };
 
 export function pending() { return list.slice(); }
 export function lastRefreshError() { return lastError; }

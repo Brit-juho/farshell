@@ -2,6 +2,7 @@
 import { getSession, activeSessionId } from '../core/store.js';
 import { icon } from '../ui/icons.js';
 import { t } from '../core/i18n.js';
+import { logEvent } from '../core/event-log.js';
 
 // M9: wifi↔LTE 전환 같은 순간적 망 전환은 보통 1~2초면 스스로 재연결된다.
 // 예전엔 첫 onclose에서 곧바로 전체 화면 오버레이를 띄워, 그런 찰나의 끊김도
@@ -87,6 +88,9 @@ export function updateConnStatus(id, connected) {
           <button type="button" class="vt-btn vt-ov-stop-btn">${t('끊기')}</button>
         `;
         document.body.appendChild(ov);
+        // 유예(1.5초)를 넘겨 오버레이까지 뜬 끊김만 기록한다 — 찰나의 끊김은 잡음이다.
+        s._connLogged = true;
+        logEvent({ level: 'warn', source: 'ws', msg: t('터미널 연결이 끊겼습니다'), detail: s._connDetail || '' });
         if (s._connDetail) ov.querySelector('.vt-ov-sub').textContent = s._connDetail;
         ov.querySelector('.vt-ov-stop-btn').addEventListener('click', () => _toggleReconnectStop(id));
         _tickConnOverlay(id);
@@ -99,6 +103,10 @@ export function updateConnStatus(id, connected) {
     if (_connOverlayTimer) { clearTimeout(_connOverlayTimer); _connOverlayTimer = null; }
     _removeConnOverlay();
     const s = getSession(id);
+    if (s && s._connLogged) {
+      s._connLogged = false;
+      logEvent({ level: 'info', source: 'ws', msg: t('터미널 연결이 돌아왔습니다 — {n}초 끊김', { n: Math.round((Date.now() - (s._disconnectedAt || Date.now())) / 1000) }) });
+    }
     if (s) { s._disconnectedAt = null; s._reconnectStopped = false; s._connDetail = null; }
   }
 }
