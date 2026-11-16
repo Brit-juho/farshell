@@ -15,7 +15,9 @@ applyI18n(document.body);
 // 이벤트 기록 — 어떤 모듈보다 먼저 전역 오류를 잡아야 부팅 중 예외와 청크 로드 실패도 남는다.
 import { installGlobalErrors } from './core/global-errors.js';
 import { reportError, setLogContext } from './core/event-log.js';
+import { startEventSender } from './core/event-log-send.js';
 installGlobalErrors();
+startEventSender();   // 오류·경고를 서버 기록(/api/client-log)으로 — 로그인 전 것은 로그인 뒤에 나간다(api.js 관문)
 
 import './core/env.js';
 import './core/api.js';
