@@ -55,25 +55,21 @@ test('칸 표식 — 실행 중인 셸이 있을 때만 「셸 N」, 이름은 �
   assert.strictEqual(root2.querySelector('.vt-shells-mark'), null, '끝난 셸만 있으면 표식 없음');
 });
 
-test('메뉴 요약 — 「백그라운드 셸」 구역: 개수·마지막 확인·셸별 줄, 설명이 있으면 명령줄을 아래에', async () => {
+test('메뉴 요약 — 「백그라운드 셸」은 카드와 같은 줄에 설명이 있으면 명령을 아래 한 줄로(commands), 카드는 싣지 않는다', async () => {
   const m = await mod();
   const root = m.document.createElement('div');
   m.document.body.appendChild(root);
-  const summary = m.rowSummaryDetails({ ...row({ shells: raw }) });
-  assert.match(summary.accessible, /백그라운드 셸 2개 실행 중/);
-  m.mountMenu(root, { x: 10, y: 10, onClose() {}, items: [], summary });
-  const sec2 = root.querySelector('.vt-shells-summary');
-  assert.ok(sec2);
-  assert.match(sec2.textContent, /실행 중 2 · 끝남 1/);
-  assert.match(sec2.textContent, /마지막 확인 .+ 전/);
-  const rows = Array.from(sec2.querySelectorAll('.vt-shells-row'));
-  assert.strictEqual(rows.length, 3);
-  assert.strictEqual(rows[0].querySelector('.vt-shells-cmd').textContent, 'pytest tests/e2e');
-  assert.strictEqual(rows[1].querySelector('.vt-shells-when').textContent, '확인 전');
-  assert.strictEqual(rows[1].querySelector('.vt-shells-cmd'), null, '설명이 없으면 이름이 곧 명령줄 — 두 번 쓰지 않는다');
-  assert.ok(rows[2].classList.contains('ended'));
-  const none = m.rowSummaryDetails(row());
-  assert.strictEqual(none.shells, undefined, '셸이 없으면 구역 없음');
+  const model = m.buildHoverCard(row({ shells: raw }), { now: NOW, commands: true });
+  const s = model.sections.find((x) => x.id === 'shells');
+  assert.strictEqual(s.rows[0].text, '백그라운드 셸 · 실행 중 2 · 끝남 1');
+  assert.strictEqual(s.rows[1].sub, 'pytest tests/e2e', '설명이 있으면 명령을 아래 줄에');
+  assert.strictEqual(s.rows[2].sub, undefined, '설명이 없으면 이름이 곧 명령 — 두 번 쓰지 않는다');
+  m.mountMenu(root, { x: 10, y: 10, onClose() {}, items: [], summary: model });
+  assert.strictEqual(root.querySelector('.vt-menu-summary .vt-hc-sub').textContent, 'pytest tests/e2e');
+  assert.match(m.cardText(model), /백그라운드 셸 · 실행 중 2/);
+  const card = m.buildHoverCard(row({ shells: raw }), { now: NOW });
+  assert.ok(card.sections.find((x) => x.id === 'shells').rows.every((r) => !r.sub), '호버 카드는 명령을 마우스를 올려 읽는다');
+  assert.strictEqual(m.buildHoverCard(row(), { now: NOW, commands: true }).sections.find((x) => x.id === 'shells'), undefined, '셸이 없으면 구역 없음');
 });
 
 test('호버 카드 — 셸 구역은 머리 + 실행 중인 셸, 넘치면 셸 줄을 줄인다', async () => {

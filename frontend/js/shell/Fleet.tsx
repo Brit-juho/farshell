@@ -39,13 +39,13 @@ import {
   collectSessionRows, syncAgentsFromServer, createDiffWatcher, useLayoutVersion, pollFetch, isNoResponse, type RailDeps,
 } from './rail-fetch.js';
 import {
-  buildRailLists, rowMenuItems, rowSummaryDetails, runRowMenu, renameViewGroup, formatRelativeTime, nodeLine, kidLabel, type SessionRow,
+  buildRailLists, rowMenuItems, runRowMenu, canShareName, renameViewGroup, formatRelativeTime, nodeLine, kidLabel, type SessionRow,
   ORDER_KEY, encodeRailOrder,
 } from './rail-data.js';
 import { buildRepoTree, flattenRows, moveInOrder, orderKey, OUTSIDE_KEY, type RepoGroup, type ProjectLike } from './repo-tree.js';
 import { createRailPrefs } from './rail-prefs.js';
 import { onSheetKeyDown } from './sheet-keys.js';
-import { shortenPath } from './rail-hover-card.js';
+import { shortenPath, buildHoverCard } from './rail-hover-card.js';
 import { MenuSummary, ShareMark, ShellsMark, ROW_MENU_ICON } from './RailRow.js';
 import {
   buildHostMenu, hostDetail, LOCAL_HOST,
@@ -369,6 +369,17 @@ function Fleet(props: { deps: FleetDeps }) {
   // 만든 곳별 표시 설정(레일 설정 「보기」)은 같이 따른다. 개입 필요 구역은 따로 두지 않는다 — 입력 대기 타일은
   // 호박색 테두리이고, 그 저장소가 맨 위로 온다(repo-tree.ts 정렬).
   const lists = createMemo(() => buildRailLists(rows(), prefs()));
+  // 꾹 누름 시트 맨 위의 세션 정보 — 레일 행 메뉴·접힌 띠 호버 카드와 같은 모델(RailRow.tsx MenuSummary).
+  const summaryOf = (row: SessionRow) => {
+    const kids = row.tmuxName ? rows().filter((r) => r.lineage && r.lineage.parent === row.tmuxName
+      && (r.lineage.state === 'running' || r.lineage.state === 'reported')) : [];
+    const h = viewHostId !== LOCAL_HOST ? activeHost() : null;
+    return buildHoverCard(row, {
+      tool: row.tool, kids, commands: true,
+      host: viewHostId === LOCAL_HOST ? null : { label: h?.label || viewHostId, online: h ? !!h.online : true, latencyMs: h?.latencyMs ?? null, reason: h?.reason ?? null },
+      shareable: viewHostId === LOCAL_HOST && canShareName(row.tmuxName),
+    });
+  };
   // 실행 중 행 ↔ 카탈로그 세션(레일과 같은 규칙) — 메뉴의 작업 기록·이름 변경이 쓴다.
   const catalogOf = (row: SessionRow): any | undefined =>
     catalog()?.sessions.find((x) => x.ended == null && x.runtime_id && x.tmux_name === row.tmuxName && x.physical_key === row.physicalKey);
@@ -692,7 +703,7 @@ function Fleet(props: { deps: FleetDeps }) {
                   </>
                 }>
                   <div class="vt-session-head"><h2>{row.name}</h2></div>
-                  <MenuSummary summary={rowSummaryDetails(row)} />
+                  <MenuSummary model={summaryOf(row)} />
                   {/* 항목은 레일 메뉴와 같은 목록(rowMenuItems)이다. 이름 변경만 시트 안에서 입력창으로
                       바뀌고, 나머지는 시트를 닫은 뒤 실행한다 — 콜백에서 m()을 다시 읽으면 이미
                       정리된 뒤라 값은 진입 시점에 한 번 꺼내 쓴다(2026-09-23 실측). */}

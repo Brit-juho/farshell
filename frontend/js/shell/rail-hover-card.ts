@@ -42,6 +42,8 @@ export interface HcRow {
   extra?: string;
   /** 오른쪽 열의 +N −N. */
   diff?: { add: number; del: number };
+  /** 값 아래의 흐린 고정폭 한 줄(백그라운드 셸의 명령 — 행 메뉴 요약에서만). 줄 수에 한 줄로 센다. */
+  sub?: string;
 }
 
 export type HcSectionId = 'activity' | 'location' | 'subagents' | 'shells' | 'meta';
@@ -73,6 +75,8 @@ export interface HcOptions {
   shareable?: boolean;
   /** 머리·상태 칩을 뺀 본문 줄 수 상한. */
   maxLines?: number;
+  /** 백그라운드 셸의 명령을 설명 아래 한 줄로 싣는다(행 메뉴 요약 — 카드는 마우스를 올려 읽는다). */
+  commands?: boolean;
 }
 
 export const NATIVE_MAX = 5;
@@ -139,13 +143,14 @@ function nativeRows(row: SessionRow, now: number, cap: number): HcRow[] {
 }
 
 /** 백그라운드 셸 — 머리(실행 중 N · 끝남 M) + 실행 중인 셸(오래된 순). 끝난 셸은 개수만(자세히는 ⋯ 메뉴 요약). */
-function shellRows(row: SessionRow, now: number, cap: number): HcRow[] {
+function shellRows(row: SessionRow, now: number, cap: number, commands = false): HcRow[] {
   const s = normalizeShells(row.shells);
   if (!s.running.length && !s.ended.length) return [];
   const rows: HcRow[] = [{ key: 'shells', icon: 'terminal', text: t('백그라운드 셸 · {counts}', { counts: shellCounts(s) }) }];
   for (const x of s.running.slice(0, cap)) {
     rows.push({
       key: 'shell:' + x.id, glyph: 'working', text: shellLabel(x), mono: !x.description, title: x.command || shellLabel(x),
+      sub: commands && x.description && x.command ? x.command : undefined,
       extra: x.pending ? t('확인 전') : formatRelativeTime(x.startedAt, now) || undefined,
     });
   }
@@ -220,7 +225,7 @@ function metaRows(row: SessionRow, shareable: boolean): HcRow[] {
   return rows;
 }
 
-const lineCount = (sections: HcSection[]) => sections.reduce((n, s) => n + s.rows.length, 0);
+const lineCount = (sections: HcSection[]) => sections.reduce((n, s) => n + s.rows.reduce((m, r) => m + (r.sub ? 2 : 1), 0), 0);
 
 /** 카드 내용. 자르는 순서와 규칙은 위 머리말. 반환한 구역에는 빈 구역이 없다. */
 export function buildHoverCard(row: SessionRow, opts: HcOptions = {}): HcModel {
@@ -248,7 +253,7 @@ export function buildHoverCard(row: SessionRow, opts: HcOptions = {}): HcModel {
     const subagents = [...nativeRows(row, now, nativeCap), ...kidRows(opts.kids || [], kidsCap), ...delegated];
     const all: HcSection[] = [
       { id: 'activity', rows: activity }, { id: 'location', rows: location },
-      { id: 'subagents', rows: subagents }, { id: 'shells', rows: shellRows(row, now, shellCap) }, { id: 'meta', rows: meta.slice(0, metaKeep) },
+      { id: 'subagents', rows: subagents }, { id: 'shells', rows: shellRows(row, now, shellCap, !!opts.commands) }, { id: 'meta', rows: meta.slice(0, metaKeep) },
     ];
     return all.filter((s) => s.rows.length > 0);
   };

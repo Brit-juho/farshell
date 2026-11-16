@@ -578,9 +578,9 @@ test('공용 툴팁은 그대로 — tooltip.js는 data-tip만 보고 카드는 
 
 test('유휴는 눈에 보이는 메뉴 요약·호버 카드에 쓰지 않고, 화면 읽기용 요약에는 남긴다', async () => {
   const m = await mod();
-  const base = { status: 'idle', kind: null, otherClients: 0, origin: 'local', originHost: null, branch: 'main' };
-  const d = m.rowSummaryDetails(base);
-  assert.ok(!d.status.includes('유휴'), d.status);
-  assert.ok(d.accessible.includes('유휴'), d.accessible);
-  assert.ok(m.rowSummaryDetails({ ...base, status: 'working' }).status.includes('작업 중'));
+  const base = { name: 'x', status: 'idle', kind: null, otherScreens: 0, otherClients: 0, origin: 'local', originHost: null, branch: 'main' };
+  const idle = m.buildHoverCard(base, {});
+  assert.strictEqual(idle.stateText, '');
+  assert.ok(m.cardText(idle).startsWith('유휴'), m.cardText(idle));
+  assert.ok(m.buildHoverCard({ ...base, status: 'working' }, {}).stateText.includes('작업 중'));
 });

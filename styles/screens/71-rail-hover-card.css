@@ -63,3 +63,5 @@
 
 /* 서브에이전트·하위 세션 줄(상태 기호가 아이콘 열에 온다) — 값은 12px 그대로, 오른쪽에 경과·보고 상태 */
 .vt-hc-row.item .vt-hc-ico svg { width:14px; height:14px; }
+/* 값 아래 흐린 고정폭 한 줄 — 백그라운드 셸의 명령(행 메뉴 요약에서만 싣는다). 값 열에 맞춘다. */
+.vt-hc-sub { grid-column:2 / 4; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--color-sub); font:var(--weight-normal) var(--fs-xs) / 18px var(--font-mono); }

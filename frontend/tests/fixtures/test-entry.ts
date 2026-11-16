@@ -11,7 +11,7 @@ export {
 export {
   formatRelativeTime, statusSentence, stateKeyword, defaultRailCollapsed,
   buildRailLists, readRailPrefs, RAIL_PREF_DEFAULTS, ATTENTION_SHOW_KEY, ATTENTION_COLLAPSED_KEY, originShowKey,
-  HIDEABLE_ORIGINS, normalizeOrigin, originLabel, normalizeKind, normalizeBadge, rowMenuItems, rowSummary, rowSummaryDetails, renameViewGroup, runRowMenu,
+  HIDEABLE_ORIGINS, normalizeOrigin, originLabel, normalizeKind, normalizeBadge, rowMenuItems, rowSummary, renameViewGroup, runRowMenu,
   worktreeIconName, diffLabel, KIND_LABEL, BADGE_LABEL, normalizeShare, shareSentence, normalizeProfile, profileLabel,
   normalizeLineage, lineageLabel, kidsProgress, parseNameList,
   LINEAGE_KEY, encodeLineagePrefs,
@@ -26,7 +26,7 @@ export { normalizeShells, shellLabel, shellCounts } from '../../js/shell/bg-shel
 export {
   buildHoverCard, shortenPath, tildePath, NATIVE_MAX, KIDS_MAX, BODY_MAX_LINES,
 } from '../../js/shell/rail-hover-card.js';
-export { OPEN_DELAY as HC_OPEN_DELAY, CLOSE_GRACE as HC_CLOSE_GRACE, CARD_ID as HC_CARD_ID } from '../../js/shell/RailHoverCard.js';
+export { OPEN_DELAY as HC_OPEN_DELAY, CLOSE_GRACE as HC_CLOSE_GRACE, CARD_ID as HC_CARD_ID, cardText } from '../../js/shell/RailHoverCard.js';
 export { canShareName } from '../../js/shell/rail-data.js';
 export {
   parseQuery, fuzzyMatch, PLACEHOLDER, PREFIX_MODE, MODE_PREFIX, MODE_HINT,

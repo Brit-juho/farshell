@@ -1079,7 +1079,6 @@ window.__VT_I18N = {
   "실행 중 {n}": "{n} running",
   "끝남 {n}": "{n} ended",
   "확인 전": "Not confirmed yet",
-  "마지막 확인 {ago} 전": "Last checked {ago} ago",
   "묶음 이름을 바꾸지 못했습니다. 1~128자로 정하거나, 묶음이 아직 있는지 확인하세요.": "Could not rename the group. Use 1–128 characters, or check that the group still exists.",
   "세션 이름과 따로 저장됩니다. 1~128자.": "Saved separately from the session names. 1–128 characters.",
   "보고 도착": "Report in",

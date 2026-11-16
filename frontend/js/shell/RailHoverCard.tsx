@@ -20,6 +20,7 @@ import { Portal } from 'solid-js/web';
 import { icon } from '../ui/icons.js';
 import { shellIcon } from '../ui/icons-shell.js';
 import { agentMark } from './agent-mark.js';
+import { STATE_LABEL } from '../design/state-classes.js';
 import { buildHoverCard, type HcGlyph, type HcHost, type HcModel, type HcRow } from './rail-hover-card.js';
 import type { SessionRow } from './rail-data.js';
 
@@ -77,8 +78,53 @@ function CardRow(props: { row: HcRow }) {
           </Show>
         </span>
       </Show>
+      <Show when={r().sub}><span class="vt-hc-sub" title={r().sub}>{r().sub}</span></Show>
     </div>
   );
+}
+
+/** 카드 본문 — 머리(마크 · 이름 · 경과, head일 때) · 상태 칩 · 구역들. 접힌 띠의 호버 카드와 행 메뉴 요약(RailRow.tsx
+ * MenuSummary)이 같이 쓴다 — 같은 세션을 두 곳에서 다르게 보여 주지 않게(2026-11-16, 옛 메뉴 요약을 이것으로 바꿨다). */
+export function CardBody(props: { model: HcModel; head?: boolean }) {
+  const m = () => props.model;
+  return (
+    <>
+      <Show when={props.head}>
+        <div class="vt-hc-row vt-hc-head">
+          <span class="vt-hc-ico vt-hc-mark" data-state={m().state} aria-hidden="true" innerHTML={agentMark(m().agent || 'shell')} />
+          <span class="vt-hc-val vt-hc-name" title={m().name}>{m().name}</span>
+          <Show when={m().since}><span class="vt-hc-extra">{m().since}</span></Show>
+        </div>
+      </Show>
+      <Show when={m().stateText || m().note}>
+        <div class="vt-hc-row vt-hc-status">
+          <span class="vt-hc-ico" />
+          <span class="vt-hc-val">
+            <Show when={m().stateText}>
+              <span class="vt-hc-chip" data-state={m().state}>
+                <span class="vt-hc-glyph" data-state={m().state} aria-hidden="true" innerHTML={icon(GLYPH_ICON[m().state], 12, 2)} />
+                {m().stateText}
+              </span>
+            </Show>
+            <Show when={m().note}><span class="vt-hc-note">{m().note}</span></Show>
+          </span>
+        </div>
+      </Show>
+      <For each={m().sections}>
+        {(s) => (
+          <div class="vt-hc-sec" data-sec={s.id}>
+            <For each={s.rows}>{(r) => <CardRow row={r} />}</For>
+          </div>
+        )}
+      </For>
+    </>
+  );
+}
+
+/** 카드 본문을 읽는 한 줄 — 스크린 리더용(행 메뉴 요약의 aria-label). 눈에는 「유휴」를 쓰지 않지만 읽기용에는 남긴다. */
+export function cardText(m: HcModel): string {
+  return [m.stateText || STATE_LABEL[m.state], m.note, ...m.sections.flatMap((s) => s.rows.map((r) => [r.text, r.tag, r.extra].filter(Boolean).join(' ')))]
+    .filter(Boolean).join(' · ');
 }
 
 export function RailHoverCard(props: {
@@ -274,36 +320,7 @@ export function RailHoverCard(props: {
         onPointerEnter={(e) => { if (e.pointerType !== 'touch') cancelHide(); }}
         onPointerLeave={(e) => { if (e.pointerType !== 'touch') scheduleHide(); }}
       >
-        <Show when={model()}>
-          {(m) => <>
-            <div class="vt-hc-row vt-hc-head">
-              <span class="vt-hc-ico vt-hc-mark" data-state={m().state} aria-hidden="true" innerHTML={agentMark(m().agent || 'shell')} />
-              <span class="vt-hc-val vt-hc-name" title={m().name}>{m().name}</span>
-              <Show when={m().since}><span class="vt-hc-extra">{m().since}</span></Show>
-            </div>
-            <Show when={m().stateText || m().note}>
-              <div class="vt-hc-row vt-hc-status">
-                <span class="vt-hc-ico" />
-                <span class="vt-hc-val">
-                  <Show when={m().stateText}>
-                    <span class="vt-hc-chip" data-state={m().state}>
-                      <span class="vt-hc-glyph" data-state={m().state} aria-hidden="true" innerHTML={icon(GLYPH_ICON[m().state], 12, 2)} />
-                      {m().stateText}
-                    </span>
-                  </Show>
-                  <Show when={m().note}><span class="vt-hc-note">{m().note}</span></Show>
-                </span>
-              </div>
-            </Show>
-            <For each={m().sections}>
-              {(s) => (
-                <div class="vt-hc-sec" data-sec={s.id}>
-                  <For each={s.rows}>{(r) => <CardRow row={r} />}</For>
-                </div>
-              )}
-            </For>
-          </>}
-        </Show>
+        <Show when={model()}>{(m) => <CardBody model={m()} head />}</Show>
       </div>
     </Portal>
   );
