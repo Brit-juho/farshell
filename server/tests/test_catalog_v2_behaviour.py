@@ -208,6 +208,17 @@ def test_a_shell_session_follows_its_folder_after_it_settles(catalog, tmp_path, 
     assert tuple(_placement(catalog, "w")) == ("checkout", "git", "other"), "다른 저장소로 가면 따라간다(고정 없음)"
 
 
+def test_session_list_carries_the_runtime_that_attach_checks(catalog, tmp_path):
+    """세션 목록(`/api/tmux/sessions`의 catalog)이 attach가 요구하는 짝(catalog_id + runtime_id)을 함께 싣는다.
+    runtime_id가 빠지면 목록에서 아직 안 연 세션을 누를 때 attach가 400(invalid_id)으로 거절했다(2.12.0~2.12.1)."""
+    from session_catalog.db import database
+    _reconcile(_item("$1:1", "w", str(tmp_path)))
+    row = catalog.homes(["$1:1"])["$1:1"]
+    with database() as con:
+        live = con.execute("SELECT id FROM runtimes WHERE session_id=? AND ended IS NULL", (row["catalog_id"],)).fetchone()
+    assert row["runtime_id"] == live["id"], "attach의 runtime_changed 검사(resolve_runtime)가 보는 그 실행 회차"
+
+
 def test_a_running_cli_places_the_session_at_once_and_registers_the_project(catalog, tmp_path, monkeypatch):
     inventory = _fresh_places(monkeypatch, settle=3600.0)
     home = tmp_path / "home"

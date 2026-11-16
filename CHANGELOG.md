@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+- **Clicking a session in the list opens it again.** A session not yet open in this browser (made in a Mac terminal, on another device, or closed earlier) failed with "Could not open session (400)" until the page was reloaded, because the list sent its catalog id without the runtime id the attach request requires (since 2.12.0). The session list now carries the runtime id, and a catalog id is only sent together with it.
+
 ---
 
 ## [2.12.1] — 2026-11-16

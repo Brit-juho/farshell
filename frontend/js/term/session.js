@@ -123,7 +123,7 @@ export async function attachTmux(tmuxName, { place = 'view', catalogSessionId = 
   const res = await apiFetch(`${API_BASE}/api/tmux/attach`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: tmuxName, screen: screenId(), ...(catalogSessionId ? { catalog_session_id: catalogSessionId, runtime_id: runtimeId, ...(catalogHost ? {catalog_host: catalogHost} : {}) } : {}) }),
+    body: JSON.stringify({ name: tmuxName, screen: screenId(), ...(catalogSessionId && runtimeId ? { catalog_session_id: catalogSessionId, runtime_id: runtimeId, ...(catalogHost ? {catalog_host: catalogHost} : {}) } : {}) }),
   });
   // 서버가 세션 없음(404) 등을 돌려주면 data.id가 없다. 그대로 addSession(undefined)하면
   // /ws/undefined로 무한 재연결하는 유령 탭이 생기므로 여기서 차단한다.
