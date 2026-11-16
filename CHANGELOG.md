@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+- **The session list is denser.** A folded repository takes one 28 px line (was 47 px), the repository head is the same height folded or open, and session rows, worktree branches and the gaps between repositories lose their spare padding (about 13% shorter for an open repository).
+
 ---
 
 ## [2.12.1] — 2026-11-16

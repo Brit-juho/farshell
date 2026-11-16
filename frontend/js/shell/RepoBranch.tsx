@@ -7,7 +7,7 @@
 //           ╰ ▣ 위임 하위 세션 · 보고 도착
 //     ◌ 종료 2 · 마지막 3시간 전                    ← EndedFold
 //
-// 가지선은 칸마다 거터 SVG로 긋는다(시안과 같은 좌표: 줄기 x=21, 워크트리 가지 x=35, 마디 중심 y=16).
+// 가지선은 칸마다 거터 SVG로 긋는다(시안과 같은 좌표: 줄기 x=21, 워크트리 가지 x=35, 마디 중심 y=14 — 마디 22px이 칸 위 3px에서 시작한다, 72-rail-graph.css).
 // 칸 사이가 끊기지 않게 각 칸은 위로 0부터, 아래로 100%까지 선을 잇고, 마지막 칸만 마디에서 멈춘다.
 import { For, Show, type JSX } from 'solid-js';
 import { t } from '../core/i18n.js';
@@ -24,8 +24,8 @@ const v = (x: number, y1: number | string, y2: number | string) => `<line x1="${
 
 /** 세션 칸의 가지선. more = 이 저장소에서 이 칸 아래로 무언가(다른 세션·가지·종료) 더 있다. */
 export function sessionLines(lane: 1 | 2, opts: { more: boolean; moreInLane: boolean; kids: boolean }): string {
-  if (lane === 1) return v(X1, 0, 8) + (opts.more || opts.kids ? v(X1, 24, '100%') : '');
-  return (opts.more ? v(X1, 0, '100%') : '') + v(X2, 0, 8) + (opts.moreInLane || opts.kids ? v(X2, 24, '100%') : '');
+  if (lane === 1) return v(X1, 0, 6) + (opts.more || opts.kids ? v(X1, 22, '100%') : '');
+  return (opts.more ? v(X1, 0, '100%') : '') + v(X2, 0, 6) + (opts.moreInLane || opts.kids ? v(X2, 22, '100%') : '');
 }
 /** 위임 하위 칸의 가지선 — 부모 마디의 x에서 굽어 나온다. */
 export function kidLines(lane: 1 | 2, opts: { more: boolean; continueParent: boolean }): string {
@@ -35,10 +35,10 @@ export function kidLines(lane: 1 | 2, opts: { more: boolean; continueParent: boo
 }
 /** 워크트리 가지 머리 — 줄기에서 x=35로 굽어 나간다. */
 export function worktreeLines(more: boolean): string {
-  return (more ? v(X1, 0, '100%') : v(X1, 0, 2)) + `<path d="M${X1} 0C${X1} 16 ${X2} 6 ${X2} 24"/>`;
+  return (more ? v(X1, 0, '100%') : v(X1, 0, 2)) + `<path d="M${X1} 0C${X1} 14 ${X2} 6 ${X2} 22"/>`;
 }
 export function headLines(hasBody: boolean): string {
-  return hasBody ? v(X1, 26, '100%') : '';
+  return hasBody ? v(X1, 23, '100%') : '';
 }
 export function endLines(last: boolean): string {
   return v(X1, 0, last ? 9 : '100%');

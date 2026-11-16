@@ -1,9 +1,11 @@
 /* 폰(Fleet)의 종료 시트·보관함도 같은 칸을 쓴다 — 그 컨테이너에 .vt-rg-scope를 붙인다(세션 로직 점검 단계 7).
    레일 저장소 가지 그래프(세션 로직 점검 단계 5, 시안 5차 데스크톱 — docs/local/plans/session-rail-renewal-2026-11).
    shell/RepoBranch.tsx · SessionNode.tsx · EndedFold.tsx. 좌표는 시안과 같다: 거터 44px, 줄기 x=21, 워크트리 가지
-   x=35, 마디 22px(위 5px), 마디 중심 y=16. 가지선은 칸마다 SVG(.vt-rg-ln)로 긋고, 칸 높이가 늘어나면 100%까지 이어진다. */
+   x=35, 마디 22px(위 3px), 마디 중심 y=14(2026-11-16 촘촘하게 — 칸 위아래 여백 5→3px). 가지선은 칸마다 SVG(.vt-rg-ln)로 긋고, 칸 높이가 늘어나면 100%까지 이어진다. */
 
-:is(#vt-wgrail, .vt-rg-scope) .vt-rg { padding:6px 0; }
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg { padding:2px 0 4px; }
+/* 접힌 저장소는 머리 한 줄(28)뿐이다 — 펼친 가지를 위한 위아래 여백을 걷는다(2026-11-16, 47px → 29px). */
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg.collapsed { padding:0; }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg + .vt-rg { border-top:1px solid var(--color-line); }
 
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-row {
@@ -24,7 +26,7 @@
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-ln { position:absolute; left:0; top:0; width:44px; height:100%; overflow:visible; pointer-events:none; }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-ln line, :is(#vt-wgrail, .vt-rg-scope) .vt-rg-ln path { fill:none; stroke:var(--color-line-strong); stroke-width:1.5; }
 
-:is(#vt-wgrail, .vt-rg-scope) .vt-rg-body { flex:1; min-width:0; padding:5px 0; }
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg-body { flex:1; min-width:0; padding:3px 0; }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-a { display:flex; align-items:center; gap:7px; min-width:0; height:22px; }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-b {
   display:flex; align-items:center; gap:6px; min-width:0; min-height:18px;
@@ -64,7 +66,7 @@
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-group { flex:none; display:inline-flex; color:var(--color-muted); }
 
 /* 마디: 상태 링(22px) + 가운데 에이전트 마크. 확인 안 한 완료는 오른쪽 아래 점. */
-:is(#vt-wgrail, .vt-rg-scope) .vt-rg-mark { position:absolute; left:10px; top:5px; width:22px; height:22px; }
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg-mark { position:absolute; left:10px; top:3px; width:22px; height:22px; }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-node.l2 .vt-rg-mark { left:24px; }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-node.l2 .vt-rg-body { padding-left:14px; }
 /* 링 도형은 접힌 띠와 같은 것(compact-mark.ts ringSvg) — 모양이 상태를 말하고 색은 상태색이다. */
@@ -86,12 +88,12 @@
 }
 
 /* 개입 필요 구역은 가지선 없이 같은 칸만 쓴다. */
-:is(#vt-wgrail, .vt-rg-scope) .vt-rg-flat { padding:2px 0 6px; }
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg-flat { padding:2px 0; }
 
 /* 저장소 머리. */
-:is(#vt-wgrail, .vt-rg-scope) .vt-rg-head { height:34px; align-items:center; }
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg-head { height:28px; align-items:center; }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-ic {
-  position:absolute; left:10px; top:6px; width:22px; height:22px; border-radius:6px;
+  position:absolute; left:10px; top:3px; width:22px; height:22px; border-radius:6px;
   display:flex; align-items:center; justify-content:center; background:var(--color-bg-3); color:var(--color-txt);
 }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg.outside .vt-rg-ic { color:var(--color-sub); }
@@ -105,7 +107,7 @@
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg.collapsed .vt-rg-head .vt-rg-caret { transform:rotate(-90deg); }
 
 /* 워크트리 가지 머리. */
-:is(#vt-wgrail, .vt-rg-scope) .vt-rg-wt { height:24px; align-items:center; cursor:default; }
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg-wt { height:22px; align-items:center; cursor:default; }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-wt:hover, :is(#vt-wgrail, .vt-rg-scope) .vt-rg-wt:active { background:transparent; }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-wt .vt-rg-body { padding:0 0 0 14px; display:flex; align-items:center; gap:6px; min-width:0; }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-wtl {
