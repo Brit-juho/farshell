@@ -5541,5 +5541,10 @@ window.__VT_I18N = {
   "정리하지 못했습니다": "Could not tidy up",
   "종료 대화 {n}개를 보관함으로 옮겼습니다": "Moved {n} ended conversations to the archive",
   "종료 대화 정리": "Tidy ended conversations",
-  "최근 활동순": "Recent activity"
+  "최근 활동순": "Recent activity",
+  "CSP가 막았습니다: {directive} {uri}": "Blocked by CSP: {directive} {uri}",
+  "눌러서 기록 보기": "Click to open the log",
+  "리소스를 불러오지 못했습니다: {url}": "Failed to load resource: {url}",
+  "알 수 없는 스크립트 오류": "Unknown script error",
+  "처리되지 않은 비동기 오류": "Unhandled async error"
 };

@@ -1,0 +1,16 @@
+[
+  { "in": "GET /api/x?token=abc&a=1", "out": "GET /api/x?token=***&a=1" },
+  { "in": "/ws?ticket=zzz", "out": "/ws?ticket=***" },
+  { "in": "x=1&access_token=abc", "out": "x=1&access_token=***" },
+  { "in": "PASSWORD=Hunter2 ok", "out": "PASSWORD=*** ok" },
+  { "in": "Authorization: Bearer abc.def-ghi", "out": "Authorization: Bearer ***" },
+  { "in": "Cookie: vt_session=abc; other=1", "out": "Cookie: vt_session=***; other=1" },
+  { "in": "{\"password\":\"hunter2\",\"user\":\"a\"}", "out": "{\"password\":\"***\",\"user\":\"a\"}" },
+  { "in": "{\"api_key\": \"k\\\"q\"}", "out": "{\"api_key\": \"***\"}" },
+  { "in": "{\"otp\":\"123456\"}", "out": "{\"otp\":\"***\"}" },
+  { "in": "token=***", "out": "token=***" },
+  { "in": "?code=abc&state=1", "out": "?code=abc&state=1" },
+  { "in": "저장 실패: 권한 없음", "out": "저장 실패: 권한 없음" },
+  { "in": "commit 3f2a9c1d8e7b6a5f4e3d2c1b0a9f8e7d6c5b4a39", "out": "commit 3f2a9c1d8e7b6a5f4e3d2c1b0a9f8e7d6c5b4a39" },
+  { "in": "PUT /api/fs/file?path=/tmp/a.txt&token=t0k", "out": "PUT /api/fs/file?path=/tmp/a.txt&token=***" }
+]

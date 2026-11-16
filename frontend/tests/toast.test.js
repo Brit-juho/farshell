@@ -145,7 +145,8 @@ test('null/undefined 메시지에 죽지 않는다', async () => {
   const { window, showToast } = await buildWindow();
   showToast(null);
   showToast(undefined, 'error');
-  assert.deepStrictEqual(toasts(window).map((e) => e.textContent), ['', '']);
+  // 실패 카드에는 기록으로 가는 「자세히」가 붙는다(2.13 — 이벤트 기록).
+  assert.deepStrictEqual(toasts(window).map((e) => e.textContent), ['', '자세히']);
 });
 
 test('dismissToast 로 즉시 제거할 수 있고, 같은 key 를 다시 쓸 수 있다', async () => {
@@ -193,7 +194,7 @@ test('카드는 3개를 넘지 않고, 실패보다 정보를 먼저 비운다',
   assert.strictEqual(alive(window).length, 3);
 
   showToast('정보3');
-  assert.deepStrictEqual(alive(window).map((e) => e.textContent), ['실패', '정보2', '정보3'],
+  assert.deepStrictEqual(alive(window).map((e) => e.textContent), ['실패자세히', '정보2', '정보3'],
     '가장 오래된 정보가 빠진다 — 정보가 에러를 밀어내면 등급이 뒤집힌다');
 });
 
@@ -213,7 +214,7 @@ test('HUD 가 있으면 info/success 는 카드가 아니라 HUD 줄로 간다',
   assert.strictEqual(msg.hidden, false);
   assert.strictEqual(msg.textContent, '복사됨');
   assert.strictEqual(msg.dataset.tone, 'ok');
-  assert.strictEqual(msg.getAttribute('data-tip'), '복사됨', '잘렸을 때 읽을 전문');
+  assert.strictEqual(msg.getAttribute('data-tip'), '복사됨 — 눌러서 기록 보기', '잘렸을 때 읽을 전문 + 기록으로 가는 안내');
   assert.ok(window.document.getElementById('vt-hud').classList.contains('vt-hud-busy'),
     '칩은 DOM에서 빼지 않고 클래스로만 숨긴다(Solid <For> 노드)');
 });
@@ -221,7 +222,7 @@ test('HUD 가 있으면 info/success 는 카드가 아니라 HUD 줄로 간다',
 test('HUD 가 있어도 warn/error 는 카드로 뜬다 — 읽어야 하는 것만 터미널을 덮는다', async () => {
   const { window, showToast } = await buildWindow({ hud: true });
   showToast('세션 생성 실패', 'error');
-  assert.deepStrictEqual(toasts(window).map((e) => e.textContent), ['세션 생성 실패']);
+  assert.deepStrictEqual(toasts(window).map((e) => e.textContent), ['세션 생성 실패자세히']);
   assert.strictEqual(hudMsg(window), null, 'HUD 줄은 만들지도 않는다');
 });
 
@@ -262,7 +263,7 @@ test('같은 key 는 등급이 달라도 한 마디 — 진행(HUD)이 실패(�
   showToast('이미지 업로드 실패 (500)', 'error', { key: 'paste-image' });
   assert.strictEqual(hudMsg(window).hidden, true,
     '한 동작이 두 자리에서 서로 다른 말을 하면 안 된다');
-  assert.deepStrictEqual(toasts(window).map((e) => e.textContent), ['이미지 업로드 실패 (500)']);
+  assert.deepStrictEqual(toasts(window).map((e) => e.textContent), ['이미지 업로드 실패 (500)자세히']);
 });
 
 // 리디자인 6단계(시안 O16-D) — 카드 340: 아이콘 · 머리(문구·×N) · 보조 줄 · 동작 버튼 · × 닫기.

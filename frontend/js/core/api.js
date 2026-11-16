@@ -7,8 +7,9 @@
 // _tokenQuery는 쿠키 교환 완료 시 ''로 재할당되므로 매번 최신값을 봐야 한다.
 
 import { noteNetworkError, noteResponse, noteTimeout } from './reachability.js';
-import { relayPath, relayUrl } from './host-route.js';
+import { relayHost, relayPath, relayUrl } from './host-route.js';
 import { t } from './i18n.js';
+import { logEvent } from './event-log.js';
 import { waitForAuthentication } from './auth-state.js';
 
 // ## 요청 시간 제한 (서버가 연결은 받는데 답을 안 하던 사고)
@@ -77,6 +78,7 @@ function _deadline(opts) {
   }
   const fetchOpts = { ...(opts || {}) };
   delete fetchOpts.timeout;
+  delete fetchOpts.noLog;
   if (ctl) fetchOpts.signal = ctl.signal;
   return {
     fetchOpts,
@@ -114,6 +116,43 @@ async function _gate() {
   throw e;
 }
 
+// ## 실패 기록 (event-log.js)
+//
+// 도달 판정(reachability)은 숫자만 센다. 개발자가 필요한 건 어떤 요청이 어떻게 실패했는지다.
+// 그래서 실패마다 요청 메타(메서드·경로·상태·소요시간·서버 오류 코드)를 Error 의 `.request` 에 붙이고 기록에 남긴다.
+// **던지는 예외와 반환값의 기존 계약은 바꾸지 않는다** — 호출부는 아무것도 몰라도 된다.
+// 본문은 기록하지 않는다(화면·파일 내용이 새면 안 된다). 서버의 error/reason 두 줄만 꺼낸다.
+//   5xx·네트워크·마감 초과 → warn(서버로도 간다), 4xx·호출부가 끊은 요청 → debug(404·409를 정상 흐름으로 쓰는 호출부가 많다).
+function _logPath(path) {
+  try {
+    const u = new URL(String(path), 'http://x');
+    return u.pathname + u.search;
+  } catch (_) { return String(path); }
+}
+
+function _logFailure(method, path, t0, e, res, data, opts) {
+  if (opts && opts.noLog) return;   // 기록 전송 자신의 실패는 기록하지 않는다(전송 → 실패 → 기록 → 전송 고리)
+  const status = res ? res.status : 0;
+  const aborted = !res && e && e.name === 'AbortError';
+  const request = {
+    method,
+    path: _logPath(path),
+    status,
+    ms: Math.round(performance.now() - t0),
+    code: data && typeof data.error === 'string' ? data.error : undefined,
+    reason: data && typeof data.reason === 'string' ? data.reason : undefined,
+    host: relayHost(),
+  };
+  if (e && typeof e === 'object') { try { e.request = request; } catch (_) { /* 얼린 Error */ } }
+  const level = aborted || (res && status < 500) ? 'debug' : 'warn';
+  const what = res ? `HTTP ${status}` : isTimeoutError(e) ? t('시간 초과') : aborted ? t('중단됨') : t('네트워크 오류');
+  logEvent({ level, source: 'api', msg: `${method} ${request.path.split('?')[0]} — ${what}`, req: request, error: e });
+}
+
+function _methodOf(opts) {
+  return String((opts && opts.method) || 'GET').toUpperCase();
+}
+
 // 거부 사유를 도달 판정에 반영한다. 호출부가 스스로 끊은 것(signal)은 서버 탓이 아니다.
 function _noteFailure(dl, e) {
   if (isTimeoutError(e)) noteTimeout();
@@ -130,12 +169,15 @@ async function _request(path, opts, notModifiedOk) {
   // 도달 여부를 여기서 센다 — 앱의 거의 모든 서버 호출이 이 한 곳을 지난다.
   // 호출부는 아무것도 안 바뀐다(예외/반환값 동일): 실패를 기록만 하고 그대로 던진다.
   const dl = _deadline(opts);
+  const t0 = performance.now();
+  const method = _methodOf(opts);
   let res;
   try {
     res = await dl.race(fetch(`${window.API_BASE}${path}${sep}${tokenQuery.replace(/^[?&]/, '')}`, dl.fetchOpts));
   } catch (e) {
     dl.done();
     _noteFailure(dl, e);
+    _logFailure(method, path, t0, e, null, null, opts);
     throw e;
   }
   noteResponse(res.status);
@@ -148,13 +190,14 @@ async function _request(path, opts, notModifiedOk) {
     data = await dl.race(res.json());
   } catch (e) {
     // 본문이 JSON이 아닌 건 예전처럼 null로 넘어간다. 본문이 마감 안에 안 오는 건 실패다.
-    if (isTimeoutError(e)) { dl.done(); noteTimeout(); throw e; }
+    if (isTimeoutError(e)) { dl.done(); noteTimeout(); _logFailure(method, path, t0, e, null, null, opts); throw e; }
     data = null;
   }
   dl.done();
   if (!res.ok) {
     const e = new Error((data && (data.reason || data.error)) || `HTTP ${res.status}`);
     e.status = res.status; e.data = data;
+    _logFailure(method, path, t0, e, res, data, opts);
     throw e;
   }
   return { res, data };
@@ -226,9 +269,16 @@ export function apiFetch(url, opts = {}) {
 export function timedFetch(url, opts) {
   if (_needsGate(url)) return _gate().then(() => timedFetch(url, opts));
   const dl = _deadline(opts);
+  const t0 = performance.now();
+  const method = _methodOf(opts);
   return dl.race(fetch(url, dl.fetchOpts)).then(
-    (res) => { noteResponse(res.status); return res; },
-    (e) => { dl.done(); _noteFailure(dl, e); throw e; },
+    (res) => {
+      noteResponse(res.status);
+      // Response 를 그대로 돌려주는 계약이라 본문은 읽지 않는다 — 상태만 기록한다(서버 오류 코드는 모른다).
+      if (!res.ok && res.status !== 304) _logFailure(method, url, t0, null, res, null, opts);
+      return res;
+    },
+    (e) => { dl.done(); _noteFailure(dl, e); _logFailure(method, url, t0, e, null, null, opts); throw e; },
   );
 }
 

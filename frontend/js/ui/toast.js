@@ -49,6 +49,8 @@
 import { COMPACT_MAX } from '../layout/breakpoints.js';
 import { icon } from './icons.js';
 import { t } from '../core/i18n.js';
+import { logEvent, recentApiId } from '../core/event-log.js';
+import { getAction } from '../core/dom.js';
 
 const TYPE_CLASS = { info: 'info', error: 'err', success: 'ok', warn: 'warn' };
 // 등급별 기본 지속. 성공은 이미 눈으로 본 걸 확인해 주는 말이라 빨리 비켜야
@@ -107,11 +109,18 @@ function hudLine() {
     // 상태 막대에서 낭독되는 곳은 이 칸 하나다(막대 전체는 role=region) — 칩이 바뀔 때마다 읽히면 소음이다.
     el.setAttribute('role', 'status');
     el.setAttribute('aria-live', 'polite');
-    el.addEventListener('click', () => retireHud(el));
+    // 눌러서 기록 패널로 — 사라진 뒤에는 되볼 방법이 없던 메시지를 그 자리에서 이어 본다.
+    el.addEventListener('click', () => { openLog(el._vtLogId); retireHud(el); });
     bindHoverPause(el);
     bar.appendChild(el);
   }
   return el;
+}
+
+// 기록 패널(eventlog 청크)을 연다. 액션이 아직 등록 전이면(부팅 직후) 조용히 넘어간다.
+function openLog(id) {
+  const open = getAction('eventlog.open');
+  if (typeof open === 'function') open(id || '');
 }
 
 // 손가락/마우스가 올라와 있는 동안은 타이머를 세운다 — 긴 실패 문구를 읽는
@@ -294,14 +303,31 @@ export function showToast(msg, type, opts) {
 
   const key = opts.key || null;
   const detail = opts.detail == null ? '' : String(opts.detail);
-  const actions = Array.isArray(opts.actions) ? opts.actions : null;
+  let actions = Array.isArray(opts.actions) ? opts.actions : null;
+
+  // 화면에 어떻게 뜨든 먼저 기록한다. 사람이 놓쳐도, 사라져도 남아야 한다.
+  // error 옵션(Error 객체)이 있으면 스택·요청 정보가 붙는다. 없으면 3초 안의 가장 최근 API 실패를 원인으로 "추정"해 묶는다.
+  const failing = type === 'error' || type === 'warn';
+  const rel = failing && !(opts.error && opts.error._logId) ? recentApiId(3000) : '';
+  const logId = logEvent({
+    // key 가 있는 info 는 진행 상황("올리는 중 12%")이라 200ms 마다 문구가 바뀐다 — debug 로 내려 링 버퍼가 밀리지 않게 한다.
+    level: key && type === 'info' ? 'debug' : type, source: 'toast', msg: text, detail: opts.logDetail || detail, error: opts.error,
+    rel: rel || undefined, relGuess: Boolean(rel),
+  });
+  // 실패 카드에는 「자세히」를 단다 — 동작 단추가 둘이면 자리가 없어 달지 않는다.
+  if (failing && logId && (!actions || actions.length < 2)) {
+    actions = [...(actions || []), { label: t('자세히'), onClick: () => openLog(logId) }];
+  }
   if (HUD_TYPES[type] && !(actions && actions.length)) {
     const hud = hudLine();
     if (hud) {
       // 같은 key의 카드(취소 단추가 있던 진행 카드 등)가 떠 있으면 거둔다 — 한 동작의 끝맺음이 상태 막대로 가면서
       // 카드가 「받는 중」으로 남으면 안 된다.
       if (key) { const card = keyed.get(key); if (card) retire(card); }
-      return paintHud(hud, text, type, ms, key);
+      const h = paintHud(hud, text, type, ms, key);
+      h._vtLogId = logId;
+      h.setAttribute('data-tip', `${text} — ${t('눌러서 기록 보기')}`);
+      return h;
     }
   }
   // 같은 key는 등급이 달라도 한 마디다. "이미지 업로드 중…"(info → HUD 줄)이
@@ -311,7 +337,9 @@ export function showToast(msg, type, opts) {
     const hud = document.getElementById('vt-hud-msg');
     if (hud && !hud.hidden && hud._vtKey === key) clearHud(hud);
   }
-  return paintCard(text, type, ms, key, detail, actions);
+  const card = paintCard(text, type, ms, key, detail, actions);
+  if (logId) card.dataset.logId = logId;
+  return card;
 }
 
 function paintHud(el, text, type, ms, key) {
