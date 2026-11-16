@@ -10,6 +10,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+---
+
+## [2.12.4] — 2026-11-17
+
 ### Added
 - **A log for notifications, errors and requests.** A toast used to vanish after a few seconds and an error toast kept only `e.message`; now everything that reaches you is also recorded — every toast, failed requests (method, path, status, time, the server's error code), script errors, stale chunks after a deploy, CSP violations, and lost connections. Open it from the palette («Log»), the **Details** button on an error card, the status-bar message, or the status-bar **Errors N** chip that appears while you have unseen errors; on a phone from Settings › Tools › Log. «This screen» shows this tab's whole log and survives a reload; «All screens» shows the errors and warnings the server keeps from every device (`~/.vt/client-log/`, 7 days or 20 MB, a logged-in person only). Rows unfold to the stack and request; **Copy for an issue** builds ready-to-paste text. Tokens, cookies and passwords are masked in the browser and again on the server. New `POST/GET/DELETE /api/client-log`.
 
