@@ -267,14 +267,17 @@ function accountChips(acc: AccountsInput, nowMs: number): HudChip[] {
 }
 
 // 초당 바이트 → "0" / "340K" / "1.2M" / "12M". 칩 폭을 지키려고 단위는 한 글자다(초당은 라벨이 말한다).
+// 한쪽이 늘 4글자 이하다 — 10 이상은 정수(「12K」), 10 미만만 소수 한 자리(「9.9K」), 999.6K가 반올림으로
+// 「1000K」가 되면 다음 단위(1M)로 넘긴다.
+// 상태 막대가 이 폭을 고정 칸으로 잡아 두므로(95-bars.css), 넘으면 칸이 흔들린다.
 export function formatRate(bps: number | null | undefined): string {
   if (bps == null || !Number.isFinite(bps) || bps < 1) return '0';
-  const units = ['B', 'K', 'M', 'G'];
+  const units = ['B', 'K', 'M', 'G', 'T'];
   let v = bps;
   let i = 0;
-  while (v >= 1000 && i < units.length - 1) { v /= 1024; i += 1; }
-  const n = v >= 100 || i === 0 ? Math.round(v) : Math.round(v * 10) / 10;
-  return `${n}${units[i]}`;
+  const round = (x: number, unit: number) => (x >= 10 || unit === 0 ? Math.round(x) : Math.round(x * 10) / 10);
+  while ((v >= 1000 || round(v, i) >= 1000) && i < units.length - 1) { v /= 1024; i += 1; }
+  return `${round(v, i)}${units[i]}`;
 }
 
 // CPU·RAM·네트워크 칩. 읽지 못한 항목(null)은 그 칩을 아예 그리지 않는다 — 「—」를 그리지 않는 HUD의 규칙.

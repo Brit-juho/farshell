@@ -211,6 +211,11 @@ test('formatRate — 초당 바이트를 한 글자 단위로 줄인다', async 
   assert.strictEqual(formatRate(340 * 1024), '340K');
   assert.strictEqual(formatRate(1.2 * 1024 * 1024), '1.2M');
   assert.strictEqual(formatRate(250 * 1024 * 1024), '250M');
+  // 반올림이 1000이 되면 다음 단위로 — 상태 막대의 고정 칸(4글자)을 넘지 않는다.
+  assert.strictEqual(formatRate(999.6), '1K');
+  assert.strictEqual(formatRate(999.7 * 1024), '1M');
+  assert.strictEqual(formatRate(1023.9 * 1024 * 1024), '1G');
+  for (let b = 1; b < 1024 ** 4; b *= 1.37) assert.ok(formatRate(b).length <= 4, `${b} → ${formatRate(b)}`);
 });
 
 test('시스템 칩 — 값이 있는 항목만 그린다(읽지 못한 항목은 칩이 없다)', async () => {
