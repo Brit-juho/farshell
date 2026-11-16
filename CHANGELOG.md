@@ -10,6 +10,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+---
+
+## [2.12.1] — 2026-11-16
+
 ### Added
 - **Agent turn checkpoints (API only, off by default).** When you switch a repository on (`PUT /api/checkpoints/settings`, browser login only), FarShell records the work folder's state in hidden refs inside that repository's `.git` at the start and end of each Claude Code / Codex turn, so a later screen can show what a turn changed. Your branch, HEAD, index and files are never changed; names the viewer refuses (`.env`, `*.pem`, …), untracked files over 2 MB and nested repositories are left out; a repository's linked worktrees share one switch; the switch is kept on this Mac only. `VT_CHECKPOINTS=0` turns it off server-wide. Reading: `GET /api/checkpoints`, `GET /api/checkpoints/diff`. The dock screen and restore come later. Details: `docs/ref/worktree.md`.
 
