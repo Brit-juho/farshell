@@ -10,6 +10,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+---
+
+## [2.12.3] — 2026-11-16
+
 ### Added
 - **Sort the session list your way, the same on every device.** Repositories chain up to three criteria — with sessions first, waiting first, name, registration or recent activity (default: with sessions first, then name) — and "Outside a repository" sits right below the repositories with live sessions. Sessions can be ordered by creation, name, recent activity or by hand: drag within a branch, or "Move up/down" in the row menu (long-press on a phone). The order is saved on the Mac, so every browser and phone viewing it sees the same list.
 - **Tidy ended conversations.** The ⋯ menu on a repository's "Ended N" line archives its ended conversations — all, or only those older than N days (default 7, set in settings › Cleanup, where you can also tidy every repository at once). Running conversations are skipped, nothing is deleted, and the notice afterwards has Undo (`POST /api/session-catalog/conversations/archive-ended` · `…/unarchive`).
