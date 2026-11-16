@@ -458,3 +458,5 @@ label.vt-railset-row { cursor:pointer; }
 #vt-wgrail .vt-srow.active .vt-srow-agent,
 #vt-wgrail .vt-srow.is-waiting .vt-srow-agent { color:var(--color-sub); }
 
+/* 정리 탭 — 「모든 저장소」 정리 버튼 둘(좁으면 줄바꿈). */
+.vt-railset-actions { display:flex; flex-wrap:wrap; gap:calc(var(--spacing) * 2); }

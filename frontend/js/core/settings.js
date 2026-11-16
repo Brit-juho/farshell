@@ -182,6 +182,9 @@ export const SCHEMA = {
   'ui.focus.hintCount':  { type: 'int',  def: 0, min: 0, max: 3, scope: 'device' },
   'rail.lineage': { type: 'str', def: '', scope: 'device' },
   'rail.view':    { type: 'str', def: '', scope: 'device' },
+  // 정렬·수동 순서는 그 맥의 전역(모든 기기가 같은 순서) — 형식은 shell/rail-data.ts SORT_KEY·ORDER_KEY.
+  'rail.sort':    { type: 'str', def: '' },
+  'rail.order':   { type: 'str', def: '' },
 };
 
 function _scopeOf(key) {
@@ -397,6 +400,22 @@ function _applyRemote(scope, remote, revision) {
   return true;
 }
 
+// 다른 기기가 바꾼 전역 설정(`/ws-workspace`의 workspace_updated)을 이 화면에 들인다 — `prefix`로 시작하는 키만(지금은
+// 세션 목록 정렬 `rail.`, shell/rail-prefs.ts). 저장 중인 키는 건드리지 않는다(내 변경이 서버에 닿기 전 옛 값으로 되돌지 않게).
+export function applyRemoteGlobal(remote, prefix) {
+  if (!remote || typeof remote !== 'object' || typeof prefix !== 'string' || !prefix) return;
+  const values = _stores.global.values;
+  const changed = {};
+  for (const [k, v] of Object.entries(remote)) {
+    if (!k.startsWith(prefix) || _scopeOf(k) !== 'global' || _isVolatile(k) || k in _pending.global) continue;
+    const c = _coerce(k, v);
+    if (c === undefined || get(k) === c) continue;   // 지금 보이는 값(기본값 포함)과 같으면 그대로
+    values[k] = c;
+    changed[k] = c;
+  }
+  if (Object.keys(changed).length) { _writeCache('global'); _notify(changed); }
+}
+
 // 서버 동기화. 캐시로 이미 그려진 뒤에 돌고, **서버 값이 이긴다**(ADR-5).
 // 두 스코프를 병렬로 가져온다 — 서로 다른 엔드포인트라 순서는 상관없다.
 // 첫 load()가 끝났는지(성공·실패·오프라인 무관)를 알리는 promise. reject하지 않는다.
@@ -459,5 +478,6 @@ if (typeof window.vtSettingsGet !== 'function') {
   window.vtSettingsSet = set;
   window.vtSettingsHas = has;
   window.vtSettingsSubscribe = subscribe;
+  window.vtSettingsApplyRemote = applyRemoteGlobal;
   window.vtSettingsSubscribePersistence = subscribePersistence;
 }

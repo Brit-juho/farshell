@@ -8,6 +8,7 @@
 import { createSignal, onCleanup } from 'solid-js';
 
 import { readRailPrefs, type RailPrefs } from './rail-data.js';
+import { onWorkspaceEvent } from '../core/workspace-ws.js';
 
 export function createRailPrefs() {
   const read = (): RailPrefs => readRailPrefs((k) => (window as any).vtSettingsGet?.(k));
@@ -18,6 +19,13 @@ export function createRailPrefs() {
     setPrefs(read());
   });
   onCleanup(() => unsub?.());
+  // 정렬·수동 순서는 그 맥의 전역 설정이라, 다른 기기(폰·다른 브라우저)가 바꾸면 서버가 workspace_updated로 알린다 —
+  // 새로고침 없이 이 화면에도 들인다(core/settings.js applyRemoteGlobal, rail. 키만). 바뀌면 위 구독이 prefs를 다시 읽는다.
+  const offRemote = onWorkspaceEvent('workspace_updated', (msg: any) => {
+    const settings = msg?.data?.settings;
+    if (settings && typeof settings === 'object') (window as any).vtSettingsApplyRemote?.(settings, 'rail.');
+  });
+  onCleanup(() => offRemote());
   const set = (key: string, value: boolean | string) => {
     (window as any).vtSettingsSet?.(key, value);
     setPrefs(read());

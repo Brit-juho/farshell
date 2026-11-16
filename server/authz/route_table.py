@@ -96,6 +96,8 @@ _ROWS: tuple = (
     ("GET", "/api/session-catalog/projects", human()),
     ("GET", "/api/session-catalog/conversations", human()),
     ("POST", "/api/session-catalog/projects/{project_id}", human()),
+    ("POST", "/api/session-catalog/conversations/archive-ended", human()),
+    ("POST", "/api/session-catalog/conversations/unarchive", human()),
     ("GET", "/api/session-history/conversations/{conversation_id}/resume-preview", human()),
     ("GET", "/api/session-history/replicas/{origin}/{conversation_id}", human()),
     ("POST", "/api/session-catalog/sessions/{session_id}", human()),

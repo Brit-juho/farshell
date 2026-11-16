@@ -514,3 +514,55 @@ def test_auto_archive_skips_running_and_recently_unarchived_conversations(catalo
         got = {r[0]: r[1] for r in db.execute("SELECT id,archived FROM conversations WHERE id IN (?,?)", (run, back))}
     assert got[run] is None, "훅 상태로 돌고 있는 대화는 연결 기록이 없어도 보관하지 않는다"
     assert got[back] is None, "사람이 보관을 푼 대화는 바로 다시 보관하지 않는다"
+
+
+def test_ended_cleanup_archives_a_project_or_everything_and_can_be_undone(catalog, monkeypatch):
+    """「종료 N」 정리 — 저장소 하나(또는 전부)의 끝난 대화를 한 번에 보관, N일 지난 것만도. 돌고 있는 대화는 남는다.
+    되돌리기는 방금 옮긴 대화만 「종료 N」으로 돌리고, 자동 보관이 곧바로 다시 옮기지 않게 표시를 남긴다."""
+    import json
+    from session_catalog.db import database
+    a, b = _repo(catalog / "a"), _repo(catalog / "b")
+    now = time.time()
+    old = conv(cwd=a, detail={"launch": "cli", "started": now - 20 * 86400, "last": now - 20 * 86400})
+    new = conv(cwd=a, detail={"launch": "cli", "started": now - 3600, "last": now - 3600})
+    live = conv(cwd=a, detail={"launch": "cli", "started": now - 30 * 86400, "last": now - 30 * 86400})
+    other = conv(cwd=b, detail={"launch": "cli", "started": now - 20 * 86400, "last": now - 20 * 86400})
+    place()
+    view = _view(monkeypatch, running={_native(live)})
+    pa = {p["name"]: p["id"] for p in view.project_list()["projects"]}["a"]
+    got = view.archive_ended(project=pa, older_than_days=7)
+    assert got["archived"] == [old], "N일 지난 것만 · 그 저장소만 · 돌고 있는 대화는 빼고"
+    got = view.archive_ended(project=pa)
+    assert got["archived"] == [new]
+    assert view.archive_ended()["archived"] == [other], "저장소를 안 정하면 전부"
+    back = view.unarchive_many([old, new, "0" * 32])
+    assert set(back["unarchived"]) == {old, new}
+    with database() as db:
+        rows = {r["id"]: r for r in db.execute("SELECT id,archived,detail FROM conversations")}
+    assert rows[old]["archived"] is None and json.loads(rows[old]["detail"]).get("unarchived")
+    assert rows[other]["archived"] is not None and rows[live]["archived"] is None
+
+
+def test_ended_cleanup_refuses_bad_arguments_and_is_human_only(catalog, monkeypatch):
+    import pytest
+    from authz import route_table
+    from session_catalog.db import Refused
+    view = _view(monkeypatch)
+    for kwargs in ({"older_than_days": -1}, {"older_than_days": True}, {"older_than_days": "7"}, {"project": "../x"}):
+        with pytest.raises(Refused):
+            view.archive_ended(**kwargs)
+    for ids in ([], "x", ["../x"], ["a" * 32] * 2001):
+        with pytest.raises(Refused):
+            view.unarchive_many(ids)
+    paths = {(m, p) for m, p, *_ in route_table._ROWS}
+    assert ("POST", "/api/session-catalog/conversations/archive-ended") in paths
+    assert ("POST", "/api/session-catalog/conversations/unarchive") in paths
+
+
+def test_ended_cleanup_days_is_a_catalog_setting(catalog):
+    import pytest
+    from session_catalog import db
+    assert db.configure({"ended_cleanup_days": 14})["ended_cleanup_days"] == 14
+    for bad in (0, -1, True, "7", 3651):
+        with pytest.raises(db.Refused):
+            db.configure({"ended_cleanup_days": bad})

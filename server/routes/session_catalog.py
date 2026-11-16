@@ -94,6 +94,26 @@ async def update_project(project_id: str, request: Request):
     return await _call(projects_view.update_project, project_id, value)
 
 
+@router.post('/api/session-catalog/conversations/archive-ended')
+async def archive_ended(request: Request):
+    """「종료 N」 정리 — {project?: 저장소 id(없으면 전부), older_than_days?: N(없거나 0이면 전부)}."""
+    try:
+        value = await _body(request, ('project', 'older_than_days'))
+    except db.Refused as error:
+        return JSONResponse({'error': error.code}, status_code=error.status)
+    return await _call(projects_view.archive_ended, value.get('project'), value.get('older_than_days'))
+
+
+@router.post('/api/session-catalog/conversations/unarchive')
+async def unarchive_conversations(request: Request):
+    """정리 되돌리기 — {ids: [대화 id…]}."""
+    try:
+        value = await _body(request, ('ids',))
+    except db.Refused as error:
+        return JSONResponse({'error': error.code}, status_code=error.status)
+    return await _call(projects_view.unarchive_many, value.get('ids'))
+
+
 @router.get('/api/session-history/conversations/{conversation_id}/resume-preview')
 async def conversation_resume_preview(conversation_id: str):
     return await _call(projects_view.conversation_resume_preview, conversation_id)
@@ -145,7 +165,7 @@ async def delete_session(session_id: str, request: Request):
 @elevated_router.post('/api/session-catalog/settings')
 async def catalog_settings(request: Request):
     try:
-        body = await _body(request, {'auto_archive_days', 'auto_name', 'resume_ends_session'})
+        body = await _body(request, {'auto_archive_days', 'ended_cleanup_days', 'auto_name', 'resume_ends_session'})
     except db.Refused as error:
         return JSONResponse({'error': error.code}, status_code=error.status)
     return await _call(db.configure, body)

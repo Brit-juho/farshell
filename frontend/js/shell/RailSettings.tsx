@@ -9,9 +9,10 @@ import { For, createSignal, onMount, Show } from 'solid-js';
 
 import { createRailPrefs } from './rail-prefs.js';
 import { t } from '../core/i18n.js';
-import { ATTENTION_SHOW_KEY, HIDEABLE_ORIGINS, ORIGIN_LABEL, originShowKey, VIEW_KEY, encodeRailView, type Origin } from './rail-data.js';
-import type { RepoSort, SessionSort, TreeSort } from './repo-tree.js';
+import { ATTENTION_SHOW_KEY, HIDEABLE_ORIGINS, ORIGIN_LABEL, originShowKey, SORT_KEY, encodeRailSort, type Origin } from './rail-data.js';
+import { REPO_SORT_LEVELS, type RepoSort, type SessionSort, type TreeSort } from './repo-tree.js';
 import { historyApi } from '../history/api.js';
+import { archiveEnded } from '../history/session-actions.js';
 
 function Choice<T extends string>(props: { label: string; value: T; options: [T, string][]; onChange: (v: T) => void }) {
   return (
@@ -41,24 +42,46 @@ function Toggle(props: { label: string; hint?: string; checked: boolean; disable
 
 const AUTO_ARCHIVE_CHOICES = [0, 7, 14, 30, 90];
 
-/** 보기 탭 — 이 기기의 표시 설정. */
+const REPO_SORT_LABEL = (): Record<RepoSort, string> => ({
+  sessions: t('세션 있는 저장소 먼저'), waiting: t('입력 대기 있는 저장소 먼저'), name: t('이름순'),
+  registered: t('등록순(최근 등록 먼저)'), activity: t('최근 활동순'),
+});
+const LEVEL_LABEL = (): string[] => [t('저장소 1차'), t('2차'), t('3차')];
+
+/** 보기 탭 — 표시 설정(이 기기)과 정렬(이 맥 — 그 맥을 보는 모든 기기가 같다). */
 export function RailViewSettings() {
   const { prefs, set } = createRailPrefs();
   const originOn = (o: Origin) => !prefs().hiddenOrigins.includes(o);
-  // 정렬(저장소 2차) — 기본은 「생성된 순」(최근 활동순은 목록이 계속 바뀐다). 기기별 보기 설정 JSON(rail.view)에 둔다.
-  const sort = () => prefs().view.sort;
-  const setSort = (next: Partial<TreeSort>) => set(VIEW_KEY, encodeRailView({ ...prefs().view, sort: { ...sort(), ...next } }));
+  // 정렬 — 그 맥의 전역 설정(rail.sort). 저장소는 기준을 1~3단계로 잇고, 앞 단계에서 고른 기준은 뒤 단계 선택지에서 빠진다.
+  const sort = () => prefs().sort;
+  const setSort = (next: Partial<TreeSort>) => set(SORT_KEY, encodeRailSort({ ...sort(), ...next }));
+  // 단계 i를 v로 — 「없음」('')이면 그 단계부터 뒤를 지운다. 1차는 「없음」이 없다.
+  const setLevel = (i: number, v: RepoSort | '') => {
+    const cur = sort().repos.slice(0, i);
+    setSort({ repos: v ? [...cur, v, ...sort().repos.slice(i + 1).filter((k) => k !== v && !cur.includes(k))] : cur });
+  };
+  const levelOptions = (i: number): [RepoSort | '', string][] => {
+    const used = sort().repos.slice(0, i);
+    const label = REPO_SORT_LABEL();
+    const opts = (Object.keys(label) as RepoSort[]).filter((k) => !used.includes(k)).map((k) => [k, label[k]] as [RepoSort, string]);
+    return i === 0 ? opts : [['', t('없음')], ...opts];
+  };
+  const levels = () => Array.from({ length: Math.min(REPO_SORT_LEVELS, sort().repos.length + 1) }, (_, i) => i);
   return (
     <div class="vt-railset">
       <div class="vt-wtd-section-title">{t('정렬')}</div>
-      <Choice<RepoSort> label={t('저장소')} value={sort().repos} onChange={(v) => setSort({ repos: v })}
-        options={[['registered', t('등록순(처음 CLI를 켠 때)')], ['name', t('이름순')], ['activity', t('최근 활동')]]} />
+      <div class="vt-railset-note">{t('이 맥을 보는 모든 기기에 같은 순서로 보입니다. 「저장소 밖」은 세션이 있는 저장소들 바로 아래에 옵니다.')}</div>
+      <For each={levels()}>{(i) => (
+        <Choice<RepoSort | ''> label={LEVEL_LABEL()[i]} value={sort().repos[i] || ''} onChange={(v) => setLevel(i, v)}
+          options={levelOptions(i)} />
+      )}</For>
       <Choice<SessionSort> label={t('세션')} value={sort().sessions} onChange={(v) => setSort({ sessions: v })}
-        options={[['created', t('만든 순')], ['name', t('이름순')], ['activity', t('최근 활동')]]} />
+        options={[['created', t('만든 순')], ['name', t('이름순')], ['activity', t('최근 활동')], ['manual', t('수동(끌어서 옮기기)')]]} />
       <Toggle
         label={t('입력 대기 먼저')}
-        hint={t('입력을 기다리는 저장소·세션을 어떤 정렬에서도 위로 올립니다')}
-        checked={sort().waitingFirst}
+        hint={sort().sessions === 'manual' ? t('수동 정렬에서는 정한 순서를 그대로 둡니다') : t('입력을 기다리는 세션을 가지 안에서 위로 올립니다')}
+        checked={sort().waitingFirst && sort().sessions !== 'manual'}
+        disabled={sort().sessions === 'manual'}
         onChange={(v) => setSort({ waitingFirst: v })}
       />
       <div class="vt-wtd-section-title">{t('구역')}</div>
@@ -83,7 +106,8 @@ export function RailViewSettings() {
   );
 }
 
-interface CatalogSettings { auto_archive_days: number; auto_name: boolean; resume_ends_session: boolean }
+interface CatalogSettings { auto_archive_days: number; ended_cleanup_days: number; auto_name: boolean; resume_ends_session: boolean }
+const CLEANUP_CHOICES = [1, 3, 7, 14, 30];
 
 /** 정리 탭 — 이 맥 서버의 세션 기록 설정. */
 export function RailCleanupSettings() {
@@ -92,16 +116,23 @@ export function RailCleanupSettings() {
   const [saving, setSaving] = createSignal(false);
   onMount(() => {
     historyApi('/api/session-catalog?limit=1&meta=false', { elevated: false }).then((d) => setValues({
-      auto_archive_days: Number(d.auto_archive_days) || 0, auto_name: d.auto_name !== false, resume_ends_session: d.resume_ends_session !== false,
+      auto_archive_days: Number(d.auto_archive_days) || 0, ended_cleanup_days: Number(d.ended_cleanup_days) || 7,
+      auto_name: d.auto_name !== false, resume_ends_session: d.resume_ends_session !== false,
     })).catch((e) => setError(e?.message || t('설정을 읽지 못했습니다')));
   });
   const save = async (patch: Partial<CatalogSettings>) => {
     setError(''); setSaving(true);
     try {
       const r = await historyApi('/api/session-catalog/settings', { body: patch });
-      setValues({ auto_archive_days: r.auto_archive_days, auto_name: r.auto_name !== false, resume_ends_session: r.resume_ends_session !== false });
+      setValues({ auto_archive_days: r.auto_archive_days, ended_cleanup_days: Number(r.ended_cleanup_days) || 7,
+                  auto_name: r.auto_name !== false, resume_ends_session: r.resume_ends_session !== false });
     } catch (e: any) { setError(e?.message || t('작업을 완료하지 못했습니다')); }
     finally { setSaving(false); }
+  };
+  const [cleaning, setCleaning] = createSignal(false);
+  const cleanAll = (days: number) => {
+    setCleaning(true);
+    archiveEnded({ olderThanDays: days }).catch((e: any) => setError(e?.message || t('정리하지 못했습니다'))).finally(() => setCleaning(false));
   };
   const choices = () => {
     const d = values()?.auto_archive_days ?? 0;
@@ -122,6 +153,20 @@ export function RailCleanupSettings() {
             </select>
           </label>
           <div class="vt-railset-note">{t('자동으로는 보관만 하고 삭제하지 않습니다. 실행 중이거나 상태를 확인하지 못한 세션은 건드리지 않습니다.')}</div>
+          <div class="vt-wtd-section-title">{t('종료 대화 정리')}</div>
+          <label class="vt-railset-row">
+            <span class="vt-railset-label">{t('「N일 지난 것만」의 기준')}</span>
+            <select value={v().ended_cleanup_days} disabled={saving()} onChange={(e) => { void save({ ended_cleanup_days: Number(e.currentTarget.value) }); }}>
+              <For each={CLEANUP_CHOICES.includes(v().ended_cleanup_days) ? CLEANUP_CHOICES : [...CLEANUP_CHOICES, v().ended_cleanup_days].sort((a, b) => a - b)}>
+                {(d) => <option value={d} selected={d === v().ended_cleanup_days}>{t('{n}일', { n: d })}</option>}
+              </For>
+            </select>
+          </label>
+          <div class="vt-railset-row vt-railset-actions">
+            <button type="button" class="vt-btn sm" disabled={cleaning()} onClick={() => cleanAll(v().ended_cleanup_days)}>{t('모든 저장소: {n}일 지난 것만 보관', { n: v().ended_cleanup_days })}</button>
+            <button type="button" class="vt-btn sm" disabled={cleaning()} onClick={() => cleanAll(0)}>{t('모든 저장소: 모두 보관')}</button>
+          </div>
+          <div class="vt-railset-note">{t('각 저장소의 「종료 N」 줄 ⋯ 메뉴에서도 그 저장소만 정리할 수 있습니다. 실행 중인 대화는 건너뛰고, 정리한 뒤 알림에서 되돌릴 수 있습니다.')}</div>
           <div class="vt-wtd-section-title">{t('이름')}</div>
           <Toggle
             label={t('CLI를 켜면 저장소 이름으로')}

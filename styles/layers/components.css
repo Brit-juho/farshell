@@ -575,9 +575,10 @@
   .vt-menu-item.on,
   .vt-menu-item.on > svg { color: var(--color-acc); }
   .vt-menu-item.dim { opacity: .6; }
-  /* 행 메뉴의 선택 불가 정보 헤더. 상태·작업 위치·브랜치를 구분하고
+  /* 행 메뉴의 정보 헤더. 상태·작업 위치·브랜치를 구분하고
    * 터치에서도 전체 경로를 읽을 수 있도록 말줄임 없이 줄바꿈한다.
-   * 글자는 sub: 메뉴 배경 위 4.5:1 이상(램프 하한이 sub 6.0). 눌러도 아무 일도 없어야 해서 포인터를 받지 않는다. */
+   * 글자는 sub: 메뉴 배경 위 4.5:1 이상(램프 하한이 sub 6.0). 누를 곳은 아니지만 경로·브랜치·명령을 끌어서 골라
+   * 복사할 수 있게 글자 선택을 연다(2026-11-16 사용자 요청 — 예전에는 포인터를 받지 않아 스크린샷으로만 전달했다). */
   .vt-menu-summary {
     max-width: 280px;
     margin: 0 0 calc(var(--spacing) * 1);
@@ -587,8 +588,9 @@
     font: var(--weight-normal) var(--fs-xs) / var(--leading-row) var(--font-ui);
     overflow-wrap: anywhere;
     white-space: normal;
-    pointer-events: none;
-    user-select: none;
+    cursor: text;
+    user-select: text;
+    -webkit-user-select: text;
   }
   .vt-menu-summary-status { color: var(--color-txt); font-weight: var(--weight-medium); }
   .vt-menu-summary-section { display: flex; flex-direction: column; gap: calc(var(--spacing) * .5); margin-top: calc(var(--spacing) * 2); min-width: 0; }

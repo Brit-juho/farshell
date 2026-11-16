@@ -18,6 +18,8 @@
   transition:opacity var(--dur-fast) linear, visibility 0s linear var(--dur-fast);
 }
 .vt-hc.open { visibility:visible; opacity:1; pointer-events:auto; transition-delay:0s; }
+/* 경로·브랜치·명령은 끌어서 골라 복사할 수 있다(행 메뉴 요약과 같다, 2026-11-16). */
+.vt-hc { user-select:text; -webkit-user-select:text; cursor:text; }
 /* 띠와 카드 사이 8px 틈을 메우는 투명 다리 — 포인터가 칸에서 카드로 건너가는 동안 카드 위에 있게 한다(hoverable). */
 .vt-hc::before { content:""; position:absolute; left:-9px; top:0; bottom:0; width:9px; }
 @media (prefers-reduced-motion: reduce) { .vt-hc { transition:none; } }

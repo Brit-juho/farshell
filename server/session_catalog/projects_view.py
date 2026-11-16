@@ -4,6 +4,8 @@
 - `conversation_list` 저장소의 「종료 N」(끝난 대화)과 보관함(보관한 대화) — 최근 활동순, 커서 쪽 넘김, 검색.
 - `update_project` 숨김·제거.
 - `conversation_resume_preview` 대화를 이어서 열 폴더와 tmux 이름(아무것도 만들지 않는다).
+- `archive_ended` 「종료 N」 정리 — 한 저장소(또는 전부)의 끝난 대화를 한 번에 보관(전부 또는 N일 지난 것만).
+- `unarchive_many` 방금 정리한 대화를 되돌린다(알림의 「되돌리기」).
 
 「끝난 대화」 = 저장소에 놓였고(placement='placed') 지운 것이 아니며 지금 돌고 있지 않은 대화. 돌고 있는지는 이 맥의 에이전트
 상태(훅)의 대화 id로 본다 — 돌고 있는 대화는 실행 중 세션 칸이 보여 준다. 활동 시각은 수집이 원본에서 적은 `detail.last`
@@ -133,6 +135,63 @@ def update_project(pid: str, value: dict) -> dict:
             db.execute('UPDATE projects SET hidden=?,revision=revision+1 WHERE id=?', (1 if hidden else 0, pid))
         changed(db, 'project', pid)
     return {'ok': True}
+
+
+BULK_MAX = 2000
+
+
+def archive_ended(project: str | None = None, older_than_days: int | None = None) -> dict:
+    """「종료 N」 정리: 저장소(없으면 전부)의 끝난 대화를 보관함으로 옮긴다. older_than_days가 있으면 마지막 활동이 그보다
+    오래된 것만(0이면 전부). 지금 돌고 있는 대화(에이전트 훅)와 열린 실행에 이어진 대화는 건너뛴다 — 자동 보관과 같은 기준.
+    지우지 않는다. 옮긴 대화 id를 돌려준다(되돌리기용, 최대 BULK_MAX개 — 넘으면 다시 부르면 이어서 옮긴다)."""
+    if project is not None:
+        identifier(project)
+    if older_than_days is not None and (isinstance(older_than_days, bool) or not isinstance(older_than_days, int)
+                                        or not 0 <= older_than_days <= 3650):
+        raise Refused('invalid_days', 400)
+    now = time.time()
+    where = ["c.placement='placed'", 'c.deleted IS NULL', 'c.parent_native_id IS NULL', 'c.archived IS NULL',
+             'NOT EXISTS(SELECT 1 FROM conversation_executions e JOIN runtimes r ON r.id=e.runtime_id'
+             ' WHERE e.conversation_id=c.id AND r.ended IS NULL)']
+    args: list = []
+    if project:
+        where.append('w.project_id=?')
+        args.append(project)
+    if older_than_days:
+        where.append(f'{_ACTIVITY}<?')
+        args.append(now - older_than_days * 86400)
+    not_running, run_args = _not_running(_running_native_ids())
+    if not_running:
+        where.append(not_running.removeprefix(' AND '))
+        args += run_args
+    with database(write=True) as db:
+        ids = [r['id'] for r in db.execute(
+            'SELECT c.id FROM conversations c JOIN workspaces w ON w.id=c.workspace_id'
+            f" WHERE {' AND '.join(where)} ORDER BY c.id LIMIT ?", (*args, BULK_MAX)).fetchall()]
+        for cid in ids:
+            db.execute('UPDATE conversations SET archived=?,updated=? WHERE id=?', (now, now, cid))
+            changed(db, 'conversation', cid)
+    return {'ok': True, 'archived': ids, 'count': len(ids)}
+
+
+def unarchive_many(ids) -> dict:
+    """방금 정리한 대화를 「종료 N」으로 되돌린다. 보관된 것만(이미 지웠거나 다시 꺼낸 것은 건너뛴다). 사람이 푼 것이라
+    자동 보관이 곧바로 다시 옮기지 않게 detail.unarchived를 남긴다(query.mutate와 같다)."""
+    if not isinstance(ids, list) or not ids or len(ids) > BULK_MAX:
+        raise Refused('invalid_ids', 400)
+    for cid in ids:
+        identifier(cid)
+    now = time.time()
+    done = []
+    with database(write=True) as db:
+        for cid in dict.fromkeys(ids):
+            cur = db.execute('UPDATE conversations SET archived=NULL,updated=? WHERE id=? AND deleted IS NULL AND archived IS NOT NULL',
+                             (now, cid))
+            if cur.rowcount:
+                db.execute("UPDATE conversations SET detail=json_set(detail,'$.unarchived',?) WHERE id=? AND json_valid(detail)", (now, cid))
+                changed(db, 'conversation', cid)
+                done.append(cid)
+    return {'ok': True, 'unarchived': done, 'count': len(done)}
 
 
 def conversation_resume_preview(cid: str) -> dict:

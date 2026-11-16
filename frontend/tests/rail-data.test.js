@@ -383,11 +383,8 @@ test('splitRunning — 개입 필요 구역을 끄면 waiting도 실행 중에 �
 
 test('parseRailView — 접힘 열쇠(저장소·종료 N)만 읽는다, 옛 값(byRepo·recent 등)은 무시, 200개까지', async () => {
   const { parseRailView, encodeRailView, toggleGroupCollapsed } = await mod();
-  const old = parseRailView(JSON.stringify({ byRepo: true, recent: 5, recentCollapsed: true }));
-  assert.deepStrictEqual(Object.keys(old), ['groupsCollapsed', 'sort'], '저장소별로 묶기·최근 종료 설정은 없앴다');
-  assert.deepStrictEqual({ ...old.sort }, { repos: 'registered', sessions: 'created', waitingFirst: false }, '기본은 생성된 순');
-  assert.deepStrictEqual({ ...parseRailView(JSON.stringify({ sort: { repos: 'name', sessions: 'bogus', waitingFirst: 'x' } })).sort },
-    { repos: 'name', sessions: 'created', waitingFirst: false }, '모르는 값은 기본으로');
+  const old = parseRailView(JSON.stringify({ byRepo: true, recent: 5, recentCollapsed: true, sort: { repos: 'name' } }));
+  assert.deepStrictEqual(Object.keys(old), ['groupsCollapsed'], '저장소별로 묶기·최근 종료·기기별 정렬은 없앴다(정렬은 맥 전역 rail.sort)');
   assert.deepStrictEqual(Array.from(old.groupsCollapsed), []);
   assert.deepStrictEqual(Array.from(parseRailView('{').groupsCollapsed), []);
   const mixed = parseRailView(JSON.stringify({ groupsCollapsed: ['a', 1, null, '', 'b'] }));
@@ -400,6 +397,22 @@ test('parseRailView — 접힘 열쇠(저장소·종료 N)만 읽는다, 옛 값
   assert.deepStrictEqual(Array.from(toggleGroupCollapsed(['a', 'b'], 'a')), ['b']);
   const same = ['a'];
   assert.strictEqual(toggleGroupCollapsed(same, ''), same, '빈 id(묶음 아님)는 무시');
+});
+
+test('parseRailSort·parseRailOrder — 맥 전역 정렬(기본 세션 있는 저장소 먼저 → 이름순), 단계 1~3·중복 없음, 순서 500개', async () => {
+  const { parseRailSort, encodeRailSort, parseRailOrder, encodeRailOrder } = await mod();
+  const def = parseRailSort('');
+  assert.deepStrictEqual({ ...def, repos: Array.from(def.repos) }, { repos: ['sessions', 'name'], sessions: 'created', waitingFirst: false });
+  const odd = parseRailSort(JSON.stringify({ repos: ['name', 'name', 'bogus', 'activity', 'registered', 'waiting'], sessions: 'manual', waitingFirst: 'x' }));
+  assert.deepStrictEqual(Array.from(odd.repos), ['name', 'activity', 'registered'], '모르는 기준·중복은 빼고 3단계까지');
+  assert.strictEqual(odd.sessions, 'manual');
+  assert.strictEqual(odd.waitingFirst, false);
+  assert.deepStrictEqual(Array.from(parseRailSort(JSON.stringify({ repos: [] })).repos), ['sessions', 'name'], '비면 기본');
+  assert.deepStrictEqual(Array.from(parseRailSort(encodeRailSort({ repos: ['activity'], sessions: 'name', waitingFirst: true })).repos), ['activity']);
+  const many = Array.from({ length: 600 }, (_, i) => 'k' + i);
+  assert.strictEqual(parseRailOrder(encodeRailOrder(many)).length, 500);
+  assert.deepStrictEqual(Array.from(parseRailOrder(JSON.stringify({ order: ['a', 1, '', 'b'] }))), ['a', 'b']);
+  assert.deepStrictEqual(Array.from(parseRailOrder('{')), []);
 });
 
 test('rowMenuItems — 카탈로그에 이어진 행만 작업 기록을 갖고, 열려 있지 않아도 이름 변경이 된다', async () => {

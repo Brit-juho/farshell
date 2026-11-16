@@ -15,7 +15,7 @@ export {
   worktreeIconName, diffLabel, KIND_LABEL, BADGE_LABEL, normalizeShare, shareSentence, normalizeProfile, profileLabel,
   normalizeLineage, lineageLabel, kidsProgress, parseNameList,
   LINEAGE_KEY, encodeLineagePrefs,
-  splitRunning, parseRailView, encodeRailView, toggleGroupCollapsed,
+  splitRunning, parseRailView, encodeRailView, toggleGroupCollapsed, parseRailSort, encodeRailSort, parseRailOrder, encodeRailOrder,
 } from '../../js/shell/rail-data.js';
 export { ringSvg, subBadge } from '../../js/shell/compact-mark.js';
 export { logout, clearAppCache, pageAssetUrls } from '../../js/shell/app-session.js';
@@ -66,7 +66,7 @@ export {
 export { TreeStore } from '../../js/files/tree-store.js';
 export { mountFileTree } from '../../js/files/mount.tsx';
 export { mountFocus, edgeDelayMs, shouldShowHint, insideReveal, EDGE_CHROME } from '../../js/shell/Focus.tsx';
-export { buildRepoTree, flattenRows, OUTSIDE_KEY } from '../../js/shell/repo-tree.js';
+export { buildRepoTree, flattenRows, moveInOrder, orderKey, OUTSIDE_KEY } from '../../js/shell/repo-tree.js';
 export { nodeLine, kidLabel } from '../../js/shell/rail-data.js';
 export { normalizeHome } from '../../js/shell/rail-fetch.js';
 export { sessionLines, kidLines, worktreeLines } from '../../js/shell/RepoBranch.js';
