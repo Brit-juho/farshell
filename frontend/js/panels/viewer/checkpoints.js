@@ -143,7 +143,7 @@ export async function renderCheckpoints(host, repo, opts = {}) {
     off.innerHTML = icon('x', 14);
     off.addEventListener('click', async () => {
       off.disabled = true;
-      try { await setEnabled(repo, false); } catch (e) { showToast(t('끄지 못했습니다: {msg}', { msg: e.message }), 'error'); }
+      try { await setEnabled(repo, false); } catch (e) { showToast(t('끄지 못했습니다: {msg}', { msg: e.message }), 'error', { error: e }); }
       opts.reload && opts.reload();
     });
     head.appendChild(off);
@@ -161,7 +161,7 @@ export async function renderCheckpoints(host, repo, opts = {}) {
       try {
         await setEnabled(repo, true);
       } catch (e) {
-        showToast(t('켜지 못했습니다: {msg}', { msg: e.message }), 'error');
+        showToast(t('켜지 못했습니다: {msg}', { msg: e.message }), 'error', { error: e });
         on.disabled = false;
         return;
       }

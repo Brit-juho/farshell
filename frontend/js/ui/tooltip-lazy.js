@@ -19,6 +19,8 @@ function load() {
     _loading = p;
     p.catch((e) => {
       console.error('[FarShell tooltip]', e);
+      // 이 파일은 시험이 옆 폴더로 복사해 쓰므로 core/event-log.js 를 import 하지 않고 앱의 브리지를 쓴다.
+      window.vtLogEvent?.({ level: 'error', source: 'console', msg: 'tooltip: ' + ((e && e.message) || e), error: e });
       if (_loading === p) _loading = null;
       _backoff = _backoff ? Math.min(_backoff * 2, BACKOFF_MAX) : BACKOFF_MIN;
       _retryAt = Date.now() + _backoff;

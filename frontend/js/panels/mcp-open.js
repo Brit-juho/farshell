@@ -13,6 +13,7 @@ import { getTabs, getActiveTabId, getTree, getActivePaneId, onLayoutChange } fro
 import { findNode } from '../layout/tree.js';
 import { t } from '../core/i18n.js';
 import { relayHost } from '../core/host-route.js';
+import { reportError } from '../core/event-log.js';
 
 export function agentConfigContext() {
   const leaf = findNode(getTree(), getActivePaneId());
@@ -71,5 +72,5 @@ export function showMcp(section) {
         manager = m.mount(panel.body, JSON.parse(ctx), openLegacy);
       });
     })
-    .catch((e) => { panel.body.textContent = t('불러오지 못했습니다'); console.error('[FarShell mcp]', e); });
+    .catch((e) => { panel.body.textContent = t('불러오지 못했습니다'); reportError('mcp', e); });
 }

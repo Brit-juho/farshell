@@ -110,7 +110,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
     host.setAttribute('aria-busy', 'true');
     host.querySelectorAll('button, input, select, textarea').forEach((n) => { n.disabled = true; });
     try { await run(); }
-    catch (e) { if (alive()) { notice = e.message || t('요청을 처리하지 못했습니다'); showToast(notice, 'error'); } }
+    catch (e) { if (alive()) { notice = e.message || t('요청을 처리하지 못했습니다'); showToast(notice, 'error', { error: e }); } }
     finally { busy = false; if (alive()) { host.removeAttribute('aria-busy'); paint(); } }
   }
 
@@ -337,7 +337,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
         await api(row.host, 'metadata', { ...contextPayload(), id: row.id, values: { ...row.metadata, origin } });
         await load();
       })));
-      if (row.kind !== 'plugin' && !row.linked && (row.kind === 'skill' || row.editable)) actions.appendChild(button(t('원본 편집'), () => { edit(row).catch((e) => showToast(e.message, 'error')); }));
+      if (row.kind !== 'plugin' && !row.linked && (row.kind === 'skill' || row.editable)) actions.appendChild(button(t('원본 편집'), () => { edit(row).catch((e) => showToast(e.message, 'error', { error: e })); }));
       actions.appendChild(button(t('업데이트 확인'), () => perform(async () => {
         const result = await api(row.host, 'update-check', { ...contextPayload(), id: row.id });
         notice = `${row.name}: ${UPDATE[result.state]}${result.reason ? ` · ${result.reason}` : ''}`;

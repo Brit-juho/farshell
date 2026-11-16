@@ -56,6 +56,7 @@ from routes.files import router as files_router
 from routes.fs_write import elevated_router as fs_write_elevated_router
 from routes.git import router as git_router
 from routes.checkpoints import router as checkpoints_router
+from routes.client_log import router as client_log_router
 from routes.ports import router as ports_router
 from routes.ports import elevated_router as ports_elevated_router
 from routes.push import router as push_router
@@ -714,6 +715,7 @@ app.include_router(files_router)
 app.include_router(fs_write_elevated_router)
 app.include_router(git_router)
 app.include_router(checkpoints_router)
+app.include_router(client_log_router)
 app.include_router(ports_router)
 app.include_router(ports_elevated_router)
 app.include_router(queue_router)

@@ -154,7 +154,7 @@ export async function createRemoteSession(hostId, name = '') {
   try {
     data = await vtFetch(`/api/hosts/${encodeURIComponent(hostId)}/sessions`, _json('POST', { name }));
   } catch (e) {
-    showToast(t('새 세션 실패 — {reason}', { reason: e.message }), 'error');
+    showToast(t('새 세션 실패 — {reason}', { reason: e.message }), 'error', { error: e });
     return null;
   }
   _hostsChanged(hostId);
@@ -196,7 +196,7 @@ export async function killRemoteSession(hostId, tmuxName) {
       _json('DELETE'),
     );
   } catch (e) {
-    showToast(t('완전 종료 실패 — {reason}', { reason: e.message }), 'error');
+    showToast(t('완전 종료 실패 — {reason}', { reason: e.message }), 'error', { error: e });
     _hostsChanged(hostId);
     return false;
   }
@@ -217,7 +217,7 @@ export async function renameRemoteSession(hostId, oldName, newName) {
       _json('PATCH', { name: next }),
     );
   } catch (e) {
-    showToast(t('이름 변경 실패 — {reason}', { reason: e.message }), 'error');
+    showToast(t('이름 변경 실패 — {reason}', { reason: e.message }), 'error', { error: e });
     return false;
   }
   const open = findRemoteSession(_entries(), hostId, oldName);

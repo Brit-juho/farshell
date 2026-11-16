@@ -10,7 +10,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- **A log for notifications, errors and requests.** A toast used to vanish after a few seconds and an error toast kept only `e.message`; now everything that reaches you is also recorded — every toast, failed requests (method, path, status, time, the server's error code), script errors, stale chunks after a deploy, CSP violations, and lost connections. Open it from the palette («Log»), the **Details** button on an error card, the status-bar message, or the status-bar **Errors N** chip that appears while you have unseen errors; on a phone from Settings › Tools › Log. «This screen» shows this tab's whole log and survives a reload; «All screens» shows the errors and warnings the server keeps from every device (`~/.vt/client-log/`, 7 days or 20 MB, a logged-in person only). Rows unfold to the stack and request; **Copy for an issue** builds ready-to-paste text. Tokens, cookies and passwords are masked in the browser and again on the server. New `POST/GET/DELETE /api/client-log`.
+
 ### Changed
+- Clicking the status-bar message opens the log instead of dismissing it.
+- The safe-mode strip at the top is gone where a status bar exists (the chip says it); on narrow screens it stays as a thin neutral strip instead of a red one.
+- `console.error` calls across the app (about 25 files) now also land in the log, and error toasts that catch an exception carry its stack and request.
 - **The information at the top of a row menu is clearer.** It now uses the same layout and data as the folded strip's hover card: a state chip, then aligned icon · value · right-hand lines — the folder once, shortened with `~` (the full path on hover; it used to repeat the project name above the absolute path), the branch with its +N −N and worktree tag, internal agents and delegated sessions, background shells with their elapsed time and the command on a muted line under the description, other screens and sharing. Empty lines are left out, long lists collapse to "N more", and the text can still be selected and copied. The old separate summary code is gone.
 
 ---

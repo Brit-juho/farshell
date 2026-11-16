@@ -16,6 +16,7 @@ import { openViewerPane, getTree, getActivePaneId } from '../layout/store.js';
 import { findNode } from '../layout/tree.js';
 import { paneElId } from '../layout/dom-ids.js';
 import { relayHost } from '../core/host-route.js';
+import { reportError } from '../core/event-log.js';
 
 let _loading = null;
 
@@ -88,7 +89,7 @@ export function openFile(path, opts = {}) {
     .then((m) => m.openFileOverlay(path, opts))
     .catch((e) => {
       // 지연 청크를 못 받았을 때 클릭이 아무 일도 안 한 것처럼 보이면 안 된다.
-      console.error('[FarShell viewer]', e);
+      reportError('viewer', e);
       if (!cross) openViewerPane(path);
     });
 }
@@ -125,7 +126,7 @@ registerAction('scm.show', () => {
   _scmOpening = true;
   import('./viewer/scm.js')
     .then((m) => m.showScm())
-    .catch((e) => console.error('[FarShell scm]', e))
+    .catch((e) => reportError('scm', e))
     .finally(() => { _scmOpening = false; });
 });
 
@@ -137,7 +138,7 @@ registerAction('dir.show', () => {
   _dirOpening = true;
   import('./viewer/tree.js')
     .then((m) => m.showTree())
-    .catch((e) => console.error('[FarShell dir]', e))
+    .catch((e) => reportError('dir', e))
     .finally(() => { _dirOpening = false; });
 });
 

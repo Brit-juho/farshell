@@ -155,6 +155,8 @@ function chunkOf(id) {
     if (p.endsWith('/frontend/js/panels/agent-profiles.js')) return 'settings';
     // 스니펫 순수 함수 — snippets.js(settings 청크)만 쓴다.
     if (p.endsWith('/frontend/js/snippets-util.js')) return 'settings';
+    // 기록 패널 — panels/event-log-lazy.js(core 스텁)가 열 때만 지연 import한다. panels 청크와 따로 둔다(뷰어·파일을 안 받는다).
+    if (p.includes('/frontend/js/panels/event-log/')) return 'eventlog';
     // 시스템 패널 — panels/system-lazy.js(core 스텁)가 열 때만 지연 import한다.
     if (p.endsWith('/frontend/js/panels/system.js')) return 'panels';
     // 계정 선택기 메뉴·기본 계정 변경(accounts-ui)과 줄 글(accounts-text) — 상태 막대 칩(shell)·설정 「계정」(settings)·「+ 새 세션」 메뉴의

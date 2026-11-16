@@ -201,6 +201,7 @@ export async function startRecording() {
     stage('recording', target.name);
   } catch (err) {
     console.error('마이크 접근 실패:', err);
+    window.vtLogEvent?.({ level: 'error', source: 'console', msg: 'voice mic: ' + ((err && err.message) || err), error: err });   // app 번들의 기록으로(브리지)
     dropCtx();
     if (pcm) { pcmSession = null; pcm.cancel(); }
     if (stream) stream.getTracks().forEach(t => t.stop());
@@ -343,6 +344,7 @@ async function uploadWithRetry() {
     stage(res.ok && data?.injected ? 'done' : 'error');
   } catch (err) {
     console.error('음성 전송 실패:', err);
+    window.vtLogEvent?.({ level: 'error', source: 'console', msg: 'voice upload: ' + ((err && err.message) || err), error: err });
     const f = _failedUpload;
     if (f && ++f.attempts < MAX_FAILED_ATTEMPTS) {
       // 보관(_failedUpload)은 유지 — 버튼으로 같은 blob을 재전송한다.

@@ -592,6 +592,17 @@ Implemented in `server/checkpoint_jobs.py`, `server/checkpoint_store.py`, `serve
 
 `/ws-workspace` pushes the content-free `{"type":"checkpoints_changed"}` after a checkpoint is recorded or the switch changes; re-read `GET /api/checkpoints`.
 
+## Client event log (errors and warnings from the browser)
+
+Implemented in `server/client_log.py` and `server/routes/client_log.py`; behavior, redaction and limits in [`docs/ref/event-log.md`](./docs/ref/event-log.md).
+**Logged-in person only** (`human`): a machine token, an agent on the unix socket and another Mac get 403, and the routes are outside the relay and socket lists.
+
+| Method | Path | Description |
+|--------|------|------|
+| POST | `/api/client-log` | Body `{events:[…]}` — at most 50 events and 64 KiB (413 `too_large` beyond that; 400 `bad_json`/`bad_request`). Only `level` `error`/`warn` are stored (others count as `ignored`). Unknown keys are dropped, strings are cut, secrets are masked and the home directory becomes `~` before anything is written. Process-wide limit 600 lines a minute: 429 `rate_limited` with `Retry-After`. Returns `{ok, accepted, ignored}` |
+| GET | `/api/client-log?limit=&before=&level=&q=` | `{items:[…]}`, newest first (`last` descending). `limit` 1–500 (default 200), `before` is a `last` timestamp in ms, `level` `error`/`warn`, `q` a case-insensitive substring (≤100 chars) over message, detail, method, path and status. The same `id` appears once, with its latest `count` |
+| DELETE | `/api/client-log` | Removes every stored file. Returns `{ok, removed}` |
+
 ## Update (check and automatic update)
 
 Implemented in `server/update_check.py` and `server/routes/update.py`; behavior and threat model in [`docs/ref/dev.md`](./docs/ref/dev.md) «Update check and automatic update». None of these routes is in the host relay allowlist or the unix-socket allowlist: an agent, a peer, the machine token or a relayed call is refused (`403 human_session_required`).

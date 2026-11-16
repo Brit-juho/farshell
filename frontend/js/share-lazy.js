@@ -5,12 +5,13 @@ import { onWorkspaceEvent } from './core/workspace-ws.js';
 import { isRelayed } from './core/host-route.js';
 import { getAction } from './core/dom.js';
 import { timedFetch } from './core/api.js';
+import { reportError } from './core/event-log.js';
 
 let shareMod = null;
 let authzMod = null;
 const loadShare = () => (shareMod || (shareMod = import('./share/entry.js')));
 const loadAuthz = () => (authzMod || (authzMod = import('./authz/entry.js')));
-const warn = (e) => console.error('[FarShell share]', e);
+const warn = (e) => reportError('share', e);
 
 // 설정 버튼들에 붙는 대기 건수 배지(기존 rail 배지와 같은 모양). 0건이면 숨긴다.
 // 넓은 화면의 설정 진입점은 활동 막대 아래 ⚙(.vt-act-settings)와 제목 막대의 FarShell 메뉴 버튼이다.

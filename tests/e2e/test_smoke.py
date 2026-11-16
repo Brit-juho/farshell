@@ -2105,6 +2105,69 @@ def test_경고_토스트는_340_카드로_상태_막대_위_16에_뜬다(page):
     assert box["btn"] and box["x"] and box["radius"] == "8px", box
 
 
+def _hide_onboarding(page):
+    # 세션이 없으면 온보딩이 화면을 덮어 클릭이 가려진다 — 이 시험들이 보려는 건 온보딩이 아니다.
+    page.evaluate("() => document.getElementById('onboarding')?.remove()")
+
+
+def test_오류_토스트의_자세히가_그_기록을_펼친_기록_패널을_연다(page):
+    _hide_onboarding(page)
+    page.evaluate("() => showToast('저장 실패', 'error', { duration: 0 })")
+    card = page.locator("#vt-toasts .vt-toast", has_text="저장 실패")
+    card.locator("button", has_text="자세히").click()
+    page.wait_for_selector("#vt-eventlog .vt-ev-row.open", timeout=10000)
+    assert "저장 실패" in page.locator("#vt-eventlog .vt-ev-row.open").inner_text()
+    expect(page.locator("#vt-toasts .vt-toast", has_text="저장 실패")).to_have_count(0, timeout=3000)   # 자세히를 누르면 카드는 닫힌다(퇴장 120ms)
+
+
+def test_상태_막대_메시지를_누르면_닫는_대신_기록_패널이_열린다(page):
+    _hide_onboarding(page)
+    page.evaluate("() => showToast('복사 끝', 'success')")
+    page.wait_for_selector("#vt-hud-msg:not([hidden])", timeout=5000)
+    page.locator("#vt-hud-msg").click()
+    page.wait_for_selector("#vt-eventlog .vt-ev-row.open", timeout=10000)
+    assert "복사 끝" in page.locator("#vt-eventlog .vt-ev-row.open").inner_text()
+
+
+def test_JS_예외는_기록되고_상태_막대_칩은_패널을_열면_사라진다(page):
+    _hide_onboarding(page)
+    page.evaluate("() => { setTimeout(() => { throw new Error('e2e-boom') }, 0) }")
+    chip = page.locator('#vt-hud [data-chip="log"]')
+    chip.wait_for(state="visible", timeout=10000)
+    assert "오류" in chip.inner_text()
+    chip.click()
+    page.wait_for_selector("#vt-eventlog .vt-ev-row", timeout=10000)
+    page.locator("#vt-eventlog .vt-ev-row", has_text="e2e-boom").first.click()
+    detail = page.locator("#vt-eventlog .vt-ev-pre").first
+    assert "e2e-boom" in detail.inner_text(), "스택이 상세에 보인다"
+    page.wait_for_selector('#vt-hud [data-chip="log"]', state="detached", timeout=5000)
+
+
+def test_화면의_오류가_서버_파일에_0600으로_남고_모든_화면_보기에서_읽힌다(page, server):
+    if _LOCAL_STATE_DIR is None:
+        pytest.skip("외부 서버라 상태 폴더를 볼 수 없다")
+    _hide_onboarding(page)
+    page.evaluate("() => window.vtLogEvent({ level: 'error', source: 'js', msg: 'e2e-server-copy' })")
+    deadline = time.time() + 15
+    found = None
+    while time.time() < deadline and not found:
+        for f in (_LOCAL_STATE_DIR / "client-log").glob("*.jsonl") if (_LOCAL_STATE_DIR / "client-log").exists() else []:
+            if "e2e-server-copy" in f.read_text(encoding="utf-8"):
+                found = f
+        time.sleep(0.3)
+    dbg = page.evaluate("() => JSON.stringify([sessionStorage.getItem('vt.eventlog.q'), window.__vtAuthed])")
+    assert found, f"2초 모아 보내므로 15초 안에 파일에 있어야 한다 {page.bad_responses} {page.console_errors} {dbg}"
+    assert oct(found.stat().st_mode & 0o777) == "0o600"
+    assert oct((_LOCAL_STATE_DIR / "client-log").stat().st_mode & 0o777) == "0o700"
+    page.keyboard.press("Escape")
+    page.evaluate("() => { const f = window.showToast; f('x', 'error', { duration: 0 }); }")
+    page.locator("#vt-toasts .vt-toast", has_text="x").locator("button", has_text="자세히").click()
+    page.wait_for_selector("#vt-eventlog", timeout=10000)
+    page.locator("#vt-eventlog .vt-ev-segbtn", has_text="모든 화면").click()
+    page.wait_for_selector("#vt-eventlog .vt-ev-row", timeout=10000)
+    assert "e2e-server-copy" in page.locator("#vt-eventlog").inner_text()
+
+
 def test_승인_창은_채운_버튼_없이_거부에_초점을_두고_바닥_줄이_창_안에_보인다(page):
     page.route("**/api/authz/approvals", lambda r: r.fulfill(status=200, content_type="application/json",
                                                               body=json.dumps({"approvals": [_APPROVAL]})))

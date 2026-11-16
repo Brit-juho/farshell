@@ -156,6 +156,8 @@ function renderMobileHome(body, focusSearch = false) {
     { label: t('파일'), description: t('업로드와 공유 링크'), action: 'files.show' },
     { label: t('포트'), description: t('실행 중인 로컬 서비스'), action: 'ports.show' },
     { label: t('사용량'), description: t('AI 도구 한도와 누적 사용량'), action: 'usage.open' },
+    // 폰에는 상태 막대(오류 칩)가 없다 — 놓친 오류·알림을 다시 보는 입구가 여기다.
+    { label: t('기록'), description: t('알림 · 오류 · 요청 기록'), action: 'eventlog.open' },
   ]);
   addList(t('설정'), shownSections());
   body.appendChild(home);

@@ -65,6 +65,7 @@ Read the relevant area document before making changes.
 | Reliability: hangs, health, watchdog | Named thread pools with deadlines, `TimedLock`, `proc.run`, remote-mount detection, scan quarantine, `/api/health/*`, the server watchdog and incident bundles, frontend request deadlines and the WS silence watchdog | [`docs/ref/reliability.md`](./docs/ref/reliability.md) |
 | Keyboard input | The processing order of a keystroke, delivery target and settings, scopes and virtual input, paste, Android measurements | [`docs/ref/keyboard-input.md`](./docs/ref/keyboard-input.md) |
 | Session list and work context | How the rail groups sessions and edits titles, and keeping work context consistent across CLIs | [`docs/ref/session-ui.md`](./docs/ref/session-ui.md) |
+| Event log: notifications, errors, requests | What `showToast`, API failures, script errors and lost connections record, redaction, the browser ring buffer, how failures reach the server (`/api/client-log`), the panel and the `log` chip | [`docs/ref/event-log.md`](./docs/ref/event-log.md) |
 | Display language | `VT_LANG`, how the server picks ko/en, `t('한국어 원문')` keys, the English dictionary, glossary | [`docs/ref/i18n.md`](./docs/ref/i18n.md) |
 | Running, testing, install | Running the server, mobile testing over adb, the E2E procedure, manual install | [`docs/ref/dev.md`](./docs/ref/dev.md) |
 

@@ -11,13 +11,14 @@
 // 추적이 불가능해지는 지점은 정확히 그 구조적 변경이었다.
 
 import { t } from './i18n.js';
+import { reportError } from './event-log.js';
 const sessions = {};
 let activeId = null;
 const subscribers = new Set();
 
 function notify() {
   for (const fn of subscribers) {
-    try { fn(); } catch (e) { console.error('[store] subscriber error', e); }
+    try { fn(); } catch (e) { reportError('store subscriber', e); }
   }
 }
 

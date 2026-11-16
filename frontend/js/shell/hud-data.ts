@@ -73,6 +73,8 @@ const PRIORITY = {
   screensAlert: 3,
   /** 훅이 깨졌다 — 상태 배지·큐·TTS가 조용히 멎은 상태라 에이전트 개입 다음으로 끝까지 남는다. */
   hooksAlert: 2,
+  /** 아직 보지 않은 오류·경고 — 개발자가 놓치면 안 되는 신호라 훅 점검과 같은 높이다. */
+  logAlert: 2,
   /** 평상시 사용량 — dock 사용량 탭에 같은 값이 더 자세히 있다. */
   usage: 5,
   /** 지금 기본 계정 — 평상시에는 사용량보다 위(새 세션이 어느 계정으로 만들어지는지 알려 주는 유일한 자리). 한도가 임박하면 usageAlert 순위. */
@@ -113,6 +115,8 @@ export interface HudInput {
   stats?: SystemStats | null;
   /** 에이전트 상태 집계(agent/state.js의 4상태). 셋 다 0이면 칩이 없다. */
   agents?: AgentCounts | null;
+  /** 아직 보지 않은 오류·경고 수(core/event-log.js `unseenLevels`). 둘 다 0이면 칩이 없다. */
+  unseenLog?: { error: number; warn: number } | null;
   /** 훅 건강 점검(서버 hook_health) — CLI별 상태와 빠진·어긋난 이벤트 이름. 이상이 없으면 칩이 없다. */
   hooks?: HooksHealth | null;
   /** 계정 선택기 목록(term/accounts-data.js `normalizeAccounts`의 결과). 계정이 없거나 다른 맥을 보면 칩이 없다. */
@@ -348,6 +352,24 @@ function agentsChip(c: AgentCounts): HudChip | null {
   };
 }
 
+// 기록 칩 — 아직 보지 않은 오류·경고가 있을 때만 생긴다. 누르면 기록 패널(panels/event-log)이 열리고, 패널을 열면 사라진다.
+function logChip(n: { error: number; warn: number }): HudChip | null {
+  const total = n.error + n.warn;
+  if (!(total > 0)) return null;
+  const err = n.error > 0;
+  return {
+    id: 'log',
+    kind: 'log',
+    label: err ? t('오류') : t('경고'),
+    value: String(total),
+    tooltip: t('아직 보지 않은 오류·경고 — 눌러서 기록 보기'),
+    tone: err ? 'err' : 'warn',
+    action: 'eventlog.open',
+    side: 'left',
+    priority: PRIORITY.logAlert,
+  };
+}
+
 // 훅 점검 칩 — 이상(빠짐·어긋남·읽기 실패)이 있는 CLI 이름만 값으로 적는다. 이상이 없거나 그 CLI를 안 쓰면(absent) 칩이 없다.
 const HOOK_BAD = new Set(['missing', 'mismatch', 'unreadable']);
 const HOOK_NAMES: Record<string, string> = { claude: 'Claude', codex: 'Codex' };
@@ -432,6 +454,11 @@ export function buildHudChips(input: HudInput, layout: HudLayout = DEFAULT_HUD_L
 
   if (input.hooks) {
     const chip = hooksChip(input.hooks);
+    if (chip) chips.push(chip);
+  }
+
+  if (input.unseenLog) {
+    const chip = logChip(input.unseenLog);
     if (chip) chips.push(chip);
   }
 

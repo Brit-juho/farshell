@@ -12,6 +12,13 @@ import '../../styles/main.css';
 import { applyI18n } from './core/i18n.js';
 applyI18n(document.body);
 
+// 이벤트 기록 — 어떤 모듈보다 먼저 전역 오류를 잡아야 부팅 중 예외와 청크 로드 실패도 남는다.
+import { installGlobalErrors } from './core/global-errors.js';
+import { reportError, setLogContext, subscribeEvents, unseenLevels } from './core/event-log.js';
+import { startEventSender } from './core/event-log-send.js';
+installGlobalErrors();
+startEventSender();   // 오류·경고를 서버 기록(/api/client-log)으로 — 로그인 전 것은 로그인 뒤에 나간다(api.js 관문)
+
 import './core/env.js';
 import './core/api.js';
 // 호스트 전환 — 전환해 둔 맥에 닿을 수 없는 이유(삭제·권한 회수·구버전)면 이 맥으로 되돌린다.
@@ -26,6 +33,7 @@ hydrateIcons();
 import { vtFetch } from './core/api.js';
 import { onWorkspaceEvent } from './core/workspace-ws.js';
 import { getSession, activeSessionId, sessionDisplayName, subscribe as storeSubscribe } from './core/store.js';
+setLogContext(() => ({ session: activeSessionId() || '' }));   // 기록에 "그때 어느 세션이었나"를 붙인다
 import { onLayoutChange } from './layout/store.js';
 import { branchOf, repoOf, onBranchChips } from './layout/branch-chips.js';
 import { allStatuses, isUnseen, onStatusChange } from './agent/state.js';
@@ -108,6 +116,7 @@ import './panels/viewer-lazy.js';
 import './term/search-bar.js';
 import './picker.js';
 import './panels/ports-lazy.js';
+import './panels/event-log-lazy.js';   // 기록(알림·오류·요청) — 토스트 「자세히」·상태 막대·팔레트가 연다
 import './panels/system-lazy.js';   // 시스템(CPU·RAM·네트워크) — HUD 칩과 dock 탭이 연다
 import './panels/files-lazy.js';
 import './queue-lazy.js';
@@ -205,6 +214,7 @@ try {
       .then(({ mountHud }) => mountHud(hudRoot, {
         vtFetch, activeTmuxName, activeClientsPath, getAction, e2eEnabled: E2E_ENABLED,
         agentCounts, subscribeAgents: onStatusChange, pushState,
+        unseenLog: unseenLevels, subscribeLog: subscribeEvents,   // 기록 칩 — 아직 안 본 오류·경고
         locale: () => (lang() === 'en' ? 'en-US' : 'ko-KR'),
         // 배치(ui.hud.layout)는 설정 화면에서 바뀐다 — core/settings.js는 지연 청크가 직접 못 읽으므로 여기서 넘긴다.
         getLayout: () => settingGet('ui.hud.layout'),
@@ -213,7 +223,7 @@ try {
           if (!keys.length || keys.includes('ui.hud.layout')) fn();
         }),
       }))
-      .catch((e) => console.error('[FarShell HUD]', e)); // HUD는 부가 정보 — 실패해도 앱은 계속
+      .catch((e) => reportError('HUD', e)); // HUD는 부가 정보 — 실패해도 앱은 계속
   }
 
   // 리디자인 2단계 — 제목 막대 36(FarShell 메뉴 · 호스트 · 저장소 › 브랜치 › 세션 · 팔레트 입력 · 도구).
@@ -237,7 +247,7 @@ try {
         vtFetch, getAction, isMac, copyText: copyToClipboard, toast: showToast, crumb, subscribeCrumb,
         keyHint, focusActive: isFocusActive, focusEvent: FOCUS_EVENT, subscribeEvent: onWorkspaceEvent,
       }))
-      .catch((e) => console.error('[FarShell title bar]', e));
+      .catch((e) => reportError('title bar', e));
   }
 
   // 리디자인 1단계 — 작업대(활동 막대 + 사이드바). 사이드바 안에 워크트리 레일(N36 §5)과
@@ -252,7 +262,7 @@ try {
         // 활동 막대 툴팁의 단축키.
         keyHint,
       }))
-      .catch((e) => console.error('[FarShell workbench]', e));
+      .catch((e) => reportError('workbench', e));
   }
 
   // 리디자인 7단계 — 데스크톱 집중 모드의 떠 있는 부분(가장자리 노출 · 들어올 때 안내 · 터치용 끝내기)은 처음 켤 때
@@ -277,6 +287,6 @@ try {
   // sleep으로 덮으면 느려지고 CI에서 플레이키해진다. 앱이 직접 말하는 게 맞다.
   document.documentElement.dataset.appBooted = 'true';
 } catch (error) {
-  console.error('[FarShell bootstrap]', error);
+  reportError('bootstrap', error);
   document.documentElement.dataset.appBootFailed = 'true';
 }

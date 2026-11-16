@@ -15,6 +15,7 @@ import { isMacKeyboard as IS_MAC, isStandalone } from './platform.js';
 import { physicalKey, isComposingKey } from './keyboard-event.js';
 import { decideKey, wireKeyboardRouter, forwardTerminalKey } from './keyboard-router.js';
 import { t } from './i18n.js';
+import { reportError } from './event-log.js';
 export { isStandalone };
 
 // 브라우저가 먼저 소비해 일반 탭에서는 가로챌 수 없는 조합.
@@ -291,7 +292,7 @@ function dispatchKey(e, decision, allowed) {
   Object.assign(decision, { owner: nativePaste ? 'native' : 'app', actionId: b.id,
     terminal: nativePaste ? 'default' : 'block', consumed: !nativePaste });
   if (b.delivery !== 'terminal') {
-    try { fn?.(e); } catch (err) { console.warn(`[keymap] ${b.id} 실행 실패:`, err); }
+    try { fn?.(e); } catch (err) { reportError(`keymap ${b.id}`, err); }
   }
   if (!nativePaste && b.delivery !== 'app') forwardTerminalKey(target, e, decision.stroke, decision.targetContext);
 }

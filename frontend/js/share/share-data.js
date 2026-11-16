@@ -2,6 +2,7 @@
 // docs/ref/terminal.md 「Agent-shared sessions」와 API.md 「Agent session sharing」.
 
 import { t } from '../core/i18n.js';
+import { logEvent } from '../core/event-log.js';
 export const NICK_RE = /^[A-Za-z0-9_-]{1,32}$/;
 /** 서버 라우트가 받는 세션 이름(`routes/agent_share.py _NAME_RE`). 한글 이름 세션은 공유할 수 없다. */
 export const SESSION_NAME_RE = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -48,11 +49,18 @@ export function shareSentence(share) {
 }
 
 /** 서버 오류 → 한 줄. */
-export function errorText(e) {
+function errorTextOf(e) {
   const code = e && (e.code || (e.data && e.data.error));
   if (code === 'nick_taken') return t('이미 쓰는 닉네임입니다');
   if (code === 'human_session_required') return t('비밀번호로 로그인한 브라우저에서만 할 수 있습니다 (토큰 링크 접속에서는 불가)');
   if (code === 'read_only_share') return t('이 공유는 읽기 전용입니다 — 공유 설정에서 읽기·쓰기로 올린 뒤 허용하세요');
   const reason = e && e.data && e.data.reason;
   return reason || (e && e.message) || t('요청에 실패했습니다');
+}
+
+/** 서버 오류 → 한 줄. 화면에 보이는 오류 줄은 사라지면 끝이라 기록(core/event-log.js)에도 남긴다. */
+export function errorText(e) {
+  const text = errorTextOf(e);
+  logEvent({ level: 'warn', source: 'ui', msg: text, error: e && typeof e === 'object' ? e : undefined });
+  return text;
 }

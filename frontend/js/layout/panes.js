@@ -30,7 +30,7 @@ import { mountPanelInPane, panelLabel } from '../panels/registry.js';
 // 빈 칸을 눌렀을 때만 쓰는 세션 선택 시트 — screens 청크(vite.config.mjs).
 const openPanePicker = (paneId) => import('./pane-picker.js')
   .then((m) => m.openPanePicker(paneId))
-  .catch((e) => console.error('[FarShell pane-picker]', e));
+  .catch((e) => reportError('pane-picker', e));
 import { isCompactMode, flattenLeaves, wireCompactSwipe } from './compact.js';
 import { icon } from '../ui/icons.js';
 import { vtFetch } from '../core/api.js';
@@ -47,7 +47,7 @@ function beginResizeOverlay() {
   import('./resize-overlay.js').then((m) => {
     _resizeOverlay = m;
     if (_resizeOverlayWanted) m.beginResizeOverlay();
-  }).catch((e) => console.error('[FarShell resize-overlay]', e));
+  }).catch((e) => reportError('resize-overlay', e));
 }
 function endResizeOverlay() {
   _resizeOverlayWanted = false;
@@ -55,6 +55,7 @@ function endResizeOverlay() {
 }
 import { t } from '../core/i18n.js';
 import { isRelayed } from '../core/host-route.js';
+import { reportError } from '../core/event-log.js';
 
 export { canSplit };
 
@@ -515,7 +516,7 @@ function _renderViewerBody(bodyEl, file) {
   shareBtn.innerHTML = icon('link', 13);
   shareBtn.addEventListener('click', () => {
     const f = bodyEl.dataset.viewerFile;
-    if (f) import('../panels/files/files.js').then((m) => m.shareFsPath(f)).catch((e) => console.error('[FarShell share]', e));
+    if (f) import('../panels/files/files.js').then((m) => m.shareFsPath(f)).catch((e) => reportError('share', e));
   });
   tools.appendChild(shareBtn);
   // 다운로드(파일 개편 단계 7) — 이 컴퓨터의 파일만이라 원격 호스트를 보는 중이면 흐리게 두고 이유를 단다(렌더러가 거절도 한다).

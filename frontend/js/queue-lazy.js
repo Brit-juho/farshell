@@ -6,6 +6,7 @@
 // 지연 청크가 core/store·layout/store·term/session을 평범하게 정적 import해도
 // 승격이 일어나지 않는다. 그래서 settings.js·snippets.js도 이제 지연 청크다.
 import { registerAction } from './core/dom.js';
+import { reportError } from './core/event-log.js';
 
 // 재진입 가드 — 청크 도착 전에 액션이 한 번 더 불리면 두 번째가 토글로 닫는다.
 let _opening = false;
@@ -15,6 +16,6 @@ registerAction('queue.show', () => {
   _opening = true;
   import('./queue.js')
     .then((m) => m.showQueue())
-    .catch((e) => console.error('[FarShell queue]', e))
+    .catch((e) => reportError('queue', e))
     .finally(() => { _opening = false; });
 });

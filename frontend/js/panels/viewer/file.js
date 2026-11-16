@@ -11,6 +11,7 @@ import {
 } from './file-load.js';
 import { _setMsg } from './state.js';
 import { t } from '../../core/i18n.js';
+import { logEvent } from '../../core/event-log.js';
 import {
   previewKind, hasRenderedView, fitsPreview, viewLabels, mountCsvTable, mountPlayer, mountSvg, mountImageView, emptyState, downloadButton,
   CSV_MAX_COLS, CSV_MAX_ROWS,
@@ -282,7 +283,7 @@ export function _setMarkdownLoader(fn) { _mdLoading = fn ? Promise.resolve().the
 async function _paintMarkdown(container, text, st) {
   let mod;
   try { mod = await _loadMarkdown(); } catch (e) {
-    console.warn('[FarShell viewer] markdown preview unavailable, showing source', e);
+    logEvent({ level: 'warn', source: 'console', msg: 'viewer: markdown preview unavailable, showing source', error: e });
     return false;
   }
   if (container._vtDoc !== st) return true;
@@ -352,7 +353,7 @@ function _syncBottomNote(container, st) {
     note.appendChild(_button(t('더 보기'), (ev) => {
       ev.currentTarget.disabled = true;
       more(container).catch((e) => {
-        if (typeof window.showToast === 'function') window.showToast(_errText(e), 'error');
+        if (typeof window.showToast === 'function') window.showToast(_errText(e), 'error', { error: e });
       });
     }));
   } else if (loaded >= MAX_LOADED) {
@@ -422,7 +423,7 @@ async function _paintText(container, text, path, mode, st) {
     handle = await mod.mountEditor(container, text, path, VTDiffLex.langForPath(path),
       mode === 'tail' ? { lineFrom: 'end' } : {});
   } catch (e) {
-    console.warn('[FarShell viewer] editor unavailable, showing plain text', e);
+    logEvent({ level: 'warn', source: 'console', msg: 'viewer: editor unavailable, showing plain text', error: e });
   }
   if (handle) {
     _sweepEditors();
