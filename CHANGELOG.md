@@ -15,6 +15,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **Tidy ended conversations.** The ⋯ menu on a repository's "Ended N" line archives its ended conversations — all, or only those older than N days (default 7, set in settings › Cleanup, where you can also tidy every repository at once). Running conversations are skipped, nothing is deleted, and the notice afterwards has Undo (`POST /api/session-catalog/conversations/archive-ended` · `…/unarchive`).
 - The status, location, branch and background-shell lines at the top of a row menu, and the folded strip's hover card, can now be selected and copied.
 
+### Fixed
+- **A session that kept failing to open with 409 opens again.** If this browser screen already had a web session for that tmux session that was attached without its runtime (an older restore or an attach by name only), opening it from the list answered `409 runtime_changed` until the server restarted — reloading did not help. The existing web session is now bound to the runtime instead, and one left over from an older runtime of the same name is replaced.
+
 ### Changed
 - **The session list is denser.** A folded repository takes one 28 px line (was 47 px), the repository head is the same height folded or open, and session rows, worktree branches and the gaps between repositories lose their spare padding (about 13% shorter for an open repository).
 
