@@ -122,7 +122,7 @@ Open "Ended N" at the bottom of a repository to see **the conversations that end
     so it can't read `~/.vt.env`.
     File mode 0600 alone can't isolate processes running as the same user. If you lower a share to read-only and then raise it back to
     read & write, the earlier write approval comes back without re-approval. To block it permanently, revoke write access or unshare.
-    This feature isn't available on screens that show another Mac, and a session whose name is in Korean can't be shared (rename it in English).
+    This feature isn't available on screens that show another Mac. A session with a Korean alias can still be shared (sharing uses the session ID).
     Approving and sharing don't work on a screen opened with a `?token=` link (password sign-in is required).
 - The sliders icon in the Sessions view header opens the **session list settings** sheet. The "Repository" tab lists the repositories where a CLI ran — a show checkbox, "Remove" (conversation records stay; it comes back when a CLI starts there again) and worktree management for git repositories; repositories with no activity for 90 days start hidden. the "View" tab sets the order and shows or hides the "Needs attention" section and sessions by origin (other Macs, external) on this device, and the "Cleanup" tab holds this Mac's session record settings: auto-archive ended conversations (never deletes), the "N days" for tidying "Ended N" (default 7) and tidying every repository at once, name sessions after the repository when a CLI starts, and end a resumed session when its CLI exits. Changing "Cleanup" asks for your password again.
 

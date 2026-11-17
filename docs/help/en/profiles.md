@@ -110,8 +110,7 @@ in that session) can read it.** "An agent cannot choose an account" is a rule of
 delegation paths, not an OS barrier, and an agent fooled by a prompt injection could send the token out. Register only
 accounts you are willing to hand to the agents you run in that session. Creating a session also refreshes that
 profile's statusLine wrapper automatically (the global `~/.claude` is only read; other settings, hooks and MCP follow
-only when you run `fsh profile sync-settings`), and a session created with an account may be named only with letters,
-digits, `_` and `-`.
+only when you run `fsh profile sync-settings`). A session's name (its alias) may use any language even with an account chosen (the tmux name is a random ID the server picks).
 
 Profile names may repeat within one tool and are still created, but they are confusing in the picker and name tags, so
 keep them distinct (with a repeat, `fsh claude <name>` asks for the ID and creation shows a "same name exists" flag).
