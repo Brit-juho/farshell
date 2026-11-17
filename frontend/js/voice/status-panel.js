@@ -125,7 +125,9 @@ export function mountVoiceStatus() {
     // 녹음 중에는 위험 테두리(시안: 「녹음 종료」는 빨간 테두리, 채운 버튼은 「입력」 하나뿐).
     record.classList.toggle('danger', phase === 'recording');
     record.textContent = phase === 'recording' ? t('녹음 종료') : phase === 'processing' ? t('인식 중') : phase === 'preparing' ? t('모델 준비 중') : phase === 'starting' ? t('마이크 확인 중') : state.textContent === t('모델 준비 필요') ? t('모델 준비') : t('녹음 시작');
-    const shown = targetName && getPin() === targetName ? t('{name} (고정)', { name: targetName }) : targetName;
+    // targetName은 세션 ID(입력 대상) — 보이는 글자는 별칭.
+    const label = pinLabel(targetName);
+    const shown = targetName && getPin() === targetName ? t('{name} (고정)', { name: label }) : label;
     meta.textContent = targetName
       ? (phase === 'recording'
         ? t('입력 대상: {name} · {sec}초 / 60초', { name: shown, sec: Math.min(60, Math.floor((Date.now() - startedAt) / 1000)) })

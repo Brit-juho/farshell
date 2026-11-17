@@ -91,7 +91,7 @@ export function SessionNode(props: {
       <div class="vt-rg-body">
         <div class="vt-rg-a">
           <Show when={props.editing} fallback={
-            <span class="vt-rg-name" data-tip={row().tmuxName && row().tmuxName !== row().name ? t('tmux 이름 · {name}', { name: row().tmuxName! }) : undefined}
+            <span class="vt-rg-name" data-tip={row().tmuxName && row().tmuxName !== row().name ? t('ID · {id}', { id: row().tmuxName! }) : undefined}
               data-tip-side="right">{row().name}</span>
           }>
             <input

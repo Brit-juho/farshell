@@ -68,12 +68,3 @@ test('planInput: paste 는 본문을 한 덩어리로 + 끝 Enter 여부, type �
   assert.deepStrictEqual({ ...u.planInput('a\nb\n', 'type') }, { type: 'a\nb\n' });
   assert.deepStrictEqual({ ...u.planInput('a\nb', 'type') }, { type: 'a\nb' });
 });
-
-test('sessionNameAdjusted: 번호만 붙은 건 그대로, 글자가 바뀌면 알린다', async () => {
-  const u = await load();
-  assert.strictEqual(u.sessionNameAdjusted('deploy', 'deploy'), false);
-  assert.strictEqual(u.sessionNameAdjusted('deploy', 'deploy-2'), false);
-  assert.strictEqual(u.sessionNameAdjusted('my build', 'my-build'), true);
-  assert.strictEqual(u.sessionNameAdjusted('입력만', 'proj'), true);
-  assert.strictEqual(u.sessionNameAdjusted('', 'proj'), false);
-});

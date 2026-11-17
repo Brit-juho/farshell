@@ -77,6 +77,8 @@ export interface HcOptions {
   maxLines?: number;
   /** 백그라운드 셸의 명령을 설명 아래 한 줄로 싣는다(행 메뉴 요약 — 카드는 마우스를 올려 읽는다). */
   commands?: boolean;
+  /** 세션 ID(tmux 이름) 한 줄을 맨 아래에 싣는다 — 행 메뉴 요약에서만(골라 복사용). 넘쳐도 자르지 않는다. */
+  showId?: boolean;
 }
 
 export const NATIVE_MAX = 5;
@@ -232,6 +234,12 @@ function metaRows(row: SessionRow, shareable: boolean): HcRow[] {
 const lineCount = (sections: HcSection[]) => sections.reduce((n, s) => n + s.rows.reduce((m, r) => m + (r.sub ? 2 : 1), 0), 0);
 
 /** 카드 내용. 자르는 순서와 규칙은 위 머리말. 반환한 구역에는 빈 구역이 없다. */
+// 세션 ID → 별칭(core/store.js가 window에 건 공용 지도 — 이 청크는 store를 import하지 않는다). 모르면 ID.
+function aliasOf(id: string): string {
+  const fn = typeof window !== 'undefined' ? (window as any).sessionAlias : null;
+  return (typeof fn === 'function' ? fn(id) : '') || id;
+}
+
 export function buildHoverCard(row: SessionRow, opts: HcOptions = {}): HcModel {
   const now = opts.now ?? Date.now();
   const max = opts.maxLines ?? BODY_MAX_LINES;
@@ -248,16 +256,21 @@ export function buildHoverCard(row: SessionRow, opts: HcOptions = {}): HcModel {
   const lin = row.lineage;
   const delegated: HcRow[] = [];
   if (lin && lin.state !== 'orphaned' && lin.parent) {
-    delegated.push({ key: 'parent', icon: 'corner-up-left', text: t('부모: {name}', { name: lin.parent }), extra: lineageLabel(lin) });
+    delegated.push({ key: 'parent', icon: 'corner-up-left', text: t('부모: {name}', { name: aliasOf(lin.parent) }), extra: lineageLabel(lin) });
     if (lin.task) delegated.push({ key: 'task', icon: 'file-text', text: lin.task, muted: true, title: lin.task });
   }
+
+  // 세션 ID — 사람에게는 별칭만 보이고, ID는 메뉴 요약에서만 흐린 한 줄로(터미널에서 `tmux attach -t`로 칠 때 복사).
+  const idRows: HcRow[] = opts.showId && row.tmuxName
+    ? [{ key: 'id', text: t('ID · {id}', { id: row.tmuxName }), mono: true, muted: true, title: row.tmuxName }]
+    : [];
 
   let metaKeep = meta.length, kidsCap = KIDS_MAX, nativeCap = NATIVE_MAX, shellCap = SHELLS_MAX;
   const assemble = (): HcSection[] => {
     const subagents = [...nativeRows(row, now, nativeCap), ...kidRows(opts.kids || [], kidsCap), ...delegated];
     const all: HcSection[] = [
       { id: 'activity', rows: activity }, { id: 'location', rows: location },
-      { id: 'subagents', rows: subagents }, { id: 'shells', rows: shellRows(row, now, shellCap, !!opts.commands) }, { id: 'meta', rows: meta.slice(0, metaKeep) },
+      { id: 'subagents', rows: subagents }, { id: 'shells', rows: shellRows(row, now, shellCap, !!opts.commands) }, { id: 'meta', rows: [...meta.slice(0, metaKeep), ...idRows] },
     ];
     return all.filter((s) => s.rows.length > 0);
   };

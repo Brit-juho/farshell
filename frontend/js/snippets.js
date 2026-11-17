@@ -21,7 +21,7 @@ import { operationId } from './core/operation-id.js';
 // 패널 껍데기 · fetch · 닫기 뼈대는 panels/panel.js·core/api.js가 공유한다.
 import { openPanel, closePanel } from './panels/panel.js';
 import { vtFetch, vtEsc } from './core/api.js';
-import { activeSession, activeSessionId, getSession } from './core/store.js';
+import { activeSession, activeSessionId, getSession, setSessionAlias } from './core/store.js';
 import { screenId } from './core/screen-id.js';
 import { sendToPty, sendPaste } from './term/clipboard.js';
 import { addSession } from './term/session.js';
@@ -31,7 +31,7 @@ import { confirmDialog } from './core/dialog.js';
 import { isMac } from './core/env.js';
 import { t } from './core/i18n.js';
 import {
-  splitText, composeText, toLines, hasHangul, displayName, matchesQuery, sessionNameFor, sessionNameAdjusted, planInput,
+  splitText, composeText, toLines, hasHangul, displayName, matchesQuery, sessionNameFor, planInput,
 } from './snippets-util.js';
 
 // '전체' 탭 기본 — 스코프 구분 없이 쓰던 예전 동작과 가장 가깝다.
@@ -505,9 +505,8 @@ async function _runInNewSession(it, name) {
     showToast(t('새 세션 생성 실패: {error}', { error: e.message }), 'error', { error: e });
     return;
   }
-  if (name && sessionNameAdjusted(name, data.tmux_session)) {
-    showToast(t('세션 이름은 영문·숫자·-·_만 쓸 수 있어 {name}(으)로 만들었습니다', { name: data.tmux_session }), 'info');
-  }
+  // 입력한 이름은 별칭이 된다(겹치면 서버가 `이름-1`로 비켜 간다) — 화면이 처음부터 확정 별칭을 보이게 싣는다.
+  if (typeof data.alias === 'string' && data.tmux_session) setSessionAlias(data.tmux_session, data.alias);
   // addSession()이 탭·xterm·WS를 만들고 활성 pane(방금 분할한 자리)에 배정한다 —
   // layout/dnd.js가 드롭으로 세션을 꽂을 때 쓰는 것과 같은 경로.
   addSession(data.id, data.name || data.id, { place: 'pane', tmuxName: data.tmux_session });

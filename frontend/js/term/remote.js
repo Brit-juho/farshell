@@ -14,7 +14,7 @@
 // 2026-09-28 — 원격 세션 **생성·종료·이름 바꾸기**와 「지금 어느 호스트를 보나」
 // (host-view.js)가 여기 붙었다. 셋 다 이 서버의 `/api/hosts/{id}/sessions`를
 // 거쳐 상대의 control 등급 엔드포인트로 간다(routes/hosts.py).
-import { getSession, allSessions, setSessionTmuxName } from '../core/store.js';
+import { getSession, allSessions, setSessionTmuxName, setHostSessionAliases, setSessionAlias, sessionAlias } from '../core/store.js';
 import { addSession, revealSession, removeSession } from './session.js';
 import { saveLayoutNow } from '../layout/persist.js';
 import { showToast } from '../ui/toast.js';
@@ -39,6 +39,7 @@ const _hostLabels = new Map();
 async function _fetchHosts() {
   const data = await vtFetch('/api/hosts');
   for (const h of data?.hosts || []) _hostLabels.set(h.id, h.label || h.id);
+  setHostSessionAliases(data?.hosts);   // 원격 세션 별칭(호스트별 지도) — core/store.js
   return data?.hosts || [];
 }
 
@@ -112,7 +113,7 @@ async function attachRemoteSessionAs(id, hostId, tmuxName, place = 'view', durab
   // 이름 붙이고, 「연결된 화면」이 그걸로 "이게 나"를 판정한다. 없으면 원격
   // 「이 화면만 남기기」가 자기 자신을 끊을 수 있어서 그 기능을 켤 수 없다.
   const screen = (crypto.randomUUID?.() || String(Math.random()).slice(2)).replace(/-/g, '');
-  addSession(id, `${tmuxName} · ${hostId}`, {
+  addSession(id, `${sessionAlias(tmuxName, hostId)} · ${hostLabelSync(hostId)}`, {
     tmuxName,
     host: hostId,
     remote: { host: hostId, tmux: tmuxName, screen, ...durable },
@@ -157,6 +158,7 @@ export async function createRemoteSession(hostId, name = '') {
     showToast(t('새 세션 실패 — {reason}', { reason: e.message }), 'error', { error: e });
     return null;
   }
+  if (typeof data?.alias === 'string') setSessionAlias(data.name, data.alias, hostId);
   _hostsChanged(hostId);
   const node = findNode(getTree(), getActivePaneId());
   const emptyHere = node && node.t === 'leaf' && !node.session && (node.kind || 'terminal') === 'terminal';
@@ -169,8 +171,9 @@ export async function createRemoteSession(hostId, name = '') {
 export async function killRemoteSession(hostId, tmuxName) {
   if (!hostId || !tmuxName) return false;
   const label = await hostLabel(hostId);
+  const name = sessionAlias(tmuxName, hostId);
   const ok = await confirmDialog(
-    t("{host}의 '{name}'을(를) 완전히 종료합니다. 되돌릴 수 없습니다.", { host: label, name: tmuxName }),
+    t("{host}의 '{name}'을(를) 완전히 종료합니다. 되돌릴 수 없습니다.", { host: label, name }),
     { title: t('완전 종료'), okLabel: t('완전 종료'), danger: true },
   );
   if (!ok) return false;
@@ -200,25 +203,32 @@ export async function killRemoteSession(hostId, tmuxName) {
     _hostsChanged(hostId);
     return false;
   }
-  showToast(t('완전 종료됨: {name} · {host}', { name: tmuxName, host: label }));
+  showToast(t('완전 종료됨: {name} · {host}', { name, host: label }));
   _hostsChanged(hostId);
   return true;
 }
 
-/** 원격 세션 이름을 바꾼다. 열린 탭은 **다시 붙지 않는다** — 상대의 attach PTY는
- * tmux 클라이언트라 세션 이름이 바뀌어도 그대로 따라간다. 레코드의 이름만 맞춘다
+/** 원격 세션 별칭을 바꾼다. 새 서버는 별칭만 바꾸고 ID(tmux 이름)는 그대로라(`{name: ID, alias}`)
+ * 지도만 고친다. 옛 서버는 tmux 이름을 바꾼다 — 열린 탭은 **다시 붙지 않는다**(상대의 attach PTY는
+ * tmux 클라이언트라 세션 이름이 바뀌어도 그대로 따라간다). 레코드의 이름만 맞춘다
  * (ws.js가 재연결할 때 레코드의 `remote.tmux`를 읽으므로 끊겨도 새 이름으로 붙는다). */
 export async function renameRemoteSession(hostId, oldName, newName) {
   const next = String(newName || '').trim();
-  if (!hostId || !oldName || !next || next === oldName) return false;
+  if (!hostId || !oldName || !next || next === sessionAlias(oldName, hostId)) return false;
+  let data;
   try {
-    await vtFetch(
+    data = await vtFetch(
       `/api/hosts/${encodeURIComponent(hostId)}/sessions/${encodeURIComponent(oldName)}`,
       _json('PATCH', { name: next }),
     );
   } catch (e) {
     showToast(t('이름 변경 실패 — {reason}', { reason: e.message }), 'error', { error: e });
     return false;
+  }
+  if (typeof data?.alias === 'string') {
+    setSessionAlias(oldName, data.alias, hostId);
+    _hostsChanged(hostId);
+    return true;
   }
   const open = findRemoteSession(_entries(), hostId, oldName);
   if (open) {

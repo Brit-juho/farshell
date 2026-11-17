@@ -15,7 +15,7 @@ import { cancelPasteTransactions } from './clipboard.js';
 // 명시적으로 허용했다("깊은 수술 없이 안전한 3분할이 아니면 하나의 오케스트레이터로
 // 남겨도 된다").
 import { getSession, registerSession, removeSessionRecord,
-  sessionDisplayName, setSessionDisplayName, setSessionTmuxName, setSessionAlias } from '../core/store.js';
+  sessionDisplayName, setSessionDisplayName, setSessionTmuxName, setSessionAlias, sessionAlias } from '../core/store.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
 import { screenId } from '../core/screen-id.js';
@@ -50,6 +50,7 @@ export async function createSession({ place = 'view' } = {}) {
     });
     const data = await res.json();
     if (!res.ok && profile) { showToast(refusalText(data), 'error'); return; }
+    if (typeof data.alias === 'string' && data.tmux_session) setSessionAlias(data.tmux_session, data.alias);
     addSession(data.id, data.name || data.id, { place });
     // ⚠ tmuxName을 안 채우면 openSessionOnMac()의 tmuxName 가드가 항상 실패해
     // "이 세션은 tmux 세션이 아니라 맥에서 열 수 없습니다"를 잘못 띄운다 —
@@ -128,9 +129,9 @@ export async function attachTmux(tmuxName, { place = 'view', catalogSessionId = 
   });
   // 서버가 세션 없음(404) 등을 돌려주면 data.id가 없다. 그대로 addSession(undefined)하면
   // /ws/undefined로 무한 재연결하는 유령 탭이 생기므로 여기서 차단한다.
-  if (!res.ok) { showToast(t('세션 열기 실패: {name} ({status})', { name: tmuxName, status: res.status })); return null; }
+  if (!res.ok) { showToast(t('세션 열기 실패: {name} ({status})', { name: sessionAlias(tmuxName), status: res.status })); return null; }
   const data = await res.json();
-  if (!data.id) { showToast(t('세션 열기 실패: {name}', { name: tmuxName })); return null; }
+  if (!data.id) { showToast(t('세션 열기 실패: {name}', { name: sessionAlias(tmuxName) })); return null; }
   // 이미 웹에 열려 있으면 해당 탭으로 전환. 2026-09-21(사용자 지적) —
   // switchTo는 "배정"이라 그 세션이 다른 세션과 화면을 공유 중이면(그룹)
   // 짝을 밀어냈다 — revealSession이 트리를 안 건드리고 그 자리로만 이동한다.
@@ -173,6 +174,8 @@ export async function createTmuxSession(opts) {
   }
   const data = await res.json();
   if (!data.id) { showToast(t('tmux 세션 생성 실패')); return; }
+  // 화면이 처음부터 별칭을 보이도록 응답의 확정 별칭을 먼저 싣는다(목록 폴링을 기다리지 않는다).
+  if (typeof data.alias === 'string' && data.tmux_session) setSessionAlias(data.tmux_session, data.alias);
   addSession(data.id, data.name || data.id, { tmuxName: data.tmux_session });
   // ⚠ tmuxName 미설정 시 openSessionOnMac()이 "tmux 세션 아님"으로 오판한다.
   const s = getSession(data.id);
@@ -272,6 +275,14 @@ export function revealSession(id) {
   saveLayoutNow();
 }
 
+/** 별칭 바꾸기 거절 코드 → 사람이 읽는 문구(`PATCH /api/sessions/{id}`). */
+export function renameErrorText(code) {
+  if (code === 'alias_taken') return t('이미 쓰고 있는 별칭입니다');
+  if (code === 'invalid_title') return t('별칭은 1~128자이고 줄바꿈 같은 제어 문자는 쓸 수 없습니다');
+  if (code === 'alias_unavailable') return t('세션 기록을 아직 못 읽었습니다 — 잠시 뒤 다시 하세요');
+  return t('세션 이름 변경 실패');
+}
+
 // 레일 세션 행과 모바일 세션 관리 시트가 같은 경로로 이름을 바꾼다.
 // 성공한 경우에만 레코드·피커·워크스페이스를 함께 동기화한다.
 export async function renameSession(id, rawName, previousNameOverride) {
@@ -287,18 +298,9 @@ export async function renameSession(id, rawName, previousNameOverride) {
     });
     const data = await res.json().catch(() => null);
     if (!res.ok) {
-      // 2026-09-21 설계 — tmux 세션 이름이 단일 진실이 되면서, 예전처럼
-      // "웹 라벨만 조용히 바꾸는" 폴백이 없어졌다: 서버가 거절한 이유를
-      // 그대로 보여준다.
-      const msg = data?.error === 'alias_taken'
-        ? t('이미 쓰고 있는 별칭입니다')
-        : data?.error === 'invalid_title'
-        ? t('별칭은 1~128자이고 줄바꿈 같은 제어 문자는 쓸 수 없습니다')
-        : data?.error === 'tmux session name must be alphanumeric/dash/underscore only'
-        ? t('세션 이름은 영숫자·하이픈(-)·밑줄(_)만 가능합니다(tmux 제약)')
-        : data?.error === 'tmux session name already exists'
-        ? t('이미 있는 이름입니다')
-        : t('세션 이름 변경 실패');
+      // 이름 바꾸기는 별칭(세션 기록의 이름)만 바꾼다 — ID(tmux 이름)는 그대로다.
+      // 서버가 거절한 이유를 그대로 보여준다(웹 라벨만 조용히 바꾸는 폴백은 없다).
+      const msg = renameErrorText(data?.error);
       if (typeof showToast === 'function') showToast(msg, 'error');
       return false;
     }

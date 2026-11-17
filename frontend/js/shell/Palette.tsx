@@ -28,7 +28,19 @@ import {
   SECTION_META, buildSettingEntries, matchSettingEntry, stepSettingValue, formatSettingValue,
 } from '../panels/settings/index-data.js';
 
-export interface SessionTab { id: string; name: string; }
+/** name = 보이는 이름(별칭), tmuxName = 세션 ID(검색으로도 찾을 수 있게). */
+export interface SessionTab { id: string; name: string; tmuxName?: string | null; }
+
+// 세션 ID → 별칭(core/store.js가 window에 건 것 — 이 청크는 store를 import하지 않는다). 모르면 ID.
+function aliasOf(id: string, host?: string | null): string {
+  const fn = (window as any).sessionAlias;
+  return (typeof fn === 'function' ? fn(id, host || undefined) : '') || id;
+}
+/** /api/tmux/sessions 행의 보이는 이름 — 행의 별칭, 없으면 아는 별칭, 그것도 없으면 ID. */
+function rowAlias(row: any): string {
+  const name = String(row?.name || '');
+  return (typeof row?.alias === 'string' && row.alias.trim()) || aliasOf(name);
+}
 export interface KeymapBinding { id: string; label: string; combo: string; passthrough: boolean; unavailable: boolean; }
 
 export interface PaletteDeps {
@@ -299,7 +311,7 @@ function PaletteBody(props: PaletteBodyProps) {
       return {
         key: `session:${sess.id}`,
         kind: 'session',
-        label: tmuxSess.name,
+        label: sess.name,
         el: (() => {
           const card = deps.buildSessionCard(tmuxSess, () => { deps.switchTo(sess.id); props.onRequestClose(); });
           card.classList.add('vt-qo-row', 'vt-qo-session-card');
@@ -453,7 +465,7 @@ function PaletteBody(props: PaletteBodyProps) {
       // ADR-43(2.3.0) — 영속 로그 검색을 없애면서 `source`는 항상 "live"가
       // 됐다("(기록)" 표시가 가리키던 `"log"`는 더 이상 안 나온다). 필드
       // 자체는 원격 피어 호환을 위해 남아 있다(server/routes/search.py).
-      label: `${remoteHost ? `${r.host_label || remoteHost} / ` : ''}${r.session_name}`
+      label: `${remoteHost ? `${r.host_label || remoteHost} / ` : ''}${(typeof r.alias === 'string' && r.alias.trim()) || aliasOf(String(r.session_name || ''), remoteHost)}`
         + ` · ${r.line.trim()}`,
       onOpen: open,
       onOpenNewPane: () => {
@@ -478,7 +490,8 @@ function PaletteBody(props: PaletteBodyProps) {
         return [...recentMatches.map(fileRow), ...serverMatches.map((r) => fileRow(r.path))];
       }
       case 'session':
-        return deps.listSessions().filter((s) => fuzzyMatch(s.name, q)).map(openSessionRow);
+        // 별칭으로 찾고, ID(tmux 이름)를 쳐도 찾는다.
+        return deps.listSessions().filter((s) => fuzzyMatch(s.name, q) || (!!s.tmuxName && fuzzyMatch(s.tmuxName, q))).map(openSessionRow);
       case 'keymap':
         return deps.listKeymapActions().filter((b) => fuzzyMatch(b.label, q)).map(keymapRow);
       case 'queue':
@@ -588,7 +601,7 @@ function PaletteBody(props: PaletteBodyProps) {
       // 위아래로 훑는 동안 요청이 몰리지 않게 120ms 머문 뒤에 묻고, 답이 늦게 오면 그때 고른 세션인지 다시 본다.
       const sess = r.preview.sess;
       const name = String(sess.name || '');
-      setPreviewText([t('세션 · {name}', { name }), sess.command || '']);
+      setPreviewText([t('세션 · {name}', { name: rowAlias(sess) }), sess.command || '']);
       if (sessionPreview()?.name !== name) setSessionPreview({ name, content: null });
       const timer = setTimeout(() => {
         void fetchPreview(deps.vtFetch, name, { lines: 40, host: deps.host || '' }).then((content) => {
@@ -765,7 +778,7 @@ function PaletteBody(props: PaletteBodyProps) {
                   }>
                     {(sess) => (
                       <div class="vt-qo-term-wrap">
-                        <div class="vt-qo-preview-head"><span class="vt-qo-term-name">{sess().name}</span><span class="vt-qo-term-cmd">{sess().command || ''}</span></div>
+                        <div class="vt-qo-preview-head"><span class="vt-qo-term-name">{rowAlias(sess())}</span><span class="vt-qo-term-cmd">{sess().command || ''}</span></div>
                         <Show when={sessionPreview()?.name === sess().name && sessionPreview()?.content != null}
                               fallback={<div class="vt-vw-empty">{sessionPreview()?.name === sess().name && sessionPreview()?.content === null ? t('불러오는 중…') : t('미리보기 없음')}</div>}>
                           <div class="vt-qo-term" ref={(el) => {

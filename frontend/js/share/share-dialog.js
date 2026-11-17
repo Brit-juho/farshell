@@ -11,6 +11,9 @@ import {
 } from './share-data.js';
 import { t } from '../core/i18n.js';
 
+// 세션 ID → 별칭(core/store.js가 window에 건 공용 지도). 모르면 ID. 서버 호출·권한 대상은 계속 ID다.
+const aliasOf = (name) => (typeof window.sessionAlias === 'function' && window.sessionAlias(name)) || name;
+
 function modeRadio(group, value, checked) {
   return `
     <label class="vt-share-mode">
@@ -36,7 +39,8 @@ export function openShareDialog(name, share, { access = false } = {}) {
   const editing = !!share;
   const shareable = SESSION_NAME_RE.test(name);
   const initialMode = normalizeMode(share && share.mode);
-  const initialNick = share ? share.nick : suggestNick(name);
+  const label = aliasOf(name);
+  const initialNick = share ? share.nick : suggestNick(label);
   return new Promise((resolve) => {
     let result = null;
     let settled = false;
@@ -45,7 +49,7 @@ export function openShareDialog(name, share, { access = false } = {}) {
     const finish = () => { grants?.dispose(); if (!settled) { settled = true; resolve(result); } };
     const { body } = openDialog({
       id,
-      title: access ? t('공유 및 권한 · {name}', { name }) : editing ? t('공유 설정 · {name}', { name }) : t('에이전트와 공유 · {name}', { name }),
+      title: access ? t('공유 및 권한 · {name}', { name: label }) : editing ? t('공유 설정 · {name}', { name: label }) : t('에이전트와 공유 · {name}', { name: label }),
       onClose: finish,
       extraClass: 'vt-share-dialog',   // 리디자인 6단계(시안 O08) — 폭 480
       bodyHTML: `

@@ -28,7 +28,7 @@ import { t } from '../core/i18n.js';
 import { primeAudioContext } from './pcm-capture.js';
 import { startPcmSession } from './pcm-session.js';
 // 입력 대상 고정·확인 후 전송은 별도 모듈에 둔다(둘 다 store.js를 import하지 않는 안전한 모듈).
-import { resolveInputTarget, pinMissingMessage } from './target-pin.js';
+import { resolveInputTarget, pinMissingMessage, pinLabel } from './target-pin.js';
 import { showConfirm, clearConfirm } from './confirm.js';
 
 const API = `${location.protocol}//${location.host}`;
@@ -197,7 +197,7 @@ export async function startRecording() {
     isRecording = true;
     micBtn.classList.add('recording');
     micBtn.querySelector('.label').textContent = t('녹음 중...');
-    micStatus.textContent = t('{name}에 녹음 중 — 탭하여 중지 (최대 60초)', { name: target.name });
+    micStatus.textContent = t('{name}에 녹음 중 — 탭하여 중지 (최대 60초)', { name: pinLabel(target.name) });
     stage('recording', target.name);
   } catch (err) {
     console.error('마이크 접근 실패:', err);
@@ -322,17 +322,17 @@ async function uploadWithRetry() {
     // 확인 모드 — 서버는 인식만 했고 입력하지 않았다. 패널의 확인 영역에서 고쳐 입력한다.
     // 확인 영역을 그릴 수 없으면 false → 아래 「입력되지 않음 + 복사」 분기로 간다.
     const confirmShown = !!(res.ok && data && data.pending_confirm && showConfirm({
-      text: data.text, token: data.confirm_token, voiceId, name: data.target_name || captured.name,
+      text: data.text, token: data.confirm_token, voiceId, name: pinLabel(data.target_name || captured.name),
       reason: data.confirm_reason, ttlSec: data.confirm_ttl_sec }));
     if (!res.ok) {
       // 4xx(인증·형식 거부)는 재시도하지 않는다 — 서버가 준 메시지를 그대로 보여준다.
       micStatus.textContent = (data && data.error) || t('전송 실패 ({status})', { status: res.status });
     } else if (confirmShown) {
-      micStatus.textContent = t('확인 후 입력합니다 — {name}', { name: data.target_name || captured.name });
+      micStatus.textContent = t('확인 후 입력합니다 — {name}', { name: pinLabel(data.target_name || captured.name) });
       stage('confirm', data.target_name || captured.name);
       return;
     } else if (data && data.text) {
-      micStatus.textContent = data.injected ? t('입력 완료 — {name}: "{text}"', { name: captured.name, text: data.text }) : t('입력되지 않음 — {text}', { text: data.text });
+      micStatus.textContent = data.injected ? t('입력 완료 — {name}: "{text}"', { name: pinLabel(captured.name), text: data.text }) : t('입력되지 않음 — {text}', { text: data.text });
       if (!data.injected && navigator.clipboard) {
         const copy = document.createElement('button'); copy.className = 'vt-btn sm'; copy.textContent = t('인식 텍스트 복사');
         copy.onclick = () => navigator.clipboard.writeText(data.text); micStatus.appendChild(copy);

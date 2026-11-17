@@ -3,7 +3,7 @@
 //
 // term/session.js는 탭 전환/제거 시 updateSessionPicker를 부른다. 세션 목록·관리는 「세션」 탭
 // (shell/Fleet.tsx)이 맡는다 — 예전 상단 시트(layout/session-sheet.js)는 거기로 합쳤다.
-import { activeSession, activeSessionId, sessionDisplayName, getSession } from './core/store.js';
+import { activeSession, activeSessionId, sessionDisplayName, getSession, sessionAlias } from './core/store.js';
 import { openSessionIds } from './layout/compact.js';
 import { onLayoutChange } from './layout/store.js';
 import { apiFetch } from './core/api.js';
@@ -56,8 +56,9 @@ async function openSessionOnMac(explicitSessionId) {
       body: JSON.stringify({ name: tmuxName }),
     });
     const data = await res.json();
-    if (data.skipped) showToast(t("'{name}'은 이미 맥에서 열려 있습니다", { name: tmuxName }), 'success');
-    else if (data.ok) showToast(t("맥 터미널에 '{name}' 열림", { name: tmuxName }), 'success');
+    const name = sessionAlias(tmuxName);
+    if (data.skipped) showToast(t("'{name}'은 이미 맥에서 열려 있습니다", { name }), 'success');
+    else if (data.ok) showToast(t("맥 터미널에 '{name}' 열림", { name }), 'success');
     else showToast(t('맥에서 열기 실패: {error}', { error: data.error || '' }), 'error');
   } catch (e) {
     showToast(t('맥에서 열기 실패: {error}', { error: e.message }), 'error', { error: e });

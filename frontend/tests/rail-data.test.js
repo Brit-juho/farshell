@@ -263,6 +263,21 @@ test('cwd가 바뀐 context와 nonrepo는 이전 브랜치/변경량을 폴백�
   assert.strictEqual(rows[1].contextStatus, 'nonrepo');
 });
 
+test('collectSessionRows — 이름은 행의 alias → catalog.title → 이전에 알던 별칭(window.sessionAlias) → ID', async () => {
+  const { collectSessionRows, window } = await mod();
+  window.allSessions = () => ({});
+  window.sessionAlias = (id) => (id === 's-3' ? '예전 별칭' : id);
+  const rows = collectSessionRows({ tmux: [
+    { name: 's-1', alias: '배포', catalog: { title: '옛 제목' } },
+    { name: 's-2', catalog: { title: '제목' } },
+    { name: 's-3', alias: null, catalog: null },
+    { name: 's-4', alias: null, catalog: null },
+  ], repos: [], deps: { vtFetch: async () => ({}) }, onDiff: () => {} });
+  delete window.sessionAlias;
+  assert.strictEqual(JSON.stringify(rows.map((r) => [r.tmuxName, r.name])),
+    JSON.stringify([['s-1', '배포'], ['s-2', '제목'], ['s-3', '예전 별칭'], ['s-4', 's-4']]));
+});
+
 test('collectSessionRows — 브랜치는 main도 담고, origin·열림·묶음 이름·다른 화면을 채운다', async () => {
   const { collectSessionRows, window } = await mod();
   window.allSessions = () => ({ w1: { tmuxName: 'api' }, w2: { tmuxName: 'web' } });

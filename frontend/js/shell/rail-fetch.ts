@@ -401,8 +401,9 @@ export function collectSessionRows(inp: CollectInput): SessionRow[] {
       physicalKey: tm.physical_key,
       // 만든 시각 — 정체성 키 `#{session_id}:#{session_created}`의 뒤쪽(tmux가 정한 생성 시각, 초). 「만든 순」 정렬.
       created: createdOf(tm.physical_key),
-      // 화면 어디서나 보이는 이름(별칭)을 쓴다 — tmux 이름은 열쇠가 아니고 맥 터미널 `tmux attach -t`용이다.
-      name: normalizeTitle(tm.catalog?.title) || tm.name,
+      // 화면 어디서나 보이는 이름(별칭)을 쓴다 — tmux 이름(ID)은 열쇠이고 맥 터미널 `tmux attach -t`용이다.
+      // 행의 `alias`(새 서버) → `catalog.title`(그 전) → 기록을 잠깐 못 읽은 목록이면 이전에 알던 별칭(core/store.js 지도) → ID.
+      name: normalizeTitle(tm.alias) || normalizeTitle(tm.catalog?.title) || normalizeTitle(w.sessionAlias?.(tm.name)) || tm.name,
       nameSource: tm.catalog?.name_source === 'human' ? 'human' : tm.catalog ? 'auto' : null,
       // 둘은 짝이다 — attach는 카탈로그 세션 id를 받으면 실행 회차(runtime_id)도 요구한다(없으면 400, 2.12.0~2.12.1 목록 클릭 실패).
       catalogSessionId: typeof tm.catalog?.catalog_id === 'string' ? tm.catalog.catalog_id : undefined,

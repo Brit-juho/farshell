@@ -78,3 +78,22 @@ test('메뉴 요약 — 위치는 ~로 시작하는 한 줄(길면 가운데를 
   const bare = await mount({ summary: env0.buildHoverCard(sessionRow({ status: 'idle', kind: null, cwd: null, branch: null, changed: null }), {}), items: [] });
   assert.strictEqual(bare.root.querySelector('.vt-menu-summary .vt-hc-row'), null, '유휴·위치 없음이면 줄이 없다');
 });
+
+test('메뉴 요약에만 세션 ID 한 줄(흐린 고정폭, 골라 복사) — 호버 카드에는 없다, 넘쳐도 자르지 않는다', async () => {
+  const env0 = await loadSolidBuild(); _envs.push(env0);
+  const row = sessionRow({ tmuxName: 's-1a2b3c4d', name: '배포' });
+  const { root } = await mount({ summary: env0.buildHoverCard(row, { commands: true, showId: true }), items: [] });
+  const id = root.querySelector('.vt-menu-summary .vt-hc-row[data-key="id"]');
+  assert.ok(id, 'ID 줄');
+  assert.strictEqual(id.querySelector('.vt-hc-text').textContent, 'ID · s-1a2b3c4d');
+  assert.ok(id.classList.contains('muted'));
+  assert.ok(id.querySelector('.vt-hc-text').classList.contains('mono'));
+  const card = env0.buildHoverCard(row, {});
+  assert.ok(!card.sections.some((s) => s.rows.some((r) => r.key === 'id')), '호버 카드(showId 없음)에는 없다');
+  const tight = env0.buildHoverCard(sessionRow({ tmuxName: 's-1', otherScreens: 2, unseen: true, share: null }), { showId: true, shareable: true, maxLines: 1 });
+  assert.ok(tight.sections.some((s) => s.rows.some((r) => r.key === 'id')), '줄 상한에 걸려도 ID는 남는다');
+  const read = (p) => fs.readFileSync(path.join(__dirname, '..', '..', p), 'utf8');
+  assert.match(read('frontend/js/shell/Rail.tsx'), /buildHoverCard\(row, \{[^}]*showId: true/);
+  assert.match(read('frontend/js/shell/Fleet.tsx'), /commands: true, showId: true/);
+  assert.doesNotMatch(read('frontend/js/shell/RailHoverCard.tsx'), /showId/, '접힌 띠 호버 카드는 ID를 싣지 않는다');
+});
