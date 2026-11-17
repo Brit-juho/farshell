@@ -177,9 +177,11 @@ export async function killRemoteSession(hostId, tmuxName) {
     { title: t('완전 종료'), okLabel: t('완전 종료'), danger: true },
   );
   if (!ok) return false;
-  let durable = catalogSessionId ? {catalogSessionId, runtimeId, catalogHost} : null;
-  if (durable && (!runtimeId || !catalogHost)) return null;
-  if (!durable) {
+  // 이 세션의 기록 신원(있으면 그 실행 회차의 열린 화면만 닫는다). 예전에는 선언 없이 읽어 확인을 누르자마자
+  // ReferenceError로 멈췄다 — 아무것도 종료되지 않았다.
+  let catalogSessionId = null, runtimeId = null, catalogHost = null;
+  let durable = null;
+  {
     try {
       const host = (await _fetchHosts()).find(h => h.id === hostId);
       const row = host?.sessions?.find(s => s.name === tmuxName);

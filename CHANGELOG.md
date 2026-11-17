@@ -21,6 +21,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - The prompt queue's target list and the voice input target list show the same name as the session rail (catalog title, else the tmux name); the value stays the tmux name.
 
 ### Fixed
+- «Kill» on another Mac's session from the web did nothing: it stopped with a script error right after the confirmation.
 - Re-sending a session create with the same `operation_id` returns the first result instead of a name conflict.
 - Manage MCP & skills: the session view's context line shows the account name and project folder instead of full paths (paths on hover), and the session picker re-reads the list on every load and clears a selection whose session has ended.
 - The focus-mode key bar's mic key was taller than the other keys on a phone (the menu-item 44px minimum applied to it).
