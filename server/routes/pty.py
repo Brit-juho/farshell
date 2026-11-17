@@ -326,7 +326,7 @@ async def rename_session(session_id: str, request: Request):
         except catalog.Refused as error:
             return JSONResponse({"error": error.code, "name": name}, status_code=error.status)
         import tmux_runner
-        await tmux_runner.set_option_async(tmux_runner.exact_target(info.tmux_name), "@fsh_alias", name.strip())   # 창 제목 — 실패하면 다음 관측이 맞춘다
+        await tmux_runner.set_option_async(f"={info.tmux_name}:", "@fsh_alias", name.strip())   # 창 제목 — 실패하면 다음 관측이 맞춘다
         info.name = name.strip()
         return {"id": session_id, "name": info.name, "alias": info.name, "tmux_name": info.tmux_name, "tmux_renamed": False}
     info.name = name   # tmux가 아닌 일반 터미널 — 이 화면의 이름만

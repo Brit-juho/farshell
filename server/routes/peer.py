@@ -572,7 +572,7 @@ async def peer_sessions_rename(request: Request, grant: dict):
             return JSONResponse({"error": "exists", "reason": tr("이미 쓰고 있는 별칭입니다: {name}", name=new)},
                                 status_code=409), "중복 별칭"
         return JSONResponse({"error": error.code}, status_code=error.status), "별칭 변경 실패"
-    await tmux_runner.set_option_async(tmux_runner.exact_target(old), "@fsh_alias", new)
+    await tmux_runner.set_option_async(f"={old}:", "@fsh_alias", new)
     return {"ok": True, "name": old, "alias": new}, "별칭 변경"
 
 
