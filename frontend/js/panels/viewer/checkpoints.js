@@ -16,15 +16,19 @@ const MAX_TURNS_PER_SESSION = 30;
 
 // ── 순수 함수 ────────────────────────────────────────────────────────────────
 
-/** 서버 `sessions[]` → 화면 묶음. 세션마다 `turn-end` 행을 최신 턴부터, 기록이 없던 구간은 그대로 둔다. */
-export function sessionGroups(sessions) {
+// 세션 ID → 별칭(core/store.js가 window에 건 지도). 모르면 ID 그대로.
+const _aliasOf = (id) => (typeof window !== 'undefined' && typeof window.sessionAlias === 'function' && window.sessionAlias(id)) || id;
+
+/** 서버 `sessions[]` → 화면 묶음. 세션마다 `turn-end` 행을 최신 턴부터, 기록이 없던 구간은 그대로 둔다.
+ * 라벨의 세션 이름은 별칭(`aliasOf`, 기본은 로컬 별칭 지도). */
+export function sessionGroups(sessions, aliasOf = _aliasOf) {
   const out = [];
   for (const s of Array.isArray(sessions) ? sessions : []) {
     const rows = (s.checkpoints || []).filter((c) => c && c.kind === 'turn-end');
     rows.sort((a, b) => (b.seq || 0) - (a.seq || 0));
     out.push({
       id: s.id,
-      label: s.tmux ? `${s.agent || ''} · ${s.tmux}`.trim() : (s.agent || t('에이전트')),
+      label: s.tmux ? `${s.agent || ''} · ${aliasOf(s.tmux)}`.trim() : (s.agent || t('에이전트')),
       last: s.last || 0,
       turns: rows.slice(0, MAX_TURNS_PER_SESSION),
       more: Math.max(0, rows.length - MAX_TURNS_PER_SESSION),

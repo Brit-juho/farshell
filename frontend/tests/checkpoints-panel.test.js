@@ -44,6 +44,13 @@ test('sessionGroups — turn-end만, 최신 턴부터, 세션은 최근 순, 라
   assert.strictEqual(mod.sessionGroups(null).length, 0);
 });
 
+test('sessionGroups — 라벨의 세션 이름은 별칭(모르면 ID)', async () => {
+  const { mod } = await load(async () => ({ body: {} }));
+  const sessions = [{ id: 'b', agent: 'codex', tmux: 's-1a2b3c4d', last: 9, checkpoints: [row({ seq: 1, turn: 1 })] }];
+  assert.strictEqual(mod.sessionGroups(sessions, (id) => (id === 's-1a2b3c4d' ? '배포' : id))[0].label, 'codex · 배포');
+  assert.strictEqual(mod.sessionGroups(sessions)[0].label, 'codex · s-1a2b3c4d', '지도가 없으면 ID');
+});
+
 test('sessionGroups — 한 세션에 많으면 30개까지만 보이고 나머지 수를 센다', async () => {
   const { mod } = await load(async () => ({ body: {} }));
   const cps = Array.from({ length: 35 }, (_, i) => row({ seq: i + 1, turn: i + 1 }));

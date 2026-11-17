@@ -13,7 +13,7 @@ import { load as loadSettings } from '../core/settings.js';
 import { apiFetch } from '../core/api.js';
 import { hostKey } from '../core/host-route.js';
 import { API_BASE } from '../core/env.js';
-import { allSessions } from '../core/store.js';
+import { allSessions, sessionAlias } from '../core/store.js';
 import { icon } from '../ui/icons.js';
 import { displayComboHtml } from '../core/keymap.js';
 import { tmuxStatus, tmuxStatusDot } from '../ui/session-badge.js';
@@ -71,7 +71,9 @@ function _drawOnboardingSessions(list, tmuxList, interactive) {
     label.className = 'vt-ob-row-label';
     label.style.cssText = 'display:flex;align-items:center;';
     const cmd = s.command ? ` · ${s.command}` : '';
-    label.append(tmuxStatusDot(s), document.createTextNode(`${s.name}  (${s.windows}win · ${statusText}${cmd})`));
+    // 사람에게는 별칭(2026-11 설계) — 목록 응답의 alias, 없으면 알고 있는 별칭, 그것도 없으면 ID.
+    const shown = s.alias || s.catalog?.title || sessionAlias(s.name) || s.name;
+    label.append(tmuxStatusDot(s), document.createTextNode(`${shown}  (${s.windows}win · ${statusText}${cmd})`));
     if (interactive) {
       label.title = t('이 세션 열기');
       label.onclick = async () => {

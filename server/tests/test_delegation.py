@@ -12,6 +12,11 @@ import queue_store
 from share_identity import Caller
 
 
+
+
+# 위임 흐름을 보는 파일 — 하위 세션 ID를 작업 제목으로 고정한다(conftest.readable_child_names).
+pytestmark = pytest.mark.usefixtures("readable_child_names")
+
 class _FakeTmux:
     def __init__(self):
         self.sessions: dict[str, dict] = {}   # name -> {key, pane}

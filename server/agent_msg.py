@@ -205,6 +205,20 @@ def resolve_conv(reply_to: str | None, claimed_hop: int = 0) -> tuple[str, int]:
 # --- 전달 ---------------------------------------------------------------------
 
 
+def _sender_label(frm: dict) -> str:
+    """머리글에 보일 보낸 쪽 세션 이름. 이 맥 세션이면 별칭(사람이 붙인 이름), 다른 맥이면 받은 이름 그대로 —
+    그 맥의 별칭은 여기 기록에 없다. 답장 주소(`to=`)는 언제나 ID다."""
+    session = str(frm.get("session") or "")
+    if not session:
+        return "?"
+    if (frm.get("host") or "local") != "local":
+        return session
+    from session_alias import alias_of
+    # 별칭은 사람이 친 글이다 — 머리글의 `[ … ]` 틀을 흉내 내지 못하게 대괄호를 바꾼다.
+    label = " ".join(str(alias_of(session) or session).split())[:64].replace("[", "(").replace("]", ")")
+    return label or session
+
+
 def envelope(msg: dict) -> str:
     """받는 에이전트의 pane에 실제로 입력되는 글. 한 줄 머리글 + 본문 + 안내.
 
@@ -217,7 +231,7 @@ def envelope(msg: dict) -> str:
     답장 방법은 "이어서 물을 게 있을 때만"으로 낮춘다. hop 상한은 그대로 최후 방어선이다.
     """
     frm = msg.get("from") or {}
-    who = f"{frm.get('hostLabel') or frm.get('host') or '?'}/{frm.get('session') or '?'}"
+    who = f"{frm.get('hostLabel') or frm.get('host') or '?'}/{_sender_label(frm)}"
     to = f"{frm.get('host') or 'local'}/{frm.get('session') or ''}"
     body = " ".join(str(msg.get("text", "")).split())
     if msg.get("replyTo"):

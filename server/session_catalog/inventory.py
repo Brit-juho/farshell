@@ -12,7 +12,7 @@ from pathlib import Path
 import fsguard
 import git_safe
 import tmux_runner
-from .db import database, host_id, uid, encode, changed, Refused, touch_activity
+from .db import database, host_id, uid, encode, changed, Refused, touch_activity, unique_alias, alias_key, live_alias_keys, setting, set_setting
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ def observe():
 
 
 def _observe_once():
-    rc, raw, err = tmux_runner.run(["list-sessions", "-F", "#{session_id}\t#{session_created}\t#{session_name}\t#{@fsh_origin}"], timeout=2)
+    rc, raw, err = tmux_runner.run(["list-sessions", "-F", "#{session_id}\t#{session_created}\t#{session_name}\t#{@fsh_origin}\t#{@fsh_alias}"], timeout=2)
     if rc:
         # 「서버 없음」을 tmux_runner.server_absent 한 곳에서 판정한다(위임 장부와 같은 기준). 재부팅 뒤 소켓 파일이
         # 없을 때도 여기서 확정해야, 직전 세션들이 몇 시간씩 「상태 모름」으로 남지 않고 곧바로 종료로 기록된다.
@@ -69,13 +69,15 @@ def _observe_once():
     sessions = []
     for line in raw.decode("utf-8", "strict").splitlines():
         p = line.split("\t")
-        if len(p) != 4 or not p[1].isdigit() or not by_session.get(p[0]):
+        if len(p) == 4:
+            p.append("")      # `@fsh_alias` 칸이 없는 출력(예전 형식) — 별칭 옵션 없음으로 본다
+        if len(p) != 5 or not p[1].isdigit() or not by_session.get(p[0]):
             return {"complete": False, "sessions": [], "error": "invalid_snapshot"}
         children = by_session[p[0]]
         active = next((x for x in children if x["active"]), children[0])
         sessions.append({"physical_key": f"{p[0]}:{p[1]}", "tmux_id": p[0], "name": p[2],
                          "origin": p[3] if p[3] in ("local", "peer") else "external",
-                         "cwd": active["cwd"], "panes": children})
+                         "cwd": active["cwd"], "panes": children, "tmux_alias": p[4]})
     return {"complete": True, "epoch": epoch, "sessions": sessions}
 
 
@@ -133,7 +135,8 @@ def workspace(db, placement):
     return wid
 
 
-# 실행 중 세션의 자리(docs/ref/session-ui.md 「Projects」): CLI가 돌고 있으면 CLI의 위치, 아니면 셸(활성 pane) 위치. 자리는 늘 그
+# 실행 중 세션의 자리(docs/ref/session-ui.md 「Projects」): CLI가 돌고 있으면 CLI를 실행한 저장소(같은 저장소 안에서는 CLI의 지금
+# 위치 갈래), 아니면 셸(활성 pane) 위치. 자리는 늘 그
 # 위치의 저장소(git이면 본 체크아웃, 아니면 그 폴더)이고, 등록되지 않은 저장소면 화면이 「저장소 밖」 폴더 가지로 그린다(homes의
 # registered). CLI 위치는 바로 따르고 그 저장소를 등록한다(CLI를 켠 곳). 셸 위치는 같은 자리가 SETTLE초 이어질 때 따른다 — cd하며
 # 둘러볼 때 목록이 들썩이지 않게. 폴더 → 배치 결과는 캐시한다(같은 폴더를 5초마다 git으로 다시 읽지 않는다; 저장소 밖 결과는
@@ -194,10 +197,22 @@ def _live_placements(snapshot, rows):
         if not item:
             continue
         cli = _agent_cli(item.get("name"))
-        cwd = cli["cwd"] if cli else item.get("cwd")
-        if not cwd:
-            continue
-        placement = _placement_for(cwd, now, budget)
+        if cli:
+            # CLI 저장소 고정(docs/local/plans/session-alias-id-design.md 3.8, 사용자 결정 5): 묶이는 저장소는 CLI를 실행한 곳이다.
+            # pane의 cwd는 전면 프로세스(CLI 자신)의 작업 폴더라 AI가 CLI 안에서 `cd`해도 실행 위치 그대로다(2026-11-17 확인 —
+            # Claude Code의 Bash `cd`는 다음 훅의 cwd만 바꾼다). 훅의 cwd는 **같은 저장소 안**일 때만 따른다(워크트리 갈래).
+            anchor = _placement_for(item.get("cwd"), now, budget) if item.get("cwd") else None
+            current = _placement_for(cli["cwd"], now, budget)
+            if anchor is None and current is None:
+                continue
+            if anchor is None:
+                continue      # 실행 위치를 아직 모른다 — 지금 자리를 둔다(훅 위치로 옮기지 않는다)
+            placement = current if current and current["locator"] == anchor["locator"] else anchor
+        else:
+            cwd = item.get("cwd")
+            if not cwd:
+                continue
+            placement = _placement_for(cwd, now, budget)
         if placement is None:
             continue          # 일시 실패·이번 관측의 git 상한 — 지금 자리를 둔다
         # 같은 자리 = 같은 저장소·같은 작업 트리 경로·같은 incarnation(같은 경로에 다시 만든 워크트리는 새 작업 트리).
@@ -289,7 +304,7 @@ def _reconcile(snapshot=None):
                 sid, rid = uid(), uid()
                 wid = workspace(db, placements.get(item["physical_key"]))
                 db.execute("INSERT INTO sessions(id,host,workspace_id,title,origin,created,updated,last_activity) VALUES(?,?,?,?,?,?,?,?)",
-                           (sid, host, wid, item["name"], item["origin"], now, now, now))
+                           (sid, host, wid, unique_alias(db, _first_alias(item)), item["origin"], now, now, now))
                 db.execute("INSERT INTO runtimes(id,session_id,epoch,physical_key,name,state,started,ended,observed,detail) VALUES(?,?,?,?,?,?,?,NULL,?,?)", (rid, sid, epoch, item["physical_key"], item["name"], "running", now, now, detail))
                 changed(db, "session", sid)
             else:
@@ -300,6 +315,12 @@ def _reconcile(snapshot=None):
                         # 사람이 「종료로 표시」했지만 사실 살아 있던 실행이 다시 보인다 — 신원 재사용이 아니라 표시를 되돌린다.
                         db.execute("UPDATE runtimes SET state='running',ended=NULL,dismissed_at=NULL,observed=? WHERE id=?", (now, row["id"]))
                         changed(db, "runtime", row["id"])
+                        # 끝난 동안 다른 살아 있는 세션이 같은 별칭을 가져갔으면 번호를 붙인다(별칭은 살아 있는 세션끼리 겹치지 않는다).
+                        back = db.execute("SELECT title FROM sessions WHERE id=?", (row["session_id"],)).fetchone()
+                        if back and alias_key(back["title"]) in live_alias_keys(db, row["session_id"]):
+                            db.execute("UPDATE sessions SET title=?,updated=?,revision=revision+1 WHERE id=?",
+                                       (unique_alias(db, back["title"], row["session_id"]), now, row["session_id"]))
+                            changed(db, "session", row["session_id"])
                         row = db.execute("SELECT * FROM runtimes WHERE id=?", (row["id"],)).fetchone()
                     else:
                         # Identity reuse is a conflict, not resurrection of an old grant. 그 세션 하나만 건너뛴다 —
@@ -307,10 +328,7 @@ def _reconcile(snapshot=None):
                         logger.warning("catalog runtime identity conflict: runtime=%s", row["id"])
                         continue
                 rid = row["id"]
-                if row["name"] != item["name"]:
-                    # tmux 이름이 바뀌었다(사람이 터미널에서 바꿈). 보이는 이름이 자동이면 따라간다 — 사람이 붙인 별칭은 그대로.
-                    db.execute("UPDATE sessions SET title=?,updated=?,revision=revision+1 WHERE id=? AND name_source='auto' AND title!=?",
-                               (item["name"], now, row["session_id"], item["name"]))
+                # tmux 이름(ID)이 바뀌어도(사람이 터미널에서 `rename-session`) 별칭은 그대로다 — 별칭은 ID를 따라가지 않는다.
                 if detail != row["detail"] or row["state"] != "running":
                     changed(db, "runtime", rid)
                 # `observed` is a liveness stamp nobody compares; refresh it only with a real change or once a minute.
@@ -346,7 +364,85 @@ def reconcile(snapshot=None):
     import store_lock
     from .db import directory
     with store_lock.exclusive(directory() / 'lifecycle.lock'):
-        return _reconcile(snapshot)
+        observed_here = snapshot is None
+        result = _reconcile(snapshot)
+        if result.get("complete"):
+            _migrate_aliases_once()
+            if observed_here:
+                # 넘겨받은 관측(시험·다른 호출자)으로 실제 tmux를 건드리지 않는다 — 직접 관측한 세션에만.
+                _sync_tmux_aliases(result)
+        return result
+
+
+def _first_alias(item):
+    """세션이 기록에 처음 올라갈 때의 별칭 기준. 만든 경로가 남긴 요청(사용자가 친 이름·저장소 이름·위임 작업 제목)이 먼저,
+    없으면 사람이 읽을 수 있는 옛 이름(ID 모양이 아니면) 그대로, 그것도 아니면 시작 폴더의 기준 이름."""
+    import session_names
+    requested = session_names.take_alias_request(item["name"])
+    if requested:
+        return requested
+    if not session_names.is_id(item["name"]):
+        return item["name"]
+    return session_names.base_for(item.get("cwd"))
+
+
+def _sync_tmux_aliases(snapshot):
+    """살아 있는 세션의 tmux 옵션 `@fsh_alias`를 기록의 별칭과 맞춘다 — 터미널 창 제목(`set-titles-string`)이 이 값을 쓴다.
+    tmux 정체성 id(`$3`)로 가리킨다(이름 앞부분 일치로 다른 세션을 건드리지 않게). 실패해도 다음 관측에서 다시 한다."""
+    keys = {item["physical_key"]: item for item in snapshot.get("sessions", [])}
+    if not keys:
+        return
+    from .db import homes
+    try:
+        known = homes(list(keys))
+    except Exception:  # noqa: BLE001 — 기록을 못 읽으면 이번에는 건너뛴다
+        return
+    for key, info in known.items():
+        item = keys.get(key)
+        title = info.get("title") or ""
+        if item and title and item.get("tmux_id") and item.get("tmux_alias") != title:
+            tmux_runner.set_option(item["tmux_id"], "@fsh_alias", title)
+
+
+_alias_migrated = False
+
+
+def _migrate_aliases_once():
+    """한 번만(완전한 관측 뒤): 살아 있는 세션의 별칭 겹침을 정리한다. 사람이 붙인 별칭이 자동 별칭보다, 같으면 먼저 만든 쪽이
+    이름을 지키고 나머지에 번호를 붙인다. 바꾸기 전 값은 기록 폴더의 JSON에 남긴다(되돌릴 때 쓴다)."""
+    global _alias_migrated
+    if _alias_migrated:
+        return
+    import json
+    from .db import directory
+    with database(write=True) as db:
+        if setting(db, "alias_migration_v1"):
+            _alias_migrated = True
+            return
+        rows = db.execute("SELECT s.id,s.title,s.name_source,s.created FROM sessions s WHERE s.deleted IS NULL"
+                          " AND EXISTS(SELECT 1 FROM runtimes r WHERE r.session_id=s.id AND r.ended IS NULL)"
+                          " ORDER BY (s.name_source='human') DESC, s.created, s.id").fetchall()
+        seen, changes, now = set(), [], time.time()
+        for r in rows:
+            key = alias_key(r["title"])
+            if key not in seen:
+                seen.add(key)
+                continue
+            new = unique_alias(db, r["title"], r["id"])
+            db.execute("UPDATE sessions SET title=?,updated=?,revision=revision+1 WHERE id=?", (new, now, r["id"]))
+            changed(db, "session", r["id"])
+            seen.add(alias_key(new))
+            changes.append({"session_id": r["id"], "before": r["title"], "after": new})
+        if changes:
+            try:
+                path = directory() / f"alias-migration-{int(now)}.json"
+                path.write_text(json.dumps(changes, ensure_ascii=False, indent=1))
+                os.chmod(path, 0o600)
+            except OSError:
+                logger.warning("alias migration record not written")
+            logger.info("세션 별칭 겹침 %d건을 번호로 정리했다", len(changes))
+        set_setting(db, "alias_migration_v1", now)
+    _alias_migrated = True
 
 
 def discover_projects():

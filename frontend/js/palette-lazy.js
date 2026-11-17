@@ -13,7 +13,7 @@
 import { registerAction, getAction } from './core/dom.js';
 import { register as registerKey, getBinding, displayCombo, displayComboHtml, list as keymapList, invoke as keymapInvoke } from './core/keymap.js';
 import { vtFetch } from './core/api.js';
-import { sessionDisplayName } from './core/store.js';
+import { sessionDisplayName, getSession } from './core/store.js';
 import { openSessionIds } from './layout/compact.js';
 import { revealSession, createTmuxSession } from './term/session.js';
 import { loadAccounts } from './term/accounts.js';
@@ -30,7 +30,10 @@ import { reportError } from './core/event-log.js';
 // 이름의 출처는 세션 레코드다(core/store.js의 sessionDisplayName) — 예전엔
 // 탭 DOM의 텍스트를 읽었는데, 그 DOM은 10 §4 3단계에서 사라진다.
 function listSessions() {
-  return openSessionIds().map((id) => ({ id, name: sessionDisplayName(id).trim() }));
+  return openSessionIds().map((id) => {
+    const s = getSession(id);
+    return { id, name: sessionDisplayName(id).trim(), tmuxName: (s && (s.tmuxName || s.tmux_name)) || null };
+  });
 }
 
 // capability 게이팅 — agent/status.js가 /api/capabilities 응답에 따라

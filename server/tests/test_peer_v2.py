@@ -36,6 +36,10 @@ OTHER_KEY = "$8:1700000001"
 # --- 서명(서버 없이) ---------------------------------------------------------------------------------------------------
 
 
+
+# 위임 흐름을 보는 파일 — 하위 세션 ID를 작업 제목으로 고정한다(conftest.readable_child_names).
+pytestmark = pytest.mark.usefixtures("readable_child_names")
+
 def test_signature_without_obo_is_byte_identical_to_v1():
     """obo 가 없으면 서명 문자열이 예전과 글자 하나까지 같다(구버전 상대와 섞여도 끊기지 않는다)."""
     import hmac
@@ -429,14 +433,16 @@ def test_remote_delegation_round_trip(duo):
     with a.ctx():
         r = delegation.spawn_on_host(parent, bid, task="check the build", title="rchild")
     did = r["delegation"]
-    assert r["child"] == f"{bid}/rchild" and "cwd" in r
+    # 하위 세션의 tmux 이름은 B가 지은 랜덤 ID다(2026-11 설계) — 별칭은 작업 제목(rchild).
+    child_name = r["child"].split("/", 1)[1]
+    assert r["child"].startswith(f"{bid}/") and child_name.startswith("s-") and "cwd" in r
     la = [x for x in _ledger(a) if x["id"] == did][0]
     lb = [x for x in _ledger(b) if x["id"] == did][0]
     assert la["state"] == lb["state"] == "running"
     assert la["child"]["host"] == bid and la["child"]["key"].startswith(f"{bid}/")
     assert lb["parent"]["host"] == aid and lb["parent"]["key"] == f"{aid}/{parent.key}"
     assert lb["cwd"] and la["cwd"] == ""                           # B 의 경로는 A 로 나가지 않는다
-    child_key = b.session_key("rchild")
+    child_key = b.session_key(child_name)
     assert la["child"]["key"] == f"{bid}/{child_key}"
     with a.ctx():
         assert delegation.public(la, parent.key)["child_host"] == bid

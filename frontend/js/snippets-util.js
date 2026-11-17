@@ -63,11 +63,3 @@ export function planInput(text, how) {
   return { type: enter ? `${body}\n` : body };
 }
 
-/** 서버가 앱의 세션 이름 규칙([A-Za-z0-9_-])에 맞추려고 이름을 바꿨는가.
- *  원하는 이름 그대로이거나 `이름-1`처럼 번호만 붙었으면 바뀐 게 아니다. */
-export function sessionNameAdjusted(requested, actual) {
-  const r = String(requested ?? '').trim();
-  if (!r) return false;
-  const a = String(actual ?? '');
-  return !(a === r || a.startsWith(`${r}-`));
-}

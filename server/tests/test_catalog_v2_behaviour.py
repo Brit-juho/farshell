@@ -71,20 +71,31 @@ def test_last_user_text_only_for_local(catalog):
     assert "last_user_text" not in _sessions(catalog, local=False)["w"]
 
 
-def test_alias_follows_tmux_rename_until_a_person_names_it(catalog):
+def test_alias_does_not_follow_tmux_rename_and_auto_name_uses_the_place(catalog):
+    """2026-11 설계: tmux 이름은 ID라 별칭이 따라가지 않는다. 자동으로 되돌리면 자리(저장소) 기준 이름, 자리가 없으면 그대로."""
     db = catalog
     _reconcile(_item("$1:1", "app"))
     sid = db.snapshot()["sessions"][0]["id"]
     _reconcile(_item("$1:1", "app-renamed"))
     row = db.snapshot()["sessions"][0]
-    assert (row["title"], row["name_source"]) == ("app-renamed", "auto")
+    assert (row["title"], row["name_source"]) == ("app", "auto")
     db.edit_session(sid, row["revision"], title="결제 버그")
-    _reconcile(_item("$1:1", "again"))
     row = db.snapshot()["sessions"][0]
     assert (row["title"], row["name_source"]) == ("결제 버그", "human")
     db.edit_session(sid, row["revision"], auto_name=True)
     row = db.snapshot()["sessions"][0]
-    assert (row["title"], row["name_source"]) == ("again", "auto")
+    assert (row["title"], row["name_source"]) == ("결제 버그", "auto")
+
+
+def test_new_random_id_session_gets_its_alias_from_the_request_or_the_folder(catalog, tmp_path):
+    import session_names
+    db = catalog
+    session_names.request_alias("s-0000aaaa", "결제 화면")
+    repo = _git_repo(tmp_path / "home" / "farshell")
+    _reconcile(_item("$1:1", "s-0000aaaa"), _item("$2:2", "s-0000bbbb", str(repo)), _item("$3:3", "s-0000cccc", str(repo)))
+    titles = {r["name"]: r["title"] for r in db.snapshot()["sessions"]}
+    assert titles["s-0000aaaa"] == "결제 화면"
+    assert sorted([titles["s-0000bbbb"], titles["s-0000cccc"]]) == ["farshell", "farshell-1"]
 
 
 def test_auto_archive_uses_last_activity_and_cleans_orphans(catalog):
@@ -225,7 +236,8 @@ def test_a_running_cli_places_the_session_at_once_and_registers_the_project(cata
     repo = _git_repo(home / "farshell")
     _reconcile(_item("$1:1", "w", str(home)))
     monkeypatch.setattr(inventory, "_agent_cli", lambda name: {"cwd": str(repo), "started": time.time()})
-    _reconcile(_item("$1:1", "w", str(home)))                       # 셸은 홈인데 CLI는 저장소 — 바로 따른다
+    # CLI를 저장소에서 켰다 — pane의 위치는 전면 프로세스(CLI)의 작업 폴더라 저장소다. 셸 기다림 없이 바로 따른다.
+    _reconcile(_item("$1:1", "w", str(repo)))
     assert tuple(_placement(catalog, "w")) == ("checkout", "git", "farshell")
     from session_catalog.db import database
     with database() as con:
@@ -318,8 +330,11 @@ def test_resume_preview_names_the_folder_and_next_free_name_without_creating(cat
     monkeypatch.setattr(tmux_runner, "has_session", lambda name: name == "farshell")   # farshell은 이미 있다
     monkeypatch.setattr(tmux_runner, "run", lambda *a, **k: created.append(a) or (0, b"", b""))
     out = lifecycle.resume_preview(sid)
+    # 미리보기는 새 세션이 받을 **별칭**이다(ID는 랜덤). 살아 있는 세션이 `farshell`을 쓰고 있으면 번호가 붙는다.
     assert out == {"resumable": True, "conversation_id": "c" * 32, "conversation_title": "결제 버그", "provider": "claude",
-                   "folder": "farshell", "name": "farshell-2"}
+                   "folder": "farshell", "name": "farshell"}
+    _reconcile(_item("$9:9", "farshell", str(repo)))
+    assert lifecycle.resume_preview(sid)["name"] == "farshell-1"
     assert created == [], "미리보기는 아무것도 만들지 않는다"
 
 
@@ -377,3 +392,77 @@ def test_git_calls_per_reconcile_are_bounded_and_failures_are_remembered(catalog
     inventory._place_cache.clear()
     _reconcile(*items)
     assert len(calls) == 2, "관측 한 번에 새로 부르는 git은 상한까지만"
+
+
+# ── 별칭은 살아 있는 세션끼리 겹치지 않는다 ──────────────────────────────────
+
+def test_alias_must_be_unique_among_live_sessions(catalog):
+    db = catalog
+    _reconcile(_item("$1:1", "alpha"), _item("$2:2", "beta"))
+    rows = _sessions(db)
+    # 같은 별칭 거절(대소문자·공백 무시) — 다른 살아 있는 세션의 자동 별칭(tmux 이름)과도 겹치면 안 된다.
+    with pytest.raises(db.Refused) as err:
+        db.edit_session(rows["beta"]["id"], rows["beta"]["revision"], title="  ALPHA ")
+    assert err.value.code == "alias_taken"
+    db.edit_session(rows["beta"]["id"], rows["beta"]["revision"], title="결제 버그")
+    with pytest.raises(db.Refused) as err:
+        db.edit_session(rows["alpha"]["id"], rows["alpha"]["revision"], title="결제 버그")
+    assert err.value.code == "alias_taken"
+    # 살아 있는 다른 세션의 ID(tmux 이름)와 ID 모양, 제어·서식 문자도 거절한다.
+    for bad in ("alpha", "s-0123abcd", "a\u202eb", "a\x7fb"):
+        with pytest.raises(db.Refused):
+            db.edit_session(rows["beta"]["id"], [r for r in db.snapshot()["sessions"] if r["name"] == "beta"][0]["revision"], title=bad)
+
+
+def test_dead_session_may_share_alias_and_revival_gets_a_new_one(catalog):
+    from session_catalog.db import database, unique_alias, live_alias_keys, alias_key
+    db = catalog
+    _reconcile(_item("$1:1", "alpha"), _item("$2:2", "beta"))
+    rows = _sessions(db)
+    db.edit_session(rows["alpha"]["id"], rows["alpha"]["revision"], title="작업")
+    _reconcile(_item("$2:2", "beta"))   # alpha 종료
+    dead = [r for r in db.snapshot()["sessions"] if r["name"] == "alpha"][0]
+    # 끝난 세션끼리·살아 있는 세션과는 겹쳐도 된다.
+    b = _sessions(db)["beta"]
+    db.edit_session(b["id"], b["revision"], title="작업")
+    with database() as con:
+        assert alias_key("작업") in live_alias_keys(con)
+        # 되살릴 때 쓰는 규칙: 겹치면 저장소 이름에 -@번호.
+        assert unique_alias(con, "작업", dead["id"]) == "작업-1"
+        assert unique_alias(con, "free", dead["id"]) == "free"
+
+
+def test_new_session_alias_avoids_live_human_alias(catalog):
+    db = catalog
+    _reconcile(_item("$1:1", "alpha"))
+    a = _sessions(db)["alpha"]
+    db.edit_session(a["id"], a["revision"], title="gamma")
+    _reconcile(_item("$1:1", "alpha"), _item("$3:3", "gamma"))
+    titles = sorted(r["title"] if "title" in r else r["name"] for r in db.snapshot()["sessions"])
+    assert len(set(t.casefold() for t in titles)) == len(titles)
+
+
+def test_a_cli_session_stays_in_the_repository_it_was_launched_from(catalog, tmp_path, monkeypatch):
+    """사용자 결정 5: 묶이는 저장소는 CLI를 실행한 곳(pane = CLI 프로세스의 작업 폴더). AI가 CLI 안에서 다른 저장소로 `cd`해
+    훅 cwd가 바뀌어도 옮겨 가지 않고, 같은 저장소의 워크트리로 가면 그 갈래를 따른다. 지금 위치를 모르면 그대로 둔다."""
+    import subprocess
+    inventory = _fresh_places(monkeypatch)
+    home = tmp_path / "home"
+    repo = _git_repo(home / "farshell")
+    other = _git_repo(home / "other")
+    subprocess.run(["git", "-c", "user.email=a@acme", "-c", "user.name=a", "commit", "-q", "--allow-empty", "-m", "x"], cwd=repo, check=True)
+    lane = home / "farshell-lane"
+    subprocess.run(["git", "worktree", "add", "-q", "-b", "lane", str(lane)], cwd=repo, check=True)
+    hook = {"cwd": str(repo)}
+    monkeypatch.setattr(inventory, "_agent_cli", lambda name: {"cwd": hook["cwd"], "started": time.time()})
+    _reconcile(_item("$1:1", "w", str(repo)))
+    assert tuple(_placement(catalog, "w")) == ("checkout", "git", "farshell")
+    hook["cwd"] = str(other)                         # AI가 다른 저장소로 cd
+    _reconcile(_item("$1:1", "w", str(repo)))
+    assert tuple(_placement(catalog, "w")) == ("checkout", "git", "farshell")
+    hook["cwd"] = str(lane)                          # 같은 저장소의 워크트리 — 갈래는 따른다
+    _reconcile(_item("$1:1", "w", str(repo)))
+    assert tuple(_placement(catalog, "w")) == ("worktree", "git", "farshell")
+    hook["cwd"] = "/nonexistent/place"               # 지금 위치를 못 읽음 — 실행 저장소에 둔다
+    _reconcile(_item("$1:1", "w", str(repo)))
+    assert _placement(catalog, "w")["name"] == "farshell"

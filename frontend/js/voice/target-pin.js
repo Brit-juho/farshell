@@ -75,19 +75,22 @@ export function onPinChange(fn) {
   return () => { window.removeEventListener(PIN_EVENT, local); window.removeEventListener('storage', cross); };
 }
 
-// 목록 글자 — 레일 행과 같은 이름(카탈로그 제목, 없으면 tmux 이름: shell/rail-fetch.ts). 값·고정은 계속 tmux 이름이다.
-// 이 파일은 번들마다 사본이라 모듈 상태를 두지 않는다 — 제목 지도는 window에 둔다(위 머리말과 같은 이유).
+// 목록 글자 — 별칭(레일 행과 같은 이름). 값·고정은 계속 세션 ID(tmux 이름)다.
+// 별칭은 core/store.js의 공용 지도(window.sessionAlias)에서 읽는다 — 이 파일은 voice.js 번들에도 사본이 들어가므로
+// store.js를 import하지 않는다(위 머리말). 지도가 없는 환경(store 없이 뜬 화면)만 window에 둔 자체 지도를 쓴다.
 const TITLES = '__vtPinTitles';
 const TITLES_TTL_MS = 15000;
 const cleanTitle = (v) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 128) : '');
 
-/** tmux 이름 → 보이는 이름. 제목 지도가 아직 없으면 tmux 이름. */
+/** 세션 ID → 보이는 이름(별칭). 모르면 ID. */
 export function pinLabel(name) {
+  if (!name) return '';
+  if (typeof window.sessionAlias === 'function') return window.sessionAlias(name) || name;
   const c = window[TITLES];
   return (c && c.map && c.map[name]) || name;
 }
 
-/** 서버의 세션 목록에서 제목 지도를 받아 둔다. 15초 안이면 건너뛰고, 바뀐 게 있을 때만 true로 알린다. */
+/** 서버의 세션 목록으로 별칭을 받아 둔다(공용 지도가 있으면 거기에). 15초 안이면 건너뛰고, 보이는 이름이 바뀌었을 때만 true. */
 async function refreshPinTitles() {
   const c = window[TITLES] || (window[TITLES] = { map: {}, at: 0, busy: false });
   // 다른 맥을 보는 중이면 받지 않는다 — 그 맥의 목록이 아니고, 음성 패널도 직접 접속이 필요하다고 막아 둔 상태다.
@@ -97,14 +100,18 @@ async function refreshPinTitles() {
   c.busy = true;
   try {
     const list = await vtFetch('/api/tmux/sessions');
-    const map = {};
-    for (const x of Array.isArray(list) ? list : []) {
-      const title = cleanTitle(x && x.catalog && x.catalog.title);
-      if (x && x.name && title) map[x.name] = title;
+    const rows = (Array.isArray(list) ? list : []).filter((x) => x && typeof x.name === 'string' && x.name);
+    const before = JSON.stringify(rows.map((x) => pinLabel(x.name)));
+    if (typeof window.setSessionAliases === 'function') window.setSessionAliases(rows);
+    else {
+      const map = {};
+      for (const x of rows) {
+        const title = cleanTitle(typeof x.alias === 'string' ? x.alias : x.catalog && x.catalog.title) || cleanTitle(c.map[x.name]);
+        if (title) map[x.name] = title;
+      }
+      c.map = map;
     }
-    const changed = JSON.stringify(map) !== JSON.stringify(c.map);
-    c.map = map;
-    return changed;
+    return JSON.stringify(rows.map((x) => pinLabel(x.name))) !== before;
   } catch { return false; } finally { c.at = Date.now(); c.busy = false; }
 }
 
@@ -120,12 +127,10 @@ export function fillPinSelect(select) {
   const follow = document.createElement('option');
   follow.value = ''; follow.textContent = t('현재 보는 세션 따라가기');
   select.appendChild(follow);
-  const counts = {};
-  for (const name of names) { const k = pinLabel(name); counts[k] = (counts[k] || 0) + 1; }
+  // 별칭은 한 맥 안에서 겹치지 않으므로 ID를 덧붙여 구분하지 않는다.
   for (const name of names) {
     const o = document.createElement('option');
-    const label = pinLabel(name);
-    o.value = name; o.textContent = counts[label] > 1 && label !== name ? `${label} (${name})` : label;
+    o.value = name; o.textContent = pinLabel(name);
     select.appendChild(o);
   }
   if (pin && !names.includes(pin)) {

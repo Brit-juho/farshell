@@ -269,6 +269,12 @@ class World:
         mp.setattr(tmux_target, "subprocess", SubprocessShim(self.tmux))
         mp.setattr(tmux_target, "TMUX_BASE", ["tmux", "-L", SOCK])
 
+        # 세션 별칭(2026-11) — 이름 바꾸기는 세션 기록의 별칭을 바꾼다. 이 하네스는 권한 판정을 보므로 기록은 "있다"로 둔다
+        # (가짜 tmux로는 관측이 기록을 만들지 못한다).
+        from session_catalog import db as catalog_db
+        mp.setattr(catalog_db, "alias_session_for_tmux_name", lambda name: ("c" * 32, 1))
+        mp.setattr(catalog_db, "edit_session", lambda *a, **k: None)
+
         import share_identity
         mp.setattr(share_identity, "parent_of", lambda pid: None)
         mp.setattr(share_identity, "socket_owner_pid", lambda *a, **k: None)

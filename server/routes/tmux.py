@@ -295,6 +295,8 @@ async def collect_tmux_sessions() -> list[dict]:
         catalog = homes.get(physical_key) if physical_key else None
         sessions.append({
             "name": name,
+            # 사람이 보는 이름(별칭, 2026-11 설계). 기록이 아직 없으면 null — 화면은 직전에 받은 별칭을 유지한다(ID를 띄우지 않는다).
+            "alias": catalog["title"] if catalog else None,
             "physical_key": physical_key,
             # 카탈로그가 아는 자리(처음 시작한 저장소·작업 트리, cd해도 그대로)와 보이는 이름(별칭). 아직 기록 전이면 null —
             # 그때는 `context`(지금 위치)로 그린다.
@@ -400,6 +402,46 @@ CLOSED_LINEAGE_SECONDS = 24 * 3600
 
 
 
+def _operation_exists(opid) -> bool:
+    if not isinstance(opid, str) or not opid:
+        return False
+    from session_catalog import db as catalog
+    with catalog.database() as con:
+        return con.execute("SELECT 1 FROM operations WHERE id=?", (opid,)).fetchone() is not None
+
+
+def _live_keys() -> set:
+    from session_catalog import db as catalog
+    with catalog.database() as con:
+        return catalog.live_alias_keys(con)
+
+
+def _alias_after_create(name: str):
+    """만든 세션을 기록에 올리고 그 별칭을 돌려준다. 기록을 못 쓰면 None(화면은 다음 목록에서 받는다)."""
+    try:
+        from session_catalog import db as catalog, inventory
+        inventory.reconcile()
+        return catalog.aliases_for_names([name]).get(name)
+    except Exception:  # noqa: BLE001
+        logger.debug("alias after create unavailable", exc_info=False)
+        return None
+
+
+@router.get("/api/tmux/resolve")
+async def tmux_resolve(q: str = ""):
+    """사람이 친 세션 이름(별칭 또는 ID) → 살아 있는 세션의 ID와 별칭. `fsh`가 별칭으로 세션을 찾을 때 부른다.
+    정확한 ID가 먼저, 아니면 별칭(정확히 하나). 없으면 404."""
+    from session_catalog import db as catalog
+    try:
+        name = await asyncio.to_thread(catalog.resolve_alias, q)
+    except catalog.Refused as error:
+        return JSONResponse({"error": error.code}, status_code=error.status)
+    if not name:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    alias = (await asyncio.to_thread(catalog.aliases_for_names, [name])).get(name, name)
+    return {"name": name, "alias": alias}
+
+
 @router.get("/api/tmux/name-preview")
 async def tmux_name_preview(cwd: str = ""):
     """새 세션 메뉴가 「이 이름으로 열립니다」를 미리 보이려고 부른다. 만들 때와 같은 규칙(session_names: 시작 폴더의
@@ -418,7 +460,8 @@ async def tmux_name_preview(cwd: str = ""):
     else:
         start_dir = platform_utils.default_start_dir()
     base = await asyncio.to_thread(session_names.base_for, start_dir)
-    return {"base": base, "name": await asyncio.to_thread(session_names.allocate, base)}
+    # 새 세션이 받을 **별칭**(ID는 랜덤이라 미리 보일 이유가 없다). 아무것도 만들지 않는다.
+    return {"base": base, "name": await asyncio.to_thread(session_names.preview_alias, base)}
 
 
 @router.post("/api/tmux/create")
@@ -436,8 +479,21 @@ async def create_tmux_session(request: Request):
     auto_open = bool(body.get("auto_open_on_mac", False))
     # 이름을 그대로 쓰는 요청(unique_name 아님)은 계정 선택 여부와 상관없이 앱의 세션 이름 규칙을 지켜야 한다 —
     # tmux는 `-s` 값을 서식으로 확장해서 `#(...)`가 셸 명령으로 실행된다. 이 라우트는 기계 토큰도 부를 수 있다.
-    if requested_name and not unique_name and not tmux_runner.valid_session_name(requested_name):
-        return JSONResponse({"error": "invalid_name", "reason": tr("세션 이름은 영문자·숫자·_·-만 쓸 수 있습니다(64자까지, 첫 글자는 -가 아님)")}, status_code=400)
+    # 사용자가 친 이름은 이제 **별칭**이다(2026-11 설계) — tmux 이름(ID)은 서버가 랜덤으로 정하므로 `-s` 서식 확장 위험이 없다.
+    # 이름을 그대로 쓰는 요청(unique_name 아님)은 별칭 규칙을 지키고 살아 있는 다른 세션과 겹치면 안 된다.
+    if requested_name and not unique_name:
+        from session_catalog import db as catalog
+        if not catalog.valid_alias(requested_name):
+            return JSONResponse({"error": "invalid_name", "reason": tr("별칭은 1~128자이고 제어 문자는 쓸 수 없습니다")}, status_code=400)
+        try:
+            # 같은 작업(operation_id)을 다시 보낸 것이면 첫 요청이 만든 세션이 이 별칭을 쓰고 있다 — 겹침이 아니라
+            # 재시도이므로 검사하지 않고 아래 기록 생성이 이전 결과를 돌려주게 둔다.
+            replay = await asyncio.to_thread(_operation_exists, body.get("operation_id"))
+            taken = not replay and await asyncio.to_thread(lambda: catalog.alias_key(requested_name) in _live_keys())
+        except Exception:  # noqa: BLE001 — 기록을 못 읽으면 만들 때 번호가 붙는다
+            taken = False
+        if taken:
+            return JSONResponse({"error": "alias_taken", "reason": tr("이미 쓰고 있는 별칭입니다")}, status_code=409)
 
     # N6(60 §4) 스니펫 「새 섹션」 — 원 세션과 같은 cwd로 새 세션을 열 때 씀.
     # fsguard(코드 뷰어 열람 경계)는 여기 적용하지 않는다: tmux 세션은 그냥 셸이고,
@@ -493,16 +549,10 @@ async def create_tmux_session(request: Request):
         return result
 
     async with _create_lock:
-        # 이름 짓기는 session_names 한 곳이다(시작 폴더의 저장소 이름, 겹치면 -2·-3). 서버 cwd는 쓰지 않는다.
-        auto_base = None
-        if requested_name and not unique_name:
-            tmux_name = requested_name
-        else:
-            # unique_name(스니펫): 규칙 밖 글자를 `-`로 바꾸고, 남는 게 없으면(한글만 등) 시작 폴더 기준.
-            auto_base = session_names.slug(requested_name) if requested_name else ""
-            if not auto_base:
-                auto_base = await asyncio.to_thread(session_names.base_for, start_dir)
-            tmux_name = await asyncio.to_thread(session_names.allocate, auto_base)
+        # ID는 session_names가 랜덤으로 짓고, 별칭 기준(사용자가 친 이름, 없으면 시작 폴더의 저장소 이름)은 그 ID의 별칭 요청이 된다.
+        # 서버 cwd는 쓰지 않는다. 겹치면 기록이 번호를 붙인다(`이름-1`).
+        auto_base = requested_name or await asyncio.to_thread(session_names.base_for, start_dir)
+        tmux_name = await asyncio.to_thread(session_names.allocate, auto_base)
         catalog_binding = None
         if body.get('operation_id') is not None:
             from session_catalog.lifecycle import create as catalog_create
@@ -528,11 +578,8 @@ async def create_tmux_session(request: Request):
                     timeout=5.0,
                 )
                 return code, stderr
-            if auto_base:
-                # 이름을 고른 뒤 만들기 전에 다른 프로세스(`bin/fsh`, 직접 띄운 tmux)가 같은 이름을 가져가도 다음 번호로 간다.
-                rc, tmux_name, err = await asyncio.to_thread(session_names.spawn_unique, auto_base, _spawn, start=tmux_name)
-            else:
-                rc, err = await asyncio.to_thread(_spawn, tmux_name)
+            # 고른 ID를 그 사이 다른 프로세스가 가져가도(`duplicate session`) 새 ID로 다시 한다.
+            rc, tmux_name, err = await asyncio.to_thread(session_names.spawn_unique, auto_base, _spawn, start=tmux_name)
     if rc != 0:
         if launch_info.get("refused"):
             return JSONResponse({"error": launch_info["refused"].code, "reason": launch_info["refused"].message}, status_code=launch_info["refused"].status)
@@ -581,6 +628,11 @@ async def create_tmux_session(request: Request):
             result = await _attach_tmux(tmux_name, cols, rows, request,catalog_binding=catalog_binding)
         else:
             result = await _attach_tmux(tmux_name, cols, rows, request)
+    if isinstance(result, dict):
+        # 화면이 처음부터 별칭을 보이도록 기록에 바로 올리고(5초 관측을 기다리지 않는다) 확정 별칭을 싣는다.
+        alias = await asyncio.to_thread(_alias_after_create, tmux_name)
+        if alias:
+            result = {**result, "alias": alias}
     if selection and isinstance(result, dict):
         # 무엇이 주입됐는지 응답에도 싣는다(이름만 — 경로·토큰 없음). cleared_env는 지운 위험 변수의 이름.
         result = {**result, "profile": selection.public()[0], "profiles": selection.public(),

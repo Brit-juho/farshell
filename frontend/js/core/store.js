@@ -12,6 +12,7 @@
 
 import { t } from './i18n.js';
 import { reportError } from './event-log.js';
+import { LOCAL_HOST, hostOfSession } from '../term/host-view.js';
 const sessions = {};
 let activeId = null;
 const subscribers = new Set();
@@ -40,6 +41,77 @@ export function allSessions() {
   return sessions;
 }
 
+// 세션 ID(tmux 이름) → 별칭(사람이 보는 이름). 키는 `호스트 + ID`다 — 맥마다 ID·별칭이 따로라
+// 원격 세션에 같은 ID의 로컬 별칭이 붙으면 안 된다. 로컬은 `local`(host-view.js LOCAL_HOST).
+// 로컬은 /api/tmux/sessions(agent/status.js), 원격은 /api/hosts의 호스트별 세션 목록으로 채운다.
+// 이 모듈 밖에서 직접 만지지 않는다.
+let aliasByKey = {};
+const _aliasKey = (host, id) => `${host || LOCAL_HOST}\n${id}`;
+
+/** 목록 행의 별칭. 새 서버는 `alias`, 그 전 단계는 `catalog.title`. 모르면(null·옛 서버) ''. */
+function _rowAlias(x) {
+  const raw = typeof x.alias === 'string' ? x.alias
+    : x.catalog && typeof x.catalog.title === 'string' ? x.catalog.title : '';
+  return raw.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 128);
+}
+
+/** 한 호스트의 지도를 목록으로 다시 만든 결과(바뀌지 않았으면 null). 별칭을 모르는 행(기록을 잠깐 못 읽음)은
+ * 이전 별칭을 유지하고, 목록에서 사라진 세션만 지운다 — 폴링마다 별칭↔ID가 깜빡이지 않게. */
+function _nextAliases(base, list, host) {
+  const prefix = _aliasKey(host, '');
+  const next = {};
+  for (const [k, v] of Object.entries(base)) if (!k.startsWith(prefix)) next[k] = v;
+  for (const x of list) {
+    if (!x || typeof x.name !== 'string' || !x.name) continue;
+    const key = _aliasKey(host, x.name);
+    const alias = _rowAlias(x);
+    if (alias) next[key] = alias;
+    else if (base[key]) next[key] = base[key];
+  }
+  return next;
+}
+
+function _commitAliases(next) {
+  if (JSON.stringify(next) === JSON.stringify(aliasByKey)) return;
+  aliasByKey = next;
+  notify();
+}
+
+/** 한 호스트(기본 로컬)의 세션 목록 전체로 별칭 지도를 맞춘다. 배열이 아니면 아무것도 안 한다. */
+export function setSessionAliases(list, host = LOCAL_HOST) {
+  if (!Array.isArray(list)) return;
+  _commitAliases(_nextAliases(aliasByKey, list, host || LOCAL_HOST));
+}
+
+/** `GET /api/hosts` 응답의 원격 호스트 세션 목록으로 원격 별칭을 맞춘다. 로컬 항목(별칭이 없는 요약)과
+ * 연결이 끊긴 호스트(빈 목록)는 건너뛴다 — 끊긴 동안에도 아는 별칭을 지우지 않는다. */
+export function setHostSessionAliases(hosts) {
+  if (!Array.isArray(hosts)) return;
+  let next = aliasByKey;
+  for (const h of hosts) {
+    if (!h || typeof h.id !== 'string' || !h.id || h.id === LOCAL_HOST) continue;
+    if (!h.online || !Array.isArray(h.sessions)) continue;
+    next = _nextAliases(next, h.sessions, h.id);
+  }
+  _commitAliases(next);
+}
+
+/** 방금 바꾸거나 만든 세션의 별칭을 폴링을 기다리지 않고 바로 반영한다. */
+export function setSessionAlias(tmuxName, alias, host = LOCAL_HOST) {
+  if (!tmuxName) return;
+  const key = _aliasKey(host, tmuxName);
+  const clean = typeof alias === 'string' ? _rowAlias({ alias }) : '';
+  const next = { ...aliasByKey };
+  if (clean) next[key] = clean; else delete next[key];
+  _commitAliases(next);
+}
+
+/** 세션 ID의 별칭. 모르면 ID 그대로(옛 서버·기록이 아직 없는 세션). host를 안 주면 로컬. */
+export function sessionAlias(tmuxName, host = LOCAL_HOST) {
+  if (!tmuxName) return '';
+  return aliasByKey[_aliasKey(host, tmuxName)] || String(tmuxName);
+}
+
 /**
  * 세션의 표시 이름 — **단일 출처**.
  *
@@ -58,7 +130,8 @@ export function sessionDisplayName(id) {
   const s = sessions[id];
   if (!s) return String(id || '').slice(0, 8);
   const tmux = s.tmuxName || s.tmux_name;
-  if (tmux) return tmux;
+  // 별칭(세션 기록의 보이는 이름)이 있으면 그것을, 없으면 tmux 이름(ID)을 보인다. 그 세션이 사는 맥의 지도에서 찾는다.
+  if (tmux) return sessionAlias(tmux, hostOfSession(s));
   if (s.displayName) return s.displayName;
   // 일반(비 tmux) 세션의 폴백 이름이 id를 8자로 잘라 붙인 의미 없는
   // 문자열이었다 — 열린 순서대로 "터미널 1", "터미널 2"…
@@ -137,5 +210,9 @@ window.setActive = setActive;
 window.registerSession = registerSession;
 window.sessionDisplayName = sessionDisplayName;
 window.setSessionTmuxName = setSessionTmuxName;
+window.setSessionAliases = setSessionAliases;
+window.setHostSessionAliases = setHostSessionAliases;
+window.setSessionAlias = setSessionAlias;
+window.sessionAlias = sessionAlias;
 window.removeSessionRecord = removeSessionRecord;
 window.storeSubscribe = subscribe;

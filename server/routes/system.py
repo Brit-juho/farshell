@@ -318,6 +318,11 @@ async def notify_client_event(request: Request):
     event = str(body.get("event", "attached"))[:16]
     session = str(body.get("session", "?"))[:64]
     remote_host = str(body.get("remote_host", "") or "").strip()[:128]
+    # 훅은 tmux 이름(ID)만 보낸다 — 별칭은 셸 문자열에 넣지 않고 여기서 찾는다(설계 3.6).
+    if session and session != "?":
+        from session_alias import alias_of
+        label = await asyncio.to_thread(alias_of, session)
+        session = "".join(ch for ch in str(label or session) if ch.isprintable())[:128] or session
 
     if event == "detached":
         title = tr("tmux 세션 연결 해제")

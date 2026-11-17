@@ -206,7 +206,7 @@ export function Rail(props: RailProps) {
     if (!railPollingActive()) return;
     try {
       const data = await pollFetch<{ hosts?: HostEntry[] } | null>(props.deps, '/api/hosts');
-      if (data?.hosts) setHosts(data.hosts);
+      if (data?.hosts) { setHosts(data.hosts); (window as any).setHostSessionAliases?.(data.hosts); }
     } catch (e) {
       if (isNoResponse(e)) throw e;   // 옛 서버(404)는 실패가 아니다 — 간격을 늘리지 않는다
     }
@@ -399,7 +399,7 @@ export function Rail(props: RailProps) {
   // 메뉴를 연 순간의 행(ctxMenu의 사본)으로 만들어, 도구 이름이 바뀌어도 열린 메뉴가 깜빡이지 않는다.
   const summaryOf = (row: SessionRow) => {
     const src = resolveCard(rowKey(row));
-    return buildHoverCard(row, { tool: row.tool, kids: src?.kids || [], host: src?.host ?? null, shareable: !!src?.shareable, commands: true });
+    return buildHoverCard(row, { tool: row.tool, kids: src?.kids || [], host: src?.host ?? null, shareable: !!src?.shareable, commands: true, showId: true });
   };
   let railEl: HTMLElement | undefined;
   const totalRows = createMemo(() => lists().sessions.length);

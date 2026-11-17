@@ -22,6 +22,10 @@ from authz import audit
 from test_delegation import _caller, tm  # noqa: F401  (격리 가짜 tmux 픽스처)
 
 
+
+# 위임 흐름을 보는 파일 — 하위 세션 ID를 작업 제목으로 고정한다(conftest.readable_child_names).
+pytestmark = pytest.mark.usefixtures("readable_child_names")
+
 @pytest.fixture(params=["off", "deleg"], autouse=True)
 def mode(request, monkeypatch):
     if request.param == "deleg":

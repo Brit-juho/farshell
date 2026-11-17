@@ -146,6 +146,7 @@ _ROWS: tuple = (
     ("GET", "/api/tmux/sessions", sock_()),
     ("POST", "/api/tmux/create", auth()),
     ("GET", "/api/tmux/name-preview", auth()),
+    ("GET", "/api/tmux/resolve", sock_()),
     ("POST", "/api/tmux/open-on-mac", auth()),
     ("POST", "/api/tmux/attach", auth()),
     ("DELETE", "/api/tmux/kill/{tmux_name}", sock_()),

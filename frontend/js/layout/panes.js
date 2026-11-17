@@ -12,7 +12,7 @@
 // 리뷰 원칙) — 클릭이든 탭이든 항상 이걸로 전부 가능하다. 탭/헤더를 pane
 // 위로 드래그하는 DnD(L5, layout/dnd.js)는 이 baseline 위에 얹는 "있으면
 // 편한" 추가 경로다.
-import { getSession, allSessions, sessionDisplayName } from '../core/store.js';
+import { getSession, allSessions, sessionDisplayName, sessionAlias, setHostSessionAliases } from '../core/store.js';
 import {
   getTree, getActivePaneId, onLayoutChange, setActivePane,
   splitPane, setRatio, getActiveTabHostId,
@@ -294,7 +294,8 @@ function _renderUnreachableBody(bodyEl, node) {
   title.textContent = node.unreachable.catalogSessionId && node.unreachable.host === 'local' ? t('실행 확인 필요') : t('{host} · 연결 안 됨', { host: node.unreachable.host });
   const sub = document.createElement('div');
   sub.className = 'vt-pane-unreachable-sub';
-  sub.textContent = node.unreachable.catalogSessionId ? node.unreachable.tmux || node.unreachable.catalogSessionId : t('{name} — 호스트가 돌아오면 이 자리에 복구됩니다.', { name: node.unreachable.tmux });
+  const unreachableName = node.unreachable.tmux ? sessionAlias(node.unreachable.tmux, node.unreachable.host) : '';
+  sub.textContent = node.unreachable.catalogSessionId ? unreachableName || node.unreachable.catalogSessionId : t('{name} — 호스트가 돌아오면 이 자리에 복구됩니다.', { name: unreachableName });
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'vt-btn sm vt-pane-unreachable-retry';
@@ -328,6 +329,7 @@ async function _retryUnreachable(node, subEl, btn) {
   subEl.textContent = t('확인 중…');
   try {
     const data = await vtFetch('/api/hosts?fresh=1');
+    setHostSessionAliases(data?.hosts);
     const host = (data?.hosts || []).find((h) => h.id === node.unreachable.host);
     if (!host) {
       subEl.textContent = t('이 호스트는 더 이상 등록돼 있지 않습니다 — 다른 세션을 고르세요.');
@@ -466,7 +468,7 @@ function _renderLeaf(node, activePaneId, isRootOnly, placement, labelSuffix = ''
   } else if (node.unreachable) {
     // C3 — 원격 호스트가 잠깐 꺼진 칸. 빈 pane으로 강등하지 않고 배치를 지킨다
     // (강등하면 호스트를 다시 켜도 배치가 영영 사라진다, layout/persist.js 참고).
-    nameEl.textContent = `${node.unreachable.tmux} · ${node.unreachable.host}` + labelSuffix;
+    nameEl.textContent = `${sessionAlias(node.unreachable.tmux, node.unreachable.host)} · ${node.unreachable.host}` + labelSuffix;
     nameEl.setAttribute('data-tip', t('{host}에 연결할 수 없습니다', { host: node.unreachable.host }));
     _renderUnreachableBody(bodyEl, node);
   } else {

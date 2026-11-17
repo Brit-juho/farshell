@@ -24,6 +24,10 @@ B = P.agent("$2:102", name="bravo")
 H = P.human("dev1")
 
 
+
+# 위임 흐름을 보는 파일 — 하위 세션 ID를 작업 제목으로 고정한다(conftest.readable_child_names).
+pytestmark = pytest.mark.usefixtures("readable_child_names")
+
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     monkeypatch.setenv("VT_STATE_DIR", str(tmp_path / "vt"))

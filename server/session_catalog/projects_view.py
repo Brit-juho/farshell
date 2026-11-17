@@ -212,4 +212,4 @@ def conversation_resume_preview(cid: str) -> dict:
         cwd = None
     base = session_names.base_for(cwd) if cwd else None
     return {'resumable': bool(cwd), 'conversation_id': c['id'], 'conversation_title': c['title'] or '', 'provider': c['provider'],
-            'folder': Path(cwd).name if cwd else None, 'name': session_names.allocate(base) if base else None}
+            'folder': Path(cwd).name if cwd else None, 'name': session_names.preview_alias(base) if base else None}

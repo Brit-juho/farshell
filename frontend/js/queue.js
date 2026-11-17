@@ -18,6 +18,7 @@ import { emptyState } from './ui/empty.js';
 import { vtFetch, vtEsc } from './core/api.js';
 import { isMac } from './core/env.js';
 import { t } from './core/i18n.js';
+import { sessionAlias, setSessionAliases, setHostSessionAliases } from './core/store.js';
 
 
 /** U8 — 「지금 실행」은 **큐에 투입할 게 있을 때만** 누를 수 있다.
@@ -116,28 +117,18 @@ export function showQueue(opts = {}) {
         sessions = await vtFetch('/api/tmux/sessions');
       } catch (_) { return; }
       const cur = sel.value;
-      // 글자는 레일 행과 같은 이름(카탈로그 제목, 없으면 tmux 이름 — shell/rail-fetch.ts), 값은 tmux 이름 그대로.
-      // 제목이 겹치면 구분되도록 tmux 이름을 괄호로 덧붙인다.
-      const titleOf = (x) => (typeof x?.catalog?.title === 'string' ? x.catalog.title.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 128) : '') || x.name;
-      const counts = {};
-      (sessions || []).forEach(s => { const k = titleOf(s); counts[k] = (counts[k] || 0) + 1; });
-      (sessions || []).forEach(s => {
-        const opt = document.createElement('option');
-        const label = titleOf(s);
-        opt.value = s.name;
-        opt.textContent = counts[label] > 1 && label !== s.name ? `${label} (${s.name})` : label;
-        sel.appendChild(opt);
-      });
+      appendLocalTargets(sel, sessions);
       // A3(80 §1 3단계) — 원격 호스트 세션. 값은 `host::세션` 합성 키다:
       // 세션 이름만으로는 어느 기계인지 못 정한다(`dev`는 맥에도 gpu-box에도 있다).
       try {
         const hosts = (await vtFetch('/api/hosts'))?.hosts || [];
+        setHostSessionAliases(hosts);
         for (const h of hosts) {
           if (h.id === 'local' || !h.online) continue;
           for (const rs of h.sessions || []) {
             const opt = document.createElement('option');
             opt.value = `${h.id}::${rs.name}`;
-            opt.textContent = `${titleOf(rs)} · ${h.label || h.id}`;
+            opt.textContent = `${sessionAlias(rs.name, h.id)} · ${h.label || h.id}`;
             sel.appendChild(opt);
           }
         }
@@ -227,11 +218,10 @@ export function showQueue(opts = {}) {
           tgt.innerHTML = icon('pin', 12);
           const nm = document.createElement('span');
           nm.className = 'vt-q-tgt-name';
-          nm.textContent = targetHost ? `${targetSession} · ${targetHost}` : targetSession;
+          const chip = targetChipText(targetSession, targetHost);
+          nm.textContent = chip.text;
           tgt.appendChild(nm);
-          tgt.title = targetHost
-            ? t('대상: {host} 호스트의 {session} 세션', { host: targetHost, session: targetSession })
-            : t('대상 세션: {session}', { session: targetSession });
+          tgt.title = chip.tip;
         } else {
           tgt.innerHTML = `<span class="vt-q-auto-lab">${vtEsc(t('자동 →'))}</span>`;
           tgt.title = t('대상 세션 — 비워두면 음성과 같은 자동 타깃 규칙을 따릅니다');
@@ -338,6 +328,28 @@ export function showQueue(opts = {}) {
       }
       refreshQueue(ctx);
     }
+
+/** 대상 드롭다운에 이 맥 세션을 채운다. 글자는 별칭(core/store.js 지도 — 레일 행과 같은 이름), 값은 세션 ID(tmux 이름).
+ *  별칭은 한 맥 안에서 겹치지 않으므로 ID를 덧붙여 구분하지 않는다. */
+export function appendLocalTargets(sel, sessions) {
+  setSessionAliases(sessions);
+  for (const s of Array.isArray(sessions) ? sessions : []) {
+    if (!s || typeof s.name !== 'string' || !s.name) continue;
+    const opt = document.createElement('option');
+    opt.value = s.name;
+    opt.textContent = sessionAlias(s.name);
+    sel.appendChild(opt);
+  }
+}
+
+/** 큐 항목의 대상 칩 글자·툴팁. 대상 값은 세션 ID, 보이는 글자는 그 맥의 별칭(모르면 ID). */
+export function targetChipText(session, host) {
+  const name = sessionAlias(session, host || undefined);
+  return {
+    text: host ? `${name} · ${host}` : name,
+    tip: host ? t('대상: {host} 호스트의 {session} 세션', { host, session: name }) : t('대상 세션: {session}', { session: name }),
+  };
+}
 
 // F3(c): data-action 위임용 등록.
 // 액션 등록은 queue-lazy.js(app.js에 남는 스텁)가 맡는다.

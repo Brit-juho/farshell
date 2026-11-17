@@ -214,9 +214,11 @@ class VoiceCoordinator:
                         await self._play_server(job, audio)
                     else:
                         ws = self.clients[dest]['ws']
+                        # `name` 은 ID(열쇠), `alias` 는 화면 문구(「{name} 응답 읽기」)용 — 대상 스냅숏(voice_targets.snapshot)이 실은 별칭.
                         await ws.send_json({'type': 'voice_audio', 'id': job['id'],
                             'completion_id': job['completion_id'], 'key': job['target']['key'],
-                            'name': job['target']['name'], 'generation': job['lease'][2],
+                            'name': job['target']['name'], 'alias': job['target'].get('alias') or job['target']['name'],
+                            'generation': job['lease'][2],
                             'media_type': audio.media_type, 'audio': base64.b64encode(audio.data).decode()})
                         await asyncio.wait_for(job['ack'].wait(), 120)
                     self.diagnostics[job['target']['key']] = 'cancelled' if job.get('cancelled') else job.get('result', 'played')

@@ -15,7 +15,7 @@ import { removeSession, attachTmux, revealSession } from './session.js';
 import { showOnboarding } from './boot.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
-import { getSession, allSessions, sessionDisplayName } from '../core/store.js';
+import { getSession, allSessions, sessionDisplayName, sessionAlias } from '../core/store.js';
 import { getStatus } from '../agent/state.js';
 import { confirmDialog } from '../core/dialog-lazy.js';
 import { confirmViewerLeave } from '../panels/viewer-lazy.js';
@@ -142,7 +142,7 @@ export async function reopenClosedView(viewId, focusTmux = null) {
       } else {
         id = await attachTmux(tmux, { place: 'none',catalogSessionId:info.catalogSessionId,runtimeId:info.runtimeId,catalogHost:info.catalogHost });
       }
-      if (id) attached.set(key, id); else failed.push(tmux);
+      if (id) attached.set(key, id); else failed.push(sessionAlias(tmux, host || 'local'));
     }
     if (byTmux.size > 0 && attached.size === 0 && !hasDurable) {
       showToast(t('묶음을 열지 못했습니다 — {names} (기억은 그대로 둡니다)', { names: failed.join(', ') }));
@@ -224,19 +224,21 @@ export function killWarning(name, status) {
 /** 종료 — 열려 있으면 먼저 닫는다(재연결 루프 방지). 다른 브라우저 탭은 WS
  * 4004로 칸을 비운다(term/ws.js). */
 export async function killSession(name, webSessionId) {
+  // 문구는 별칭으로. 종료 뒤엔 지도에서 빠지므로 먼저 읽어 둔다.
+  const label = sessionAlias(name);
   if (webSessionId && getSession(webSessionId)) {
     // 종료를 누른 사용자는 결과를 이미 안다 — 알림 없이 뷰까지 정리한다.
     await closeEndedSession(webSessionId, { notify: false });
   }
   try {
     const res = await apiFetch(`${API_BASE}/api/tmux/kill/${encodeURIComponent(name)}`, { method: 'DELETE' });
-    if (!res.ok) { showToast(t('완전 종료 실패: {name} ({status})', { name, status: res.status })); return false; }
+    if (!res.ok) { showToast(t('완전 종료 실패: {name} ({status})', { name: label, status: res.status })); return false; }
     forgetClosedMembers([name]);
     saveLayoutNow();
-    showToast(t('완전 종료됨: {name}', { name }));
+    showToast(t('완전 종료됨: {name}', { name: label }));
     return true;
   } catch (_) {
-    showToast(t('완전 종료 오류: {name}', { name }));
+    showToast(t('완전 종료 오류: {name}', { name: label }));
     return false;
   }
 }
@@ -244,7 +246,7 @@ export async function killSession(name, webSessionId) {
 /** 확인받고 종료(Rail.tsx 메뉴 등). */
 export async function confirmAndKillSession(name, webSessionId) {
   const status = getStatus(name);
-  if (!await confirmDialog(killWarning(name, status), { title: t('완전 종료'), okLabel: t('완전 종료'), danger: true })) return false;
+  if (!await confirmDialog(killWarning(sessionAlias(name), status), { title: t('완전 종료'), okLabel: t('완전 종료'), danger: true })) return false;
   return killSession(name, webSessionId);
 }
 

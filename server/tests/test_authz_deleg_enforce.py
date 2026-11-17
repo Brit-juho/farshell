@@ -35,6 +35,11 @@ if str(_CHAR) not in sys.path:
     sys.path.insert(0, str(_CHAR))
 
 
+
+
+# 위임 흐름을 보는 파일 — 하위 세션 ID를 작업 제목으로 고정한다(conftest.readable_child_names).
+pytestmark = pytest.mark.usefixtures("readable_child_names")
+
 @pytest.fixture(autouse=True)
 def _enforce(monkeypatch):
     monkeypatch.setenv("VT_AUTHZ_ENFORCE", "deleg")

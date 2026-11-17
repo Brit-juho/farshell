@@ -15,11 +15,16 @@
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
 import { screenId } from '../core/screen-id.js';
-import { allSessions, getSession } from '../core/store.js';
+import { allSessions, getSession, sessionAlias } from '../core/store.js';
 import { switchTo, addSession } from '../term/session.js';
 import { _applyCardAgent } from './badges.js';
 import { t } from '../core/i18n.js';
 import { reportError } from '../core/event-log.js';
+
+// 카드에 보이는 이름 — 행의 별칭(새 서버), 없으면 아는 별칭, 그것도 없으면 ID.
+function cardName(sess) {
+  return (typeof sess.alias === 'string' && sess.alias.trim()) || sessionAlias(sess.name);
+}
 
 // 카드 하나의 정적 뼈대를 만든다(제목·메타 자리·클릭 핸들러). 값 채우기는
 // updateSessionCard()가 별도로 한다 — pane-picker.js의 "매번 새로 만든다"와
@@ -39,13 +44,14 @@ export function buildSessionCard(sess, onSelect) {
     </div>
     <button type="button" class="card-meta"></button>
   `;
-  card.querySelector('.card-title').textContent = sess.name;
+  card.querySelector('.card-title').textContent = cardName(sess);
   card.onclick = onSelect;
   return card;
 }
 
 // 매번 새로 계산해야 하는 값(명령·cwd·이미 탭인지·에이전트 배지)만 갱신한다.
 export function updateSessionCard(card, sess, agentInfo) {
+  card.querySelector('.card-title').textContent = cardName(sess);
   card.querySelector('.card-cmd').textContent = sess.command || '';
   // cwd는 dataset에도 저장해둔다 — agent_event(pre/stop)가 cwd로만 오므로
   // "어느 카드가 지금 작업 중인지"를 여기 저장된 값과 매칭해서 찾는다.
@@ -59,7 +65,7 @@ export function updateSessionCard(card, sess, agentInfo) {
   import('../ui/session-context.js').then(({ contextLabel }) => {
     if (card._contextSession === sess) meta.textContent = contextLabel(sess);
   }).catch(() => { if (card._contextSession === sess) meta.textContent = sess.cwd || ''; });
-  meta.setAttribute('aria-label', t('{name} 작업 위치 보기', { name: sess.name }));
+  meta.setAttribute('aria-label', t('{name} 작업 위치 보기', { name: cardName(sess) }));
   meta.onclick = (e) => { e.stopPropagation(); import('../ui/workspace-details.js').then(m => m.showWorkspaceDetails(sess)); };
   card.querySelector('.card-meta').setAttribute('data-tip', sess.cwd || '');
   // 이미 탭으로 열려 있으면(전환 vs attach — 클릭 결과가 달라진다) 왼쪽에 표시.

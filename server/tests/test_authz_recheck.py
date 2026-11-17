@@ -31,6 +31,11 @@ _REAL_SEND = tmux_target.send_to_tmux               # 위임 시험 픽스처가
 # --- 도우미 -----------------------------------------------------------------------------------
 
 
+
+
+# 위임 흐름을 보는 파일 — 하위 세션 ID를 작업 제목으로 고정한다(conftest.readable_child_names).
+pytestmark = pytest.mark.usefixtures("readable_child_names")
+
 def drop_grant(gid: str) -> None:
     with store.txn() as d:
         d["grants"]["items"] = [g for g in d["grants"]["items"] if g.get("id") != gid]

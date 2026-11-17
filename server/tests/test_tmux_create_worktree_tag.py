@@ -24,6 +24,7 @@ def fake_attach(monkeypatch):
     async def _fake_attach_tmux(name, cols, rows, request=None):
         return {"id": "sess-1", "name": name, "tmux_session": name}
     monkeypatch.setattr(tmux_route, "_attach_tmux", _fake_attach_tmux)
+    monkeypatch.setattr(tmux_route, "_alias_after_create", lambda name: None)
 
 
 def test_create_with_worktree_id_tags_the_session(monkeypatch):
@@ -33,9 +34,10 @@ def test_create_with_worktree_id_tags_the_session(monkeypatch):
     monkeypatch.setattr(tmux_runner, "set_option", lambda s, k, v: tagged.append((s, k, v)) or True)
 
     body = {"name": "wt-test", "worktreeId": "abcdef123456"}
-    asyncio.run(tmux_route.create_tmux_session(_FakeRequest(body)))
+    resp = asyncio.run(tmux_route.create_tmux_session(_FakeRequest(body)))
 
-    assert [t for t in tagged if t[1] == "@fsh_wt"] == [("wt-test", "@fsh_wt", "abcdef123456")]
+    # 태그는 실제로 만든 세션(랜덤 ID)에 붙는다.
+    assert [t for t in tagged if t[1] == "@fsh_wt"] == [(resp["tmux_session"], "@fsh_wt", "abcdef123456")]
 
 
 def test_create_without_worktree_id_does_not_tag(monkeypatch):

@@ -315,7 +315,7 @@ function Fleet(props: { deps: FleetDeps }) {
     if (!isFleetActive()) return;
     try {
       const data = await pollFetch<{ hosts?: HostEntry[] } | null>(props.deps, '/api/hosts');
-      if (data?.hosts) setHosts(data.hosts);
+      if (data?.hosts) { setHosts(data.hosts); (window as any).setHostSessionAliases?.(data.hosts); }
     } catch (e) {
       if (isNoResponse(e)) throw e;   // 옛 서버(404)는 실패가 아니다
     }
@@ -375,7 +375,7 @@ function Fleet(props: { deps: FleetDeps }) {
       && (r.lineage.state === 'running' || r.lineage.state === 'reported')) : [];
     const h = viewHostId !== LOCAL_HOST ? activeHost() : null;
     return buildHoverCard(row, {
-      tool: row.tool, kids, commands: true,
+      tool: row.tool, kids, commands: true, showId: true,
       host: viewHostId === LOCAL_HOST ? null : { label: h?.label || viewHostId, online: h ? !!h.online : true, latencyMs: h?.latencyMs ?? null, reason: h?.reason ?? null },
       shareable: viewHostId === LOCAL_HOST && canShareName(row.tmuxName),
     });

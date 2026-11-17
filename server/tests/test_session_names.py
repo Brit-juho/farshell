@@ -54,37 +54,46 @@ def test_non_ascii_folder_falls_back_to_session(tmp_path):
     assert session_names.base_for(str(folder)) == "session"
 
 
-def test_allocate_numbers_from_two_and_matches_exactly(monkeypatch):
-    taken = {"app", "app-2"}
-    asked = []
-    monkeypatch.setattr(tmux_runner, "has_session", lambda n: asked.append(n) or n in taken)
-    assert session_names.allocate("app") == "app-3"
-    assert asked == ["app", "app-2", "app-3"]
+def test_allocate_gives_a_random_id_and_keeps_the_base_as_an_alias_request(monkeypatch):
+    """2026-11 설계: 새 세션의 tmux 이름은 랜덤 ID(`s-` + 16진 8자리)이고, 기준 이름은 별칭 요청으로 남는다."""
+    taken = set()
+    monkeypatch.setattr(tmux_runner, "has_session", lambda n: n in taken)
+    name = session_names.allocate("app")
+    assert session_names.is_id(name) and tmux_runner.valid_session_name(name)
+    assert session_names.take_alias_request(name) == "app"
+    assert session_names.take_alias_request(name) is None          # 한 번만 가져간다
 
 
-def test_spawn_unique_moves_on_only_for_duplicates():
+def test_spawn_unique_retries_with_a_new_id_only_for_duplicates():
     tried = []
 
     def spawn(name):
         tried.append(name)
-        return (1, b"duplicate session: " + name.encode()) if name in ("w", "w-2") else (0, b"")
-    assert session_names.spawn_unique("w", spawn) == (0, "w-3", b"")
-    assert tried == ["w", "w-2", "w-3"]
+        return (1, b"duplicate session: " + name.encode()) if len(tried) < 3 else (0, b"")
+    rc, name, err = session_names.spawn_unique("w", spawn)
+    assert rc == 0 and len(set(tried)) == 3 and name == tried[-1] and session_names.is_id(name)
+    assert session_names.take_alias_request(name) == "w"            # 별칭 요청은 실제로 쓴 ID로 옮겨 간다
+    assert all(session_names.take_alias_request(n) is None for n in tried[:-1])
 
     def broken(name):
         return 1, b"some other failure"
     rc, name, err = session_names.spawn_unique("w", broken)
-    assert (rc, name) == (1, "w") and err == b"some other failure"
+    assert rc == 1 and err == b"some other failure"
 
 
 def test_spawn_unique_can_start_from_an_allocated_name():
     tried = []
-    assert session_names.spawn_unique("w", lambda n: tried.append(n) or (0, b""), start="w-4")[1] == "w-4"
-    assert tried == ["w-4"]
+
+    def spawn(name):
+        tried.append(name)
+        return 0, b""
+    rc, name, _ = session_names.spawn_unique("w", spawn, start="s-0000abcd")
+    assert (rc, name, tried) == (0, "s-0000abcd", ["s-0000abcd"])
 
 
-def test_delegated_children_use_the_same_numbering():
+def test_delegated_children_get_a_random_id_and_ask_for_a_readable_alias():
     import delegation
-    assert delegation._child_name("app", "", set()) == "app-sub"
-    assert delegation._child_name("app", "", {"app-sub"}) == "app-sub-2"
-    assert delegation._child_name("app", "tests", {"tests", "tests-2"}) == "tests-3"
+    child = delegation._child_name("app", "", set())
+    assert session_names.is_id(child) and session_names.take_alias_request(child) == "app-sub"
+    child = delegation._child_name("app", "tests", set())
+    assert session_names.take_alias_request(child) == "tests"

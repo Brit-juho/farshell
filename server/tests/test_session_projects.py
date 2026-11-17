@@ -418,7 +418,7 @@ def test_conversation_resume_preview_names_the_folder(catalog, monkeypatch):
     cid = conv(cwd=a)
     view = _view(monkeypatch)
     import session_names
-    monkeypatch.setattr(session_names, "allocate", lambda base: base + "-2")
+    monkeypatch.setattr(session_names, "preview_alias", lambda base: base + "-2")
     got = view.conversation_resume_preview(cid)
     assert got["resumable"] and got["folder"] == "farshell" and got["name"] == "farshell-2"
 

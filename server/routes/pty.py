@@ -304,39 +304,33 @@ async def rename_session(session_id: str, request: Request):
     if not name:
         return {"id": session_id, "name": info.name, "tmux_name": info.tmux_name}
 
-    # tmux 세션의 이름은 이제 tmux 세션 이름 그 자체가 단일 진실이다(2026-09-21
-    # 설계) — "웹 라벨만 조용히 바꾸는" 폴백을 없앴다. 그게 있으면 이 화면·다른
-    # 기기·원격 호스트가 서로 다른 이름을 보게 되는 두 번째 진실이 생긴다.
-    tmux_renamed = False
-    if info.tmux_name and info.tmux_name != name:
+    # 별칭(2026-11 설계) — tmux 세션의 이름 바꾸기는 tmux 이름(ID)이 아니라 세션 기록의 별칭을 바꾼다. 한글을 쓸 수 있고 살아 있는
+    # 다른 세션과 겹치면 거절한다. 기록에 아직 없으면(만든 직후) 한 번 관측해 올린 뒤 다시 찾는다. tmux 이름 바꾸기 폴백은 없다.
+    if info.tmux_name:
+        from session_catalog import db as catalog, inventory
+        try:
+            found = await asyncio.to_thread(catalog.alias_session_for_tmux_name, info.tmux_name)
+            if not found:
+                await asyncio.to_thread(inventory.reconcile)
+                found = await asyncio.to_thread(catalog.alias_session_for_tmux_name, info.tmux_name)
+            if not found:
+                return JSONResponse({"error": "alias_unavailable", "name": name}, status_code=503)
+            for attempt in (0, 1):
+                try:
+                    await asyncio.to_thread(catalog.edit_session, found[0], found[1], title=name)
+                    break
+                except catalog.Refused as error:
+                    if error.code != "revision_conflict" or attempt:
+                        raise
+                    found = await asyncio.to_thread(catalog.alias_session_for_tmux_name, info.tmux_name) or found
+        except catalog.Refused as error:
+            return JSONResponse({"error": error.code, "name": name}, status_code=error.status)
         import tmux_runner
-        # 앱의 세션 이름 규칙(tmux_runner.SESSION_NAME_RE) — 서식 확장·옵션 오인 방지, 64자 상한.
-        if not tmux_runner.valid_session_name(name):
-            return JSONResponse(
-                {"error": "tmux session name must be alphanumeric/dash/underscore only", "name": name},
-                status_code=400,
-            )
-        # 충돌 검사
-        if await tmux_runner.has_session_async(name):
-            return JSONResponse(
-                {"error": "tmux session name already exists", "name": name},
-                status_code=409,
-            )
-        rc, _, err = await tmux_runner.run_async(
-            ["rename-session", "-t", tmux_runner.exact_target(info.tmux_name), name],
-            timeout=2.0,
-        )
-        if rc != 0:
-            return JSONResponse(
-                {"error": "tmux rename-session failed", "detail": err.decode("utf-8", errors="ignore")},
-                status_code=500,
-            )
-        for attached in session_store.find_all_by_tmux_name(info.tmux_name):
-            session_store.update_tmux_name(attached.session_id, name)
-            attached.name = name
-        tmux_renamed = True
-    info.name = name
-    return {"id": session_id, "name": info.name, "tmux_name": info.tmux_name, "tmux_renamed": tmux_renamed}
+        await tmux_runner.set_option_async(f"={info.tmux_name}:", "@fsh_alias", name.strip())   # 창 제목 — 실패하면 다음 관측이 맞춘다
+        info.name = name.strip()
+        return {"id": session_id, "name": info.name, "alias": info.name, "tmux_name": info.tmux_name, "tmux_renamed": False}
+    info.name = name   # tmux가 아닌 일반 터미널 — 이 화면의 이름만
+    return {"id": session_id, "name": info.name, "tmux_name": info.tmux_name, "tmux_renamed": False}
 
 
 # --------------------------------------------------------------------------

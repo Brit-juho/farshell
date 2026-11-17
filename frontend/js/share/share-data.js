@@ -29,7 +29,8 @@ export function validateNick(nick) {
   return null;
 }
 
-/** 세션 이름에서 닉네임 기본값을 만든다. 허용 밖의 글자는 `-` 로, 앞뒤 `-` 는 뗀다. */
+/** 세션 별칭에서 닉네임 기본값을 만든다(영문만 남는다 — 닉네임 규칙). 허용 밖의 글자는 `-` 로, 앞뒤 `-` 는 뗀다.
+ *  남는 글자가 없으면(한글 별칭 등) `session`. */
 export function suggestNick(sessionName) {
   const s = String(sessionName || '').replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32).replace(/-+$/g, '');
   return s || 'session';

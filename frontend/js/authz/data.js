@@ -35,14 +35,25 @@ export function detailLine(item) {
   return cd ? `${sc} · ${cd}` : sc;
 }
 
+// 이 맥 세션의 ID → 별칭(core/store.js가 window에 건 공용 지도). 새 서버는 이미 별칭을 보내므로(그대로 돌아온다)
+// 옛 응답이나 기록이 늦은 경우의 보정이다. 모르면 그대로.
+const aliasOf = (name) => (typeof window !== 'undefined' && typeof window.sessionAlias === 'function' && window.sessionAlias(name)) || name;
+
 export function requester(item) {
   const s = item.subject || {};
+  // 다른 맥(peer)의 요청자는 그 맥의 이름이라 이 맥의 지도로 바꾸지 않는다.
+  if (s.name && s.kind === 'agent') return aliasOf(s.name);
   return s.name || s.id || '?';
 }
 
 export function resourceText(item) {
   const r = item.resource;
-  if (r && typeof r === 'object') return r.label ? `${r.label}` : (r.id || '?');
+  if (r && typeof r === 'object') {
+    if (!r.label) return r.id || '?';
+    // 이 맥 세션이 대상이면 별칭으로. 공유 요청의 라벨은 공유 닉네임이라 그대로 둔다.
+    const local = typeof r.id === 'string' && r.id.startsWith('session:local/') && item.kind !== 'share';
+    return local ? aliasOf(r.label) : `${r.label}`;
+  }
   return r || '?';
 }
 

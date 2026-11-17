@@ -16,7 +16,9 @@ try:
     _, raw = fsh_client.call('POST', '/voice/bind', body=body, timeout=5, svc='voice', server=base, token=token,
                              port=port, raise_for_status=True)
     result = json.loads(raw.decode('utf-8'))
-    print(tr('음성 연결: {name} {pane}', name=result['target']['name'], pane=result['target']['pane']))
+    target = result['target']
+    name = ''.join(ch for ch in str(target.get('alias') or target['name']) if ch.isprintable())
+    print(tr('음성 연결: {name} {pane}', name=name, pane=target['pane']))
 except Exception as e:
     print(tr('음성 연결 실패: {e}', e=e), file=sys.stderr)
     sys.exit(1)

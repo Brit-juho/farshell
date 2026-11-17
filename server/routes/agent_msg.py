@@ -319,7 +319,7 @@ async def directory(fresh: bool = Query(False)):
         out.append({
             "host": h["id"], "label": h.get("label") or h["id"], "online": h.get("online", False),
             "reason": h.get("reason"),
-            "sessions": [{"name": s.get("name"), "command": s.get("command") or "",
+            "sessions": [{"name": s.get("name"), "alias": s.get("alias"), "command": s.get("command") or "",
                           "status": s.get("status") or "idle"} for s in h.get("sessions") or []],
         })
     return {"hosts": out}

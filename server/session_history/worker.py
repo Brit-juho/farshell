@@ -6,7 +6,7 @@ import logging
 import time
 
 from session_catalog import inventory
-from session_catalog.db import database, set_setting, Refused
+from session_catalog.db import database, set_setting, Refused, unique_alias
 from . import archive
 
 logger = logging.getLogger(__name__)
@@ -153,6 +153,8 @@ class Collector:
                 touch_activity(db, sid, touch)
                 if cwd:
                     base = named.get(rid)
+                    # 별칭은 살아 있는 세션끼리 겹치지 않는다 — 같은 저장소 세션이 이미 있으면 번호(`이름-1`).
+                    base = unique_alias(db, base, sid) if base else None
                     if base and base != title:
                         db.execute("UPDATE sessions SET title=?,updated=?,revision=revision+1 WHERE id=? AND name_source='auto'",
                                    (base, time.time(), sid))

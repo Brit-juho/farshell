@@ -13,13 +13,14 @@ def _call(cwd=""):
     return out if isinstance(out, dict) else (out.status_code, json.loads(out.body))
 
 
-def test_preview_uses_the_creation_rule_without_creating(tmp_path, monkeypatch):
+def test_preview_shows_the_alias_without_creating(tmp_path, monkeypatch):
+    """미리보기는 새 세션이 받을 **별칭**이다(2026-11 — tmux 이름은 랜덤 ID). 살아 있는 세션이 쓰면 번호가 붙는다."""
     repo = tmp_path / "farshell"
     repo.mkdir()
     calls = []
-    monkeypatch.setattr(tmux_runner, "has_session", lambda name: name == "farshell")
     monkeypatch.setattr(tmux_runner, "run", lambda *a, **k: calls.append(a) or (0, b"", b""))
-    assert _call(str(repo)) == {"base": "farshell", "name": "farshell-2"}
+    monkeypatch.setattr(session_names, "preview_alias", lambda base: base + "-1")
+    assert _call(str(repo)) == {"base": "farshell", "name": "farshell-1"}
     assert calls == [], "미리보기는 tmux에 아무것도 만들지 않는다"
 
 

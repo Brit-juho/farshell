@@ -410,12 +410,42 @@ def _fail(status: int, data: dict) -> str:
     return data.get("reason") or data.get("error") or f"HTTP {status}"
 
 
+def _clean_label(text) -> str:
+    """사람이 붙인 별칭을 한 줄로 — 제어 문자를 지우고 공백을 접는다."""
+    return " ".join("".join(ch for ch in str(text or "") if ch.isprintable() or ch.isspace()).split())[:80]
+
+
+def _local_aliases() -> dict[str, str]:
+    """이 맥 세션의 {ID: 별칭}. 못 읽으면 빈 지도(그때는 ID만 보인다)."""
+    try:
+        status, data = _api("GET", "/api/tmux/sessions")
+    except Exception:  # noqa: BLE001 — 표시용일 뿐
+        return {}
+    if status != 200 or not isinstance(data, list):
+        return {}
+    out = {}
+    for row in data:
+        if isinstance(row, dict) and isinstance(row.get("name"), str):
+            label = _clean_label(row.get("alias"))
+            if label:
+                out[row["name"]] = label
+    return out
+
+
+def _session_label(name, alias: str = "") -> str:
+    """`별칭 (to에 쓸 ID: …)`. 별칭이 없거나 ID와 같으면 ID만. to 에는 언제나 ID를 써야 한다."""
+    name = str(name or "?")
+    alias = _clean_label(alias)
+    return f"{alias} (to에 쓸 ID: {name})" if alias and alias != name else name
+
+
 def tool_list_agents(args: dict) -> tuple[str, bool]:
     q = "?fresh=1" if args.get("fresh") else ""
     status, data = _api("GET", f"/api/agent/directory{q}")
     if status != 200:
         return _fail(status, data), True
     lines = []
+    local = None
     for h in data.get("hosts", []):
         head = f"{h['label']} (to에 쓸 이름: {'local' if h['host'] == 'local' else h['host']})"
         if not h.get("online"):
@@ -424,7 +454,12 @@ def tool_list_agents(args: dict) -> tuple[str, bool]:
         lines.append(head)
         for s in h.get("sessions") or []:
             cmd = f" · {s['command']}" if s.get("command") else ""
-            lines.append(f"  - {s['name']}{cmd} · {s.get('status', 'idle')}")
+            alias = s.get("alias") or ""
+            if not alias and h["host"] == "local":
+                if local is None:
+                    local = _local_aliases()
+                alias = local.get(s["name"], "")
+            lines.append(f"  - {_session_label(s['name'], alias)}{cmd} · {s.get('status', 'idle')}")
         if not h.get("sessions"):
             lines.append("  (세션 없음)")
     return "\n".join(lines) or "연결된 호스트가 없습니다", False
@@ -458,11 +493,17 @@ def tool_read_messages(args: dict) -> tuple[str, bool]:
     if status != 200:
         return _fail(status, data), True
     rows = []
+    local = _local_aliases() if data.get("messages") else {}
+
+    def mine(name) -> str:          # 이 맥 세션: 별칭 + to에 쓸 ID
+        return _session_label(name, local.get(str(name or ""), ""))
+
     for m in data.get("messages", []):
         frm, to = m.get("from") or {}, m.get("to") or {}
-        arrow = (f"{frm.get('hostLabel') or frm.get('host')}/{frm.get('session') or '?'} → 이 맥/{to.get('session')}"
+        sender = (mine(frm.get("session")) if (frm.get("host") or "local") == "local" else (frm.get("session") or "?"))
+        arrow = (f"{frm.get('hostLabel') or frm.get('host')}/{sender} → 이 맥/{mine(to.get('session'))}"
                  if m.get("dir") == "in" else
-                 f"이 맥/{frm.get('session') or '?'} → {to.get('hostLabel') or to.get('host')}/{to.get('session')}")
+                 f"이 맥/{mine(frm.get('session'))} → {to.get('hostLabel') or to.get('host')}/{to.get('session')}")
         reason = f" ({m['reason']})" if m.get("reason") else ""
         rows.append(f"#{m['id']} [{m.get('status')}{reason}] 대화 {m.get('conv')} · {arrow}: {m.get('text', '')}")
     return "\n".join(rows) or "기록이 없습니다", False

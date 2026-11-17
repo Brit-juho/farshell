@@ -84,8 +84,9 @@ def test_tmux_create_records_local_and_ignores_body_origin(monkeypatch, fake_att
     monkeypatch.setattr(tmux_runner, "run", lambda args, timeout=None: (0, b"", b""))
     sets = []
     monkeypatch.setattr(tmux_runner, "set_option", lambda s, k, v: sets.append((s, k, v)) or True)
-    asyncio.run(tmux_route.create_tmux_session(_FakeRequest({"name": "n1", "origin": "agent"})))
-    assert sets == [("n1", "@fsh_origin", "local")]
+    monkeypatch.setattr(tmux_route, "_alias_after_create", lambda name: None)
+    r = asyncio.run(tmux_route.create_tmux_session(_FakeRequest({"name": "n1", "origin": "agent"})))
+    assert sets == [(r["name"], "@fsh_origin", "local")]   # 만든 세션(랜덤 ID)에 기록한다
 
 
 def test_tmux_create_failure_records_nothing(monkeypatch, fake_attach):
