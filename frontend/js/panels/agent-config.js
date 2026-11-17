@@ -60,6 +60,9 @@ export function mount(host, initialContext = {}, onLegacy = null) {
   let selectedHost = initialContext.host || relayHost();
   let session = initialContext.session || '';
   let hosts = [];
+  let hostsAt = 0;
+  let namesAt = 0;
+  let profileNames = {};   // 계정 프로필 id → 이름(이 호스트의 선택기 목록). 경로 대신 이름을 보이려고 받아 둔다.
   let snapshots = [];
   let rows = [];
   let section = initialContext.section === 'profiles' ? 'profiles' : 'items';
@@ -85,6 +88,14 @@ export function mount(host, initialContext = {}, onLegacy = null) {
 
   const alive = () => !disposed && host.isConnected;
   const contextPayload = () => ({ session: session || null, view });
+  const baseName = (path) => String(path || '').replace(/\/+$/, '').split('/').pop() || String(path || '');
+  // 설정 폴더 경로 → 사람이 붙인 계정 이름. 선택기 목록에 없으면 기본 폴더(~/.claude·~/.codex)는 「기본 계정」, 그 밖은 폴더 이름.
+  const profileTitle = (ctx) => {
+    const m = /\/agent-profiles\/([0-9a-f]{32})\/(?:claude|codex)\/?$/.exec(String(ctx.root || ''));
+    if (m && profileNames[m[1]]) return profileNames[m[1]];
+    if (/\/\.(?:claude|codex)\/?$/.test(String(ctx.root || ''))) return t('기본 계정');
+    return baseName(ctx.root);
+  };
   const rowKey = (row) => `${row.host}:${row.id}`;
   const hostLabel = (id) => hosts.find((h) => h.id === id)?.label || id;
 
@@ -124,7 +135,36 @@ export function mount(host, initialContext = {}, onLegacy = null) {
     await load();
   }
 
+  // 세션 목록은 처음 한 번만 받으면 끝난 세션이 계속 남는다 — 불러올 때마다(2초 안이면 건너뜀) 다시 받는다.
+  async function refreshHosts() {
+    if (Date.now() - hostsAt >= 2000) {
+      hostsAt = Date.now();
+      try {
+        const data = await vtFetch('/api/hosts');
+        if (!alive()) return;
+        const next = data.hosts || [];
+        if (!next.some((h) => h.id === 'local')) next.unshift({ id: 'local', label: t('이 호스트'), sessions: [] });
+        hosts = next;
+      } catch (_) { /* 목록을 못 받으면 가지고 있던 목록을 그대로 쓴다 */ }
+    }
+    if (Date.now() - namesAt >= 2000) try {
+      namesAt = Date.now();
+      const picker = await vtFetch('/api/agent-profiles/read/picker', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      if (alive()) profileNames = Object.fromEntries((picker?.profiles || []).map((p) => [p.id, p.name]));
+    } catch (_) { /* 이름을 못 받으면 경로의 마지막 조각을 쓴다 */ }
+    // 고른 세션이 확인된 호스트에서 사라졌으면 선택을 푼다(끝난 세션이 선택 목록에 남지 않게).
+    if (view === 'session' && session) {
+      const h = hosts.find((x) => x.id === selectedHost);
+      if (h && h.online !== false && !(h.sessions || []).some((x) => x.name === session)) {
+        notice = t('선택한 세션 {name}이(가) 없어져 선택을 풀었습니다', { name: session });
+        session = '';
+      }
+    }
+  }
+
   async function load() {
+    await refreshHosts();
+    if (!alive()) return;
     const seq = ++generation;
     loading = true;
     const targets = selectedHost === 'all' ? hosts.map((h) => h.id) : [selectedHost];
@@ -552,8 +592,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
     controls.appendChild(select(t('호스트'), hostOptions, selectedHost, (v) => perform(() => changeContext(() => { selectedHost = v; session = ''; }))));
     if (view === 'session') {
       const available = hosts.find((h) => h.id === selectedHost)?.sessions || [];
-      const entries = [['', t('세션 선택')], ...available.map((s) => [s.name, s.name])];
-      if (session && !available.some((s) => s.name === session)) entries.push([session, session]);
+      const entries = [['', available.length ? t('세션 선택') : t('고를 수 있는 세션이 없습니다')], ...available.map((s) => [s.name, s.name])];
       controls.appendChild(select(t('세션'), entries, session, (v) => perform(() => changeContext(() => { session = v; }))));
     }
     top.appendChild(controls);
@@ -587,7 +626,11 @@ export function mount(host, initialContext = {}, onLegacy = null) {
     const intro = el('div', 'vt-ac-intro');
     if (loading) intro.appendChild(el('p', 'vt-mcp-meta', t('나머지 위치를 확인하는 중…')));
     const current = snapshots.find((s) => s.host === selectedHost)?.selected;
-    if (view === 'session' && current) intro.appendChild(el('p', 'vt-ac-context', `${current.tool} · ${current.root}\n${current.project}`));
+    if (view === 'session' && current) {
+      const line = el('p', 'vt-ac-context', `${current.tool} · ${profileTitle(current)}\n${baseName(current.project)}`);
+      line.title = `${current.root}\n${current.project}`;   // 전체 경로는 마우스를 올리면
+      intro.appendChild(line);
+    }
     if (notice) { const status = el('p', 'vt-ac-notice', notice); status.setAttribute('role', 'status'); intro.appendChild(status); }
     if (errors.length) {
       const details = el('details', 'vt-ac-errors'); details.appendChild(el('summary', null, t('확인하지 못한 항목 {n}개', { n: errors.length })));
@@ -640,6 +683,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
   vtFetch('/api/hosts').then((data) => {
     if (!alive()) return;
     hosts = data.hosts || [];
+    hostsAt = Date.now();
     if (!hosts.some((h) => h.id === 'local')) hosts.unshift({ id: 'local', label: t('이 호스트'), sessions: [] });
     return load();
   }).catch((e) => {

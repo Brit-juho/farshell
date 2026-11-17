@@ -1665,6 +1665,8 @@ window.__VT_I18N = {
   "폰 마이크 버튼 표시": "Show mic button on phone",
   "폰에서 터미널 위에 떠 있는 마이크 버튼과, 집중 모드 키바의 마이크 키를 보입니다. 끄면 숨기고, 녹음은 이 설정 화면의 「녹음 시작」으로 할 수 있습니다. 이 기기에만 적용됩니다.": "Shows the floating mic button over the terminal and the mic key on the focus-mode key bar. When off, both are hidden; you can still record with \"Start recording\" on this settings screen. Applies to this device only.",
   "업로드": "Upload",
+  "선택한 세션 {name}이(가) 없어져 선택을 풀었습니다": "The selected session {name} no longer exists, so the selection was cleared.",
+  "고를 수 있는 세션이 없습니다": "No sessions to choose from",
   "부분 결과 표시": "Show partial results",
   "녹음하는 동안 인식 중인 문장을 흐리게 미리 보여 줍니다. 입력은 녹음이 끝난 뒤 최종 결과로만 합니다. 서버의 음성 인식을 더 씁니다.": "Shows a dimmed preview of the sentence while you record. Only the final result after recording is typed in. Uses more of the server's speech recognition.",
   "미리 보기 — 녹음이 끝나면 다시 인식합니다": "Preview — recognized again when recording ends",
