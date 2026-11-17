@@ -27,7 +27,7 @@ def principal(request) -> str:
     return 'credential:' + hashlib.sha256(credential.encode()).hexdigest()
 
 
-def snapshot(name: str, pane: str = '') -> dict:
+def snapshot(name: str, pane: str = '', with_alias: bool = True) -> dict:
     """tmux 세션 이름을 UUID·pane PID로 변환한다. 옵션은 세션 수명 동안 보존된다."""
     with _lock:
         fmt = '#{session_id}\t#{@fsh_voice_id}\t#{pane_id}\t#{pane_pid}\t#{session_name}'
@@ -45,8 +45,14 @@ def snapshot(name: str, pane: str = '') -> dict:
             rc, _, _ = tmux_runner.run(['set-option', '-t', sid, '@fsh_voice_id', key])
             if rc:
                 raise ValueError(tr('음성 대상 식별자를 저장할 수 없습니다'))
-        return {'key': key, 'name': actual, 'tmux_id': sid, 'pane': pid,
-                'generation': process, 'boot': BOOT}
+        out = {'key': key, 'name': actual, 'tmux_id': sid, 'pane': pid,
+               'generation': process, 'boot': BOOT}
+    # 사람에게 보일 이름(별칭)은 표시용 — 비교·열쇠는 `name`(ID)과 위 식별자만 쓴다.
+    if not with_alias:
+        return out
+    from session_alias import alias_of
+    out['alias'] = alias_of(actual) or actual
+    return out
 
 
 def from_web(session_id: str) -> dict:
@@ -59,7 +65,7 @@ def from_web(session_id: str) -> dict:
 
 def valid(target: dict) -> bool:
     try:
-        current = snapshot('', target['pane'])
+        current = snapshot('', target['pane'], with_alias=False)
         return all(current.get(k) == target.get(k) for k in ('key', 'tmux_id', 'pane', 'generation', 'boot'))
     except (ValueError, KeyError):
         return False

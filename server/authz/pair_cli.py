@@ -81,6 +81,21 @@ def _request(method: str, path: str, body: Optional[dict] = None):
         return None
 
 
+def _session_ref(text: str) -> str:
+    """`--session`·`--with` 값 — 별칭이나 ID를 받아 ID로. 정확한 ID가 먼저(서버 `/api/tmux/resolve`), 못 찾으면 받은 값 그대로
+    (세션 열쇠 `sid:created` 모양 등은 서버가 판정한다)."""
+    import urllib.parse
+    text = str(text or "").strip()
+    if not text:
+        return text
+    try:
+        status, data = _call("GET", "/api/tmux/resolve?" + urllib.parse.urlencode({"q": text}), timeout=5.0)
+    except Unreachable:
+        return text
+    name = data.get("name") if status == 200 else None
+    return name if isinstance(name, str) and name else text
+
+
 def cmd_start(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="fsh pair start")
     ap.add_argument("--session", action="append", default=[])
@@ -91,10 +106,10 @@ def cmd_start(argv: list[str]) -> int:
     ap.add_argument("--with", dest="with_", default=None)
     args = ap.parse_args(argv)
     import os
-    body = {"sessions": args.session, "dirs": [os.path.abspath(os.path.expanduser(d)) for d in args.dir], "role": args.role,
+    body = {"sessions": [_session_ref(x) for x in args.session], "dirs": [os.path.abspath(os.path.expanduser(d)) for d in args.dir], "role": args.role,
             "leases": args.lease, "elevated": [x for x in args.elevated.split(",") if x]}
     if args.with_:
-        body["with"] = args.with_
+        body["with"] = _session_ref(args.with_)
     r = _request("POST", "/api/pairs", body)
     if r is None:
         return _unreachable()

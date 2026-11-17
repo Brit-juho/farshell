@@ -9,8 +9,14 @@ from textual.widgets import Input, Label
 from i18n import tr
 
 
+def _escape(text: str) -> str:
+    """사람이 붙인 별칭을 Label 마크업으로 해석되지 않게(제어 문자도 지운다)."""
+    from .helpers import clean_label
+    return clean_label(text)
+
+
 class RenameDialog(ModalScreen[str | None]):
-    """세션 이름 변경 모달."""
+    """세션 별칭(보이는 이름) 변경 모달. tmux 이름(ID)은 바뀌지 않는다."""
 
     BINDINGS = [Binding("escape", "cancel", tr("취소"))]
 
@@ -20,7 +26,7 @@ class RenameDialog(ModalScreen[str | None]):
 
     def compose(self) -> ComposeResult:
         yield Vertical(
-            Label(tr("'{name}' 새 이름:", name=self.current_name)),
+            Label(tr("'{name}' 새 이름:", name=_escape(self.current_name))),
             Input(value=self.current_name, id="rename-input"),
             Label(tr("[Enter] 확정  [Esc] 취소"), classes="dim"),
             id="rename-dialog",

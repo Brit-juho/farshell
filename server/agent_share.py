@@ -513,7 +513,8 @@ _share_lock = threading.Lock()
 def _by_name(snap: dict[str, Sess], name: str) -> Sess:
     hits = [s for s in snap.values() if s.name == name]
     if len(hits) != 1:
-        raise ShareError("not_found", tr("'{name}' 세션이 없습니다", name=name), 404)
+        from session_alias import alias_of
+        raise ShareError("not_found", tr("'{name}' 세션이 없습니다", name=alias_of(name)), 404)
     return hits[0]
 
 

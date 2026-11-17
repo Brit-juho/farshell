@@ -471,6 +471,7 @@ _t_en_lookup() {
     '설치됨, 미연결 ('\''tailscale up'\'' 필요)') _T_OUT='installed, not connected (run '\''tailscale up'\'')' ;;
     '설치됨, 미연결 — '\''tailscale up'\'' 실행 필요') _T_OUT='installed, not connected — run '\''tailscale up'\''' ;;
     '설치됨:') _T_OUT='Installed:' ;;
+    '세션 '\''{name}'\''을(를) 찾지 못했습니다 (별칭 또는 ID)') _T_OUT='Couldn'\''t find session '\''{name}'\'' (alias or ID)' ;;
     '세션 서명키(VT_AUTH_SESSION_KEY) 자동 생성') _T_OUT='Session signing key (VT_AUTH_SESSION_KEY) generated automatically' ;;
     '세션 이름을 입력하세요:') _T_OUT='Enter a session name:' ;;
     '소스가 산출물보다 최신 — '\''npm run build'\''로 다시 빌드하세요 ({src} 등)') _T_OUT='sources are newer than the build — rebuild with '\''npm run build'\'' (e.g. {src})' ;;

@@ -590,6 +590,34 @@ def _run_via_server() -> dict | None:
     return data
 
 
+def _cli_aliases(names) -> dict[str, str]:
+    """CLI 목록용 {ID: 별칭} — 이 맥 세션 이름만 넘긴다. 기록을 못 읽으면 빈 지도(ID 그대로 보인다)."""
+    try:
+        from session_alias import aliases
+        return aliases(names)
+    except Exception:  # noqa: BLE001 — 표시용
+        return {}
+
+
+def _cli_label(name: str, shown: dict[str, str]) -> str:
+    """`별칭 (ID)` — 별칭이 ID와 같거나 없으면 ID만. 제어 문자는 지운다."""
+    alias = shown.get(name) or name
+    out = f"{alias} ({name})" if alias != name else name
+    return "".join(ch for ch in out if ch.isprintable())
+
+
+def _cli_target(arg: str) -> str:
+    """`vt queue add "…" [세션]` 의 세션 — 별칭 또는 ID를 받아 ID로. 정확한 tmux 이름이 먼저, 아니면 살아 있는 세션의 별칭
+    (정확히 하나). 못 찾으면(기록을 못 읽음·없는 이름) 받은 값 그대로 — 옛 동작."""
+    if tmux_runner.has_session(arg):
+        return arg
+    try:
+        from session_alias import resolve
+        return resolve(arg) or arg
+    except Exception:  # noqa: BLE001
+        return arg
+
+
 def _cli(argv: list[str]) -> int:
     import sys
 
@@ -605,13 +633,14 @@ def _cli(argv: list[str]) -> int:
             print("  " + tr("추가: vt queue add \"테스트 고쳐줘\""))
         else:
             pend = sum(1 for x in items if x.get("status") == STATUS_PENDING)
+            targets = [target_session(x) for x in items]
+            shown = _cli_aliases(ts for x, ts in zip(items, targets) if ts and ts != GONE and target_host(x) == "local")
             print("  📋 " + tr("프롬프트 큐 — {total}건 (대기 {pending})", n=len(items), total=len(items), pending=pend))
             print()
-            for i, x in enumerate(items, 1):
+            for i, (x, ts) in enumerate(zip(items, targets), 1):
                 st = x.get("status")
                 mark = "⏸" if st == STATUS_BLOCKED else ("→" if st == STATUS_SENDING else f"{i}.")
-                ts = target_session(x)
-                target = f" [{ts}]" if ts else ""
+                target = f" [{_cli_label(ts, shown) if target_host(x) == "local" else ts}]" if ts else ""
                 text = x["text"].replace("\n", " ⏎ ")
                 if len(text) > 60:
                     text = text[:57] + "..."
@@ -632,8 +661,8 @@ def _cli(argv: list[str]) -> int:
         if not rest:
             print("  ✗ " + tr("내용이 없습니다. 사용법: vt queue add \"내용\" [세션]"), file=sys.stderr)
             return 2
-        # 마지막 인자가 tmux 세션 이름이면 타깃으로 쓴다(vt queue add "..." dev)
-        r = add(rest[0], rest[1] if len(rest) > 1 else None)
+        # 마지막 인자가 세션(별칭 또는 ID)이면 타깃으로 쓴다(vt queue add "..." dev). 저장 값은 ID.
+        r = add(rest[0], _cli_target(rest[1]) if len(rest) > 1 and rest[1] else None)
         if not r.get("ok"):
             print(f"  ✗ {r['reason']}", file=sys.stderr)
             return 1

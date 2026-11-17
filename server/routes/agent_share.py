@@ -396,12 +396,19 @@ async def agent_send(request: Request):
 # --- 사람용 (브라우저 로그인 세션만) ------------------------------------------------------------
 
 
+async def _shown(name: str) -> str:
+    """오류 문구에 보일 세션 이름 — 별칭(기록에 없으면 받은 값). 제어 문자는 지운다."""
+    from session_alias import alias_of
+    label = await asyncio.to_thread(alias_of, name)
+    return "".join(ch for ch in str(label or name) if ch.isprintable())[:128]
+
+
 @human_router.post("/api/tmux/{name}/share", response_model=ShareSetResponse)
 async def share_session(name: str, request: Request):
     """세션을 에이전트에게 공유(또는 닉네임·모드 변경). 모드를 낮추면 즉시 효력이 있다."""
     body = await _body(request)
     if not _NAME_RE.fullmatch(name):
-        return _err(ShareError("not_found", tr("'{name}' 세션이 없습니다", name=name), 404))
+        return _err(ShareError("not_found", tr("'{name}' 세션이 없습니다", name=await _shown(name)), 404))
     try:
         share = await asyncio.to_thread(agent_share.set_share, name, body.get("nick"), body.get("mode"), _actor(request))
     except ShareError as e:
@@ -415,7 +422,7 @@ async def share_session(name: str, request: Request):
 async def unshare_session(name: str, request: Request):
     """공유 해제 — 그 세션의 모든 권한과 대기·거부 요청도 지운다."""
     if not _NAME_RE.fullmatch(name):
-        return _err(ShareError("not_found", tr("'{name}' 세션이 없습니다", name=name), 404))
+        return _err(ShareError("not_found", tr("'{name}' 세션이 없습니다", name=await _shown(name)), 404))
     try:
         res = await asyncio.to_thread(agent_share.unset_share, name, _actor(request))
     except ShareError as e:

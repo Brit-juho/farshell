@@ -31,6 +31,22 @@ _REAL_SEND = tmux_target.send_to_tmux               # 위임 시험 픽스처가
 # --- 도우미 -----------------------------------------------------------------------------------
 
 
+
+@pytest.fixture(autouse=True)
+def _readable_child_names(monkeypatch):
+    """이 파일은 권한 재확인을 본다 — 하위 세션 ID를 작업 제목으로 고정한다(이름 규칙은 test_session_names.py)."""
+    import delegation
+
+    def legacy(parent_name, title, existing):
+        base = delegation._NAME_RE.sub("-", title).strip("-")[:40] if title else ""
+        base = base or f"{delegation._NAME_RE.sub('-', parent_name).strip('-')[:32] or 'sub'}-sub"
+        for i in range(1, 50):
+            name = base if i == 1 else f"{base}-{i}"
+            if name not in existing:
+                return name
+        raise delegation.DelegationError("name_exhausted", "x", 409)
+    monkeypatch.setattr(delegation, "_child_name", legacy)
+
 def drop_grant(gid: str) -> None:
     with store.txn() as d:
         d["grants"]["items"] = [g for g in d["grants"]["items"] if g.get("id") != gid]

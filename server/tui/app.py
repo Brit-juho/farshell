@@ -18,16 +18,48 @@ except ImportError:
 
 from .helpers import (
     VT_PORT,
+    clean_label,
     get_hotkey,
     get_server_status,
     get_voice_target,
     list_tmux_sessions,
+    server_call,
     server_request,
+    server_sessions,
     set_voice_target,
     tmux,
 )
 from .modals import ConfirmDialog, RenameDialog
 from i18n import tr
+
+
+class RenameFailed(Exception):
+    """이름(별칭) 바꾸기 실패 — 메시지가 화면에 그대로 보인다."""
+
+
+def _rename_error(code: str | None, status: int) -> str:
+    if code == "alias_taken":
+        return tr("이미 다른 세션이 쓰는 이름입니다")
+    if code == "invalid_title":
+        return tr("쓸 수 없는 이름입니다(1~128자, 제어 문자·ID 모양 금지)")
+    if code == "alias_unavailable" or status == 503:
+        return tr("세션 기록을 아직 못 읽었습니다 — 잠시 뒤 다시 하세요")
+    return clean_label(code) if code else f"HTTP {status or '-'}"
+
+
+def rename_session(name: str, old: str, new: str, rows: dict[str, dict]) -> str:
+    """세션 `name`(ID)의 별칭을 `new`로. 성공하면 알림 문구, 실패하면 RenameFailed. tmux 이름은 건드리지 않는다."""
+    if not rows:
+        raise RenameFailed(tr("서버에 연결할 수 없어 이름을 바꾸지 못했습니다 — 'fsh status'로 확인하세요"))
+    web_session_id = (rows.get(name) or {}).get("web_session_id")
+    if not web_session_id:
+        raise RenameFailed(tr("서버가 이 세션을 아직 모릅니다 — 잠시 뒤 다시 하세요"))
+    status, resp = server_call("PATCH", f"/api/sessions/{web_session_id}", body={"name": new})
+    if status == 200 and isinstance(resp, dict):
+        shown = resp.get("alias") or resp.get("name") or new
+        return tr("이름 변경: {old} → {new}", old=clean_label(old), new=clean_label(shown))
+    code = resp.get("error") if isinstance(resp, dict) else None
+    raise RenameFailed(_rename_error(code if isinstance(code, str) else None, status))
 
 
 class VTManagerApp(App):
@@ -96,8 +128,21 @@ class VTManagerApp(App):
         self.refresh_data()
         self.set_interval(3.0, self.refresh_data)
 
+    def _label(self, name: str | None) -> str:
+        """화면에 보일 세션 이름 — 별칭(서버 기록), 없으면 ID. 열쇠(잠금·kill·attach)는 언제나 ID."""
+        if not name:
+            return ""
+        for s in self.sessions:
+            if s["name"] == name:
+                return s.get("label") or clean_label(name)
+        return clean_label(name)
+
     def refresh_data(self) -> None:
-        self.sessions = list_tmux_sessions()
+        sessions = list_tmux_sessions()
+        rows = server_sessions() if sessions else {}
+        for s in sessions:
+            s["label"] = clean_label((rows.get(s["name"]) or {}).get("alias") or s["name"])
+        self.sessions = sessions
         self.target = get_voice_target()
         spec, disabled = get_hotkey()
         srv = get_server_status()
@@ -105,7 +150,7 @@ class VTManagerApp(App):
         status = self.query_one("#status-bar", Static)
         srv_str = tr("● 서버 :{port}", port=VT_PORT) if srv.get("running") else tr("○ 서버 정지")
         voice_str = "● Voice" if srv.get("voice") else "○ Voice"
-        target_str = f"🔒 LOCK: {self.target}" if self.target else "🔓 AUTO"
+        target_str = f"🔒 LOCK: {self._label(self.target)}" if self.target else "🔓 AUTO"
         hotkey_str = f"⌨ {spec}" + (" (DISABLED)" if disabled else "")
         status.update(
             f"{srv_str}    {voice_str}    {target_str}    {hotkey_str}"
@@ -117,7 +162,7 @@ class VTManagerApp(App):
         for s in self.sessions:
             target_mark = "🎤 LOCK" if (self.target == s["name"]) else ""
             table.add_row(
-                s["name"],
+                s["label"],
                 str(s["windows"]),
                 "✓" if s["attached"] else "",
                 target_mark,
@@ -144,44 +189,31 @@ class VTManagerApp(App):
         self.notify(tr("새로고침 완료"), timeout=1.5)
 
     def action_rename(self) -> None:
+        """별칭(보이는 이름)만 바꾼다 — 서버 기록이 주인이다(PATCH /api/sessions/{id}). tmux 이름(ID)은 바꾸지 않는다.
+        서버가 없거나 이 세션을 모르면 바꾸지 않고 이유를 보인다(예전의 `tmux rename-session` 폴백은 없앴다)."""
         name = self._selected_name()
         if not name:
             return
+        rows = server_sessions()
+        current = (rows.get(name) or {}).get("alias") or name
 
         def on_done(new_name: str | None) -> None:
-            if not new_name or new_name == name:
+            if not new_name or new_name == current:
                 return
-            srv_running, _ = server_request("GET", "/api/capabilities", timeout=0.5)
-            web_session_id = None
-            if srv_running:
-                ok, sessions = server_request("GET", "/api/tmux/sessions", timeout=1.0)
-                if ok and isinstance(sessions, list):
-                    for s in sessions:
-                        if isinstance(s, dict) and s.get("name") == name:
-                            web_session_id = s.get("web_session_id")
-                            break
-            if web_session_id:
-                ok, resp = server_request(
-                    "PATCH", f"/api/sessions/{web_session_id}",
-                    body={"name": new_name},
-                )
-                if ok and resp and resp.get("tmux_renamed"):
-                    self.notify(tr("이름 변경: {old} → {new}", old=name, new=new_name))
-                    self.refresh_data()
-                    return
-            rc, _, err = tmux("rename-session", "-t", name, new_name)
-            if rc == 0:
-                self.notify(tr("이름 변경: {old} → {new}", old=name, new=new_name))
-                self.refresh_data()
-            else:
-                self.notify(tr("실패: {err}", err=err.strip()), severity="error")
+            try:
+                self.notify(rename_session(name, current, new_name, server_sessions()))
+            except RenameFailed as e:
+                self.notify(tr("실패: {err}", err=str(e)), severity="error")
+            self.refresh_data()
 
-        self.push_screen(RenameDialog(name), on_done)
+        self.push_screen(RenameDialog(current), on_done)
 
     def action_kill(self) -> None:
         name = self._selected_name()
         if not name:
             return
+
+        label = self._label(name)
 
         def on_confirm(ok: bool) -> None:
             if not ok:
@@ -196,13 +228,13 @@ class VTManagerApp(App):
                 if rc != 0:
                     self.notify(tr("실패: {err}", err=err.strip()), severity="error")
                     return
-            self.notify(tr("세션 '{name}' 종료", name=name))
+            self.notify(tr("세션 '{name}' 종료", name=label))
             if self.target == name:
                 set_voice_target(None)
             self.refresh_data()
 
         self.push_screen(
-            ConfirmDialog(tr("세션 '{name}'을 정말 종료하시겠습니까?", name=name)),
+            ConfirmDialog(tr("세션 '{name}'을 정말 종료하시겠습니까?", name=label)),
             on_confirm,
         )
 
@@ -223,7 +255,7 @@ class VTManagerApp(App):
                 stderr=subprocess.DEVNULL,
                 start_new_session=True,
             )
-            self.notify(tr("새 터미널 창에 '{name}' attach 시도", name=name))
+            self.notify(tr("새 터미널 창에 '{name}' attach 시도", name=self._label(name)))
         except Exception as e:
             self.notify(tr("실패: {err}", err=e), severity="error")
 
@@ -242,7 +274,7 @@ class VTManagerApp(App):
         if not name:
             return
         set_voice_target(name)
-        self.notify(tr("🔒 음성 타깃 LOCK: {name}", name=name))
+        self.notify(tr("🔒 음성 타깃 LOCK: {name}", name=self._label(name)))
         self.refresh_data()
 
     def action_unlock(self) -> None:

@@ -112,6 +112,37 @@ def _names(snap) -> dict:
     return {k: v.name for k, v in (snap or {}).items()}
 
 
+class _Shown:
+    """화면에 보일 세션 이름(별칭) — 열쇠·저장 값은 그대로 두고 보기(view)에만 쓴다. 한 번 찾은 이름은 기억한다.
+    기록에 없는 이름(다른 맥 `호스트/이름`, 닉네임 등)은 받은 값 그대로."""
+
+    def __init__(self, names=()):
+        self._m: dict[str, str] = {}
+        self.prime(names)
+
+    def prime(self, names) -> None:
+        want = [n for n in names if isinstance(n, str) and n and n not in self._m]
+        if not want:
+            return
+        try:
+            from session_alias import aliases
+            self._m.update(aliases(want))
+        except Exception:  # noqa: BLE001 — 별칭은 표시용, 못 찾으면 이름 그대로
+            self._m.update({n: n for n in want})
+
+    def __call__(self, name) -> str:
+        if not isinstance(name, str) or not name:
+            return name or ""
+        if name not in self._m:
+            self.prime([name])
+        return self._m.get(name) or name
+
+    def names(self, raw: dict) -> dict:
+        """{세션 열쇠: 이름} → {세션 열쇠: 별칭}."""
+        self.prime(raw.values())
+        return {k: self(v) for k, v in raw.items()}
+
+
 def _session_key(resource: str) -> Optional[str]:
     return resource[len("session:local/"):] if resource.startswith("session:local/") else None
 
@@ -210,15 +241,17 @@ def _scoped(rec: dict, scopes, sconds) -> dict:
     return out
 
 
-def request_view(rec: dict, names: Optional[dict] = None) -> dict:
-    """승인함 항목(generic). 사유는 에이전트가 적은 글이다 — 화면은 이스케이프해서 보이고 판단 근거로만 쓴다."""
+def request_view(rec: dict, names: Optional[dict] = None, shown: Optional["_Shown"] = None) -> dict:
+    """승인함 항목(generic). 사유는 에이전트가 적은 글이다 — 화면은 이스케이프해서 보이고 판단 근거로만 쓴다.
+    `shown` 이 있으면 세션 이름을 별칭으로 보인다(`names` 는 이미 별칭이어야 한다)."""
     names = names or {}
+    shown = shown or (lambda n: n or "")
     sk = rec.get("subject_session")
     scopes = list(rec.get("scopes") or ())
     return _item(kind=KIND_GENERIC, rid=raw_id(rec), rec=rec,
                  subject={"kind": "peer" if rec.get("peer_id") else ("agent" if sk else "local"), "id": rec.get("subject"),
-                          "name": names.get(sk) or rec.get("subject_name") or ""},
-                 resource={"id": rec.get("resource"), "label": names.get(rec.get("resource_session") or "") or rec.get("resource_name") or ""},
+                          "name": names.get(sk) or shown(rec.get("subject_name")) or ""},
+                 resource={"id": rec.get("resource"), "label": names.get(rec.get("resource_session") or "") or shown(rec.get("resource_name")) or ""},
                  scopes=scopes, sconds=rec.get("sconds"), extra={"reason": rec.get("note") or "", "ttl": rec.get("ttl")})
 
 
@@ -493,7 +526,8 @@ def list_approvals(snap, *, names_alive=None) -> list[dict]:
     import agent_share
     from . import host_grant_svc, msg_svc
     now = time.time()
-    names = _names(snap)
+    shown = _Shown()
+    names = shown.names(_names(snap))       # 보기용 별칭 — 아래 목록 함수들에는 보기(view)에만 쓰인다
     out: list[dict] = []
     recs = {raw_id_any(a): a for a in store.snapshot(now).approvals}
     state = agent_share.list_state(snap)
@@ -507,28 +541,28 @@ def list_approvals(snap, *, names_alive=None) -> list[dict]:
         a = (snap or {}).get(f"{r['agent']['sid']}:{r['agent']['created']}")
         out.append(_item(kind=KIND_SHARE, rid=r["id"], rec={**r, "delegation": rec.get("delegation")},
                          subject={"kind": "agent", "id": f"agent:local/{r['agent']['sid']}:{r['agent']['created']}",
-                                  "name": a.name if a else r["agent"].get("name", "")},
+                                  "name": shown(a.name if a else r["agent"].get("name", ""))},
                          resource={"id": f"session:local/{r['target']['sid']}:{r['target']['created']}",
-                                   "label": ((t.share or {}).get("nick") if t else None) or (t.name if t else "")},
+                                   "label": ((t.share or {}).get("nick") if t else None) or (shown(t.name) if t else "")},
                          scopes=scopes, sconds=sconds, extra={"access": r["kind"]}, now=now))
     if msg_svc.enforced():
         alive_names = names_alive() if names_alive else (None, {})
-        for v in msg_svc.list_requests(alive_names[0], alive_names[1] or names):
+        for v in msg_svc.list_requests(alive_names[0], shown.names(alive_names[1] or {}) or names):
             rec = recs.get(v["id"], {})
             out.append(_item(kind=KIND_MSG, rid=v["id"], rec={**v, "delegation": rec.get("delegation")},
-                             subject={"kind": "agent", "id": rec.get("subject"), "name": v["agent"]["name"]},
-                             resource={"id": rec.get("resource"), "label": v["target"]["name"]},
+                             subject={"kind": "agent", "id": rec.get("subject"), "name": shown(v["agent"]["name"])},
+                             resource={"id": rec.get("resource"), "label": shown(v["target"]["name"])},
                              scopes=[msg_svc.SCOPE], sconds=None, now=now))
     if host_grant_svc.enforced():
         for v in host_grant_svc.list_requests():
             rec = recs.get(v["id"], {})
             sc, cd, res = host_grant_svc._requested(rec.get("change") or v.get("change") or "")
             out.append(_item(kind=KIND_PEER, rid=v["id"], rec=v,
-                             subject={"kind": "local", "id": rec.get("subject"), "name": v["agent"]["name"]},
+                             subject={"kind": "local", "id": rec.get("subject"), "name": shown(v["agent"]["name"])},
                              resource={"id": res, "label": v["target"]["nick"]},
                              scopes=sc, sconds=cd, extra={"change": v.get("change")}, now=now))
     alive = _alive(snap)
-    gen = [request_view(r, names) for r in store.snapshot(now).approvals
+    gen = [request_view(r, names, shown) for r in store.snapshot(now).approvals
            if is_req(r) and r.get("state") == "pending" and now < float(r.get("expires") or 0)
            and not (alive is not None and any(r.get(k) and r[k] not in alive for k in ("subject_session", "resource_session")))]
     out += gen
@@ -562,13 +596,14 @@ def kind_of_grant(g: dict) -> str:
     return "other"
 
 
-def grant_view(g: dict, kind: str, names: Optional[dict] = None) -> dict:
+def grant_view(g: dict, kind: str, names: Optional[dict] = None, shown: Optional["_Shown"] = None) -> dict:
     names = names or {}
+    shown = shown or (lambda n: n or "")
     scopes = _fmt_scopes(S.caps_of(g))
     mu = (g.get("conds") or {}).get("max_uses")
     sk = g.get("subject_session")
     return {"id": g.get("id"), "kind": kind, "effect": g.get("effect") or "allow", "state": g.get("state") or "active",
-            "subject": {"id": g.get("subject"), "name": names.get(sk or "") or g.get("subject_name") or ""},
+            "subject": {"id": g.get("subject"), "name": names.get(sk or "") or shown(g.get("subject_name")) or ""},
             "resource": g.get("resource"), "scopes": scopes, "conds": _view_conds(g.get("sconds")),
             "preset": preset_of(list(g.get("scopes") or ()), g.get("sconds")),
             "approvedBy": g.get("approved_by"), "approvedVia": S.via_of(g), "created": g.get("created"),
@@ -582,7 +617,8 @@ def list_grants(snap, *, subject: str = "", resource: str = "", kind: str = "") 
     import host_store
     from . import migrate
     now = time.time()
-    names = _names(snap)
+    shown = _Shown()
+    names = shown.names(_names(snap))       # 보기용 별칭
     st = store.snapshot(now)
     out: list[dict] = []
     # 세션 공유 — 플래그와 무관하게 옛 목록 함수가 진실을 안다(꺼짐: agent_grants.json, 켜짐: 엔진 저장소)
@@ -595,7 +631,7 @@ def list_grants(snap, *, subject: str = "", resource: str = "", kind: str = "") 
         a = (snap or {}).get(f"{g['agent']['sid']}:{g['agent']['created']}")
         out.append({"id": gid, "kind": KIND_SHARE, "effect": "allow", "state": "active",
                     "subject": {"id": f"agent:local/{g['agent']['sid']}:{g['agent']['created']}",
-                                "name": a.name if a else g["agent"].get("name", "")},
+                                "name": shown(a.name if a else g["agent"].get("name", ""))},
                     "resource": f"session:local/{g['target']['sid']}:{g['target']['created']}", "scopes": _fmt_scopes(S.effective(scopes, sconds)),
                     "conds": _view_conds(sconds), "preset": preset_of(scopes, sconds),
                     "approvedBy": g.get("approvedBy") or rec.get("approved_by"),
@@ -608,19 +644,23 @@ def list_grants(snap, *, subject: str = "", resource: str = "", kind: str = "") 
         for rec in migrate.translate_peer_grant(hg):
             cp = copies.get(rec["origin"]) or {}
             out.append(grant_view({**rec, "approved_by": cp.get("approved_by") or rec.get("approved_by"),
-                                   "approved_via": cp.get("approved_via") or rec.get("approved_via")}, KIND_PEER, names))
+                                   "approved_via": cp.get("approved_via") or rec.get("approved_via")}, KIND_PEER, names, shown))
     for g in st.grants:
         k = kind_of_grant(g)
         if k in (KIND_SHARE, KIND_PEER) or g.get("state", "active") != "active":     # 끝난(ended) 위임 grant 는 쓸 수 없다 — 목록에서 뺀다
             continue
         if k in (KIND_GENERIC,) and _grant_dead(g, _alive(snap), now):
             continue
-        out.append(grant_view(g, k, names))
+        out.append(grant_view(g, k, names, shown))
+    # 이름 필터는 별칭으로도, 세션 ID로도 찾는다(보이는 이름은 별칭이다).
+    subject_alias = shown(subject).lower() if subject else ""
 
     def keep(v: dict) -> bool:
         if kind and v["kind"] != kind:
             return False
-        if subject and subject not in str(v["subject"].get("id") or "") and subject.lower() not in str(v["subject"].get("name") or "").lower():
+        shown_name = str(v["subject"].get("name") or "").lower()
+        if subject and subject not in str(v["subject"].get("id") or "") and subject.lower() not in shown_name \
+                and subject_alias not in shown_name:
             return False
         if resource and not str(v.get("resource") or "").startswith(resource):
             return False

@@ -36,6 +36,39 @@ def server_request(method: str, path: str, body: dict | None = None, timeout: fl
         return False, None
 
 
+def server_call(method: str, path: str, body: dict | None = None, timeout: float = 2.0) -> tuple[int, dict | None]:
+    """server_request 와 같지만 (HTTP 상태, 본문)을 돌려준다 — 오류 코드(`alias_taken` 등)를 화면에 보이려고. 서버가 없으면 (0, None)."""
+    import json as _json
+    try:
+        status, content = fsh_client.call(method, path, body=body, timeout=timeout, svc="tui",
+                                          server=f"http://127.0.0.1:{VT_PORT}", token=VT_TOKEN, port=VT_PORT)
+    except (urllib.error.URLError, ConnectionError, OSError):
+        return 0, None
+    try:
+        data = _json.loads(content) if content else {}
+    except _json.JSONDecodeError:
+        data = None
+    return status, data if isinstance(data, dict) or data is None else {"items": data}
+
+
+def clean_label(text) -> str:
+    """사람이 붙인 별칭을 한 줄 표시용으로 — 제어 문자를 지우고 공백을 접는다. Textual 마크업으로 해석되지 않게 `[`도 이스케이프."""
+    out = " ".join("".join(ch for ch in str(text or "") if ch.isprintable() or ch.isspace()).split())
+    try:
+        from rich.markup import escape
+    except ImportError:          # textual 이 없으면 TUI 자체가 뜨지 않는다 — 시험용 대체
+        return out.replace("[", "\\[")
+    return escape(out)
+
+
+def server_sessions(timeout: float = 1.0) -> dict[str, dict]:
+    """서버가 아는 세션 행 {ID: 행}(별칭·web_session_id). 서버가 없거나 실패하면 빈 지도."""
+    ok, rows = server_request("GET", "/api/tmux/sessions", timeout=timeout)
+    if not ok or not isinstance(rows, list):
+        return {}
+    return {r["name"]: r for r in rows if isinstance(r, dict) and isinstance(r.get("name"), str)}
+
+
 def tmux(*args: str, timeout: float = 2.0) -> tuple[int, str, str]:
     cmd = ["tmux", "-L", VT_TMUX_SOCKET, *args]
     try:

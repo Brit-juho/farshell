@@ -125,7 +125,7 @@ function connect() {
         const raw = atob(msg.audio);
         const bytes = Uint8Array.from(raw, (c) => c.charCodeAt(0));
         const status = document.getElementById('mic-status');
-        if (status) status.textContent = t('{name} 응답 읽기', { name: pinLabel(msg.name) });
+        if (status) status.textContent = t('{name} 응답 읽기', { name: msg.alias || pinLabel(msg.name) });
         play(new Blob([bytes], { type: msg.media_type }), msg.id);
       }
     } catch (e) { console.warn('[voice]', e); }

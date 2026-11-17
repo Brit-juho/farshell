@@ -355,7 +355,7 @@ def _neutralize(body: str) -> str:
 
 
 def format_to_parent(item: dict, kind: str, body: str = "", outcome: str = "") -> str:
-    child = item["child"]["name"]
+    child = _label(item["child"])
     tag = f"{kind}/{outcome}" if outcome else kind
     head = _one_line(f"{HEADER_PREFIX} · {child} · {tag}] (위임 {item['id']})", 200)
     if not body:
@@ -392,6 +392,17 @@ def _sha8(text: str) -> str:
 
 def _agent_id(key: str) -> str:
     return f"agent:local/{key}"
+
+
+def _label(side: dict) -> str:
+    """사람·에이전트가 읽는 문구용 세션 이름 — 이 호스트 세션이면 별칭, 다른 호스트 세션이면 받은 이름 그대로.
+    장부·열쇠에는 쓰지 않는다(그 값은 ID)."""
+    name = str((side or {}).get("name") or "")
+    if not name or (side or {}).get("host"):
+        return name
+    from session_alias import alias_of
+    # 별칭은 사람이 친 글 — 주입 머리 줄의 `[ … ]` 틀을 흉내 내지 못하게 대괄호를 바꾼다.
+    return str(alias_of(name) or name).replace("[", "(").replace("]", ")")
 
 
 def _push(title: str, body: str) -> None:
@@ -861,7 +872,9 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
     tmux_target.send_to_tmux(ident["pane"], LAUNCH[agent])
     _audit("spawn", "ok", principal=remote.principal if remote is not None else _agent_id(parent_key), did=did,
            reason=f"{caller.name}->{child_name}", chars=len(task), sha8=_sha8(task))
-    _push(tr("하위 세션을 만들었습니다"), f"{caller.name} → {child_name}: {_one_line(task, 60)}")
+    _push(tr("하위 세션을 만들었습니다"),
+          f"{_label({'name': caller.name, 'host': remote.host if remote is not None else ''})} → "
+          f"{_label({'name': child_name})}: {_one_line(task, 60)}")
     if remote is not None:
         return {"delegation": did, "child": child_name, "agent": agent, "childKey": ident["key"], **({"identity_version": 2, "runtime_binding": identity_metadata["runtime_bindings"][ident["key"]]} if identity_metadata else {})}    # 이 호스트의 경로는 내보내지 않는다
     out = {"delegation": did, "child": child_name, "agent": agent, "cwd": start_dir}
@@ -882,7 +895,7 @@ def send_to_child(caller_key: str, did: str, text: str) -> dict:
         item = _owned(data, did, caller_key, "parent", op="send")
         if item["state"] not in OPEN_STATES:
             raise DelegationError("delegation_closed", "닫힌 위임입니다", 409)
-        head = f"[부모 세션 {item['parent']['name']}의 추가 지시 · 위임 {did}]"
+        head = _one_line(f"[부모 세션 {_label(item['parent'])}의 추가 지시 · 위임 {did}]", 200)
         msg = f"{head}\n{text}"
         if len(msg) > TASK_MAX_CHARS:
             raise DelegationError("text_too_long", f"내용이 너무 깁니다(최대 {TASK_MAX_CHARS - len(head) - 1}자)", 413)
@@ -986,7 +999,7 @@ def report(caller_key: str, outcome: str, summary: str) -> dict:
     _audit("report", "ok", principal=_agent_id(caller_key), did=did, reason=outcome, chars=len(summary),
            sha8=_sha8(summary))
     if not still_running:
-        _push(tr("위임한 작업이 모두 끝났습니다"), tr("{name}의 하위 세션 보고가 도착했습니다", name=item['parent']['name']))
+        _push(tr("위임한 작업이 모두 끝났습니다"), tr("{name}의 하위 세션 보고가 도착했습니다", name=_label(item['parent'])))
     return {"ok": True, "delegation": did}
 
 
@@ -1144,7 +1157,7 @@ def send_from_remote(host: str, obo: str, did: str, text: str) -> dict:
         _authorize_remote(item, host, obo, "parent", "send")
         if item["state"] not in OPEN_STATES:
             raise DelegationError("delegation_closed", "닫힌 위임입니다", 409)
-        head = f"[부모 세션 {item['parent']['name']}의 추가 지시 · 위임 {did}]"
+        head = _one_line(f"[부모 세션 {_label(item['parent'])}의 추가 지시 · 위임 {did}]", 200)
         msg = f"{head}\n{text}"
         if len(msg) > TASK_MAX_CHARS:
             raise DelegationError("text_too_long", f"내용이 너무 깁니다(최대 {TASK_MAX_CHARS - len(head) - 1}자)", 413)
@@ -1254,8 +1267,9 @@ def on_agent_event(session: Optional[str], status: Optional[str], payload: dict)
             _nh = "하위 세션이 사람의 승인을 기다립니다. 에이전트는 대신 승인할 수 없습니다. 기다리거나 다른 일을 하세요."
             _enqueue(data["items"], item, KIND_NEEDS_HUMAN, format_to_parent(item, "needs_human", _nh), "parent", body=_nh)
         _write(data)
-        child_name, parent_name = item["child"]["name"], item["parent"]["name"]
+        child_side, parent_side = dict(item["child"]), dict(item["parent"])
     _flush(did)
+    child_name, parent_name = _label(child_side), _label(parent_side)
     if status == "waiting":
         _push(tr("하위 세션이 승인을 기다립니다"), f"{parent_name} → {child_name}")
     else:
@@ -1428,6 +1442,18 @@ def _cli_close_via_server(did: str):
     return body
 
 
+def _cli_label(side: dict) -> str:
+    """`fsh delegate ls` 한 칸: 별칭, ID와 다르면 `별칭 (ID)`. 다른 호스트면 `호스트/이름`. 제어 문자는 지운다."""
+    name = str((side or {}).get("name") or "")
+    host = str((side or {}).get("host") or "")
+    if host:
+        out = f"{host}/{name}"
+    else:
+        label = _label(side)
+        out = f"{label} ({name})" if label and label != name else name
+    return "".join(ch for ch in out if ch.isprintable())
+
+
 def _cli(argv: list[str]) -> int:
     import sys
     cmd = argv[0] if argv else "ls"
@@ -1439,7 +1465,7 @@ def _cli(argv: list[str]) -> int:
         for x in sorted(items, key=lambda x: x.get("created_at", 0)):
             ts = time.strftime("%m-%d %H:%M", time.localtime(x.get("created_at", 0)))
             oc = f"/{x['outcome']}" if x.get("outcome") else ""
-            print(f"  {x['id']}  {ts}  {x['parent']['name']} → {x['child']['name']}  "
+            print(f"  {x['id']}  {ts}  {_cli_label(x['parent'])} → {_cli_label(x['child'])}  "
                   f"[{x['state']}{oc}]  {x.get('task_preview', '')[:60]}")
         return 0
     if cmd == "close":

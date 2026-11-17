@@ -31,8 +31,11 @@ def calls(monkeypatch):
 
 def test_start_creates_then_issues_a_code(calls, capsys):
     seen, st = calls
-    st["reply"] = lambda m_, p: (201, {"ok": True, "pair": PAIR}) if p == "/api/pairs" else (200, CODE)
+    st["reply"] = lambda m_, p: ((201, {"ok": True, "pair": PAIR}) if p == "/api/pairs" else
+                                 (404, {"error": "not_found"}) if p.startswith("/api/tmux/resolve") else (200, CODE))
     assert pair_cli.main(["start", "--session", "bravo", "--dir", "~/proj", "--lease", "--elevated", "raw_input,relay", "--role", "navigator"]) == 0
+    assert seen[0][:2] == ("GET", "/api/tmux/resolve?q=bravo")     # 별칭 → ID 풀기(못 찾으면 받은 값 그대로)
+    seen.pop(0)
     assert seen[0][:2] == ("POST", "/api/pairs")
     body = seen[0][2]
     assert body["sessions"] == ["bravo"] and body["dirs"] == [os.path.expanduser("~/proj")] and body["leases"] is True
@@ -40,6 +43,22 @@ def test_start_creates_then_issues_a_code(calls, capsys):
     assert seen[1][:2] == ("POST", "/api/pairs/pr-1/code")
     out = capsys.readouterr().out
     assert "ABCD-EFGH" in out and "amber river" in out and "5분" in out
+
+
+def test_start_resolves_session_aliases_to_ids(calls, capsys):
+    """`--session`·`--with` 는 별칭도 받는다 — 서버가 ID로 풀고, 본문에는 ID만 실린다."""
+    seen, st = calls
+
+    def reply(m_, p):
+        if p == "/api/tmux/resolve?q=%EB%B2%84%EA%B7%B8+%EC%88%98%EC%A0%95":
+            return 200, {"name": "s-3f9a2c1d", "alias": "버그 수정"}
+        if p.startswith("/api/tmux/resolve"):
+            return 404, {"error": "not_found"}
+        return (201, {"ok": True, "pair": PAIR}) if p == "/api/pairs" else (200, CODE)
+    st["reply"] = reply
+    assert pair_cli.main(["start", "--session", "버그 수정", "--session", "dev", "--with", "버그 수정"]) == 0
+    body = next(b for m_, p, b in seen if p == "/api/pairs")
+    assert body["sessions"] == ["s-3f9a2c1d", "dev"] and body["with"] == "s-3f9a2c1d"
 
 
 def test_join_status_handoff_accept_end(calls, capsys):
