@@ -125,4 +125,4 @@ def test_install_also_sets_window_title_options(calls):
     assert tmux_hooks.install() is True
     sets = [c for c in calls["calls"] if c[0] == "set-option"]
     assert ["set-option", "-g", "set-titles", "on"] in sets
-    assert ["set-option", "-g", "set-titles-string", "#S"] in sets
+    assert ["set-option", "-g", "set-titles-string", "#{?@fsh_alias,#{@fsh_alias},#S}"] in sets   # 제목은 별칭, 없으면 ID

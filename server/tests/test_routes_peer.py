@@ -790,7 +790,16 @@ def test_session_management_without_signature_is_401(env, fake_tmux):
     assert fake_tmux.names == ["dev-2"]
 
 
-def test_create_named_session_at_control_level(env, fake_tmux, monkeypatch):
+@pytest.fixture
+def no_alias_lookup(monkeypatch):
+    """만든 직후 기록에 올리는 관측(가짜 tmux로는 의미 없음)을 건너뛴다 — 응답의 별칭은 요청한 기준 이름."""
+    import routes.tmux as tmux_route
+    monkeypatch.setattr(tmux_route, "_alias_after_create", lambda name: None)
+
+
+def test_create_named_session_at_control_level(env, fake_tmux, monkeypatch, no_alias_lookup):
+    """2026-11 설계: 요청한 이름은 별칭이고 tmux 이름은 랜덤 ID다."""
+    import session_names
     client, hs, _ = env
     secret = _pair(client, hs)
     hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
@@ -798,45 +807,36 @@ def test_create_named_session_at_control_level(env, fake_tmux, monkeypatch):
     monkeypatch.setattr(platform_utils, "default_start_dir", lambda: "/home-x")
     r = _signed_post(client, hs, secret, "/api/peer/sessions/create", {"name": "dev"})
     assert r.status_code == 200, r.text
-    assert r.json() == {"ok": True, "name": "dev"}
-    assert "dev" in fake_tmux.names
+    body = r.json()
+    assert body["alias"] == "dev" and session_names.is_id(body["name"]) and body["name"] in fake_tmux.names
     new = [c for c in fake_tmux.calls if c[0] == "new-session"][-1]
     assert new[new.index("-c") + 1] == "/home-x"   # 시작 폴더는 이 호스트가 정한다
 
 
-def test_create_does_not_take_prefix_match_as_a_conflict(env, fake_tmux):
-    """`dev-2`만 있을 때 `dev`는 새 이름이다 — 접두사 매칭이면 409로 잘못 막힌다."""
-    client, hs, _ = env
-    secret = _pair(client, hs)
-    hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
-    r = _signed_post(client, hs, secret, "/api/peer/sessions/create", {"name": "dev"})
-    assert r.status_code == 200
-
-
-def test_create_existing_name_is_409(env, fake_tmux):
+def test_create_with_a_taken_alias_is_409(env, fake_tmux, monkeypatch, no_alias_lookup):
+    import routes.peer as peer_route
+    monkeypatch.setattr(peer_route, "_alias_taken", lambda alias: alias == "dev-2")
     client, hs, _ = env
     secret = _pair(client, hs)
     hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
     r = _signed_post(client, hs, secret, "/api/peer/sessions/create", {"name": "dev-2"})
     assert r.status_code == 409
+    assert not [c for c in fake_tmux.calls if c[0] == "new-session"]
 
 
-def test_create_without_name_uses_the_local_default_rule(env, fake_tmux, monkeypatch):
+def test_create_without_name_uses_the_local_default_rule(env, fake_tmux, monkeypatch, no_alias_lookup):
+    import session_names
     client, hs, _ = env
     secret = _pair(client, hs)
     hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
-    import session_names
     monkeypatch.setattr(session_names, "base_for", lambda cwd: "home")
-    monkeypatch.setattr(session_names, "allocate", lambda base: f"{base}-3")
     r = _signed_post(client, hs, secret, "/api/peer/sessions/create", {})
-    assert r.json()["name"] == "home-3"
-    assert "home-3" in fake_tmux.names
+    assert r.json()["alias"] == "home" and session_names.is_id(r.json()["name"])
 
 
-@pytest.mark.parametrize("bad", ["a:b", "a.b", "a b", "x" * 33, "-t", "$(id)"])
-def test_create_rejects_unsafe_names(env, fake_tmux, bad):
-    """tmux 대상 문법(`:`·`.`)·공백·과도한 길이·`-`로 시작(옵션으로 읽힘)은
-    tmux 인자로 가기 전에 막는다."""
+@pytest.mark.parametrize("bad", ["x" * 129, "a\nb", "s-0123abcd", "a\u202eb"])
+def test_create_rejects_bad_aliases(env, fake_tmux, bad):
+    """별칭 규칙 밖(길이·제어·서식 문자·ID 모양)은 tmux에 닿기 전에 막는다. tmux 이름은 늘 서버가 지은 ID다."""
     client, hs, _ = env
     secret = _pair(client, hs)
     hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
@@ -866,43 +866,55 @@ def test_kill_existing_session(env, fake_tmux):
     assert fake_tmux.names == []
 
 
-def test_rename_session(env, fake_tmux):
+@pytest.fixture
+def fake_catalog(monkeypatch):
+    from session_catalog import db as catalog
+    edits = []
+    monkeypatch.setattr(catalog, "alias_session_for_tmux_name", lambda n: ("c" * 32, 1))
+
+    def edit(sid, rev, **kw):
+        if kw.get("title") == "other":
+            raise catalog.Refused("alias_taken", 409)
+        edits.append(kw)
+    monkeypatch.setattr(catalog, "edit_session", edit)
+    return edits
+
+
+def test_rename_session_changes_the_alias_only(env, fake_tmux, fake_catalog):
     client, hs, _ = env
     secret = _pair(client, hs)
     hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
-    r = _signed_post(client, hs, secret, "/api/peer/sessions/rename", {"name": "dev-2", "new": "work"})
+    r = _signed_post(client, hs, secret, "/api/peer/sessions/rename", {"name": "dev-2", "new": "작업 별칭"})
     assert r.status_code == 200, r.text
-    assert fake_tmux.names == ["work"]
-    ren = [c for c in fake_tmux.calls if c[0] == "rename-session"][-1]
-    assert ren[2] == "=dev-2"   # 대상은 정확 매칭으로 지목한다
+    assert r.json() == {"ok": True, "name": "dev-2", "alias": "작업 별칭"}
+    assert fake_tmux.names == ["dev-2"] and fake_catalog == [{"title": "작업 별칭"}]
+    assert not [c for c in fake_tmux.calls if c[0] == "rename-session"]
 
 
-def test_rename_prefix_is_not_a_target(env, fake_tmux):
+def test_rename_prefix_is_not_a_target(env, fake_tmux, fake_catalog):
     client, hs, _ = env
     secret = _pair(client, hs)
     hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
     r = _signed_post(client, hs, secret, "/api/peer/sessions/rename", {"name": "dev", "new": "work"})
     assert r.status_code == 404
-    assert fake_tmux.names == ["dev-2"]
+    assert fake_catalog == []
 
 
-def test_rename_to_existing_name_is_409(env, fake_tmux):
+def test_rename_to_a_taken_alias_is_409(env, fake_tmux, fake_catalog):
     client, hs, _ = env
-    fake_tmux.names.append("other")
     secret = _pair(client, hs)
     hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
     r = _signed_post(client, hs, secret, "/api/peer/sessions/rename", {"name": "dev-2", "new": "other"})
     assert r.status_code == 409
-    assert fake_tmux.names == ["dev-2", "other"]
 
 
-def test_rename_rejects_unsafe_new_name(env, fake_tmux):
+def test_rename_rejects_a_bad_alias(env, fake_tmux, fake_catalog):
     client, hs, _ = env
     secret = _pair(client, hs)
     hs.set_grant_level("laptop", hs.LEVEL_CONTROL)
-    r = _signed_post(client, hs, secret, "/api/peer/sessions/rename", {"name": "dev-2", "new": "a:b"})
+    r = _signed_post(client, hs, secret, "/api/peer/sessions/rename", {"name": "dev-2", "new": "a\nb"})
     assert r.status_code == 400
-    assert fake_tmux.names == ["dev-2"]
+    assert fake_catalog == []
 
 
 def test_session_management_is_audited(env, fake_tmux):
@@ -990,7 +1002,7 @@ def test_peer_ws_stays_open_when_only_this_screen_was_detached(env, monkeypatch)
         assert ws.receive_bytes() == b"still-open"   # 닫혔다면 여기서 끊김 예외
 
 
-def test_peer_create_records_origin_peer_and_ignores_body(env, fake_tmux):
+def test_peer_create_records_origin_peer_and_ignores_body(env, fake_tmux, no_alias_lookup):
     """peer가 만든 세션은 서버가 스스로 origin=peer로 적는다 — 본문의 origin은 믿지 않는다."""
     client, hs, _ = env
     secret = _pair(client, hs)
@@ -999,9 +1011,10 @@ def test_peer_create_records_origin_peer_and_ignores_body(env, fake_tmux):
                      {"name": "dev", "origin": "local", "@fsh_origin": "agent"})
     assert r.status_code == 200, r.text
     sets = [c for c in fake_tmux.calls if c[0] == "set-option"]
+    name = r.json()["name"]                      # 랜덤 ID(2026-11 설계)
     # 만든 맥의 이름은 서명한 grant 라벨(`_pair`가 "노트북"으로 등록) — 본문 값이 아니다.
-    assert sets == [["set-option", "-t", "dev", "@fsh_origin", "peer"],
-                    ["set-option", "-t", "dev", "@fsh_origin_host", "노트북"]]
+    assert sets == [["set-option", "-t", name, "@fsh_origin", "peer"],
+                    ["set-option", "-t", name, "@fsh_origin_host", "노트북"]]
 
 
 def test_peer_create_ignores_body_origin_host(env, fake_tmux):

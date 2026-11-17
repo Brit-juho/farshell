@@ -69,6 +69,8 @@ def _observe_once():
     sessions = []
     for line in raw.decode("utf-8", "strict").splitlines():
         p = line.split("\t")
+        if len(p) == 4:
+            p.append("")      # `@fsh_alias` 칸이 없는 출력(예전 형식) — 별칭 옵션 없음으로 본다
         if len(p) != 5 or not p[1].isdigit() or not by_session.get(p[0]):
             return {"complete": False, "sessions": [], "error": "invalid_snapshot"}
         children = by_session[p[0]]
@@ -362,10 +364,13 @@ def reconcile(snapshot=None):
     import store_lock
     from .db import directory
     with store_lock.exclusive(directory() / 'lifecycle.lock'):
+        observed_here = snapshot is None
         result = _reconcile(snapshot)
         if result.get("complete"):
             _migrate_aliases_once()
-            _sync_tmux_aliases(result)
+            if observed_here:
+                # 넘겨받은 관측(시험·다른 호출자)으로 실제 tmux를 건드리지 않는다 — 직접 관측한 세션에만.
+                _sync_tmux_aliases(result)
         return result
 
 
@@ -395,7 +400,7 @@ def _sync_tmux_aliases(snapshot):
     for key, info in known.items():
         item = keys.get(key)
         title = info.get("title") or ""
-        if item and title and item.get("tmux_alias") != title:
+        if item and title and item.get("tmux_id") and item.get("tmux_alias") != title:
             tmux_runner.set_option(item["tmux_id"], "@fsh_alias", title)
 
 

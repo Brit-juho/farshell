@@ -29,6 +29,11 @@ def fake_attach(monkeypatch):
     async def _fake_attach_tmux(name, cols, rows, request=None):
         return {"id": "sess-1", "name": name, "tmux_session": name}
     monkeypatch.setattr(tmux_route, "_attach_tmux", _fake_attach_tmux)
+    monkeypatch.setattr(tmux_route, "_alias_after_create", lambda name: None)
+
+
+def _new_session(calls):
+    return next(a for a in calls if a[0] == "new-session")
 
 
 def test_create_with_valid_cwd_passes_dash_c(tmp_path, monkeypatch):
@@ -41,9 +46,9 @@ def test_create_with_valid_cwd_passes_dash_c(tmp_path, monkeypatch):
 
     body = {"name": "wt-test", "cwd": str(tmp_path)}
     resp = asyncio.run(tmux_route.create_tmux_session(_FakeRequest(body)))
-    assert resp["tmux_session"] == "wt-test"
-    assert calls, "tmux_runner.run이 호출되지 않았다"
-    args = calls[0]
+    import session_names
+    assert session_names.is_id(resp["tmux_session"])
+    args = _new_session(calls)
     assert "-c" in args
     assert args[args.index("-c") + 1] == str(tmp_path)
 
@@ -59,7 +64,7 @@ def test_create_without_cwd_uses_default_start_dir(monkeypatch):
 
     body = {"name": "wt-plain"}
     asyncio.run(tmux_route.create_tmux_session(_FakeRequest(body)))
-    args = calls[0]
+    args = _new_session(calls)
     assert args[args.index("-c") + 1] == "/tmp/default-start"
 
 
@@ -84,7 +89,7 @@ def test_create_rejects_nonexistent_cwd(monkeypatch, tmp_path):
     assert not calls
 
 
-# ── 세션 이름: 이름, 이름-2, 이름-3 (2026-11-12, session_names) ─────────────────────────────
+# ── 세션 ID와 별칭 요청(2026-11 설계) — tmux 이름은 랜덤 ID, 사람이 친 이름·폴더 이름은 별칭 요청 ─────────────
 
 def _fake_tmux(monkeypatch, existing):
     """has-session은 `existing`에 있는 이름만 0, new-session은 이름을 기록하고 existing에 더한다."""
@@ -92,7 +97,6 @@ def _fake_tmux(monkeypatch, existing):
 
     def fake_run(args, timeout=None):
         if args[0] == "has-session":
-            # 이름 조회는 `=이름` 정확 매칭으로 온다(tmux_runner.exact_target).
             return (0 if args[args.index("-t") + 1].removeprefix("=") in existing else 1, b"", b"")
         if args[0] == "new-session":
             name = args[args.index("-s") + 1]
@@ -103,39 +107,36 @@ def _fake_tmux(monkeypatch, existing):
     return created
 
 
-def test_unique_name_numbers_from_two(monkeypatch):
+def _requests(created):
+    import session_names
+    assert all(session_names.is_id(n) for n in created), created
+    return [session_names.take_alias_request(n) for n in created]
+
+
+def test_every_create_gets_a_distinct_random_id_and_keeps_the_name_as_alias_request(monkeypatch):
     created = _fake_tmux(monkeypatch, set())
     for _ in range(3):
         asyncio.run(tmux_route.create_tmux_session(_FakeRequest({"name": "deploy", "unique_name": True})))
-    assert created == ["deploy", "deploy-2", "deploy-3"]
+    assert len(set(created)) == 3
+    assert _requests(created) == ["deploy"] * 3       # 번호(`deploy-1`)는 기록이 붙인다(test_catalog_v2_behaviour)
 
 
-def test_unique_name_without_usable_characters_falls_back_to_cwd_folder(tmp_path, monkeypatch):
-    """한글만 있는 이름은 앱의 세션 이름 규칙([A-Za-z0-9_-])에 남는 글자가 없다 — cwd 폴더 이름으로."""
-    proj = tmp_path / "work"
-    proj.mkdir()
+def test_korean_and_punctuation_names_are_kept_as_aliases(tmp_path, monkeypatch):
     created = _fake_tmux(monkeypatch, set())
-    asyncio.run(tmux_route.create_tmux_session(_FakeRequest(
-        {"name": "입력만", "unique_name": True, "cwd": str(proj)})))
-    assert created == ["work"]
-
-
-def test_unique_name_sanitizes_tmux_unsafe_characters(monkeypatch):
-    created = _fake_tmux(monkeypatch, set())
+    asyncio.run(tmux_route.create_tmux_session(_FakeRequest({"name": "입력만", "unique_name": True})))
     asyncio.run(tmux_route.create_tmux_session(_FakeRequest({"name": "my build: v1.2", "unique_name": True})))
-    assert created == ["my-build-v1-2"]
+    assert _requests(created) == ["입력만", "my build: v1.2"]
 
 
-def test_default_name_comes_from_requested_cwd_and_numbers_from_two(tmp_path, monkeypatch):
+def test_default_alias_comes_from_requested_cwd(tmp_path, monkeypatch):
     proj = tmp_path / "Proj"
     proj.mkdir()
     created = _fake_tmux(monkeypatch, set())
-    for _ in range(2):
-        asyncio.run(tmux_route.create_tmux_session(_FakeRequest({"cwd": str(proj)})))
-    assert created == ["Proj", "Proj-2"]
+    asyncio.run(tmux_route.create_tmux_session(_FakeRequest({"cwd": str(proj)})))
+    assert _requests(created) == ["Proj"]
 
 
-def test_concurrent_creates_get_distinct_names(monkeypatch):
+def test_concurrent_creates_get_distinct_ids(monkeypatch):
     created = _fake_tmux(monkeypatch, set())
 
     async def go():
@@ -144,10 +145,20 @@ def test_concurrent_creates_get_distinct_names(monkeypatch):
             for _ in range(4)
         ])
     asyncio.run(go())
-    assert sorted(created) == ["same", "same-2", "same-3", "same-4"]
+    assert len(set(created)) == 4
 
 
-def test_explicit_name_without_unique_flag_is_used_as_is(monkeypatch):
-    created = _fake_tmux(monkeypatch, {"fixed"})
-    asyncio.run(tmux_route.create_tmux_session(_FakeRequest({"name": "fixed"})))
-    assert created == ["fixed"]
+def test_an_id_taken_meanwhile_is_retried_with_a_new_id(monkeypatch):
+    created, seen = [], []
+
+    def fake_run(args, timeout=None):
+        if args[0] == "new-session":
+            name = args[args.index("-s") + 1]
+            seen.append(name)
+            if len(seen) == 1:
+                return (1, b"", b"duplicate session: " + name.encode())
+            created.append(name)
+        return (1, b"", b"") if args[0] == "has-session" else (0, b"", b"")
+    monkeypatch.setattr(tmux_runner, "run", fake_run)
+    resp = asyncio.run(tmux_route.create_tmux_session(_FakeRequest({"name": "x", "unique_name": True})))
+    assert len(seen) == 2 and resp["tmux_session"] == created[0] == seen[1]
