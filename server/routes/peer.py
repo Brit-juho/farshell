@@ -190,8 +190,9 @@ async def peer_sessions(request: Request, grant: dict):
             with database() as db:
                 host = host_id(db)
                 return {row['name']: {'catalog_session_id': row['session_id'], 'runtime_id': row['id'],
-                        'catalog_host': host} for row in db.execute(
-                    "SELECT * FROM runtimes WHERE epoch=? AND ended IS NULL AND state='running'", (observed['epoch'],))}
+                        'catalog_host': host, 'alias': row['title']} for row in db.execute(
+                    "SELECT r.*,s.title FROM runtimes r JOIN sessions s ON s.id=r.session_id"
+                    " WHERE r.epoch=? AND r.ended IS NULL AND r.state='running'", (observed['epoch'],))}
         except (OSError, ValueError, Refused):
             return {}
     identities = await asyncio.to_thread(_durable)
@@ -199,6 +200,12 @@ async def peer_sessions(request: Request, grant: dict):
         session.update(identities.get(session['name'], {}))
     me = host_store.get_self()
     return {"ok": True, "id": me["id"], "label": me["label"], "sessions": sessions}
+
+
+def _alias_taken(alias: str) -> bool:
+    from session_catalog import db as catalog
+    with catalog.database() as con:
+        return catalog.alias_key(alias) in catalog.live_alias_keys(con)
 
 
 _SCREEN_RE = re.compile(r"[A-Za-z0-9_\-]{1,64}")
@@ -469,23 +476,30 @@ async def peer_sessions_create(request: Request, grant: dict):
     import tmux_runner
     import session_names
 
+    from session_catalog import db as catalog
     raw = body.get("name")
     if raw is None or str(raw).strip() == "":
-        # 이름 짓기 규칙은 session_names 한 곳이다 — 이 세션은 홈에서 열리니 기준은 `home`(서버 cwd가 아니다).
-        name = await asyncio.to_thread(session_names.allocate,
-                                       await asyncio.to_thread(session_names.base_for, platform_utils.default_start_dir()))
+        # ID는 랜덤, 별칭 기준은 시작 폴더(홈)의 기준 이름이다(session_names 한 곳, 서버 cwd가 아니다).
+        base = await asyncio.to_thread(session_names.base_for, platform_utils.default_start_dir())
     else:
-        name = _tmux_name_or_none(raw)
-        if name is None:
+        # 요청한 이름은 **별칭**이다(2026-11 설계). 살아 있는 다른 세션과 겹치면 거절한다.
+        base = str(raw).strip()
+        if not catalog.valid_alias(base):
             return _bad_name(raw)
-        if await _has_exact(name):
+        try:
+            taken = await asyncio.to_thread(_alias_taken, base)
+        except Exception:  # noqa: BLE001 — 기록을 못 읽으면 만들 때 번호가 붙는다
+            taken = False
+        if taken:
             return JSONResponse(
-                {"error": "exists", "reason": tr("이미 있는 이름입니다: {name}", name=name)}, status_code=409,
-            ), f"중복: {name}"
-    rc, _, err = await tmux_runner.run_async(
-        ["new-session", "-d", "-s", name, "-c", platform_utils.default_start_dir()],
-        timeout=5.0,
-    )
+                {"error": "exists", "reason": tr("이미 쓰고 있는 별칭입니다: {name}", name=base)}, status_code=409,
+            ), "중복 별칭"
+    name = await asyncio.to_thread(session_names.allocate, base)
+
+    def _spawn(candidate):
+        code, _, stderr = tmux_runner.run(["new-session", "-d", "-s", candidate, "-c", platform_utils.default_start_dir()], timeout=5.0)
+        return code, stderr
+    rc, name, err = await asyncio.to_thread(session_names.spawn_unique, base, _spawn, start=name)
     if rc != 0:
         return JSONResponse(
             {"error": "create_failed", "reason": err.decode("utf-8", errors="ignore")[:200]},
@@ -494,7 +508,9 @@ async def peer_sessions_create(request: Request, grant: dict):
     # 만든 곳 기록 — 서명 검증을 통과한 peer 경로이므로 서버가 "peer"로 정한다(본문 값은 안 본다).
     # 만든 맥의 이름은 서명한 grant의 라벨(없으면 id) — 요청 본문 값은 안 믿는다.
     await tmux_runner.set_origin_async(name, "peer", grant.get("label") or grant.get("id") or "")
-    return {"ok": True, "name": name}, name
+    from routes.tmux import _alias_after_create
+    alias = await asyncio.to_thread(_alias_after_create, name)
+    return {"ok": True, "name": name, "alias": alias or base}, name
 
 
 @router.post("/api/peer/sessions/kill")
@@ -533,29 +549,31 @@ async def peer_sessions_rename(request: Request, grant: dict):
     import tmux_runner
     from deps import session_store
 
+    from session_catalog import db as catalog, inventory
     old = _tmux_name_or_none(body.get("name"))
     if old is None:
         return _bad_name(body.get("name"))
-    new = _tmux_name_or_none(body.get("new"))
-    if new is None:
+    # 새 이름은 **별칭**이다(2026-11 설계) — tmux 이름(ID)은 바꾸지 않는다. 로컬 이름 바꾸기(`routes/pty.py`)와 같은 규칙.
+    new = str(body.get("new") or "").strip()
+    if not catalog.valid_alias(new):
         return _bad_name(body.get("new"))
-    if old == new:
-        return {"ok": True, "name": new}, "변경 없음"
     if not await _has_exact(old):
-        return JSONResponse({"error": "session_not_found"}, status_code=404), f"세션 없음: {old}"
-    if await _has_exact(new):
-        return JSONResponse(
-            {"error": "exists", "reason": tr("이미 있는 이름입니다: {name}", name=new)}, status_code=409,
-        ), f"중복: {new}"
-    rc, _, err = await tmux_runner.run_async(["rename-session", "-t", f"={old}", new], timeout=2.0)
-    if rc != 0:
-        return JSONResponse(
-            {"error": "rename_failed", "reason": err.decode("utf-8", errors="ignore")[:200]},
-            status_code=500,
-        ), f"변경 실패: {old}"
-    for local in session_store.find_all_by_tmux_name(old):
-        session_store.update_tmux_name(local.session_id, new)
-    return {"ok": True, "name": new}, f"{old} → {new}"
+        return JSONResponse({"error": "session_not_found"}, status_code=404), "세션 없음"
+    try:
+        found = await asyncio.to_thread(catalog.alias_session_for_tmux_name, old)
+        if not found:
+            await asyncio.to_thread(inventory.reconcile)
+            found = await asyncio.to_thread(catalog.alias_session_for_tmux_name, old)
+        if not found:
+            return JSONResponse({"error": "alias_unavailable"}, status_code=503), "기록 없음"
+        await asyncio.to_thread(catalog.edit_session, found[0], found[1], title=new)
+    except catalog.Refused as error:
+        if error.code == "alias_taken":
+            return JSONResponse({"error": "exists", "reason": tr("이미 쓰고 있는 별칭입니다: {name}", name=new)},
+                                status_code=409), "중복 별칭"
+        return JSONResponse({"error": error.code}, status_code=error.status), "별칭 변경 실패"
+    await tmux_runner.set_option_async(tmux_runner.exact_target(old), "@fsh_alias", new)
+    return {"ok": True, "name": old, "alias": new}, "별칭 변경"
 
 
 @router.websocket('/api/peer/ws-v2/{catalog_host}/{catalog_session_id}/{runtime_id}/{tmux_name}')

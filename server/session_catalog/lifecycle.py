@@ -13,7 +13,7 @@ import zstandard
 import fsguard
 import store_lock
 import tmux_runner
-from .db import touch_activity, resume_ends_session, database, directory, identifier, uid, encode, changed, host_id, resume_target, Refused
+from .db import touch_activity, resume_ends_session, database, directory, identifier, uid, encode, changed, host_id, resume_target, Refused, unique_alias, alias_key, live_alias_keys
 from . import permission_modes, execution_policy
 from . import inventory
 
@@ -223,12 +223,18 @@ def resume(cid, opid, *, sid=None):
                 row = db.execute('SELECT * FROM sessions WHERE id=? AND deleted IS NULL AND archived IS NULL', (sid,)).fetchone()
                 if not row or db.execute('SELECT 1 FROM runtimes WHERE session_id=? AND ended IS NULL', (sid,)).fetchone():
                     raise Refused('runtime_must_stop')
+                # 되살리는 세션의 별칭을 그사이 다른 살아 있는 세션이 쓰고 있으면, 저장소 이름에 번호를 붙인 새 별칭(`이름-@2`)을 준다.
+                session_names.take_alias_request(name)   # 원래 세션의 별칭을 쓴다 — 새 ID의 요청은 버린다
+                if alias_key(row['title']) in live_alias_keys(db, sid):
+                    # 별칭은 살아 있는 세션끼리 겹치지 않는다 — 그사이 다른 세션이 가져갔으면 저장소 이름에 번호(`farshell-1`).
+                    db.execute("UPDATE sessions SET title=?,updated=?,revision=revision+1 WHERE id=?",
+                               (unique_alias(db, session_names.base_for(str(cwd)), sid), now, sid))
             else:
                 sid = uid()
                 wid = inventory.workspace(db, placement)
                 db.execute('INSERT INTO sessions(id,host,workspace_id,title,origin,created,updated,last_activity) VALUES(?,?,?,?,?,?,?,?)',
                            # 보이는 이름은 자동 이름 규칙(새 tmux 이름 = 저장소 이름)이다. 대화 제목·id를 세션 이름으로 쓰지 않는다.
-                           (sid, host_id(db), wid, name, 'local', now, now, now))
+                           (sid, host_id(db), wid, unique_alias(db, inventory._first_alias({'name': name, 'cwd': str(cwd)})), 'local', now, now, now))
             result = {'session_id': sid, 'conversation_id': cid, 'name': name, 'native_id': native}
             if mode:
                 result['permission_mode'] = mode
@@ -297,7 +303,7 @@ def resume_preview(sid):
     base = session_names.base_for(cwd) if cwd else None
     return {'resumable': True, 'conversation_id': conversation['id'], 'conversation_title': conversation['title'] or '',
             'provider': conversation['provider'], 'folder': Path(cwd).name if cwd else None,
-            'name': session_names.allocate(base) if base else None}
+            'name': session_names.preview_alias(base) if base else None}
 
 
 def resume_session(sid, opid):
@@ -395,7 +401,7 @@ def create(opid,name,cwd,cols=80,rows=24,*,request_spec=None,launcher=None):
                 return json.loads(prior['result'])
             sid=uid();now=time.time();wid=inventory.workspace(db,placement)
             db.execute('INSERT INTO sessions(id,host,workspace_id,title,origin,created,updated,last_activity) VALUES(?,?,?,?,?,?,?,?)',
-                       (sid,host_id(db),wid,name,'local',now,now,now))
+                       (sid,host_id(db),wid,unique_alias(db,inventory._first_alias({'name':name,'cwd':cwd})),'local',now,now,now))
             result={'session_id':sid,'name':name,'host':host_id(db)}
             _begin(db,opid,'create',sid,payload,result)
         # `launcher`: a caller that must create the session itself (account injection). It returns (rc, error, info).

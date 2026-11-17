@@ -76,6 +76,7 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     ("GET", r"/api/capabilities", "fsh manage (svc:tui)"),
     ("GET", r"/api/health/ready", "fsh status|doctor · server_watchdog (svc:watchdog)"),
     ("GET", r"/api/tmux/sessions", "fsh manage (svc:tui)"),
+    ("GET", r"/api/tmux/resolve", "fsh attach|voice-target|ssh|mobile (cli) — 별칭 → ID"),
     ("DELETE", r"/api/tmux/kill/[^/]+", "fsh manage (svc:tui)"),
     ("PATCH", r"/api/sessions/[^/]+", "fsh manage (svc:tui)"),
     ("POST", r"/api/notify/client-event", "tmux_client_notify.sh (svc:tmux-notify)"),

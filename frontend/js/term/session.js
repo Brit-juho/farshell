@@ -15,7 +15,7 @@ import { cancelPasteTransactions } from './clipboard.js';
 // 명시적으로 허용했다("깊은 수술 없이 안전한 3분할이 아니면 하나의 오케스트레이터로
 // 남겨도 된다").
 import { getSession, registerSession, removeSessionRecord,
-  sessionDisplayName, setSessionDisplayName, setSessionTmuxName } from '../core/store.js';
+  sessionDisplayName, setSessionDisplayName, setSessionTmuxName, setSessionAlias } from '../core/store.js';
 import { apiFetch } from '../core/api.js';
 import { API_BASE } from '../core/env.js';
 import { screenId } from '../core/screen-id.js';
@@ -290,7 +290,11 @@ export async function renameSession(id, rawName, previousNameOverride) {
       // 2026-09-21 설계 — tmux 세션 이름이 단일 진실이 되면서, 예전처럼
       // "웹 라벨만 조용히 바꾸는" 폴백이 없어졌다: 서버가 거절한 이유를
       // 그대로 보여준다.
-      const msg = data?.error === 'tmux session name must be alphanumeric/dash/underscore only'
+      const msg = data?.error === 'alias_taken'
+        ? t('이미 쓰고 있는 별칭입니다')
+        : data?.error === 'invalid_title'
+        ? t('별칭은 1~128자이고 줄바꿈 같은 제어 문자는 쓸 수 없습니다')
+        : data?.error === 'tmux session name must be alphanumeric/dash/underscore only'
         ? t('세션 이름은 영숫자·하이픈(-)·밑줄(_)만 가능합니다(tmux 제약)')
         : data?.error === 'tmux session name already exists'
         ? t('이미 있는 이름입니다')
@@ -301,7 +305,8 @@ export async function renameSession(id, rawName, previousNameOverride) {
     // tmux 세션은 이름의 단일 진실이 tmux 세션 이름 자체다(core/store.js의
     // sessionDisplayName). 서버가 방금 rename-session한 실제 이름으로 로컬
     // 레코드를 맞춘다 — 5초 레일 폴링을 기다리지 않고 즉시 반영한다.
-    if (data?.tmux_name) setSessionTmuxName(id, data.tmux_name);
+    if (data?.alias !== undefined) { setSessionTmuxName(id, data.tmux_name); setSessionAlias(data.tmux_name, data.alias); }
+    else if (data?.tmux_name) setSessionTmuxName(id, data.tmux_name);
     else setSessionDisplayName(id, newName);
     // 사용자가 직접 지은 이름은 그 뒤 어떤 자동 라벨링도 덮지 않는다
     // (term/tab-worktree.js의 워크트리 라벨이 첫 소비자다).

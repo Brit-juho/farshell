@@ -625,13 +625,18 @@ def _owned(data: dict, did: str, caller_key: str, role: str, op: str = "send") -
 
 
 def _child_name(parent_name: str, title: str, existing: set[str]) -> str:
-    base = _NAME_RE.sub("-", title).strip("-")[:40] if title else ""
+    """하위 세션의 ID(랜덤, session_names)와 별칭 요청. 별칭 = 작업 제목, 없으면 `부모별칭-sub` — 겹치면 기록이 번호를 붙인다
+    (`이름-1`). 2026-11 설계 전에는 이 값이 그대로 tmux 이름이었다."""
+    import session_names
+    from session_alias import alias_of
+    base = " ".join(str(title or "").split())[:60]
     if not base:
-        base = f"{_NAME_RE.sub('-', parent_name).strip('-')[:32] or 'sub'}-sub"
-    # 번호는 다른 세션 이름과 같은 규칙(base, base-2, base-3 …, session_names)이다. 예전에는 `base2`·`parent-sub1`처럼 달랐다.
-    for i in range(1, 50):
-        name = base if i == 1 else f"{base}-{i}"
+        parent = alias_of(parent_name) if parent_name else ""
+        base = f"{(parent or 'sub')[:60]}-sub"
+    for _ in range(8):
+        name = session_names.new_id()
         if name not in existing:
+            session_names.request_alias(name, base)
             return name
     raise DelegationError("name_exhausted", "하위 세션 이름을 정하지 못했습니다", 409)
 
@@ -769,7 +774,8 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
     try:
         # 2) 워크트리(요청할 때만)
         if worktree_branch:
-            start_dir = _prepare_worktree(parent_cwd or start_dir, worktree_branch, child_name,
+            import session_names   # 워크트리 폴더 이름은 사람이 읽는 작업 제목(ID는 랜덤)
+            start_dir = _prepare_worktree(parent_cwd or start_dir, worktree_branch, session_names.slug(title or "") or child_name,
                                           check=(lambda top: _svc().check_fs(parent_key, top, "spawn_worktree_base"))
                                           if enforced() else None)
         # 3) 세션 — 이름이 겹치면 실패한다(기존 세션을 덮지 않는다).

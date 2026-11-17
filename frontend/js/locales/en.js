@@ -1667,6 +1667,8 @@ window.__VT_I18N = {
   "업로드": "Upload",
   "선택한 세션 {name}이(가) 없어져 선택을 풀었습니다": "The selected session {name} no longer exists, so the selection was cleared.",
   "고를 수 있는 세션이 없습니다": "No sessions to choose from",
+  "이미 쓰고 있는 별칭입니다": "That alias is already in use.",
+  "별칭은 1~128자이고 줄바꿈 같은 제어 문자는 쓸 수 없습니다": "An alias is 1 to 128 characters with no control characters such as line breaks.",
   "부분 결과 표시": "Show partial results",
   "녹음하는 동안 인식 중인 문장을 흐리게 미리 보여 줍니다. 입력은 녹음이 끝난 뒤 최종 결과로만 합니다. 서버의 음성 인식을 더 씁니다.": "Shows a dimmed preview of the sentence while you record. Only the final result after recording is typed in. Uses more of the server's speech recognition.",
   "미리 보기 — 녹음이 끝나면 다시 인식합니다": "Preview — recognized again when recording ends",

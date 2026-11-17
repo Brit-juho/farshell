@@ -1,6 +1,6 @@
 """tmux 세션 이름 짓기 — 한 곳(세션 로직 점검 단계 1).
 
-이름은 세션을 만들 때 한 번 정하고 서버가 나중에 바꾸지 않는다. 세션을 가리키는 열쇠는 이름이 아니라
+이름(ID)은 세션을 만들 때 한 번 정하고 서버가 나중에 바꾸지 않는다. 새 세션은 랜덤 ID다(아래 「ID와 별칭」). 세션을 가리키는 열쇠는 이름이 아니라
 정체성 키(tmux 세션 id와 생성 시각)다. 사람이 보는 이름(별칭)은 따로 둔다(설계 S1).
 
 규칙
@@ -71,35 +71,78 @@ def base_for(cwd: Optional[str]) -> str:
     return slug(name) or "session"
 
 
-def candidates(base: str):
-    base = slug(base) or "session"
-    yield base
-    for n in range(2, _MAX_SUFFIX + 1):
-        yield f"{base}-{n}"
-    yield f"{base}-{secrets.token_hex(2)}"
+# ── ID와 별칭(2026-11 설계, docs/local/plans/session-alias-id-design.md) ─────────────────────────────────────
+# 새 세션의 tmux 이름은 사람에게 보이지 않는 랜덤 ID(`s-` + 16진 8자리)다. 사람이 보는 이름(별칭)은 세션 기록
+# (session_catalog `sessions.title`)에 있고, 기준 이름(위 base_for — 저장소 이름)이나 사용자가 친 이름은 **별칭 요청**으로
+# 이 프로세스 메모리에 잠깐 들고 있다가 기록이 그 세션을 처음 볼 때(inventory.reconcile) 가져가 겹치지 않는 별칭으로 만든다.
+# 요청이 사라져도(서버 재시작) 기록은 시작 폴더 기준 이름으로 별칭을 짓는다 — 별칭이 ID로 남지 않는다.
+ID_RE = re.compile(r"s-[0-9a-f]{8}")
+_REQUEST_TTL = 600.0
+_requests: dict[str, tuple[str, float]] = {}
+
+
+def new_id() -> str:
+    return "s-" + secrets.token_hex(4)
+
+
+def is_id(name: str) -> bool:
+    return isinstance(name, str) and ID_RE.fullmatch(name) is not None
+
+
+def request_alias(session_id: str, alias: Optional[str]) -> None:
+    """그 ID의 세션이 기록에 처음 올라갈 때 쓸 별칭 기준. 빈 값이면 아무것도 하지 않는다."""
+    import time
+    text = " ".join(str(alias or "").split())[:128]
+    if not session_id or not text:
+        return
+    now = time.monotonic()
+    for key in [k for k, (_, at) in _requests.items() if now - at > _REQUEST_TTL]:
+        del _requests[key]
+    _requests[session_id] = (text, now)
+
+
+def take_alias_request(session_id: str) -> Optional[str]:
+    import time
+    hit = _requests.pop(session_id, None)
+    if not hit or time.monotonic() - hit[1] > _REQUEST_TTL:
+        return None
+    return hit[0]
 
 
 def allocate(base: str) -> str:
-    """아직 없는 첫 이름. 같은 프로세스 안의 경합은 호출부가 잠금으로 막는다 — 다른 프로세스(`bin/fsh`, 사용자가 직접
-    띄운 tmux)와의 경합까지 막으려면 `spawn_unique`를 쓴다."""
-    last = ""
-    for name in candidates(base):
-        last = name
+    """아직 없는 새 ID. `base`(기준 이름)는 그 세션의 별칭 요청이 된다. 같은 프로세스 안의 경합은 호출부가 잠금으로
+    막는다 — 다른 프로세스와의 경합까지 막으려면 `spawn_unique`를 쓴다."""
+    name = new_id()
+    for _ in range(8):
         if not tmux_runner.has_session(name):
-            return name
-    return last
+            break
+        name = new_id()
+    request_alias(name, base)
+    return name
 
 
 def spawn_unique(base: str, spawn: Callable[[str], tuple[int, bytes]], *, start: Optional[str] = None) -> tuple[int, str, bytes]:
-    """`spawn(name) -> (rc, stderr)`를 `base`, `base-2`, … 순으로 부르다가 tmux가 「duplicate session」으로 거절하면
-    다음 이름으로 넘어간다. 이름을 고르고 만드는 사이에 다른 프로세스가 같은 이름을 가져가도 안전하다.
-    `start`(이미 `allocate`로 고른 이름)가 있으면 그 이름부터 시도한다. 돌려주는 값: (rc, 쓴 이름, stderr)."""
-    rc, err, name = 1, b"", ""
-    names = list(candidates(base))
-    if start in names:
-        names = names[names.index(start):]
-    for name in names:
+    """`spawn(name) -> (rc, stderr)`를 새 ID로 부르다가 tmux가 「duplicate session」으로 거절하면 다른 ID로 다시 한다.
+    `start`(이미 `allocate`로 고른 ID)가 있으면 그것부터. 별칭 요청(`base`)은 실제로 쓴 ID로 옮긴다.
+    돌려주는 값: (rc, 쓴 ID, stderr)."""
+    name = start or allocate(base)
+    rc, err = 1, b""
+    for _ in range(8):
         rc, err = spawn(name)
         if rc == 0 or b"duplicate session" not in (err or b""):
+            if rc == 0 and name not in _requests:
+                request_alias(name, base)
             return rc, name, err
+        _requests.pop(name, None)
+        name = new_id()
+        request_alias(name, base)
     return rc, name, err
+
+
+def preview_alias(base: str) -> str:
+    """새 세션이 받을 별칭 미리보기(아무것도 만들지 않는다). 기록을 못 읽으면 기준 이름 그대로."""
+    try:
+        from session_catalog import db as catalog
+        return catalog.preview_alias(base)
+    except Exception:  # noqa: BLE001 — 미리보기일 뿐이다
+        return base

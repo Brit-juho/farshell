@@ -46,7 +46,8 @@ HOOK_INDEX = 77
 # 터미널 창(탭) 제목을 세션 이름으로 — tmux가 제목을 알려주지 않으면(set-titles off, 기본값)
 # Ghostty는 기본 아이콘(👻)만 보여줘서 창이 여러 개일 때 어느 창이 어느 세션인지 구분이 안 된다.
 # fsh 전용 서버(-L fsh)에만 걸리고, 사용자의 기본 tmux나 ~/.tmux.conf는 건드리지 않는다.
-TITLE_OPTIONS = (("set-titles", "on"), ("set-titles-string", "#S"))
+# 제목은 별칭(`@fsh_alias`, 세션 기록이 관측 때마다 맞춘다), 없으면 tmux 이름(ID). tmux는 `#{@옵션}` 값을 다시 서식으로 풀지 않는다.
+TITLE_OPTIONS = (("set-titles", "on"), ("set-titles-string", "#{?@fsh_alias,#{@fsh_alias},#S}"))
 KICK_PATH = "/api/tmux/kick"
 HEADER = "X-VT-Kick"
 

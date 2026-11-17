@@ -1307,7 +1307,7 @@ _start_clipboard_daemon() {
 # (서버 쪽은 server/tmux_hooks.py의 TITLE_OPTIONS — 같은 값이어야 한다)
 _tmux_apply_title_options() {
   "${TMUX_BASE[@]}" set-option -g set-titles on 2>/dev/null
-  "${TMUX_BASE[@]}" set-option -g set-titles-string "#S" 2>/dev/null
+  "${TMUX_BASE[@]}" set-option -g set-titles-string "#{?@fsh_alias,#{@fsh_alias},#S}" 2>/dev/null
   return 0
 }
 

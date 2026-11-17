@@ -377,3 +377,49 @@ def test_git_calls_per_reconcile_are_bounded_and_failures_are_remembered(catalog
     inventory._place_cache.clear()
     _reconcile(*items)
     assert len(calls) == 2, "관측 한 번에 새로 부르는 git은 상한까지만"
+
+
+# ── 별칭은 살아 있는 세션끼리 겹치지 않는다 ──────────────────────────────────
+
+def test_alias_must_be_unique_among_live_sessions(catalog):
+    db = catalog
+    _reconcile(_item("$1:1", "alpha"), _item("$2:2", "beta"))
+    rows = _sessions(db)
+    # 같은 별칭 거절(대소문자·공백 무시) — 다른 살아 있는 세션의 자동 별칭(tmux 이름)과도 겹치면 안 된다.
+    with pytest.raises(db.Refused) as err:
+        db.edit_session(rows["beta"]["id"], rows["beta"]["revision"], title="  ALPHA ")
+    assert err.value.code == "alias_taken"
+    db.edit_session(rows["beta"]["id"], rows["beta"]["revision"], title="결제 버그")
+    row = _sessions(db)["beta"] if "beta" in _sessions(db) else None
+    again = [r for r in db.snapshot()["sessions"] if r["name"] == "beta"][0]
+    with pytest.raises(db.Refused):
+        db.edit_session(rows["alpha"]["id"], rows["alpha"]["revision"], title="결제 버그")
+    assert row is None or again["id"] == rows["beta"]["id"]
+
+
+def test_dead_session_may_share_alias_and_revival_gets_a_new_one(catalog):
+    from session_catalog.db import database, unique_alias, live_alias_keys, alias_key
+    db = catalog
+    _reconcile(_item("$1:1", "alpha"), _item("$2:2", "beta"))
+    rows = _sessions(db)
+    db.edit_session(rows["alpha"]["id"], rows["alpha"]["revision"], title="작업")
+    _reconcile(_item("$2:2", "beta"))   # alpha 종료
+    dead = [r for r in db.snapshot()["sessions"] if r["name"] == "alpha"][0]
+    # 끝난 세션끼리·살아 있는 세션과는 겹쳐도 된다.
+    b = _sessions(db)["beta"]
+    db.edit_session(b["id"], b["revision"], title="작업")
+    with database() as con:
+        assert alias_key("작업") in live_alias_keys(con)
+        # 되살릴 때 쓰는 규칙: 겹치면 저장소 이름에 -@번호.
+        assert unique_alias(con, "작업", dead["id"]) == "작업-@2"
+        assert unique_alias(con, "free", dead["id"]) == "free"
+
+
+def test_new_session_alias_avoids_live_human_alias(catalog):
+    db = catalog
+    _reconcile(_item("$1:1", "alpha"))
+    a = _sessions(db)["alpha"]
+    db.edit_session(a["id"], a["revision"], title="gamma")
+    _reconcile(_item("$1:1", "alpha"), _item("$3:3", "gamma"))
+    titles = sorted(r["title"] if "title" in r else r["name"] for r in db.snapshot()["sessions"])
+    assert len(set(t.casefold() for t in titles)) == len(titles)

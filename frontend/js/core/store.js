@@ -40,6 +40,27 @@ export function allSessions() {
   return sessions;
 }
 
+// tmux 이름(ID) → 별칭. /api/tmux/sessions의 `catalog.title`로 채운다(agent/status.js). 이 모듈 밖에서 직접 만지지 않는다.
+let aliasByTmux = {};
+export function setSessionAliases(list) {
+  const next = {};
+  for (const x of Array.isArray(list) ? list : []) {
+    const title = x && x.catalog && typeof x.catalog.title === 'string' ? x.catalog.title.trim() : '';
+    if (x && x.name && title && title !== x.name) next[x.name] = title;
+  }
+  if (JSON.stringify(next) === JSON.stringify(aliasByTmux)) return;
+  aliasByTmux = next;
+  notify();
+}
+/** 방금 바꾼 별칭을 5초 폴링을 기다리지 않고 바로 반영한다. */
+export function setSessionAlias(tmuxName, alias) {
+  if (!tmuxName) return;
+  const next = { ...aliasByTmux };
+  if (alias && alias !== tmuxName) next[tmuxName] = alias; else delete next[tmuxName];
+  aliasByTmux = next;
+  notify();
+}
+
 /**
  * 세션의 표시 이름 — **단일 출처**.
  *
@@ -58,7 +79,8 @@ export function sessionDisplayName(id) {
   const s = sessions[id];
   if (!s) return String(id || '').slice(0, 8);
   const tmux = s.tmuxName || s.tmux_name;
-  if (tmux) return tmux;
+  // 별칭(세션 기록의 보이는 이름)이 있으면 그것을, 없으면 tmux 이름(ID)을 보인다. 서버가 5초~20초마다 보내는 목록으로 채운다.
+  if (tmux) return aliasByTmux[tmux] || tmux;
   if (s.displayName) return s.displayName;
   // 일반(비 tmux) 세션의 폴백 이름이 id를 8자로 잘라 붙인 의미 없는
   // 문자열이었다 — 열린 순서대로 "터미널 1", "터미널 2"…
@@ -137,5 +159,6 @@ window.setActive = setActive;
 window.registerSession = registerSession;
 window.sessionDisplayName = sessionDisplayName;
 window.setSessionTmuxName = setSessionTmuxName;
+window.setSessionAliases = setSessionAliases;
 window.removeSessionRecord = removeSessionRecord;
 window.storeSubscribe = subscribe;

@@ -140,6 +140,7 @@ function _setTmuxCwdMap(list) {
   const map = {};
   for (const s of list) if (s && s.name) map[s.name] = s.cwd || '';
   _tmuxCwdByName = map;
+  window.setSessionAliases?.(list);   // 별칭(보이는 이름) 지도 — core/store.js
 }
 
 // 실패는 던진다 — 폴러(core/poll.js)가 간격을 늘리고 다음 주기에 다시 본다.

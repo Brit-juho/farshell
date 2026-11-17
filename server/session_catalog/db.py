@@ -486,6 +486,111 @@ def snapshot(*, limit=50, after=None, archived=False, order="id", cursor=None, q
         return out
 
 
+# ── 별칭(보이는 이름) 규칙 — 한 곳 (docs/local/plans/session-alias-id-design.md 3.2) ─────────────────────────────
+# 별칭은 살아 있는 세션끼리 겹치지 않는다(끝난 세션과는 겹쳐도 된다). 「살아 있음」= 끝나지 않은 실행이 있거나, 진행 중인
+# 만들기·이어서 시작 작업이 잡고 있는 세션(실행이 기록되기 전의 틈). 살아 있는 다른 세션의 ID(tmux 이름)도 별칭으로 못 쓴다 —
+# `fsh attach <이름>`이 ID를 먼저 보므로 엉뚱한 세션에 붙지 않게.
+ALIAS_MAX = 128
+_ID_SHAPE = re.compile(r"s-[0-9a-f]{8}")
+
+
+def alias_key(title):
+    """별칭 비교 키 — 공백을 하나로 접고 대소문자를 무시한다."""
+    return " ".join(str(title or "").split()).casefold()
+
+
+def valid_alias(title):
+    """1~128자, 제어·서식·줄·문단 구분 문자 없음(양방향 덮어쓰기 등으로 두 별칭이 같아 보이지 않게), ID 모양 아님."""
+    import unicodedata
+    if not isinstance(title, str):
+        return False
+    text = title.strip()
+    return (1 <= len(text) <= ALIAS_MAX
+            and not any(unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp") for c in text)
+            and not _ID_SHAPE.fullmatch(text.lower()))
+
+
+def clean_alias(text, fallback="session"):
+    """자동 별칭 기준을 규칙 안으로 — 공백 접기, 금지 문자 빼기, 길이 자르기. 남는 게 없으면 fallback."""
+    import unicodedata
+    value = " ".join("".join(c for c in str(text or "") if unicodedata.category(c) not in ("Cc", "Cf", "Zl", "Zp")).split())
+    value = value[:ALIAS_MAX - 4].strip()
+    return value if valid_alias(value) else fallback
+
+
+def live_alias_keys(db, exclude_sid=None):
+    """살아 있는 다른 세션들이 쓰는 키(별칭과 ID 둘 다). `exclude_sid`는 뺀다."""
+    rows = db.execute(
+        "SELECT s.id,s.title,(SELECT r.name FROM runtimes r WHERE r.session_id=s.id AND r.ended IS NULL) AS live_name"
+        " FROM sessions s WHERE s.deleted IS NULL AND (EXISTS(SELECT 1 FROM runtimes r WHERE r.session_id=s.id AND r.ended IS NULL)"
+        " OR EXISTS(SELECT 1 FROM operations o WHERE o.resource=s.id AND o.kind IN ('create','resume') AND o.state='running'))").fetchall()
+    keys = set()
+    for r in rows:
+        if r["id"] == exclude_sid:
+            continue
+        keys.add(alias_key(r["title"]))
+        if r["live_name"]:
+            keys.add(alias_key(r["live_name"]))
+    return keys
+
+
+def unique_alias(db, base, exclude_sid=None):
+    """살아 있는 다른 세션과 겹치지 않는 별칭. 겹치면 `기준-1`, `기준-2` … 중 첫 빈 번호."""
+    base = clean_alias(base)
+    taken = live_alias_keys(db, exclude_sid)
+    if alias_key(base) not in taken:
+        return base
+    n = 1
+    while alias_key(f"{base}-{n}") in taken:
+        n += 1
+    return f"{base}-{n}"
+
+
+def preview_alias(base):
+    """새 세션이 받을 별칭(읽기만)."""
+    with database() as db:
+        return unique_alias(db, base)
+
+
+def alias_session_for_tmux_name(tmux_name):
+    """살아 있는 tmux 세션 이름(ID) → (카탈로그 세션 id, revision). 없으면 None."""
+    with database() as db:
+        row = db.execute("SELECT s.id,s.revision FROM runtimes r JOIN sessions s ON s.id=r.session_id"
+                         " WHERE r.name=? AND r.ended IS NULL AND s.deleted IS NULL ORDER BY r.started DESC LIMIT 1",
+                         (tmux_name,)).fetchone()
+        return (row["id"], row["revision"]) if row else None
+
+
+def aliases_for_names(names):
+    """살아 있는 tmux 이름(ID) 목록 → {ID: 별칭}. 기록에 없는 이름은 빠진다."""
+    names = [n for n in dict.fromkeys(names) if isinstance(n, str) and n]
+    out = {}
+    if not names:
+        return out
+    with database() as db:
+        for start in range(0, len(names), 400):
+            chunk = names[start:start + 400]
+            for r in db.execute("SELECT r.name,s.title FROM runtimes r JOIN sessions s ON s.id=r.session_id"
+                                f" WHERE r.ended IS NULL AND s.deleted IS NULL AND r.name IN ({','.join('?' * len(chunk))})", chunk):
+                out[r["name"]] = r["title"]
+    return out
+
+
+def resolve_alias(text):
+    """사람이 친 값 → 살아 있는 세션의 ID. 정확한 ID가 먼저, 아니면 별칭(비교 키로 정확히 하나). 없거나 여럿이면 None."""
+    if not isinstance(text, str) or not text.strip():
+        return None
+    with database() as db:
+        rows = db.execute("SELECT r.name,s.title FROM runtimes r JOIN sessions s ON s.id=r.session_id"
+                          " WHERE r.ended IS NULL AND s.deleted IS NULL").fetchall()
+    for r in rows:
+        if r["name"] == text:
+            return r["name"]
+    key = alias_key(text)
+    hits = [r["name"] for r in rows if alias_key(r["title"]) == key]
+    return hits[0] if len(hits) == 1 else None
+
+
 def edit_session(sid, revision, *, title=None, archived=None, auto_name=None):
     """보이는 이름(별칭)·보관을 바꾼다. 이름을 주면 사람이 붙인 이름(`human`)이 되어 자동 이름이 멈춘다.
     `auto_name=True`는 자동으로 되돌린다(보이는 이름 = 마지막 tmux 이름)."""
@@ -494,8 +599,7 @@ def edit_session(sid, revision, *, title=None, archived=None, auto_name=None):
         raise Refused("invalid_auto_name", 400)
     if isinstance(revision, bool) or not isinstance(revision, int) or revision < 1:
         raise Refused("invalid_revision", 400)
-    if title is not None and (not isinstance(title, str) or not 1 <= len(title.strip()) <= 128
-                              or any(ord(c) < 32 for c in title)):
+    if title is not None and not valid_alias(title):
         raise Refused("invalid_title", 400)
     if archived is not None and not isinstance(archived, bool):
         raise Refused("invalid_archive", 400)
@@ -509,11 +613,18 @@ def edit_session(sid, revision, *, title=None, archived=None, auto_name=None):
             raise Refused("runtime_must_stop")
         name_source = row["name_source"]
         new_title = row["title"]
+        is_live = db.execute("SELECT 1 FROM runtimes WHERE session_id=? AND ended IS NULL", (sid,)).fetchone() is not None
         if title is not None:
             new_title, name_source = title.strip(), "human"
+            # 별칭은 살아 있는 세션끼리 겹치면 안 된다(끝난 세션과는 겹쳐도 된다 — 되살릴 때 새 별칭이 붙는다).
+            if is_live and alias_key(new_title) in live_alias_keys(db, sid):
+                raise Refused("alias_taken", 409)
         if auto_name:
-            latest = db.execute("SELECT name FROM runtimes WHERE session_id=? ORDER BY started DESC,id DESC LIMIT 1", (sid,)).fetchone()
-            new_title, name_source = (latest["name"] if latest else row["title"]), "auto"
+            # 자동 별칭 = 그 세션 자리의 기준 이름(저장소 이름). ID는 랜덤이라 기준이 될 수 없다.
+            place = db.execute("SELECT w.path FROM workspaces w WHERE w.id=?", (row["workspace_id"],)).fetchone()
+            import session_names
+            base = session_names.base_for(place["path"]) if place else row["title"]
+            new_title, name_source = unique_alias(db, base, sid), "auto"
         db.execute("UPDATE sessions SET title=?,name_source=?,archived=?,updated=?,revision=revision+1 WHERE id=?",
                    (new_title, name_source,
                     (time.time() if archived else None) if archived is not None else row["archived"], time.time(), sid))
