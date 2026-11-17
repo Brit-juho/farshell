@@ -15,10 +15,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - A session's row menu (and the folded strip's hover card) now shows the account it was created with, under the location lines.
 
 ### Changed
+- **Sessions have an ID and an alias.** A new session's tmux name is a random ID (`s-` + 8 hex) that is not shown to people; everything people see and type is the session's **alias** — rail, palette, cards, toasts, kill confirmation, voice and queue targets, share and approval dialogs, notifications, delegation and message headers, the TUI, terminal window titles (`@fsh_alias`) and `fsh attach|voice-target|mobile --session|ssh|msg send|pair start --session`, `vt queue add` (alias or ID; an exact ID wins). Renaming changes only the alias (Korean allowed, 1–128 characters); aliases are unique among live sessions on a host (`409 alias_taken` for a person's rename, `name-1`, `name-2` for automatic ones), and a revived session whose alias was taken meanwhile gets `<repository>-N`. Stored keys (queue target, voice lock, message `to`, layout) keep the ID. The row menu shows one copyable «ID» line. Existing sessions and `dev` keep their names as IDs; on first start, overlapping aliases of live sessions are numbered once (previous values saved in `~/.vt/session-catalog/alias-migration-*.json`). New `GET /api/tmux/resolve`.
+- **A session with a running CLI stays in the repository the CLI was launched in.** When the agent `cd`s elsewhere inside the CLI, the session no longer jumps between repository groups; moves into a worktree of the same repository are followed. Branch and change counts still follow the agent's current folder.
 - The System panel's network card shows download and upload on two separate lines instead of one.
 - The prompt queue's target list and the voice input target list show the same name as the session rail (catalog title, else the tmux name); the value stays the tmux name.
 
 ### Fixed
+- Re-sending a session create with the same `operation_id` returns the first result instead of a name conflict.
 - Manage MCP & skills: the session view's context line shows the account name and project folder instead of full paths (paths on hover), and the session picker re-reads the list on every load and clears a selection whose session has ended.
 - The focus-mode key bar's mic key was taller than the other keys on a phone (the menu-item 44px minimum applied to it).
 
