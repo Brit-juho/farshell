@@ -76,6 +76,8 @@ export const SCHEMA = {
   // partialResults: 녹음 중 미리 보기 — 입력하지 않고 표시만 한다. 서버 STT를 더 쓴다(docs/ref/voice.md).
   'voice.autoStop':         { type: 'bool', def: false },
   'voice.partialResults':   { type: 'bool', def: true },
+  // 폰에서 떠 있는 마이크 버튼·집중 모드 키바의 마이크 키를 보일지(term/keybar.js). 기기마다 따로 — 폰 설정이 맥에 번지지 않게 device.
+  'voice.phoneMicButton':   { type: 'bool', def: true, scope: 'device' },
   'a11y.screenReader':      { type: 'enum', def: 'auto', values: ['auto', 'on', 'off'], migrate: 'vt-a11y',
                               parse: (v) => (v === '1' ? 'on' : v === '0' ? 'off' : 'auto') },
   'theme.skin':             { type: 'str',  def: 'farshell', migrate: 'vt-skin' },

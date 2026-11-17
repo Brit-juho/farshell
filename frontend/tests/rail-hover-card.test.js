@@ -584,3 +584,11 @@ test('유휴는 눈에 보이는 메뉴 요약·호버 카드에 쓰지 않고, 
   assert.ok(m.cardText(idle).startsWith('유휴'), m.cardText(idle));
   assert.ok(m.buildHoverCard({ ...base, status: 'working' }, {}).stateText.includes('작업 중'));
 });
+
+test('buildHoverCard — 생성 시 계정은 위치 구역에 나온다(없으면 줄이 없다)', async () => {
+  const { buildHoverCard } = await mod();
+  const withP = rowsOf(buildHoverCard(row({ cwd: '/a', profile: { id: 'p1', name: 'acme' } }), { now: NOW }), 'location');
+  same(withP.map((r) => r.key), ['dir', 'profile']);
+  assert.strictEqual(withP[1].text, 'acme');
+  same(rowsOf(buildHoverCard(row({ cwd: '/a' }), { now: NOW }), 'location').map((r) => r.key), ['dir']);
+});

@@ -2,7 +2,7 @@
 import { vtFetch } from '../core/api.js';
 import { t } from '../core/i18n.js';
 import { icon } from '../ui/icons.js';
-import { bindPinSelect, fillPinSelect, getPin, resolveInputTarget, pinMissingMessage, onPinChange } from './target-pin.js';
+import { bindPinSelect, fillPinSelect, getPin, pinLabel, resolveInputTarget, pinMissingMessage, onPinChange } from './target-pin.js';
 
 export function describeStt(status, catalog) {
   const model = catalog?.models?.find((m) => m.id === status.model);
@@ -77,7 +77,7 @@ export function mountVoiceStatus() {
     }
     if (pinNote) {
       pinNote.textContent = resolveInputTarget().missing ? pinMissingMessage()
-        : pin ? t('{name}에 고정됨 — 보고 있는 세션이 바뀌어도 여기로 입력합니다', { name: pin }) : '';
+        : pin ? t('{name}에 고정됨 — 보고 있는 세션이 바뀌어도 여기로 입력합니다', { name: pinLabel(pin) }) : '';
     }
     if (mic) {
       if (pin) mic.dataset.voicePin = pin; else delete mic.dataset.voicePin;

@@ -9,6 +9,7 @@
 // 새로고침 뒤에 고정이 풀리기 때문이다. 녹음 시점에 그 이름을 가진 열린 세션 id를 찾아 서버에 보낸다.
 // 찾지 못하면 활성 세션으로 대신하지 않고 막는다(missing).
 import { t } from '../core/i18n.js';
+import { vtFetch } from '../core/api.js';
 
 export const PIN_KEY = 'vt_voice_pin';
 export const PIN_EVENT = 'vt:voice-pin';
@@ -74,30 +75,68 @@ export function onPinChange(fn) {
   return () => { window.removeEventListener(PIN_EVENT, local); window.removeEventListener('storage', cross); };
 }
 
+// 목록 글자 — 레일 행과 같은 이름(카탈로그 제목, 없으면 tmux 이름: shell/rail-fetch.ts). 값·고정은 계속 tmux 이름이다.
+// 이 파일은 번들마다 사본이라 모듈 상태를 두지 않는다 — 제목 지도는 window에 둔다(위 머리말과 같은 이유).
+const TITLES = '__vtPinTitles';
+const TITLES_TTL_MS = 15000;
+const cleanTitle = (v) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 128) : '');
+
+/** tmux 이름 → 보이는 이름. 제목 지도가 아직 없으면 tmux 이름. */
+export function pinLabel(name) {
+  const c = window[TITLES];
+  return (c && c.map && c.map[name]) || name;
+}
+
+/** 서버의 세션 목록에서 제목 지도를 받아 둔다. 15초 안이면 건너뛰고, 바뀐 게 있을 때만 true로 알린다. */
+async function refreshPinTitles() {
+  const c = window[TITLES] || (window[TITLES] = { map: {}, at: 0, busy: false });
+  // 다른 맥을 보는 중이면 받지 않는다 — 그 맥의 목록이 아니고, 음성 패널도 직접 접속이 필요하다고 막아 둔 상태다.
+  const relay = window.vtRelayHost?.();
+  if (relay && relay !== 'local') return false;
+  if (c.busy || Date.now() - c.at < TITLES_TTL_MS) return false;
+  c.busy = true;
+  try {
+    const list = await vtFetch('/api/tmux/sessions');
+    const map = {};
+    for (const x of Array.isArray(list) ? list : []) {
+      const title = cleanTitle(x && x.catalog && x.catalog.title);
+      if (x && x.name && title) map[x.name] = title;
+    }
+    const changed = JSON.stringify(map) !== JSON.stringify(c.map);
+    c.map = map;
+    return changed;
+  } catch { return false; } finally { c.at = Date.now(); c.busy = false; }
+}
+
 /** <select>를 현재 목록·고정 값으로 채운다. 고정한 세션이 목록에 없으면 「(없음)」으로 남겨 보여 준다. */
 export function fillPinSelect(select) {
   const pin = getPin();
   const names = pinCandidates().map((c) => c.name);
   const keep = document.activeElement === select;
-  const sig = JSON.stringify([pin, names]);
+  const sig = JSON.stringify([pin, names, names.map(pinLabel)]);
   if (select.dataset.sig === sig) return;
   select.dataset.sig = sig;
   select.replaceChildren();
   const follow = document.createElement('option');
   follow.value = ''; follow.textContent = t('현재 보는 세션 따라가기');
   select.appendChild(follow);
+  const counts = {};
+  for (const name of names) { const k = pinLabel(name); counts[k] = (counts[k] || 0) + 1; }
   for (const name of names) {
     const o = document.createElement('option');
-    o.value = name; o.textContent = name;
+    const label = pinLabel(name);
+    o.value = name; o.textContent = counts[label] > 1 && label !== name ? `${label} (${name})` : label;
     select.appendChild(o);
   }
   if (pin && !names.includes(pin)) {
     const o = document.createElement('option');
-    o.value = pin; o.textContent = t('{name} (없음)', { name: pin });
+    o.value = pin; o.textContent = t('{name} (없음)', { name: pinLabel(pin) });
     select.appendChild(o);
   }
   select.value = pin;
   if (keep) select.focus();
+  // 제목은 비동기로 받는다 — 받은 뒤 바뀐 게 있으면 한 번 더 채운다(받는 동안 목록이 닫혔으면 건너뛴다).
+  void refreshPinTitles().then((changed) => { if (changed && select.isConnected) fillPinSelect(select); });
 }
 
 /** select 변경을 저장하고 목록 변화를 따라간다. 해제 함수를 돌려준다. */

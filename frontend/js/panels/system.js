@@ -94,9 +94,11 @@ export function renderStats(d) {
     // 받기·보내기는 같은 눈금으로 겹쳐 그린다 — 따로 맞추면 작은 쪽이 커 보인다.
     const top = Math.max(1, ..._hist.rx.concat(_hist.tx).filter((v) => v != null));
     const both = _spark(_hist.rx, top, 'rx') + _spark(_hist.tx, top, 'tx');
-    parts.push(_row(t('네트워크'),
-      `<span class="rx">↓ ${vtEsc(fmtRate(d.net.rx_bps))}</span> <span class="tx">↑ ${vtEsc(fmtRate(d.net.tx_bps))}</span>`,
-      vtEsc((d.net.interfaces || []).join(', ')), null, '', `<div class="vt-sys-dual">${both}</div>`));
+    // 다운로드·업로드는 한 줄에 같이 두지 않고 위아래 두 줄로 — 머리 줄에 두 값이 붙어 있으면 한 덩어리로 읽힌다.
+    const line = (cls, arrow, label, bps) => `<div class="vt-sys-netline ${cls}"><span class="vt-sys-netname">${arrow} ${vtEsc(label)}</span>`
+      + `<span class="vt-sys-value">${vtEsc(fmtRate(bps))}</span></div>`;
+    const lines = `<div class="vt-sys-netlines">${line('rx', '↓', t('다운로드'), d.net.rx_bps)}${line('tx', '↑', t('업로드'), d.net.tx_bps)}</div>`;
+    parts.push(_row(t('네트워크'), '', vtEsc((d.net.interfaces || []).join(', ')), null, '', lines + `<div class="vt-sys-dual">${both}</div>`));
   }
   if (parts.length === 1) parts.push(`<div class="vt-vw-empty">${vtEsc(t('시스템 정보를 읽지 못했습니다.'))}</div>`);
   return parts.join('');

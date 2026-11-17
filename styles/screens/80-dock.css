@@ -401,6 +401,11 @@ body.vt-has-viewer-pane .vt-onboarding { display:none !important; }
 .vt-sys-spark{ width:100%; height:36px; color:var(--color-acc); display:block; }
 .vt-sys-card:has(.vt-sys-value.warn) .vt-sys-spark{ color:var(--color-st-waiting); }
 .vt-sys-card:has(.vt-sys-value.err) .vt-sys-spark{ color:var(--color-st-error); }
+.vt-sys-netlines{ display:flex; flex-direction:column; gap:calc(var(--spacing) * 0.5); margin-top:calc(var(--spacing) * 2); }
+.vt-sys-netline{ display:flex; align-items:center; justify-content:space-between; gap:calc(var(--spacing) * 2); }
+.vt-sys-netname{ font:var(--weight-semibold) var(--fs-xs)/16px var(--font-ui); }
+.vt-sys-netline.rx .vt-sys-netname{ color:var(--color-acc); }
+.vt-sys-netline.tx .vt-sys-netname{ color:var(--color-st-working); }
 .vt-sys-dual{ position:relative; height:36px; margin-top:calc(var(--spacing) * 2); }
 .vt-sys-dual .vt-sys-spark{ position:absolute; inset:0; }
 .vt-sys-spark.rx{ color:var(--color-acc); }

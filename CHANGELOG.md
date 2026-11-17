@@ -10,6 +10,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- **Phone mic button switch.** Settings › Voice › «Show mic button on phone» (per device, on by default) hides the floating mic button and the focus-mode key bar mic key. Recording still works from Settings.
+- A session's row menu (and the folded strip's hover card) now shows the account it was created with, under the location lines.
+
+### Changed
+- The System panel's network card shows download and upload on two separate lines instead of one.
+- The prompt queue's target list and the voice input target list show the same name as the session rail (catalog title, else the tmux name); the value stays the tmux name.
+
+### Fixed
+- The focus-mode key bar's mic key was taller than the other keys on a phone (the menu-item 44px minimum applied to it).
+
 ---
 
 ## [2.12.4] — 2026-11-17

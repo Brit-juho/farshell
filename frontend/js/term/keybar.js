@@ -10,6 +10,7 @@ import { activeSessionId, activeSession, getSession } from '../core/store.js';
 import { copyToClipboard } from './clipboard.js';
 import { _isCoarsePointer } from '../core/env.js';
 import { t } from '../core/i18n.js';
+import { get as setting, subscribe as subscribeSettings } from '../core/settings.js';
 
 // 보이는 높이가 이보다 작으면 포커스 모드. 가로 폰(≈400px)에 키보드가 뜨면 200px 안팎, 세로 폰은 훨씬 크다.
 // 300px = 상단 바 + 키바(≈96px) + 터미널 몇 줄이 겨우 들어가는 하한이라 그 아래에서는 크롬이 터미널을 먹는다.
@@ -152,6 +153,14 @@ try {
 } catch (_) { /* matchMedia 없는 환경 */ }
 // 폰 집중 모드가 켜지고 꺼질 때(layout/mobile-focus.js가 쏜다) — 떠 있는 자리 ↔ 키바 첫 키.
 document.addEventListener('vt:focus-change', () => placeMicButton());
+
+// 「폰 마이크 버튼 표시」 설정 — 꺼지면 html.vt-mic-off가 붙어 떠 있는 버튼과 키바 마이크 키를 CSS로 숨긴다(98-mobile.css).
+// 노드는 그대로 두므로(voice.js가 id를 캐시) 설정 화면의 「녹음 시작」은 계속 동작한다.
+function applyPhoneMicSetting() {
+  document.documentElement.classList.toggle('vt-mic-off', setting('voice.phoneMicButton') === false);
+}
+applyPhoneMicSetting();
+subscribeSettings(applyPhoneMicSetting);
 
 export function _activeMods() {
   const out = {};

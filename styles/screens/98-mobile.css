@@ -246,11 +246,15 @@
     padding-bottom:calc(var(--kb-height, calc(var(--spacing) * 24)) + var(--kb-overlap, 0px));
   }
   /* 마이크는 키바 첫 키로 옮겨 간다(term/keybar.js placeMicButton) — 떠 있는 자리는 비어 숨는다. */
+  /* 설정 「폰 마이크 버튼 표시」를 끄면(term/keybar.js) 두 자리 모두 숨긴다 — 집중 모드 규칙보다 구체적이어야 한다. */
+  html.vt-mic-off #vt-mic-fab,
+  html.vt-mic-off #keybar-mic-slot,
+  html.vt-mic-off.vt-focus #keybar-mic-slot { display:none !important; }
   #keybar-mic-slot { display:none; }
   html.vt-focus #keybar-mic-slot { display:flex; flex:none; }
   html.vt-focus #keybar-mic-slot:empty { display:none; }
   #keybar-mic-slot #mic-btn-wrap.mic {
-    display:flex; align-items:center; justify-content:center; width:44px; height:36px; padding:0; margin:0;
+    display:flex; align-items:center; justify-content:center; width:44px; height:36px; min-height:0; padding:0; margin:0;
     border-radius:var(--radius-sm); background:var(--color-bg-raised); border:1px solid var(--color-line-strong); color:var(--color-sub);
   }
   #keybar-mic-slot #mic-btn-wrap svg { width:16px; height:16px; }

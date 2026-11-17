@@ -15,7 +15,7 @@ import { reasonLabel } from './host-data.js';
 import { normalizeShells, shellCounts, shellLabel } from './bg-shells.js';
 import {
   KIND_LABEL, ORIGIN_ICON, diffLabel, formatRelativeTime, kidsProgress, lineageLabel, normalizeKind, normalizeOrigin,
-  originLabel, shareSentence, stateKeyword, type SessionRow,
+  originLabel, profileLabel, shareSentence, stateKeyword, type SessionRow,
 } from './rail-data.js';
 
 export type HcState = 'idle' | 'working' | 'waiting' | 'done';
@@ -196,6 +196,10 @@ function locationRows(row: SessionRow, host: HcHost | null | undefined): HcRow[]
       // 줄 수를 모르면 「파일 3」(diffLabel) — 줄 수가 있으면 위 diff가 이 값을 대신한다.
       extra: hasLines ? undefined : diffLabel(row) || undefined,
     });
+  }
+  // 만들 때 고른 계정(서버가 기록한 것만 — 셸에서 바꾼 환경은 모른다). 위치 구역이라 자리가 모자라도 잘리지 않는다.
+  if (row.profile) {
+    rows.push({ key: 'profile', icon: 'user', text: profileLabel(row.profile), title: t('생성 시 계정: {name}', { name: profileLabel(row.profile) }) });
   }
   if (host) {
     const ms = host.latencyMs != null && host.latencyMs > 0 ? ` · ${host.latencyMs}ms` : '';

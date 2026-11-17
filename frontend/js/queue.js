@@ -116,10 +116,16 @@ export function showQueue(opts = {}) {
         sessions = await vtFetch('/api/tmux/sessions');
       } catch (_) { return; }
       const cur = sel.value;
+      // 글자는 레일 행과 같은 이름(카탈로그 제목, 없으면 tmux 이름 — shell/rail-fetch.ts), 값은 tmux 이름 그대로.
+      // 제목이 겹치면 구분되도록 tmux 이름을 괄호로 덧붙인다.
+      const titleOf = (x) => (typeof x?.catalog?.title === 'string' ? x.catalog.title.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 128) : '') || x.name;
+      const counts = {};
+      (sessions || []).forEach(s => { const k = titleOf(s); counts[k] = (counts[k] || 0) + 1; });
       (sessions || []).forEach(s => {
         const opt = document.createElement('option');
+        const label = titleOf(s);
         opt.value = s.name;
-        opt.textContent = s.name;
+        opt.textContent = counts[label] > 1 && label !== s.name ? `${label} (${s.name})` : label;
         sel.appendChild(opt);
       });
       // A3(80 §1 3단계) — 원격 호스트 세션. 값은 `host::세션` 합성 키다:
@@ -131,7 +137,7 @@ export function showQueue(opts = {}) {
           for (const rs of h.sessions || []) {
             const opt = document.createElement('option');
             opt.value = `${h.id}::${rs.name}`;
-            opt.textContent = `${rs.name} · ${h.label || h.id}`;
+            opt.textContent = `${titleOf(rs)} · ${h.label || h.id}`;
             sel.appendChild(opt);
           }
         }
