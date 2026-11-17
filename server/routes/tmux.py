@@ -402,6 +402,14 @@ CLOSED_LINEAGE_SECONDS = 24 * 3600
 
 
 
+def _operation_exists(opid) -> bool:
+    if not isinstance(opid, str) or not opid:
+        return False
+    from session_catalog import db as catalog
+    with catalog.database() as con:
+        return con.execute("SELECT 1 FROM operations WHERE id=?", (opid,)).fetchone() is not None
+
+
 def _live_keys() -> set:
     from session_catalog import db as catalog
     with catalog.database() as con:
@@ -478,7 +486,10 @@ async def create_tmux_session(request: Request):
         if not catalog.valid_alias(requested_name):
             return JSONResponse({"error": "invalid_name", "reason": tr("별칭은 1~128자이고 제어 문자는 쓸 수 없습니다")}, status_code=400)
         try:
-            taken = await asyncio.to_thread(lambda: catalog.alias_key(requested_name) in _live_keys())
+            # 같은 작업(operation_id)을 다시 보낸 것이면 첫 요청이 만든 세션이 이 별칭을 쓰고 있다 — 겹침이 아니라
+            # 재시도이므로 검사하지 않고 아래 기록 생성이 이전 결과를 돌려주게 둔다.
+            replay = await asyncio.to_thread(_operation_exists, body.get("operation_id"))
+            taken = not replay and await asyncio.to_thread(lambda: catalog.alias_key(requested_name) in _live_keys())
         except Exception:  # noqa: BLE001 — 기록을 못 읽으면 만들 때 번호가 붙는다
             taken = False
         if taken:

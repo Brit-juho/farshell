@@ -250,3 +250,21 @@ def _reset_new_device_login_cap():
     from auth import lockout
     lockout._new_device_failures._fails.clear()
     yield
+
+
+@pytest.fixture
+def readable_child_names(monkeypatch):
+    """위임 흐름(장부·임대·권한)을 보는 시험용 — 하위 세션 ID를 작업 제목으로 고정해 읽기 쉽게 한다.
+    실제 이름 규칙(랜덤 ID + 별칭 요청, 2026-11)은 test_session_names.py가 본다. 쓰는 파일은
+    `pytestmark = pytest.mark.usefixtures("readable_child_names")`."""
+    import delegation
+
+    def legacy(parent_name, title, existing):
+        base = delegation._NAME_RE.sub("-", title).strip("-")[:40] if title else ""
+        base = base or f"{delegation._NAME_RE.sub('-', parent_name).strip('-')[:32] or 'sub'}-sub"
+        for i in range(1, 50):
+            name = base if i == 1 else f"{base}-{i}"
+            if name not in existing:
+                return name
+        raise delegation.DelegationError("name_exhausted", "x", 409)
+    monkeypatch.setattr(delegation, "_child_name", legacy)

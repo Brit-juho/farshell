@@ -13,21 +13,9 @@ from share_identity import Caller
 
 
 
-@pytest.fixture(autouse=True)
-def _readable_child_names(monkeypatch):
-    """이 파일은 위임 흐름(장부·임대·보고)을 본다 — 하위 세션 ID를 작업 제목으로 고정해 읽기 쉽게 한다.
-    실제 이름 규칙(랜덤 ID + 별칭 요청)은 test_session_names.py가 본다."""
-    import delegation
 
-    def legacy(parent_name, title, existing):
-        base = delegation._NAME_RE.sub("-", title).strip("-")[:40] if title else ""
-        base = base or f"{delegation._NAME_RE.sub('-', parent_name).strip('-')[:32] or 'sub'}-sub"
-        for i in range(1, 50):
-            name = base if i == 1 else f"{base}-{i}"
-            if name not in existing:
-                return name
-        raise delegation.DelegationError("name_exhausted", "x", 409)
-    monkeypatch.setattr(delegation, "_child_name", legacy)
+# 위임 흐름을 보는 파일 — 하위 세션 ID를 작업 제목으로 고정한다(conftest.readable_child_names).
+pytestmark = pytest.mark.usefixtures("readable_child_names")
 
 class _FakeTmux:
     def __init__(self):

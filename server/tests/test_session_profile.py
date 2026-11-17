@@ -537,6 +537,7 @@ def create(sandbox, tmux, monkeypatch):
         return {'id': 'web-1', 'name': name, 'tmux_session': name}
     monkeypatch.setattr(tmux_route, '_attach_tmux', attach)
     monkeypatch.setattr(tmux_route, '_kick_sessions', lambda: None)
+    monkeypatch.setattr(tmux_route, '_alias_after_create', lambda name: None)
 
     def call(body):
         return asyncio.run(tmux_route.create_tmux_session(_Request(body)))
@@ -548,10 +549,12 @@ def _body(response):
 
 
 def test_create_without_profile_is_unchanged(create, tmux):
+    import session_names
     result = create({'name': 'plain'})
-    assert result['tmux_session'] == 'plain' and 'profile' not in result
+    name = result['tmux_session']                                   # 랜덤 ID(2026-11) — 'plain'은 별칭 요청이다
+    assert session_names.is_id(name) and 'profile' not in result
     assert not any('source-file' in call for call in tmux.argv)
-    assert subprocess.run(['tmux', '-L', tmux.socket, 'show-options', '-t', '=plain:', '@fsh_profile'], capture_output=True, text=True).stdout.strip() in ('', '@fsh_profile ""')
+    assert subprocess.run(['tmux', '-L', tmux.socket, 'show-options', '-t', f'={name}:', '@fsh_profile'], capture_output=True, text=True).stdout.strip() in ('', '@fsh_profile ""')
 
 
 def test_create_with_profile_injects_and_records(create, tmux, sandbox):
@@ -561,7 +564,7 @@ def test_create_with_profile_injects_and_records(create, tmux, sandbox):
     assert _dump(tmux)['CLAUDE_CONFIG_DIR'] == str(profiles.root(pid))
     with profiles.database() as db:
         rows = db.execute('SELECT name, profile_id FROM injected_sessions').fetchall()
-        assert [(r['name'], r['profile_id']) for r in rows] == [('mine', pid)]
+        assert [(r['name'], r['profile_id']) for r in rows] == [(result['tmux_session'], pid)]
         # The launch panel's table is not touched.
         assert db.execute('SELECT count(*) FROM sessions').fetchone()[0] == 0
 
@@ -595,8 +598,9 @@ def test_create_with_profile_needs_a_human_session(create, tmux, sandbox, monkey
         assert error.value.status_code == 403
         with pytest.raises(HTTPException):
             create({'name': 'agent', 'profile': 'none'})       # even "none": the field is a human choice
-        assert create({'name': 'agent-plain-' + kind})['tmux_session'] == 'agent-plain-' + kind   # the old call still works
-    assert not tmux_runner.has_session('agent')
+        assert create({'name': 'agent-plain-' + kind})['tmux_session'].startswith('s-')   # the old call still works (ID is random)
+    listed = (tmux_runner.run_text(['list-sessions', '-F', '#{session_name}']) or '').split()
+    assert len(listed) == 2                                          # only the two plain sessions — nothing with a profile
 
 
 def test_create_through_the_session_catalog_injects_too(create, tmux, sandbox):
@@ -685,14 +689,30 @@ def test_a_failed_automatic_sync_is_logged_without_values_or_paths_and_never_sto
     assert 'secret-detail' not in text and '/home/example/' not in text
 
 
-@pytest.mark.parametrize('name', ['#{session_id}', '#(echo hi)', 'a b', 'x;y', 'a.b', 'a:b', '한글', 'x' * 81, '#{pane_id}-x'])
-def test_create_with_a_profile_refuses_names_outside_the_app_rule_and_leaves_no_session(create, tmux, sandbox, name):
+@pytest.mark.parametrize('name', ['x' * 129, 'a\nb', 's-0123abcd'])
+def test_create_with_a_profile_refuses_bad_aliases_and_leaves_no_session(create, tmux, sandbox, name):
     pid = _make('alice')
     response = create({'name': name, 'profile': pid})
     assert (response.status_code, _body(response)['error']) == (400, 'invalid_name')
     listed = tmux_runner.run_text(['list-sessions', '-F', '#{session_name}']) or ''
     assert listed.strip() == ''                                       # no orphan session under any name
-    with pytest.raises(session_profile.SlotRefused) as error:          # the lowest layer refuses too (delegation uses it)
+
+
+@pytest.mark.parametrize('name', ['#{session_id}', '#(echo hi)', '한글', '#{pane_id}-x'])
+def test_create_with_a_profile_keeps_format_like_names_away_from_tmux(create, tmux, sandbox, name):
+    """2026-11: 사람이 친 이름은 별칭이라 받아들이지만 tmux `-s`에는 랜덤 ID만 간다 — 서식이 펼쳐지지 않는다."""
+    import session_names
+    pid = _make('alice')
+    result = create({'name': name, 'profile': pid})
+    listed = (tmux_runner.run_text(['list-sessions', '-F', '#{session_name}']) or '').split()
+    assert listed == [result['tmux_session']] and session_names.is_id(listed[0])
+
+
+@pytest.mark.parametrize('name', ['#{session_id}', '#(echo hi)', 'a b', 'x;y', 'a.b', 'a:b', '한글', 'x' * 81, '#{pane_id}-x'])
+def test_the_spawn_layer_still_refuses_names_outside_the_tmux_rule(tmux, sandbox, name):
+    """가장 아래 층(위임도 쓴다)은 tmux 이름 규칙을 그대로 지킨다."""
+    pid = _make('alice')
+    with pytest.raises(session_profile.SlotRefused) as error:
         _spawn(name, session_profile.select(pid))
     assert error.value.code == 'invalid_name' and error.value.status == 400
     assert (tmux_runner.run_text(['list-sessions', '-F', '#{session_name}']) or '').strip() == ''
@@ -708,7 +728,7 @@ def test_create_with_a_profile_validates_dimensions(create, tmux, sandbox, cols,
 
 def test_create_with_a_profile_accepts_the_dimension_range_edges(create, tmux, sandbox):
     pid = _make('alice')
-    assert create({'name': 'edge', 'profile': pid, 'cols': 1, 'rows': 1000})['tmux_session'] == 'edge'
+    assert create({'name': 'edge', 'profile': pid, 'cols': 1, 'rows': 1000})['tmux_session'].startswith('s-')
 
 
 def test_a_profile_folder_that_vanishes_is_a_fixed_refusal_not_an_exception_text(sandbox, tmux, monkeypatch):
