@@ -428,6 +428,7 @@ export interface RailLists<T> {
  * 만든 곳을 숨겨도 **열려 있는 세션과 waiting 세션은 남긴다** — 지금 보고 있는 세션이
  * 레일에서 사라지거나, 내 입력을 기다리는 세션이 안 보이면 안 된다.
  * 개입 필요를 끄면 waiting은 「세션」 안에서 키워드로만 말한다.
+ * 저장소 묶음은 「세션」 전체(waiting 포함)로 만든다 — 개입 필요는 같은 세션을 위에 추가로 한 번 더 보여 줄 뿐이다(2.13.2).
  */
 export function buildRailLists<T extends Pick<SessionRow, 'name' | 'status' | 'origin' | 'open'>>(
   rows: T[],
@@ -438,17 +439,6 @@ export function buildRailLists<T extends Pick<SessionRow, 'name' | 'status' | 'o
   const sessions = rows.filter((r) => !hidden.has(r.origin) || r.open || waiting(r)).sort(byName);
   const attention = prefs.attentionShow ? rows.filter(waiting).sort(byName) : [];
   return { attention, sessions };
-}
-
-/**
- * 「실행 중」 구역 = 「세션」 전체에서 「개입 필요」에 이미 올라간 행을 뺀 것.
- * 개입 필요 구역이 꺼져 있으면(`attention`이 비어 있다) 빼는 것이 없다.
- * 저장소 가지 그래프(repo-tree.ts)와 접힌 띠는 이 결과(개입 필요에 없는 행)를 받는다.
- */
-export function splitRunning<T>(lists: RailLists<T>): T[] {
-  if (lists.attention.length === 0) return lists.sessions;
-  const top = new Set<T>(lists.attention);
-  return lists.sessions.filter((r) => !top.has(r));
 }
 
 // ── 행 메뉴(⋯ 버튼·우클릭·폰 롱프레스가 같은 항목) ───────────────────────
