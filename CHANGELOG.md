@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+- A session could get a needless `-1` on its alias: create/resume operations left «running» since October held the aliases of ended sessions forever. Only operations started in the last 10 minutes hold an alias now.
+
 ---
 
 ## [2.13.1] — 2026-11-18

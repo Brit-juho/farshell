@@ -491,6 +491,9 @@ def snapshot(*, limit=50, after=None, archived=False, order="id", cursor=None, q
 # 만들기·이어서 시작 작업이 잡고 있는 세션(실행이 기록되기 전의 틈). 살아 있는 다른 세션의 ID(tmux 이름)도 별칭으로 못 쓴다 —
 # `fsh attach <이름>`이 ID를 먼저 보므로 엉뚱한 세션에 붙지 않게.
 ALIAS_MAX = 128
+# 만들기·이어서 시작 작업이 「진행 중」인 채로 별칭을 잡고 있는 시간. 그보다 오래된 「진행 중」 표시는 끝나지 못하고 남은 옛 기록이라
+# 별칭을 막지 않는다(10월부터 남은 작업이 끝난 세션의 별칭을 영원히 붙잡아 새 세션에 `-1`이 붙던 문제 — 2026-11-18 실측).
+PENDING_OP_SECONDS = 600
 _ID_SHAPE = re.compile(r"s-[0-9a-f]{8}")
 
 
@@ -523,7 +526,8 @@ def live_alias_keys(db, exclude_sid=None):
     rows = db.execute(
         "SELECT s.id,s.title,(SELECT r.name FROM runtimes r WHERE r.session_id=s.id AND r.ended IS NULL) AS live_name"
         " FROM sessions s WHERE s.deleted IS NULL AND (EXISTS(SELECT 1 FROM runtimes r WHERE r.session_id=s.id AND r.ended IS NULL)"
-        " OR EXISTS(SELECT 1 FROM operations o WHERE o.resource=s.id AND o.kind IN ('create','resume') AND o.state='running'))").fetchall()
+        " OR EXISTS(SELECT 1 FROM operations o WHERE o.resource=s.id AND o.kind IN ('create','resume') AND o.state='running'"
+        " AND o.created>?))", (time.time() - PENDING_OP_SECONDS,)).fetchall()
     keys = set()
     for r in rows:
         if r["id"] == exclude_sid:

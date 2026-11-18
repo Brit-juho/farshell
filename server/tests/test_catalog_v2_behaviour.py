@@ -466,3 +466,25 @@ def test_a_cli_session_stays_in_the_repository_it_was_launched_from(catalog, tmp
     hook["cwd"] = "/nonexistent/place"               # 지금 위치를 못 읽음 — 실행 저장소에 둔다
     _reconcile(_item("$1:1", "w", str(repo)))
     assert _placement(catalog, "w")["name"] == "farshell"
+
+
+def test_a_stale_running_operation_does_not_hold_an_alias(catalog):
+    """끝나지 못하고 「진행 중」으로 남은 옛 만들기 작업(10월 실측)이 끝난 세션의 별칭을 붙잡아 새 세션에 번호가 붙던 문제.
+    10분 안의 진행 중 작업만 별칭을 잡는다."""
+    from session_catalog.db import database, live_alias_keys, unique_alias, alias_key, PENDING_OP_SECONDS
+    db = catalog
+    _reconcile(_item("$1:1", "old"))
+    sid = db.snapshot()["sessions"][0]["id"]
+    _reconcile()                                            # 끝났다
+    now = time.time()
+    with database(write=True) as con:
+        con.execute("INSERT INTO operations(id,kind,resource,fingerprint,state,result,created,updated) VALUES('stale','create',?,'f','running','{}',?,?)",
+                    (sid, now - 3 * 86400, now - 3 * 86400))
+    with database() as con:
+        assert alias_key("old") not in live_alias_keys(con)
+        assert unique_alias(con, "old") == "old"
+    with database(write=True) as con:
+        con.execute("UPDATE operations SET created=?,updated=? WHERE id='stale'", (now - PENDING_OP_SECONDS + 30, now))
+    with database() as con:
+        assert alias_key("old") in live_alias_keys(con)     # 방금 시작한 작업은 그 세션이 막 만들어지는 중이다
+        assert unique_alias(con, "old") == "old-1"
