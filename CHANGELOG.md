@@ -10,6 +10,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+---
+
+## [2.13.0] — 2026-11-18
+
 ### Added
 - **Phone mic button switch.** Settings › Voice › «Show mic button on phone» (per device, on by default) hides the floating mic button and the focus-mode key bar mic key. Recording still works from Settings.
 - A session's row menu (and the folded strip's hover card) now shows the account it was created with, under the location lines.
