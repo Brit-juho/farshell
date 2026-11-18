@@ -4373,6 +4373,20 @@ def _new_session_menu(page) -> None:
     page.locator("#add-menu .vt-menu-item", has_text="이번만 다른 계정으로").wait_for(timeout=10000)
 
 
+def _menu_account_name(page, session_id: str) -> str:
+    """그 세션 행 ⋯ 메뉴 상단 정보의 「생성 시 계정」 줄(사람 아이콘 + 계정 이름). 행에는 배지를 붙이지 않는다(2026-11) — 없으면 빈 글."""
+    page.evaluate("() => window.vtSettingsSet('ui.side.activity', 'sessions')")
+    node = page.locator(f'#vt-wgrail .vt-rg-node[data-session-id="{session_id}"]').first
+    node.hover()
+    node.locator(".vt-rg-more").click()
+    summary = page.locator(".vt-menu-summary").first
+    summary.wait_for(timeout=5000)
+    row = summary.locator('.vt-hc-val[title^="생성 시 계정"]')
+    text = row.first.text_content().strip() if row.count() else ""
+    page.keyboard.press("Escape")
+    return text
+
+
 def _pick_account_row(page, label: str) -> None:
     page.wait_for_selector("#account-menu", timeout=10000)
     page.locator("#account-menu .vt-menu-item.two", has=page.locator(".vt-menu-item-label", has_text=re.compile(f"^{label}$"))).click()
@@ -4435,9 +4449,10 @@ def test_계정을_고르면_그_세션_환경에만_고른_폴더가_들어가�
         picker = page.evaluate("""async () => (await (await fetch('/api/agent-profiles/read/picker', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'})).json())""")
         assert picker["defaults"]["claude"]["id"] == ids["alice"], "「이번만」이 기본 계정을 바꿨다"
 
-        # 4) 레일 행 배지 — 서버가 기록한 이름만
-        page.wait_for_function("() => [...document.querySelectorAll('.vt-srow-profile-name')].map(e => e.textContent).sort().join() === 'alice,work'", timeout=15000)
-        assert page.locator(".vt-srow-profile").first.get_attribute("data-tip") == "생성 시 계정"
+        # 4) 계정 표시 — 서버가 기록한 이름만. 행에는 배지가 없고 행 ⋯ 메뉴 상단 정보에 있다.
+        assert page.locator("#vt-wgrail .vt-srow-profile").count() == 0, "레일 행에는 계정 배지를 붙이지 않는다"
+        assert _menu_account_name(page, first) == "alice"
+        assert _menu_account_name(page, second) == "work"
 
         # 5) 폴더 없는 프로필은 거부 — 세션이 늘지 않고 사유 토스트가 뜬다(기본 환경으로 대체하지 않는다)
         count = page.evaluate("() => Object.keys(window.allSessions()).length")
@@ -4507,7 +4522,7 @@ def test_API_엔드포인트_프로필을_선택기에서_고르면_그_세션_�
         assert env["ANTHROPIC_AUTH_TOKEN"] == _FAKE_GATEWAY_AUTH             # 출력하지 않고 비교만
         assert env["CLAUDE_CONFIG_DIR"] == str(_LOCAL_STATE_DIR / "agent-profiles" / pid / "claude")
         assert env.get("ANTHROPIC_API_KEY") is None, "전역 환경의 다른 계정 키가 남았다"
-        page.wait_for_function("() => [...document.querySelectorAll('.vt-srow-profile-name')].map(e => e.textContent).includes('gateway')", timeout=15000)
+        assert _menu_account_name(page, sid) == "gateway"
         ps = subprocess.run(["ps", "-axo", "command"], capture_output=True, text=True).stdout
         assert _FAKE_GATEWAY_AUTH not in ps
     finally:
@@ -4786,7 +4801,8 @@ def test_질문이_온_세션은_저장소_묶음에_남고_개입_필요에도_
         page.wait_for_function("() => document.documentElement.dataset.appReady === 'true'", timeout=20000)
         page.evaluate("() => { window.vtSettingsSet('ui.side.activity', 'sessions'); window.vtSettingsSet('rail.sort', ''); }")   # 레일을 열고 정렬은 기본값(앞 시험이 남긴 값을 지운다)
         page.wait_for_function(
-            "() => [...document.querySelectorAll('#vt-wgrail section.vt-rg')].some((s) => (s.getAttribute('aria-label') || '').startsWith('attn-'))", timeout=20000)
+            "() => [...document.querySelectorAll('#vt-wgrail section.vt-rg')].some((s) => (s.getAttribute('aria-label') || '').startsWith('attn-f') && s.querySelector('.vt-rg-node'))",
+            timeout=20000)   # 세션이 저장소 묶음에 나타난 뒤에 순서를 본다 — 그 전에는 저장소만 이름순으로 먼저 그려진다
         heads = "() => [...document.querySelectorAll('#vt-wgrail section.vt-rg')].map((s) => s.getAttribute('aria-label')).filter((n) => n && n.startsWith('attn-'))"
         rows = "() => [...document.querySelectorAll('#vt-wgrail .vt-rg-node')].filter((e) => e.textContent.includes('attn-f')).map((e) => !!e.closest('.vt-rg-flat'))"
         assert page.evaluate(heads) == ["attn-farshell", "attn-acme"], page.evaluate(heads)

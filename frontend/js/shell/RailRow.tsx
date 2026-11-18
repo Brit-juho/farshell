@@ -1,6 +1,6 @@
 // 레일 칸 부품과 행 메뉴(세션 로직 점검 단계 5·7).
 //   Row          접힌 48px 띠의 칸(링 + 에이전트 마크). 펼친 레일은 가지 그래프 칸(SessionNode.tsx), 폰은 타일(Fleet.tsx).
-//   OriginMark · ShareMark · ProfileMark · ScreensMark · KidsToggle   칸에 붙는 작은 표시(레일·폰 공용)
+//   OriginMark · ShareMark · ScreensMark · KidsToggle   칸에 붙는 작은 표시(레일·폰 공용)
 //   Menu · MenuSummary · ROW_MENU_ICON   ⋯·우클릭 메뉴와 폰 시트가 같이 쓰는 메뉴 규격
 // 목록 안의 답 버튼·상태 키워드 줄·위임 상태 글은 없다 — 답은 터미널에서, 상태는 칸의 둘째 줄(nodeLine)이 말한다.
 //
@@ -59,28 +59,6 @@ export function ShareMark(props: { share: ShareInfo | null | undefined }) {
           <span innerHTML={icon(s().mode === 'readwrite' ? 'share-write' : 'share-read', 12, 2)} />
           <span class="vt-srow-share-nick">{s().nick}</span>
           <Show when={s().mode === 'readwrite'}><span class="vt-srow-share-mode">{SHARE_MODE_LABEL.readwrite}</span></Show>
-        </span>
-      )}
-    </Show>
-  );
-}
-
-/** 새 세션을 만들 때 고른 계정 이름(서버가 기록한 것만 — 추측하지 않는다). 셸에서 환경을 바꿨는지는 알 수 없어서
- * 툴팁에 「생성 시 계정」이라고 적는다. 레일 행과 Fleet 행이 같이 쓴다. */
-export function ProfileMark(props: { profile: SessionProfile | null | undefined }) {
-  return (
-    <Show when={props.profile}>
-      {(p) => (
-        <span
-          class="vt-srow-profile"
-          data-tip={t('생성 시 계정')}
-          data-tip-sub={profileLabel(p())}
-          data-tip-side="right"
-          role="img"
-          aria-label={t('생성 시 계정: {name}', { name: profileLabel(p()) })}
-        >
-          <span innerHTML={icon('user', 12, 2)} />
-          <span class="vt-srow-profile-name">{profileLabel(p())}</span>
         </span>
       )}
     </Show>

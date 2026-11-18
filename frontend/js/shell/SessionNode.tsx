@@ -13,7 +13,7 @@ import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
 import { ringSvg } from './compact-mark.js';
 import { agentMark } from './agent-mark.js';
 import { formatRelativeTime, nodeLine, kidLabel, type SessionRow } from './rail-data.js';
-import { ShareMark, ProfileMark, ScreensMark, OriginMark, KidsToggle, ShellsMark } from './RailRow.js';
+import { ShareMark, ScreensMark, OriginMark, KidsToggle, ShellsMark } from './RailRow.js';
 import { NativeChip } from './NativeChildren.js';
 import { normalizeSubagents } from './native-subagents.js';
 
@@ -127,7 +127,7 @@ export function SessionNode(props: {
             innerHTML={icon('more-horizontal', 16, 2)}
           />
         </div>
-        <Show when={line() || changed() || row().otherScreens > 0 || row().otherClients > 0 || row().profile || hasSubagents()}>
+        <Show when={line() || changed() || row().otherScreens > 0 || row().otherClients > 0 || hasSubagents()}>
           <div class="vt-rg-b">
             <Show when={line()}>
               {(l) => (
@@ -139,7 +139,7 @@ export function SessionNode(props: {
             </Show>
             <Show when={!line()}><span class="vt-rg-sp" /></Show>
             <NativeChip row={row()} />
-            <ProfileMark profile={row().profile} />
+            {/* 생성 시 계정은 행에 붙이지 않는다 — 행 ⋯ 메뉴 상단 정보에 있다(rail-hover-card.ts 위치 구역). 폰 타일(Fleet.tsx)은 따로. */}
             <ScreensMark row={row()} />
             <Show when={changed()}>
               {(c) => (

@@ -1416,17 +1416,6 @@
   }
   .vt-srow-share > svg,
   .vt-srow-share > span:first-child { display: inline-flex; flex: none; }
-  /* 생성 때 고른 계정 이름(레일·Fleet 행). 공유 표시와 같은 무채색 한 줄 — 상태색을 쓰지 않는다. */
-  .vt-srow-profile {
-    display: inline-flex;
-    align-items: center;
-    gap: calc(var(--spacing) * 1);
-    min-width: 0;
-    max-width: 100%;
-    color: var(--color-sub);
-  }
-  .vt-srow-profile > span:first-child { display: inline-flex; flex: none; }
-  .vt-srow-profile-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .vt-srow-share-nick {
     min-width: 0;
     overflow: hidden;
