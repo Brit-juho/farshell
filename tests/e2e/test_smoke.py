@@ -4758,3 +4758,74 @@ def test_dock_소스컨트롤_체크포인트_턴_목록과_하위_화면이_그
     page.wait_for_selector("#vt-dock-scm .vt-ckpt-row", timeout=15000)
     csp = [e for e in page.console_errors if "Content Security Policy" in e or "Refused to" in e]
     assert csp == [], csp
+
+
+def test_질문이_온_세션은_저장소_묶음에_남고_개입_필요에도_한_번_더_보인다(page, server):
+    """2.13.1까지는 질문이 온(waiting) 세션이 저장소 묶음에서 빠져 개입 필요 구역으로만 갔다 — 저장소의 마지막 세션이 질문을 받으면
+    그 저장소가 「세션 없는 저장소」가 되어 순서가 바뀌거나 사라진 것처럼 보였다(답하면 돌아왔다).
+    지금은 묶음에 그대로 남고, 위쪽 개입 필요 구역은 같은 세션을 추가로 보여 준다."""
+    if _BROWSE_DIR is None:
+        pytest.skip("외부 서버(VT_E2E_URL)에서는 시험 저장소를 만들 수 없다")
+    base, token = server
+    acme = _git_repo(_BROWSE_DIR / "attn-acme", "main")        # 이름순으로는 먼저, 세션은 없다
+    farm = _git_repo(_BROWSE_DIR / "attn-farshell", "main")
+    made, ids = [], []
+    try:
+        for alias, cwd in (("attn-a", acme), ("attn-f", farm)):
+            r = _api(base, token, "POST", "/api/tmux/create", {"name": alias, "cwd": str(cwd)})
+            made.append(r["id"])
+            ids.append(r["tmux_session"])      # 이름은 별칭이고 tmux 이름은 서버가 정한 랜덤 ID다
+        time.sleep(1)
+        for i, (tmux_id, cwd) in enumerate(zip(ids, (acme, farm))):
+            _cli_started(base, token, tmux_id, cwd, f"attn-{i}")     # 저장소는 CLI를 켠 곳에 생긴다
+        time.sleep(7)                                                # 5초 관측이 저장소를 등록할 때까지
+        _tmux_for(base, "kill-session", "-t", f"={ids[0]}")          # acme에는 세션이 남지 않는다 — 저장소만 목록에 있다
+        time.sleep(7)                                                # 5초 관측: 종료 반영
+        _reset_saved_layout(base, token)
+        page.reload()
+        page.wait_for_function("() => document.documentElement.dataset.appReady === 'true'", timeout=20000)
+        page.evaluate("() => { window.vtSettingsSet('ui.side.activity', 'sessions'); window.vtSettingsSet('rail.sort', ''); }")   # 레일을 열고 정렬은 기본값(앞 시험이 남긴 값을 지운다)
+        page.wait_for_function(
+            "() => [...document.querySelectorAll('#vt-wgrail section.vt-rg')].some((s) => (s.getAttribute('aria-label') || '').startsWith('attn-'))", timeout=20000)
+        heads = "() => [...document.querySelectorAll('#vt-wgrail section.vt-rg')].map((s) => s.getAttribute('aria-label')).filter((n) => n && n.startsWith('attn-'))"
+        rows = "() => [...document.querySelectorAll('#vt-wgrail .vt-rg-node')].filter((e) => e.textContent.includes('attn-f')).map((e) => !!e.closest('.vt-rg-flat'))"
+        assert page.evaluate(heads) == ["attn-farshell", "attn-acme"], page.evaluate(heads)
+        assert page.evaluate(rows) == [False], "질문 전에는 저장소 묶음에만"
+        # 이름 바꾸기 입력칸은 열려 있는 세션에서만 제자리에 뜬다 — 먼저 연다.
+        page.locator("#vt-wgrail section.vt-rg .vt-rg-node", has_text="attn-f").first.click()
+        page.wait_for_selector(".vt-pane .vt-pane-body .xterm", timeout=15000)
+        # 서버 감지 대신 같은 모양의 스냅샷을 넣는다(agent/state.js applySnapshot) — 레일의 상태 조회가 지우지 않게 그 다리에도 섞는다.
+        page.evaluate(
+            """(name) => {
+              const fake = { e2e: { tmux_session: name, status: 'waiting', kind: 'approval', since: Date.now() / 1000 } };
+              const orig = window.vtApplyAgentSnapshot;
+              window.vtApplyAgentSnapshot = (all) => orig({ ...(all || {}), ...fake });
+              orig(fake);
+            }""",
+            ids[1],
+        )
+        page.wait_for_function(
+            "() => [...document.querySelectorAll('#vt-wgrail .vt-rg-flat .vt-rg-node')].some((e) => e.textContent.includes('attn-f'))", timeout=10000)
+        assert sorted(page.evaluate(rows)) == [False, True], "개입 필요에도 보이고 저장소 묶음에도 그대로 남는다"
+        assert page.evaluate(heads) == ["attn-farshell", "attn-acme"], "질문이 와도 저장소 순서가 바뀌지 않는다"
+        in_repo = page.evaluate(
+            "() => [...document.querySelectorAll('#vt-wgrail section.vt-rg')].find((s) => (s.getAttribute('aria-label') || '').startsWith('attn-f'))"
+            ".querySelectorAll('.vt-rg-node').length")
+        assert in_repo == 1, in_repo
+        # 같은 세션이 두 곳에 보여도 이름 바꾸기 입력칸은 한 곳(질문 온 쪽 = 개입 필요 구역)에만 뜬다.
+        top = page.locator("#vt-wgrail .vt-rg-flat .vt-rg-node", has_text="attn-f").first
+        top.hover()
+        top.locator(".vt-rg-more").click()
+        page.locator(".vt-menu-item", has_text="이름 변경").first.click()
+        page.wait_for_selector("#vt-wgrail .vt-wgrail-name-edit", timeout=5000)
+        assert page.locator("#vt-wgrail .vt-wgrail-name-edit").count() == 1
+        assert page.locator("#vt-wgrail .vt-rg-flat .vt-wgrail-name-edit").count() == 1
+        page.keyboard.press("Escape")
+    finally:
+        for sid in made:
+            try:
+                _api(base, token, "DELETE", f"/api/sessions/{sid}")
+            except Exception:
+                pass
+        _tmux_for(base, "kill-session", "-t", f"={ids[1]}") if len(ids) > 1 else None
+        page.evaluate("() => { window.vtSettingsSet('rail.sort', ''); window.vtSettingsSet('rail.view', ''); }")

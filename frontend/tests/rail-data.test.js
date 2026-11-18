@@ -382,18 +382,19 @@ test('runRowMenu — 분할 항목은 vtSplitOpenSession(방향, 세션)을 부�
 
 // ── 상태 구역형(실행 중 · 최근 종료 · 보관함) ──────────────────────────────
 
-test('splitRunning — 개입 필요에 올라간 행은 실행 중에서 빠진다(중복 없음)', async () => {
-  const { buildRailLists, splitRunning } = await mod();
+test('buildRailLists — 질문이 온(waiting) 세션은 「세션」 전체에도 남고 개입 필요에 한 번 더 나온다', async () => {
+  const { buildRailLists } = await mod();
   const rows = [row({ name: 'a', status: 'idle' }), row({ name: 'b', status: 'waiting' }), row({ name: 'c', status: 'working' })];
   const lists = buildRailLists(rows, PREFS);
-  assert.deepStrictEqual(names(splitRunning(lists)), ['a', 'c']);
+  assert.deepStrictEqual(names(lists.sessions), ['a', 'b', 'c'], '저장소 묶음은 이 목록으로 만든다 — 질문 때문에 빠지지 않는다');
   assert.deepStrictEqual(names(lists.attention), ['b']);
 });
 
-test('splitRunning — 개입 필요 구역을 끄면 waiting도 실행 중에 남는다', async () => {
-  const { buildRailLists, splitRunning } = await mod();
+test('buildRailLists — 개입 필요 구역을 꺼도 waiting은 「세션」에 남는다', async () => {
+  const { buildRailLists } = await mod();
   const lists = buildRailLists([row({ name: 'a', status: 'waiting' })], { ...PREFS, attentionShow: false });
-  assert.deepStrictEqual(names(splitRunning(lists)), ['a']);
+  assert.deepStrictEqual(names(lists.sessions), ['a']);
+  assert.deepStrictEqual(names(lists.attention), []);
 });
 
 test('parseRailView — 접힘 열쇠(저장소·종료 N)만 읽는다, 옛 값(byRepo·recent 등)은 무시, 200개까지', async () => {

@@ -13,7 +13,7 @@ import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'so
 import { Portal } from 'solid-js/web';
 import { t } from '../core/i18n.js';
 import {
-  buildRailLists, splitRunning, rowMenuItems, runRowMenu, renameViewGroup,
+  buildRailLists, rowMenuItems, runRowMenu, renameViewGroup,
   ATTENTION_COLLAPSED_KEY, ATTENTION_SHOW_KEY, LINEAGE_KEY, VIEW_KEY, ORDER_KEY, encodeLineagePrefs, encodeRailView, encodeRailOrder,
   toggleGroupCollapsed,
   kidsProgress, canShareName,
@@ -287,12 +287,15 @@ export function Rail(props: RailProps) {
   const hideAttention = () => setPref(ATTENTION_SHOW_KEY, false);
 
   const lists = createMemo(() => buildRailLists(rows(), prefs()));
-  // 「실행 중」 구역 = 세션 전체에서 개입 필요에 올라간 행을 뺀 것(같은 세션이 두 번 나오지 않는다).
-  const running = createMemo(() => splitRunning(lists()));
+  // 저장소 묶음은 질문이 온(개입 필요) 세션도 **그대로 품는다** — 위쪽 「개입 필요」 구역은 같은 세션을 추가로 한 번 더 보여 줄 뿐이다.
+  // 예전에는 개입 필요에 올라간 행을 묶음에서 뺐고(2.13.1까지), 저장소의 마지막 세션이 질문을 받으면 그 저장소가 「세션 없는
+  // 저장소」가 되어 정렬이 바뀌거나 사라진 것처럼 보였다(답하면 돌아왔다). 같은 세션이 두 곳에 보이므로 이름 바꾸기 입력칸·순서 끌기는
+  // 한 곳에서만 동작하게 한다(attentionProps · nodeProps의 editing).
   // ── 저장소 가지 그래프(설계 P1·P2 → 저장소 2차) ───────────────────────────────
   // 저장소(CLI를 켠 곳, 세션이 없어도 남음) → (메인 · 워크트리 가지) → 세션 → 위임 하위 · 「종료 N」(끝난 대화). 정렬은 기기별
   // 설정(보기 탭): 저장소 등록순·세션 만든 순이 기본, 이름순·최근 활동, 「입력 대기 먼저」. 손으로 끌어 정하는 순서는 없다.
   const rowKey = (r: SessionRow) => r.tmuxName || r.name;
+  const attentionKeys = createMemo(() => new Set(lists().attention.map(rowKey)));   // rowKey보다 앞에 두면 createMemo가 바로 돌아 선언 전 참조 오류다
   const mainBranches = createMemo(() => {
     const m = new Map<string, string | null>();
     for (const repo of repos()) {
@@ -309,7 +312,7 @@ export function Rail(props: RailProps) {
   // 이름을 고치는 동안은 그래프도 얼린다 — 카탈로그 폴링(5초)마다 새 묶음 객체가 오면 <For>가 칸을 다시 만들어 편집 중이던
   // 입력창이 뜯겨 나간다(행 메모를 얼리는 것과 같은 이유, 위 rows 주석).
   const tree = createMemo<RepoGroup<SessionRow>[]>((prev) => editingSessionKey() && prev ? prev : buildRepoTree({
-    rows: running(),
+    rows: lists().sessions,
     projects: viewHostId === LOCAL_HOST ? projects() : [],
     mainBranches: mainBranches(),
     activityOf: (r) => (r.physicalKey && activityByKey().get(r.physicalKey)) || Number(r.since || 0),
@@ -370,7 +373,7 @@ export function Rail(props: RailProps) {
   // 접힌 띠(48px)의 칸 순서 — 개입 필요가 위, 나머지는 펼친 가지와 같은 순서.
   const compact = createMemo(() => {
     const top = lists().attention.map((row) => ({ row, kid: null as null | { last: boolean; merged: boolean; failed: boolean; closed: boolean } }));
-    const rest = flattenRows(tree()).filter((e) => !(e.kid && kidsCollapsed(rowParent(e.row)))).map((e) => ({
+    const rest = flattenRows(tree()).filter((e) => !(e.kid && kidsCollapsed(rowParent(e.row))) && !attentionKeys().has(rowKey(e.row))).map((e) => ({
       row: e.row,
       kid: e.kid ? { last: false, merged: e.row.lineage?.state === 'reported', failed: e.row.lineage?.outcome === 'failed', closed: e.row.lineage?.state === 'closed' } : null,
     }));
@@ -555,7 +558,8 @@ export function Rail(props: RailProps) {
     onToggleKids: kids.length ? () => toggleKids(rowKey(row)) : undefined,
     progress: kids.length ? kidsProgress(kids) : null,
     groupLabel: row.viewLabel,
-    editing: !!row.sessionId && editingSessionKey() === row.sessionId,
+    // 이름 바꾸기 입력칸은 한 곳에만 — 개입 필요 구역이 보이면 그쪽 복사본이, 아니면 저장소 묶음 쪽이 받는다.
+    editing: !!row.sessionId && editingSessionKey() === row.sessionId && !attentionShown(row),
     editingValue: editingSessionValue(),
     onEditInput: setEditingSessionValue,
     onEditCommit: () => commitRenameSession(row.sessionId),
@@ -569,6 +573,18 @@ export function Rail(props: RailProps) {
     onDragEnd: onOrderDragEnd,
     onOpen: (e: MouseEvent) => openRow(e, row),
     onContext: (e: MouseEvent) => contextRow(e, row),
+  });
+  // 개입 필요 구역의 행(저장소 묶음에 이미 있는 세션의 복사본) — 순서 끌기·드롭 표시는 저장소 쪽에서만, 이름 바꾸기 입력칸은 여기서.
+  const attentionVisible = () => !collapsed() && !archiveOpen() && !prefs().attentionCollapsed && lists().attention.length > 0;
+  const attentionShown = (row: SessionRow) => attentionVisible() && attentionKeys().has(rowKey(row));
+  const attentionProps = (row: SessionRow) => ({
+    ...nodeProps(row),
+    editing: !!row.sessionId && editingSessionKey() === row.sessionId,
+    draggable: row.open && !!row.sessionId,
+    dropPlace: null,
+    onDragOver: () => {},
+    onDragLeave: () => {},
+    onDrop: () => {},
   });
   const isActiveRow = (row: SessionRow) => !!row.sessionId && row.sessionId === activeId();
 
@@ -709,7 +725,7 @@ export function Rail(props: RailProps) {
             <Show when={!prefs().attentionCollapsed || collapsed()}>
               <div class="vt-rg-flat">
                 <For each={lists().attention}>{(row) => (
-                  <SessionNode row={row} active={isActiveRow(row)} geometry={{ lane: 1, lines: '' }} {...nodeProps(row)} />
+                  <SessionNode row={row} active={isActiveRow(row)} geometry={{ lane: 1, lines: '' }} {...attentionProps(row)} />
                 )}</For>
               </div>
             </Show>

@@ -15,7 +15,7 @@ export {
   worktreeIconName, diffLabel, KIND_LABEL, BADGE_LABEL, normalizeShare, shareSentence, normalizeProfile, profileLabel,
   normalizeLineage, lineageLabel, kidsProgress, parseNameList,
   LINEAGE_KEY, encodeLineagePrefs,
-  splitRunning, parseRailView, encodeRailView, toggleGroupCollapsed, parseRailSort, encodeRailSort, parseRailOrder, encodeRailOrder,
+  parseRailView, encodeRailView, toggleGroupCollapsed, parseRailSort, encodeRailSort, parseRailOrder, encodeRailOrder,
 } from '../../js/shell/rail-data.js';
 export { ringSvg, subBadge } from '../../js/shell/compact-mark.js';
 export { logout, clearAppCache, pageAssetUrls } from '../../js/shell/app-session.js';

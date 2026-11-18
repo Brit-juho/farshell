@@ -379,3 +379,20 @@ test('입력 대기 먼저 — 대기 세션이 있는 워크트리 가지가 �
   const on = m.buildRepoTree({ rows, sort: { repos: 'registered', sessions: 'created', waitingFirst: true } });
   assert.strictEqual(on[0].lanes[0].worktree.branch, 'fix/x');
 });
+
+test('질문이 온(waiting) 세션이 저장소 묶음에 남으면 그 저장소는 「세션 있는 저장소」로 제자리다 — 개입 필요에 올라가도 사라지지 않는다', async () => {
+  const m = await mod();
+  const projects = [
+    { id: 'A', name: 'acme', path: '/r/acme', kind: 'git', registered: 1 },        // 세션 없음, 이름순으로는 먼저
+    { id: 'B', name: 'farshell', path: '/r/farshell', kind: 'git', registered: 2 },
+  ];
+  const waitingRow = row({ name: 'w', status: 'waiting', home: home('farshell', '/r/farshell', 'B'), context: ctx('/r/farshell', false, '/r/farshell') });
+  // 예전 동작(2.13.1까지): 묶음에서 질문 온 세션을 빼면 farshell이 세션 없는 저장소가 되어 acme 뒤로 밀린다.
+  const without = m.buildRepoTree({ rows: [], projects });
+  assert.deepStrictEqual(plain(without.map((g) => g.name)), ['acme', 'farshell']);
+  // 지금: 묶음에 그대로 두면 세션 있는 저장소가 먼저고, 머리에 「질문 있음」 표시가 켜진다.
+  const kept = m.buildRepoTree({ rows: [waitingRow], projects });
+  assert.deepStrictEqual(plain(kept.map((g) => g.name)), ['farshell', 'acme']);
+  assert.strictEqual(kept[0].attention, true);
+  assert.deepStrictEqual(names(kept[0].lanes[0].sessions.map((s) => s.row)), ['w']);
+});
