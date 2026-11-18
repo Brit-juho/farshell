@@ -4739,7 +4739,10 @@ cmd_handoff() {
       echo ""
       if [ -n "${TMUX:-}" ]; then
         _ensure_tmux
-        echo "  ⓘ $(_t '이미 tmux 안 ({session}). 추가 동작 없음.' session="$(tmux display -p '#S')")"
+        local here_id here_label
+        here_id="$(tmux display -p '#S' 2>/dev/null)"
+        here_label="$(_session_label "$(_session_alias_map)" "$here_id")"   # 별칭 (ID) — 표시 전용
+        echo "  ⓘ $(_t '이미 tmux 안 ({session}). 추가 동작 없음.' session="$here_label")"
         return
       fi
       # dev가 없으면 미리 만들지 않는다 — 창이 `new -A -s dev 'claude --resume'`로 세션과 claude를

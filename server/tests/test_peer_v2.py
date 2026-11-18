@@ -440,6 +440,7 @@ def test_remote_delegation_round_trip(duo):
     lb = [x for x in _ledger(b) if x["id"] == did][0]
     assert la["state"] == lb["state"] == "running"
     assert la["child"]["host"] == bid and la["child"]["key"].startswith(f"{bid}/")
+    assert la["child"].get("alias") == "rchild"     # B가 알려 준 하위 세션 별칭(작업 제목) — 표시용
     assert lb["parent"]["host"] == aid and lb["parent"]["key"] == f"{aid}/{parent.key}"
     assert lb["cwd"] and la["cwd"] == ""                           # B 의 경로는 A 로 나가지 않는다
     child_key = b.session_key(child_name)

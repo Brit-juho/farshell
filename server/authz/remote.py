@@ -487,6 +487,7 @@ def deleg_spawn_in(grant: dict, body: dict) -> tuple[int, dict, Optional[dict]]:
         return 202, {"state": "pending", "requestId": view["id"], "kind": "deleg", "created": created,
                      "reason": tr("사용자 승인 대기 중 — 승인되면 같은 호출을 다시 하세요")}, (view if created else None)
     out = delegation.spawn_remote(grant["id"], p.obo, did=str(body.get("delegation") or ""), parent_name=str(body.get("parentName") or ""),
+                                  parent_alias=str(body.get("parentAlias") or ""),
                                   task=str(body.get("task") or ""), title=str(body.get("title") or ""), agent=str(body.get("agent") or ""),
                                   principal=p.short(), runtime_binding=binding)
     return 200, {"ok": True, **out}, None

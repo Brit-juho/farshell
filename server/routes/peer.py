@@ -803,6 +803,7 @@ async def peer_agent_message(request: Request, grant: dict, data: bytes):
             text=str(body.get("text") or ""), reply_to=body.get("replyTo") or None,
             claimed_hop=int(body.get("hop") or 0), msg_id=str(body.get("id") or ""),
             conv=str(body.get("conv") or ""), authz=ticket,
+            from_alias=str(body.get("fromAlias") or ""),   # 보낸 맥의 별칭(표시용, 옛 맥은 안 보냄)
         )
     except agent_msg.MessageError as e:
         return JSONResponse({"error": e.code, "reason": e.reason},

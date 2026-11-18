@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+- Messages and delegations from another Mac show that session's alias (the sending Mac includes it; an older Mac still shows the ID). The reply address stays the ID, and a received alias is cleaned (printable characters, 64 characters, no brackets) before it reaches a header. `fsh handoff desktop` shows the alias too.
+
 ---
 
 ## [2.13.0] — 2026-11-18
