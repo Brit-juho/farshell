@@ -451,7 +451,6 @@ label.vt-railset-row { cursor:pointer; }
 .vt-srow-kids-ico { display:inline-flex; flex:none; }
 
 #vt-wgrail .vt-srow-share { color:var(--color-sub); }
-#vt-wgrail .vt-srow-profile { color:var(--color-sub); }
 #vt-wgrail .vt-srow-share[data-mode="readwrite"] { color:var(--color-st-waiting); }
 
 /* 틴트 칸(선택 · 개입 필요) — 보조 글자 한 단 올림. */

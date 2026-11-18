@@ -190,7 +190,7 @@ const base = {
   agent: null, branch: null, isMainWorktree: false, origin: 'local', viewLabel: null, otherScreens: 0, otherClients: 0,
 };
 
-test('레일 세션 칸 배지: 서버가 기록한 계정만 이름으로 보이고, 툴팁은 「생성 시 계정」, 없으면 배지가 없다', async () => {
+test('레일 세션 칸에는 계정 배지를 붙이지 않는다 — 생성 시 계정은 행 ⋯ 메뉴 상단 정보에 있다(rail-hover-card.test.js)', async () => {
   const env = await loadSolidBuild();
   _envs.push(env);
   const mount = (profile) => {
@@ -199,15 +199,11 @@ test('레일 세션 칸 배지: 서버가 기록한 계정만 이름으로 보�
     env.mountSessionNode(root, { row: { ...base, profile }, active: false, geometry: { lane: 1, lines: '' }, onOpen() {}, onContext() {} });
     return root;
   };
-  const withProfile = mount({ id: 'a'.repeat(32), name: 'alice', tool: 'claude' });
-  const badge = withProfile.querySelector('.vt-srow-profile');
-  assert.ok(badge);
-  assert.equal(badge.querySelector('.vt-srow-profile-name').textContent, 'alice');
-  assert.equal(badge.dataset.tip, '생성 시 계정');
-  assert.equal(badge.dataset.tipSub, 'alice');
-  assert.equal(mount(null).querySelector('.vt-srow-profile'), null);
-  assert.equal(mount(undefined).querySelector('.vt-srow-profile'), null);
-  assert.equal(mount({ id: 'z'.repeat(32), name: null, tool: null }).querySelector('.vt-srow-profile-name').textContent, '알 수 없는 계정', '이름을 못 읽으면 지어내지 않는다');
+  for (const profile of [{ id: 'a'.repeat(32), name: 'alice', tool: 'claude' }, null, undefined, { id: 'z'.repeat(32), name: null, tool: null }]) {
+    const root = mount(profile);
+    assert.equal(root.querySelector('.vt-srow-profile'), null, JSON.stringify(profile));
+    assert.ok(!root.textContent.includes('alice'), '계정 이름이 행에 새지 않는다');
+  }
 });
 
 test('normalizeProfile: 모양이 맞는 값만 받는다(옛 서버·깨진 값은 null)', async () => {

@@ -11,6 +11,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Changed
+- The account a session was created with is no longer shown as a badge on the desktop session rows; it is in the row's ⋯ menu info (and the folded strip's hover card).
 - **A session that needs your answer stays in its repository.** The attention section at the top of the session list now shows it *in addition to* its repository group instead of moving it out; before, the last session of a repository asking a question made that repository look empty and jump or vanish until you answered. The rename field opens in one place only (the top copy while the session is waiting), and ordering by drag works in the repository group only. The collapsed 48px strip and the phone tiles are unchanged.
 
 ### Fixed
