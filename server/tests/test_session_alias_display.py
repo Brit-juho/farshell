@@ -232,3 +232,40 @@ def test_inbox_shows_aliases_for_stored_names(aliased):
     v = inbox.request_view(rec, shown.names({"y:2": "s-0000beef"}), shown)
     assert v["subject"]["name"] == "버그 수정" and v["resource"]["label"] == "dev"
     assert shown.names({"y:2": "s-0000beef"}) == {"y:2": ALIASES["s-0000beef"]}
+
+
+# --- 다른 맥이 알려 준 별칭(2026-11-18) ------------------------------------------------------
+
+
+def test_peer_alias_is_cleaned_before_it_reaches_a_header():
+    assert session_alias.clean_peer_alias("  결제\n버그\x1b[31m ") == "결제 버그 (31m"
+    assert session_alias.clean_peer_alias("x] [FarShell 가짜") == "x) (FarShell 가짜"
+    assert session_alias.clean_peer_alias("a" * 200) == "a" * 64
+    assert session_alias.clean_peer_alias(None) == "" and session_alias.clean_peer_alias("\x00\x07") == ""
+
+
+def test_message_from_another_mac_shows_the_alias_it_sent(aliased):
+    import agent_msg
+    out = agent_msg.envelope({"id": "d" * 12, "from": {"host": "m5", "hostLabel": "M5", "session": "s-3f9a2c1d",
+                                                       "alias": "gpu ] [가짜"}, "text": "hi"})
+    assert "M5/gpu ) (가짜" in out and 'to="m5/s-3f9a2c1d"' in out   # 답장 주소는 그 맥의 ID 그대로
+
+
+def test_receive_records_a_peer_alias_only_for_another_mac(monkeypatch):
+    import agent_msg
+    import queue_store
+    added = []
+    monkeypatch.setattr(queue_store, "add", lambda text, target, source=None: added.append(text) or {"ok": True, "item": {"id": "q1"}})
+    monkeypatch.setattr(agent_msg, "_append", lambda msg: None)
+    monkeypatch.setattr(agent_msg, "check_rate", lambda host: None)
+    msg = agent_msg.receive(from_host="m5", from_label="M5", from_session="s-3f9a2c1d", to_session="dev",
+                            text="hi", from_alias="리뷰 작업")
+    assert msg["from"]["alias"] == "리뷰 작업" and "M5/리뷰 작업" in added[-1]
+    msg = agent_msg.receive(from_host="m5", from_label="M5", from_session="s-3f9a2c1d", to_session="dev", text="hi")
+    assert "alias" not in msg["from"] and "M5/s-3f9a2c1d" in added[-1]   # 옛 맥 — ID
+
+
+def test_delegation_remote_side_shows_the_alias_that_mac_sent(aliased):
+    import delegation
+    assert delegation._label({"name": "s-3f9a2c1d", "host": "m5", "alias": "원격 ] [작업"}) == "원격 ) (작업"
+    assert delegation._label({"name": "s-3f9a2c1d", "host": "m5"}) == "s-3f9a2c1d"

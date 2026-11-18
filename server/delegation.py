@@ -398,8 +398,12 @@ def _label(side: dict) -> str:
     """사람·에이전트가 읽는 문구용 세션 이름 — 이 호스트 세션이면 별칭, 다른 호스트 세션이면 받은 이름 그대로.
     장부·열쇠에는 쓰지 않는다(그 값은 ID)."""
     name = str((side or {}).get("name") or "")
-    if not name or (side or {}).get("host"):
+    if not name:
         return name
+    if (side or {}).get("host"):
+        # 다른 맥 세션 — 그 맥이 알려 준 별칭(장부의 `alias`)을 다듬어 쓴다. 옛 맥은 안 알려 준다 — 그때는 ID.
+        from session_alias import clean_peer_alias
+        return clean_peer_alias(side.get("alias")) or name
     from session_alias import alias_of
     # 별칭은 사람이 친 글 — 주입 머리 줄의 `[ … ]` 틀을 흉내 내지 못하게 대괄호를 바꾼다.
     return str(alias_of(name) or name).replace("[", "(").replace("]", ")")
@@ -685,9 +689,10 @@ class RemoteCaller:
     """다른 호스트의 에이전트가 부모인 위임 — `share_identity.Caller` 자리에 들어가는 최소한(`key` 는 `<호스트 id>/<그쪽 세션 key>`).
     이 호스트에는 그 pane 이 없다(`pane_id` 빈 값). 대리 주체를 서명으로 보증한 것은 그 호스트이고, 권한 판정은 이 호스트의 grant 가 이미 했다."""
 
-    def __init__(self, host: str, key: str, name: str, principal: str):
+    def __init__(self, host: str, key: str, name: str, principal: str, alias: str = ""):
         self.host, self.raw_key, self.name, self.principal = host, key, name, principal
         self.key, self.pane_id = f"{host}/{key}", ""
+        self.alias = alias   # 그 맥이 알려 준 부모 세션 별칭(표시용, 다듬은 값)
 
 
 _DID_RE = re.compile(r"[0-9a-f]{10}")
@@ -778,6 +783,8 @@ def spawn(caller, *, task: str, title: str = "", agent: str = "", cwd: str = "",
         }
         if remote is not None:
             item["parent"]["host"] = remote.host
+            if getattr(remote, "alias", ""):
+                item["parent"]["alias"] = remote.alias
         data["items"].append(item)
         _write(data)
 
@@ -1075,7 +1082,8 @@ def spawn_on_host(caller, host: str, *, task: str, title: str = "", agent: str =
     try:
         status, out = remote.call(host, "POST", "/api/peer/v2/deleg/spawn",
                                   {"delegation": did, "task": task, "title": title, "agent": agent,
-                                   "parentName": caller.name}, agent_key=caller.key, timeout=30.0)
+                                   "parentName": caller.name, "parentAlias": _label({"name": caller.name})},
+                                  agent_key=caller.key, timeout=30.0)
     except ShareError as e:
         drop()
         _audit("spawn", "failed", principal=_agent_id(parent_key), did=did, reason=e.code)
@@ -1113,18 +1121,35 @@ def spawn_on_host(caller, host: str, *, task: str, title: str = "", agent: str =
         cur.update(identity_metadata)
         cur["state"] = RUNNING
         cur["child"] = {"key": f"{host}/{child_key}", "name": str(out.get("child") or "")[:60], "pane": "", "host": host}
+        from session_alias import clean_peer_alias
+        if clean_peer_alias(out.get("childAlias")):
+            cur["child"]["alias"] = clean_peer_alias(out.get("childAlias"))   # 그 맥의 별칭(표시용)
         _write(data)
     _audit("spawn", "ok", principal=_agent_id(parent_key), did=did, reason=f"{caller.name}->{host}/{out.get('child')}",
            chars=len(task), sha8=_sha8(task))
     return {"delegation": did, "child": f"{host}/{out.get('child')}", "agent": agent, "cwd": f"(호스트 {host})", "host": host}
 
 
-def spawn_remote(host: str, obo: str, *, did: str, parent_name: str, task: str, title: str, agent: str, principal: str, runtime_binding=None) -> dict:
-    """이 호스트에 다른 호스트의 에이전트가 부모인 하위 세션을 만든다(허용은 호출자가 B 의 grant 로 이미 판정). blocking."""
+def spawn_remote(host: str, obo: str, *, did: str, parent_name: str, task: str, title: str, agent: str, principal: str, runtime_binding=None,
+                 parent_alias: str = "") -> dict:
+    """이 호스트에 다른 호스트의 에이전트가 부모인 하위 세션을 만든다(허용은 호출자가 B 의 grant 로 이미 판정). blocking.
+    `parent_alias`는 그 맥이 알려 준 부모 세션 별칭(표시용). 응답에 하위 세션의 별칭(`childAlias`)을 싣는다."""
     from authz import remote
+    from session_alias import alias_of, clean_peer_alias
     name = _NAME_RE.sub("-", str(parent_name or "")).strip("-")[:40] or "remote"
-    caller = RemoteCaller(host, remote.obo_key(obo), name, principal)
-    return spawn(caller, task=task, title=title, agent=agent, remote=caller, did=did, runtime_binding=runtime_binding)
+    caller = RemoteCaller(host, remote.obo_key(obo), name, principal, alias=clean_peer_alias(parent_alias))
+    out = spawn(caller, task=task, title=title, agent=agent, remote=caller, did=did, runtime_binding=runtime_binding)
+    child = str(out.get("child") or "")
+    if child:
+        try:
+            from session_catalog import inventory
+            inventory.reconcile()     # 방금 만든 세션을 기록에 올려 별칭을 정한다(5초 관측을 기다리지 않는다)
+        except Exception:  # noqa: BLE001 — 별칭은 표시용이다
+            pass
+        alias = alias_of(child)
+        if alias and alias != child:
+            out = {**out, "childAlias": alias[:64]}
+    return out
 
 
 def _find_remote(data: dict, did: str, host: str, obo: str, role: str) -> dict:

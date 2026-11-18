@@ -32,6 +32,16 @@ def alias_of(name: str) -> str:
     return aliases([name]).get(name, name)
 
 
+def clean_peer_alias(text) -> str:
+    """다른 맥이 보낸 별칭(믿을 수 없는 글)을 문구에 넣을 수 있게 다듬는다. 인쇄 가능한 글자만, 공백을 하나로 접고 64자까지,
+    머리 줄의 `[ … ]` 틀을 흉내 내지 못하게 대괄호를 바꾼다. 쓸 게 없으면 빈 문자열."""
+    if not isinstance(text, str):
+        return ""
+    # 인쇄할 수 없는 글자(줄바꿈·ESC 등)는 공백으로 바꾼 뒤 접는다 — 단어가 붙지 않게.
+    value = " ".join("".join(ch if ch.isprintable() else " " for ch in text).split())[:64]
+    return value.replace("[", "(").replace("]", ")")
+
+
 def resolve(text: str) -> str | None:
     """사람이 친 값(별칭 또는 ID) → 살아 있는 세션의 ID. 정확한 ID가 먼저. 없거나 모호하면 None."""
     try:

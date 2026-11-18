@@ -224,7 +224,10 @@ async def send_message(request: Request):
     except agent_msg.MessageError as e:
         return _err(e.code, e.reason, e.status)
     msg_id = uuid.uuid4().hex[:12]
+    from session_alias import alias_of
     payload = {"id": msg_id, "conv": conv, "hop": hop, "from": from_session,
+               # 받는 맥이 머리 줄에 보일 이 세션의 별칭(표시용). 답장 주소는 `from`(ID) 그대로다.
+               "fromAlias": (await asyncio.to_thread(alias_of, from_session))[:64],
                "to": to_session, "text": text, "replyTo": reply_to}
     try:
         result = await asyncio.to_thread(

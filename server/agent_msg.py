@@ -212,7 +212,9 @@ def _sender_label(frm: dict) -> str:
     if not session:
         return "?"
     if (frm.get("host") or "local") != "local":
-        return session
+        # 다른 맥의 별칭은 보낸 맥이 실어 보낸 값(`fromAlias`)을 다듬어 쓴다. 옛 맥은 안 보낸다 — 그때는 ID.
+        from session_alias import clean_peer_alias
+        return clean_peer_alias(frm.get("alias")) or session
     from session_alias import alias_of
     # 별칭은 사람이 친 글이다 — 머리글의 `[ … ]` 틀을 흉내 내지 못하게 대괄호를 바꾼다.
     label = " ".join(str(alias_of(session) or session).split())[:64].replace("[", "(").replace("]", ")")
@@ -250,7 +252,7 @@ def envelope(msg: dict) -> str:
 
 def receive(*, from_host: str, from_label: str, from_session: str, to_session: str,
             text: str, reply_to: str | None = None, claimed_hop: int = 0,
-            msg_id: str | None = None, conv: str | None = None, authz=None) -> dict:
+            msg_id: str | None = None, conv: str | None = None, authz=None, from_alias: str = "") -> dict:
     """이 맥의 세션 앞으로 온 메시지를 기록하고 큐에 넣는다. 로컬 발신도 여기로 온다.
 
     `authz`: 엔진(`VT_AUTHZ_ENFORCE=msg`)이 이미 허용한 판정의 `msg_svc.Ticket`. 있으면 분당 한도를 엔진이 센다
@@ -286,6 +288,11 @@ def receive(*, from_host: str, from_label: str, from_session: str, to_session: s
         clue = msg_svc.queue_authz(authz)
         if clue:
             source["authz"] = clue
+    if from_alias and from_host != "local":
+        from session_alias import clean_peer_alias
+        alias = clean_peer_alias(from_alias)
+        if alias:
+            msg["from"]["alias"] = alias
     r = queue_store.add(envelope(msg), {"session": to_session}, source=source)
     if not r.get("ok"):
         raise MessageError(r.get("error", "queue_failed"),
