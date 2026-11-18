@@ -4784,7 +4784,7 @@ def test_질문이_온_세션은_저장소_묶음에_남고_개입_필요에도_
         _reset_saved_layout(base, token)
         page.reload()
         page.wait_for_function("() => document.documentElement.dataset.appReady === 'true'", timeout=20000)
-        page.evaluate("() => window.vtSettingsSet('ui.side.activity', 'sessions')")      # 레일(세션 목록)을 연다
+        page.evaluate("() => { window.vtSettingsSet('ui.side.activity', 'sessions'); window.vtSettingsSet('rail.sort', ''); }")   # 레일을 열고 정렬은 기본값(앞 시험이 남긴 값을 지운다)
         page.wait_for_function(
             "() => [...document.querySelectorAll('#vt-wgrail section.vt-rg')].some((s) => (s.getAttribute('aria-label') || '').startsWith('attn-'))", timeout=20000)
         heads = "() => [...document.querySelectorAll('#vt-wgrail section.vt-rg')].map((s) => s.getAttribute('aria-label')).filter((n) => n && n.startsWith('attn-'))"
@@ -4828,3 +4828,4 @@ def test_질문이_온_세션은_저장소_묶음에_남고_개입_필요에도_
             except Exception:
                 pass
         _tmux_for(base, "kill-session", "-t", f"={ids[1]}") if len(ids) > 1 else None
+        page.evaluate("() => { window.vtSettingsSet('rail.sort', ''); window.vtSettingsSet('rail.view', ''); }")
