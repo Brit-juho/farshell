@@ -640,7 +640,9 @@ def _cli(argv: list[str]) -> int:
             for i, (x, ts) in enumerate(zip(items, targets), 1):
                 st = x.get("status")
                 mark = "⏸" if st == STATUS_BLOCKED else ("→" if st == STATUS_SENDING else f"{i}.")
-                target = f" [{_cli_label(ts, shown) if target_host(x) == "local" else ts}]" if ts else ""
+                # f-string 안에 같은 따옴표를 겹쳐 쓰면 Python 3.11에서 문법 오류다 — 값을 먼저 정한다.
+                label = _cli_label(ts, shown) if target_host(x) == "local" else ts
+                target = f" [{label}]" if ts else ""
                 text = x["text"].replace("\n", " ⏎ ")
                 if len(text) > 60:
                     text = text[:57] + "..."

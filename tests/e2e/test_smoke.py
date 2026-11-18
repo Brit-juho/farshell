@@ -4129,11 +4129,14 @@ def test_모바일_저장소_머리는_브랜치를_온전히_보이고_이름�
     made = []
     ctx = None
     try:
+        ids = []
         for name, cwd in (("dfx-deep", deep), ("dfx-short", short)):
-            made.append(_api(base, token, "POST", "/api/tmux/create", {"name": name, "cwd": str(cwd)})["id"])
+            r = _api(base, token, "POST", "/api/tmux/create", {"name": name, "cwd": str(cwd)})
+            made.append(r["id"])
+            ids.append(r["tmux_session"])      # 이름은 별칭이고 tmux 이름은 서버가 정한 랜덤 ID다(2026-11)
         time.sleep(1)
-        for i, (name, cwd) in enumerate((("dfx-deep", deep), ("dfx-short", short))):
-            _cli_started(base, token, name, cwd, f"dfx-{i}")     # 저장소는 CLI를 켠 곳에 생긴다
+        for i, (tmux_id, cwd) in enumerate(zip(ids, (deep, short))):
+            _cli_started(base, token, tmux_id, cwd, f"dfx-{i}")     # 저장소는 CLI를 켠 곳에 생긴다
         _reset_saved_layout(base, token)
         ctx = _mobile_ctx(browser, base)
         pg = ctx.new_page()
