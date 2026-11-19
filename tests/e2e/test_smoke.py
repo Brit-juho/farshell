@@ -4793,9 +4793,20 @@ def test_질문이_온_세션은_저장소_묶음에_남고_개입_필요에도_
         time.sleep(1)
         for i, (tmux_id, cwd) in enumerate(zip(ids, (acme, farm))):
             _cli_started(base, token, tmux_id, cwd, f"attn-{i}")     # 저장소는 CLI를 켠 곳에 생긴다
-        time.sleep(7)                                                # 5초 관측이 저장소를 등록할 때까지
+        # 5초 관측이 저장소를 등록할 때까지 — 고정 시간이 아니라 실제로 등록됐는지 본다(느린 러너에서는 7초로 모자랐다).
+        deadline = time.time() + 40
+        while time.time() < deadline:
+            listed = page.evaluate("async () => (await (await fetch('/api/session-catalog/projects')).json())")   # 사람 로그인 세션만 받는다
+            if any((p.get("name") or "") == "attn-acme" and p.get("registered") for p in (listed.get("projects") or [])):
+                break
+            time.sleep(1)
+        else:
+            raise AssertionError("acme 저장소가 목록에 등록되지 않았다")
         _tmux_for(base, "kill-session", "-t", f"={ids[0]}")          # acme에는 세션이 남지 않는다 — 저장소만 목록에 있다
-        time.sleep(7)                                                # 5초 관측: 종료 반영
+        deadline = time.time() + 30
+        while time.time() < deadline and ids[0] in _tmux_for(base, "list-sessions", "-F", "#{session_name}"):
+            time.sleep(0.5)
+        time.sleep(6)                                                # 5초 관측이 종료를 기록할 때까지
         _reset_saved_layout(base, token)
         page.reload()
         page.wait_for_function("() => document.documentElement.dataset.appReady === 'true'", timeout=20000)

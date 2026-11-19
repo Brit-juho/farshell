@@ -5471,7 +5471,6 @@ window.__VT_I18N = {
   "본인 계정만 등록하세요. 다른 사람의 계정이나 토큰을 넣지 마세요.": "Register only your own accounts. Do not enter anyone else's account or token.",
   "사용량 알 수 없음": "Usage unknown",
   "새 세션에 계정을 지정하지 않습니다": "New sessions get no account",
-  "생성 시 계정": "Account at creation",
   "생성 시 계정: {name}": "Account at creation: {name}",
   "알 수 없는 계정": "Unknown account",
   "여유 많은 순": "Most headroom first",
