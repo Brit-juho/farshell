@@ -1076,6 +1076,7 @@ window.__VT_I18N = {
   "백그라운드 셸 {n}개 실행 중": "{n} background shells running",
   "백그라운드 셸 · {counts}": "Background shells · {counts}",
   "실행 중 {n}": "{n} running",
+  "실행 중 {n} · 입력 대기 {w}": "{n} running · {w} waiting for input",
   "끝남 {n}": "{n} ended",
   "확인 전": "Not confirmed yet",
   "묶음 이름을 바꾸지 못했습니다. 1~128자로 정하거나, 묶음이 아직 있는지 확인하세요.": "Could not rename the group. Use 1–128 characters, or check that the group still exists.",

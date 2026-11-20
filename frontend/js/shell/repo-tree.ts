@@ -79,6 +79,8 @@ export interface RepoGroup<R> {
   endedCount: number;
   /** 머리의 세션 수(실행 중 최상위 + 하위). */
   count: number;
+  /** 그중 입력(질문·승인)을 기다리는 세션 수(하위 포함) — 접힌 머리의 칩이 보여 준다. */
+  waiting: number;
   attention: boolean;
   lastActivity: number;
   /** 처음 CLI를 켠 시각(등록순 정렬). */
@@ -181,7 +183,7 @@ export function buildRepoTree<R extends RepoRowLike>(inp: BuildInput<R>): RepoGr
     let g = groups.get(key);
     if (!g) {
       g = { key, name, repository, kind: repository ? 'git' : null, root, mainBranch: root ? inp.mainBranches?.get(root) ?? null : null,
-            lanes: [], endedCount: 0, count: 0, attention: false, lastActivity: 0, registered: 0 };
+            lanes: [], endedCount: 0, count: 0, waiting: 0, attention: false, lastActivity: 0, registered: 0 };
       groups.set(key, g);
     }
     return g;
@@ -209,6 +211,7 @@ export function buildRepoTree<R extends RepoRowLike>(inp: BuildInput<R>): RepoGr
     const kids = r.tmuxName ? descendants(r.tmuxName, new Set([r.tmuxName])) : [];
     lane.sessions.push({ row: r, kids });
     g.count += 1 + kids.length;
+    g.waiting += [r, ...kids].filter((x) => x.status === 'waiting').length;
     g.attention = g.attention || urgent(r);
     g.lastActivity = Math.max(g.lastActivity, activity(r), ...kids.map(activity));
   }
