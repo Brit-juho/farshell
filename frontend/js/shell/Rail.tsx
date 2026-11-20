@@ -580,7 +580,7 @@ export function Rail(props: RailProps) {
   const attentionProps = (row: SessionRow) => ({
     ...nodeProps(row),
     editing: !!row.sessionId && editingSessionKey() === row.sessionId,
-    draggable: row.open && !!row.sessionId,
+    draggable: false,
     dropPlace: null,
     onDragOver: () => {},
     onDragLeave: () => {},
