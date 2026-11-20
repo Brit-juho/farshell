@@ -14,7 +14,8 @@
 
 **신고된 pid 는 인증 근거로 쓰지 않는다.** 직접 루프백 연결에서 서버가 TCP 소켓의 소유 프로세스를
 `lsof` 로 직접 찾는다(`socket_owner_pid`). 소유자를 확인할 수 없는 경로(터널·프록시·`lsof` 없음)는 거부한다.
-`testclient`의 가상 연결만 별도 시험 경로에서 신고 pid 를 쓴다.
+신고 pid 를 받는 시험 경로는 `_TEST_ONLY_TRUST_REPORTED_PID` 가 켜진 프로세스(pytest conftest)에서만 열린다 —
+운영 서버에서는 연결 주소가 `testclient` 로 보이더라도(프록시 헤더 위조 포함) 이 경로가 없다.
 """
 
 from __future__ import annotations
@@ -33,6 +34,9 @@ MAX_DEPTH = 64
 _PANE_RE = re.compile(r"%\d{1,9}")
 _PROXY_HEADERS = ("x-forwarded-for", "forwarded", "x-real-ip", "cf-connecting-ip",
                   "x-forwarded-host", "true-client-ip")
+# 시험 전용 스위치. 운영 코드는 절대 켜지 않는다(server/tests/conftest.py 만 켠다). 꺼져 있으면 `client[0]` 이 무엇이든
+# 신고 pid 를 받지 않는다 — uvicorn 이 `X-Forwarded-For: testclient` 로 연결 주소를 덮어쓰던 우회(2026-11)의 근본 차단.
+_TEST_ONLY_TRUST_REPORTED_PID = False
 _LOOPBACK = ("127.0.0.1", "::1", "::ffff:127.0.0.1")
 
 
@@ -231,7 +235,7 @@ def verify_caller(pane: Optional[str], tmux_env: Optional[str], claimed_pid, *,
     # 이제 헤더는 보지 않는다 — 직접 루프백 연결이어야 하고, 그 연결을 쥔 프로세스를 `lsof` 로 확인하지
     # 못하면 거부한다(터널·원격·lsof 없음 포함). `testclient` 는 실제 소켓이 만들 수 없는 호스트 이름이라
     # 테스트 클라이언트 전용으로만 신고 pid 를 받는다.
-    is_test_client = bool(client) and client[0] == "testclient"
+    is_test_client = _TEST_ONLY_TRUST_REPORTED_PID and bool(client) and client[0] == "testclient"
     owner = socket_owner_pid(client, {}, server_port)
     if owner is not None:
         pid = owner
