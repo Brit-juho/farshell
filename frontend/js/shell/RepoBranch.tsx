@@ -67,6 +67,7 @@ export interface RepoBranchProps {
 export function RepoBranch(p: RepoBranchProps) {
   const g = () => p.group;
   const lanes = () => g().lanes;
+  const waiting = () => Number(g().waiting) || 0;
   const hasBody = () => !p.collapsed && (lanes().length > 0 || p.hasEnded);
   const title = () => (g().repository ? g().name : t('저장소 밖'));
   // 이 가지(lane) 뒤에 다른 가지나 종료 칸이 있는가 — 줄기(x=21)를 계속 그을지.
@@ -89,7 +90,16 @@ export function RepoBranch(p: RepoBranchProps) {
             </span>
           </Show>
           <span class="vt-rg-sp" />
-          <Show when={g().count > 0}><span class="vt-rg-tm">{g().count}</span></Show>
+          <Show when={g().count > 0}>
+            {/* 접은 머리에서는 살아 있는 세션 수와 그중 입력 대기 수를 함께 보인다(「3 · 1」) — 펼치면 세션이 보이므로 수만. */}
+            <span class="vt-rg-tm vt-rg-live" classList={{ 'has-waiting': p.collapsed && waiting() > 0 }}
+              data-tip={p.collapsed ? t('실행 중 {n} · 입력 대기 {w}', { n: g().count, w: waiting() }) : undefined} data-tip-side="right">
+              {g().count}
+              <Show when={p.collapsed && waiting() > 0}>
+                <span class="vt-rg-live-sep" aria-hidden="true">·</span><span class="vt-rg-live-w c-waiting">{waiting()}</span>
+              </Show>
+            </span>
+          </Show>
           <span class="vt-rg-caret" innerHTML={icon('chevron-down', 12, 2)} />
         </span>
       </button>

@@ -40,6 +40,8 @@
 }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-row.is-quiet .vt-rg-name, :is(#vt-wgrail, .vt-rg-scope) .vt-rg-row.closed .vt-rg-name { color:var(--color-sub); font-weight:var(--weight-medium); }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-tm { flex:none; font:var(--fs-xs) var(--font-mono); color:var(--color-muted); white-space:nowrap; }
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg-live { display:inline-flex; align-items:center; gap:4px; }
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg-live-w { color:var(--color-st-waiting); font-weight:var(--weight-semibold); }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-tm.ui { font-family:var(--font-ui); }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-tm.c-waiting { color:var(--color-st-waiting); font-weight:var(--weight-semibold); }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-tm[data-tone="done"] { color:var(--color-st-done); font-weight:var(--weight-semibold); }

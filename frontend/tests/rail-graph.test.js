@@ -396,3 +396,14 @@ test('질문이 온(waiting) 세션이 저장소 묶음에 남으면 그 저장�
   assert.strictEqual(kept[0].attention, true);
   assert.deepStrictEqual(names(kept[0].lanes[0].sessions.map((s) => s.row)), ['w']);
 });
+
+test('저장소 머리의 입력 대기 수 — 하위 세션까지 세고, 접은 머리에서만 칩으로 보인다', async () => {
+  const m = await mod();
+  const projects = [{ id: 'B', name: 'farshell', path: '/r/farshell', kind: 'git', registered: 1 }];
+  const mk = (name, status) => row({ name, status, home: home('farshell', '/r/farshell', 'B'), context: ctx('/r/farshell', false, '/r/farshell') });
+  const tree = m.buildRepoTree({ rows: [mk('a', 'waiting'), mk('b', 'working'), mk('c', 'idle')], projects });
+  assert.strictEqual(tree[0].count, 3);
+  assert.strictEqual(tree[0].waiting, 1);
+  const none = m.buildRepoTree({ rows: [mk('a', 'working')], projects });
+  assert.strictEqual(none[0].waiting, 0);
+});
