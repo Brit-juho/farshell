@@ -268,3 +268,15 @@ def readable_child_names(monkeypatch):
                 return name
         raise delegation.DelegationError("name_exhausted", "x", 409)
     monkeypatch.setattr(delegation, "_child_name", legacy)
+
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _allow_reported_pid_for_testclient():
+    """TestClient 의 가상 연결(`testclient`)은 소켓이 없어 신고 pid 로 호출자를 확인한다 — 운영에서는 꺼져 있는 시험 전용 스위치."""
+    import share_identity
+    share_identity._TEST_ONLY_TRUST_REPORTED_PID = True
+    yield
+    share_identity._TEST_ONLY_TRUST_REPORTED_PID = False

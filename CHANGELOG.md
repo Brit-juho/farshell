@@ -15,6 +15,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **A session that needs your answer stays in its repository.** The attention section at the top of the session list now shows it *in addition to* its repository group instead of moving it out; before, the last session of a repository asking a question made that repository look empty and jump or vanish until you answered. The rename field opens in one place only (the top copy while the session is waiting), and ordering by drag works in the repository group only. The collapsed 48px strip and the phone tiles are unchanged.
 
 ### Fixed
+- **Security: an agent could pose as another agent by sending `X-Forwarded-For: testclient` straight to the local server.** uvicorn now starts with `--no-proxy-headers`, and the reported-pid path used by the test client is only open when a test switch is on (never in the running server). Needs a same-user local process holding the machine token.
 - A session could get a needless `-1` on its alias: create/resume operations left «running» since October held the aliases of ended sessions forever. Only operations started in the last 10 minutes hold an alias now.
 
 ---

@@ -299,7 +299,7 @@ _start_server() {
   command -v _vt_app_prefix >/dev/null 2>&1 && _app="$(_vt_app_prefix)"
   if [ -n "$_app" ]; then
     rm -f "$PID_DIR/server.child.pid"
-    PATH="$_srv_path" FSH_APP_PIDFILE="$PID_DIR/server.child.pid" nohup "$_app" "$VT_PYTHON" -m uvicorn main:app --host "$bind_host" --port $VT_PORT > "$SERVER_LOG" 2>&1 &
+    PATH="$_srv_path" FSH_APP_PIDFILE="$PID_DIR/server.child.pid" nohup "$_app" "$VT_PYTHON" -m uvicorn main:app --no-proxy-headers --host "$bind_host" --port $VT_PORT > "$SERVER_LOG" 2>&1 &
     local _launcher=$! _w=0
     while [ ! -s "$PID_DIR/server.child.pid" ] && [ $_w -lt 50 ]; do sleep 0.1; _w=$((_w + 1)); done
     if [ -s "$PID_DIR/server.child.pid" ]; then
@@ -309,7 +309,7 @@ _start_server() {
     fi
     rm -f "$PID_DIR/server.child.pid"
   else
-    PATH="$_srv_path" nohup "$VT_PYTHON" -m uvicorn main:app --host "$bind_host" --port $VT_PORT > "$SERVER_LOG" 2>&1 &
+    PATH="$_srv_path" nohup "$VT_PYTHON" -m uvicorn main:app --no-proxy-headers --host "$bind_host" --port $VT_PORT > "$SERVER_LOG" 2>&1 &
     echo $! > "$PID_DIR/server.pid"
   fi
   # 고정 sleep 대신 서버가 실제로 응답할 때까지 폴링한다. uvicorn 기동 시간은

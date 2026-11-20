@@ -586,6 +586,15 @@ def test_verify_caller_tcp_path_unchanged_without_peer_pid(ours, monkeypatch):
                                      rows=[row(pane_pid=5000)])
 
 
+def test_verify_caller_testclient_host_cannot_skip_socket_check_in_production(ours, monkeypatch):
+    """`X-Forwarded-For: testclient` 로 연결 주소를 위조해도 시험 전용 스위치가 꺼진 운영에서는 신고 pid 를 받지 않는다."""
+    monkeypatch.setattr(share_identity, "_TEST_ONLY_TRUST_REPORTED_PID", False)
+    monkeypatch.setattr(share_identity, "socket_owner_pid", lambda *a, **k: None)
+    with pytest.raises(share_identity.IdentityError, match="확인하지 못했습니다"):
+        share_identity.verify_caller("%1", "/ours/tmux,1,0", "5000", client=("testclient", 0),
+                                     rows=[row(pane_pid=5000)])
+
+
 # --- 실제 서버 통과 -------------------------------------------------------------------------------
 
 
