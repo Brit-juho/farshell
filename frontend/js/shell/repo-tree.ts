@@ -9,7 +9,9 @@
 //
 // 저장소 = CLI를 켠 곳(서버 session_catalog/placement.py·projects_view.py). 묶음은 **저장소 목록**(`projects`)에서 만든다 —
 // 세션이 없어도 남는다. 실행 중 세션의 자리는 서버가 정한 `home`(CLI가 돌면 CLI 위치, 아니면 셸 위치 — inventory.py)이고, 그
-// 저장소가 목록의 저장소(`home.registered`, 숨김 아님)면 그 묶음, 아니면 「저장소 밖」 폴더 가지다. 워크트리 가지는 지금 위치가
+// 저장소가 목록의 저장소(`home.registered`, 숨김 아님)면 그 묶음이다. 아직 CLI를 안 켠 git 저장소(셸로 들어간 미등록, 숨김 아님)도
+// 저장소 이름으로 묶는다(`unlisted` — 흐리게 그린다): 진짜 저장소 안인데 「저장소 밖」으로 보이면 헷갈린다. 「저장소 밖」은 git이 아닌
+// 폴더·숨긴 저장소·자리 모름만 쓴다. 워크트리 가지는 지금 위치가
 // 같은 저장소의 다른 작업 트리일 때만이다(common-dir가 같고 작업 트리가 다를 때).
 //
 // 정렬(그 맥의 전역 설정 rail.sort — 그 맥을 보는 모든 기기가 같다, rail-data.ts parseRailSort): 저장소는 기준을 1~3단계로
@@ -70,6 +72,8 @@ export interface RepoGroup<R> {
   name: string;
   /** 목록의 저장소인가(저장소 밖이 아니다). */
   repository: boolean;
+  /** git 저장소지만 아직 CLI를 켠 적이 없어 저장소 목록에는 없다(셸로만 들어간 곳) — 이름으로 묶되 흐리게. */
+  unlisted: boolean;
   /** 'git' · 'directory'(git이 아닌 폴더 저장소) · null(저장소 밖). */
   kind: string | null;
   root: string | null;
@@ -102,7 +106,7 @@ function currentPlace(row: RepoRowLike): { repoRoot: string | null; treeRoot: st
 }
 
 interface Placed<R> {
-  row: R; key: string; name: string; repository: boolean; root: string | null; lane: Lane<R>['worktree'];
+  row: R; key: string; name: string; repository: boolean; unlisted: boolean; root: string | null; lane: Lane<R>['worktree'];
   /** 이 행이 메인 작업 트리에 있으면 그 브랜치 — /api/repos에 없는(등록 안 된) 저장소의 머리 브랜치를 채운다. */
   mainBranch: string | null;
 }
@@ -110,17 +114,18 @@ interface Placed<R> {
 function place<R extends RepoRowLike>(row: R): Placed<R> {
   const now = currentPlace(row);
   const home = row.home;
-  if (home && home.registered && !home.hidden) {
+  if (home && !home.hidden && (home.registered || home.repository)) {
     // 지금 위치가 같은 저장소의 다른(링크드) 작업 트리면 그 워크트리 가지에 둔다(git 저장소만).
     const lane = home.repository && now.linked && now.repoRoot === home.root && now.treeRoot
       ? { key: now.treeRoot, name: base(now.treeRoot), branch: row.branch || null } : null;
     const inMain = home.repository && !now.linked && !!now.treeRoot && now.treeRoot === home.root;
-    return { row, key: home.project_id, name: home.name, repository: true, root: home.root, lane, mainBranch: inMain ? row.branch || null : null };
+    return { row, key: home.project_id, name: home.name, repository: true, unlisted: !home.registered, root: home.root, lane,
+             mainBranch: inMain ? row.branch || null : null };
   }
-  // 목록의 저장소가 아니다(셸로 들어간 미등록 저장소·숨긴 저장소·자리 모름) — 저장소 밖, 지금 폴더별 가지.
+  // git 저장소가 아니거나(폴더) 숨겼거나 자리를 모른다 — 저장소 밖, 지금 폴더별 가지.
   const dir = typeof row.cwd === 'string' && row.cwd ? row.cwd.replace(/\/+$/, '') || '/' : '';
   const lane = dir ? { key: 'dir:' + dir, name: base(dir) || dir, branch: null, folder: dir } : null;
-  return { row, key: OUTSIDE_KEY, name: '', repository: false, root: null, lane, mainBranch: null };
+  return { row, key: OUTSIDE_KEY, name: '', repository: false, unlisted: false, root: null, lane, mainBranch: null };
 }
 
 export interface BuildInput<R> {
@@ -179,10 +184,10 @@ export function buildRepoTree<R extends RepoRowLike>(inp: BuildInput<R>): RepoGr
   };
 
   const groups = new Map<string, RepoGroup<R>>();
-  const group = (key: string, name: string, repository: boolean, root: string | null) => {
+  const group = (key: string, name: string, repository: boolean, root: string | null, unlisted = false) => {
     let g = groups.get(key);
     if (!g) {
-      g = { key, name, repository, kind: repository ? 'git' : null, root, mainBranch: root ? inp.mainBranches?.get(root) ?? null : null,
+      g = { key, name, repository, unlisted, kind: repository ? 'git' : null, root, mainBranch: root ? inp.mainBranches?.get(root) ?? null : null,
             lanes: [], endedCount: 0, count: 0, waiting: 0, attention: false, lastActivity: 0, registered: 0 };
       groups.set(key, g);
     }
@@ -202,7 +207,7 @@ export function buildRepoTree<R extends RepoRowLike>(inp: BuildInput<R>): RepoGr
   for (const r of inp.rows) {
     if (isKid(r)) continue;
     const p = place(r);
-    const g = group(p.key, p.name, p.repository, p.root);
+    const g = group(p.key, p.name, p.repository, p.root, p.unlisted);
     // 메인 작업 트리 브랜치는 /api/repos(등록된 저장소)가 먼저고, 거기 없으면 메인 작업 트리에 있는 세션의 브랜치로 채운다.
     if (!g.mainBranch && p.mainBranch) g.mainBranch = p.mainBranch;
     const laneKey = p.lane?.key ?? '';

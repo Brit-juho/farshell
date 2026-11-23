@@ -101,6 +101,8 @@
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg.outside .vt-rg-ic { color:var(--color-sub); }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-head .vt-rg-body { padding:0; }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-rn { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--fs-sm); font-weight:700; color:var(--color-txt); }
+/* 아직 CLI를 켠 적 없는 git 저장소(셸로만 들어간 곳) — 이름으로 묶되 목록의 저장소보다 한 단계 흐리게 */
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg.unlisted .vt-rg-rn { color:var(--color-sub); font-weight:600; }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-rb { flex:0 0 auto; max-width:55%; min-width:0; display:inline-flex; align-items:center; gap:3px; margin-left:2px; font:var(--fs-xs) var(--font-mono); color:var(--color-muted); }
 /* 메인 브랜치는 들어갈 만하면 온전히(저장소 이름이 먼저 줄어든다), 머리 절반을 넘는 긴 브랜치만 줄임표 — 수·캐럿·「+」는 자리를 지킨다. */
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-rb > span:first-child { display:flex; flex:none; }
@@ -219,6 +221,7 @@
 #vt-fleet .vt-fleet-repo-head { display:flex; align-items:center; gap:6px; min-height:44px; padding:6px 2px 4px; color:var(--color-sub); }
 #vt-fleet .vt-fleet-repo-ic { display:flex; }
 #vt-fleet .vt-fleet-repo-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:15px; color:var(--color-txt); }
+#vt-fleet .vt-fleet-repo.unlisted .vt-fleet-repo-name { color:var(--color-sub); }
 /* 브랜치는 들어갈 만하면 온전히 보이고(저장소 이름이 먼저 줄어든다), 화면 절반을 넘는 긴 브랜치만 줄임표로 줄인다. */
 #vt-fleet .vt-fleet-repo-branch { flex:0 0 auto; max-width:55%; min-width:0; display:inline-flex; align-items:center; gap:3px; font:var(--fs-xs) var(--font-mono); color:var(--color-muted); }
 #vt-fleet .vt-fleet-repo-branch > span:first-child { display:flex; flex:none; }

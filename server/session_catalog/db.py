@@ -14,7 +14,7 @@ from pathlib import Path
 
 import vt_paths
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 ID = re.compile(r"[a-f0-9]{32}")
 HASH = re.compile(r"[a-f0-9]{64}")
 
@@ -206,11 +206,128 @@ MIGRATIONS = {
 }
 
 
+def _stable_project_identity(db):
+    """v4: 저장소 열쇠에서 운영 체제가 다시 매기는 값(디스크 장치 번호)을 뺀다 — 같은 경로의 저장소는 한 행이다.
+
+    예전 열쇠는 `git:<.git 경로>:<장치>:<inode>` · `directory:<경로>:<장치>:<inode>`였다. 맥을 다시 켜면 장치 번호가 바뀌어(실측:
+    같은 경로가 장치 번호 3종으로 갈라져 28개 경로가 68행) 같은 저장소가 새 행으로 등록되고 등록 상태는 옛 행에 남았다.
+    여기서는 (1) 열쇠에서 장치·inode를 떼고, (2) 같은 경로이거나 같은 열쇠가 된 행을 한 행으로 합치며(등록·숨김·마지막 활동을
+    보존하고 작업 폴더·세션·대화의 참조를 옮긴다), (3) 작업 폴더의 `incarnation`도 inode만 남긴다. 합친 뒤 같은 경로 한 행은
+    `projects_host_path` 고유 색인이 DB에서 지킨다. 경로는 있는 폴더면 디스크 철자(대소문자)로 맞춘다."""
+    from .inventory import canonical_path
+
+    def canon(raw):
+        try:
+            return str(canonical_path(raw))
+        except (OSError, ValueError):
+            return raw
+
+    def strip_locator(loc):
+        head, _, rest = loc.partition(":")
+        parts = rest.rsplit(":", 2)
+        if len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
+            rest = parts[0]
+        return f"{head}:{canon(rest)}" if head in ("git", "directory") else loc
+
+    def strip_incarnation(value):
+        parts = str(value).split(":")
+        return parts[1] if len(parts) == 2 and all(x.isdigit() for x in parts) else str(value)
+
+    def records(sql):       # row_factory에 기대지 않는다 — 마이그레이션은 어떤 연결로도 돌 수 있어야 한다
+        cur = db.execute(sql)
+        names = [d[0] for d in cur.description]
+        return [dict(zip(names, r)) for r in cur.fetchall()]
+
+    rows = records("SELECT id,host,locator,name,path,kind,hidden,revision,registered,removed,last_activity FROM projects ORDER BY id")
+    if not rows:
+        return
+    for r in rows:
+        r["new_path"] = canon(r["path"])
+        r["new_locator"] = strip_locator(r["locator"])
+    parent = {r["id"]: r["id"] for r in rows}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    seen: dict = {}
+    for r in rows:
+        for key in (("path", r["host"], r["new_path"]), ("locator", r["host"], r["new_locator"])):
+            if key in seen:
+                parent[find(r["id"])] = find(seen[key])
+            else:
+                seen[key] = r["id"]
+    groups: dict = {}
+    for r in rows:
+        groups.setdefault(find(r["id"]), []).append(r)
+
+    def rank(r):
+        live = r["registered"] is not None and r["removed"] is None
+        return (not live, r["registered"] is None, -(r["last_activity"] or 0), r["id"])
+
+    survivor_of: dict = {}
+    merged: dict = {}
+    for members in groups.values():
+        members.sort(key=rank)
+        keep = members[0]
+        for r in members:
+            survivor_of[r["id"]] = keep["id"]
+        registered = [r["registered"] for r in members if r["registered"] is not None]
+        removed = [r["removed"] for r in members if r["removed"] is not None]
+        activity = [r["last_activity"] for r in members if r["last_activity"] is not None]
+        hidden = {r["hidden"] for r in members}
+        merged[keep["id"]] = {
+            "locator": keep["new_locator"], "path": keep["new_path"],
+            "kind": "git" if keep["new_locator"].startswith("git:") else "directory",
+            "registered": min(registered) if registered else None,
+            "removed": None if any(r["registered"] is not None and r["removed"] is None for r in members)
+            else (max(removed) if removed else None),
+            "last_activity": max(activity) if activity else None,
+            "hidden": 1 if 1 in hidden else (0 if 0 in hidden else 2),
+            "revision": max(r["revision"] for r in members) + (1 if len(members) > 1 else 0),
+            "merged": len(members) > 1,
+        }
+
+    works = records("SELECT id,project_id,path,incarnation,available FROM workspaces ORDER BY id")
+    refs: dict = {}
+    for table in ("sessions", "conversations"):
+        for wid, n in db.execute(f"SELECT workspace_id,COUNT(*) FROM {table} WHERE workspace_id IS NOT NULL GROUP BY workspace_id"):
+            refs[wid] = refs.get(wid, 0) + n
+    by_key: dict = {}
+    for w in works:
+        w["new_project"] = survivor_of.get(w["project_id"], w["project_id"])
+        w["new_path"] = canon(w["path"])
+        w["new_incarnation"] = strip_incarnation(w["incarnation"])
+        by_key.setdefault((w["new_project"], w["new_path"], w["new_incarnation"]), []).append(w)
+    for members in by_key.values():
+        members.sort(key=lambda w: (not w["available"], -refs.get(w["id"], 0), w["id"]))
+        keep = members[0]
+        for w in members[1:]:
+            for table in ("sessions", "conversations"):
+                db.execute(f"UPDATE {table} SET workspace_id=? WHERE workspace_id=?", (keep["id"], w["id"]))
+            db.execute("DELETE FROM workspaces WHERE id=?", (w["id"],))
+        db.execute("UPDATE workspaces SET project_id=?,path=?,incarnation=? WHERE id=?",
+                   (keep["new_project"], keep["new_path"], keep["new_incarnation"], keep["id"]))
+
+    for r in rows:
+        if survivor_of[r["id"]] != r["id"]:
+            db.execute("DELETE FROM projects WHERE id=?", (r["id"],))
+    for pid, m in merged.items():
+        db.execute("UPDATE projects SET locator=?,path=?,kind=?,registered=?,removed=?,last_activity=?,hidden=?,revision=? WHERE id=?",
+                   (m["locator"], m["path"], m["kind"], m["registered"], m["removed"], m["last_activity"], m["hidden"], m["revision"], pid))
+
+
+# 같은 경로의 저장소는 한 행(열쇠에서 장치 번호 제거 + 합치기), 그 뒤 DB가 같은 경로의 두 번째 행을 거부한다.
+MIGRATIONS[4] = (_stable_project_identity, "CREATE UNIQUE INDEX projects_host_path ON projects(host,path)")
+
+
 def migrate(db, from_version):
     """`from_version`에서 SCHEMA_VERSION까지 올린다. 호출부가 트랜잭션을 연다."""
     for version in range(from_version + 1, SCHEMA_VERSION + 1):
         for statement in MIGRATIONS.get(version, ()):
-            db.execute(statement)
+            statement(db) if callable(statement) else db.execute(statement)
     db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
 

@@ -73,7 +73,7 @@ export function RepoBranch(p: RepoBranchProps) {
   // 이 가지(lane) 뒤에 다른 가지나 종료 칸이 있는가 — 줄기(x=21)를 계속 그을지.
   const moreAfterLane = (li: number) => li < lanes().length - 1 || p.hasEnded;
   return (
-    <section class="vt-rg" classList={{ outside: !g().repository, collapsed: p.collapsed }} aria-label={title()}>
+    <section class="vt-rg" classList={{ outside: !g().repository, unlisted: g().unlisted, collapsed: p.collapsed }} aria-label={title()}>
       {/* 머리 = 접기 버튼 + (저장소면) 「+」 새 세션 버튼. 둘은 형제다 — 버튼 안에 버튼을 두지 않는다. */}
       <div class="vt-rg-headrow">
       <button type="button" class="vt-rg-row vt-rg-head" aria-expanded={!p.collapsed} onClick={p.onToggle}

@@ -234,7 +234,7 @@ server and put the copy back (`mv catalog.sqlite3.v1.bak catalog.sqlite3`, remov
 records made after the upgrade are not in that copy. Version 2 (2026-11) added the last-activity time and the visible-name
 source of a session, the branch at end, CLI path and "marked ended" time of a run, and a local table of conversation
 summaries. Version 3 (2026-11) added projects as the place where a CLI started (`projects.registered`, `removed`, `last_activity`; `hidden` 2 =
-auto-hidden), `conversations.placement` and two indexes, and moved archived sessions' conversations to the archive. After the upgrade a background
+auto-hidden), `conversations.placement` and two indexes, and moved archived sessions' conversations to the archive. Version 4 (2026-11) made a project's identity its real path (the device number left the locator), merged the rows an old reboot had split, and added the unique index `projects_host_path`; its copy is `catalog.sqlite3.v3.bak`. After the upgrade a background
 worker places existing conversations into projects from their archived transcripts (`session_catalog/placement.py`, a batch every second while
 there is a backlog); each Mac builds its own projects from its own records. Tests: `server/tests/test_catalog_migration.py`,
 `server/tests/test_session_projects.py`.

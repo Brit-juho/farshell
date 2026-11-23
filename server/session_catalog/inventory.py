@@ -1,6 +1,7 @@
 """Batch physical observation. An incomplete snapshot is never an exit event."""
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import logging
@@ -81,11 +82,35 @@ def _observe_once():
     return {"complete": True, "epoch": epoch, "sessions": sessions}
 
 
+def canonical_path(path):
+    """폴더의 실경로. macOS는 파일 시스템이 대소문자를 구별하지 않아 같은 폴더를 `/gitHub`·`/GitHub`로 부를 수 있다 —
+    열어 둔 파일 기술자의 경로(F_GETPATH)가 디스크에 적힌 철자라서 그 값으로 통일한다. 못 얻으면 resolve 결과 그대로."""
+    resolved = Path(path).resolve(strict=True)
+    getpath = getattr(fcntl, "F_GETPATH", None)
+    if getpath is None:
+        return resolved
+    try:
+        fd = os.open(resolved, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    except OSError:
+        return resolved
+    try:
+        raw = fcntl.fcntl(fd, getpath, b"\0" * 1024).split(b"\0", 1)[0].decode("utf-8", "strict")
+    except (OSError, UnicodeError, ValueError):
+        return resolved
+    finally:
+        os.close(fd)
+    return Path(raw) if raw.startswith("/") else resolved
+
+
 def inspect_workspace(cwd):
     """폴더 → 배치(저장소·작업 트리). 실행 중 세션의 자리(`_live_placements`)와 대화를 저장소에 놓기(placement.py)가 쓴다.
 
     Git이 「저장소가 아니다」라고 답할 때만 저장소 밖(directory)이다. 시간 초과·다른 오류는 None(다음 관측에서 다시) —
-    예전에는 일시 실패도 저장소 밖으로 영구 분류했다."""
+    예전에는 일시 실패도 저장소 밖으로 영구 분류했다.
+
+    저장소 열쇠(`locator`)는 **실경로만**이다. 예전에는 디스크 장치 번호(st_dev)와 inode를 붙였는데, macOS는 부팅 때 장치 번호를
+    다시 매겨서 재시작 뒤 같은 저장소가 새 저장소로 등록됐다. 운영 체제가 다시 매길 수 있는 값은 열쇠에 넣지 않는다.
+    작업 폴더를 지웠다 다시 만든 경우를 가르는 `incarnation`은 inode만 쓴다(같은 (저장소, 경로) 안에서만 비교한다)."""
     try:
         path = fsguard.resolve_under_roots(cwd, git_meta=True)
         if not path.is_dir():
@@ -98,37 +123,52 @@ def inspect_workspace(cwd):
         if result.returncode == 0 and len(roots) != 2:
             return None
         if len(roots) == 2:
-            path = fsguard.resolve_under_roots(roots[0], git_meta=True)
-            common = Path(roots[1]).resolve(strict=True)
-            marker = common.stat()
-            locator = f"git:{common}:{marker.st_dev}:{marker.st_ino}"
+            path = canonical_path(fsguard.resolve_under_roots(roots[0], git_meta=True))
+            common = canonical_path(roots[1])
+            locator = f"git:{common}"
             project_path = common.parent if common.name == ".git" else path
             kind = "checkout" if path == project_path else "worktree"
         else:
-            marker = path.stat()
-            locator = f"directory:{path}:{marker.st_dev}:{marker.st_ino}"
+            path = canonical_path(path)
+            locator = f"directory:{path}"
             project_path, kind = path, "directory"
         marker = path.stat()
         return {"locator": locator, "project_path": str(project_path), "project_kind": "git" if roots else "directory",
-                "path": str(path), "kind": kind, "incarnation": f"{marker.st_dev}:{marker.st_ino}"}
+                "path": str(path), "kind": kind, "incarnation": str(marker.st_ino)}
     except (OSError, UnicodeError, ValueError, fsguard.FsDenied, subprocess.TimeoutExpired):
         return None
+
+
+def project_for(db, host, placement):
+    """배치가 속한 저장소 행. **같은 경로는 한 행**이다(`projects_host_path` 고유 색인) — 열쇠로 먼저 찾고, 없으면 같은 경로의 행을
+    찾아 열쇠·종류만 제자리에서 바꾼다(그 자리에서 `git init`을 했거나 `.git`을 지운 경우). 새 행은 둘 다 없을 때만 만든다."""
+    row = db.execute("SELECT id FROM projects WHERE host=? AND locator=?", (host, placement["locator"])).fetchone()
+    if row:
+        return row[0]
+    root = Path(placement["project_path"])
+    row = db.execute("SELECT id,locator,kind FROM projects WHERE host=? AND path=?", (host, str(root))).fetchone()
+    if row:
+        if row["locator"] != placement["locator"] or row["kind"] != placement["project_kind"]:
+            db.execute("UPDATE projects SET locator=?,kind=?,revision=revision+1 WHERE id=?",
+                       (placement["locator"], placement["project_kind"], row["id"]))
+            changed(db, "project", row["id"])
+        return row["id"]
+    project = uid()
+    db.execute("INSERT INTO projects(id,host,locator,name,path,kind) VALUES(?,?,?,?,?,?)",
+               (project, host, placement["locator"], root.name or str(root), str(root), placement["project_kind"]))
+    return project
 
 
 def workspace(db, placement):
     if not placement:
         return None
-    host = host_id(db)
-    row = db.execute("SELECT id FROM projects WHERE host=? AND locator=?", (host, placement['locator'])).fetchone()
-    project = row[0] if row else uid()
-    if not row:
-        root = Path(placement['project_path'])
-        db.execute("INSERT INTO projects(id,host,locator,name,path,kind) VALUES(?,?,?,?,?,?)",
-                   (project, host, placement['locator'], root.name or str(root), str(root), placement['project_kind']))
-    row = db.execute("SELECT id FROM workspaces WHERE project_id=? AND path=? AND incarnation=?",
+    project = project_for(db, host_id(db), placement)
+    row = db.execute("SELECT id,kind FROM workspaces WHERE project_id=? AND path=? AND incarnation=?",
                      (project, placement['path'], placement['incarnation'])).fetchone()
     if row:
-        return row[0]
+        if row["kind"] != placement["kind"]:        # 같은 폴더가 저장소가 됐거나(git init) 아니게 됐다 — 새 행이 아니라 종류만 바꾼다
+            db.execute("UPDATE workspaces SET kind=? WHERE id=?", (placement["kind"], row["id"]))
+        return row["id"]
     wid = uid()
     db.execute("INSERT INTO workspaces(id,project_id,path,kind,incarnation) VALUES(?,?,?,?,?)",
                (wid, project, placement['path'], placement['kind'], placement['incarnation']))
