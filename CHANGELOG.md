@@ -10,19 +10,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-### Fixed
-- Links in the terminal that an app wraps by itself (e.g. a long URL or path that Claude Code breaks at the screen width and indents on the next line) are now recognized as one link. Before, only the cut-off first line was linked and opened a truncated address. A line is joined only when the upper line ends within 2 columns of the right edge on URL/path characters and the next line, after its indent, continues with URL/path characters.
-
 ### Added
 - The file viewer can now read `/tmp` (outside `VT_BROWSE_ROOTS`), read-only: only files and folders owned by the server user, readable by other users (files `o+r`, folders `o+rx`), regular files/folders only. `0600` secrets, other users' files, sockets, symlinks leaving `/tmp`, and tool state folders (`vt-pids`, `vt-uploads`, `claude-*`, `tmux-*`, `pytest-of-*`) stay closed; the usual deny list and hidden-folder rules still apply. No folder registration needed. Set `VT_BROWSE_TMP=0` to turn it off.
 
 ### Changed
 - The account a session was created with is no longer shown as a badge on the desktop session rows; it is in the row's ⋯ menu info (and the folded strip's hover card).
+
 - **A session that needs your answer stays in its repository.** The attention section at the top of the session list now shows it *in addition to* its repository group instead of moving it out; before, the last session of a repository asking a question made that repository look empty and jump or vanish until you answered. The rename field opens in one place only (the top copy while the session is waiting), and ordering by drag works in the repository group only. The collapsed 48px strip and the phone tiles are unchanged.
 
 - **A collapsed repository now shows how many of its sessions are alive and how many are waiting for you** (`3 · 1`; the tooltip spells it out). Expanded groups keep the plain count.
 
 - **Responses are gzip-compressed now.** The server sent everything uncompressed (the first screen's CSS/JS alone is about 1.2 MB). Text responses of 1 KB or more are compressed — the app's CSS/JS about 4–7× smaller, the 5-second session list 48 KB → 8 KB. Credential and pairing paths, binary downloads, ranges and WebSocket traffic are left as they were.
+
 - **The session and repository lists are only re-sent when they change.** The 5-second poll re-downloaded the same ~58 KB list every time. The server now tags each answer with a content hash and replies `304` (no body) when nothing changed; the page keeps the last answer in memory. The responses stay `no-store` — nothing is written to the browser cache.
 
 - **Only the newest daily catalog backup is kept (was seven).** Each backup is a full copy of the session-record database (about 0.9 GB on a large store), so a week of them used about 6 GB of mostly identical data. The conversation text and the CLI's own files are not part of this rotation. The cost: a damaged database can only be rolled back to the last night's copy, not to an older one.
@@ -33,10 +32,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - **`fsh archive-replicas` removes what other Macs replicated to this one.** After turning replication off (settings › 대화 보관), `preview` shows and `apply` removes the received conversations, the raw chunks only they use and their search index, so each Mac keeps only its own conversations. It refuses while replication is still on, takes the daily catalog backup first, never touches this Mac's own conversations (a chunk shared with one is kept) and puts back any chunk a capture started to use during the grace wait.
 
+- **A repository with no sessions no longer shows an expand/collapse arrow, and a collapsed repository opens by itself when a new session starts in it.**
+
+- **Settings sections load their first data together and draw once** (a loading state is shown, waiting at most 1.5 s), instead of each section fetching and redrawing on its own.
+
+- **Dependencies:** `softprops/action-gh-release` 3.0.4 (pinned to the verified commit), `vite` 8.3.8, `vite-plugin-solid` 2.11.17, `tailwindcss` / `@tailwindcss/vite` 4.3.5, `marked` 18.2.1, `dompurify` 3.4.18. `solid-js` 2 and `jsdom` 31 (major versions) are not taken.
+
 ### Fixed
+- Links in the terminal that an app wraps by itself (e.g. a long URL or path that Claude Code breaks at the screen width and indents on the next line) are now recognized as one link. Before, only the cut-off first line was linked and opened a truncated address. A line is joined only when the upper line ends within 2 columns of the right edge on URL/path characters and the next line, after its indent, continues with URL/path characters.
+
 - **The same repository no longer turns into two after a restart.** A project was keyed by its path *and the disk device number*, which macOS renumbers between boots, so a repository came back as a new, unregistered project (and showed up under 「저장소 밖」) while its registration stayed on the old row. A project is now its real path alone, the database refuses a second row for a path, and a one-time upgrade (format 4, copy kept as `catalog.sqlite3.v3.bak`) merges the rows already split. A git repository you only opened in a shell is now listed under its own name (dimmed) instead of 「저장소 밖」.
+
 - **Security: an agent could pose as another agent by sending `X-Forwarded-For: testclient` straight to the local server.** uvicorn now starts with `--no-proxy-headers`, and the reported-pid path used by the test client is only open when a test switch is on (never in the running server). Needs a same-user local process holding the machine token.
+
 - A session could get a needless `-1` on its alias: create/resume operations left «running» since October held the aliases of ended sessions forever. Only operations started in the last 10 minutes hold an alias now.
+
+- The «Ended N» label in the session list no longer splits into two lines (`Ended` / `14`) in a narrow list; the «last …» time on its right shrinks first.
+
+- A row in the attention section can no longer be dragged — there was nowhere to drop it, so dragging did nothing.
 
 ---
 
