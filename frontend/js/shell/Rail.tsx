@@ -9,7 +9,7 @@
 // 지연 청크가 이들을 정적 import하면 Vite lib 모드가 상태를 복제한다,
 // ADR-26/N35 커밋 참고). 전부 그 파일들이 이미 노출해 둔 window 브리지로만
 // 읽는다. vtFetch·getAction만 main.js가 인자로 넘긴다(Hud.tsx와 같은 이유).
-import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
+import { createSignal, createMemo, createEffect, onCleanup, untrack, For, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { t } from '../core/i18n.js';
 import {
@@ -327,6 +327,34 @@ export function Rail(props: RailProps) {
   const repoCollapsed = (g: RepoGroup<SessionRow>) => prefs().view.groupsCollapsed.includes('repo:' + repoKey(g));
   const endedOpen = (g: RepoGroup<SessionRow>) => prefs().view.groupsCollapsed.includes('ended:' + repoKey(g));
   const toggleView = (id: string) => setPref(VIEW_KEY, encodeRailView({ ...prefs().view, groupsCollapsed: toggleGroupCollapsed(prefs().view.groupsCollapsed, id) }));
+  // 저장소에 세션이 새로 들어오면(그 저장소에서 새 세션을 열었거나, 저장소 밖에서 `cd`로 옮겨 왔다) 접혀 있던 그 저장소를 연다.
+  // 처음 그려질 때의 세션은 기준선일 뿐이라 열지 않는다 — 일부러 접어 둔 저장소가 새로고침 뒤에도 접혀 있어야 한다.
+  // 저장소 밖 묶음은 대상이 아니다(저장소가 아니다).
+  let seenByRepo: Map<string, Set<string>> | null = null;
+  let baselineTimer: ReturnType<typeof setTimeout> | undefined = setTimeout(() => { baselineTimer = undefined; if (!seenByRepo) seenByRepo = new Map(); }, 3000);
+  onCleanup(() => { if (baselineTimer) clearTimeout(baselineTimer); });
+  createEffect(() => {
+    const cur = new Map<string, Set<string>>();
+    for (const g of tree()) cur.set(repoKey(g), new Set(flattenRows([g]).map((e) => rowKey(e.row))));
+    const prev = seenByRepo;
+    seenByRepo = cur;
+    if (!prev) {
+      // 세션이 아직 안 읽힌 채로 기준선을 잡으면 첫 목록이 전부 「새로 생김」이 된다 — 하나라도 보일 때까지(또는 3초) 기다린다.
+      if ([...cur.values()].every((s) => s.size === 0)) seenByRepo = null;
+      else if (baselineTimer) { clearTimeout(baselineTimer); baselineTimer = undefined; }
+      return;
+    }
+    const open: string[] = [];
+    for (const g of tree()) {
+      if (!g.repository) continue;
+      const k = repoKey(g);
+      const before = prev.get(k);
+      const added = [...(cur.get(k) || [])].some((r) => !before || !before.has(r));
+      if (added && untrack(() => repoCollapsed(g))) open.push('repo:' + k);
+    }
+    if (!open.length) return;
+    untrack(() => setPref(VIEW_KEY, encodeRailView({ ...prefs().view, groupsCollapsed: prefs().view.groupsCollapsed.filter((x) => !open.includes(x)) })));
+  });
   // ── 수동 정렬(정렬 설정 「세션: 수동」) — 같은 가지(메인 또는 같은 워크트리·폴더) 안에서만 옮긴다. 하위 세션은 부모를 따른다.
   // 순서는 그 맥의 전역 설정(ORDER_KEY)이라 그 맥을 보는 모든 기기가 같다. 저장할 때 지금 보이는 최상위 세션만 남긴다.
   const manual = () => prefs().sort.sessions === 'manual';
