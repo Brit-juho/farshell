@@ -39,18 +39,42 @@ export function historyError(code) {
   })[code] || t('작업을 완료하지 못했습니다');
 }
 
-/** @param {string} path @param {{ body?: any, signal?: AbortSignal, elevated?: boolean, method?: string }} [options] @returns {Promise<any>} */
-export async function historyApi(path, { body, signal, elevated = true, method } = {}) {
+// 조건부 조회(`conditional`) — 5초마다 오는 목록은 거의 안 바뀐다. 마지막 응답과 그 ETag를 **메모리에만** 들고 있다가 다음에
+// `If-None-Match`로 보내, 서버가 304(본문 없음)로 답하면 들고 있던 값을 그대로 돌려준다. 응답이 `Cache-Control: no-store`라
+// 브라우저 캐시는 쓰지 않는다(사람 전용 기록을 디스크에 두지 않는다) — 그래서 304를 이 함수가 직접 처리한다.
+const CONDITIONAL_MAX = 16;
+/** @type {Map<string, { etag: string, value: any }>} */
+const conditionalCache = new Map();
+
+/** 시험용 — 들고 있는 조건부 응답을 비운다. */
+export function clearConditionalCache() { conditionalCache.clear(); }
+
+/** @param {string} path @param {{ body?: any, signal?: AbortSignal, elevated?: boolean, method?: string, conditional?: boolean }} [options] @returns {Promise<any>} */
+export async function historyApi(path, { body, signal, elevated = true, method, conditional = false } = {}) {
+  const useConditional = conditional && body === undefined && (!method || method === 'GET');
   const run = async () => {
+    const known = useConditional ? conditionalCache.get(path) : undefined;
+    const headers = body === undefined ? {} : { 'Content-Type': 'application/json' };
+    if (known) headers['If-None-Match'] = known.etag;
     // 주소는 그대로(중계·토큰 없음) — 마감과 도달 판정만 붙인다(core/api.js timedFetch).
     const response = await timedFetch(path, { method: method || (body === undefined ? 'GET' : 'POST'), credentials: 'same-origin',
-      headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+      headers,
       body: body === undefined ? undefined : JSON.stringify(body), signal });
+    if (useConditional && response.status === 304 && known) return known.value;
     const value = await response.json();
     if (!response.ok) {
+      if (useConditional) conditionalCache.delete(path);
       const error = new Error(historyError(value.error));
       error.code = value.error; error.status = response.status;
       throw error;
+    }
+    if (useConditional) {
+      const etag = response.headers.get('ETag');
+      if (etag) {
+        conditionalCache.delete(path);                                  // 가장 오래된 것부터 밀려난다(삽입 순서)
+        conditionalCache.set(path, { etag, value });
+        while (conditionalCache.size > CONDITIONAL_MAX) conditionalCache.delete(conditionalCache.keys().next().value);
+      } else conditionalCache.delete(path);
     }
     return value;
   };

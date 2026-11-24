@@ -192,6 +192,7 @@ After `VT_WATCHDOG_FAILS` (3) failures in a row:
 - **Login gate.** Probes and submits time out at 8 s and show a retry block. A timeout never hides the gate;
   a real network error still does, so the offline shell can work.
 - **Polling.** `core/poll.js` drives every poller. It never overlaps a run, backs off up to 60 s on failure
+- **Conditional polling.** The 5-second session list and project list (`/api/session-catalog`, `/api/session-catalog/projects`) are the page's main steady traffic. The server hashes each answer into a weak `ETag` and replies `304` with no body when `If-None-Match` matches; `historyApi(path, { conditional: true })` keeps the last answer and its `ETag` **in memory only** (the responses are `no-store`, so the browser cache is never used) and returns that same object on `304`. It is content-based on purpose — the catalog's `revision` does not move for every field in the answer (last prompt, observation time, the hidden-repository list), so a revision check would leave a stale list. An error or an answer without an `ETag` drops the remembered one.
   and pauses while the tab is hidden. HUD, Rail and Fleet show Updates delayed (갱신 지연) when the last success is older
   than max(2 × interval, 90 s).
 - **WebSockets.** `core/ws-watchdog.js` closes a socket that received nothing for 45 s (code 4000), so the
