@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import sqlite3
@@ -11,7 +12,7 @@ from pathlib import Path
 
 import fsguard
 from session_catalog.db import database, directory, private_dir, private_file, uid, Refused, setting, set_setting
-from .archive import chunk_path, read_chunk
+from .archive import read_chunk
 
 
 # How many daily catalog snapshots to keep. Each one is a full copy of the catalog database (about 0.9 GB on a large
@@ -73,8 +74,12 @@ def export_package():
         with tarfile.open(target, 'w') as package:
             package.add(snap, arcname='catalog.sqlite3', recursive=False)
             for digest in sorted(hashes):
-                read_chunk(digest)
-                package.add(chunk_path(digest), arcname='chunks/' + digest, recursive=False)
+                # The package always holds the raw bytes under the chunk's own name (restore_package checks that name
+                # against the sha256 of the content), whichever form the chunk has on disk.
+                data = read_chunk(digest)
+                info = tarfile.TarInfo('chunks/' + digest)
+                info.size, info.mode, info.mtime = len(data), 0o600, int(time.time())
+                package.addfile(info, io.BytesIO(data))
         return target
     except BaseException:
         target.unlink(missing_ok=True)
