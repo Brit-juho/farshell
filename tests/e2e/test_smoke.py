@@ -4816,6 +4816,10 @@ def test_질문이_온_세션은_저장소_묶음에_남고_개입_필요에도_
             timeout=20000)   # 세션이 저장소 묶음에 나타난 뒤에 순서를 본다 — 그 전에는 저장소만 이름순으로 먼저 그려진다
         heads = "() => [...document.querySelectorAll('#vt-wgrail section.vt-rg')].map((s) => s.getAttribute('aria-label')).filter((n) => n && n.startsWith('attn-'))"
         rows = "() => [...document.querySelectorAll('#vt-wgrail .vt-rg-node')].filter((e) => e.textContent.includes('attn-f')).map((e) => !!e.closest('.vt-rg-flat'))"
+        # 세션 없는 저장소(attn-acme)는 저장소 목록을 따로 받아 그린다 — 느린 러너에서는 세션 행보다 늦게 나타난다. 둘 다 그려진 뒤에 순서를 본다.
+        page.wait_for_function(
+            "() => ['attn-farshell', 'attn-acme'].every((n) => [...document.querySelectorAll('#vt-wgrail section.vt-rg')].some((s) => s.getAttribute('aria-label') === n))",
+            timeout=20000)
         assert page.evaluate(heads) == ["attn-farshell", "attn-acme"], page.evaluate(heads)
         assert page.evaluate(rows) == [False], "질문 전에는 저장소 묶음에만"
         # 이름 바꾸기 입력칸은 열려 있는 세션에서만 제자리에 뜬다 — 먼저 연다.
