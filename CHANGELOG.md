@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+- Links in the terminal that an app wraps by itself (e.g. a long URL or path that Claude Code breaks at the screen width and indents on the next line) are now recognized as one link. Before, only the cut-off first line was linked and opened a truncated address. A line is joined only when the upper line ends within 2 columns of the right edge on URL/path characters and the next line, after its indent, continues with URL/path characters.
+
 ### Added
 - The file viewer can now read `/tmp` (outside `VT_BROWSE_ROOTS`), read-only: only files and folders owned by the server user, readable by other users (files `o+r`, folders `o+rx`), regular files/folders only. `0600` secrets, other users' files, sockets, symlinks leaving `/tmp`, and tool state folders (`vt-pids`, `vt-uploads`, `claude-*`, `tmux-*`, `pytest-of-*`) stay closed; the usual deny list and hidden-folder rules still apply. No folder registration needed. Set `VT_BROWSE_TMP=0` to turn it off.
 
