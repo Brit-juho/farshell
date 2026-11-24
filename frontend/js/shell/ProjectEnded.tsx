@@ -116,7 +116,7 @@ export function ProjectEnded(p: { projectId: string; count: number; latest?: num
         <span class="vt-rg-gut"><svg class="vt-rg-ln" aria-hidden="true" innerHTML={endLines(!p.open)} /><span class="vt-rg-hol" /></span>
         <span class="vt-rg-body vt-rg-a">
           <span class="vt-rg-caret" classList={{ open: p.open }} innerHTML={icon('chevron-right', 12, 2)} />
-          <span>{t('종료 {n}', { n: p.count })}</span>
+          <span class="vt-rg-lbl">{t('종료 {n}', { n: p.count })}</span>
           <span class="vt-rg-sp" />
           <Show when={p.latest}><span class="vt-rg-tm">{t('마지막 {ago}', { ago: agoLabel(p.latest) })}</span></Show>
         </span>
