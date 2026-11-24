@@ -1050,3 +1050,10 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
   .vt-settings .vt-set-keyrow > .vt-set-reset { grid-column:3; }
   .vt-settings .vt-set-row > .vt-set-keyrow { align-self:flex-start; }
 }
+
+/* 섹션의 첫 조회가 끝날 때까지 본문을 숨기고(조회가 올 때마다 줄이 바뀌어 출렁이던 것을 막는다) 로드 중 표시만 둔다. */
+.vt-set-content.is-loading > :not(.vt-set-intro):not(.vt-set-loadnote) { display:none; }
+.vt-set-loadnote { display:flex; align-items:center; gap:8px; padding:12px 0; color:var(--color-muted); font-size:var(--fs-sm); }
+.vt-set-spin { flex:none; width:14px; height:14px; border:2px solid var(--color-line-strong, var(--color-line)); border-top-color:var(--color-txt); border-radius:50%; animation:vt-set-spin .8s linear infinite; }
+@keyframes vt-set-spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .vt-set-spin { animation:none; } }

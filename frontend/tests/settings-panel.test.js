@@ -577,6 +577,27 @@ test('에이전트 — "보통 이하" 경고 문장이 그대로 노출된다',
   assert.ok(texts.some((t) => t.includes('fsh pane report')));
 });
 
+test('에이전트 — 조회가 끝나기 전에는 본문을 숨기고 「불러오는 중」만 보이다가 한 번에 보여 준다', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const { document, P } = await build({
+    fetchExtra: (u) => (u.includes('/api/agents/coverage')
+      ? gate.then(() => ({ ok: true, json: () => Promise.resolve(COVERAGE_ROWS) }))
+      : null),
+  });
+  P.showSettings();
+  sectionButton(document, '에이전트').click();
+  await flush();
+  const content = document.querySelector('.vt-set-content');
+  assert.ok(content.classList.contains('is-loading'), '기다리는 동안 is-loading');
+  assert.ok(content.querySelector('.vt-set-loadnote'), '로드 중 표시');
+  release();
+  await flush(); await flush();
+  assert.ok(!content.classList.contains('is-loading'));
+  assert.ok(!content.querySelector('.vt-set-loadnote'));
+  assert.ok(content.querySelector('.vt-set-covtable'));
+});
+
 test('에이전트 — API 실패 시 표 대신 안내 문구', async () => {
   const { document, P } = await build({
     fetchExtra: (u) => (u.includes('/api/agents/coverage')

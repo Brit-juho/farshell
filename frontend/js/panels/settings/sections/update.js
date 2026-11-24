@@ -6,7 +6,7 @@
 import { vtFetch } from '../../../core/api.js';
 import { t } from '../../../core/i18n.js';
 import { withElevation } from '../../../authz/elevate.js';
-import { row, group, toast, fmtWhen, switchButton, choiceControl } from '../controls.js';
+import { row, group, toast, fmtWhen, switchButton, choiceControl, withReady } from '../controls.js';
 import { reasonText, blockedText, AUTO_HOURS } from '../../../shell/update-data.js';
 
 // 스위치·선택 컨트롤은 설정 공용 빌더(controls.js)를 쓴다 — 여기서 모양을 따로 만들지 않는다.
@@ -125,8 +125,8 @@ export function renderUpdateSection(deps = {}) {
   }
 
   paint();
-  api('/api/update/status').then((r) => { st = r; paint(); }).catch((e) => {
+  const ready = api('/api/update/status').then((r) => { st = r; paint(); }).catch((e) => {
     root.replaceChildren(note(errText(e) || t('업데이트 상태를 확인할 수 없습니다.')));
   });
-  return root;
+  return withReady(root, ready);
 }

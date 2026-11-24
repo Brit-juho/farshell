@@ -1,5 +1,5 @@
 // 설정 > 권한 — 승인 대기, 페어, 폴더 lease, 브라우저, 허용된 권한, 감사 기록, 비상 정지. 본체는 `share` 청크(authz/*)에 있고 여기는 자리만 만든다.
-import { group, statusLine } from '../controls.js';
+import { group, statusLine, withReady } from '../controls.js';
 import { t } from '../../../core/i18n.js';
 
 export function renderPermissionsSection() {
@@ -16,12 +16,12 @@ export function renderPermissionsSection() {
     group(t('비상 정지'), hosts.panic),
   );
   for (const h of Object.values(hosts)) h.appendChild(statusLine(t('불러오는 중…')));
-  import('../../../authz/entry.js')
+  const ready = import('../../../authz/entry.js')
     .then((m) => {
       for (const h of Object.values(hosts)) h.textContent = '';
       m.mountPermissions(hosts);
       return m.refresh();
     })
     .catch(() => { hosts.inbox.textContent = ''; hosts.inbox.appendChild(statusLine(t('권한 화면을 불러오지 못했습니다.'))); });
-  return frag;
+  return withReady(frag, ready);
 }

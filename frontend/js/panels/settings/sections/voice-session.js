@@ -120,8 +120,8 @@ export function renderSessionVoice() {
   // 자신의 PUT 응답이 갱신을 수행한다. 타 화면 정책 변경만 이벤트로 갱신한다.
   const policyChanged = (e) => { if (!e.detail?.owns) refresh(); };
   window.addEventListener('voice-policy', policyChanged);
-  refresh();
-  return { element: group(t('현재 세션 음성'), host, chip), cleanup: () => {
+  const ready = refresh();
+  return { ready, element: group(t('현재 세션 음성'), host, chip), cleanup: () => {
     disposed = true; revision++; inputObserver?.disconnect(); unsub(); window.removeEventListener('voice-connected', update);
     window.removeEventListener('voice-policy', policyChanged);
   } };
@@ -156,6 +156,6 @@ export function renderVoiceDefaults() {
       host.appendChild(row(t('오류 응답 제외'), switchButton({ checked: !!policy.success_only, onChange: (v) => save({ success_only: v }) }), undefined, { scope: 'global' }));
     } catch (e) { if (!disposed) host.appendChild(statLine(e.message, 'err')); }
   }
-  refresh();
-  return { element: group(t('새 세션 기본값'), host), cleanup: () => { disposed = true; } };
+  const ready = refresh();
+  return { ready, element: group(t('새 세션 기본값'), host), cleanup: () => { disposed = true; } };
 }

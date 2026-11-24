@@ -11,7 +11,7 @@
 import { confirmDialog } from '../../../core/dialog.js';
 import { t } from '../../../core/i18n.js';
 import { historyApi } from '../../../history/api.js';
-import { group } from '../controls.js';
+import { group, withReady } from '../controls.js';
 
 function node(tag, cls, text) {
   const el = document.createElement(tag);
@@ -185,6 +185,5 @@ export function renderHistorySection() {
     advanced.append(migration);
     root.append(group(t('고급'), advanced));
   }
-  void action(load);
-  return root;
+  return withReady(root, action(load));
 }

@@ -1,6 +1,6 @@
 import { vtFetch } from '../../../core/api.js';
 import { getAction } from '../../../core/dom.js';
-import { group, row, statLine, codeLine, fmtWhen } from '../controls.js';
+import { group, row, statLine, codeLine, fmtWhen, withReady } from '../controls.js';
 import { icon } from '../../../ui/icons.js';
 import { t } from '../../../core/i18n.js';
 
@@ -136,7 +136,7 @@ export function renderAboutSection() {
     }
   }).catch(() => { hooks.replaceChildren(statLine(t('훅 상태를 확인할 수 없습니다.'), 'warn')); });
   recheck.addEventListener('click', loadHooks);
-  loadHooks();
+  const loads = [loadHooks()];
   frag.appendChild(group(t('에이전트 훅'), hooks, recheck));
 
   // U1 — 사용량 소스가 없으면 탭도 HUD 칩도 통째로 사라진다(2.0 게이팅 규칙).
@@ -162,7 +162,7 @@ export function renderAboutSection() {
     return line;
   };
 
-  vtFetch('/api/capabilities').then((r) => {
+  loads.push(vtFetch('/api/capabilities').then((r) => {
     const cap = (r && r.usage) || {};
     usage.textContent = '';
     const reason = cap.available ? null : cap.reason;
@@ -188,7 +188,7 @@ export function renderAboutSection() {
       : codexReason ? t('Codex 사용량을 잠시 가져오지 못했습니다.')
       : null;
     usage.appendChild(provRow('codex', codexCap.available ? 'ok' : codexReason === 'expired' ? 'warn' : 'off', codexCap.available ? t('사용 중') : t('표시 안 함'), codexHint));
-  }).catch(() => { usage.replaceChildren(statLine(t('사용량 공급자를 확인할 수 없습니다.'), 'warn')); });
+  }).catch(() => { usage.replaceChildren(statLine(t('사용량 공급자를 확인할 수 없습니다.'), 'warn')); }));
 
   // 앱 파일 — 폰에는 FarShell 메뉴(제목 막대)가 없어 「캐시 지우기」를 여기서도 할 수 있게 한다.
   // 새 로직은 없다: 팔레트·메뉴와 같은 액션(app.clear-cache, 확인 대화상자 포함)을 부른다.
@@ -201,5 +201,5 @@ export function renderAboutSection() {
   });
   frag.appendChild(group(t('앱 파일'), row(t('앱 파일을 지우고 새로 받습니다. 설정과 로그인은 그대로입니다.'), clear)));
 
-  return frag;
+  return withReady(frag, ...loads);
 }

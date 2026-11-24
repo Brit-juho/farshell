@@ -1,5 +1,5 @@
 import { vtFetch } from '../../../core/api.js';
-import { statusLine, secRow, fmtWhen, group } from '../controls.js';
+import { statusLine, secRow, fmtWhen, group, withReady } from '../controls.js';
 import { t } from '../../../core/i18n.js';
 
 // ── 「보안」 ──────────────────────────────────────────────────────────────
@@ -43,7 +43,8 @@ export function renderSecuritySection() {
   outGroup.hidden = true;
   frag.appendChild(outGroup);
 
-  vtFetch('/api/auth/status').then((r) => {
+  const loads = [];
+  loads.push(vtFetch('/api/auth/status').then((r) => {
     authHost.innerHTML = '';
     const pw = !!(r && r.password_set);
     if (pw) { outHost.appendChild(_logoutRow()); outGroup.hidden = false; }
@@ -61,9 +62,9 @@ export function renderSecuritySection() {
       otp ? t('처음 보는 기기를 등록할 때만 OTP를 요구합니다.')
           : t("터미널에서 'fsh otp setup'으로 활성화합니다."),
     ));
-  }).catch(() => { authHost.innerHTML = ''; authHost.appendChild(statusLine(t('인증 상태를 확인할 수 없습니다.'))); });
+  }).catch(() => { authHost.innerHTML = ''; authHost.appendChild(statusLine(t('인증 상태를 확인할 수 없습니다.'))); }));
 
-  vtFetch('/api/devices').then((r) => {
+  loads.push(vtFetch('/api/devices').then((r) => {
     const rows = (r && Array.isArray(r.devices)) ? r.devices : [];
     devHost.innerHTML = '';
     if (!rows.length) {
@@ -81,9 +82,9 @@ export function renderSecuritySection() {
     if (rows.some((d) => d.expired)) {
       devHost.appendChild(statusLine(t("만료된 기기는 접속할 수 없고 7일 뒤 목록에서 지워집니다. 지금 정리하려면 'fsh device prune'.")));
     }
-  }).catch(() => { devHost.innerHTML = ''; devHost.appendChild(statusLine(t('기기 목록을 확인할 수 없습니다.'))); });
+  }).catch(() => { devHost.innerHTML = ''; devHost.appendChild(statusLine(t('기기 목록을 확인할 수 없습니다.'))); }));
 
-  vtFetch('/api/auth/elevation').then((r) => {
+  loads.push(vtFetch('/api/auth/elevation').then((r) => {
     const until = (r && Number(r.elevated_until)) || 0;
     const left = until ? Math.max(0, Math.round((until * 1000 - Date.now()) / 60000)) : 0;
     elevHost.innerHTML = '';
@@ -95,9 +96,9 @@ export function renderSecuritySection() {
       // 이 문장이 없으면 "왜 항상 비활성이지?"로 읽힌다.
       t('승격을 요구하는 조작이 아직 없어 지금은 이 기능을 쓰는 경로가 없습니다.'),
     ));
-  }).catch(() => { elevHost.innerHTML = ''; elevHost.appendChild(statusLine(t('승격 상태를 확인할 수 없습니다.'))); });
+  }).catch(() => { elevHost.innerHTML = ''; elevHost.appendChild(statusLine(t('승격 상태를 확인할 수 없습니다.'))); }));
 
-  return frag;
+  return withReady(frag, ...loads);
 }
 
 // 로그아웃 한 줄. 누르면 세션 쿠키가 지워지므로 그 자리에서 다시 그릴 화면이

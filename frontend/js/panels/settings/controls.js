@@ -293,6 +293,14 @@ export function group(title, content, aside) {
   return el;
 }
 
+// 섹션이 처음 그릴 때 시작한 조회를 settings.js에 알린다 — 그 조회가 다 끝날 때까지(상한 있음)
+// 본문을 숨겼다가 한 번에 보여 준다. 조회가 하나씩 도착할 때마다 줄이 바뀌어 화면이 출렁이던 것을 막는다.
+// 인자는 실패해도 되는 Promise들(성공·실패 모두 "끝남"으로 센다). 반환은 넘겨받은 node 그대로.
+export function withReady(node, ...promises) {
+  node.vtReady = Promise.allSettled(promises.filter(Boolean));
+  return node;
+}
+
 // 상태 한 줄 — state: 'ok'(조용한 회색 체크) | 'warn'(호박색) | 'err'(빨강) | 없으면 글자만.
 export function statLine(text, state) {
   const el = document.createElement('div');
