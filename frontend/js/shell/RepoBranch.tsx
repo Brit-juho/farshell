@@ -68,7 +68,9 @@ export function RepoBranch(p: RepoBranchProps) {
   const g = () => p.group;
   const lanes = () => g().lanes;
   const waiting = () => Number(g().waiting) || 0;
-  const hasBody = () => !p.collapsed && (lanes().length > 0 || p.hasEnded);
+  // 열었을 때 보일 것(세션 가지·「종료 N」)이 없으면 여닫는 표시와 동작을 없앤다.
+  const foldable = () => lanes().length > 0 || p.hasEnded;
+  const hasBody = () => !p.collapsed && foldable();
   const title = () => (g().repository ? g().name : t('저장소 밖'));
   // 이 가지(lane) 뒤에 다른 가지나 종료 칸이 있는가 — 줄기(x=21)를 계속 그을지.
   const moreAfterLane = (li: number) => li < lanes().length - 1 || p.hasEnded;
@@ -76,7 +78,8 @@ export function RepoBranch(p: RepoBranchProps) {
     <section class="vt-rg" classList={{ outside: !g().repository, unlisted: g().unlisted, collapsed: p.collapsed }} aria-label={title()}>
       {/* 머리 = 접기 버튼 + (저장소면) 「+」 새 세션 버튼. 둘은 형제다 — 버튼 안에 버튼을 두지 않는다. */}
       <div class="vt-rg-headrow">
-      <button type="button" class="vt-rg-row vt-rg-head" aria-expanded={!p.collapsed} onClick={p.onToggle}
+      <button type="button" class="vt-rg-row vt-rg-head" aria-expanded={foldable() ? !p.collapsed : undefined}
+        onClick={() => { if (foldable()) p.onToggle(); }}
         data-tip={g().root || undefined} data-tip-side="right">
         <span class="vt-rg-gut">
           <svg class="vt-rg-ln" aria-hidden="true" innerHTML={headLines(hasBody())} />
@@ -100,7 +103,7 @@ export function RepoBranch(p: RepoBranchProps) {
               </Show>
             </span>
           </Show>
-          <span class="vt-rg-caret" innerHTML={icon('chevron-down', 12, 2)} />
+          <Show when={foldable()}><span class="vt-rg-caret" innerHTML={icon('chevron-down', 12, 2)} /></Show>
         </span>
       </button>
       <Show when={p.onNew && g().repository && g().root}>
