@@ -101,6 +101,10 @@ def _list_dir(p: Path, after: tuple | None = None, limit: int = PAGE_ENTRIES) ->
     None), `capped`(스캔 상한에 닿음), `truncated`(이 응답 밖에 항목이 더 있다 — 옛 클라이언트용 뜻 그대로)."""
     found: list[tuple[tuple, os.DirEntry]] = []
     capped = False
+    # VT_BROWSE_ROOTS 밖의 /tmp 항목은 열람 규칙(내 소유·o+r)을 못 지키면 목록에서도 감춘다.
+    troot = fsguard.tmp_root()
+    in_tmp = bool(troot) and fsguard._is_within(p, troot) \
+        and not any(fsguard._is_within(p, r) for r in fsguard.get_roots())
     try:
         with os.scandir(p) as it:
             for de in it:
@@ -119,6 +123,9 @@ def _list_dir(p: Path, after: tuple | None = None, limit: int = PAGE_ENTRIES) ->
                     continue
                 # 거부 대상은 목록에서도 감춘다. 이름만으로도 정보가 되기 때문.
                 if not is_dir and fsguard._is_denied_name(name):
+                    continue
+                if in_tmp and (fsguard._tmp_entry_denied(name)
+                               or not fsguard.tmp_entry_visible(de.path)):
                     continue
                 found.append((_sort_key(is_dir, name), de))
     except PermissionError:
