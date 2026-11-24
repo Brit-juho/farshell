@@ -531,6 +531,16 @@ tool_result text is found inside it), `img` (base64 images become a short text n
 valid), `big` (a tool output over 32 KB keeps its head and tail). Thinking blocks are counted but not trimmed. It never writes: not the
 database, not a chunk, not a file. Nothing in FarShell applies these rules yet.
 
+**Keeping only this Mac's own conversations.** Replication (settings › 대화 보관, `replication_grants`) copies one Mac's conversations to another:
+messages and conversation records into the `replicas` table, raw chunks into `chunks/`, and the search index (`search.sqlite3`, a disposable projection)
+covers them. Turning replication off is a person's decision (password); it does not remove what was already received. `fsh archive-replicas`
+(`server/session_history/replica_purge.py`) does: `status`/`preview` read only; `apply` refuses while an enabled `receive` grant exists, first writes the
+daily catalog backup, deletes the replica rows in batches and the replication checkpoints, moves the chunk files that only the removed copies use into a
+trash folder (a chunk that a local manifest or a remaining origin uses is kept), waits `--grace` seconds (default 60) and puts back any chunk a local
+manifest started to use meanwhile, deletes the rest and removes the search index so the server rebuilds it from this Mac's messages (searches use the slower
+SQL path until then). `vacuum` returns the freed pages to the file system (the database file never shrinks by itself; it needs the database to itself for
+about a minute). The grants stay as they are. Receiving again later starts from a fresh checkpoint.
+
 New catalog attach paths validate durable runtime IDs; layout v6 retains stopped placeholders and
 rejects same-name replacement runtimes. Legacy name-only snapshots retain compatibility behavior;
 legacy name-only layout adoption remains separate from grant migration. Execution-bound legacy grants

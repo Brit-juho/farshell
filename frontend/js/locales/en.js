@@ -2149,6 +2149,7 @@ window.__VT_I18N = {
   "사용법: fsh migrate-auth [--dry-run|--apply|--verify|--backup|--restore <ts>|--status] [--json]": "Usage: fsh migrate-auth [--dry-run|--apply|--verify|--backup|--restore <ts>|--status] [--json]",
   "사용법: fsh archive-compress [status|preview [--sample N]|apply [--limit-mb N]|expand [--limit-mb N]] [--json]": "Usage: fsh archive-compress [status|preview [--sample N]|apply [--limit-mb N]|expand [--limit-mb N]] [--json]",
   "사용법: fsh archive-compact preview [--sample N] [--idle-days 0,7,30,90] [--top K] [--json]": "Usage: fsh archive-compact preview [--sample N] [--idle-days 0,7,30,90] [--top K] [--json]",
+  "사용법: fsh archive-replicas [status|preview [--origin ID]|apply [--origin ID] [--grace SEC]|vacuum] [--json]": "Usage: fsh archive-replicas [status|preview [--origin ID]|apply [--origin ID] [--grace SEC]|vacuum] [--json]",
   "사용법: fsh device [list|rename <id> <별명>|revoke <id>|prune]": "Usage: fsh device [list|rename <id> <name>|revoke <id>|prune]",
   "사용법: fsh device rename <id앞자리> <별명>": "Usage: fsh device rename <id-prefix> <name>",
   "사용법: fsh device revoke <id앞자리>": "Usage: fsh device revoke <id-prefix>",
