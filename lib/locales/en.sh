@@ -383,6 +383,7 @@ _t_en_lookup() {
     '사용법:') _T_OUT='Usage:' ;;
     '사용법: fsh archive-compact preview [--sample N] [--idle-days 0,7,30,90] [--top K] [--json]') _T_OUT='Usage: fsh archive-compact preview [--sample N] [--idle-days 0,7,30,90] [--top K] [--json]' ;;
     '사용법: fsh archive-compress [status|preview [--sample N]|apply [--limit-mb N]|expand [--limit-mb N]] [--json]') _T_OUT='Usage: fsh archive-compress [status|preview [--sample N]|apply [--limit-mb N]|expand [--limit-mb N]] [--json]' ;;
+    '사용법: fsh archive-replicas [status|preview [--origin ID]|apply [--origin ID] [--grace SEC]|vacuum] [--json]') _T_OUT='Usage: fsh archive-replicas [status|preview [--origin ID]|apply [--origin ID] [--grace SEC]|vacuum] [--json]' ;;
     '사용법: fsh authz <whoami|grants|requests|revoke <id>|audit [--follow] [--since 10m]|panic>') _T_OUT='Usage: fsh authz <whoami|grants|requests|revoke <id>|audit [--follow] [--since 10m]|panic>' ;;
     '사용법: fsh browser <adapters|enable <이름> [--off] [--yes]|tabs|close <id>>') _T_OUT='Usage: fsh browser <adapters|enable <name> [--off] [--yes]|tabs|close <id>>' ;;
     '사용법: fsh clauth [status|which]') _T_OUT='Usage: fsh clauth [status|which]' ;;
