@@ -136,6 +136,9 @@
 /* 종료 — 점선 마디. 「이어서」는 늘 보인다. */
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-end { min-height:28px; align-items:center; font-size:var(--fs-sm); color:var(--color-muted); }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-fold .vt-rg-body { padding:0; }
+/* 「종료 N」 글자는 어떤 폭에서도 한 줄 — 좁으면 오른쪽 「마지막 …」이 먼저 줄어든다(예전엔 글자 칸이 줄어 `종료`/`14` 두 줄로 갈렸다). */
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg-fold .vt-rg-lbl { flex:none; white-space:nowrap; }
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg-fold .vt-rg-tm { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-fold .vt-rg-caret.open { transform:rotate(90deg); }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-hol {
   position:absolute; left:16px; top:9px; width:10px; height:10px; border-radius:50%;
