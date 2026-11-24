@@ -38,76 +38,44 @@ export function findLinkMatches(text) {
 //   - 윗줄 오른쪽에 남는 칸이 HARD_WRAP_MARGIN 이하(폭 끝까지 찼다 — 입력창 꺾임은 1~2칸 남는다)
 //   - 윗줄이 URL 또는 `/` 가 든 경로 글자로 끝난다(마지막 공백 이후 덩어리가 통째로 URL·경로 글자)
 //   - 아랫줄은 들여쓰기 공백 뒤가 곧바로 URL·경로 글자 덩어리로 시작하고, 그 덩어리가 새 `http(s)://` 가 아니다
-const HARD_WRAP_MARGIN = 2;
-const URL_TAIL_RE = /https?:\/\/[A-Za-z0-9\-._~:\/?#@!$&*+,;=%]*$/;
-const PATH_TAIL_RE = /(?:^|\s)([~\w.\-:]*\/[\w.\-\/:]*)$/;
-const CONT_HEAD_RE = /^[A-Za-z0-9\-._~:\/?#@!$&*+,;=%]+/;
+const TAIL = /(?:https?:\/\/[\w\-.~:\/?#@!$&*+,;=%]*|(?:^|\s)[~\w.\-:]*\/[\w.\-\/:]*)$/;
+const HEAD = /^ *([\w\-.~:\/?#@!$&*+,;=%]+)/;
 
-/** 한 행을 [{ch, w, x}] 로 읽는다(전각 뒷칸 제외). 읽을 수 없으면 null. */
-function readCells(line) {
-  if (!line) return null;
-  const cells = [];
-  for (let x = 0; x < line.length; x++) {
-    const cell = line.getCell(x);
-    if (!cell) break;
-    const w = cell.getWidth();
-    if (w === 0) continue;
-    cells.push({ ch: cell.getChars() || ' ', w, x });
-  }
-  return cells;
+// 한 행 → [[글자, 끝 칸]] (전각 뒷칸 제외)
+function cellsOf(l) {
+  const a = [];
+  for (let x = 0, c; x < l.length && (c = l.getCell(x)); x++) if (c.getWidth()) a.push([c.getChars() || ' ', x + c.getWidth()]);
+  return a;
 }
 
-/** upper 행이 앱의 줄바꿈으로 lower 행에 이어지는지(위 조건). */
-function isHardWrap(upper, lower) {
-  if (!upper || !lower || lower.isWrapped) return false;
-  const up = readCells(upper), low = readCells(lower);
-  if (!up || !low) return false;
-  let last = up.length - 1;
-  while (last >= 0 && up[last].ch === ' ') last--;
-  if (last < 0) return false;
-  if (upper.length - (up[last].x + up[last].w) > HARD_WRAP_MARGIN) return false;
-  const upText = up.slice(0, last + 1).map((c) => c.ch).join('');
-  const lowText = low.map((c) => c.ch).join('');
-  const head = CONT_HEAD_RE.exec(lowText.replace(/^ +/, ''));
-  if (!head || /^https?:\/\//i.test(head[0])) return false;
-  if (URL_TAIL_RE.test(upText)) return true;
-  const m = PATH_TAIL_RE.exec(upText);
-  return !!m && !URL_TAIL_RE.test(upText) && !/^https?:/i.test(m[1]);
+/** u 행이 앱의 줄바꿈으로 l 행에 이어지는지(위 조건, 여백 2칸 이하). */
+function hardWrap(u, l) {
+  if (!u || !l || l.isWrapped) return false;
+  const a = cellsOf(u), h = HEAD.exec(cellsOf(l).map((c) => c[0]).join(''));
+  while (a.length && a[a.length - 1][0] === ' ') a.pop();
+  return !!a.length && u.length - a[a.length - 1][1] <= 2 && !!h && !/^https?:\/\//i.test(h[1])
+    && TAIL.test(a.map((c) => c[0]).join(''));
 }
 
 /** 논리 줄(줄바꿈으로 이어진 행들)을 읽는다.
  *  → { text, rows[], cols[], widths[] } — 문자열 한 글자(UTF-16 단위)마다 행(1부터)·칸(0부터)·칸 수. */
 export function readLogicalLine(buf, row) {
   let first = row;
-  while (first > 1) {
-    const l = buf.getLine(first - 1);
-    if (!l) break;
-    if (!l.isWrapped && !isHardWrap(buf.getLine(first - 2), l)) break;
-    first--;
-  }
+  for (let l; first > 1 && (l = buf.getLine(first - 1)) && (l.isWrapped || hardWrap(buf.getLine(first - 2), l)); first--);
   let text = '';
   const rows = [], cols = [], widths = [];
-  for (let r = first; ; r++) {
-    const line = buf.getLine(r - 1);
-    if (!line) break;
-    let hard = false;
-    if (r > first && !line.isWrapped) {
-      hard = isHardWrap(buf.getLine(r - 2), line);
-      if (!hard) break;
-    }
-    if (hard) {
-      // 앱이 꺾은 자리: 윗줄 끝의 공백 패딩과 아랫줄 앞의 들여쓰기는 주소의 일부가 아니다.
-      while (text.endsWith(' ')) { text = text.slice(0, -1); rows.pop(); cols.pop(); widths.pop(); }
-    }
-    let skipIndent = hard;
-    // 마지막 칸 뒤 공백 패딩은 줄 끝이 아니면 의미가 없지만, 이어지는 줄이 있으면 그대로 둔다.
-    for (let x = 0; x < line.length; x++) {
-      const cell = line.getCell(x);
-      if (!cell) break;
+  for (let r = first, line; (line = buf.getLine(r - 1)); r++) {
+    const hard = r > first && !line.isWrapped;
+    if (hard && !hardWrap(buf.getLine(r - 2), line)) break;
+    // 앱이 꺾은 자리: 윗줄 끝 패딩·아랫줄 들여쓰기는 주소가 아니다.
+    while (hard && text.endsWith(' ')) { text = text.slice(0, -1); rows.pop(); cols.pop(); widths.pop(); }
+    let indent = hard;
+    for (let x = 0, cell; x < line.length && (cell = line.getCell(x)); x++) {
       const w = cell.getWidth();
       if (w === 0) continue;               // 전각 문자의 뒷칸
       const ch = cell.getChars() || ' ';
-      if (skipIndent) { if (ch === ' ') continue; skipIndent = false; }
+      if (indent && ch === ' ') continue;
+      indent = false;
       for (let k = 0; k < ch.length; k++) {
         text += ch[k]; rows.push(r); cols.push(x); widths.push(w);
       }

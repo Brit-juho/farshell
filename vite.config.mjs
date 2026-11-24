@@ -88,6 +88,8 @@ function chunkOf(id) {
     // 음성 입력 대상 고정(3KB) — 상태 패널(voice-status)과 설정 > 음성(settings)만 쓴다. 이름이 없으면 두 지연 청크가
     // 함께 쓴다는 이유로 포괄 규칙이 core로 보낸다(리디자인 9단계에 찾았다). voice.js 번들은 별도 빌드라 제 사본을 갖는다.
     if (p.endsWith('/frontend/js/voice/target-pin.js')) return 'voice-status';
+    // 링크 계산(URL·경로 찾기, 앱이 꺾은 줄 잇기)은 링크에 처음 마우스를 올릴 때 받는다 — 초기 페이로드 상한 때문에 분리.
+    if (p.endsWith('/frontend/js/term/link-scan.js')) return 'links';
     // 터치 제스처는 터치 기기에만 로딩한다. 상태/키 인코더는 core 하나를 공유한다.
     if (/\/frontend\/js\/term\/(?:touch(?:-select)?|keybar-ui)\.js$/.test(p)) return 'touch';
     // pane 작업 정보 구독은 main.js가 지연 로딩한다. 초기 부팅에 필요하지 않다.

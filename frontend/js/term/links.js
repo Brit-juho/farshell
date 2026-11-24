@@ -11,8 +11,10 @@ import { getSession } from '../core/store.js';
 import { vtFetch } from '../core/api.js';
 import { relayHost } from '../core/host-route.js';
 import { openFile } from '../panels/viewer-lazy.js';
-import { linksForRow, splitPathLine } from './link-scan.js';
 import { hostOfSession, LOCAL_HOST } from './host-view.js';
+
+// 링크 계산(link-scan)은 첫 화면에 필요 없다 — 링크 위에 처음 마우스를 올릴 때 받는다(초기 페이로드 상한 때문에 지연 로딩).
+const _scan = () => import('./link-scan.js');
 
 // 링크를 연 세션의 호스트(계획 3.5 — 링크는 **그 세션의 호스트**로 연다. 지금 고른 호스트가 아니다).
 // 원격 칸(`remote.host`)이면 그 호스트, 아니면 null(지금 화면의 호스트 — vtFetch가 중계한다).
@@ -50,7 +52,7 @@ async function _getHome(host) {
 }
 
 async function _openLinkAsPath(id, rawText) {
-  const { path: clean, line, col } = splitPathLine(rawText);
+  const { path: clean, line, col } = (await _scan()).splitPathLine(rawText);
   const s = getSession(id);
   const host = _sessionHost(s);
   let full = clean;
@@ -70,19 +72,21 @@ export function wireLinks(id, term) {
   if (typeof term.registerLinkProvider !== 'function') return; // 구버전 xterm 방어
   term.registerLinkProvider({
     provideLinks(bufferLineNumber, callback) {
-      const matches = linksForRow(term.buffer.active, bufferLineNumber);
-      if (!matches.length) { callback(undefined); return; }
-      callback(matches.map((m) => ({
-        range: m.range,
-        text: m.text,
-        activate: () => {
-          if (m.kind === 'url') {
-            window.open(m.text, '_blank', 'noopener,noreferrer');
-          } else {
-            _openLinkAsPath(id, m.text);
-          }
-        },
-      })));
+      _scan().then(({ linksForRow }) => {
+        const matches = linksForRow(term.buffer.active, bufferLineNumber);
+        if (!matches.length) { callback(undefined); return; }
+        callback(matches.map((m) => ({
+          range: m.range,
+          text: m.text,
+          activate: () => {
+            if (m.kind === 'url') {
+              window.open(m.text, '_blank', 'noopener,noreferrer');
+            } else {
+              _openLinkAsPath(id, m.text);
+            }
+          },
+        })));
+      }, () => callback(undefined));
     },
   });
 }
