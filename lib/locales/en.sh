@@ -381,6 +381,7 @@ _t_en_lookup() {
     '사용 중 (서버 이미 실행 중일 수 있음)') _T_OUT='in use (the server may already be running)' ;;
     '사용: prefix + {key}  (default prefix: Ctrl+b)') _T_OUT='Use: prefix + {key}  (default prefix: Ctrl+b)' ;;
     '사용법:') _T_OUT='Usage:' ;;
+    '사용법: fsh archive-compact preview [--sample N] [--idle-days 0,7,30,90] [--top K] [--json]') _T_OUT='Usage: fsh archive-compact preview [--sample N] [--idle-days 0,7,30,90] [--top K] [--json]' ;;
     '사용법: fsh archive-compress [status|preview [--sample N]|apply [--limit-mb N]|expand [--limit-mb N]] [--json]') _T_OUT='Usage: fsh archive-compress [status|preview [--sample N]|apply [--limit-mb N]|expand [--limit-mb N]] [--json]' ;;
     '사용법: fsh authz <whoami|grants|requests|revoke <id>|audit [--follow] [--since 10m]|panic>') _T_OUT='Usage: fsh authz <whoami|grants|requests|revoke <id>|audit [--follow] [--since 10m]|panic>' ;;
     '사용법: fsh browser <adapters|enable <이름> [--off] [--yes]|tabs|close <id>>') _T_OUT='Usage: fsh browser <adapters|enable <name> [--off] [--yes]|tabs|close <id>>' ;;
