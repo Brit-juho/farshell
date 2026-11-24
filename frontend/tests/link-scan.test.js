@@ -70,3 +70,49 @@ test('splitPathLine — `경로:줄:열`을 나눈다(터미널 링크가 그 �
   assert.deepStrictEqual({ ...splitPathLine('~/x/b.ts') }, { path: '~/x/b.ts', line: null, col: null });
   assert.deepStrictEqual({ ...splitPathLine('a/b.js:0:0') }, { path: 'a/b.js', line: null, col: null });
 });
+
+// 앱이 직접 꺾은 줄(Claude Code 실측 — 폭 60: 첫 줄은 폭 끝까지, 둘째 줄은 앞 공백 2칸). isWrapped 가 아니다.
+test('앱이 꺾은 URL(윗줄 폭 끝·아랫줄 들여쓰기)을 한 링크로 잡는다', async () => {
+  const S = await load();
+  const b = buf([
+    mkLine('⏺ https://example.com/very/long/path/segment/abcdefghijklmno', 60),
+    mkLine('  pqrstuvwxyz/0123456789?query=value&other=thing', 60),
+  ]);
+  const full = 'https://example.com/very/long/path/segment/abcdefghijklmnopqrstuvwxyz/0123456789?query=value&other=thing';
+  for (const row of [1, 2]) {
+    const l = S.linksForRow(b, row);
+    assert.strictEqual(l.length, 1);
+    assert.strictEqual(l[0].text, full);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(l[0].range)), { start: { x: 3, y: 1 }, end: { x: 48, y: 2 } });
+  }
+});
+
+test('입력창처럼 윗줄 오른쪽에 1~2칸 남아도 잇고, 3칸 이상 남으면 잇지 않는다', async () => {
+  const S = await load();
+  const head = '  https://example.com/very/long/path/segment/abcdefghijklm';   // 58자
+  const tail = mkLine('  nopqrstuvwxyz/0123456789', 60);
+  const l2 = S.linksForRow(buf([mkLine(head, 60), tail]), 1);
+  assert.strictEqual(l2[0].text, 'https://example.com/very/long/path/segment/abcdefghijklmnopqrstuvwxyz/0123456789');
+  const l5 = S.linksForRow(buf([mkLine(head.slice(0, 55), 60), tail]), 1);
+  assert.strictEqual(l5[0].text, 'https://example.com/very/long/path/segment/abcdefghij');
+});
+
+test('앱이 꺾은 파일 경로도 잇는다', async () => {
+  const S = await load();
+  const b = buf([mkLine('  edit ~/GitHub/side_project/tools/farshell/frontend/js/', 56), mkLine('  term/link-scan.js:42 done', 56)]);
+  const l = S.linksForRow(b, 2);
+  assert.strictEqual(l.length, 1);
+  assert.strictEqual(l[0].text, '~/GitHub/side_project/tools/farshell/frontend/js/term/link-scan.js:42');
+});
+
+test('오탐 방지: 아랫줄이 새 URL·문장이면 잇지 않는다', async () => {
+  const S = await load();
+  const full = (str) => mkLine(str, [...str].length);   // 폭 끝까지 찬 줄
+  const u = 'see https://example.com/' + 'a'.repeat(30);
+  const a = S.linksForRow(buf([full(u), mkLine('https://other.example/b', 60)]), 1);
+  assert.deepStrictEqual([...a.map((x) => x.text)], [u.slice(4)]);
+  const b = S.linksForRow(buf([full(u), mkLine('│ 이어지는 설명 문장', 60)]), 1);
+  assert.deepStrictEqual([...b.map((x) => x.text)], [u.slice(4)]);
+  const c = S.linksForRow(buf([mkLine('끝에 https://example.com/x', 60), mkLine('다음 줄 abc', 60)]), 1);
+  assert.deepStrictEqual([...c.map((x) => x.text)], ['https://example.com/x']);
+});
