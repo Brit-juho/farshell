@@ -50,6 +50,7 @@ function renderAgentSection() {
   const frag = document.createDocumentFragment();
   const { body, aside } = renderAgentsSection();
   frag.appendChild(group(t('감지 방법과 정확도'), body, aside));
+  frag.vtReady = body.vtReady;
   return frag;
 }
 
@@ -164,7 +165,12 @@ function renderMobileHome(body, focusSearch = false) {
   if (focusSearch) Promise.resolve().then(() => home.querySelector('.vt-set-search-input')?.focus());
 }
 
+// 섹션이 처음 그릴 때 시작한 조회(`withReady`)를 기다리는 최대 시간. 지나면 지금 모습 그대로 열고 나머지는 도착하는 대로 채운다.
+const READY_CAP_MS = 1500;
+let _renderGen = 0;
+
 function rerender(focusTarget = null) {
+  const gen = ++_renderGen;
   const body = document.getElementById('vt-set-body');
   if (!body) return;
   // 「음성」 섹션을 떠나면 clients.js 폴링 타이머를 반드시 끊는다(rail.js의
@@ -199,16 +205,38 @@ function rerender(focusTarget = null) {
   const p = document.createElement('p'); p.className = 'vt-set-description'; p.textContent = section.description;
   intro.append(h, p);
   content.appendChild(intro);
-  content.appendChild(section.custom ? section.custom() : renderItems(section));
+  const node = section.custom ? section.custom() : renderItems(section);
+  const ready = node.vtReady;   // appendChild가 DocumentFragment를 비워도 속성은 남는다
+  content.appendChild(node);
   body.append(nav, content);
   // 좁은 화면에는 미리보기 칸을 두지 않는다(CSS가 숨기지만 구독도 아예 만들지 않는다).
   const preview = isCompact() ? null : createSectionPreview(section.id, content);
   if (preview) { body.appendChild(preview.el); _previewDispose = preview.dispose; }
-  if (focusTarget !== null) Promise.resolve().then(() => {
+  const focusNow = () => {
     const target = focusTarget && Array.from(content.querySelectorAll('.vt-set-label, .vt-set-group-title'))
       .find((el) => el.firstChild?.textContent === focusTarget);
     if (target) { target.tabIndex = -1; target.focus(); target.scrollIntoView?.({ block: 'center' }); }
     else h.focus();
+  };
+  if (!ready) {
+    if (focusTarget !== null) Promise.resolve().then(focusNow);
+    return;
+  }
+  // 조회가 도착할 때마다 줄이 바뀌어 출렁이지 않게, 본문은 숨겨 둔 채(이미 그려져 있다) 다 끝나면 한 번에 보여 준다.
+  const note = document.createElement('div');
+  note.className = 'vt-set-loadnote'; note.setAttribute('role', 'status');
+  const spin = document.createElement('span'); spin.className = 'vt-set-spin'; spin.setAttribute('aria-hidden', 'true');
+  note.append(spin, document.createTextNode(t('불러오는 중…')));
+  content.classList.add('is-loading');
+  content.appendChild(note);
+  let timer = 0;
+  const cap = new Promise((resolve) => { timer = setTimeout(resolve, READY_CAP_MS); });
+  Promise.race([ready, cap]).then(() => {
+    clearTimeout(timer);
+    if (gen !== _renderGen) return;   // 그 사이 다른 섹션으로 옮겼다
+    note.remove();
+    content.classList.remove('is-loading');
+    if (focusTarget !== null) focusNow();
   });
 }
 

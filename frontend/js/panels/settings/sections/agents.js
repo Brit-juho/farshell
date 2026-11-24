@@ -1,5 +1,5 @@
 import { vtFetch } from '../../../core/api.js';
-import { statusLine } from '../controls.js';
+import { statusLine, withReady } from '../controls.js';
 import { t } from '../../../core/i18n.js';
 import { icon } from '../../../ui/icons.js';
 
@@ -43,7 +43,7 @@ export function renderAgentsSection() {
     tableHost.replaceChildren(renderCoverageTable(rows));
   }).catch(() => { status.hidden = false; status.textContent = t('커버리지 정보를 확인할 수 없습니다.'); });
   refresh.addEventListener('click', load);
-  load();
+  withReady(frag, load());
 
   return { body: frag, aside: refresh };
 }

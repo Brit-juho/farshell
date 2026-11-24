@@ -498,8 +498,6 @@ export function renderVoiceInput() {
   const manageGroup = group(t('내려받은 파일'), manageEl);
   // 호출부가 구역 순서를 정할 수 있게 둘로 나눠 돌려준다.
   const input = group(t('음성 입력(받아쓰기)'), frag);
-  reload();
-  refreshStatus();
-  refreshManage();
-  return { input, manage: manageGroup };
+  const ready = Promise.allSettled([reload(), refreshStatus(), refreshManage()]);
+  return { input, manage: manageGroup, ready };
 }

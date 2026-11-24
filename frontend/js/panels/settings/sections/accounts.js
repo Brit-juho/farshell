@@ -1,4 +1,4 @@
-import { row, group, statusLine } from '../controls.js';
+import { row, group, statusLine, withReady } from '../controls.js';
 import { t } from '../../../core/i18n.js';
 import { icon } from '../../../ui/icons.js';
 import { isRelayed } from '../../../core/host-route.js';
@@ -108,6 +108,5 @@ export function renderAccountsSection() {
   // 기본 계정이 상태 막대 칩·선택기에서 바뀌면 이 화면도 다시 읽는다. 화면을 떠나면(host가 DOM에서 빠지면) 스스로 해제한다.
   const onChanged = () => { if (!host.isConnected) { window.removeEventListener(ACCOUNTS_CHANGED, onChanged); return; } load(false); };
   window.addEventListener(ACCOUNTS_CHANGED, onChanged);
-  load(true);
-  return frag;
+  return withReady(frag, load(true));
 }

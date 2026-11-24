@@ -2,7 +2,7 @@ import { renderSessionVoice, renderVoiceDefaults } from './voice-session.js';
 import { vtFetch } from '../../../core/api.js';
 import { activeSessionId, getSession } from '../../../core/store.js';
 import { mountClients } from '../../../layout/clients.js';
-import { row, statLine, toast, group, boolControl, selectControl } from '../controls.js';
+import { row, statLine, toast, group, withReady, boolControl, selectControl } from '../controls.js';
 import { scopeOf } from '../../../core/settings.js';
 import { bindPinSelect } from '../../../voice/target-pin.js';
 import { renderVoiceInput, cleanupVoiceModels } from './voice-models.js';
@@ -53,7 +53,7 @@ export function renderVoiceSection() {
   const pushStatus = statLine(t('확인 중…'));
   notif.append(pushRow, pushStatus);
   refreshPushLabel();
-  vtFetch('/api/push/status').then((r) => {
+  const pushReady = vtFetch('/api/push/status').then((r) => {
     if (!r) return;
     pushStatus.vtSetText(r.available
       ? t('구독 {n}대 · VAPID {vapid}', { n: r.subscriptions, vapid: r.configured ? t('확인됨') : t('미설정') })
@@ -137,5 +137,5 @@ export function renderVoiceSection() {
   if (activeTmux) _voiceClientsCleanup = mountClients(clientsHost, activeTmux, activeSess && activeSess.remote, activeSessionId());
 
   frag.append(group(t('알림'), notif), sessionVoice.element, defaults.element, vm.input, vm.manage, group(t('데스크톱 음성'), desk));
-  return frag;
+  return withReady(frag, pushReady, sessionVoice.ready, defaults.ready, vm.ready);
 }
