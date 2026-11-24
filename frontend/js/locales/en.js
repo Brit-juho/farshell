@@ -3511,6 +3511,7 @@ window.__VT_I18N = {
   "허용 목록(VT_ACCESS_SPEC): {spec}": "allow list (VT_ACCESS_SPEC): {spec}",
   "허용된 권한": "Granted access",
   "허용된 루트 밖의 경로입니다": "The path is outside the allowed roots",
+  "/tmp 에서는 내 소유이고 다른 사용자도 읽을 수 있는 파일·폴더만 열 수 있습니다": "Under /tmp only files and folders that you own and other users can read can be opened",
   "헤더 인증이 있는 서버는 도구 간 변환을 지원하지 않습니다": "Servers with header auth can't be converted between tools",
   "헬퍼 빌드가 시간 안에 끝나지 않았습니다": "Building the helper timed out",
   "헬퍼 빌드에 실패했습니다: {tail}": "Couldn't build the helper: {tail}",
