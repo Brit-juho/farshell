@@ -49,7 +49,7 @@ It is **not** built to defend against:
 2. Prefer Tailscale (`fsh start --network tailscale`) when you do not need the public internet.
 3. If you do use the public tunnel, set `VT_TUNNEL_ALLOWED_MAIL` and use `fsh device list` / `fsh device revoke`
    to prune devices you no longer own.
-4. Keep `VT_BROWSE_ROOTS` as narrow as you can; the default is `~/GitHub`.
+4. Keep `VT_BROWSE_ROOTS` as narrow as you can; the default is `~/GitHub`. `/tmp` is also readable (read-only, only files owned by the server user and readable by others, never `0600` files); set `VT_BROWSE_TMP=0` to close it.
 5. Run `fsh doctor` after changes and update to the latest release for security fixes.
 
 ## Verifying a download

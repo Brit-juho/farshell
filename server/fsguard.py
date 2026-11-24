@@ -523,6 +523,70 @@ def _claude_worktree_at(p: Path) -> Optional[int]:
     return None
 
 
+# --- /tmp 열람(내 소유·읽기 전용) --------------------------------------------
+# VT_BROWSE_ROOTS 밖이지만 `/tmp` 는 에이전트·도구의 산출물(이미지·로그)이 자주 놓이는 곳이라 따로 연다.
+# 공용 폴더라 경계 전체를 열지 않고, 경로의 모든 구성요소가 아래를 만족할 때만 허용한다.
+#   - 내(서버 사용자) 소유 (다른 사용자·root 파일 제외)
+#   - 다른 사용자도 읽을 수 있는 권한 (파일 o+r, 폴더 o+r+x) — 도구가 비밀 파일을 0600 으로 만드는 습관을 이용
+#   - 일반 파일·폴더만 (소켓·FIFO 제외)
+#   - 내부 상태 폴더(TMP_DENY_*) 제외, 기존 거부 목록·점 폴더 규칙은 그대로
+# resolve() 뒤 검사라 /tmp 밖을 가리키는 심링크는 걸러진다. `VT_BROWSE_TMP=0` 이면 끈다.
+# get_roots()(쓰기 경계·워크트리 등 다른 소비자)는 건드리지 않는다 — 열람 판정(resolve_under_roots)에만 쓴다.
+TMP_DENY_NAMES = {"vt-pids", "vt-uploads"}
+TMP_DENY_PREFIXES = ("claude-", "tmux-", "pytest-of-")
+
+
+def tmp_root() -> Optional[Path]:
+    """`/tmp` 열람 경계(심링크를 푼 실제 경로). 꺼져 있거나 없으면 None."""
+    if os.environ.get("VT_BROWSE_TMP", "1").strip().lower() in ("0", "off", "false", "no"):
+        return None
+    try:
+        root = Path("/tmp").resolve()
+    except (OSError, RuntimeError):
+        return None
+    return root if root.is_dir() else None
+
+
+def _tmp_entry_denied(name: str) -> bool:
+    return name in TMP_DENY_NAMES or name.startswith(TMP_DENY_PREFIXES)
+
+
+def tmp_entry_visible(path: str, st=None) -> bool:
+    """`/tmp` 바로 아래·하위 항목 하나(심링크 따라가지 않음)가 열람 규칙을 만족하는지. 목록 표시용."""
+    import stat
+    try:
+        st = st or os.lstat(path)
+    except OSError:
+        return False
+    if st.st_uid != os.getuid():
+        return False
+    if stat.S_ISDIR(st.st_mode):
+        return st.st_mode & 0o005 == 0o005
+    return stat.S_ISREG(st.st_mode) and bool(st.st_mode & 0o004)
+
+
+def _check_tmp(p: Path, root: Path) -> Optional[str]:
+    """resolve 된 p(root 안)가 `/tmp` 규칙을 만족하는지 — 거부 사유 또는 None."""
+    try:
+        rel = p.relative_to(root).parts
+    except ValueError:
+        return tr("허용된 루트 밖의 경로입니다")
+    if rel and _tmp_entry_denied(rel[0]):
+        return tr("거부된 디렉토리: {name}", name=rel[0])
+    cur = root
+    for part in rel:
+        cur = cur / part
+        try:
+            st = os.lstat(cur)
+        except FileNotFoundError:
+            return None          # 없는 경로 — 존재 확인은 호출부(404)
+        except OSError:
+            return tr("읽기 권한이 없습니다")
+        if not tmp_entry_visible(str(cur), st):
+            return tr("/tmp 에서는 내 소유이고 다른 사용자도 읽을 수 있는 파일·폴더만 열 수 있습니다")
+    return None
+
+
 def resolve_under_roots(raw_path: str, *, check_hidden: bool = True, git_meta: bool = False) -> Path:
     """사용자가 준 경로를 검증해 안전한 절대경로로 바꾼다.
 
@@ -547,7 +611,17 @@ def resolve_under_roots(raw_path: str, *, check_hidden: bool = True, git_meta: b
     except (OSError, RuntimeError) as e:
         raise FsDenied(tr("경로 해석 실패: {error}", error=e)) from e
 
-    if not any(_is_within(p, root) for root in roots):
+    match_root = None
+    if any(_is_within(p, root) for root in roots):
+        match_root = _matching_root(p, roots)
+    else:
+        troot = tmp_root()
+        if troot is not None and _is_within(p, troot):
+            denied = _check_tmp(p, troot)
+            if denied:
+                raise FsDenied(denied)
+            match_root = troot
+    if match_root is None:
         raise FsDenied(tr("허용된 루트 밖의 경로입니다"))
 
     skip = _claude_worktree_at(p) if git_meta else None
@@ -556,7 +630,7 @@ def resolve_under_roots(raw_path: str, *, check_hidden: bool = True, git_meta: b
         raise FsDenied(denied)
 
     if check_hidden:
-        denied = _check_hidden_state_dir(p, _matching_root(p, roots), skip)
+        denied = _check_hidden_state_dir(p, match_root, skip)
         if denied:
             raise FsDenied(denied)
 
