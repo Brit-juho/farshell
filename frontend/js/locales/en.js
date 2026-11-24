@@ -2147,6 +2147,7 @@ window.__VT_I18N = {
   "최근 24h 토큰 사용 {n}건": "{n} machine-token requests in the last 24h",
   "unix socket 으로만 호출자를 확인할 수 있습니다": "The caller can only be identified over the unix socket",
   "사용법: fsh migrate-auth [--dry-run|--apply|--verify|--backup|--restore <ts>|--status] [--json]": "Usage: fsh migrate-auth [--dry-run|--apply|--verify|--backup|--restore <ts>|--status] [--json]",
+  "사용법: fsh archive-compress [status|preview [--sample N]|apply [--limit-mb N]|expand [--limit-mb N]] [--json]": "Usage: fsh archive-compress [status|preview [--sample N]|apply [--limit-mb N]|expand [--limit-mb N]] [--json]",
   "사용법: fsh device [list|rename <id> <별명>|revoke <id>|prune]": "Usage: fsh device [list|rename <id> <name>|revoke <id>|prune]",
   "사용법: fsh device rename <id앞자리> <별명>": "Usage: fsh device rename <id-prefix> <name>",
   "사용법: fsh device revoke <id앞자리>": "Usage: fsh device revoke <id-prefix>",

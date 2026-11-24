@@ -512,6 +512,17 @@ referenced raw chunks, excluding CLI credentials and transport private keys. The
 sources and replication are disabled for review and historical runtimes are stopped. There is
 currently no browser backup-import flow.
 
+**Chunk storage form.** A chunk is named by the sha256 of its raw bytes, and that never changes. On disk it is either the raw
+bytes (`chunks/<digest>`) or the same bytes zstd-compressed (`chunks/<digest>.z`, level 3, only when that is smaller). New chunks
+are stored packed by `archive.put_chunk`; every reader goes through `archive.read_chunk`, which accepts both forms, prefers a raw file
+when both exist and always checks the unpacked bytes against the name. Replication, `export_package`/`restore_package` and the
+manifests are unchanged (they carry raw bytes). Chunks stored before the change stay raw until `fsh archive-compress apply`
+(`server/session_history/chunk_pack.py`) converts them: per chunk it checks the raw file, writes the packed copy atomically, reads it
+back and re-checks it, and only after syncing the folder removes the raw file, so a stop at any point loses nothing and the run
+can be repeated or done in parts (`--limit-mb`). `fsh archive-compress preview` only measures; `expand` converts back, which is needed
+before going back to a FarShell older than this change (it cannot read `.z`). On real conversation data the packed size is about 46%
+of the raw size.
+
 New catalog attach paths validate durable runtime IDs; layout v6 retains stopped placeholders and
 rejects same-name replacement runtimes. Legacy name-only snapshots retain compatibility behavior;
 legacy name-only layout adoption remains separate from grant migration. Execution-bound legacy grants

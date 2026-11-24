@@ -151,7 +151,7 @@ def receive(peer, envelope):
             block = base64.b64decode(data.get('data', ''), validate=True)
         except (ValueError, TypeError):
             raise Refused('invalid_chunk', 400) from None
-        if not archive.chunk_path(digest).exists():
+        if not archive.chunk_exists(digest):
             archive._quota(replica=True,additional=len(block))
         if hashlib.sha256(block).hexdigest() != digest or archive.put_chunk(block) != digest:
             raise Refused('chunk_corrupt', 400)

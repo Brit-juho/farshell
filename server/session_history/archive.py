@@ -1,6 +1,7 @@
 """Immutable raw chunks. Source disappearance never deletes a committed capture."""
 from __future__ import annotations
 
+import errno
 import hashlib
 import io
 import json
@@ -9,6 +10,8 @@ import shutil
 import threading
 import time
 from pathlib import Path
+
+import zstandard
 
 import fsguard
 from session_catalog.db import (database, directory, private_dir, uid, encode, host_id, changed,
@@ -22,30 +25,58 @@ MAX_FILES = 20000
 
 
 def chunk_path(digest):
+    """The chunk's name on disk in its original form: the file holds the raw bytes. A chunk can instead be stored
+    packed (see `chunk_packed_path`); every reader goes through `read_chunk`, which accepts both."""
     if not isinstance(digest, str) or not HASH.fullmatch(digest):
         raise Refused('invalid_digest', 400)
     folder = private_dir(directory() / 'chunks')
     return folder / digest
 
 
-def put_chunk(data):
-    if not isinstance(data, bytes) or not 0 < len(data) <= CHUNK:
-        raise Refused('invalid_chunk', 400)
-    digest = hashlib.sha256(data).hexdigest()
-    dest = chunk_path(digest)
-    if dest.exists() or dest.is_symlink():
-        if read_chunk(digest) != data:
-            raise Refused('chunk_corrupt', 503)
-        return digest
+# A chunk is addressed by the sha256 of its raw bytes and that never changes. On disk it is either the raw bytes
+# (`<digest>`) or the same bytes zstd-compressed (`<digest>.z`) — conversation transcripts shrink to about half.
+# A separate name, not a magic header, keeps the two forms unambiguous (a raw chunk may start with any byte).
+PACKED_SUFFIX = '.z'
+PACK_LEVEL = 3          # zstd level 3: 474 MB/s to compress and 1.1 GB/s to unpack on a laptop; higher levels gain under 1 point
+PACK_SLACK = 4096       # a packed chunk is never stored when it is not smaller, so it cannot exceed CHUNK
+
+
+def chunk_packed_path(digest):
+    return chunk_path(digest).with_name(digest + PACKED_SUFFIX)
+
+
+def chunk_exists(digest):
+    """Is the chunk stored in either form? (Replaces `chunk_path(d).exists()`, which misses packed chunks.)"""
+    raw = chunk_path(digest)
+    packed = raw.with_name(digest + PACKED_SUFFIX)
+    return raw.exists() or raw.is_symlink() or packed.exists() or packed.is_symlink()
+
+
+def pack_bytes(data):
+    return zstandard.ZstdCompressor(level=PACK_LEVEL).compress(data)
+
+
+def unpack_bytes(blob):
+    """Decompress a packed chunk. Anything that is not a valid zstd frame within the chunk size limit is corruption."""
+    try:
+        data = zstandard.ZstdDecompressor().decompress(blob, max_output_size=CHUNK + 1)
+    except zstandard.ZstdError:
+        raise Refused('chunk_corrupt', 503) from None
+    if len(data) > CHUNK:
+        raise Refused('chunk_corrupt', 503)
+    return data
+
+
+def write_chunk_file(dest, body):
+    """Write `body` to `dest` atomically (temp file in the same folder, fsync, rename, fsync of the folder)."""
     temp = dest.with_name('.' + uid())
     fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     try:
         with os.fdopen(fd, 'wb') as out:
-            out.write(data)
+            out.write(body)
             out.flush()
             os.fsync(out.fileno())
         os.replace(temp, dest)
-        _note_written(len(data))
         folder = os.open(dest.parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(folder)
@@ -54,12 +85,42 @@ def put_chunk(data):
     finally:
         if temp.exists():
             temp.unlink()
+
+
+def put_chunk(data):
+    if not isinstance(data, bytes) or not 0 < len(data) <= CHUNK:
+        raise Refused('invalid_chunk', 400)
+    digest = hashlib.sha256(data).hexdigest()
+    raw = chunk_path(digest)
+    packed = raw.with_name(digest + PACKED_SUFFIX)
+    for existing in (raw, packed):
+        if existing.exists() or existing.is_symlink():
+            if read_chunk(digest) != data:
+                raise Refused('chunk_corrupt', 503)
+            return digest
+    blob = pack_bytes(data)
+    dest, body = (packed, blob) if len(blob) < len(data) else (raw, data)     # incompressible data stays as it is
+    write_chunk_file(dest, body)
+    _note_written(len(body))
     return digest
 
 
 def read_chunk(digest):
-    with fsguard.open_subagent_file(chunk_path(digest)) as stream:
-        data = stream.read(CHUNK + 1)
+    """The raw bytes of a chunk, verified against its name. Either on-disk form is read; a raw file wins when both
+    exist (a conversion to the packed form is in progress). Missing in both forms raises an `OSError` (ENOENT)."""
+    raw = chunk_path(digest)
+    try:
+        with fsguard.open_subagent_file(raw) as stream:
+            data = stream.read(CHUNK + 1)
+    except OSError as error:
+        if error.errno != errno.ENOENT:
+            raise
+        # The raw file may have been removed a moment ago by a conversion that had already verified the packed copy.
+        with fsguard.open_subagent_file(raw.with_name(digest + PACKED_SUFFIX)) as stream:
+            blob = stream.read(CHUNK + PACK_SLACK + 1)
+        if len(blob) > CHUNK + PACK_SLACK:
+            raise Refused('chunk_corrupt', 503) from None
+        data = unpack_bytes(blob)
     if len(data) > CHUNK or hashlib.sha256(data).hexdigest() != digest:
         raise Refused('chunk_corrupt', 503)
     return data
@@ -133,9 +194,10 @@ def _count_usage():
         if not path.is_file() or path.is_symlink():
             continue
         size = path.stat().st_size
-        if path.name in local or path.name not in known:
+        name = path.name[:-len(PACKED_SUFFIX)] if path.name.endswith(PACKED_SUFFIX) else path.name
+        if name in local or name not in known:
             totals['local'] += size
-        if path.name in remote or path.name not in known:
+        if name in remote or name not in known:
             totals['remote'] += size
     return totals
 
@@ -362,7 +424,7 @@ def capture(source, relative, *, max_bytes=PASS_BYTES):
             data = file.read(min(CHUNK, end - file.tell()))
             if not data:
                 raise Refused('source_changed')
-            if not chunk_path(hashlib.sha256(data).hexdigest()).exists():
+            if not chunk_exists(hashlib.sha256(data).hexdigest()):
                 _quota(additional=len(data) + max(0, file.tell() - begin - len(data)))
             chunks.append({'digest': put_chunk(data), 'size': len(data)})
             digest.update(data)

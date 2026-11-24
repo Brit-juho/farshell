@@ -590,7 +590,7 @@ def test_quota_full_count_is_cached_but_new_chunks_count_at_once(private_history
     archive._quota()
     archive._quota()
     assert len(counted) == 1  # one full count per window, not one per call
-    archive.put_chunk(b'x' * 200)  # an orphan chunk counts for both roles
+    archive.put_chunk(os.urandom(200))  # an orphan chunk counts for both roles (random bytes: stored as they are — a compressible chunk is counted by its packed size)
     with pytest.raises(Refused, match='archive_quota_reached'):
         archive._quota()
     assert len(counted) == 1  # refused from the running total, without recounting

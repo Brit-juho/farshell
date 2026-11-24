@@ -2217,6 +2217,7 @@ cmd_help() {
     fsh queue               Prompt queue — stack instructions while the agent is busy and feed them in order
     fsh delegate            List/close agent delegations (ls|close <id>)
     fsh migrate-auth        Migrate permissions to the authz store (--dry-run|--apply|--verify|--status)
+    fsh archive-compress    Store the conversation copy compressed (status|preview|apply|expand)
     fsh authz               Inbox and permissions, read-only (whoami|grants|requests|audit|revoke|panic)
     fsh lease               Folder leases — mark a path as "mine" (ls|acquire|renew|release|check|guard)
     fsh pair                Two sessions working one bundle together — driver/navigator (start|code|join|status|handoff|accept|end|revoke)
@@ -2293,6 +2294,7 @@ HELP_EN
     fsh queue               프롬프트 큐 — 작업 중일 때 지시를 쌓아뒀다 순차 투입
     fsh delegate            에이전트 위임 목록·닫기 (ls|close <id>)
     fsh migrate-auth        권한 저장소 이전 (--dry-run|--apply|--verify|--status)
+    fsh archive-compress    대화 사본 압축 저장으로 변환 (status|preview|apply|expand)
     fsh authz               승인함·권한 조회 (whoami|grants|requests|audit|revoke|panic) — 승인·회수는 웹/폰에서
     fsh lease               폴더 lease — 이 경로는 내가 쓰는 중 (ls|acquire|renew|release|check|guard)
     fsh pair                두 세션이 한 작업 묶음을 함께 — driver/navigator (start|code|join|status|handoff|accept|end|revoke)
@@ -2735,6 +2737,22 @@ cmd_delegate() {
 
 # 권한 저장소 이전 — 옛 grant·peer 등급·위임을 ~/.vt/authz/ 로 옮긴다.
 # 서버 없이 동작한다(저장소 파일·tmux 만 읽는다). 기본은 --dry-run(아무것도 쓰지 않음).
+cmd_archive_compress() {
+  if [ -z "${VT_PYTHON:-}" ] || [ ! -x "$VT_PYTHON" ]; then
+    echo "  ✗ $(_t "VT_PYTHON 미설정/실행불가. 'fsh doctor'로 확인하세요.")"
+    return 1
+  fi
+  [ $# -eq 0 ] && set -- status
+  case "$1" in
+    status|preview|apply|expand)
+      (cd "$VT_DIR/server" && "$VT_PYTHON" -m session_history.chunk_pack "$@")
+      ;;
+    *)
+      echo "$(_t '사용법: fsh archive-compress [status|preview [--sample N]|apply [--limit-mb N]|expand [--limit-mb N]] [--json]')"
+      return 1 ;;
+  esac
+}
+
 cmd_migrate_auth() {
   if [ -z "${VT_PYTHON:-}" ] || [ ! -x "$VT_PYTHON" ]; then
     echo "  ✗ $(_t "VT_PYTHON 미설정/실행불가. 'fsh doctor'로 확인하세요.")"
@@ -5884,6 +5902,7 @@ case "${1:-help}" in
   queue)    shift; cmd_queue "$@" ;;
   delegate) shift; cmd_delegate "$@" ;;
   migrate-auth) shift; cmd_migrate_auth "$@" ;;
+  archive-compress) shift; cmd_archive_compress "$@" ;;
   authz)    shift; cmd_authz "$@" ;;
   lease)    shift; cmd_lease "$@" ;;
   pair)     shift; cmd_pair "$@" ;;
