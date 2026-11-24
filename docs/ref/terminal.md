@@ -523,6 +523,14 @@ can be repeated or done in parts (`--limit-mb`). `fsh archive-compress preview` 
 before going back to a FarShell older than this change (it cannot read `.z`). On real conversation data the packed size is about 46%
 of the raw size.
 
+**Trim preview (read only).** `fsh archive-compact preview` (`server/session_history/compact_preview.py`, rules in `compact_rules.py`) rebuilds
+each stored conversation from its chunks, applies candidate trimming rules in memory and reports the size each would leave (compressed in
+256 KB pieces like the archive), what would disappear, the saving by "idle for N days" group (only conversations whose original file is
+still on disk) and the conversations that shrink most. Rules: `tur` (Claude's `toolUseResult` when a stretch of the message's own
+tool_result text is found inside it), `img` (base64 images become a short text note, an image block becomes a text block so the line stays
+valid), `big` (a tool output over 32 KB keeps its head and tail). Thinking blocks are counted but not trimmed. It never writes: not the
+database, not a chunk, not a file. Nothing in FarShell applies these rules yet.
+
 New catalog attach paths validate durable runtime IDs; layout v6 retains stopped placeholders and
 rejects same-name replacement runtimes. Legacy name-only snapshots retain compatibility behavior;
 legacy name-only layout adoption remains separate from grant migration. Execution-bound legacy grants
