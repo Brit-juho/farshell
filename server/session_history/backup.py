@@ -14,6 +14,12 @@ from session_catalog.db import database, directory, private_dir, private_file, u
 from .archive import chunk_path, read_chunk
 
 
+# How many daily catalog snapshots to keep. Each one is a full copy of the catalog database (about 0.9 GB on a large
+# store), so a week of them took 6 GB of mostly identical bytes. One is enough to roll back a damaged database; the raw
+# transcript chunks and the CLI's own files are separate and are not touched by this rotation.
+KEEP_SNAPSHOTS = 1
+
+
 def snapshot():
     folder = private_dir(directory() / 'backups')
     temp, dest = folder / ('.' + uid()), folder / (str(time.time_ns()) + '.sqlite3')
@@ -38,7 +44,8 @@ def snapshot():
             set_setting(db, 'last_backup', {'created': time.time(), 'file': dest.name})
         # Only our generated snapshots, never raw transcript chunks, are rotated.
         backups = sorted(p for p in folder.glob('*.sqlite3') if p.is_file() and not p.is_symlink())
-        for path in backups[:-7]:
+        # The new snapshot was verified and moved into place above, so it is the newest and always survives.
+        for path in backups[:-KEEP_SNAPSHOTS]:
             path.unlink()
         return dest
     finally:

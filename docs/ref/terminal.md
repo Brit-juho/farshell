@@ -506,7 +506,7 @@ Receiver records never become local executions.
 Protocol tests cover large projections, lost ACKs and revoked grants; these are not evidence of
 an operational central host connection.
 
-Daily consistent catalog snapshots retain seven generations. Export includes local and replicated
+Daily consistent catalog snapshots keep only the newest one (`backup.KEEP_SNAPSHOTS`; it was seven until 2026-11 — each is a full copy of the catalog database, so seven of them were mostly identical bytes). Export includes local and replicated
 referenced raw chunks, excluding CLI credentials and transport private keys. The offline
 `session_history.backup.restore_package` function restores only into an absent catalog directory;
 sources and replication are disabled for review and historical runtimes are stopped. There is
