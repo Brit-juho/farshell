@@ -7,7 +7,7 @@ import json
 import os
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, Response
 from starlette.background import BackgroundTask
 
 import auth
@@ -40,10 +40,36 @@ async def _body(request, allowed):
     return value
 
 
-async def _call(fn, *args, **kwargs):
+def _etag(body: bytes) -> str:
+    """응답 내용의 해시 — 내용이 같으면 같고 다르면 다르다(약한 ETag: 압축 여부와 무관하게 같은 내용)."""
+    return 'W/"' + hashlib.sha256(body).hexdigest()[:20] + '"'
+
+
+def _etag_matches(header: str | None, etag: str) -> bool:
+    """`If-None-Match` 값(쉼표 목록·`W/` 접두·`*`)이 이 ETag와 같은가 — 약한 비교."""
+    if not header:
+        return False
+    want = etag.removeprefix('W/')
+    for part in header.split(','):
+        part = part.strip()
+        if part == '*' or part.removeprefix('W/') == want:
+            return True
+    return False
+
+
+async def _call(fn, *args, _request=None, **kwargs):
+    """`_request`를 주면 GET 응답에 내용 해시 ETag를 달고, 상대가 이미 같은 내용을 갖고 있으면(`If-None-Match`) 본문 없는
+    304로 답한다. 5초마다 같은 목록 48KB를 다시 보내던 것을 바뀐 때만 보내려는 것이다. `Cache-Control: no-store`는 그대로다 —
+    브라우저가 이 사람 전용 기록을 디스크에 두지 못하게, 상대(화면)가 마지막 응답을 메모리에 들고 직접 `If-None-Match`를 보낸다."""
     try:
         result = await asyncio.to_thread(fn, *args, **kwargs)
-        return JSONResponse(result, headers={'Cache-Control': 'no-store'})
+        response = JSONResponse(result, headers={'Cache-Control': 'no-store'})
+        if _request is not None and _request.method == 'GET':
+            etag = _etag(response.body)
+            if _etag_matches(_request.headers.get('if-none-match'), etag):
+                return Response(status_code=304, headers={'ETag': etag, 'Cache-Control': 'no-store'})
+            response.headers['ETag'] = etag
+        return response
     except db.Refused as error:
         return JSONResponse({'error': error.code}, status_code=error.status)
     except (OSError, fsguard.FsDenied):
@@ -51,11 +77,11 @@ async def _call(fn, *args, **kwargs):
 
 
 @router.get('/api/session-catalog')
-async def catalog(limit: int = 50, after: str | None = None, archived: bool = False, order: str = 'id',
+async def catalog(request: Request, limit: int = 50, after: str | None = None, archived: bool = False, order: str = 'id',
                   cursor: str | None = None, q: str | None = None, project: str | None = None, meta: bool = True):
     # 이 라우터는 이 맥의 사람 세션 전용이고 중계되지 않는다 — 마지막 지시(이 맥 전용)를 싣는다.
     return await _call(db.snapshot, limit=limit, after=after, archived=archived, order=order, cursor=cursor,
-                       q=q, project=project, meta=meta, local=True)
+                       q=q, project=project, meta=meta, local=True, _request=request)
 
 
 @router.get('/api/session-history')
@@ -75,8 +101,8 @@ async def session_detail(session_id: str):
 
 # 저장소 = CLI를 켠 곳(session_catalog/projects_view.py). 목록의 저장소, 「종료 N」·보관함의 대화, 숨김·제거.
 @router.get('/api/session-catalog/projects')
-async def projects(include_hidden: bool = False):
-    return await _call(projects_view.project_list, include_hidden)
+async def projects(request: Request, include_hidden: bool = False):
+    return await _call(projects_view.project_list, include_hidden, _request=request)
 
 
 @router.get('/api/session-catalog/conversations')

@@ -44,6 +44,7 @@ import tunnel
 import vt_paths
 from host_guard import HostGuardMiddleware
 import security_headers
+from compress import CompressMiddleware
 from security_headers import SecurityHeadersMiddleware
 from deps import pty_mgr, output_watcher
 from routes.pty import router as pty_router, on_task_complete
@@ -677,6 +678,8 @@ app.add_middleware(OriginGuardMiddleware)
 app.add_middleware(HostGuardMiddleware)
 # 보안 헤더는 그보다도 바깥 — Host/Origin/인증이 403·401 로 끊은 응답에도 붙는다(security_headers.py).
 app.add_middleware(SecurityHeadersMiddleware)
+# 응답 압축은 맨 바깥 — 안쪽이 만든 응답(보안 헤더가 붙은 것 포함)을 마지막에 줄인다(compress.py).
+app.add_middleware(CompressMiddleware)
 
 # 정적 파일
 #

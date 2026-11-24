@@ -416,7 +416,8 @@ def test_host_relay_drops_dangerous_headers(a_env, monkeypatch, name, value):
     client, _ = a_env
     _mock_b(monkeypatch, status=302 if name == "location" else 200,
             headers={"content-type": "application/json", name: value})
-    r = client.get("/api/hosts/m5/relay/api/workspace")
+    # 이 서버 자신의 응답 압축(`Content-Encoding: gzip`)이 섞이지 않게 한다 — 시험하는 것은 상대가 보낸 헤더를 넘기지 않는 것이다.
+    r = client.get("/api/hosts/m5/relay/api/workspace", headers={"Accept-Encoding": "identity"})
     if name == "x-frame-options":
         assert r.headers.get_list(name) == ["DENY"]
     else:

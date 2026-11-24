@@ -16,6 +16,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - **A collapsed repository now shows how many of its sessions are alive and how many are waiting for you** (`3 · 1`; the tooltip spells it out). Expanded groups keep the plain count.
 
+- **Responses are gzip-compressed now.** The server sent everything uncompressed (the first screen's CSS/JS alone is about 1.2 MB). Text responses of 1 KB or more are compressed — the app's CSS/JS about 4–7× smaller, the 5-second session list 48 KB → 8 KB. Credential and pairing paths, binary downloads, ranges and WebSocket traffic are left as they were.
+- **The session and repository lists are only re-sent when they change.** The 5-second poll re-downloaded the same ~58 KB list every time. The server now tags each answer with a content hash and replies `304` (no body) when nothing changed; the page keeps the last answer in memory. The responses stay `no-store` — nothing is written to the browser cache.
+
 ### Fixed
 - **The same repository no longer turns into two after a restart.** A project was keyed by its path *and the disk device number*, which macOS renumbers between boots, so a repository came back as a new, unregistered project (and showed up under 「저장소 밖」) while its registration stayed on the old row. A project is now its real path alone, the database refuses a second row for a path, and a one-time upgrade (format 4, copy kept as `catalog.sqlite3.v3.bak`) merges the rows already split. A git repository you only opened in a shell is now listed under its own name (dimmed) instead of 「저장소 밖」.
 - **Security: an agent could pose as another agent by sending `X-Forwarded-For: testclient` straight to the local server.** uvicorn now starts with `--no-proxy-headers`, and the reported-pid path used by the test client is only open when a test switch is on (never in the running server). Needs a same-user local process holding the machine token.

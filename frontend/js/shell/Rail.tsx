@@ -146,8 +146,8 @@ export function Rail(props: RailProps) {
       // 실행 중 세션의 카탈로그 기록(최근 활동·이름 변경·작업 기록)과 저장소 목록. 끝난 것은 저장소의 「종료 N」(대화)이
       // 펼칠 때 따로 받고(ProjectEnded.tsx), 보관한 것은 보관함 화면(ArchiveView)이 받는다.
       const [data, list] = await Promise.all([
-        historyApi('/api/session-catalog?' + new URLSearchParams({ archived: 'false', limit: '200', order: 'activity' })),
-        historyApi('/api/session-catalog/projects').catch(() => null),
+        historyApi('/api/session-catalog?' + new URLSearchParams({ archived: 'false', limit: '200', order: 'activity' }), { conditional: true }),
+        historyApi('/api/session-catalog/projects', { conditional: true }).catch(() => null),
       ]);
       if (request !== catalogRequest) return;
       setCatalog(data);

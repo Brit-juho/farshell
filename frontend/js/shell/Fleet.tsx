@@ -257,8 +257,8 @@ function Fleet(props: { deps: FleetDeps }) {
     try {
       // 실행 중 세션의 카탈로그 기록과 저장소 목록. 끝난 대화는 「종료 N」 시트가, 보관한 것은 보관함 화면이 따로 받는다.
       const [value, list] = await Promise.all([
-        historyApi('/api/session-catalog?' + new URLSearchParams({ archived: 'false', limit: '200', order: 'activity' })),
-        historyApi('/api/session-catalog/projects').catch(() => null),
+        historyApi('/api/session-catalog?' + new URLSearchParams({ archived: 'false', limit: '200', order: 'activity' }), { conditional: true }),
+        historyApi('/api/session-catalog/projects', { conditional: true }).catch(() => null),
       ]);
       if (request !== catalogRequest) return;
       setCatalog(value);
