@@ -595,7 +595,7 @@ function Fleet(props: { deps: FleetDeps }) {
         <For each={tree().map((g) => g.key)}>{(key) => (
           <Show when={tree().find((g) => g.key === key)}>
             {(g) => (
-              <section class="vt-fleet-repo" data-repo={g().key} classList={{ outside: g().key === OUTSIDE_KEY }} aria-label={g().repository ? g().name : t('저장소 밖')}>
+              <section class="vt-fleet-repo" data-repo={g().key} classList={{ outside: g().key === OUTSIDE_KEY, unlisted: g().unlisted }} aria-label={g().repository ? g().name : t('저장소 밖')}>
                 <div class="vt-fleet-repo-head">
                   <span class="vt-fleet-repo-ic" innerHTML={shellIcon(g().repository ? 'folder' : 'home', 14, 2)} />
                   <b class="vt-fleet-repo-name">{g().repository ? g().name : t('저장소 밖')}</b>

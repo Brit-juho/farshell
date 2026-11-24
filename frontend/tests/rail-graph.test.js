@@ -55,18 +55,29 @@ test('머리 브랜치 — /api/repos가 먼저, 없으면 메인 작업 트리�
   assert.strictEqual(listed[0].mainBranch, 'feat/auth', '저장소 목록의 브랜치가 먼저');
 });
 
-test('목록의 저장소가 아니면(자리 모름·셸로 들어간 미등록 저장소·숨김) 「저장소 밖」(세션 있는 저장소 아래)', async () => {
+test('git 저장소는 미등록이어도 이름으로 묶고(흐리게), 「저장소 밖」은 git이 아닌 폴더·숨김·자리 모름만', async () => {
   const m = await mod();
   const tree = m.buildRepoTree({ rows: [
     row({ name: 'tmp' }),
     row({ name: 'new', context: ctx('/r/acme', false, '/r/acme'), cwd: '/r/acme' }),
     row({ name: 'unreg', home: home('acme', '/r/acme', 'A', { registered: false }), cwd: '/r/acme' }),
+    row({ name: 'plain', home: home('notes', '/r/notes', 'N', { registered: false, repository: false }), cwd: '/r/notes' }),
     row({ name: 'hid', home: home('beta', '/r/beta', 'B', { hidden: true }), cwd: '/r/beta' }),
     row({ name: 'ok', home: home('gamma', '/r/gamma') }),
   ] });
-  assert.deepStrictEqual(plain(tree.map((g) => [g.name, g.repository])), [['gamma', true], ['', false]]);
-  assert.strictEqual(tree[1].key, m.OUTSIDE_KEY);
-  assert.deepStrictEqual(names(tree[1].lanes.flatMap((l) => l.sessions.map((s) => s.row))).sort(), ['hid', 'new', 'tmp', 'unreg']);
+  assert.deepStrictEqual(plain(tree.map((g) => [g.name, g.repository, g.unlisted])), [['acme', true, true], ['gamma', true, false], ['', false, false]]);
+  assert.strictEqual(tree[2].key, m.OUTSIDE_KEY);
+  assert.deepStrictEqual(names(tree[0].lanes.flatMap((l) => l.sessions.map((s) => s.row))), ['unreg']);
+  assert.deepStrictEqual(names(tree[2].lanes.flatMap((l) => l.sessions.map((s) => s.row))).sort(), ['hid', 'new', 'plain', 'tmp']);
+});
+
+test('같은 저장소가 목록에 있으면 미등록 행이 있어도 흐리지 않다', async () => {
+  const m = await mod();
+  const tree = m.buildRepoTree({
+    rows: [row({ name: 'a', home: home('acme', '/r/acme', 'A', { registered: false }) })],
+    projects: [{ id: 'A', name: 'acme', path: '/r/acme', kind: 'git' }],
+  });
+  assert.deepStrictEqual(plain(tree.map((g) => [g.name, g.unlisted])), [['acme', false]]);
 });
 
 test('저장소 밖 — 지금 폴더별 가지로 묶고(같은 폴더는 한 가지), 폴더를 모르면 가지 없이', async () => {

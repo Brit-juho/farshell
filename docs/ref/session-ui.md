@@ -38,6 +38,18 @@ inside git, so linked worktrees belong to their main repository; otherwise that 
   temp folder sets `conversations.workspace_id` and, the first time, `projects.registered`. A CLI running in a FarShell tmux session registers its
   project at once from the hook (`inventory._register_cli`). Child conversations, unknown launches and gone folders are skipped with a reason
   (`skip:*`); a deleted worktree folder is mapped to its repository through the recorded workspaces.
+- **Identity (v4).** A project is identified by its **real path**, nothing the operating system can renumber. `projects.locator` is
+  `git:<canonical .git dir>` or `directory:<canonical folder>` (`inventory.inspect_workspace`) — it used to carry the disk device number
+  and inode, and macOS renumbers the device across reboots, so after a restart the same repository was registered again as a new project
+  (28 paths became 68 rows on one Mac) while its registration stayed on the old row. `projects_host_path` (a unique index on `host, path`)
+  now makes a second row for the same path impossible; `inventory.project_for` finds a project by locator, else by path and then updates
+  its locator and kind in place (a folder that gets `git init`, or loses its `.git`, keeps its row). Paths are the spelling on disk
+  (`canonical_path`: `F_GETPATH` on macOS), so `/gitHub` and `/GitHub` are one project. A workspace's `incarnation` is the folder's inode
+  only (compared within one project and path). The v4 migration (`db._stable_project_identity`) merges older rows that share a path or a
+  stripped locator once: the registered live row survives, registration time is the earliest, a person's hide stays, workspaces, sessions
+  and conversations are re-pointed.
+- **Where a session shows.** A session whose location is a git repository is grouped under that repository's name even before a CLI
+  started there (dimmed, `unlisted`); 「저장소 밖」 is for folders that are not git, hidden repositories and a location not yet known.
 - **Times** come from the transcript, not the capture: `detail.started` (first `timestamp`) and `detail.last` (the transcript file's last write).
   Conversations captured before v3 are read back from the archived raw copy (backfill, newest first, in the background).
 - **Visibility.** `projects.hidden` 0 visible · 1 hidden by a person · 2 auto-hidden (registered with its last activity over 90 days ago; new
