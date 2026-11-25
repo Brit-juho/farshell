@@ -187,6 +187,7 @@ export const SCHEMA = {
   // 정렬·수동 순서는 그 맥의 전역(모든 기기가 같은 순서) — 형식은 shell/rail-data.ts SORT_KEY·ORDER_KEY.
   'rail.sort':    { type: 'str', def: '' },
   'rail.order':   { type: 'str', def: '' },
+  'rail.repoMarks': { type: 'str', def: '' },
 };
 
 function _scopeOf(key) {

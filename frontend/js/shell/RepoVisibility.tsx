@@ -26,6 +26,10 @@ import { WorktreeDialog } from './WorktreeDialog.js';
 import { t } from '../core/i18n.js';
 import { historyApi } from '../history/api.js';
 import { confirmDialog } from '../core/dialog-lazy.js';
+import { Portal } from 'solid-js/web';
+import { createRailPrefs } from './rail-prefs.js';
+import { RepoMarkPicker } from './RepoMarkPicker.js';
+import { MARKS_KEY, encodeRepoMarks, markIconHtml, markOf, markStyle, withMark, type RepoMark } from './repo-marks.js';
 
 export interface RepoVisibilityDeps extends RailDeps {}
 
@@ -97,6 +101,10 @@ export function RepoVisibility(props: Props) {
   // 띄운다. Rail.tsx가 예전에 하던 "기본 저장소 추측"을 여기서는 안 한다 —
   // 사용자가 이미 어느 저장소 카드에서 눌렀는지로 정해진다.
   const [wtDialogRepo, setWtDialogRepo] = createSignal<{ path: string } | null>(null);
+  // 저장소 표식(레일·폰 머리 아이콘) — 그 맥의 전역 설정(repo-marks.ts). 목록의 저장소(projectId)만 고를 수 있다.
+  const { prefs, set: setPref } = createRailPrefs();
+  const [markMenu, setMarkMenu] = createSignal<{ x: number; y: number; id: string; name: string } | null>(null);
+  const setRepoMark = (id: string, mark: Partial<RepoMark> | null) => setPref(MARKS_KEY, encodeRepoMarks(withMark(prefs().marks, id, mark)));
 
   const load = async () => {
     try {
@@ -313,6 +321,16 @@ export function RepoVisibility(props: Props) {
                               onChange={() => toggleHidden(group)}
                             />
                           </Show>
+                          <Show when={wt.isMain && group.projectId}>
+                            <button type="button" class="vt-icon-btn sm vt-repovis-mark"
+                              style={markStyle(markOf(prefs().marks, group.projectId))}
+                              aria-label={t('{name} 표식 바꾸기', { name: group.name })} data-tip={t('{name} 표식 바꾸기', { name: group.name })}
+                              onClick={(e) => {
+                                const r = e.currentTarget.getBoundingClientRect();
+                                setMarkMenu({ x: r.left, y: r.bottom + 2, id: group.projectId!, name: group.name });
+                              }}
+                              innerHTML={markIconHtml(markOf(prefs().marks, group.projectId)?.icon || 'folder', 14, 2)} />
+                          </Show>
                           <span class="vt-repovis-wt-branch">{wt.isMain ? group.name : wt.branch}</span>
                           {/* 부가 워크트리는 소속 저장소를 이름표로(본체는 이름 자체가
                               저장소 이름이라 필요 없다). */}
@@ -395,6 +413,14 @@ export function RepoVisibility(props: Props) {
           </Show>
         </div>
       </div>
+      <Show when={markMenu()}>
+        {(m) => (
+          <Portal>
+            <RepoMarkPicker x={m().x} y={m().y} name={m().name} mark={markOf(prefs().marks, m().id)}
+              onChange={(mark) => setRepoMark(m().id, mark)} onClose={() => setMarkMenu(null)} />
+          </Portal>
+        )}
+      </Show>
       <Show when={wtDialogRepo()}>
         {(target) => (
           <WorktreeDialog

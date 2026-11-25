@@ -46,6 +46,8 @@ import { shellIcon } from '../ui/icons-shell.js';
 
 export type { RailDeps } from './rail-fetch.js';
 import { RepoVisibility } from './RepoVisibility.js';
+import { RepoMarkPicker } from './RepoMarkPicker.js';
+import { MARKS_KEY, encodeRepoMarks, markOf, withMark, type RepoMark } from './repo-marks.js';
 import { RailViewSettings, RailCleanupSettings } from './RailSettings.js';
 import { onWorkspaceEvent } from '../core/workspace-ws.js';
 // 상태 없는 순수 모듈이라 지연 청크에 복제돼도 된다(위 ⚠의 예외).
@@ -116,6 +118,9 @@ export function Rail(props: RailProps) {
   const [ctxMenu, setCtxMenu] = createSignal<{ x: number; y: number; row: SessionRow } | null>(null);
   const [hosts, setHosts] = createSignal<HostEntry[]>([]);
   const [hostMenu, setHostMenu] = createSignal<{ x: number; y: number } | null>(null);
+  // 저장소 표식 선택판(머리 우클릭) — 대상은 저장소 id(묶음 key). 값은 그 맥의 전역 설정(repo-marks.ts).
+  const [markMenu, setMarkMenu] = createSignal<{ x: number; y: number; id: string; name: string } | null>(null);
+  const setRepoMark = (id: string, mark: Partial<RepoMark> | null) => setPref(MARKS_KEY, encodeRepoMarks(withMark(prefs().marks, id, mark)));
   // 2026-09-28(사용자 요청) — 스위처는 이제 목록 필터가 아니라 **화면 전체의
   // 전환**이다(core/host-route.js). 이 화면이 보고 있는 맥은 부팅 때 정해지고,
   // 레일의 세션 행은 그 맥의 API(중계)에서 오므로 로컬과 같은 경로로 그린다.
@@ -777,6 +782,11 @@ export function Rail(props: RailProps) {
                     nodeProps={nodeProps}
                     kidsCollapsed={kidsCollapsed}
                     afterNode={(row) => <NativeChildren row={row} />}
+                    mark={markOf(prefs().marks, group().key)}
+                    onMarkMenu={viewHostOffline() || !group().repository ? undefined : (e) => {
+                      const head = (e.currentTarget as HTMLElement | null)?.getBoundingClientRect();
+                      setMarkMenu({ x: head ? head.left + 8 : e.clientX, y: head ? head.bottom + 2 : e.clientY, id: group().key, name: group().name });
+                    }}
                     onNew={viewHostOffline() ? undefined : (root) => {
                       (props.deps.getAction('session.create-in') as ((cwd: string) => void) | undefined)?.(root);
                     }}
@@ -849,6 +859,14 @@ export function Rail(props: RailProps) {
         {(m) => (
           <Portal>
             <Menu x={m().x} y={m().y} onClose={() => setHostMenu(null)} items={hostMenuItems()} />
+          </Portal>
+        )}
+      </Show>
+      <Show when={markMenu()}>
+        {(m) => (
+          <Portal>
+            <RepoMarkPicker x={m().x} y={m().y} name={m().name} mark={markOf(prefs().marks, m().id)}
+              onChange={(mark) => setRepoMark(m().id, mark)} onClose={() => setMarkMenu(null)} />
           </Portal>
         )}
       </Show>

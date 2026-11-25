@@ -17,6 +17,7 @@ import type { RepoGroup, Lane } from './repo-tree.js';
 import type { SessionRow } from './rail-data.js';
 import { SessionNode, KidNode } from './SessionNode.js';
 import { shortenPath } from './rail-hover-card.js';
+import { markIconHtml, markStyle, type RepoMark } from './repo-marks.js';
 
 export const X1 = 21;
 export const X2 = 35;
@@ -62,6 +63,10 @@ export interface RepoBranchProps {
   onNew?: (root: string) => void;
   /** 세션 칸 바로 밑(내부 서브에이전트 목록). */
   afterNode?: (row: SessionRow) => JSX.Element;
+  /** 이 저장소의 표식(repo-marks.ts) — 없으면 폴더. */
+  mark?: RepoMark | null;
+  /** 머리 우클릭 — 표식 선택판을 연다(저장소 밖·원격 맥이면 없다). */
+  onMarkMenu?: (e: MouseEvent) => void;
 }
 
 export function RepoBranch(p: RepoBranchProps) {
@@ -80,10 +85,12 @@ export function RepoBranch(p: RepoBranchProps) {
       <div class="vt-rg-headrow">
       <button type="button" class="vt-rg-row vt-rg-head" aria-expanded={foldable() ? !p.collapsed : undefined}
         onClick={() => { if (foldable()) p.onToggle(); }}
+        onContextMenu={(e) => { if (!p.onMarkMenu || !g().repository) return; e.preventDefault(); p.onMarkMenu(e); }}
         data-tip={g().root || undefined} data-tip-side="right">
         <span class="vt-rg-gut">
           <svg class="vt-rg-ln" aria-hidden="true" innerHTML={headLines(hasBody())} />
-          <span class="vt-rg-ic" innerHTML={shellIcon(g().repository ? 'folder' : 'home', 13, 2)} />
+          <span class="vt-rg-ic" style={g().repository ? markStyle(p.mark ?? null) : undefined}
+            innerHTML={g().repository ? markIconHtml(p.mark?.icon || 'folder', 13, 2) : shellIcon('home', 13, 2)} />
         </span>
         <span class="vt-rg-body vt-rg-a">
           <span class="vt-rg-rn">{title()}</span>

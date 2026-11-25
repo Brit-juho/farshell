@@ -12,6 +12,7 @@ import { alertDialog, promptDialog } from '../core/dialog-lazy.js';
 import { timedFetch } from '../core/api.js';
 import { DEFAULT_SORT, REPO_SORTS, REPO_SORT_LEVELS, SESSION_SORTS, type RepoSort, type SessionSort, type TreeSort } from './repo-tree.js';
 import { normalizeShells, type BgShells } from './bg-shells.js';
+import { MARKS_KEY, parseRepoMarks, type RepoMarks } from './repo-marks.js';
 
 // ── 행 모양 ────────────────────────────────────────────────────────────────
 
@@ -390,6 +391,8 @@ export interface RailPrefs {
   view: RailView;
   sort: TreeSort;
   order: string[];
+  /** 저장소 표식(그 맥의 전역 설정) — repo-marks.ts. */
+  marks: RepoMarks;
   attentionShow: boolean;
   attentionCollapsed: boolean;
   hiddenOrigins: Origin[];
@@ -406,6 +409,7 @@ export function readRailPrefs(get: (key: string) => unknown): RailPrefs {
     view: parseRailView(get(VIEW_KEY)),
     sort: parseRailSort(get(SORT_KEY)),
     order: parseRailOrder(get(ORDER_KEY)),
+    marks: parseRepoMarks(get(MARKS_KEY)),
     attentionShow: flag(ATTENTION_SHOW_KEY),
     attentionCollapsed: flag(ATTENTION_COLLAPSED_KEY),
     hiddenOrigins: HIDEABLE_ORIGINS.filter((o) => !flag(originShowKey(o))),
