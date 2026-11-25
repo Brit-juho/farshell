@@ -2,7 +2,7 @@
 // 배선(registerOscHandler)은 term/selection.js가 한다.
 //
 // 규칙(위에서 아래로):
-//  1. 재생분(scrollback 다시 그리기) · 「드래그 시 자동 복사」 꺼짐 · 빈 payload/`?`(질의) · 잘못된 base64 → 무시
+//  1. 「드래그 시 자동 복사」 꺼짐 · 빈 payload/`?`(질의) · 잘못된 base64 → 무시
 //  2. 디코드 결과가 1MB(1,048,576바이트)를 넘으면 → 무시
 //  3. tmux 세션이 아니고 `terminal.osc52Untrusted`가 꺼져 있으면 → 차단(세션마다 첫 1회만 경고)
 //  4. 그 외 → 복사 + 미리보기 토스트
@@ -23,8 +23,7 @@ export function osc52Preview(text) {
   return { preview: head + (chars.length > PREVIEW_CHARS ? '…' : ''), length: chars.length };
 }
 
-export function osc52Decision({ payload, isTmux, allowUntrusted, autocopy, replaying }) {
-  if (replaying) return { action: 'ignore', reason: 'replay' };
+export function osc52Decision({ payload, isTmux, allowUntrusted, autocopy }) {
   if (!autocopy) return { action: 'ignore', reason: 'autocopy-off' };
   if (!payload || payload === '?') return { action: 'ignore', reason: 'empty' };
   if (payload.length > MAX_B64_CHARS) return { action: 'ignore', reason: 'too-large' };
@@ -51,7 +50,6 @@ export function handleOsc52(data, { session, setting, copy, toast, t }) {
     isTmux: !!(session && (session.tmuxName || session.tmux_name)),
     allowUntrusted: !!setting('terminal.osc52Untrusted'),
     autocopy: !!setting('mouse.autocopyOnSelect'),
-    replaying: !!(session && session._replayingScrollback),
   });
   if (d.action === 'block') {
     if (session && !session._osc52Warned) {

@@ -44,13 +44,6 @@ WS_HEARTBEAT_TIMEOUT = float(os.environ.get("VT_WS_HEARTBEAT_TIMEOUT", "45.0"))
 WS_QUEUE_HIGH = 200
 WS_QUEUE_LOW = 50
 
-# scrollback replay 종료 표식 — send_queue는 보통 bytes만 나르지만, 이 객체가
-# 큐에서 나오면 _send_worker가 bytes 대신 JSON 텍스트 메시지로 클라이언트에
-# "여기까지가 재생분이다"를 알린다. 클라이언트는 이 신호를 받기 전까지 OSC52
-# 클립보드 동기화(selection.js)를 건너뛴다 — 안 그러면 재접속마다 세션 도중
-# 쌓인 과거 OSC52 시퀀스가 scrollback과 함께 통째로 재생되며 그때마다 다시
-# 발화해 "새로고침하면 클립보드 동기화 토스트가 한꺼번에 여러 개" 뜨는 버그가 났다.
-_SCROLLBACK_END = object()
 _screen_cleanup_tasks: dict[str, asyncio.Task] = {}
 SCREEN_DISCONNECT_GRACE = 5.0
 
@@ -542,10 +535,7 @@ async def ws_terminal(ws: WebSocket, session_id: str):
             while True:
                 try:
                     data = await send_queue.get()
-                    if data is _SCROLLBACK_END:
-                        await ws.send_text(json.dumps({"type": "scrollback_end"}))
-                    else:
-                        await ws.send_bytes(data)
+                    await ws.send_bytes(data)
                     # 큐를 비우는 주체가 재개도 책임진다. PTY reader가 pause된 뒤엔
                     # _on_data가 더 호출되지 않으므로 그 경로에서는 LOW 도달을
                     # 관찰할 수 없다.
@@ -586,9 +576,9 @@ async def ws_terminal(ws: WebSocket, session_id: str):
         # (256KB 안에 작은 청크가 수천 개) 큐(maxsize 400)가 중간에 꽉 차 break로
         # 잘렸다 — 잘려나가는 뒤쪽이 하필 가장 최신 출력이었다. 큐 여유분에 맞게
         # 뒤(최신)에서부터만 남겨서 채운다.
-        # _send_worker를 먼저 띄워 큐를 동시에 비우게 한다 — 이래야 아래
-        # scrollback_end sentinel을 (큐가 꽉 찬 경우에도) 안전하게 `await put()`으로
-        # 흘려보낼 수 있다. worker가 없으면 큐가 안 비워져 deadlock난다.
+        # _send_worker를 먼저 띄워 큐를 동시에 비우게 한다.
+        # 재생본은 저장할 때 이미 질의·OSC 52·BEL을 뺀 사본이라(server/replay_filter.py)
+        # 「여기까지가 재생분」 표식(옛 scrollback_end)을 따로 보내지 않는다.
         send_task = asyncio.create_task(_send_worker())
 
         scrollback_chunks = pty_mgr.get_scrollback(session_id)
@@ -601,10 +591,6 @@ async def ws_terminal(ws: WebSocket, session_id: str):
                 send_queue.put_nowait(out)
             except asyncio.QueueFull:
                 break
-        # scrollback 큐잉이 끝났다는 신호 — put_nowait이 아니라 put()을 쓴다:
-        # 큐가 방금 꽉 찼더라도(스크롤백 자체가 maxsize를 채운 경우) worker가
-        # 비우는 대로 자리를 얻어 반드시 전송되게 한다.
-        await send_queue.put(_SCROLLBACK_END)
         on_data = _on_data
         pty_mgr.subscribe(session_id, on_data)
 

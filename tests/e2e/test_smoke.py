@@ -4321,6 +4321,75 @@ def test_일반_터미널의_OSC52는_기본_차단되고_설정을_켜면_클�
         page.evaluate("(id) => window.removeSession && window.removeSession(id)", sid)
 
 
+def test_재접속_재생은_옛_터미널_질의에_다시_답하지_않는다(isolated_page, tmp_path):
+    """server/replay_filter.py — 재접속하면 서버가 저장해 둔 출력을 xterm.js에 다시 실행시킨다.
+    저장본에 질의(DECRQM `CSI ? 2026 $ p`)가 남아 있으면 xterm.js가 재접속마다 다시 답하고, 그 답이
+    PTY 입력으로 들어가 프롬프트에 `2026;0$y`가 쌓였다(방치한 세션에서 실제로 난 증상). 실시간 질의에는
+    한 번 답해야 하고, 재접속 뒤에는 더 답하면 안 된다. 답은 칸 안의 작은 프로그램이 원시 모드로 받아
+    파일에 적는다(줄 단위 입력이면 개행 없는 답이 줄 버퍼에 머문다)."""
+    page = isolated_page
+    page.evaluate("() => window.createSession && window.createSession()")
+    page.wait_for_selector(".vt-pane .vt-pane-body .xterm", timeout=15000)
+    sid = page.evaluate("() => Object.keys(window.allSessions())[0]")
+    read_buf = """(id) => {
+      const s = window.getSession(id);
+      const b = s && s.term && s.term.buffer && s.term.buffer.active;
+      if (!b) return '';
+      let out = '';
+      for (let i = 0; i < b.length; i++) {
+        const line = b.getLine(i);
+        if (line) out += (line.isWrapped ? '' : '\\n') + line.translateToString(true);
+      }
+      return out;
+    }"""
+    deadline = time.time() + 20
+    while True:
+        page.evaluate("([id, cmd]) => window.getSession(id).term.input(cmd + '\\r', true)", [sid, "echo FSHREADY$((1+1))"])
+        try:
+            page.wait_for_function("([f, id]) => (0, eval)('(' + f + ')')(id).includes('FSHREADY2')", arg=[read_buf, sid], timeout=2000)
+            break
+        except Exception:
+            assert time.time() < deadline, "셸이 20초 안에 준비되지 않았다"
+    assert page.evaluate("(id) => !window.getSession(id).tmuxName", sid), "일반(tmux 아님) 세션이어야 한다"
+    # 막 만든 PTY는 0.5초 동안 ESC로 시작하는 입력을 버리고(pty_manager PTY_BOOT_GRACE_SEC) 1.5초 동안 일부 질의에
+    # 서버가 대신 답한다(PTY_QUERY_INTERCEPT_SEC) — 둘 다 지난 뒤에 시작해야 실시간 응답이 그대로 들어간다.
+    page.wait_for_timeout(2000)
+
+    got = tmp_path / "replies.txt"
+    probe = tmp_path / "probe.py"
+    probe.write_text(
+        "import os, sys, time, tty\n"
+        "tty.setraw(0)\n"
+        "os.write(1, b'\\x1b[?2026$p')\n"
+        "out = open(sys.argv[1], 'ab', buffering=0)\n"
+        "end = time.time() + 120\n"
+        "while time.time() < end:\n"
+        "    out.write(os.read(0, 256))\n")
+
+    def replies() -> int:
+        return got.read_text(errors="replace").count("2026;") if got.exists() else 0
+
+    try:
+        page.evaluate("([id, cmd]) => window.getSession(id).term.input(cmd + '\\r', true)",
+                      [sid, f"exec {sys.executable} -I {probe} {got}"])
+        deadline = time.time() + 10
+        while replies() < 1:
+            assert time.time() < deadline, "실시간 질의에 xterm.js가 답하지 않았다(시험 전제가 깨짐)"
+            time.sleep(0.2)
+        assert replies() == 1
+
+        # 같은 PTY로 다시 붙는다(서버 유예 5초 안) — 서버가 저장본을 재생한다.
+        for _ in range(2):
+            page.evaluate("(id) => { window.__oldWs = window.getSession(id).ws; window.__oldWs.close(); }", sid)
+            page.wait_for_function(
+                "(id) => { const s = window.getSession(id); return s.ws && s.ws !== window.__oldWs && s.ws.readyState === 1; }",
+                arg=sid, timeout=15000)
+            page.wait_for_timeout(1500)
+        assert replies() == 1, f"재접속 재생 때 옛 질의에 다시 답했다: {got.read_bytes()!r}"
+    finally:
+        page.evaluate("(id) => window.removeSession && window.removeSession(id)", sid)
+
+
 # --- 계정 핫스왑 H1: 새 세션에 계정 주입 --------------------------------------------------
 # 격리 서버의 레지스트리(VT_STATE_DIR)에 가짜 프로필(가짜 토큰 문자열)만 만든다. 실제 claude/codex는 실행하지 않고,
 # 실제 계정·키체인은 읽지 않는다(토큰 프로필은 키체인을 보지 않는다).

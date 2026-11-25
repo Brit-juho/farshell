@@ -32,6 +32,7 @@ from typing import Callable, Optional
 
 import input_mode
 import paste_prepare
+from replay_filter import ReplayFilter
 from i18n import tr
 import tmux_paste
 
@@ -140,6 +141,9 @@ class PTYSession:
     # 256KB뿐이라 78배 과다 저장 → 세션 몇 개만 열려도 수백 MB로 폭증했다.
     _scrollback: deque = field(default_factory=deque, repr=False)
     _scrollback_bytes: int = field(default=0, repr=False)  # 현재 저장 바이트 합
+    # 저장 사본만 거치는 필터 — 재접속 재생 때 터미널 질의·OSC 52·BEL이 다시 실행되지
+    # 않게 뺀다(server/replay_filter.py). 실시간 출력은 이 필터를 거치지 않는다.
+    _replay_filter: ReplayFilter = field(default_factory=ReplayFilter, repr=False)
     # D3: 백프레셔(backpressure) 플래그 — True이면 add_reader가 등록 해제된 상태
     _paused: bool = field(default=False, repr=False)
     # P0 fix: PTY 시작 시각 — grace period 동안 클라이언트 자동응답(ESC 시퀀스) 차단용
@@ -600,8 +604,13 @@ class PTYManager:
         # 이유: 모든 출력이 반드시 한 번 지나는 유일한 지점이다.
         session._bracketed = input_mode.scan_bracketed_mode(data, session._bracketed)
 
-        # scrollback에 저장 (바이트 예산으로 트리밍)
-        self._append_scrollback(session, data)
+        # scrollback에 저장 (바이트 예산으로 트리밍). 저장하는 건 재생해도 안전한 사본이다 —
+        # 질의(DA·DSR·DECRQM …)·OSC 52·BEL을 뺀다. 날것을 저장하면 재접속마다 xterm.js가
+        # 옛 질의에 다시 답하고, 그 답이 PTY 입력으로 들어가 프롬프트에 `2026;0$y` 같은
+        # 글자가 쌓였다. 구독자에게는 아래에서 원본(data)을 그대로 보낸다.
+        stored = session._replay_filter.feed(data)
+        if stored:
+            self._append_scrollback(session, stored)
         # broadcast to all subscribers
         dead = set()
         for cb in list(session._subscribers):
