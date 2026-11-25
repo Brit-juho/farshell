@@ -4117,6 +4117,119 @@ def _cli_started(base: str, token: str, name: str, cwd: Path, sid: str) -> None:
                                                   "payload": {"session_id": sid, "cwd": str(cwd), "source": "startup"}})
 
 
+def test_저장소_표식은_머리_우클릭으로_고르고_그_맥의_전역_설정이라_폰에도_같다(page, browser, server):
+    """저장소 머리 아이콘(폴더 고정)을 저장소마다 아이콘·색으로 바꾼다(2026-11, shell/repo-marks.ts).
+    데스크톱 레일은 머리 우클릭, 폰은 저장소 머리 꾹 누르기로 같은 선택판을 연다. 값은 그 맥의 전역 설정 rail.repoMarks."""
+    if _BROWSE_DIR is None:
+        pytest.skip("외부 서버(VT_E2E_URL)에서는 시험 저장소를 만들 수 없다")
+    base, token = server
+    repo = _git_repo(_BROWSE_DIR / "mark-repo", "main")
+    made, ctx = [], None
+    head = "#vt-wgrail section.vt-rg[aria-label='mark-repo'] .vt-rg-head"
+    icon_of = "(sel) => { const e = document.querySelector(sel); return e && { html: e.innerHTML, color: e.style.color, bg: e.style.background }; }"
+    try:
+        r = _api(base, token, "POST", "/api/tmux/create", {"name": "mark-a", "cwd": str(repo)})
+        made.append(r["id"])
+        time.sleep(1)
+        _cli_started(base, token, r["tmux_session"], repo, "mark-0")
+        deadline = time.time() + 40
+        while time.time() < deadline:
+            listed = page.evaluate("async () => (await (await fetch('/api/session-catalog/projects')).json())")
+            pid = next((p["id"] for p in (listed.get("projects") or []) if p.get("name") == "mark-repo" and p.get("registered")), None)
+            if pid:
+                break
+            time.sleep(1)
+        else:
+            raise AssertionError("mark-repo 저장소가 목록에 등록되지 않았다")
+        _reset_saved_layout(base, token)
+        page.reload()
+        page.wait_for_function("() => document.documentElement.dataset.appReady === 'true'", timeout=20000)
+        page.evaluate("() => { window.vtSettingsSet('ui.side.activity', 'sessions'); window.vtSettingsSet('rail.repoMarks', ''); }")
+        page.wait_for_selector(head, timeout=20000)
+        before = page.evaluate(icon_of, head + " .vt-rg-ic")
+        assert "M20 20a2 2 0 0 0 2-2V8" in before["html"] and not before["color"], before   # 기본은 폴더
+        page.click(head, button="right")
+        page.wait_for_selector(".vt-mark-pick", timeout=5000)
+        assert page.locator(".vt-mark-pick .vt-mark-pick-name").inner_text() == "mark-repo"
+        page.locator(".vt-mark-pick-ic[aria-label='코드']").click()
+        page.locator(".vt-mark-pick-sw[aria-label='파랑']").click()
+        assert page.locator(".vt-mark-pick").count() == 1, "고른 뒤에도 판은 열려 있다(아이콘과 색을 한 번에)"
+        _dfx_shot(page, "mark-picker-desktop")
+        page.keyboard.press("Escape")
+        page.wait_for_selector(".vt-mark-pick", state="detached", timeout=5000)
+        after = page.evaluate(icon_of, head + " .vt-rg-ic")
+        assert "16 18 22 12 16 6" in after["html"] and "--color-term-blue" in after["color"], after
+        saved = _api(base, token, "GET", "/api/workspace")["settings"].get("rail.repoMarks")
+        assert json.loads(saved) == {"marks": {pid: {"icon": "code", "color": "blue"}}}, saved
+        # 폰(같은 맥의 다른 기기)도 같은 표식 — 그리고 꾹 눌러 바꾼다.
+        ctx = _mobile_ctx(browser, base)
+        pg = ctx.new_page()
+        _boot(pg, f"{base}/")
+        fhead = "#vt-fleet section.vt-fleet-repo[aria-label='mark-repo'] .vt-fleet-repo-head"
+        pg.wait_for_selector(fhead, timeout=20000)
+        m = pg.evaluate(icon_of, fhead + " .vt-fleet-repo-ic")
+        assert "16 18 22 12 16 6" in m["html"] and "--color-term-blue" in m["color"], m
+        pg.evaluate("""(sel) => { const h = document.querySelector(sel).querySelector('.vt-fleet-repo-name');
+          const r = h.getBoundingClientRect();
+          h.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch', clientX: r.left + 4, clientY: r.top + 4 })); }""", fhead)
+        pg.wait_for_selector(".vt-mark-pick", timeout=5000)
+        pg.evaluate("(sel) => document.querySelector(sel).querySelector('.vt-fleet-repo-name').dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch' }))", fhead)
+        pg.wait_for_timeout(500)
+        assert pg.locator(".vt-mark-pick").count() == 1, "꾹 눌러 연 판이 손을 떼자마자 닫히면 안 된다"
+        box = pg.locator(".vt-mark-pick").bounding_box()
+        vw = pg.evaluate("() => window.innerWidth")
+        assert box and box["x"] >= 0 and box["x"] + box["width"] <= vw, box
+        _dfx_shot(pg, "mark-picker-390")
+        pg.locator(".vt-mark-pick-ic[aria-label='서버']").click()
+        pg.locator(".vt-mark-pick button", has_text="닫기").click()
+        pg.wait_for_selector(".vt-mark-pick", state="detached", timeout=5000)
+        assert 'x1="6"' in pg.evaluate(icon_of, fhead + " .vt-fleet-repo-ic")["html"], "폰 머리가 서버 아이콘으로"
+        _dfx_shot(pg, "mark-fleet-390")
+        saved = json.loads(_api(base, token, "GET", "/api/workspace")["settings"].get("rail.repoMarks"))
+        assert saved == {"marks": {pid: {"icon": "server", "color": "blue"}}}, saved
+        # 데스크톱도 새로고침 없이 따라온다(workspace_updated) — 그 뒤 「기본으로」.
+        page.wait_for_function("(sel) => document.querySelector(sel).innerHTML.includes('x1=\"6\"')", arg=head + " .vt-rg-ic", timeout=10000)
+        _dfx_shot(page, "mark-rail-desktop")
+        page.click(head, button="right")
+        page.locator(".vt-mark-pick button", has_text="기본으로").click()
+        page.keyboard.press("Escape")
+        back = page.evaluate(icon_of, head + " .vt-rg-ic")
+        assert "M20 20a2 2 0 0 0 2-2V8" in back["html"] and not back["color"], back
+        assert json.loads(_api(base, token, "GET", "/api/workspace")["settings"].get("rail.repoMarks")) == {"marks": {}}
+        # 세션 목록 설정 › 저장소 탭의 표식 버튼 — 시트 위에서 판이 열리고, Esc는 판만 닫는다(시트는 남는다).
+        page.click("#vt-wgrail .vt-wgrail-settings")
+        page.click("#vt-repovis-tab-repos")
+        btn = page.locator(".vt-repovis-mark[aria-label='mark-repo 표식 바꾸기']")
+        btn.click()
+        page.wait_for_selector(".vt-mark-pick", timeout=5000)
+        page.locator(".vt-mark-pick-ic[aria-label='별']").click()
+        page.locator(".vt-mark-pick-sw[aria-label='초록']").click()
+        _dfx_shot(page, "mark-repovis-desktop")
+        page.keyboard.press("Escape")
+        page.wait_for_selector(".vt-mark-pick", state="detached", timeout=5000)
+        assert page.locator("#vt-repovis-tab-repos").is_visible(), "Esc가 시트까지 닫았다"
+        assert "--color-term-green" in (btn.get_attribute("style") or "")
+        page.keyboard.press("Escape")
+        page.wait_for_selector("#vt-repovis-tab-repos", state="detached", timeout=5000)
+        star = page.evaluate(icon_of, head + " .vt-rg-ic")
+        assert "M11.525 2.295" in star["html"] and "--color-term-green" in star["color"], star
+        csp = [e for e in page.console_errors if "Content Security Policy" in e or "Refused to" in e]
+        assert csp == [], csp
+    finally:
+        if ctx is not None:
+            ctx.close()
+        for sid in made:
+            try:
+                _api(base, token, "DELETE", f"/api/sessions/{sid}")
+            except Exception:
+                pass
+        try:
+            page.evaluate("() => window.vtSettingsSet('rail.repoMarks', '')")
+        except Exception:
+            pass
+        _reset_saved_layout(base, token)
+
+
 def test_모바일_저장소_머리는_브랜치를_온전히_보이고_이름만_줄임표로_줄인다(browser, server):
     """실기기: 「유휴 메인 demo-app /m… +1」 — 브랜치가 `/m…`로 잘려 어느 브랜치인지 알 수 없었다.
     세션 로직 점검 단계 7부터 폰 세션 목록은 저장소별 타일이고 브랜치는 저장소 머리(`.vt-fleet-repo-branch`)에 한 번 나온다.

@@ -67,6 +67,7 @@ export { TreeStore } from '../../js/files/tree-store.js';
 export { mountFileTree } from '../../js/files/mount.tsx';
 export { mountFocus, edgeDelayMs, shouldShowHint, insideReveal, EDGE_CHROME } from '../../js/shell/Focus.tsx';
 export { buildRepoTree, flattenRows, moveInOrder, orderKey, OUTSIDE_KEY } from '../../js/shell/repo-tree.js';
+export { MARKS_KEY, MARKS_MAX, MARK_ICONS, MARK_COLOR_NAMES, parseRepoMarks, encodeRepoMarks, withMark, markOf, markIconHtml, markStyle } from '../../js/shell/repo-marks.js';
 export { nodeLine, kidLabel } from '../../js/shell/rail-data.js';
 export { normalizeHome } from '../../js/shell/rail-fetch.js';
 export { sessionLines, kidLines, worktreeLines } from '../../js/shell/RepoBranch.js';

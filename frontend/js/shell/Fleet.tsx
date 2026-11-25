@@ -18,7 +18,7 @@
 //
 // Rail.tsx와 같은 이유로 데이터 fetch(세션 목록·agent 상태·git diff)를 여기서 다시 부른다(정적 import 금지 — 지연 청크가
 // core/store.js 등 상태 모듈을 정적 import하면 Vite lib 모드가 복제한다, ADR-26).
-import { createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
+import { createSignal, createMemo, createEffect, onCleanup, For, Show, type JSX } from 'solid-js';
 import { render, Portal } from 'solid-js/web';
 import { icon } from '../ui/icons.js';
 import { shellIcon } from '../ui/icons-shell.js';
@@ -44,6 +44,8 @@ import {
 } from './rail-data.js';
 import { buildRepoTree, flattenRows, moveInOrder, orderKey, OUTSIDE_KEY, type RepoGroup, type ProjectLike } from './repo-tree.js';
 import { createRailPrefs } from './rail-prefs.js';
+import { RepoMarkPicker } from './RepoMarkPicker.js';
+import { MARKS_KEY, encodeRepoMarks, markIconHtml, markOf, markStyle, withMark, type RepoMark } from './repo-marks.js';
 import { onSheetKeyDown } from './sheet-keys.js';
 import { shortenPath, buildHoverCard } from './rail-hover-card.js';
 import { MenuSummary, ShareMark, ShellsMark, ROW_MENU_ICON } from './RailRow.js';
@@ -117,6 +119,23 @@ function useLongPress(onLongPress: () => void) {
     onPointerUp: clear,
     onPointerCancel: clear,
   };
+}
+
+/** 저장소 머리 — 꾹 누르거나(터치) 우클릭하면 표식 선택판(저장소일 때만). 안의 「+」 버튼에서 시작한 누름은 제외한다. */
+function RepoHead(props: { group: RepoGroup<SessionRow>; onMark: (el: HTMLElement | null, g: RepoGroup<SessionRow>) => void; children: JSX.Element }) {
+  let el: HTMLDivElement | undefined;
+  const longPress = useLongPress(() => props.onMark(el || null, props.group));
+  const fromButton = (e: Event) => !!(e.target as HTMLElement | null)?.closest?.('button');
+  return (
+    <div ref={el} class="vt-fleet-repo-head"
+      onPointerDown={(e) => { if (!fromButton(e)) longPress.onPointerDown(e); }}
+      onPointerMove={longPress.onPointerMove}
+      onPointerUp={longPress.onPointerUp}
+      onPointerCancel={longPress.onPointerCancel}
+      onContextMenu={(e) => { if (fromButton(e) || !props.group.repository) return; e.preventDefault(); props.onMark(el || null, props.group); }}>
+      {props.children}
+    </div>
+  );
 }
 
 /** 타일 하나에 그릴 것 — 저장소 묶음을 펼친 순서(가지 → 세션 → 그 하위 세션). */
@@ -348,6 +367,14 @@ function Fleet(props: { deps: FleetDeps }) {
 
   const activeHost = createMemo(() => hosts().find((h) => h.id === viewHostId) || null);
   const viewHostOffline = createMemo(() => viewHostId !== LOCAL_HOST && !!activeHost() && !activeHost()!.online);
+  // 저장소 표식 선택판(저장소 머리 꾹 누르기·우클릭) — 값은 그 맥의 전역 설정(repo-marks.ts), 레일과 같다.
+  const [markMenu, setMarkMenu] = createSignal<{ x: number; y: number; id: string; name: string } | null>(null);
+  const setRepoMark = (id: string, mark: Partial<RepoMark> | null) => setPref(MARKS_KEY, encodeRepoMarks(withMark(prefs().marks, id, mark)));
+  const openMarkMenu = (el: HTMLElement | null, g: RepoGroup<SessionRow>) => {
+    if (!g.repository || viewHostOffline()) return;
+    const r = el?.getBoundingClientRect();
+    setMarkMenu({ x: r ? r.left + 8 : 16, y: r ? r.bottom + 2 : 80, id: g.key, name: g.name });
+  };
 
   const selectHost = (id: string) => {
     setHostMenuOpen(false);
@@ -596,8 +623,9 @@ function Fleet(props: { deps: FleetDeps }) {
           <Show when={tree().find((g) => g.key === key)}>
             {(g) => (
               <section class="vt-fleet-repo" data-repo={g().key} classList={{ outside: g().key === OUTSIDE_KEY, unlisted: g().unlisted }} aria-label={g().repository ? g().name : t('저장소 밖')}>
-                <div class="vt-fleet-repo-head">
-                  <span class="vt-fleet-repo-ic" innerHTML={shellIcon(g().repository ? 'folder' : 'home', 14, 2)} />
+                <RepoHead group={g()} onMark={openMarkMenu}>
+                  <span class="vt-fleet-repo-ic" style={g().repository ? markStyle(markOf(prefs().marks, g().key), false) : undefined}
+                    innerHTML={g().repository ? markIconHtml(markOf(prefs().marks, g().key)?.icon || 'folder', 14, 2) : shellIcon('home', 14, 2)} />
                   <b class="vt-fleet-repo-name">{g().repository ? g().name : t('저장소 밖')}</b>
                   <Show when={g().mainBranch}><span class="vt-fleet-repo-branch" title={g().mainBranch!}><span innerHTML={icon('git-branch', 11, 2)} /><span class="vt-fleet-repo-bn">{g().mainBranch}</span></span></Show>
                   <span class="vt-tile-sp" />
@@ -606,7 +634,7 @@ function Fleet(props: { deps: FleetDeps }) {
                     <button type="button" class="vt-icon-btn vt-fleet-repo-new" aria-label={t('{name}에서 새 세션', { name: g().name })}
                       onClick={() => newIn(g().root!)} innerHTML={icon('plus', 16, 2)} />
                   </Show>
-                </div>
+                </RepoHead>
                 <div class="vt-tile-grid">
                   <For each={tilesOf(g()).map((e) => e.row.tmuxName || e.row.sessionId || e.row.name)}>{(tk) => (
                     <Show when={tilesOf(g()).find((e) => (e.row.tmuxName || e.row.sessionId || e.row.name) === tk)}>
@@ -637,6 +665,14 @@ function Fleet(props: { deps: FleetDeps }) {
           <ArchiveView remote={viewHostId !== LOCAL_HOST} onBack={() => { setArchiveOpen(false); catalogPoll.kick(); }}
             onChanged={() => { catalogPoll.kick(); }} />
         </div>
+      </Show>
+      <Show when={markMenu()}>
+        {(m) => (
+          <Portal>
+            <RepoMarkPicker x={m().x} y={m().y} name={m().name} mark={markOf(prefs().marks, m().id)}
+              onChange={(mark) => setRepoMark(m().id, mark)} onClose={() => setMarkMenu(null)} />
+          </Portal>
+        )}
       </Show>
       {/* 「종료 N」 시트 — 그 저장소의 끝난 대화. 「이어서」가 늘 보이고, 칸을 누르면 이어서 열 곳 미리보기와 「대화 보기」. */}
       <Show when={endedGroup()}>

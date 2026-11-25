@@ -63,6 +63,11 @@ inside git, so linked worktrees belong to their main repository; otherwise that 
   registration break ties); 「저장소 밖」 is inserted right after the last project with live sessions. Sessions: `created` (default), `name`,
   `activity` or `manual` — `rail.order` lists `orderKey`s (catalog session id, else `tmux:<name>`); unknown sessions go to the end of their branch;
   moves stay within one branch and save only the visible keys (≤500).
+- **Repository marks.** `rail.repoMarks` (also this Mac's global setting) maps a project id to `{icon, color}` for the group head
+  (`shell/repo-marks.ts`): 17 fixed Lucide icons (`folder` is the default) and 6 colors taken from the skin's `--color-term-*` tokens.
+  Unknown names, bad ids and default values are dropped when read and written; at most 200 marks, the oldest choice drops first.
+  Picked from the head's context menu (rail), a long-press on the head (phone) or the mark button in settings › Repositories
+  (`RepoMarkPicker.tsx`); 「저장소 밖」 has no mark.
 - **Running sessions** sit at their current place (`db.homes`). While a CLI runs, the project is the one the CLI was **launched** in: the pane's
   cwd is the foreground CLI process's own working folder, which does not change when the agent `cd`s inside the CLI (only the hook cwd does).
   The hook cwd is followed only inside that same project (a move into one of its worktrees); elsewhere, or when it cannot be read, the session
