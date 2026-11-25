@@ -209,6 +209,34 @@ test('내부 에이전트는 기록 조회로, 위임 세션은 별도 레이블
   assert.match(root.querySelector('.vt-native-chip').textContent, /내부 1 작업 중/);
 });
 
+test('내부 에이전트 칩은 살아 있는 것만 센다 — 끝난 것은 행 아래 「끝난 서브에이전트 N」에만', async () => {
+  const env = await loadSolidBuild();
+  _envs.push(env);
+  const node = (items) => {
+    const root = env.document.createElement('div');
+    env.document.body.append(root);
+    const row = { ...base, status: 'working', subagents: { parent_id: 'parent', items } };
+    env.mountSessionNode(root, { row, geometry: { lane: 1, lines: '' }, kidsCount: 0, progress: { reported: 0, open: 0 }, onToggleKids() {}, onOpen() {}, onContext() {} });
+    return root;
+  };
+  const mixed = node([
+    { id: 'a', label: 'x', state: 'idle', started_at: 1 }, { id: 'b', label: 'y', state: 'idle', started_at: 2 },
+    { id: 'c', label: 'z', state: 'done', started_at: 3 }, { id: 'd', label: 'w', state: 'failed', started_at: 4 },
+  ]);
+  assert.strictEqual(mixed.querySelector('.vt-native-chip').textContent.trim(), '내부 2개');
+  assert.strictEqual(mixed.querySelector('.vt-native-chip').dataset.tip, '내부 에이전트 2개');
+  const stale = node([{ id: 'a', label: 'x', state: 'idle', stale: true, started_at: 1 }, { id: 'b', label: 'y', state: 'idle', started_at: 2 }]);
+  assert.strictEqual(stale.querySelector('.vt-native-chip').textContent.trim(), '내부 1개', '오래 못 들은 대기는 세지 않는다');
+  const allDone = node([{ id: 'c', label: 'z', state: 'done', started_at: 3 }, { id: 'd', label: 'w', state: 'done', started_at: 4 }]);
+  assert.strictEqual(allDone.querySelector('.vt-native-chip'), null, '다 끝났으면 칩을 그리지 않는다');
+  const listRoot = env.document.createElement('div');
+  env.document.body.append(listRoot);
+  env.mountNativeChildren(listRoot, { ...base, status: 'working', subagents: { parent_id: 'parent', items: [
+    { id: 'a', label: 'x', state: 'idle', started_at: 1 }, { id: 'c', label: 'z', state: 'done', started_at: 3 }, { id: 'd', label: 'w', state: 'done', started_at: 4 },
+  ] } });
+  assert.match(listRoot.querySelector('.vt-native-fold-ended').textContent, /끝난 서브에이전트 2/);
+});
+
 test('다른 맥에서 만든 칸 — 1줄 이름 옆에 아이콘(툴팁 「다른 맥에서 만듦」), 글은 없다', async () => {
   const { root } = await mount({ origin: 'peer' });
   const origin = root.querySelector('.vt-rg-a .vt-srow-origin');

@@ -20,6 +20,17 @@ export function normalizeSubagents(value) {
   };
 }
 
+// 「살아 있는」 내부 에이전트 — 작업 중이거나, 상태를 최근에 들은 대기. 오래 못 들은(stale) 대기는 이미 끝났을
+// 가능성이 커서 세지 않는다(작업 중이면 stale이어도 센다). 칩·호버 카드·행 아래 목록이 이 한 기준을 쓴다 —
+// 예전엔 칩이 끝난 것까지 세어(`내부 4개`) 바로 아래 「끝난 서브에이전트 2」와 숫자가 겹쳐 보였다.
+export function isAliveSubagent(r) {
+  return r.state === 'working' || (r.state === 'idle' && !r.stale);
+}
+
+export function isEndedSubagent(r) {
+  return r.state === 'done' || r.state === 'failed';
+}
+
 // idle은 「대기」다(세션 로직 점검 단계 7) — Codex 자식은 턴 사이마다 idle로 쉬어 「유휴」라고 하면 끝난 것처럼 읽혔다.
 // 「유휴」라는 말은 목록에서 쓰지 않는다.
 export function nativeStateLabel(state) {

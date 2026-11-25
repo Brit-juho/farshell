@@ -10,7 +10,7 @@
 // 쓴다. 카드 컴포넌트(RailHoverCard.tsx)가 열릴 때 한 번 찍은 값과 상태가 바뀔 때만 갱신한 값을 넘긴다.
 import { t } from '../core/i18n.js';
 import { STATE_LABEL, normalizeState } from '../design/state-classes.js';
-import { normalizeSubagents, nativeStateLabel, sameLabelOrdinals } from './native-subagents.js';
+import { normalizeSubagents, nativeStateLabel, sameLabelOrdinals, isAliveSubagent, isEndedSubagent } from './native-subagents.js';
 import { reasonLabel } from './host-data.js';
 import { normalizeShells, shellCounts, shellLabel } from './bg-shells.js';
 import {
@@ -121,10 +121,15 @@ function nativeRows(row: SessionRow, now: number, cap: number): HcRow[] {
   const sub = normalizeSubagents(row.subagents);
   const items: any[] = sub.items;
   if (!items.length && !sub.limited) return [];
+  // 머리 개수는 살아 있는 것만(칩·행 아래 목록과 같은 기준), 끝난 것은 「· 끝남 E」로 따로 — 아래 줄에는 끝난 것도 나온다.
   const working = items.filter((r) => r.state === 'working').length;
-  const head = sub.limited
-    ? t('내부 에이전트 · 표시 한도 도달')
-    : working > 0 ? t('내부 에이전트 {n}개 · 작업 중 {m}', { n: items.length, m: working }) : t('내부 에이전트 {n}개', { n: items.length });
+  const alive = items.filter(isAliveSubagent).length;
+  const ended = items.filter(isEndedSubagent).length;
+  const head = sub.limited ? t('내부 에이전트 · 표시 한도 도달')
+    : !alive && ended ? t('끝난 내부 에이전트 {e}개', { e: ended })
+    : working > 0
+      ? (ended ? t('내부 에이전트 {n}개 · 작업 중 {m} · 끝남 {e}', { n: alive, m: working, e: ended }) : t('내부 에이전트 {n}개 · 작업 중 {m}', { n: alive, m: working }))
+      : (ended ? t('내부 에이전트 {n}개 · 끝남 {e}', { n: alive, e: ended }) : t('내부 에이전트 {n}개', { n: alive }));
   const rows: HcRow[] = [{ key: 'native', icon: 'bot', text: head }];
   // 같은 이름은 시작 순 #N — 전체 목록에서 한 번 매겨(NativeChildren과 같은 규칙) 카드가 자른 뒤에도 번호가 같다.
   const ord = sameLabelOrdinals(items);

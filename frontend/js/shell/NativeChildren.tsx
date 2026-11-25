@@ -3,13 +3,15 @@ import { Portal } from 'solid-js/web';
 import { t } from '../core/i18n.js';
 import { icon, stateIcon } from '../ui/icons.js';
 import { Menu } from './RailRow.js';
-import { normalizeSubagents, nativeStateLabel, sameLabelOrdinals } from './native-subagents.js';
+import { normalizeSubagents, nativeStateLabel, sameLabelOrdinals, isAliveSubagent, isEndedSubagent } from './native-subagents.js';
 import { formatRelativeTime, type SessionRow } from './rail-data.js';
 
 export function NativeChip(props: { row: SessionRow }) {
   const summary = () => normalizeSubagents(props.row.subagents);
+  // 살아 있는 것만 센다 — 끝난 것은 행 아래 「끝난 서브에이전트 N」이 따로 보여 준다.
+  const alive = () => summary().items.filter(isAliveSubagent).length;
   const count = () => summary().items.filter((r: any) => r.state === 'working').length;
-  const fullLabel = () => summary().limited ? t('내부 에이전트 · 표시 한도 도달') : count() ? t('내부 에이전트 {n} 작업 중', { n: count() }) : t('내부 에이전트 {n}개', { n: summary().items.length });
+  const fullLabel = () => summary().limited ? t('내부 에이전트 · 표시 한도 도달') : count() ? t('내부 에이전트 {n} 작업 중', { n: count() }) : t('내부 에이전트 {n}개', { n: alive() });
   // 리디자인 6단계(시안 O15-B) — 칩을 누르면 「작업 기록」 창을 열고 오른쪽에 작업 중인 첫 서브에이전트를 고른다
   // (예전 「에이전트 내부」 목록 창은 없앴다 — 같은 목록이 작업 기록 왼쪽에 있다).
   const openList = async () => {
@@ -18,13 +20,13 @@ export function NativeChip(props: { row: SessionRow }) {
     if (host !== ((window as any).vtRelayHost?.() || 'local')) return;
     mod.openWorkLog({ tmuxName: props.row.tmuxName, select: { kind: 'working' } });
   };
-  return <Show when={summary().items.length || summary().limited}>
+  return <Show when={alive() || summary().limited}>
     {/* 행 폭이 좁아 칩 글자는 줄이고(「내부 3 작업 중」), 전체 문장은 툴팁에 둔다. 아이콘이 에이전트 가지임을 말한다. */}
     <button type="button" class="vt-native-chip" data-working={count() ? '' : undefined}
       data-tip={fullLabel()} data-tip-side="right" aria-label={fullLabel()}
       onClick={(e) => { e.stopPropagation(); void openList(); }}>
       <span class="vt-native-chip-icon" innerHTML={icon('git-branch', 12, 2)} />
-      <span>{summary().limited ? t('내부 · 한도 도달') : count() ? t('내부 {n} 작업 중', { n: count() }) : t('내부 {n}개', { n: summary().items.length })}</span>
+      <span>{summary().limited ? t('내부 · 한도 도달') : count() ? t('내부 {n} 작업 중', { n: count() }) : t('내부 {n}개', { n: alive() })}</span>
     </button>
   </Show>;
 }
@@ -32,8 +34,8 @@ export function NativeChip(props: { row: SessionRow }) {
 export function NativeChildren(props: { row: SessionRow }) {
   const summary = createMemo(() => normalizeSubagents(props.row.subagents));
   // 진행 중·대기. 상태를 오래 못 들은(stale) 대기 행은 숨긴다 — 이미 끝났을 가능성이 크다(작업 중이면 둔다).
-  const current = () => summary().items.filter((r: any) => r.state === 'working' || (r.state === 'idle' && !r.stale));
-  const ended = () => summary().items.filter((r: any) => r.state === 'done' || r.state === 'failed');
+  const current = () => summary().items.filter(isAliveSubagent);
+  const ended = () => summary().items.filter(isEndedSubagent);
   const manyWorking = () => current().filter((r: any) => r.state === 'working').length > 4;
   const storageKey = () => `vt.native:${(window as any).vtRelayHost?.() || 'local'}:${summary().parentId || props.row.tmuxName}`;
   const saved = () => { try { return JSON.parse(localStorage.getItem(storageKey()) || '{}'); } catch { return {}; } };
