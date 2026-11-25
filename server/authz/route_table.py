@@ -197,6 +197,8 @@ _ROWS: tuple = (
     ("GET", "/api/health/live", public("returns only ok/pid/uptime — the liveness probe must answer before login")),
     ("GET", "/api/usage", auth()),
     ("GET POST", "/api/usage/counter", auth()),
+    ("GET", "/api/usage/system-claude", human()),
+    ("POST", "/api/usage/system-claude", human(elevated=True)),
     ("GET", "/api/tailscale/status", auth()),
     ("POST", "/api/notify/client-event", sock_()),
     ("GET", "/api/safe-mode", auth()),

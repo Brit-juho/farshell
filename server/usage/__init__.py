@@ -79,16 +79,26 @@ def _get_codex_provider() -> CodexProvider:
     return _codex_provider
 
 
+# `native` 모드도 ~/.codex(기본 계정)는 읽는다 — 관리 프로필과 같은 계정이면 merged_snapshot이 카드를 하나로 합친다.
 def codex_capability() -> dict:
-    if _mode() in ("none", "native"):
-        return {"available": False, "provider": "codex", "profiles": 0, "reason": "disabled" if _mode() == "none" else "managed-native"}
+    if _mode() == "none":
+        return {"available": False, "provider": "codex", "profiles": 0, "reason": "disabled"}
     return _get_codex_provider().capability()
 
 
 def codex_snapshot() -> Optional[dict]:
-    if _mode() in ("none", "native"):
+    if _mode() == "none":
         return None
     return _get_codex_provider().snapshot()
+
+
+def _system_claude_row() -> Optional[dict]:
+    """~/.claude 기본 계정 카드(statusline 감싸기로 모은 값). 읽다 실패해도 목록 전체를 막지 않는다."""
+    from .system_accounts import claude_row
+    try:
+        return claude_row()
+    except Exception:
+        return None
 
 
 # ── `/api/usage`(스냅샷 렌더링) 전용 — clauth·codex를 한 화면에 합친다 ─────────
@@ -104,6 +114,8 @@ def merged_capability() -> dict:
         native = agent_profiles.listing()['profiles']
         if native:
             caps.append({'available': True, 'provider': 'native', 'profiles': len(native)})
+        if _system_claude_row() is not None:
+            caps.append({'available': True, 'provider': 'system', 'profiles': 1})
     available = [c for c in caps if c.get("available")]
     # 코덱스 토큰이 만료됐어도 "있는데 재인증이 필요하다"는 카드를 보여야 한다.
     if caps[1].get("reason") == "expired":
@@ -121,11 +133,24 @@ def merged_snapshot() -> Optional[dict]:
     profiles = list(clauth_snap.get("profiles") or [])
     codex_profile = (codex_snap or {}).get("profile")
     if codex_profile:
-        profiles.append(codex_profile)
+        codex_profile = {**codex_profile, "system": True}
     elif codex_capability().get("reason") == "expired":
-        profiles.append(codex_expired_profile())
+        codex_profile = {**codex_expired_profile(), "system": True}
     from .profiles import snapshot as profile_snapshot
-    profiles.extend(profile_snapshot())
+    managed = profile_snapshot()
+    # ~/.codex가 관리 프로필과 같은 계정이면(제공자가 준 계정 ID로만 판단) 기본 계정 카드는 따로 그리지 않는다.
+    if codex_profile and codex_profile.get("subject_hash"):
+        twin = next((r for r in managed if r.get("provider") == "codex"
+                     and r.get("subject_hash") == codex_profile["subject_hash"]), None)
+        if twin is not None:
+            twin["same_as_system"] = True
+            codex_profile = None
+    if codex_profile:
+        profiles.append(codex_profile)
+    profiles.extend(managed)
+    claude_system = _system_claude_row()
+    if claude_system:
+        profiles.append(claude_system)
     if not profiles:
         return None
     return {

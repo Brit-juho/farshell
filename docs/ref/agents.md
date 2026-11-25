@@ -517,7 +517,7 @@ card, the picker row, the HUD chip tooltip and the usage panel show value, reset
 `fsh profile sync-settings`; at session creation only its `statusline_only` form) writes the PROFILE's `statusLine` as
 global value G -> `wrap(G)`: the same object with `command` replaced by
 `<repo>/bin/fsh-statusline --profile <id> --dir <usage dir> -- '<G command>'`; with no global statusLine the
-wrapper alone (it prints nothing). The global `~/.claude/settings.json` is never written. A value that is G itself
+wrapper alone (it prints nothing). The sync never writes the global `~/.claude/settings.json` (only the default-account switch below does). A value that is G itself
 or an earlier wrap (any wrapper path, any earlier G) counts as following, never as the profile's own choice, so a
 changed global statusline or a moved checkout is picked up on the next sync. A statusLine the profile chose
 itself stays its own and is not wrapped (no usage source for it; `take_global` brings the global value back).
@@ -527,6 +527,18 @@ The wrapper reads stdin once, replaces the profile's file only with a document t
 call. It stores the whole input document (POSIX sh cannot parse JSON; the input also carries cwd and transcript
 path), which is why the directory is 0700 and the server reads only `rate_limits` from it. The global statusLine
 command therefore runs in every profile session (the wrapper pipes to it).
+
+**Default accounts.** `usage/system_accounts.py` adds cards for the accounts no managed profile owns (`system: true`
+in `/api/usage`, also in `native` mode). Codex: the default `~/.codex` reader; when a managed Codex profile is proven
+to be the same account (sha256 of `codex:` + the `account_id` the usage endpoint returns, the profile's `subject_hash`),
+only the profile card is shown, with `same_as_system: true`. Claude: the system-default Keychain item is never read.
+The value comes only from the statusline of sessions on the global `~/.claude`, after the user turns collection on
+in the usage panel (`POST /api/usage/system-claude`, human + elevated): the global `statusLine` becomes
+`fsh-statusline --profile system ... -- '<original>'` (file `system.json` in the same folder), turning it off puts
+the original value back, and only that key is written (lock, unchanged-file check, `settings.json.vtbak`, atomic
+replace). The sync above unwraps that `system` wrapper before wrapping for a profile, so a profile never records
+into the default account's file. States: `on`, `stale` (wrapped by another checkout path: turn on again), `off`,
+`unsupported` (not a plain command), `unreadable`.
 
 **Codex app-server conditions.** Started only when the profile's `auth.json` exists, no Codex process uses that
 `CODEX_HOME` (same ps check as `require_inactive`; an unreadable ps counts as in use), at least 5 minutes since
@@ -538,7 +550,7 @@ may refresh the login while it runs: unverified race with a same-account session
 
 `usage/profiles.py` reads namespaced native OAuth credentials and whitelisted quota
 responses without implementing OAuth refresh. API-key profiles do not fall back to
-OAuth credentials. Native mode excludes the default Codex reader; `none` excludes all
+OAuth credentials. Native mode keeps the default Codex reader (see Default accounts); `none` excludes all
 usage sources. Arbitrary API endpoint quotas remain unsupported. Registry account
 labels remain unverified logical grouping. The retirement report (`fsh profile retirement`) keeps
 `same-account-concurrency-not-certified` as a blocker until concurrent use is observed: two live

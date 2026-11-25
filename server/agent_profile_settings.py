@@ -43,7 +43,8 @@ _MISSING = object()
 
 STATUSLINE = "statusLine"
 WRAPPER = Path(__file__).resolve().parent.parent / "bin" / "fsh-statusline"
-_WRAPPED = re.compile(r"(?:'[^']*fsh-statusline'|[^\s']*fsh-statusline) --profile [a-f0-9]{32}(?: --dir (?:'[^']*'|\S+))? --(?: (?P<rest>.*))?", re.S)
+SYSTEM_ID = "system"   # the global ~/.claude account (usage panel "default account"), wrapped only on request
+_WRAPPED = re.compile(r"(?:'[^']*fsh-statusline'|[^\s']*fsh-statusline) --profile (?P<id>[a-f0-9]{32}|system)(?: --dir (?:'[^']*'|\S+))? --(?: (?P<rest>.*))?", re.S)
 
 
 def wrap_command(profile_id, command):
@@ -64,6 +65,24 @@ def _wrapped(value):
     except ValueError:
         return True, None
     return True, parts[0] if len(parts) == 1 else None
+
+
+def wrapped_id(value):
+    """The profile id (or SYSTEM_ID) a FarShell-wrapped statusLine records for, else None."""
+    command = value.get("command") if isinstance(value, dict) else None
+    match = _WRAPPED.fullmatch(command) if isinstance(command, str) else None
+    return match.group("id") if match else None
+
+
+def global_view(glob):
+    """The global statusLine as a profile should follow it: the user's own command, never the
+    `system` wrapper FarShell put around it (that would record a profile's limits as the default account's)."""
+    if wrapped_id(glob) != SYSTEM_ID:
+        return glob
+    _, original = _wrapped(glob)
+    if original is None:
+        return _MISSING
+    return {**glob, "command": original}
 
 
 def _statusline_want(profile_id, glob):
@@ -232,7 +251,7 @@ def sync(profile_id, *, dry_run=False, take_global=(), include_mcp=None, statusl
                 # Global G -> profile wrap(G). A value that is G itself or an earlier wrap (any wrapper
                 # path, any earlier G) is the profile following, not the profile's own choice, unless the
                 # key is already marked as its own.
-                raw = g
+                raw = global_view(g)
                 g = _statusline_want(profile["id"], raw)
                 following = (p is not _MISSING and recorded.get(key) != OWN
                              and (_wrapped(p)[0] or (raw is not _MISSING and _digest(p) == _digest(raw))))

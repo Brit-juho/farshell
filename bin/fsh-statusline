@@ -3,6 +3,9 @@
 #
 #   fsh-statusline --profile <id> [--dir <usage-dir>] -- [<original statusLine command>]
 #
+# <id> is a managed profile id, or `system` for the account of the global ~/.claude (FarShell's
+# "default account" card), whose own statusLine FarShell wraps only when the user turns it on.
+#
 # Claude Code feeds the statusline command a JSON document on stdin; since a session's first reply it
 # carries `rate_limits.five_hour|seven_day.{used_percentage,resets_at}` for the account that session
 # runs on. This wrapper reads stdin once and
@@ -33,8 +36,9 @@ done
 
 input=$(cat)
 
-# A profile id is 32 lowercase hex characters; anything else is never used as a file name.
+# A profile id is 32 lowercase hex characters (or the literal `system`); anything else is never used as a file name.
 case $profile in
+  system) ;;
   *[!a-f0-9]*|'') profile= ;;
   *) [ ${#profile} -eq 32 ] || profile= ;;
 esac

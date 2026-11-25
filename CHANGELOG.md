@@ -12,6 +12,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 - **Each repository can have its own icon and color.** The folder icon at the head of a repository in the session list was the same for every repository. Right-click the head (on the phone, long-press it) or use the mark button in Session list settings › Repositories to pick one of 17 icons and 6 colors (or reset). The choice is saved on that Mac (`rail.repoMarks` in the workspace settings), so every device viewing that Mac shows the same marks and picks up changes without a reload. Only names from the fixed list are stored; unknown values fall back to the folder.
+- **The usage panel opens the account settings.** A gear button in its header goes to Settings › Agent accounts (profiles and the default account for new sessions).
+- **The usage panel shows the default accounts** (the global `~/.claude` and `~/.codex` that no FarShell profile owns), also with `VT_USAGE_PROVIDER=native`.
+  - Codex reads `~/.codex` as before. When a Codex profile is proven to be the same account (by the account id Codex returns), only the profile card is shown, tagged «same as default account».
+  - Claude never reads the system Keychain. The «default account · Claude» card has a «Turn on collection» button that wraps the global `statusLine` with `bin/fsh-statusline --profile system`; your own command still runs unchanged, and «Turn off collection» puts it back. It asks for your password again, writes only that key and keeps a `settings.json.vtbak` copy. Values appear after a Claude session on the default account replies once.
+  - Profiles keep following your own statusLine command, never the `system` wrapper, so a profile's limits are never recorded as the default account's.
+  - New routes: `GET`/`POST /api/usage/system-claude`.
 
 ---
 

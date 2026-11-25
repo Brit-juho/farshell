@@ -65,6 +65,10 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv("VT_CLAUTH_STATUS", str(tmp_path / "status.json"))
     monkeypatch.setenv("VT_CODEX_HOME", str(tmp_path / "codex"))
     monkeypatch.delenv("VT_USAGE_PROVIDER", raising=False)
+    # 기본 Claude 계정 카드(usage/system_accounts)는 ~/.claude가 있으면 생긴다 — 공용 시험 HOME에는 다른 시험이
+    # 그 폴더를 만들 수 있어, 이 시험은 ~/.claude가 없는 자기 HOME을 쓴다.
+    (tmp_path / "home").mkdir()
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     usage._reset_for_tests()
     yield tmp_path
     usage._reset_for_tests()

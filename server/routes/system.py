@@ -13,10 +13,11 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Request, Response, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+import auth
 import fsguard
 import i18n
 import network_access
@@ -248,6 +249,43 @@ def _usage_etag_source(payload: dict) -> dict:
     if "profiles" in stable:
         stable["profiles"] = profiles
     return stable
+
+
+class SystemClaudeState(BaseModel):
+    state: str
+
+
+class SystemClaudeSet(BaseModel):
+    ok: bool
+    state: str
+
+
+@router.get("/api/usage/system-claude", response_model=SystemClaudeState, dependencies=[Depends(auth.require_human_session)])
+async def usage_system_claude_get():
+    """기본 계정(~/.claude) 사용량 수집 상태 — on | stale | off | unsupported | unreadable."""
+    from usage import system_accounts
+    return {"state": await asyncio.to_thread(system_accounts.claude_state)}
+
+
+@router.post("/api/usage/system-claude", response_model=SystemClaudeSet,
+             dependencies=[Depends(auth.require_human_session), Depends(auth.require_elevated)])
+async def usage_system_claude_set(request: Request):
+    """기본 계정 사용량 수집 켜기·끄기 — 전역 ~/.claude/settings.json의 statusLine 하나만 감싸거나 되돌린다.
+
+    전역 설정을 쓰는 일이라 사람 세션 + 비밀번호 재확인(elevated)만 받는다.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = None
+    if not isinstance(body, dict) or set(body) != {"enabled"} or not isinstance(body["enabled"], bool):
+        return JSONResponse({"ok": False, "error": tr("잘못된 요청입니다")}, status_code=400)
+    from usage import system_accounts
+    try:
+        state = await asyncio.to_thread(system_accounts.set_claude, body["enabled"])
+    except system_accounts.Refused as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=409)
+    return {"ok": True, "state": state}
 
 
 @router.get("/api/usage/counter")

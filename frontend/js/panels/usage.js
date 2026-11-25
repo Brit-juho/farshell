@@ -15,7 +15,9 @@ import { emptyState } from '../ui/empty.js';
 import { icon } from '../ui/icons.js';
 import { vtFetch } from '../core/api.js';
 import { t } from '../core/i18n.js';
-import { confirmDialog } from '../core/dialog.js';
+import { confirmDialog, promptDialog } from '../core/dialog.js';
+import { getAction } from '../core/dom.js';
+import { relayHost } from '../core/host-route.js';
 
 const PANEL_ID = 'vt-usage';
 const POLL_MS = 30000;   // 피드 자체가 90초 주기라 그보다 자주 볼 이유가 없다
@@ -80,6 +82,8 @@ function renderWindow(w) {
 const _PROFILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 export function reauthCommand(p) {
+  // 기본 Claude 계정은 FarShell이 로그인시키지 않는다(값도 statusline에서만 온다).
+  if (p.system && p.provider === 'claude') return null;
   if (p.profile_id != null) {
     if (!/^[a-f0-9]{32}$/.test(p.profile_id) || p.quota_scope === 'api-key' || p.quota_scope === 'unsupported') return null;
     return `fsh profile login ${p.profile_id}`;
@@ -132,6 +136,62 @@ export function sourceLine(p, nowMs = Date.now()) {
   return parts.join(' · ');
 }
 
+// 기본 계정(~/.claude)의 사용량 수집 켜기·끄기 — 전역 statusLine을 감싸는 일이라 비밀번호를 다시 확인받는다.
+async function setSystemCollect(enabled) {
+  if (relayHost() !== 'local') throw new Error(t('대상 호스트에 직접 접속해 바꾸세요'));
+  const opts = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) };
+  try { return await vtFetch('/api/usage/system-claude', opts); }
+  catch (error) {
+    if (error.status !== 401 || !/elevation_required/.test(JSON.stringify(error.data || error.message))) throw error;
+    const password = await promptDialog(t('설정을 변경하려면 비밀번호를 확인하세요'), { password: true, title: t('비밀번호 확인') });
+    if (password === null) return null;
+    await vtFetch('/api/auth/elevate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
+    return vtFetch('/api/usage/system-claude', opts);
+  }
+}
+
+async function toggleSystemCollect(enabled, btn) {
+  if (enabled && !await confirmDialog(
+    t('전역 ~/.claude/settings.json의 statusLine을 FarShell 수집 스크립트로 감쌉니다. 원래 statusLine은 그대로 실행되고, 사용량 값만 따로 기록됩니다. 바꾸기 전 settings.json.vtbak으로 백업합니다.'),
+    { title: t('기본 계정 사용량 수집'), okLabel: t('켜기') })) return;
+  const body = btn.closest('.vt-usage-limit-section')?.parentElement;
+  btn.disabled = true;
+  try {
+    const r = await setSystemCollect(enabled);
+    if (r) showToast(enabled ? t('기본 계정 사용량 수집을 켰습니다. 새로 시작한 Claude 세션부터 적용됩니다') : t('기본 계정 사용량 수집을 껐습니다'));
+  } catch (error) {
+    showToast(t('바꾸지 못했습니다: {reason}', { reason: error.data?.error || error.message || '' }));
+  } finally {
+    btn.disabled = false;
+    if (body?.isConnected) refresh(body);
+  }
+}
+
+// 기본 Claude 계정 카드의 안내 줄 — 수집 상태별로 무엇을 하면 되는지 말한다.
+export function systemCollectNote(p) {
+  const hasValue = Array.isArray(p.windows) && p.windows.length > 0;
+  switch (p.collect) {
+    case 'on': return hasValue ? null : { text: t('기본 계정으로 Claude 세션이 한 번 응답하면 값이 표시됩니다'), action: 'off' };
+    case 'off': return { text: t('사용량 수집이 꺼져 있습니다'), action: 'on' };
+    case 'stale': return { text: t('수집 스크립트 위치가 바뀌었습니다 — 다시 켜야 값이 갱신됩니다'), action: 'on' };
+    case 'unsupported': return { text: t('전역 statusLine이 명령 형식이 아니라 수집할 수 없습니다'), action: null };
+    default: return { text: t('전역 설정을 읽지 못했습니다'), action: null };
+  }
+}
+
+function collectButton(action) {
+  const btn = el('button', 'vt-btn sm', action === 'on' ? t('수집 켜기') : t('수집 끄기'));
+  btn.type = 'button';
+  btn.title = action === 'on' ? t('전역 statusLine을 감싸 기본 계정 사용량을 기록합니다') : t('전역 statusLine을 원래대로 되돌립니다');
+  btn.addEventListener('click', () => toggleSystemCollect(action === 'on', btn));
+  return btn;
+}
+
+export function displayName(p) {
+  if (!p.system) return p.name;
+  return t('기본 계정 · {tool}', { tool: p.provider === 'codex' ? 'Codex' : 'Claude' });
+}
+
 function renderProfile(p, activeName) {
   // 카드(시안 P07): 반경 8 · 여백 12. 지금 쓰는 프로필은 액센트 테두리. 머리 = 이름 13/600 · 요금제 11 muted …
   // 꼬리표(실행 중 · 활성 · 재인증 필요). 상태는 색만이 아니라 낱말 꼬리표로 말한다.
@@ -140,7 +200,8 @@ function renderProfile(p, activeName) {
   if (isActive) card.classList.add('active', 'act');
 
   const head = el('div', 'vt-usage-head');
-  const title = el('span', 'vt-usage-name', p.name);
+  const title = el('span', 'vt-usage-name', displayName(p));
+  if (p.system) title.title = t('FarShell 프로필이 아닌 기본 설정 폴더({dir})의 계정', { dir: p.provider === 'codex' ? '~/.codex' : '~/.claude' });
   head.appendChild(title);
   if (p.tier) head.appendChild(el('span', 'vt-usage-tier', p.tier));
   // rolling 토큰은 고정 토큰과 성격이 다르다 — 같은 모양으로 그리면 사용자가
@@ -155,6 +216,11 @@ function renderProfile(p, activeName) {
     live.dataset.tone = 'work';
     live.title = t('이 프로필로 실행 중인 세션이 있습니다');
     tags.appendChild(live);
+  }
+  if (p.same_as_system) {
+    const same = el('span', 'vt-ptag', t('기본 계정과 같음'));
+    same.title = t('~/.codex에 로그인된 계정과 같은 계정이라 기본 계정 카드를 따로 그리지 않습니다');
+    tags.appendChild(same);
   }
   if (isActive) {
     const act = el('span', 'vt-ptag', t('활성'));
@@ -193,16 +259,32 @@ function renderProfile(p, activeName) {
       card.appendChild(el('div', 'vt-mcp-meta', t('잔액: {amount} {currency}', { amount: balance.remaining, currency: balance.currency })));
     }
   }
+  const collect = p.system && p.provider === 'claude' ? systemCollectNote(p) : null;
+  if (collect) {
+    const note = el('div', 'vt-usage-warn vt-usage-collect');
+    note.appendChild(el('span', 'vt-usage-warn-text', collect.text));
+    if (collect.action) note.appendChild(collectButton(collect.action));
+    card.appendChild(note);
+  }
+
   if (!p.windows || p.windows.length === 0) {
     // provider:"generic" 등은 바를 그릴 데이터가 없다. 빈 바를 0%로 그리면
     // "안 쓰고 있다"는 거짓 정보가 된다. 카드는 머리 줄 하나로 줄인다 — 빈 카드가
     // 데이터 있는 카드만큼 자리를 차지하면 목록이 쓸데없이 길어진다.
     card.classList.add('compact');
-    head.appendChild(el('span', 'vt-usage-empty', needsAuth || p.balances?.length ? '' : t('사용량 정보 없음')));
+    head.appendChild(el('span', 'vt-usage-empty', needsAuth || collect || p.balances?.length ? '' : t('사용량 정보 없음')));
   } else {
     for (const w of p.windows) card.appendChild(renderWindow(w));
     const origin = sourceLine(p);
-    if (origin) card.appendChild(el('div', 'vt-mcp-meta vt-usage-source', origin));
+    if (origin || (p.system && p.provider === 'claude' && p.collect === 'on')) {
+      const meta = el('div', 'vt-mcp-meta vt-usage-source');
+      meta.appendChild(el('span', null, origin));
+      if (p.system && p.provider === 'claude' && p.collect === 'on') {
+        meta.classList.add('vt-usage-source-row');
+        meta.appendChild(collectButton('off'));
+      }
+      card.appendChild(meta);
+    }
   }
 
   if (p.fallback && p.fallback.position != null) {
@@ -415,6 +497,7 @@ export function showUsage(opts = {}) {
     ariaLabel: t('사용량'),
     // 리디자인 5단계(시안 P07): 머리 = 「사용량」 + 새로고침 아이콘(피드는 30초마다 다시 읽는다).
     headHTML: `<div class="vt-vw-title">${t('사용량')}</div><span class="vt-ph-ctx"></span>`
+      + `<button type="button" class="vt-icon-btn sm" id="vt-usage-accounts" aria-label="${t('계정 설정')}" data-tip="${t('계정 설정')}">${icon('settings', 14)}</button>`
       + `<button type="button" class="vt-icon-btn sm" id="vt-usage-refresh" aria-label="${t('새로고침')}" data-tip="${t('새로고침')}">${icon('refresh-cw', 14)}</button>`,
     bodyId: 'vt-usage-body',
     extraClass: 'vt-usage',
@@ -422,6 +505,8 @@ export function showUsage(opts = {}) {
   if (!panel) return;   // 토글 — 이미 열려 있어서 닫기만 했다
   const bodyEl = panel.ctx.byId('vt-usage-body');
   panel.ctx.byId('vt-usage-refresh')?.addEventListener('click', () => refresh(bodyEl));
+  // 설정 › 에이전트 계정 — 프로필 관리와 새 세션의 기본 계정 지정이 거기 있다.
+  panel.ctx.byId('vt-usage-accounts')?.addEventListener('click', () => getAction('settings.section')?.('accounts'));
   refresh(bodyEl);
   // 손으로 돌리던 `setInterval` + 모듈 레벨 `_timer`를 `setPanelPoll`로 바꿨다.
   // 그 한 벌짜리 타이머는 인스턴스가 둘이 되는 순간 하나가 다른 하나를 덮어쓴다

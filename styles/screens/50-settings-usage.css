@@ -596,6 +596,9 @@ details[open] > summary > .vt-mcp-chev { transform:none; }
 .vt-usage-card.compact .vt-usage-empty { margin-left:auto; padding:0; text-align:right; color:var(--color-muted); font:400 var(--fs-3xs) var(--font-ui); }
 .vt-usage-card.compact .vt-usage-tags + .vt-usage-empty { margin-left:calc(var(--spacing) * 1.5); }
 .vt-usage-warn .vt-btn { flex:0 0 auto; }
+/* 기본 Claude 계정 카드 — 출처 줄 오른쪽 끝에 「수집 끄기」. */
+.vt-usage-source-row { display:flex; align-items:center; justify-content:space-between; gap:calc(var(--spacing) * 2); }
+.vt-usage-source-row .vt-btn { flex:0 0 auto; }
 .vt-usage-fallback { margin-top:calc(var(--spacing) * 2); font:400 var(--fs-3xs)/16px var(--font-ui); color:var(--color-muted); }
 .vt-usage-fallback.armed { color:var(--color-sub); }
 

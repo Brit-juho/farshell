@@ -154,6 +154,9 @@ def _isolated_env(port: int, token: str, tmp: Path) -> dict:
         # 사용량은 이 서버의 격리 프로필만 읽게 한다. 기본(auto)은 HOME이 진짜라 `~/.codex/auth.json`·clauth 피드를 읽어
         # 실계정으로 사용량 조회를 보낸다(HUD에 진짜 codex 사용률이 뜬 것으로 확인됨).
         VT_USAGE_PROVIDER="native",
+        # native 모드도 기본 계정(~/.codex)을 읽는다(usage/system_accounts) — 없는 폴더로 돌려 실계정 조회를 막는다.
+        # 기본 Claude 계정 카드는 ~/.claude/settings.json의 statusLine을 **읽기만** 한다(쓰기는 승격된 POST뿐, 이 스위트는 안 부른다).
+        VT_CODEX_HOME=str(tmp / "no-codex-home"),
         # Codex app-server 사용량 소스도 끈다 — 켜 두면 Codex 프로필이 생길 때 `codex app-server`를 띄운다(지금 e2e는 안 만들지만 방어).
         VT_USAGE_APPSERVER="0",
         VT_STATE_DIR=str(tmp / "state"),      # ~/.vt/ 대신 여기에 쓰게

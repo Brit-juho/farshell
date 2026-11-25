@@ -52,3 +52,41 @@ test('sourceLine — 「출처 · 갱신 시각」, 모르는 출처는 비운�
   assert.equal(sourceLine({ source: 'weird', checked_at: at }, now), '');
   assert.equal(sourceLine({}, now), '');
 });
+
+test('기본 Claude 계정은 재인증 명령을 만들지 않고, 기본 Codex는 codex login', async () => {
+  const { reauthCommand } = await load();
+  assert.equal(reauthCommand({ system: true, provider: 'claude', name: 'claude' }), null);
+  assert.equal(reauthCommand({ system: true, provider: 'codex', name: 'codex' }), 'codex login');
+});
+
+test('systemCollectNote — 수집 상태마다 안내와 버튼 동작이 정해진다', async () => {
+  const { systemCollectNote } = await load();
+  const win = [{ pct: 10 }];
+  assert.equal(systemCollectNote({ collect: 'on', windows: win }), null);
+  assert.equal(systemCollectNote({ collect: 'on', windows: [] }).action, 'off');
+  assert.equal(systemCollectNote({ collect: 'off', windows: [] }).action, 'on');
+  assert.equal(systemCollectNote({ collect: 'stale', windows: win }).action, 'on');
+  assert.equal(systemCollectNote({ collect: 'unsupported', windows: [] }).action, null);
+  assert.equal(systemCollectNote({ collect: 'unreadable', windows: [] }).action, null);
+});
+
+test('displayName — 기본 계정은 도구 이름으로, 관리 프로필은 이름 그대로', async () => {
+  const { displayName } = await load();
+  assert.equal(displayName({ system: true, provider: 'claude', name: 'claude' }), '기본 계정 · Claude');
+  assert.equal(displayName({ system: true, provider: 'codex', name: 'codex' }), '기본 계정 · Codex');
+  assert.equal(displayName({ name: 'work', provider: 'claude' }), 'work');
+});
+
+test('renderBody — 기본 Claude 카드는 수집 꺼짐 안내와 「수집 켜기」 버튼을 그린다', async () => {
+  const env = createDomEnv('<!doctype html><html><body></body></html>');
+  _doms.push(env.dom);
+  const { renderBody } = await importFresh(USAGE_JS, env.context, new Map());
+  const body = env.dom.window.document.createElement('div');
+  renderBody({ available: true, profiles: [
+    { name: 'claude', system: true, provider: 'claude', collect: 'off', auth_ok: true, windows: [] },
+  ] }, { available: false }, body);
+  assert.match(body.textContent, /기본 계정 · Claude/);
+  assert.match(body.textContent, /사용량 수집이 꺼져 있습니다/);
+  assert.ok([...body.querySelectorAll('button')].some((b) => b.textContent === '수집 켜기'));
+  assert.doesNotMatch(body.textContent, /사용량 정보 없음/);
+});
