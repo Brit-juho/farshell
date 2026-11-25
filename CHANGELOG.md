@@ -10,6 +10,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+---
+
+## [2.14.0] — 2026-11-25
+
 ### Added
 - The file viewer can now read `/tmp` (outside `VT_BROWSE_ROOTS`), read-only: only files and folders owned by the server user, readable by other users (files `o+r`, folders `o+rx`), regular files/folders only. `0600` secrets, other users' files, sockets, symlinks leaving `/tmp`, and tool state folders (`vt-pids`, `vt-uploads`, `claude-*`, `tmux-*`, `pytest-of-*`) stay closed; the usual deny list and hidden-folder rules still apply. No folder registration needed. Set `VT_BROWSE_TMP=0` to turn it off.
 
