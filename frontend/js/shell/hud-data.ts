@@ -168,6 +168,9 @@ interface UsageProfile {
   checked_at?: number;
   active?: boolean;
   windows?: UsageWindow[];
+  /** 기본 설정 폴더(~/.claude·~/.codex)의 계정 — 관리 프로필이 아니다. 이름 대신 「기본 Claude」처럼 그린다. */
+  system?: boolean;
+  provider?: string;
 }
 
 interface UsageSnapshot {
@@ -208,14 +211,15 @@ function usageChip(p: UsageProfile): HudChip | null {
   if (!windows.length) return null;
   const top = windows.reduce((a, b) => ((b.pct ?? 0) > (a.pct ?? 0) ? b : a));
   const pct = Math.round(top.pct ?? 0);
-  const name = (p.name || '').trim();
+  // 기본 계정의 name은 도구 이름(claude·codex)이라 같은 이름의 관리 프로필과 겹친다 — 칩 id·이름을 따로 짓는다.
+  const name = p.system ? t('기본 {tool}', { tool: p.provider === 'codex' ? 'Codex' : 'Claude' }) : (p.name || '').trim();
   if (!name) return null;
 
   const resets = formatResetsIn(top.resets_in_sec);
   // 임계값은 dock 게이지와 같은 감각으로: 90% 넘으면 위험, 75% 넘으면 주의.
   const tone: HudTone = pct >= 90 ? 'err' : pct >= 75 ? 'warn' : 'plain';
   return {
-    id: `usage:${name}`,
+    id: p.system ? `usage:system:${p.provider || ''}` : `usage:${name}`,
     kind: 'usage',
     label: name,
     value: `${pct}%`,

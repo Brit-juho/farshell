@@ -618,3 +618,17 @@ test('기록 칩: 아직 안 본 오류·경고가 있을 때만 생기고, 오�
   const withAgents = buildHudChips({ unseenLog: { error: 1, warn: 0 }, agents: { waiting: 1, working: 0, done: 0 } }, none);
   assert.deepStrictEqual(ids(withAgents), ['agents', 'log'], '에이전트 칩 바로 다음');
 });
+
+test('기본 계정 칩은 같은 이름의 관리 프로필과 id가 겹치지 않고 「기본 Codex」로 그린다', async () => {
+  const { buildHudChips } = await mod();
+  const chips = buildHudChips({
+    caps: {},
+    usage: { available: true, profiles: [
+      { name: 'codex', provider: 'codex', windows: [{ pct: 10 }] },
+      { name: 'codex', provider: 'codex', system: true, windows: [{ pct: 30 }] },
+    ] },
+  });
+  const usageIds = ids(chips).filter((i) => i.startsWith('usage:'));
+  assert.deepStrictEqual(usageIds.sort(), ['usage:codex', 'usage:system:codex']);
+  assert.strictEqual(chips.find((c) => c.id === 'usage:system:codex').label, '기본 Codex');
+});

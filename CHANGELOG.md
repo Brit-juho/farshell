@@ -10,6 +10,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- **The usage panel opens the account settings.** A gear button in its header goes to Settings › Agent accounts (profiles and the default account for new sessions).
+- **The usage panel shows the default accounts** (the global `~/.claude` and `~/.codex` that no FarShell profile owns), also with `VT_USAGE_PROVIDER=native`.
+  - Codex reads `~/.codex` as before. When a Codex profile is proven to be the same account (by the account id Codex returns), only the profile card is shown, tagged «same as default account».
+  - Claude never reads the system Keychain. The «default account · Claude» card has a «Turn on collection» button that wraps the global `statusLine` with `bin/fsh-statusline --profile system`; your own command still runs unchanged, and «Turn off collection» puts it back. It asks for your password again, writes only that key and keeps a `settings.json.vtbak` copy. Values appear after a Claude session on the default account replies once.
+  - Profiles keep following your own statusLine command, never the `system` wrapper, so a profile's limits are never recorded as the default account's.
+  - New routes: `GET`/`POST /api/usage/system-claude`.
+
 ---
 
 ## [2.15.0] — 2026-11-25

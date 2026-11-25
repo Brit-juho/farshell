@@ -28,6 +28,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import threading
@@ -211,6 +212,11 @@ class CodexProvider:
             return None, "unavailable"
 
         normalized = self._normalize(data, now)
+        # Same evidence and hash a managed Codex profile records (`profiles.NativeProfileProvider`), so the
+        # usage list can show one card when ~/.codex is logged into the same account as a profile.
+        subject = data.get("account_id")
+        if isinstance(subject, str) and subject:
+            normalized["profile"]["subject_hash"] = hashlib.sha256(("codex:" + subject).encode()).hexdigest()
         self._cache_at, self._cache, self._cache_error = now, normalized, None
         return normalized, None
 
