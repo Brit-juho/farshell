@@ -11,6 +11,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Fixed
+- **The internal-agent count shows only live agents.** The session row's chip counted finished subagents too (`내부 4개` above 「끝난 서브에이전트 2」). The chip now counts working agents and idle ones heard from recently, and hides when every agent has finished; the collapsed strip's hover card reads 「내부 에이전트 2개 · 끝남 2」 (or 「끝난 내부 에이전트 2개」).
 - **A terminal left open no longer collects stray text like `2026;0$y` in its prompt.** On every reconnect the server replays the session's saved output, and the saved copy still held one-shot terminal queries (device attributes, mode reports such as `CSI ? 2026 $ p`, version and colour queries). The browser terminal answered each of them again and the answers were typed into the session. The saved copy now drops queries, clipboard writes (OSC 52) and bells before it is stored (`server/replay_filter.py`); live output is unchanged, so programs still get their answers once. The replay marker the page used to skip old clipboard writes (`scrollback_end`) is gone with it.
 
 ---

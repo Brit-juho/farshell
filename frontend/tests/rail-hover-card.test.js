@@ -146,18 +146,23 @@ test('위치 — 원격 호스트면 호스트 이름과 응답 상태(속도), 
 
 // ── 서브에이전트 ──────────────────────────────────────────────────────────
 
-test('내부 에이전트 — 머리 「N개 · 작업 중 M」과 줄(작업 중이 위), 줄에는 상태 모양 · 이름 · 경과', async () => {
+test('내부 에이전트 — 머리 「N개 · 작업 중 M · 끝남 E」(N은 살아 있는 것만)과 줄(작업 중이 위), 줄에는 상태 모양 · 이름 · 경과', async () => {
   const { buildHoverCard } = await mod();
   const m = buildHoverCard(row({
     subagents: sub({ state: 'done', label: 'a' }, { state: 'working', label: 'b' }, { state: 'idle', label: 'c' }, { state: 'working', label: 'd' }),
   }), { now: NOW });
   const r = rowsOf(m, 'subagents');
-  assert.strictEqual(r[0].text, '내부 에이전트 4개 · 작업 중 2');
+  assert.strictEqual(r[0].text, '내부 에이전트 3개 · 작업 중 2 · 끝남 1');
   assert.strictEqual(r[0].icon, 'bot');
   same(r.slice(1).map((x) => [x.text, x.glyph]), [['b', 'working'], ['d', 'working'], ['c', 'idle'], ['a', 'done']]);
   assert.strictEqual(r[1].extra, '10분', '경과 = 시작 후');
-  // 작업 중이 없으면 개수만
-  assert.strictEqual(rowsOf(buildHoverCard(row({ subagents: sub({ state: 'idle' }, { state: 'done' }) }), { now: NOW }), 'subagents')[0].text, '내부 에이전트 2개');
+  // 작업 중이 없으면 살아 있는 개수 + 끝남
+  assert.strictEqual(rowsOf(buildHoverCard(row({ subagents: sub({ state: 'idle' }, { state: 'done' }) }), { now: NOW }), 'subagents')[0].text, '내부 에이전트 1개 · 끝남 1');
+  assert.strictEqual(rowsOf(buildHoverCard(row({ subagents: sub({ state: 'idle' }, { state: 'idle' }) }), { now: NOW }), 'subagents')[0].text, '내부 에이전트 2개');
+  // 다 끝났으면 끝난 개수만, 줄은 그대로 보인다
+  const allDone = rowsOf(buildHoverCard(row({ subagents: sub({ state: 'done' }, { state: 'failed' }) }), { now: NOW }), 'subagents');
+  assert.strictEqual(allDone[0].text, '끝난 내부 에이전트 2개');
+  assert.strictEqual(allDone.length, 3);
   // 한도 도달
   const lim = rowsOf(buildHoverCard(row({ subagents: { ...sub({ state: 'working' }), limited: true } }), { now: NOW }), 'subagents')[0];
   assert.strictEqual(lim.text, '내부 에이전트 · 표시 한도 도달');

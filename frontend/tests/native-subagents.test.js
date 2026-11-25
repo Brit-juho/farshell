@@ -26,6 +26,18 @@ test('native summaries whitelist fields, reject duplicate and unsafe ids and pre
   assert.equal(r.limited, true);
 });
 
+test('살아 있음 = 작업 중 또는 최근에 들은 대기, 끝남 = 완료·실패', async () => {
+  const { mod } = await load('shell/native-subagents.js');
+  assert.equal(mod.isAliveSubagent({ state: 'working' }), true);
+  assert.equal(mod.isAliveSubagent({ state: 'working', stale: true }), true, '작업 중은 오래 못 들어도 센다');
+  assert.equal(mod.isAliveSubagent({ state: 'idle' }), true);
+  assert.equal(mod.isAliveSubagent({ state: 'idle', stale: true }), false);
+  assert.equal(mod.isAliveSubagent({ state: 'done' }), false);
+  assert.equal(mod.isEndedSubagent({ state: 'done' }), true);
+  assert.equal(mod.isEndedSubagent({ state: 'failed' }), true);
+  assert.equal(mod.isEndedSubagent({ state: 'idle' }), false);
+});
+
 test('transcript merge deduplicates overlapping pages and resets replaced files', async () => {
   const { mod } = await load('panels/subagent-poll.js');
   const old = [{ id: 'a', kind: 'assistant', text: 'old' }];

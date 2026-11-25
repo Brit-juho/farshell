@@ -15,7 +15,7 @@ import { agentMark } from './agent-mark.js';
 import { formatRelativeTime, nodeLine, kidLabel, type SessionRow } from './rail-data.js';
 import { ShareMark, ScreensMark, OriginMark, KidsToggle, ShellsMark } from './RailRow.js';
 import { NativeChip } from './NativeChildren.js';
-import { normalizeSubagents } from './native-subagents.js';
+import { normalizeSubagents, isAliveSubagent } from './native-subagents.js';
 
 function createNow() {
   const [now, setNow] = createSignal(Date.now());
@@ -55,7 +55,8 @@ export function SessionNode(props: {
     props.onOpen(e as unknown as MouseEvent);
   };
   const g = () => props.geometry;
-  const hasSubagents = () => normalizeSubagents(row().subagents).items.length > 0;
+  // 둘째 줄 칩(NativeChip)은 살아 있는 내부 에이전트가 있을 때만 그린다 — 끝난 것만 있으면 줄을 따로 열지 않는다.
+  const hasSubagents = () => { const s = normalizeSubagents(row().subagents); return s.limited || s.items.some(isAliveSubagent); };
   return (
     <div
       class="vt-rg-row vt-rg-node"
