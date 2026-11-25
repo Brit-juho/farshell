@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+- **A terminal left open no longer collects stray text like `2026;0$y` in its prompt.** On every reconnect the server replays the session's saved output, and the saved copy still held one-shot terminal queries (device attributes, mode reports such as `CSI ? 2026 $ p`, version and colour queries). The browser terminal answered each of them again and the answers were typed into the session. The saved copy now drops queries, clipboard writes (OSC 52) and bells before it is stored (`server/replay_filter.py`); live output is unchanged, so programs still get their answers once. The replay marker the page used to skip old clipboard writes (`scrollback_end`) is gone with it.
+
 ---
 
 ## [2.14.0] — 2026-11-25

@@ -102,8 +102,8 @@ export function wireClipboard(id, term, wrapper) {
   //    · tmux 없는 일반 터미널: 출력 속 시퀀스가 그대로 오므로 기본 차단,
   //      설정 `terminal.osc52Untrusted`로 허용. 1MB 초과는 무시. 판정은 term/osc52.js.
   //    "?"(쿼리) 응답은 미지원 — set 요청만 처리.
-  //    재생분(`_replayingScrollback`, ws.js)은 이미 한 번 처리된 과거 요청이라 조용히 무시한다
-  //    (재접속마다 복사+토스트가 우르르 뜨던 버그 방지). 「드래그 시 자동 복사」를 끄면 이
+  //    재접속 재생본에는 OSC 52가 없다 — 서버가 저장할 때 뺀다(server/replay_filter.py), 그래서
+  //    재접속마다 복사+토스트가 다시 뜨지 않는다. 「드래그 시 자동 복사」를 끄면 이
   //    경로도 같이 꺼진다(tmux copy-mode 복사도 같은 OSC52 경로라 따로 구분할 수 없다).
   if (term.parser && typeof term.parser.registerOscHandler === 'function') {
     term.parser.registerOscHandler(52, (data) => {

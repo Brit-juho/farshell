@@ -8,7 +8,7 @@ const { pathToFileURL } = require('node:url');
 
 const MOD = pathToFileURL(path.join(__dirname, '../js/term/osc52.js')).href;
 const b64 = (s) => Buffer.from(s, 'utf8').toString('base64');
-const base = { isTmux: false, allowUntrusted: false, autocopy: true, replaying: false };
+const base = { isTmux: false, allowUntrusted: false, autocopy: true };
 
 test('tmux 세션은 허용 설정과 무관하게 복사한다', async () => {
   const { osc52Decision } = await import(MOD);
@@ -34,9 +34,8 @@ test('자동 복사가 꺼져 있으면 무시(tmux도 일반도)', async () => 
   }
 });
 
-test('재생분 · 빈 payload · ? · 잘못된 base64는 무시', async () => {
+test('빈 payload · ? · 잘못된 base64는 무시', async () => {
   const { osc52Decision } = await import(MOD);
-  assert.strictEqual(osc52Decision({ ...base, isTmux: true, replaying: true, payload: b64('x') }).reason, 'replay');
   assert.strictEqual(osc52Decision({ ...base, isTmux: true, payload: '' }).action, 'ignore');
   assert.strictEqual(osc52Decision({ ...base, isTmux: true, payload: '?' }).action, 'ignore');
   const bad = osc52Decision({ ...base, isTmux: true, payload: '!!!not base64!!!' });
@@ -99,12 +98,10 @@ test('차단 경고는 세션마다 첫 1회만, 복사는 하지 않는다', as
   assert.strictEqual(h2.toasts.length, 1);
 });
 
-test('차단되지 않는 경로(크기 초과·재생분)는 경고 토스트도 없다', async () => {
+test('차단되지 않는 경로(크기 초과)는 경고 토스트도 없다', async () => {
   const { handleOsc52 } = await import(MOD);
   const h = harness({ tmux: false });
   handleOsc52('c;' + Buffer.alloc(1048577, 1).toString('base64'), h.deps);
-  h.session._replayingScrollback = true;
-  handleOsc52('c;' + b64('x'), h.deps);
   assert.strictEqual(h.toasts.length, 0);
   assert.strictEqual(h.session._osc52Warned, undefined);
 });

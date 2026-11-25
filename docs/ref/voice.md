@@ -130,8 +130,9 @@ carry over. Two paths cover this:
     clipboard (pastejacking). **Blocked by default**, one warning toast per session;
     allow it with Settings › Terminal › "Allow clipboard writes from non-tmux terminals
     (OSC 52)" (`terminal.osc52Untrusted`, device scope).
-  - Always ignored: scrollback replay, `mouse.autocopyOnSelect` off, empty/`?` payloads,
-    invalid base64, and anything over 1 MiB (1,048,576 bytes decoded).
+  - Always ignored: `mouse.autocopyOnSelect` off, empty/`?` payloads, invalid base64, and
+    anything over 1 MiB (1,048,576 bytes decoded). Scrollback replay never carries OSC 52:
+    the server drops it from the saved copy (`server/replay_filter.py`).
   - The copy toast shows the first 40 characters (newlines as ⏎) and the length.
 - **Polling daemon** (`fsh clip`) — copies made outside the terminal (Safari, Finder,
   etc.) can't be caught via OSC52, so `server/clipboard_daemon.py` polls
