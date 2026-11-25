@@ -11,6 +11,7 @@ const KIND = { mcp: 'MCP', skill: t('스킬'), plugin: t('플러그인') };
 const ORIGIN = { personal: t('개인 작성'), git: t('Git 저장소'), marketplace: t('마켓플레이스'), local: t('로컬 설치'), unknown: t('출처 미확인') };
 const UPDATE = { unchecked: t('업데이트 미확인'), unavailable: t('업데이트 확인 불가'), current: t('최신'), available: t('업데이트 있음'), modified: t('로컬 수정 있음') };
 const STATE = { waiting: t('안전한 재시작 대기'), restarting: t('재시작 중'), resumed: t('같은 대화로 재시작됨'), failed: t('재시작 실패'), cancelled: t('재시작 취소됨') };
+const MAX_CHANGES = 64;   // server/agent_config.py MAX_ITEMS
 const READ = new Set(['inventory', 'environment', 'sync-status', 'restart-status', 'restart-jobs', 'requests', 'preview', 'restart-preview', 'edit-preview']);
 
 // 관리 창 안쪽 배치(리디자인 후속, 시안 panels P09-b): 위 막대(관리 대상 · 호스트 · 세션 · 새로고침) /
@@ -219,7 +220,7 @@ export function mount(host, initialContext = {}, onLegacy = null) {
 
   async function applySelection(enabled, preset = null, single = null) {
     const groups = new Map();
-    const members = preset ? [] : single ? [single] : [...selected.values()];
+    const members = preset ? [] : single ? [].concat(single) : [...selected.values()];
     for (const row of members) {
       if (!groups.has(row.host)) groups.set(row.host, []);
       groups.get(row.host).push({ id: row.id, enabled });
@@ -228,8 +229,11 @@ export function mount(host, initialContext = {}, onLegacy = null) {
     if (!groups.size) return;
     const plans = [];
     for (const [target, changes] of groups) {
-      const plan = await api(target, 'preview', { ...contextPayload(), changes, preset: preset?.id });
-      plans.push({ target, plan });
+      // 서버는 한 번에 64개까지만 검토한다 — 넘으면 나눠서 미리보고, 확인은 한 번에 보여 준다.
+      for (let i = 0; i === 0 || (changes && i < changes.length); i += MAX_CHANGES) {
+        const plan = await api(target, 'preview', { ...contextPayload(), changes: changes && changes.slice(i, i + MAX_CHANGES), preset: preset?.id });
+        plans.push({ target, plan });
+      }
     }
     const review = plans.map(({ target, plan }) => `${hostLabel(target)}\n${planText(plan)}`).join('\n\n');
     if (!(await confirmDialog(`${t('아래 항목만 변경합니다. 나머지 구성은 유지합니다.')}\n\n${review}\n\n${t('전역·프로필 설정 변경은 다른 세션에도 영향을 줍니다. 프로젝트 공용 파일은 팀과 공유됩니다.')}`, { title: t('설정 변경 적용'), okLabel: t('적용') }))) return;
@@ -390,6 +394,115 @@ export function mount(host, initialContext = {}, onLegacy = null) {
     return entry;
   }
 
+  // 같은 스킬·플러그인·MCP는 저장소(작업 폴더)가 달라도 한 행이다 — 폴더별 켜짐·꺼짐은 그 행 안에서 보인다.
+  // 서버는 폴더마다 행을 따로 주므로(Claude 스킬의 켬·끔이 프로젝트마다 다르다) 여기서 이름으로 묶는다.
+  const groupKey = (r) => `${r.host}:${r.kind}:${r.tool}:${r.name}`;
+  function groupRows(list) {
+    const map = new Map();
+    for (const r of list) {
+      const key = groupKey(r);
+      if (!map.has(key)) map.set(key, { key, rows: [] });
+      map.get(key).rows.push(r);
+    }
+    return [...map.values()];
+  }
+  const hasMeta = (r) => r.metadata && (r.metadata.category || r.metadata.description);
+  // 분류·출처·업데이트 확인·원본 편집은 대표 행 하나에 한다 — 메모가 이미 있는 행을 먼저, 없으면 전역 행.
+  const repOf = (rows) => rows.find(hasMeta) || rows.find((r) => r.scope === 'global') || rows[0];
+  const contextLabel = (r) => (r.project ? r.project.split('/').pop() : r.profile?.split('/').pop()) || '';
+  const scopeLabel = (r) => (r.scope === 'global' ? (r.profile === `${r.context?.home}/.${r.tool}` ? t('기본 유저') : t('프로필 유저')) : r.level === 'local' ? t('프로젝트 개인') : t('프로젝트 공용'));
+
+  function groupItem(group) {
+    const rows = group.rows;
+    if (rows.length === 1) return item(rows[0]);
+    const rep = repOf(rows);
+    const meta = rows.find(hasMeta)?.metadata || {};
+    const key = `group:${group.key}`;
+    const on = rows.filter((r) => r.enabled === true).length;
+    const off = rows.filter((r) => r.enabled === false).length;
+    const unknown = rows.length - on - off;
+    const entry = el('div', 'vt-ac-entry vt-ac-group');
+    const box = el('details', 'vt-ac-item');
+    box.open = expanded.has(key);
+    box.addEventListener('toggle', () => { if (box.open) expanded.add(key); else expanded.delete(key); });
+    const summary = el('summary', 'vt-ac-itemhead');
+    const head = el('span', 'vt-ac-headmain');
+    const line1 = el('span', 'vt-ac-line1');
+    const kindTag = el('span', 'vt-ac-tag mono', KIND[rep.kind]);
+    kindTag.dataset.kind = rep.kind;
+    line1.append(el('strong', null, rep.name), kindTag, el('span', 'vt-mcp-meta', `${rep.tool} · ${hostLabel(rep.host)}`),
+      el('span', 'vt-mcp-meta', t('{n}곳', { n: rows.length })));
+    const sources = [...new Set(rows.map((r) => r.source).filter(Boolean))];
+    head.append(line1, el('span', 'vt-ac-line2', sources.length === 1 ? sources[0] : t('원본 위치 {n}곳', { n: sources.length })));
+    const status = el('span', 'vt-ac-status', t('{n}곳 중 {on}곳 켜짐', { n: rows.length, on }) + (unknown ? ` · ${t('확인 불가 {u}곳', { u: unknown })}` : ''));
+    status.dataset.state = on === rows.length ? 'on' : off === rows.length ? 'off' : unknown === rows.length ? 'unknown' : 'mixed';
+    summary.append(el('span', 'vt-ac-chev', null), head, status);
+    summary.querySelector('.vt-ac-chev').innerHTML = icon('chevron-right', 12, 2);
+    summary.querySelector('.vt-ac-chev').setAttribute('aria-hidden', 'true');
+    box.appendChild(summary);
+    const info = el('div', 'vt-ac-itembody');
+    info.append(el('p', 'vt-mcp-meta', `${ORIGIN[meta.origin || rep.origin] || ORIGIN.unknown} · ${meta.category || t('미분류')} · ${UPDATE[rep.update?.state] || UPDATE.unchecked}`));
+    if (meta.description) info.appendChild(el('p', 'vt-set-help', meta.description));
+    const list = el('div', 'vt-ac-states');
+    list.setAttribute('role', 'list');
+    const ordered = [...rows].sort((a, b) => `${a.scope === 'global' ? 0 : 1}:${a.project || a.profile || ''}`.localeCompare(`${b.scope === 'global' ? 0 : 1}:${b.project || b.profile || ''}`));
+    for (const r of ordered) {
+      const line = el('div', 'vt-ac-state');
+      line.setAttribute('role', 'listitem');
+      const text = el('span', 'vt-ac-statetext');
+      text.append(el('span', null, `${scopeLabel(r)}${contextLabel(r) ? ` · ${contextLabel(r)}` : ''}`), el('span', 'vt-ac-path', r.project || r.source || ''));
+      const st = el('span', 'vt-ac-status', r.enabled == null ? t('기본값 또는 확인 불가') : r.enabled ? t('설정상 켜짐') : t('설정상 꺼짐'));
+      st.dataset.state = r.enabled == null ? 'unknown' : r.enabled ? 'on' : 'off';
+      line.append(text, st);
+      if (r.writable) {
+        line.appendChild(button(r.enabled ? t('끄기') : t('켜기'), () => perform(async () => { await applySelection(!r.enabled, null, r); }), 'vt-chip sm'));
+      }
+      list.appendChild(line);
+    }
+    info.appendChild(list);
+    if (rows.some((r) => !r.writable)) info.appendChild(el('p', 'vt-set-help', t('쓰기 불가 항목의 활성화는 해당 CLI에서 관리합니다')));
+    const actions = el('div', 'vt-ac-actions');
+    if (rep.host === 'local') {
+      actions.appendChild(button(t('분류·설명'), () => perform(() => classify({ ...rep, metadata: meta }))));
+      actions.appendChild(select(t('출처'), Object.entries(ORIGIN), meta.origin || rep.origin || 'unknown', (origin) => perform(async () => {
+        await api(rep.host, 'metadata', { ...contextPayload(), id: rep.id, values: { ...rep.metadata, origin } });
+        await load();
+      })));
+      if (rep.kind !== 'plugin' && !rep.linked && (rep.kind === 'skill' || rep.editable)) actions.appendChild(button(t('원본 편집'), () => { edit(rep).catch((e) => showToast(e.message, 'error', { error: e })); }));
+      actions.appendChild(button(t('업데이트 확인'), () => perform(async () => {
+        const result = await api(rep.host, 'update-check', { ...contextPayload(), id: rep.id });
+        notice = `${rep.name}: ${UPDATE[result.state]}${result.reason ? ` · ${result.reason}` : ''}`;
+        await load();
+      })));
+    }
+    info.appendChild(actions);
+    box.appendChild(info);
+    {
+      const label = el('label', 'vt-ac-pick');
+      const check = el('input');
+      check.type = 'checkbox';
+      check.checked = rows.every((r) => selected.has(rowKey(r)));
+      check.setAttribute('aria-label', t('{name} 선택', { name: rep.name }));
+      check.addEventListener('change', () => {
+        for (const r of rows) { if (check.checked) selected.set(rowKey(r), r); else selected.delete(rowKey(r)); }
+        updateSelection();
+      });
+      label.append(check, document.createTextNode(t('일괄 관리에 선택')));
+      entry.appendChild(label);
+    }
+    // 전체 켜기·끄기 — 쓸 수 있는 곳 중 지금 상태가 다른 곳만 바꾼다. 확인 창에 바뀔 폴더가 전부 나온다.
+    const bulk = el('span', 'vt-ac-quickset');
+    for (const [text, enabled] of [[t('전체 켜기'), true], [t('전체 끄기'), false]]) {
+      const targets = rows.filter((r) => r.writable && r.enabled !== enabled);
+      const b = button(text, () => perform(async () => { await applySelection(enabled, null, targets); }), 'vt-chip sm vt-ac-quick');
+      b.disabled = !targets.length;
+      bulk.appendChild(b);
+    }
+    entry.appendChild(bulk);
+    entry.appendChild(box);
+    return entry;
+  }
+
   function updateSelection() {
     const count = host.querySelector('.vt-ac-selected');
     if (count) count.textContent = t('{n}개 선택', { n: selected.size });
@@ -450,14 +563,18 @@ export function mount(host, initialContext = {}, onLegacy = null) {
     function renderList() {
       list.replaceChildren();
       const query = q.trim().toLocaleLowerCase();
-      const visible = rows.filter((r) => (kind === 'all' || r.kind === kind) && (tool === 'all' || r.tool === tool)
+      const matched = rows.filter((r) => (kind === 'all' || r.kind === kind) && (tool === 'all' || r.tool === tool)
         && (profile === 'all' || r.profile === profile)
-        && (scope === 'all' || (scope === 'global' ? r.scope === 'global' : scope === 'local' ? r.level === 'local' : r.scope !== 'global' && r.level !== 'local'))
-        && (category === 'all' || (category === 'uncategorized' ? !r.metadata?.category : r.metadata?.category === category))
-        && (!query || [r.name, r.source, r.profile, r.metadata?.description, r.metadata?.category, ORIGIN[r.origin]].join(' ').toLocaleLowerCase().includes(query)));
-      visible.sort((a, b) => `${a.metadata?.category || ''}:${a.name}:${a.kind}`.localeCompare(`${b.metadata?.category || ''}:${b.name}:${b.kind}`));
+        && (scope === 'all' || (scope === 'global' ? r.scope === 'global' : scope === 'local' ? r.level === 'local' : r.scope !== 'global' && r.level !== 'local')));
+      const visible = groupRows(matched).filter((g) => {
+        const meta = g.rows.find(hasMeta)?.metadata || {};
+        if (category !== 'all' && (category === 'uncategorized' ? meta.category : meta.category !== category)) return false;
+        return !query || g.rows.some((r) => [r.name, r.source, r.profile, meta.description, meta.category, ORIGIN[r.origin]].join(' ').toLocaleLowerCase().includes(query));
+      });
+      const sortKey = (g) => `${(g.rows.find(hasMeta)?.metadata || {}).category || ''}:${g.rows[0].name}:${g.rows[0].kind}`;
+      visible.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
       list.appendChild(el('p', 'vt-mcp-meta vt-ac-count', t('{n}개 항목', { n: visible.length })));
-      for (const row of visible) list.appendChild(item(row));
+      for (const g of visible) list.appendChild(groupItem(g));
       if (!visible.length) list.appendChild(el('p', 'vt-set-help', t('이 범위에 표시할 자료가 없습니다. 세션·도구·필터를 확인하세요.')));
       updateSelection();
     }

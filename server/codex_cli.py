@@ -8,6 +8,8 @@ Codex 자신이 제공하는 JSON 출력을 단일 경로로 읽되, 셸을 거�
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import json
 import os
 import subprocess
@@ -87,12 +89,29 @@ PLUGIN_LIST_TIMEOUT_SEC = 30.0
 _plugin_lock = TimedLock("codex.plugin_list", default_timeout=45.0)
 _plugin_cache: dict = {"at": 0.0, "data": None}
 _plugin_caches: dict[str, dict] = {}
+# 관리 화면의 목록은 작업 폴더마다 이 조회를 부른다(25곳이면 25번). 조회가 실패하면 30초씩 25번 반복돼 목록 하나에 10분이
+# 넘게 걸렸다(2026-11-25 실측). 그래서 `failure_scope()` 안에서만 실패를 20초 동안 기억한다(목록은 여러 페이지 요청으로
+# 오므로 시간으로 묶는다). 범위 밖은 예전 그대로 실패를 기억하지 않는다 — 다음 호출이 바로 다시 시도해 일시 실패가 굳지 않는다.
+SCOPED_FAIL_TTL_SEC = 20.0
+_failure_scope: contextvars.ContextVar = contextvars.ContextVar("codex_plugin_failure_scope", default=False)
+_scoped_failures: dict[str, tuple[float, str]] = {}
+
+
+@contextlib.contextmanager
+def failure_scope():
+    """이 안에서 실패한 `plugin list` 를 짧게 기억한다."""
+    token = _failure_scope.set(True)
+    try:
+        yield
+    finally:
+        _failure_scope.reset(token)
 
 
 def reset_plugin_cache() -> None:
     with _plugin_lock:
         _plugin_cache.update(at=0.0, data=None)
         _plugin_caches.clear()
+        _scoped_failures.clear()
 
 
 def plugin_list(*, refresh: bool = False) -> tuple[object | None, str | None]:
@@ -118,11 +137,18 @@ def _plugin_list_locked(refresh: bool) -> tuple[object | None, str | None]:
         fresh = time.monotonic() - cache["at"] < PLUGIN_LIST_TTL_SEC
         if cached is not None and fresh and not refresh:
             return cached, None
+        scoped = _failure_scope.get()
+        failed = _scoped_failures.get(key)
+        if scoped and failed and not refresh and time.monotonic() - failed[0] < SCOPED_FAIL_TTL_SEC:
+            return cached, (None if cached is not None else failed[1])
         data, err = run_json(["plugin", "list", "--json"], timeout=PLUGIN_LIST_TIMEOUT_SEC)
         if err is None and isinstance(data, dict) and isinstance(data.get("installed"), list):
             cache.update(at=time.monotonic(), data=data)
             _plugin_cache.update(cache)
+            _scoped_failures.pop(key, None)
             return data, None
+        if scoped:
+            _scoped_failures[key] = (time.monotonic(), err or tr("응답 형식이 예상과 다릅니다"))
         if cached is not None:
             return cached, None
         return data, err
