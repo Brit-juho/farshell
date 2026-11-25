@@ -10,6 +10,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+---
+
+## [2.15.0] — 2026-11-25
+
 ### Fixed
 - **The internal-agent count shows only live agents.** The session row's chip counted finished subagents too (`내부 4개` above 「끝난 서브에이전트 2」). The chip now counts working agents and idle ones heard from recently, and hides when every agent has finished; the collapsed strip's hover card reads 「내부 에이전트 2개 · 끝남 2」 (or 「끝난 내부 에이전트 2개」).
 - **The customization manager no longer hangs for minutes when `codex plugin list` fails.** The list asked Codex for its plugins once per repository, and a failed or timed-out call was retried each time (30 s × 25). A failure is now remembered for 20 s while one list is being built; a normal call outside a list still retries at once.
