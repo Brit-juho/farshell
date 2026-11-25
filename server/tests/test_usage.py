@@ -57,6 +57,9 @@ def feed(tmp_path, monkeypatch):
     # 고정한다 — 안 그러면 이 테스트를 돌리는 실제 맥의 ~/.codex/auth.json
     # 존재 여부에 결과가 갈리는, 기기마다 다른 결과가 나오는 테스트가 된다.
     monkeypatch.setenv("VT_CODEX_HOME", str(tmp_path / "codex-empty"))
+    # 기본 Claude 계정 카드(usage/system_accounts)도 같은 이유로 막는다 — ~/.claude가 없는 HOME.
+    (tmp_path / "home").mkdir()
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     usage._reset_for_tests()
     yield path
     usage._reset_for_tests()
