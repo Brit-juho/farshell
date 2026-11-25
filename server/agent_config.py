@@ -16,6 +16,7 @@ from pathlib import Path
 from contextlib import contextmanager
 
 import agent_config_context as contexts
+import codex_cli
 import config_io
 import mcp_adapters
 import mcp_plans
@@ -274,6 +275,11 @@ def inventory(session: str | None = None, view: str = "all", *, plugins: bool = 
               offset: int = 0, inventory_revision: str | None = None) -> dict:
     if view not in ("all", "session"):
         raise ValueError(tr("잘못된 관리 범위입니다"))
+    with codex_cli.failure_scope():
+        return _inventory(session, view, plugins, offset, inventory_revision)
+
+
+def _inventory(session, view, plugins, offset, inventory_revision) -> dict:
     contexts_list, selected, errors = _context_list(session, view)
     if type(offset) is not int or offset < 0 or offset > MAX_CONTEXTS:
         raise ValueError(tr("잘못된 관리 범위입니다"))
@@ -304,6 +310,11 @@ def inventory(session: str | None = None, view: str = "all", *, plugins: bool = 
 
 
 def full_inventory(session=None, view="all", *, plugins=False):
+    with codex_cli.failure_scope():
+        return _full_inventory(session, view, plugins)
+
+
+def _full_inventory(session, view, plugins):
     result = inventory(session, view, plugins=plugins)
     rows = {r["id"]: r for r in result["items"]}
     while result["next_offset"] is not None:

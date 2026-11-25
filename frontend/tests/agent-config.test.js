@@ -137,3 +137,62 @@ test('옛 보관함 버튼은 바닥 막대에 있고 누르면 이 화면을 �
   assert.equal(opened, 1);
   assert.ok(!env.host.classList.contains('vt-agent-config'));
 });
+
+// 같은 스킬은 작업 폴더가 달라도 한 행 — 폴더별 켜짐·꺼짐은 그 행 안(펼침)에 있다.
+const skill = (project, over = {}) => ({ id: `skill:${project}`, kind: 'skill', tool: 'claude', name: 'review',
+  source: '/home/alice/.claude/skills/review/SKILL.md', profile: '/home/alice/.claude', scope: 'global', level: 'user',
+  project, enabled: true, writable: true, metadata: {}, origin: 'unknown', context: { home: '/home/alice' }, ...over });
+
+test('같은 스킬이 여러 폴더에 있어도 한 행으로 묶고 켜진 곳 수를 보인다', async () => {
+  const items = [skill('/w/a'), skill('/w/b', { enabled: false }), skill('/w/c'), row({ id: 'other', kind: 'skill', tool: 'claude', name: 'ship', scope: 'global' })];
+  const { host, manager } = await setup({ items });
+  assert.equal(host.querySelectorAll('.vt-ac-entry').length, 2, '묶음 하나 + 단독 하나');
+  assert.equal(host.querySelectorAll('.vt-ac-group').length, 1);
+  assert.match(host.querySelector('.vt-ac-group .vt-ac-status').textContent, /3곳 중 2곳 켜짐/);
+  assert.equal(host.querySelector('.vt-ac-group .vt-ac-status').dataset.state, 'mixed');
+  assert.equal(host.querySelectorAll('.vt-ac-group .vt-ac-state').length, 3, '폴더별 상태는 안에 그대로');
+  manager.dispose();
+});
+
+test('전체 켜기는 쓸 수 있고 상태가 다른 폴더만 검토 목록에 담는다', async () => {
+  const items = [skill('/w/a'), skill('/w/b', { enabled: false }), skill('/w/c', { enabled: false, writable: false })];
+  const { host, calls, document, manager } = await setup({ items });
+  const [allOn, allOff] = [...host.querySelectorAll('.vt-ac-group .vt-ac-quickset button')];
+  assert.equal(allOn.textContent, '전체 켜기');
+  assert.equal(allOn.disabled, false);
+  assert.equal(allOff.disabled, false, '켜진 곳이 있으니 끄기도 가능');
+  allOn.click();
+  for (let i = 0; i < 4; i++) await flush();
+  const preview = calls.find((c) => c.route.endsWith('/preview'));
+  assert.deepEqual(preview.body.changes, [{ id: 'skill:/w/b', enabled: true }], '이미 켜진 곳·쓰기 불가는 빠진다');
+  assert.equal(calls.some((c) => c.route.endsWith('/apply')), false, '확인 전에는 쓰지 않는다');
+  await answerConfirm(document);
+  for (let i = 0; i < 8; i++) await flush();
+  assert.deepEqual(calls.find((c) => c.route.endsWith('/apply')).body, { token: 'review-token' });
+  manager.dispose();
+});
+
+test('바꿀 곳이 없으면 전체 버튼이 꺼지고, 64개를 넘으면 나눠서 검토한다', async () => {
+  const one = await setup({ items: [skill('/w/a'), skill('/w/b')] });
+  const [allOn] = [...one.host.querySelectorAll('.vt-ac-group .vt-ac-quickset button')];
+  assert.equal(allOn.disabled, true, '이미 모두 켜짐');
+  one.manager.dispose();
+
+  const many = Array.from({ length: 70 }, (_, i) => skill(`/w/p${i}`, { enabled: false }));
+  const { host, calls, document, manager } = await setup({ items: many });
+  host.querySelector('.vt-ac-group .vt-ac-quickset button').click();
+  for (let i = 0; i < 8; i++) await flush();
+  const sizes = calls.filter((c) => c.route.endsWith('/preview')).map((c) => c.body.changes.length);
+  assert.deepEqual(sizes, [64, 6]);
+  await answerConfirm(document);
+  for (let i = 0; i < 8; i++) await flush();
+  assert.equal(calls.filter((c) => c.route.endsWith('/apply')).length, 2, '나눈 계획을 모두 적용');
+  manager.dispose();
+});
+
+test('묶음의 선택 칸은 그 안의 모든 폴더를 일괄 관리에 담는다', async () => {
+  const { host, manager } = await setup({ items: [skill('/w/a'), skill('/w/b')] });
+  host.querySelector('.vt-ac-group input[type="checkbox"]').click();
+  assert.match(host.querySelector('.vt-ac-selected').textContent, /2개 선택/);
+  manager.dispose();
+});
