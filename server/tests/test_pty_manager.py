@@ -317,3 +317,57 @@ def test_capabilities_reports_the_dropped_subscriber_total():
             assert body["dropped_subscribers"] >= 3
         finally:
             client.delete(f"/api/sessions/{sid}")
+
+
+# ------------------------------------------------- 출력 관찰자(2026-11-26)
+# 출력 감시·자동 응답·프롬프트 감지는 WS 연결마다가 아니라 세션당 한 번 출력을 본다.
+
+def test_observers_see_each_flush_once_regardless_of_subscriber_count(loop):
+    mgr = make_manager_with_session(loop, "test-obs")
+    session = mgr._sessions["test-obs"]
+    seen = []
+    mgr.output_observers.append(lambda sid, data: seen.append((sid, data)))
+    a, b = [], []
+    session._subscribers.add(a.append)
+    session._subscribers.add(b.append)
+
+    session._out_buf.extend(b"hello")
+    mgr._flush_session("test-obs")
+
+    assert len(seen) == 1 and seen[0][0] == "test-obs" and seen[0][1].endswith(b"hello")
+    assert len(a) == 1 and len(b) == 1, "두 화면은 각자 받는다"
+    mgr.destroy_session("test-obs")
+
+
+def test_observers_run_without_any_subscriber(loop):
+    mgr = make_manager_with_session(loop, "test-obs0")
+    session = mgr._sessions["test-obs0"]
+    seen = []
+    mgr.output_observers.append(lambda sid, data: seen.append(data))
+    session._out_buf.extend(b"x")
+    mgr._flush_session("test-obs0")
+    assert len(seen) == 1
+    mgr.destroy_session("test-obs0")
+
+
+def test_raising_observer_does_not_block_screens_or_other_observers(loop):
+    mgr = make_manager_with_session(loop, "test-obs-err")
+    session = mgr._sessions["test-obs-err"]
+
+    def bad(_sid, _data):
+        raise RuntimeError("boom")
+
+    after = []
+    mgr.output_observers.extend([bad, lambda sid, data: after.append(data)])
+    screen = []
+    session._subscribers.add(screen.append)
+    session._out_buf.extend(b"y")
+    mgr._flush_session("test-obs-err")
+    assert len(after) == 1 and len(screen) == 1
+    assert screen.append in session._subscribers and session.dropped_subscribers == 0
+    mgr.destroy_session("test-obs-err")
+
+
+def test_deps_registers_the_three_consumers_once():
+    import deps
+    assert deps.pty_mgr.output_observers.count(deps._observe_pty_output) == 1
