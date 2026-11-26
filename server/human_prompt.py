@@ -8,7 +8,8 @@ from __future__ import annotations
 from typing import Optional
 
 LIMIT = 200
-NOT_HUMAN_PREFIXES = ('<', 'Caveat:', '[FarShell 위임', '[위임 결과', '[FarShell 에이전트')
+# `# AGENTS.md instructions` — Codex가 대화 첫머리에 끼워 넣는 프로젝트 지침(사람이 친 글이 아니다).
+NOT_HUMAN_PREFIXES = ('<', 'Caveat:', '[FarShell 위임', '[위임 결과', '[FarShell 에이전트', '# AGENTS.md instructions')
 # 위임한 작업은 본문 뒤에 이 꼬리가 붙는다(delegation.py `_task_footer`) — 앞부분은 부모 에이전트가 쓴 글이다.
 NOT_HUMAN_MARKERS = ('\n[FarShell 위임 ',)
 

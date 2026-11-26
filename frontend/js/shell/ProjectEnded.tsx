@@ -141,7 +141,9 @@ export function ConversationItem(p: { conversation: EndedConversation; last: boo
   const [preview, setPreview] = createSignal<any>(null);
   const [opened, setOpened] = createSignal(false);
   const archived = () => !!c().archived;
-  const title = () => c().title || t('제목 없음');
+  // 제목이 없으면(Claude가 제목을 붙이기 전에 끝난 대화 등) 마지막 지시를 흐리게 대신 쓴다 — 아래 「…」 줄과 겹치지 않게 그 줄은 숨긴다.
+  const fallback = () => !c().title && !!c().last_user_text;
+  const title = () => c().title || c().last_user_text || t('제목 없음');
   const run = async (fn: () => Promise<unknown>) => {
     if (busy()) return;
     setBusy(true); setError('');
@@ -181,7 +183,7 @@ export function ConversationItem(p: { conversation: EndedConversation; last: boo
             <button type="button" class="vt-rg-er-toggle" aria-expanded={opened()} aria-label={t('{name} 자세히', { name: title() })}
               onClick={(e) => { e.stopPropagation(); void toggle(); }}>
               <Show when={c().provider}><span class="vt-rg-mk2" innerHTML={agentMark(c().provider)} /></Show>
-              <span class="vt-rg-name">{title()}</span>
+              <span class="vt-rg-name" classList={{ untitled: !c().title }}>{title()}</span>
             </button>
             <span class="vt-rg-sp" />
             <span class="vt-rg-tm">{agoLabel(c().activity || 0)}</span>
@@ -205,7 +207,7 @@ export function ConversationItem(p: { conversation: EndedConversation; last: boo
               <Show when={c().user_message_count}><span class="vt-rg-tm ui">{t('지시 {n}', { n: c().user_message_count })}</span></Show>
             </div>
           </Show>
-          <Show when={c().last_user_text}><div class="vt-rg-b"><span class="vt-rg-sm">「{c().last_user_text}」</span></div></Show>
+          <Show when={c().last_user_text && !fallback()}><div class="vt-rg-b"><span class="vt-rg-sm">「{c().last_user_text}」</span></div></Show>
           <Show when={opened()}>
             <div class="vt-rg-cv" onClick={(e) => e.stopPropagation()}>
               <Show when={preview()?.resumable}>

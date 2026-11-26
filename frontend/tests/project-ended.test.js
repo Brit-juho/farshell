@@ -24,8 +24,17 @@ test('대화 칸 — 제목·경과·「이어서」(늘 보임)·⋯, 둘째 �
   assert.match(root.textContent, /「결제 고쳐줘」/);
   const untitled = m.document.createElement('div');
   m.document.body.appendChild(untitled);
+  // 제목이 없으면 마지막 지시를 흐리게(untitled) 제목 자리에 — 아래 「…」 줄은 겹치므로 숨긴다.
   m.mountConversationItem(untitled, { conversation: conv({ title: '', archived: 5 }), last: false });
-  assert.strictEqual(untitled.querySelector('.vt-rg-name').textContent, '제목 없음');
+  const name = untitled.querySelector('.vt-rg-name');
+  assert.strictEqual(name.textContent, '결제 고쳐줘');
+  assert.ok(name.classList.contains('untitled'));
+  assert.doesNotMatch(untitled.textContent, /「결제 고쳐줘」/);
+  assert.ok(!root.querySelector('.vt-rg-name').classList.contains('untitled'), '제목이 있으면 그대로');
+  const bare = m.document.createElement('div');
+  m.document.body.appendChild(bare);
+  m.mountConversationItem(bare, { conversation: conv({ title: '', last_user_text: '' }), last: false });
+  assert.strictEqual(bare.querySelector('.vt-rg-name').textContent, '제목 없음', '지시도 없으면 「제목 없음」');
   assert.match(untitled.querySelector('.vt-rg-rs').textContent, /해제/, '보관한 대화는 「해제」');
 });
 

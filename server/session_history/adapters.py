@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 import re
 
+from .titles import better, claude_title
+
 SECRET = re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._~-]+|\b(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,})")
 
 
@@ -70,6 +72,7 @@ def records(record, provider):
 
 def identity(data, provider, relative):
     native, cwd, parent, title, launch = '', '', None, '', ''
+    title_kind = None
     for raw in data.splitlines()[:256]:
         try:
             row = json.loads(raw)
@@ -90,8 +93,9 @@ def identity(data, provider, relative):
             native = native or row.get('sessionId', '')
             cwd = cwd or row.get('cwd', '')
             launch = launch or (row.get('entrypoint') if isinstance(row.get('entrypoint'), str) else '')
-            if row.get('type') in ('summary', 'custom-title', 'ai-title'):
-                title = row.get('customTitle', row.get('title', row.get('summary', '')))
+            found = claude_title(row)
+            if better((title, title_kind) if title else None, found):
+                title, title_kind = found
     # Claude child sessionId can be the parent's. Path-owned child ID stays distinct.
     parts = relative.split('/')
     if provider == 'claude' and 'subagents' in parts:
@@ -104,5 +108,6 @@ def identity(data, provider, relative):
     return {'native_id': native, 'cwd': cwd if isinstance(cwd, str) else '',
             'parent_native_id': parent if isinstance(parent, str) else None,
             'title': title[:128] if isinstance(title, str) else '',
+            'title_kind': title_kind if title else None,
             # 어떻게 켰나(Claude `entrypoint`, Codex `originator`) — 저장소는 터미널 CLI 대화만 만든다(session_catalog/placement.py).
             'launch': launch[:40]}

@@ -16,7 +16,7 @@ import zstandard
 import fsguard
 from session_catalog.db import (database, directory, private_dir, uid, encode, host_id, changed,
                                 identifier, HASH, Refused, setting)
-from . import adapters
+from . import adapters, titles
 
 CHUNK = 4 * 1024 * 1024
 PASS_BYTES = 8 * 1024 * 1024
@@ -274,11 +274,12 @@ def _projection(stream, provider, begin, end, *, seek=True, checkpoint=None):
             reasons.add('invalid_record')
             continue
         # Claude가 나중에 붙이는 제목 줄(summary/custom-title/ai-title)도 본다 — 앞 256줄만 보던 identity는 대화가
-        # 길어진 뒤 생긴 제목을 놓쳤다. 저장하지 않는 임시 키(`_title`)로 넘기고 capture가 꺼낸다.
-        if provider == 'claude' and isinstance(row, dict) and row.get('type') in ('summary', 'custom-title', 'ai-title'):
-            found = row.get('customTitle', row.get('title', row.get('summary', '')))
-            if isinstance(found, str) and found.strip():
-                checkpoint['_title'] = found.strip()[:128]
+        # 길어진 뒤 생긴 제목을 놓쳤다. 이번에 읽은 줄 중 순위가 가장 높은(같으면 나중) 것을 저장하지 않는 임시 키(`_title`)로
+        # 넘기고 capture가 꺼낸다. 순위·키는 titles.py.
+        if provider == 'claude':
+            found = titles.claude_title(row)
+            if titles.better(checkpoint.get('_title'), found):
+                checkpoint['_title'] = found
         for index, (role, body) in enumerate(projected):
             if body:
                 out.append((position * 1000000 + index, role, body))
@@ -523,8 +524,11 @@ def capture(source, relative, *, max_bytes=PASS_BYTES):
             if db.execute('INSERT OR IGNORE INTO messages VALUES(?,?,?,?,?,?,?)', (msgid, cid, generation, pos, role, body, now)).rowcount:
                 fresh.append((pos, role, body))
         # 처음 들어온 메시지만 센다 — 옛 형식을 다시 읽는 경로(같은 메시지 id)에서 지시 수가 두 번 늘지 않게.
+        if not conversation and identity and identity.get('title') and identity.get('title_kind'):
+            titles.apply(db, cid, (identity['title'], identity['title_kind']))
         _refresh_conversation_summary(db, cid, source['provider'], fresh, latest_title, now)
-        prior_detail=json.loads(conversation['detail']) if conversation else {}
+        # 제목 출처(titles.py)는 위에서 detail에 적혔다 — 아래 detail_next가 옛 detail로 덮지 않게 지금 값을 읽는다.
+        prior_detail=json.loads(db.execute('SELECT detail FROM conversations WHERE id=?', (cid,)).fetchone()['detail'] or '{}')
         verified=prior_detail.get('native_identity_verified',False) or (identity is not None and capture_kind=='transcript' and not changing)
         detail_next={**prior_detail,'native_identity_verified':verified}
         # 저장소(session_catalog/placement.py)가 읽는 사실: 실행 방식, 실제 시작(원본 첫 timestamp), 마지막 활동(원본 파일 수정 시각).
@@ -554,14 +558,17 @@ from human_prompt import human_prompt  # noqa: E402 — 사람 지시 판정은 
 def _refresh_conversation_summary(db, cid, provider, messages, latest_title, now):
     """이번에 읽은 메시지로 대화 제목과 이 맥 전용 요약(마지막 지시·지시 수)을 갱신한다.
 
-    - 제목: Claude가 붙인 제목 줄이 새로 보이면 바꾼다. Codex는 제목 줄이 없어 제목이 비었을 때만 첫 지시로 정한다.
+    - 제목: Claude 제목 줄(latest_title = (제목, 종류))이 새로 보이면 순위대로 바꾼다(사람이 정한 이름은 자동 제목이 못 덮는다,
+      titles.py). Codex는 제목 줄이 없어 제목이 비었을 때만 첫 지시로 정한다.
     - 요약(`conversation_local`)은 복제·원격 응답에 실리지 않는다(사용자 원문은 이 맥에서만, docs/ref/agents.md).
     """
     prompts = [p for p in (human_prompt(body) for _, role, body in messages if role == 'user') if p]
     if latest_title:
-        db.execute("UPDATE conversations SET title=? WHERE id=? AND title!=?", (latest_title, cid, latest_title))
+        titles.apply(db, cid, latest_title)
     elif provider == 'codex' and prompts:
-        db.execute("UPDATE conversations SET title=? WHERE id=? AND title=''", (prompts[0][:60], cid))
+        row = db.execute('SELECT title FROM conversations WHERE id=?', (cid,)).fetchone()
+        if row is not None and not row['title']:
+            titles.apply(db, cid, (prompts[0][:60], 'prompt'))
     if prompts:
         db.execute("INSERT INTO conversation_local(conversation_id,last_user_text,user_message_count,updated) VALUES(?,?,?,?)"
                    " ON CONFLICT(conversation_id) DO UPDATE SET last_user_text=excluded.last_user_text,"

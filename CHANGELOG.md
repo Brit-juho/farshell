@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+- **Ended conversations and the conversation history show titles again.** Almost every conversation read 「제목 없음」 (Untitled): Claude Code writes its automatic title as `aiTitle`, which was never read; conversations collected before titles existed were never re-read; and a Codex conversation's title could be the `# AGENTS.md instructions` text Codex inserts. Titles are read from the right keys now, a name you gave with /rename is never replaced by a later automatic title, and the server fills older conversations once in the background (Claude from FarShell's archived copy, Codex from the first prompt you typed). A conversation that still has no title shows its last prompt, dimmed.
+
 ---
 
 ## [2.15.1] — 2026-11-26
