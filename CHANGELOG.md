@@ -10,6 +10,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+---
+
+## [2.15.1] — 2026-11-26
+
 ### Added
 - **Each repository can have its own icon and color.** The folder icon at the head of a repository in the session list was the same for every repository. Right-click the head (on the phone, long-press it) or use the mark button in Session list settings › Repositories to pick one of 17 icons and 6 colors (or reset). The choice is saved on that Mac (`rail.repoMarks` in the workspace settings), so every device viewing that Mac shows the same marks and picks up changes without a reload. Only names from the fixed list are stored; unknown values fall back to the folder.
 - **The usage panel opens the account settings.** A gear button in its header goes to Settings › Agent accounts (profiles and the default account for new sessions).
