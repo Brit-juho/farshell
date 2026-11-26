@@ -39,6 +39,8 @@
   font-size:var(--fs-sm); font-weight:var(--weight-semibold); color:var(--color-txt);
 }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-row.is-quiet .vt-rg-name, :is(#vt-wgrail, .vt-rg-scope) .vt-rg-row.closed .vt-rg-name { color:var(--color-sub); font-weight:var(--weight-medium); }
+/* 종료 대화에 제목이 없어 마지막 지시를 대신 쓴 것(ProjectEnded.tsx) — 진짜 제목과 구분되게 흐리고 가늘게. */
+:is(#vt-wgrail, .vt-rg-scope) .vt-rg-name.untitled { color:var(--color-sub); font-weight:var(--weight-normal); }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-tm { flex:none; font:var(--fs-xs) var(--font-mono); color:var(--color-muted); white-space:nowrap; }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-live { display:inline-flex; align-items:center; gap:4px; }
 :is(#vt-wgrail, .vt-rg-scope) .vt-rg-live-w { color:var(--color-st-waiting); font-weight:var(--weight-semibold); }

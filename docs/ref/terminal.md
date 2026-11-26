@@ -403,8 +403,15 @@ gives (`title` edit) makes it `human` and nothing changes it again until `auto_n
 changed by the server. `sessions.last_activity` moves forward on run start, agent activity (at most once a minute) and the
 last observation before a run ends; the list is ordered by it and auto-archive uses it. A run's `branch_at_end` is the
 workspace branch known when the run is seen to end. A conversation's title is refreshed whenever new transcript lines
-carry one (Codex: its first prompt), and `conversation_local` keeps the last prompt a person typed and the prompt count for
-this Mac only (not replicated). Tests: `server/tests/test_catalog_v2_behaviour.py`, `test_conversation_summary.py`.
+carry one (`session_history/titles.py`): Claude's `custom-title` (`customTitle`, a /rename) outranks `ai-title` (`aiTitle`),
+which outranks the old `summary`; Codex has no title line and uses its first human prompt (`human_prompt.py` drops injected
+`# AGENTS.md instructions`). Equal ranks: the later line wins; the source is kept in `detail.title_source`, so a later
+automatic title never replaces a name a person gave. `conversation_local` keeps the last prompt a person typed and the
+prompt count for this Mac only (not replicated). Conversations read before titles existed are filled once in the
+background (`worker.backfill_titles`, meta `conversation_titles_backfill`): Claude titles from the archived copy (works
+after the original file is gone), Codex first prompts and missing `conversation_local` rows from stored messages; only
+this Mac's own conversations. Subagent transcripts carry no title. With no title, the 「종료 N」 row shows the last prompt
+dimmed (`ProjectEnded.tsx`). Tests: `server/tests/test_catalog_v2_behaviour.py`, `test_conversation_summary.py`.
 
 What counts as a complete observation (`session_catalog/inventory.observe`): "the tmux server is absent" is decided in
 one place, `tmux_runner.server_absent`, shared with the delegation ledger — `no server running on` and, after a reboot

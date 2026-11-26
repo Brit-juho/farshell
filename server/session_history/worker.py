@@ -342,6 +342,22 @@ async def index_history():
         await asyncio.sleep(2)
 
 
+async def backfill_titles():
+    """옛 대화의 제목·마지막 지시 요약을 한 번 채운다(titles.py). 서버가 뜨고 30초 뒤 시작해 조금씩 — 끝나면 이 작업도 끝난다."""
+    from . import titles
+    await asyncio.sleep(30)
+    while True:
+        try:
+            _, done = await _offload(titles.backfill_batch)
+        except Exception:
+            logger.warning('conversation title backfill unavailable')
+            await asyncio.sleep(60)
+            continue
+        if done:
+            return
+        await asyncio.sleep(0.5)
+
+
 async def initialize():
     from session_catalog.identity import enable
     from session_catalog.db import hold_wal
