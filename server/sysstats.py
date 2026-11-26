@@ -4,9 +4,9 @@
 ~50MB를 목표로 한다). 읽는 방법이 OS마다 다르다.
 
   macOS   CPU  `host_statistics`(ctypes, libSystem) — 실패하면 `top -l 2`
-          RAM  `sysctl hw.memsize` + `vm_stat`
+          RAM  `sysctl hw.memsize`(처음 한 번) + `vm_stat`
           NET  `netstat -ib`(en* 인터페이스의 링크 행)
-          GPU  `ioreg -c IOAccelerator`의 `Device Utilization %`(sudo 불필요, 전용 VRAM이 없어 사용률만)
+          GPU  `ioreg -c IOAccelerator`의 `Device Utilization %`(sudo 불필요, 전용 VRAM이 없어 사용률만, GPU_INTERVAL마다)
   Linux   CPU  /proc/stat 두 번의 차이
   WSL2    RAM  /proc/meminfo(MemTotal − MemAvailable)
           NET  /proc/net/dev(가상·루프백 제외)
@@ -35,6 +35,9 @@ import platform_utils
 logger = logging.getLogger(__name__)
 
 MIN_INTERVAL = 1.0       # 이보다 자주 불러도 같은 결과(초)
+# GPU 사용률은 이 간격으로만 다시 읽는다(초). macOS `ioreg`는 표본마다 띄우는 명령 중 가장 무겁고,
+# 화면(HUD 3초·시스템 패널 2초)이 부를 때마다 띄울 만큼 빨리 변하는 값이 아니다(2026-11-26).
+GPU_INTERVAL = 15.0
 FIRST_SAMPLE_GAP = 0.25  # 첫 호출은 비교할 이전 표본이 없어 이 간격으로 두 번 읽는다(초)
 CMD_TIMEOUT = 2.0
 
@@ -241,13 +244,26 @@ def read_cpu_ticks() -> Optional[tuple[int, int]]:
     return parse_proc_stat(text) if text else None
 
 
+_mac_memsize: Optional[int] = None
+
+
+def _mac_total_memory() -> Optional[int]:
+    """물리 메모리 크기 — 부팅 동안 변하지 않으니 처음 성공한 값을 계속 쓴다."""
+    global _mac_memsize
+    if _mac_memsize is None:
+        total_s = (_run(["sysctl", "-n", "hw.memsize"]) or "").strip()
+        if total_s.isdigit():
+            _mac_memsize = int(total_s)
+    return _mac_memsize
+
+
 def read_ram() -> Optional[tuple[int, int]]:
     if platform_utils.IS_MACOS:
-        total_s = (_run(["sysctl", "-n", "hw.memsize"]) or "").strip()
+        total = _mac_total_memory()
         vm = _run(["vm_stat"])
-        if not total_s.isdigit() or not vm:
+        if not total or not vm:
             return None
-        return parse_vm_stat(vm, int(total_s))
+        return parse_vm_stat(vm, total)
     text = _read_file("/proc/meminfo")
     return parse_meminfo(text) if text else None
 
@@ -315,6 +331,13 @@ class Sampler:
         self._prev: Optional[dict] = None
         self._cache: Optional[dict] = None
         self._cache_at = 0.0
+        self._gpu: Optional[dict] = None
+        self._gpu_at: Optional[float] = None
+
+    def _gpu_sample(self, now: float) -> Optional[dict]:
+        if self._gpu_at is None or now - self._gpu_at >= GPU_INTERVAL:
+            self._gpu, self._gpu_at = read_gpu(), now
+        return self._gpu
 
     def _raw(self) -> dict:
         return {"t": time.monotonic(), "cpu": read_cpu_ticks(), "net": read_net()}
@@ -336,7 +359,7 @@ class Sampler:
             if pct is None and platform_utils.IS_MACOS and prev["cpu"] is None:
                 pct = _mac_cpu_pct_via_top()      # ctypes를 못 쓴 환경의 폴백(1초 걸린다)
             ram = read_ram()
-            gpu = read_gpu()
+            gpu = self._gpu_sample(time.monotonic())
             rates = net_rates(prev["net"], cur["net"], dt)
 
             snap = {

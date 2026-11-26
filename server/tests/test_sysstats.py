@@ -240,3 +240,47 @@ def test_http_response_preserves_gpu(monkeypatch, gpu):
         assert actual is None
     else:
         assert {key: actual[key] for key in gpu} == gpu
+
+
+def test_gpu_is_read_once_per_gpu_interval(monkeypatch):
+    calls = {"gpu": 0}
+
+    def fake_gpu():
+        calls["gpu"] += 1
+        return {"pct": float(calls["gpu"]), "name": "G", "count": 1}
+
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(S.time, "monotonic", lambda: clock["t"])
+    monkeypatch.setattr(S, "read_cpu_ticks", lambda: (1, 2))
+    monkeypatch.setattr(S, "read_net", lambda: {})
+    monkeypatch.setattr(S, "read_ram", lambda: None)
+    monkeypatch.setattr(S, "read_gpu", fake_gpu)
+    monkeypatch.setattr(S, "FIRST_SAMPLE_GAP", 0.0)
+    s = S.Sampler()
+    assert s.snapshot()["gpu"]["pct"] == 1.0
+    clock["t"] += S.MIN_INTERVAL + 1           # 새 표본이지만 GPU는 아직 그대로
+    assert s.snapshot()["gpu"]["pct"] == 1.0 and calls["gpu"] == 1
+    clock["t"] += S.GPU_INTERVAL               # 간격이 지나면 다시 읽는다
+    assert s.snapshot()["gpu"]["pct"] == 2.0 and calls["gpu"] == 2
+
+
+def test_macos_total_memory_is_read_once(monkeypatch):
+    calls = []
+
+    def fake_run(args):
+        calls.append(args[0])
+        return "17179869184\n" if args[0] == "sysctl" else None
+
+    monkeypatch.setattr(S, "_run", fake_run)
+    monkeypatch.setattr(S, "_mac_memsize", None)
+    assert S._mac_total_memory() == 17179869184
+    assert S._mac_total_memory() == 17179869184
+    assert calls == ["sysctl"]
+
+
+def test_macos_total_memory_failure_is_retried(monkeypatch):
+    answers = iter([None, "8589934592\n"])
+    monkeypatch.setattr(S, "_run", lambda args: next(answers))
+    monkeypatch.setattr(S, "_mac_memsize", None)
+    assert S._mac_total_memory() is None
+    assert S._mac_total_memory() == 8589934592
