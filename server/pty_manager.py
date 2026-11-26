@@ -169,6 +169,10 @@ class PTYSession:
 class PTYManager:
     def __init__(self):
         self._sessions: dict[str, PTYSession] = {}
+        # 세션 출력을 **세션당 한 번** 보는 관찰자(session_id, data) — 출력 감시·자동 응답·프롬프트 감지.
+        # 예전엔 WS 연결마다의 콜백(_on_data)에서 불러, 한 세션을 두 화면이 보면 같은 출력을 두 번
+        # 먹었다(감지 CPU 두 배, 알림 요약 줄 중복, 자동 응답 창에 같은 조각이 겹침). 2026-11-26.
+        self.output_observers: list[Callable[[str, bytes], None]] = []
         # SIGCHLD 핸들러는 의도적으로 등록하지 않는다 — `subprocess.run` 같은 stdlib이
         # 자체 wait를 수행하므로 process-wide reaper와 충돌해 ECHILD/returncode 깨짐을
         # 유발할 수 있다. 대신 `_on_readable`의 EOF 분기와 `destroy_session`에서 PTY 자식만
@@ -611,6 +615,12 @@ class PTYManager:
         stored = session._replay_filter.feed(data)
         if stored:
             self._append_scrollback(session, stored)
+        for observe in list(self.output_observers):
+            try:
+                observe(session_id, data)
+            except Exception as e:  # noqa: BLE001 — 관찰자 하나가 화면 전송을 막지 않는다
+                # 예외 타입만 남긴다 — data(터미널 출력)는 로그에 싣지 않는다.
+                logger.warning(f"session {session_id}: 출력 관찰자가 {e.__class__.__name__}로 실패")
         # broadcast to all subscribers
         dead = set()
         for cb in list(session._subscribers):

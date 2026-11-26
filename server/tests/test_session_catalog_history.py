@@ -311,6 +311,43 @@ def test_search_index_can_be_lost_and_rebuilt(private_history):
     assert len(query.listing(search='hello-world')['items']) == 1
 
 
+def _open_paths():
+    """Paths this process has open, without a subprocess (Linux /proc, macOS F_GETPATH)."""
+    import fcntl
+    paths = []
+    for name in os.listdir('/proc/self/fd' if os.path.isdir('/proc/self/fd') else '/dev/fd'):
+        fd = int(name)
+        try:
+            if os.path.isdir('/proc/self/fd'):
+                paths.append(os.readlink(f'/proc/self/fd/{fd}'))
+            else:
+                paths.append(fcntl.fcntl(fd, 50, b'\0' * 1024).split(b'\0', 1)[0].decode())  # F_GETPATH
+        except OSError:
+            pass
+    return paths
+
+
+def test_search_index_connections_are_closed_without_gc(private_history):
+    """`with sqlite3.connect()` only commits; the 2-second index loop piled up handles until GC ran."""
+    import gc
+    from session_history import archive, search
+    from session_catalog.db import directory, database
+    root, folder, source = _source(private_history)
+    (folder/'a.jsonl').write_text('{"sessionId":"a","type":"user","message":{"content":"handle check needle"}}\n')
+    archive.scan_source(source)
+    path = str((directory()/'search.sqlite3').resolve())
+    gc.collect()
+    gc.disable()
+    try:
+        for _ in range(5):
+            search.refresh()
+            with database() as source_db:
+                assert search.matches(source_db, 'needle') is not None
+        assert [p for p in _open_paths() if os.path.realpath(p) == path] == []
+    finally:
+        gc.enable()
+
+
 def test_search_index_keeps_no_body_copy_and_rebuilds_the_old_layout(private_history):
     import sqlite3
     from session_history import archive, query, search

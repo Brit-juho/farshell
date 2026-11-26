@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from session_catalog.db import database, directory, private_file, host_id
@@ -22,7 +23,8 @@ def _outdated(path):
     """True for an index in the old self-contained layout (bodies without owners)."""
     if not path.is_file() or path.is_symlink():
         return False
-    with sqlite3.connect(f'file:{path}?mode=ro', uri=True, timeout=.2) as index:
+    # `with connection:` only commits; closing() is what actually releases the handle (it otherwise waits for GC).
+    with closing(sqlite3.connect(f'file:{path}?mode=ro', uri=True, timeout=.2)) as index:
         names = {r[0] for r in index.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     return 'bodies' in names and 'owners' not in names
 
@@ -30,7 +32,7 @@ def _outdated(path):
 def _refresh(limit=1000):
     path = directory() / 'search.sqlite3'
     private_file(path)
-    with database() as source, sqlite3.connect(path, timeout=.2) as index:
+    with database() as source, closing(sqlite3.connect(path, timeout=.2)) as index, index:
         for statement in SCHEMA:
             index.execute(statement)
         origin = host_id(source)
@@ -67,7 +69,7 @@ def matches(source, search):
     if not path.is_file() or path.is_symlink():
         return None
     try:
-        with sqlite3.connect(f'file:{path}?mode=ro', uri=True, timeout=.1) as index:
+        with closing(sqlite3.connect(f'file:{path}?mode=ro', uri=True, timeout=.1)) as index:
             progress = dict(index.execute('SELECT kind,position FROM progress'))
             local = source.execute('SELECT COALESCE(MAX(rowid),0) FROM messages').fetchone()[0]
             remote = source.execute("SELECT COALESCE(MAX(rowid),0) FROM replicas WHERE kind='message'").fetchone()[0]

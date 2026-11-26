@@ -11,6 +11,8 @@ import agent_detector
 import tmux_runner
 from tmux_runner import PaneInfo
 
+_REAL_FIND_CHILD_PIDS = agent_detector._find_child_pids  # autouse가 막기 전의 원래 함수
+
 
 @pytest.fixture(autouse=True)
 def _isolate(monkeypatch):
@@ -168,3 +170,67 @@ def test_new_coding_clis_are_known():
     """2026-09-29 — 브랜드 로고가 붙은 CLI들이 감지 대상에 있다(키 = 바이너리 이름)."""
     for name in ("opencode", "cursor-agent", "copilot", "amp", "goose", "kimi"):
         assert name in agent_detector.KNOWN_AGENTS
+
+
+# ── 프로세스 표 한 장(2026-11-26) ─────────────────────────────────────────────
+# 칸마다 pgrep·ps를 띄우던 것을 `ps` 한 번으로 바꿨다. 아래 시험은 autouse가 막아 둔
+# _find_child_pids를 원래 함수로 되돌리고 subprocess만 가짜로 바꾼다.
+
+_PS = """\
+  100     1 -zsh
+  200   100 bash ./run.sh
+  300   200 /opt/homebrew/bin/node /usr/local/bin/codex --yolo
+  400     1 zsh
+  500   400 vim notes.md
+  600     1 zsh
+"""
+
+
+@pytest.fixture
+def fake_ps(monkeypatch):
+    real = agent_detector
+    monkeypatch.setattr(real, "_find_child_pids", _REAL_FIND_CHILD_PIDS)
+    calls = []
+
+    def check_output(args, **kw):
+        calls.append(args)
+        return _PS.encode()
+
+    monkeypatch.setattr(real.subprocess, "check_output", check_output)
+    real.invalidate_cache()
+    yield real, calls
+    real.invalidate_cache()
+
+
+def test_parse_ps_table_keeps_args_with_spaces():
+    table = agent_detector.parse_ps_table(_PS + "garbage line\n")
+    assert table[300] == (200, "/opt/homebrew/bin/node /usr/local/bin/codex --yolo")
+    assert table[100] == (1, "-zsh")
+    assert len(table) == 6
+
+
+def test_grandchild_agent_found_and_all_panes_share_one_ps(fake_ps, monkeypatch):
+    det, calls = fake_ps
+    monkeypatch.setattr(tmux_runner, "get_all_panes", lambda: [
+        PaneInfo(session="a", command="zsh", pid=100),
+        PaneInfo(session="b", command="vim", pid=400),
+        PaneInfo(session="c", command="zsh", pid=600),
+    ])
+    result = det.detect_all()
+    assert result["a"]["agent"] == "codex"      # zsh → bash → node codex (손자)
+    assert result["b"]["agent"] == "shell"
+    assert result["c"]["agent"] == "shell"
+    assert len(calls) == 1, "칸이 여럿이어도 ps는 한 번"
+
+
+def test_ps_failure_means_no_children(monkeypatch):
+    det = agent_detector
+    monkeypatch.setattr(det, "_find_child_pids", _REAL_FIND_CHILD_PIDS)
+
+    def boom(*a, **kw):
+        raise OSError("no ps")
+
+    monkeypatch.setattr(det.subprocess, "check_output", boom)
+    det.invalidate_cache()
+    assert det._scan_child_processes(100, "zsh") == "zsh"
+    det.invalidate_cache()

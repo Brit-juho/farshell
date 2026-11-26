@@ -245,6 +245,18 @@ _prompt_detector = agent_prompt_detect.get_global_detector(
     on_interrupt=_on_interrupt, screen_for=_screen_for_pty)
 
 
+def _observe_pty_output(session_id: str, data: bytes) -> None:
+    """세션 출력의 세 소비자 — 보는 화면 수와 상관없이 세션당 한 번(PTYManager._flush_session)."""
+    output_watcher.feed_output(session_id, data)
+    _auto_responder.feed(session_id, data)
+    # A3: 같은 스트림의 세 번째 소비자. 아무것도 쓰지 않고 상태만 본다
+    # (auto_responder가 방금 응답한 세션은 그쪽 cooldown 창 동안 억제).
+    _prompt_detector.feed(session_id, data)
+
+
+pty_mgr.output_observers.append(_observe_pty_output)
+
+
 def on_terminal_input(pty_session_id: str, data: bytes | str | None = None) -> None:
     """PTY 입력과 훅 기반 waiting 상태를 한 경로에서 해제한다.
 

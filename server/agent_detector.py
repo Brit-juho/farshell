@@ -5,15 +5,16 @@
 - 정확 매치: filepath.basename으로 false positive 방지 (substring → exact)
 - 5초 TTL 캐시: 동일 panePID 반복 조회 비용 감소
 - batch 패턴: list-panes -a 1회 호출로 모든 세션 처리 (purplemux 차용)
-- macOS 호환: pgrep 실패 시 ps -eo pid,ppid fallback
+- 프로세스 표: `ps -A -o pid=,ppid=,args=` 한 번을 짧게 캐시해 모든 칸이 나눠 쓴다
 """
 
 from __future__ import annotations
 
 import logging
 import os
-import shutil
 import subprocess
+import threading
+import time
 from typing import Optional
 
 import tmux_runner
@@ -83,74 +84,81 @@ _RAW_TOOL_CMDS = {
 # panePID → resolved command (5초 TTL)
 _cmd_cache: TTLCache[str] = TTLCache(ttl=5.0)
 
+# 프로세스 표 한 장(pid → (ppid, args)). 예전엔 칸마다 `pgrep -P`·`ps -o args= -p`를 따로 띄워
+# 5초 루프 한 번에 칸 수 × (1 + 자식 수 + 손자 수)개의 프로세스를 만들었다(2026-11-26 실측: 서버가
+# 30초에 `ps` 20개). 이제 짧은 창 안의 조회는 `ps` 한 번을 나눠 쓴다. 창은 루프 간격(5초)보다
+# 짧게 둬서, 루프마다 새 표를 읽는다(판정이 예전보다 늦어지지 않게).
+PROC_TABLE_TTL = 2.0
+_proc_lock = threading.Lock()
+_proc_table: Optional[dict[int, tuple[int, str]]] = None
+_proc_table_at = 0.0
 
-def _find_child_pids(parent_pid: int) -> list[int]:
-    """자식 PID 목록. pgrep 우선, 실패 시 ps -eo fallback (macOS 호환)."""
-    if parent_pid <= 0:
-        return []
 
-    # 1차: pgrep -P (Linux/macOS 모두 견고)
-    if shutil.which("pgrep"):
+def parse_ps_table(text: str) -> dict[int, tuple[int, str]]:
+    """`ps -A -o pid=,ppid=,args=` 출력 → {pid: (ppid, args)}. 순수 함수."""
+    table: dict[int, tuple[int, str]] = {}
+    for line in text.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) < 2 or not parts[0].isdigit() or not parts[1].isdigit():
+            continue
+        table[int(parts[0])] = (int(parts[1]), parts[2] if len(parts) > 2 else "")
+    return table
+
+
+def _process_table() -> Optional[dict[int, tuple[int, str]]]:
+    """짧게 캐시한 프로세스 표. 못 읽으면 None(호출자는 '자식 없음'으로 본다)."""
+    global _proc_table, _proc_table_at
+    with _proc_lock:
+        now = time.monotonic()
+        if _proc_table is not None and now - _proc_table_at < PROC_TABLE_TTL:
+            return _proc_table
         try:
             out = subprocess.check_output(
-                ["pgrep", "-P", str(parent_pid)],
+                ["ps", "-ww", "-A", "-o", "pid=,ppid=,args="],
                 stderr=subprocess.DEVNULL,
-                timeout=1.0,
-            ).decode()
-            pids = [int(p) for p in out.split() if p.isdigit()]
-            if pids:
-                return pids
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
-            pass
+                timeout=2.0,
+            ).decode("utf-8", errors="replace")
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+            return None
+        _proc_table, _proc_table_at = parse_ps_table(out), now
+        return _proc_table
 
-    # 2차 fallback: ps -eo pid,ppid
-    try:
-        out = subprocess.check_output(
-            ["ps", "-eo", "pid,ppid"],
-            stderr=subprocess.DEVNULL,
-            timeout=1.0,
-        ).decode()
-        result = []
-        for line in out.splitlines()[1:]:
-            parts = line.split()
-            if len(parts) >= 2 and parts[1].isdigit() and int(parts[1]) == parent_pid:
-                if parts[0].isdigit():
-                    result.append(int(parts[0]))
-        return result
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+
+def _find_child_pids(parent_pid: int) -> list[int]:
+    """자식 PID 목록(프로세스 표 한 장에서)."""
+    if parent_pid <= 0:
         return []
+    table = _process_table()
+    if not table:
+        return []
+    return [pid for pid, (ppid, _) in table.items() if ppid == parent_pid]
+
+
+def _proc_args(pid: int) -> str:
+    table = _process_table()
+    entry = table.get(pid) if table else None
+    return entry[1] if entry else ""
+
+
+def _has_known_agent(args: str) -> Optional[str]:
+    for part in args.split():
+        base = os.path.basename(part)
+        if base in KNOWN_AGENTS:
+            return base
+    return None
 
 
 def _scan_child_processes(pane_pid: int, raw_cmd: str) -> str:
     """자식 프로세스 args 스캔해서 AI CLI 발견."""
-    children = _find_child_pids(pane_pid)
-    for pid in children:
-        try:
-            args_out = subprocess.check_output(
-                ["ps", "-o", "args=", "-p", str(pid)],
-                stderr=subprocess.DEVNULL,
-                timeout=1.0,
-            ).decode()
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
-            continue
-        for part in args_out.split():
-            base = os.path.basename(part)
-            if base in KNOWN_AGENTS:
-                return base
+    for pid in _find_child_pids(pane_pid):
+        found = _has_known_agent(_proc_args(pid))
+        if found:
+            return found
         # 재귀 1단계 — bash → bash → claude 같은 케이스 잡기 (limit 1)
         for grandchild in _find_child_pids(pid)[:5]:
-            try:
-                gc_args = subprocess.check_output(
-                    ["ps", "-o", "args=", "-p", str(grandchild)],
-                    stderr=subprocess.DEVNULL,
-                    timeout=1.0,
-                ).decode()
-            except Exception:
-                continue
-            for part in gc_args.split():
-                base = os.path.basename(part)
-                if base in KNOWN_AGENTS:
-                    return base
+            found = _has_known_agent(_proc_args(grandchild))
+            if found:
+                return found
     return raw_cmd
 
 
@@ -262,8 +270,11 @@ def detect_all() -> dict[str, dict]:
 
 def invalidate_cache(pane_pid: Optional[int] = None) -> None:
     """캐시 무효화. None이면 전체."""
+    global _proc_table
     if pane_pid is None:
         _cmd_cache.clear()
+        with _proc_lock:
+            _proc_table = None
     else:
         # prefix 매치 invalidate
         with _cmd_cache._lock:

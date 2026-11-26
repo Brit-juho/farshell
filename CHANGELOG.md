@@ -12,6 +12,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 - **Ended conversations and the conversation history show titles again.** Almost every conversation read 「제목 없음」 (Untitled): Claude Code writes its automatic title as `aiTitle`, which was never read; conversations collected before titles existed were never re-read; and a Codex conversation's title could be the `# AGENTS.md instructions` text Codex inserts. Titles are read from the right keys now, a name you gave with /rename is never replaced by a later automatic title, and the server fills older conversations once in the background (Claude from FarShell's archived copy, Codex from the first prompt you typed). A conversation that still has no title shows its last prompt, dimmed.
+- **The server spends less CPU while you watch your sessions.**
+  - Agent detection reads one process list per check (`ps` once) instead of starting `pgrep` and `ps` for every pane, child and grandchild. Measured on a 4-session Mac: 0.137 s → 0.046 s per check, same results.
+  - System stats read total memory once and the GPU (`ioreg`) every 15 s instead of on every HUD refresh.
+  - Output watching, the auto-responder and approval-prompt detection read a session's output once, no matter how many screens show it. Before, two screens on one session fed the same output twice, which also repeated lines in the idle-notification summary.
+  - The conversation search index closes its database connections; they used to pile up (16 → 46 open handles) until garbage collection ran.
 
 ---
 

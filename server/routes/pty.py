@@ -511,11 +511,8 @@ async def ws_terminal(ws: WebSocket, session_id: str):
 
         def _on_data(data: bytes):
             nonlocal pty_paused
-            output_watcher.feed_output(session_id, data)
-            _auto_responder.feed(session_id, data)
-            # A3: 같은 스트림의 세 번째 소비자. 아무것도 쓰지 않고 상태만 본다
-            # (auto_responder가 방금 응답한 세션은 그쪽 cooldown 창 동안 억제).
-            _prompt_detector.feed(session_id, data)
+            # 출력 감시·자동 응답·프롬프트 감지는 여기(연결마다)가 아니라 세션당 한 번 돈다
+            # (deps._observe_pty_output, PTYManager.output_observers).
             out = channel.encrypt_simple(data) if channel else data
             try:
                 send_queue.put_nowait(out)

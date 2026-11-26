@@ -299,6 +299,10 @@ Mobile browser:  GET /?...#tmux=dev
 session**. Buffer, scrollback, and process are all shared.
 
 ### 3.5 Idle detection → push (OutputWatcher)
+The three readers of a session's output — `output_watcher`, `auto_responder` and
+`agent_prompt_detect` — run **once per session** from `PTYManager.output_observers`
+(`deps._observe_pty_output`, called in `_flush_session`), not once per WebSocket: two screens on one
+session no longer feed the same bytes twice.
 ```
 PTY output → output_watcher.feed_output()
   → accumulates in buffer
